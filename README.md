@@ -1,7 +1,9 @@
 # Nayive
 
-Personal web apps you host yourself: Calendar, Tasks, Contacts, Drive, Photos,
-Music, Movies, Calc, Write, Text, Trips, Habits, Split, Planner and Games.
+Personal web apps you host yourself: Drive, Planner (calendar, tasks and habits),
+Contacts, Write, Calc, Text, Photos, Music, Movies, Trips, Split and Games.
+
+![The Nayive launcher](docs/launcher.png)
 
 - One static Go binary (`server/go/`) serves the apps and a small JSON file API.
 - Multi-user. Each user's data is plain files (`.ics`, `.vcf`, `.json`) in their own folder.
