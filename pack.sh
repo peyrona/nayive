@@ -58,6 +58,17 @@ cp    install.sh       "$STAGE/install.sh"
 cp -r "$SRC/apps"      "$STAGE/apps"
 chmod +x "$STAGE/install.sh" "$STAGE/nayive"
 
+# Stamp the launcher's build date into the staged copy, as deploy.sh does on
+# the server: the repo's apps/index.html always holds the literal
+# "ver.yy-mm-dd". Fail loudly if it is missing - a silent miss once froze the
+# date for weeks. Its .gz sidecar was built before the stamp: rebuild it.
+STAMP="ver.$(date +%y-%m-%d)"
+sed -i "s/ver\.yy-mm-dd/$STAMP/" "$STAGE/apps/index.html"
+grep -q "$STAMP" "$STAGE/apps/index.html" \
+    || { echo "error: \"ver.yy-mm-dd\" not found in $SRC/apps/index.html" >&2; exit 1; }
+gzip -kf9 "$STAGE/apps/index.html"
+echo "==> launcher version: $STAMP"
+
 # Drop things that must not ship:
 #  - editor / OS cruft
 #  - per-user data written live on a running server (never in a fresh install)
