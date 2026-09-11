@@ -1,0 +1,490 @@
+<!-- index.html - Combined view: Calendar + Tasks + Habits, each in its own <iframe>. Does
+     not modify any of them: the framed pages notice they are embedded (shared/ui.js stamps
+     html.is-embedded) and hide their own title / sync dot, so this page draws
+     ONE header - name, one sync dot mirroring the worst of the three panes - on every
+     screen. PC / tablet: Calendar on the left, a right column with Tasks over Habits,
+     two draggable splitters whose position is remembered per screen and orientation (a
+     monitor, a laptop and a tablet each keep their own); there each pane keeps its own app icon in its top-left
+     corner as the label of that area (html.is-embedded-wide, see EMBEDDED in
+     shared/app.css). Phone: one pane at a time, chosen with three icon buttons
+     in that header - which are those same icons, so the panes drop theirs
+     (see TWO LAYOUT MODES in shared/app.css). -->
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Planner</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300d1b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Shared header behaviour + the "?" help dialog. Planner keeps no data of
+         its own, so this is the only shared script it needs. -->
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        var phone = window.matchMedia( '(max-width: 640px)' ).matches;
+        NayiveUI.firstRun( {
+            app:   'planner',
+            title: 'Planner',
+            lead:  phone
+                 ? NayiveUI.t( 'planner.introLeadPhone' )
+                 : NayiveUI.t( 'planner.introLead' ),
+            buttons: ( phone
+                ? [
+                    { sel: '[data-pane="calendarPane"]', text: NayiveUI.t( 'planner.introCal' ) },
+                    { sel: '[data-pane="tasksPane"]',    text: NayiveUI.t( 'planner.introTasks' ) },
+                    { sel: '[data-pane="habitsPane"]',   text: NayiveUI.t( 'planner.introHabits' ) }
+                  ]
+                : [
+                    { sel: '#habitsRestore', text: NayiveUI.t( 'planner.introRestore' ) }
+                  ] ).concat( [
+                    { icon: 'help', name: NayiveUI.t( 'planner.introHelpName' ), text: NayiveUI.t( 'planner.introHelp' ) },
+                    { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
+                      text: NayiveUI.t( 'planner.introSync' ) }
+                  ] ),
+            tip: NayiveUI.t( 'planner.introTip' )
+        } );
+    } );
+    </script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL.
+         Planner has no data of its own; the iframed calendar / tasks / habits each cache themselves. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <style>
+        /* Base reset + fonts from ../shared/app.css. Planner is just an iframe
+           host, so it overrides the page scroll (both axes hidden) and adds
+           only the header row + split-pane layout. */
+        html, body { height: 100%; overflow: hidden; }
+
+        .planner { display: flex; flex-direction: column; height: 100%; }
+
+        /* A shared .topbar; only override: it is ONE fixed row that neither
+           wraps nor scrolls. */
+        .planner-bar { flex: 0 0 auto; flex-wrap: nowrap; overflow: visible; background: var(--card); }
+        .planner-bar .home  { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+        .planner-bar .topbar-actions { gap: 6px; }
+
+        /* The Calendario / Tareas / Hábitos switch: phone only (every pane always shows on PC). */
+        .pane-tabs { display: none; align-items: center; gap: 6px; }
+
+        .panes { display: flex; flex: 1 1 auto; min-height: 0; }
+
+        .panes iframe { flex: 0 0 auto; height: 100%; border: 0; background: var(--bg); }
+
+        #calendarPane { width: 75%; }
+
+        /* The right column: Tasks over Habits, split by a horizontal handle. */
+        .right        { display: flex; flex-direction: column; flex: 0 0 auto; width: 25%; height: 100%; min-height: 0; }
+        .right iframe { width: 100%; }
+        #tasksPane    { height: 60%; }
+        #habitsPane   { height: 40%; }
+
+        .splitter
+        {
+            flex: 0 0 auto; width: 6px; height: 100%; cursor: col-resize;
+            background: var(--line);
+        }
+        .hsplitter    { flex: 0 0 auto; width: 100%; height: 6px; cursor: row-resize; background: var(--line); }
+        .splitter:hover, .splitter.dragging,
+        .hsplitter:hover, .hsplitter.dragging { background: var(--accent); }
+
+        .panes.dragging iframe { pointer-events: none; }
+
+        /* HABITS FOLDED AWAY.  The [v] button in the Habits header asks us to
+           give its whole height to Tasks; all that is left is this strip with a
+           chevron to bring it back. PC/tablet only - on a phone the pane tabs
+           already show one app at a time, so the rules below stay switched off
+           even if the collapsed state was remembered from a desktop. */
+        .pane-restore
+        {
+            display: none; align-items: center; justify-content: center; gap: 6px;
+            flex: 0 0 auto; width: 100%; height: 28px; padding: 0;
+            border: none; border-top: 1px solid var(--line);
+            background: var(--card); color: var(--text-dim); cursor: pointer;
+        }
+        .pane-restore:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+        .pane-restore svg    { width: 16px; height: 16px; display: block; }
+        .pane-restore .sprout { color: var(--accent); }
+
+        @media (min-width: 641px)
+        {
+            .right.habits-folded > #habitsPane,
+            .right.habits-folded > .hsplitter   { display: none; }
+            .right.habits-folded > #tasksPane   { flex: 1 1 auto; height: auto !important; }
+            .right.habits-folded > .pane-restore { display: flex; }
+        }
+
+        /* Phone: the three panes stack - one visible at a time, chosen with the
+           icon buttons in the header - because a slice of a phone screen is too
+           little for any of them. The right column dissolves (display: contents)
+           so all three frames are direct children of the column layout. */
+        @media (max-width: 640px)
+        {
+            .panes     { flex-direction: column; }
+            .right     { display: contents; }
+            .splitter, .hsplitter { display: none; }
+            .pane-tabs { display: flex; }
+            /* !important: beats the inline sizes the splitters' JS sets on the PC layout */
+            .panes iframe { width: 100% !important; height: auto !important; flex: 1 1 auto; min-height: 0; }
+            .panes iframe.off { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="planner" id="planner">
+        <div class="planner-bar topbar" id="plannerBar">
+            <a class="home" href="/nayive/" data-i18n-attr="title:ui.toApps">
+                <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <h1>Planner</h1>
+            </a>
+            <div class="topbar-actions">
+                <div class="pane-tabs" role="tablist" data-i18n-attr="aria-label:planner.view">
+                    <button type="button" class="icon-btn is-active" data-pane="calendarPane" role="tab" aria-selected="true" title="Calendar" aria-label="Calendar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    </button>
+                    <button type="button" class="icon-btn" data-pane="tasksPane" role="tab" aria-selected="false" title="Tasks" aria-label="Tasks">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"></path><polyline points="8 13 11 16 16 10.5"></polyline></svg>
+                    </button>
+                    <button type="button" class="icon-btn" data-pane="habitsPane" role="tab" aria-selected="false" title="Habits" aria-label="Habits">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
+                    </button>
+                </div>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </button>
+                <!-- ONE sync dot for all panes: mirrors the worst of the three (script below), and
+                     clicking it refreshes all three. Always the last child of the header. -->
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+            </div>
+        </div>
+        <div class="panes" id="panes">
+            <iframe id="calendarPane" data-src="../calendar/index.html" title="Calendar"></iframe>
+            <div class="splitter" id="splitter"></div>
+            <div class="right" id="rightCol">
+                <iframe id="tasksPane" data-src="../tasks/index.html" title="Tasks"></iframe>
+                <div class="hsplitter" id="hsplitter"></div>
+                <iframe id="habitsPane" data-src="../habits/index.html" title="Habits"></iframe>
+                <button class="pane-restore" id="habitsRestore" type="button" data-i18n-attr="title:planner.showHabits, aria-label:planner.showHabits">
+                    <svg class="sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Confirm the session first, then point the iframes at the apps - otherwise
+        // an expired session would render the login page inside each frame.
+        function showFrames()
+        {
+            document.querySelectorAll( 'iframe[data-src]' ).forEach( function ( f )
+            {
+                f.src = f.getAttribute( 'data-src' );
+            } );
+        }
+
+        fetch( '/api/whoami', { credentials: 'same-origin' } ).then( function ( r )
+        {
+            if( r.status === 401 ) { location.href = '/nayive/login.html'; return 'gone'; }
+            return r.json().catch( function () { return {}; } );   // a bad body still gets the panes
+        } ).then( function ( me )
+        {
+            if( me === 'gone' ) return;                            // on our way to the sign-in page
+
+            // The ACCOUNT's language beats this device's, and the SHELL has to
+            // be the one to take it: each pane is an app that would adopt on its
+            // own, but a reload inside an iframe reloads only that pane and
+            // would leave this frame - and the other panes - in the old
+            // language. Adopting here, the panes open already agreeing.
+            if( window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( me.lang ) ) return;
+
+            showFrames();
+        } ).catch( showFrames );
+    </script>
+
+    <script>
+        (function ()
+        {
+            var panes     = document.getElementById( 'panes' );
+            var calPane   = document.getElementById( 'calendarPane' );
+            var rightCol  = document.getElementById( 'rightCol' );
+            var taskPane  = document.getElementById( 'tasksPane' );
+            var habitPane = document.getElementById( 'habitsPane' );
+            var splitter  = document.getElementById( 'splitter' );
+            var hsplitter = document.getElementById( 'hsplitter' );
+            var MIN_PCT   = 30;
+            var MAX_PCT   = 85;
+            var MIN_TASKS = 25;     // the vertical split of the right column, % for Tasks
+            var MAX_TASKS = 80;
+
+            function applyPct( pct )
+            {
+                calPane.style.width  = pct + '%';
+                rightCol.style.width = (100 - pct) + '%';
+            }
+
+            function applyTasksPct( pct )
+            {
+                taskPane.style.height  = pct + '%';
+                habitPane.style.height = (100 - pct) + '%';
+            }
+
+            // WHERE THE HANDLES ARE REMEMBERED  - one split PER SCREEN, not one for
+            // all of them. A 24" monitor, a laptop and a tablet want different
+            // shares of the width, and localStorage alone does not tell them apart:
+            // it is per browser, so the last screen the panes were dragged on used
+            // to win everywhere. The key carries the screen's size and which way it
+            // is turned - a tablet held upright and the same tablet on its side are
+            // that different, and each keeps its own split. The size is written
+            // short-side-first because rotating swaps screen.width / .height on
+            // some browsers and not on others; that way both spell the same key
+            // and the -p / -l tells the two apart.
+            //
+            // A screen seen for the first time starts from the value saved before
+            // this was per-screen (the bare 'planner.calPct' / 'planner.tasksPct'),
+            // so nobody's split is lost; from its first drag on, that screen writes
+            // its own key only. Nothing is ever migrated away from the bare keys -
+            // they stay as the starting point for the NEXT new screen.
+            var DEF_CAL   = 75;     // the CSS defaults, repeated because a rotation
+            var DEF_TASKS = 60;     // has to be able to go BACK to them
+
+            function screenId()
+            {
+                var w = 0, h = 0, portrait = true;
+                try { w = screen.width; h = screen.height; } catch( e ) {}
+                if( ! w || ! h ) return 'default';
+                try { portrait = window.matchMedia( '(orientation: portrait)' ).matches; } catch( e ) {}
+                return Math.min( w, h ) + 'x' + Math.max( w, h ) + ( portrait ? '-p' : '-l' );
+            }
+
+            function splitKey( name ) { return 'planner.' + name + '.' + screenId(); }
+
+            function savedPct( name )
+            {
+                var v = null;
+                try
+                {
+                    v = localStorage.getItem( splitKey( name ) );
+                    if( v === null ) v = localStorage.getItem( 'planner.' + name );
+                }
+                catch( e ) {}
+                return parseFloat( v );
+            }
+
+            // Put both handles where THIS screen left them - on load, and again
+            // whenever the device is turned, which is a different screen to us.
+            function applySplits()
+            {
+                var c = savedPct( 'calPct' );
+                applyPct( isNaN( c ) ? DEF_CAL : Math.min( MAX_PCT, Math.max( MIN_PCT, c ) ) );
+
+                var t = savedPct( 'tasksPct' );
+                applyTasksPct( isNaN( t ) ? DEF_TASKS : Math.min( MAX_TASKS, Math.max( MIN_TASKS, t ) ) );
+            }
+
+            applySplits();
+
+            try { window.matchMedia( '(orientation: portrait)' ).addEventListener( 'change', applySplits ); }
+            catch( e ) {}
+
+            // One drag routine for both handles: `compute` turns the pointer position
+            // into a percentage, `apply` sets it, `name` says which key remembers it
+            // (resolved when the drag starts - the screen cannot turn mid-drag).
+            function wireSplitter( handle, compute, apply, name, min, max )
+            {
+                handle.addEventListener( 'pointerdown', function( evt )
+                {
+                    evt.preventDefault();
+                    panes.classList.add( 'dragging' );
+                    handle.classList.add( 'dragging' );
+
+                    var key = splitKey( name );
+
+                    function onMove( e )
+                    {
+                        var pct = Math.min( max, Math.max( min, compute( e ) ) );
+                        apply( pct );
+                        try { localStorage.setItem( key, pct ); } catch( err ) {}
+                    }
+
+                    function onUp()
+                    {
+                        panes.classList.remove( 'dragging' );
+                        handle.classList.remove( 'dragging' );
+                        document.removeEventListener( 'pointermove', onMove );
+                        document.removeEventListener( 'pointerup', onUp );
+                    }
+
+                    document.addEventListener( 'pointermove', onMove );
+                    document.addEventListener( 'pointerup', onUp );
+                } );
+            }
+
+            wireSplitter( splitter, function( e )
+            {
+                var rect = panes.getBoundingClientRect();
+                return ((e.clientX - rect.left) / rect.width) * 100;
+            }, applyPct, 'calPct', MIN_PCT, MAX_PCT );
+
+            wireSplitter( hsplitter, function( e )
+            {
+                var rect = rightCol.getBoundingClientRect();
+                return ((e.clientY - rect.top) / rect.height) * 100;
+            }, applyTasksPct, 'tasksPct', MIN_TASKS, MAX_TASKS );
+
+            // FOLD HABITS AWAY.  The Habits frame posts { nayive: 'pane-collapse' }
+            // when its [v] button is pressed; the strip under it puts the pane
+            // back. The choice is remembered, like the splitter positions.
+            var restore = document.getElementById( 'habitsRestore' );
+            var FOLDKEY = 'planner.habitsFolded';
+
+            function foldHabits( on )
+            {
+                rightCol.classList.toggle( 'habits-folded', on );
+
+                // Folded, #tasksPane grows on its own (see the CSS); unfolded it
+                // goes back to the remembered split.
+                if( ! on )
+                {
+                    var pct = savedPct( 'tasksPct' );
+                    applyTasksPct( isNaN( pct ) ? DEF_TASKS : Math.min( MAX_TASKS, Math.max( MIN_TASKS, pct ) ) );
+                }
+
+                try { localStorage.setItem( FOLDKEY, on ? '1' : '0' ); } catch( e ) {}
+            }
+
+            window.addEventListener( 'message', function( e )
+            {
+                if( e.origin !== location.origin ) return;
+                if( ! e.data || e.data.nayive !== 'pane-collapse' ) return;
+                if( e.source !== habitPane.contentWindow ) return;
+                if( isPhone() ) return;                 // the pane tabs already do this
+                foldHabits( true );
+            } );
+
+            restore.addEventListener( 'click', function() { foldHabits( false ); } );
+
+            try { if( localStorage.getItem( FOLDKEY ) === '1' ) foldHabits( true ); } catch( e ) {}
+
+            // Start with the keyboard in the Tasks pane (its own script focuses the
+            // "new task" field); the other panes grab nothing on load. Not on a
+            // phone: focusing the hidden pane would pop the keyboard for nothing.
+            taskPane.addEventListener( 'load', function() { if( ! isPhone() ) { try { taskPane.contentWindow.focus(); } catch( e ) {} } } );
+
+            // ONE sync dot for every pane. Each framed app keeps updating its own
+            // .sync-indicator (hidden by app.css while embedded); the frames are
+            // same-origin, so we watch those elements and copy the WORST of the
+            // states here. Worst first: no class (red, not synced yet) >
+            // .offline (gold, changes queued) > .busy (blue) > .synced (green).
+            var dot    = document.getElementById( 'syncIndicator' );
+            var frames = [ calPane, taskPane, habitPane ];
+
+            function paneDot( f )
+            {
+                try { return f.contentDocument && f.contentDocument.querySelector( '.sync-indicator' ); }
+                catch( e ) { return null; }
+            }
+
+            function rank( el )
+            {
+                if( ! el ) return -1;                              // frame not loaded yet: ignore
+                var c = el.classList;
+                return c.contains( 'offline' ) ? 2
+                     : c.contains( 'busy' )    ? 1
+                     : c.contains( 'synced' )  ? 0
+                     : 3;
+            }
+
+            function mirrorSync()
+            {
+                var worst = null, worstRank = -1;
+                frames.forEach( function( f )
+                {
+                    var el = paneDot( f ), r = rank( el );
+                    if( r > worstRank ) { worstRank = r; worst = el; }
+                } );
+                if( ! worst ) return;
+                [ 'synced', 'busy', 'offline' ].forEach( function( cls )
+                {
+                    dot.classList.toggle( cls, worst.classList.contains( cls ) );
+                } );
+                dot.title = worst.title || '';
+            }
+
+            // The dot is also the refresh button for every pane. Each framed app exposes
+            // window.nayiveRefresh (push what is queued + re-read the server's copy); the
+            // frames are same-origin, so calling it is a plain function call. A pane that
+            // has not loaded yet, or an app without the hook, is simply skipped.
+            dot.addEventListener( 'click', function()
+            {
+                frames.forEach( function( f )
+                {
+                    try { f.contentWindow && f.contentWindow.nayiveRefresh && f.contentWindow.nayiveRefresh(); }
+                    catch( e ) { /* a frame mid-navigation must not break the others */ }
+                } );
+            } );
+
+            frames.forEach( function( f )
+            {
+                f.addEventListener( 'load', function()
+                {
+                    var el = paneDot( f );
+                    if( ! el ) return;
+                    new MutationObserver( mirrorSync ).observe( el, { attributes: true, attributeFilter: [ 'class', 'title' ] } );
+                    mirrorSync();
+                } );
+            } );
+
+            // Phone: one pane at a time. The tab buttons are CSS-hidden above
+            // 640px, so on PC every pane always shows and the class below is harmless.
+            var PHONE  = window.matchMedia( '(max-width: 640px)' );
+            var tabs   = document.querySelector( '.pane-tabs' );
+            var TABKEY = 'planner.pane';
+            var PANES  = { calendarPane: calPane, tasksPane: taskPane, habitsPane: habitPane };
+
+            function isPhone() { return PHONE.matches; }
+
+            function showPane( id )
+            {
+                Object.keys( PANES ).forEach( function( k ) { PANES[ k ].classList.toggle( 'off', k !== id ); } );
+                tabs.querySelectorAll( 'button[data-pane]' ).forEach( function( b )
+                {
+                    var on = b.dataset.pane === id;
+                    b.classList.toggle( 'is-active', on );
+                    b.setAttribute( 'aria-selected', String( on ) );
+                } );
+                try { localStorage.setItem( TABKEY, id ); } catch( e ) {}
+            }
+
+            tabs.addEventListener( 'click', function( e )
+            {
+                var b = e.target.closest( 'button[data-pane]' );
+                if( b ) showPane( b.dataset.pane );
+            } );
+
+            var last = null;
+            try { last = localStorage.getItem( TABKEY ); } catch( e ) {}
+            showPane( PANES[ last ] ? last : 'calendarPane' );
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!-- login.html - sign-in screen for Nayive. Posts to /api/login, which sets the session cookie. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="shared/i18n.js"></script>
+    <title>Nayive</title>
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="shared/theme.js" defer></script>
+
+    <style>
+        /* Base reset + fonts from ../shared/app.css. This is the standalone
+           sign-in screen, so it keeps its own centred single-card layout and
+           the uppercase field labels of an entry form. */
+        html, body { height: 100%; }
+        body
+        {
+            font-size: 15px; line-height: 1.5;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .card
+        {
+            width: 100%; max-width: 340px; background: var(--card);
+            border: 1px solid var(--line); border-radius: var(--radius-l);
+            padding: 30px 26px 26px; box-shadow: var(--elev-card);
+        }
+        .brand
+        {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1.35rem; font-weight: 700; margin-bottom: 22px;
+        }
+        .brand img { width: 48px; height: 48px; flex: 0 0 auto; }
+        label
+        {
+            display: block; font-size: 0.78rem; color: var(--text-dim);
+            margin: 0 0 5px 2px; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        /* Inputs take their look AND their focus border from app.css (FORM FIELD)
+           - the same text field as every other app. Entry-screen tweaks only:
+           full width and a comfortable gap under each. */
+        input          { width: 100%; margin-bottom: 16px; }
+
+        .pw-wrap { position: relative; margin-bottom: 16px; }
+        .pw-wrap input { margin-bottom: 0; padding-right: 44px; }
+        .pw-eye
+        {
+            position: absolute; top: 0; right: 0; height: 100%;
+            width: 40px; display: flex; align-items: center; justify-content: center;
+            border: none; background: none; padding: 0; margin: 0; cursor: pointer;
+            color: var(--text-dim); border-radius: 0;
+        }
+        .pw-eye:hover { color: var(--text); filter: none; }
+        .pw-eye:active { filter: none; }
+        .pw-eye svg { width: 18px; height: 18px; margin: 0; }
+        .remember
+        {
+            display: flex; align-items: center; gap: 8px;
+            text-transform: none; letter-spacing: 0; font-size: 0.85rem;
+            color: var(--text-dim); margin: -4px 0 6px 2px; cursor: pointer;
+        }
+        .remember input
+        {
+            width: 16px; height: 16px; margin: 0; padding: 0;
+            flex: 0 0 auto; accent-color: var(--accent);
+        }
+        button
+        {
+            display: flex; align-items: center; justify-content: center;
+            width: 48px; height: 48px; padding: 0; margin: 6px 0 0 auto;   /* auto-left => pushed to the right edge */
+            color: var(--on-accent); background: var(--accent);
+            border: none; border-radius: 50%; cursor: pointer;
+        }
+        button svg { width: 22px; height: 22px; margin-left: 2px; }   /* nudge: optical centre of a triangle */
+        button:hover  { filter: brightness(1.12); }
+        button:active { filter: brightness(0.93); }
+        button:disabled { opacity: 0.55; cursor: default; filter: none; }
+        .error
+        {
+            color: var(--danger); font-size: 0.88rem; margin: 0 0 14px; min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <form class="card" id="loginForm" autocomplete="on">
+        <div class="brand">
+            <img src="icons/icon-192.png" alt="">
+            <span>Nayive</span>
+        </div>
+
+        <p class="error" id="error" role="alert"></p>
+
+        <label for="user" data-i18n="login.user"></label>
+        <input id="user" name="user" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+
+        <label for="password" data-i18n="login.password"></label>
+        <div class="pw-wrap">
+            <input id="password" name="password" type="password" autocomplete="current-password" data-i18n-attr="placeholder:login.blankIfNew">
+            <button type="button" class="pw-eye" id="pwEye" data-i18n-attr="aria-label:ui.showPassword"></button>
+        </div>
+
+        <label class="remember" for="remember">
+            <input type="checkbox" id="remember" name="remember" checked>
+            <span data-i18n="login.remember"></span>
+        </label>
+
+        <button type="submit" id="submit" data-i18n-attr="title:login.signIn, aria-label:login.signIn">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+    </form>
+
+    <script>
+        ( function ()
+        {
+            var form   = document.getElementById( 'loginForm' );
+            var errBox = document.getElementById( 'error' );
+            var submit = document.getElementById( 'submit' );
+
+            document.getElementById( 'user' ).focus();
+
+            // Eye toggle: show / hide the password text.
+            ( function ()
+            {
+                var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+                var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
+                var eye = document.getElementById( 'pwEye' );
+                var pw  = document.getElementById( 'password' );
+                eye.innerHTML = EYE;
+                eye.addEventListener( 'click', function ()
+                {
+                    var show = pw.type === 'password';
+                    pw.type = show ? 'text' : 'password';
+                    eye.innerHTML = show ? EYE_OFF : EYE;
+                    eye.setAttribute( 'aria-label', show ? NayiveI18n.t( 'ui.hidePassword' ) : NayiveI18n.t( 'ui.showPassword' ) );
+                    pw.focus();
+                } );
+            } )();
+
+            function returnTo( role )
+            {
+                // The admin account manages users, so send it straight to the
+                // admin panel. Everyone else lands on the app launcher. We ignore
+                // any ?return= path on purpose: on iPhone, Safari restores the
+                // last app's tab and its cookie has expired, so honouring
+                // ?return= would drop you into that app instead.
+                return role === 'admin' ? '/nayive/admin.html' : '/nayive/';
+            }
+
+            form.addEventListener( 'submit', async function ( ev )
+            {
+                ev.preventDefault();
+                errBox.textContent = '';
+                submit.disabled = true;
+
+                try
+                {
+                    var res = await fetch( '/api/login',
+                    {
+                        method:      'POST',
+                        headers:     { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(
+                        {
+                            user:     document.getElementById( 'user' ).value.trim(),
+                            password: document.getElementById( 'password' ).value,
+                            remember: document.getElementById( 'remember' ).checked
+                        } )
+                    } );
+
+                    if( res.ok )
+                    {
+                        var info = await res.json().catch( function () { return {}; } );
+                        location.href = returnTo( info.role );
+                        return;
+                    }
+
+                    var data = await res.json().catch( function () { return {}; } );
+                    errBox.textContent = data.error || NayiveI18n.t( 'login.failed' );
+                }
+                catch ( e )
+                {
+                    errBox.textContent = NayiveI18n.t( 'login.noServer' );
+                }
+
+                submit.disabled = false;
+                document.getElementById( 'password' ).value = '';
+                document.getElementById( 'password' ).focus();
+            } );
+        } )();
+    </script>
+</body>
+</html>

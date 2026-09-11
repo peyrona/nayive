@@ -1,0 +1,2342 @@
+<!-- index.html - "Fotos" viewer: the images in one Drive folder, seen as a
+     contact sheet, as pins on a real map, or as an automatic slideshow.
+     Opened as  ?dir=<folder path>  from Drive's "Abrir con" dialog (a
+     double-clicked file no app claims) - Drive has no Photos button any more.
+
+     Opened from the launcher there is no ?dir=: the page uses the folder it
+     remembers in data/photos/config.json, asking for it once with
+     NayiveUI.pickFolder. If that folder holds sub-folders (an album per trip,
+     say) and no loose images, Photos first shows those sub-folders as an album
+     index; picking one re-opens the page at ?dir=<that album>. The crumb
+     re-opens the picker. Only a visitor who is NOT signed in falls back to the
+     small built-in example set (a Lisbon trip).
+
+     Real folders: the image list + sizes come from GET /api/files?dir=<folder>
+     (one level - files + sub-folders of just that folder, never the whole
+     recursive tree). Each grid tile is a small JPEG thumbnail that THIS PAGE
+     made and stored as an ordinary file, data/photos/thumbs/<size>_<mtime>.jpg
+     (see THUMBNAILS below; the server never resizes anything). The lightbox +
+     Pase still load the full file. Tiles are <img loading="lazy"> so only the
+     ones on screen download. The capture date + GPS are read from each JPEG's
+     EXIF via a small Range request, and that read is cached in
+     data/photos/scan-cache.json (keyed by path, with the file's size + mtime)
+     so a folder full of photos is only scanned once, not on every open.
+
+     Keeping that cache honest: Drive re-keys the entries when you move or
+     rename a file / folder and drops them when you send one to the trash (the
+     same it does for the comments below - see its remapMediaCaches /
+     purgeMediaCaches); Photos also prunes dead entries for the open folder on
+     load; and an entry is used only while its size + mtime still match, so a
+     stale one can never show wrong data - at worst it wastes a few bytes until
+     that folder is opened again.
+
+     Place names for the map clusters are reverse-geocoded once (Nominatim) and
+     cached in data/photos/places.json. Per-photo comments live in
+     data/photos/comments.json (the same sidecar Drive's image editor uses). -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Photos</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='16' height='16' rx='2'/%3E%3Ccircle cx='12' cy='8' r='2'/%3E%3Cpath d='m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18'/%3E%3Cpath d='M18 22H4a2 2 0 0 1-2-2V6'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive /
+         the launcher; this page only follows the saved choice. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script src="../shared/photo.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'photos',
+            title: 'Photos',
+            lead:  NayiveUI.t( 'photos.introLead' ),
+            buttons: [
+                { sel: '#crumb',       text: NayiveUI.t( 'photos.introFolder' ) },
+                { sel: '#searchInput', text: NayiveUI.t( 'photos.introSearch' ) },
+                { sel: '#reloadBtn',   text: NayiveUI.t( 'photos.introRescan' ) },
+                { sel: '[data-mode="grid"]',   text: NayiveUI.t( 'photos.introGrid' ) },
+                { sel: '[data-mode="lista"]',  text: NayiveUI.t( 'photos.introList' ) },
+                { sel: '[data-mode="map"]',    text: NayiveUI.t( 'photos.introMap' ) },
+                { sel: '[data-mode="pase"]',   text: NayiveUI.t( 'photos.introSlideshow' ) },
+                { sel: '[data-mode="editar"]', text: NayiveUI.t( 'photos.introEdit' ) },
+                { sel: '#addBtn',      text: NayiveUI.t( 'photos.introUpload' ) }
+            ]
+        } );
+    } );
+    </script>
+
+    <style>
+    /* ===================================================================
+     * PHOTOS - per-app layout only. Chrome (header, .icon-btn, .pill,
+     * toast) comes from shared/theme.css + app.css; this block holds the
+     * four views (grid / map / pase / editar) and the two full-screen viewers.
+     * =================================================================*/
+
+    /* Tool shell needs a height chain (app.css .app is height:100%). */
+    html, body { height: 100%; }
+
+    button:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* .crumb, .bar-info, .tb-end and the whole .view-bar row come from
+       shared/app.css (folder-backed viewers), search field included. */
+
+    /* Album index: the chosen folder's sub-folders, shown as cards before any
+       one of them is opened. Reuses nothing else in the app. */
+    .albums { padding: 16px; display: grid; gap: 14px;
+              grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; }
+    .album-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+                  padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-l);
+                  background: var(--card); color: var(--text); cursor: pointer; font: inherit; text-align: left; }
+    .album-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+    .album-card svg { width: 26px; height: 26px; color: var(--accent); }
+    .album-card .a-name { font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
+                          white-space: nowrap; max-width: 100%; }
+
+    /* The .view-bar row (the 5 gallery modes, then upload + share) is the shared
+       one - #grid's 16px indent already matches its padding, so nothing here. */
+
+    /* list view: each day's .shots (in #grid only - the map strip keeps its
+       own tile layout) becomes a column of thin rows */
+    body.view-list #grid .shots { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 4px; }
+    body.view-list #grid .tile
+    {
+        aspect-ratio: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 10px 4px 4px;
+        overflow: visible;
+        box-shadow: none;
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+        border-radius: 0;
+        background: none;
+    }
+    body.view-list #grid .tile:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    body.view-list #grid .tile .scene
+    {
+        position: relative;
+        inset: auto;
+        width: 52px;
+        height: 52px;
+        flex: 0 0 auto;
+        border-radius: var(--radius-s);
+        overflow: hidden;
+    }
+    body.view-list #grid .tile .cap,
+    body.view-list #grid .tile .geo-dot { display: none; }
+    body.view-list #grid .tmeta
+    {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1 1 auto;
+        text-align: left;
+    }
+    body.view-list #grid .tmeta b { font-size: 0.84rem; font-weight: 600; color: var(--text);
+                              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body.view-list #grid .tmeta i { font-style: normal; font-size: 0.76rem; color: var(--text-dim);
+                              font-variant-numeric: tabular-nums; }
+    /* the .tmeta block only exists to be shown in #grid list view */
+    .tmeta { display: none; }
+
+    /* ---------- stage : one pane visible at a time ---------- */
+    .stage { flex: 1 1 auto; min-height: 0; position: relative; }
+    .pane  { position: absolute; inset: 0; overflow: auto; }
+    .pane[hidden] { display: none; }
+
+    /* ---------- grid (contact sheet) ---------- */
+    #grid { padding: 2px var(--space-4) 40px; }
+    .grid-msg { padding: 48px var(--space-4); text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+    .grid-msg.busy::after { content: ""; display: inline-block; width: 14px; height: 14px; margin-left: 8px; vertical-align: -2px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .day-h
+    {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 16px 2px 8px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+    }
+    .day-h span { font-weight: 400; letter-spacing: 0; color: var(--text-faint); }
+
+    .shots
+    {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+        gap: 6px;
+        padding: 10px 0 4px;
+    }
+    .tile
+    {
+        position: relative;
+        aspect-ratio: 3 / 2;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        border-radius: var(--radius-s);
+        overflow: hidden;
+        background: var(--card2);
+        box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .tile .scene { position: absolute; inset: 0; }
+    /* caption sits over photo art -> a fixed light-on-dark scrim, not a token */
+    .tile .cap
+    {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 14px 8px 6px;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        color: #fff;
+        text-align: left;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.62));
+        opacity: 0;
+        transition: opacity var(--tr-fast);
+        font-variant-numeric: tabular-nums;
+    }
+    .tile:hover .cap,
+    .tile:focus-visible .cap { opacity: 1; }
+
+    /* small marker: filled = has GPS, ring = no location. Sits on photo art. */
+    .geo-dot
+    {
+        position: absolute;
+        top: 7px;
+        right: 7px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.28);
+    }
+    .geo-dot.no { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.6); }
+
+    /* ---------- map (real Leaflet map, library lazy-loaded on first use) ---------- */
+    #map { background: var(--bg); }
+    .lmap { position: absolute; inset: 0; background: var(--card); }
+    /* OSM tiles are visually busy - calm them to a grey backdrop so the photo
+       pins are the only colour (same treatment as the Trips map). */
+    .lmap .leaflet-tile-pane { filter: grayscale(0.92) contrast(0.9) brightness(1.05); }
+
+    /* Leaflet's default controls / popups assume a light page */
+    /* Leaflet's popup / zoom / attribution chrome is tokenised once in the shared
+       LEAFLET CHROME block (shared/app.css); Trips' map gets the same. */
+
+    /* a photo cluster: a count bubble (L.divIcon markup) */
+    .mk
+    {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+        color: var(--on-accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        box-shadow: 0 2px 8px var(--shadow), 0 0 0 2px var(--card);
+        transition: transform var(--tr-fast);
+    }
+    .mk:hover, .mk.on { transform: scale(1.14); }
+
+    .map-empty
+    {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+        max-width: 80%;
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--text-dim);
+    }
+    .map-empty[hidden] { display: none; }
+
+    #nogeoChip { position: absolute; left: var(--space-4); bottom: var(--space-4); z-index: 3; }
+    #nogeoChip[hidden] { display: none; }
+
+    /* map header: sits top-right (top-left is Leaflet's zoom control), tells the
+       reader where the place names come from via the shared info dot. */
+    .map-head
+    {
+        position: absolute;
+        right: var(--space-4);
+        top: var(--space-4);
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 4px 6px 4px 11px;
+        border-radius: var(--radius-pill);
+        background: color-mix(in srgb, var(--card) 88%, transparent);
+        border: 1px solid var(--line);
+        box-shadow: var(--elev-card);
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .map-head .info-dot { margin: 0; }
+
+    .strip
+    {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 4;
+        background: var(--card);
+        border-top: 1px solid var(--line);
+        box-shadow: var(--elev-dialog);
+        transform: translateY(100%);
+        transition: transform var(--tr-move);
+    }
+    .strip.open { transform: translateY(0); }
+    .strip-head
+    {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px 4px;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+    .strip-scroll { display: flex; gap: 8px; padding: 10px 12px 16px; overflow-x: auto; }
+    .strip-scroll .tile { width: 150px; flex: none; }
+
+    /* ---------- PASE + LIGHTBOX : full-screen viewers ----------
+     * Both are deliberately fixed-dark and do NOT follow the theme - the same
+     * call app.css records for Drive's built-in image viewer. Colours here are
+     * literals on purpose; only --accent (readable on black) is borrowed. */
+    body.pase .topbar,
+    body.pase .view-bar { display: none; }
+    body.pase #pase   { position: fixed; inset: 0; z-index: 40; }
+
+    #pase { background: #101013; overflow: hidden; }
+    .pase-frame { position: absolute; inset: 0; overflow: hidden; }
+    .pase-photo { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s ease; }
+    .pase-photo.show { opacity: 1; }
+    .pase-photo .scene { position: absolute; inset: -4%; }
+    .pase-kb .scene { transition: transform var(--dwell, 6s) linear; }
+
+    .pase-top  { position: absolute; left: 0; right: 0; top: 0; z-index: 3; height: 3px; background: rgba(255, 255, 255, 0.14); }
+    .pase-prog { height: 100%; width: 0; background: var(--accent); transition: width 0.3s linear; }
+    .pase-tick { position: absolute; top: 0; width: 2px; height: 3px; background: rgba(255, 255, 255, 0.5); }
+
+    .pase-count { position: absolute; right: 16px; top: 16px; z-index: 3; font-size: 0.76rem; font-weight: 700; color: rgba(255, 255, 255, 0.82); font-variant-numeric: tabular-nums; }
+    .pase-x
+    {
+        position: absolute; left: 14px; top: 12px; z-index: 4;
+        width: 36px; height: 36px; border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.35);
+        color: #fff; cursor: pointer; font-size: 15px;
+    }
+    .pase-cap { position: absolute; left: 22px; bottom: 74px; z-index: 3; max-width: min(72%, 560px); color: #fff; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6); }
+    .pase-cap .t { font-size: 1.3rem; font-weight: 700; line-height: 1.2; margin-bottom: 4px; text-wrap: balance; }
+    .pase-cap .m { font-size: 0.82rem; color: rgba(255, 255, 255, 0.86); font-variant-numeric: tabular-nums; }
+    .pase-ctrl
+    {
+        position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 4;
+        display: flex; align-items: center; gap: 6px;
+        background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: var(--radius-pill); padding: 6px; backdrop-filter: blur(6px);
+    }
+    .pase-ctrl button { width: 40px; height: 40px; border-radius: 50%; border: 0; background: transparent; color: #fff; cursor: pointer; display: grid; place-items: center; }
+    .pase-ctrl button:hover { background: rgba(255, 255, 255, 0.14); }
+    .pase-ctrl .play { background: #fff; color: #111; }
+    .pase-ctrl .play:hover { background: #fff; }
+    .pase-speed { border: 0; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; font-size: 0.78rem; font-weight: 700; padding: 0 10px; min-width: 44px; font-variant-numeric: tabular-nums; }
+
+    .lb { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.92); display: none; flex-direction: column; }
+    .lb.open { display: flex; }
+    .lb-photo { flex: 1; position: relative; margin: 14px; }
+    .lb-photo .scene { position: absolute; inset: 0; border-radius: var(--radius-m); overflow: hidden; }
+    .lb-x
+    {
+        position: absolute; right: 14px; top: 12px; z-index: 3;
+        width: 38px; height: 38px; border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.4);
+        color: #fff; cursor: pointer; font-size: 16px;
+    }
+    .lb-nav
+    {
+        position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+        width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.4);
+        color: #fff; cursor: pointer; display: grid; place-items: center;
+    }
+    .lb-nav.prev { left: 22px; }
+    .lb-nav.next { right: 22px; }
+    .lb-foot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 0 20px 16px; color: #fff; }
+    .lb-cap { margin-right: auto; }
+    .lb-cap .t { font-size: 1.05rem; font-weight: 700; }
+    .lb-cap .m { font-size: 0.8rem; color: rgba(255, 255, 255, 0.72); font-variant-numeric: tabular-nums; }
+    .lb-btn
+    {
+        border: 1px solid rgba(255, 255, 255, 0.24); background: rgba(255, 255, 255, 0.06);
+        color: #fff; cursor: pointer; font-size: 0.82rem;
+        padding: 9px 14px; border-radius: var(--radius-pill);
+        display: inline-flex; align-items: center; gap: 7px;
+    }
+    .lb-btn:hover { background: rgba(255, 255, 255, 0.14); }
+    .lb-btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+    .lb-foot-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* per-photo comment, read-only here - edited in "Editar" mode. Fixed
+     * light-on-dark like the rest of the lightbox (never theme tokens). */
+    .lb-note { margin-top: 2px; }
+    .lb-note[hidden] { display: none; }
+    .lb-note .note-text
+    {
+        margin: 0;
+        padding: 8px 12px;
+        font-size: 0.88rem;
+        line-height: 1.45;
+        color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, 0.07);
+        border-radius: var(--radius-s);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /* grid marker: this photo has a comment (geo-dot sits top-right, this top-left) */
+    .note-mark { position: absolute; top: 6px; left: 6px; color: #fff; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.65)); }
+    .note-mark svg { width: 13px; height: 13px; display: block; }
+
+    /* the comment, read-only, under the Pase caption */
+    .pase-cap .c { margin-top: 8px; font-size: 0.9rem; line-height: 1.45; color: rgba(255, 255, 255, 0.9); max-width: 46ch; white-space: pre-wrap; }
+    .pase-cap .c[hidden] { display: none; }
+
+    /* ---------- EDITAR mode : the hint bar over the grid ---------- */
+    .edit-hint
+    {
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        text-align: center;
+        font-size: 0.82rem;
+        color: var(--text-dim);
+        background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+        border-bottom: 1px solid var(--line);
+    }
+    .edit-hint[hidden] { display: none; }
+
+    /* ---------- IMAGE EDITOR : full-screen, opens in this tab ----------
+     * TOAST UI Image Editor (same build Drive ships, loaded on first use). A
+     * fixed-dark surface like the other viewers - literals on purpose, never
+     * theme tokens - matching Drive's own editor chrome. */
+    /* The chrome itself is the shared IMAGE EDITOR block in shared/app.css (Drive
+       opens the same editor). Local: the layer it opens over, and a tabular-figures
+       title, because Photos puts "3 / 128" up there. */
+    .editor-backdrop { z-index: 60; }
+    .editor-title    { font-variant-numeric: tabular-nums; }
+
+    /* ---------- scene : a real photo <img>, or (example mode) placeholder art ----------
+     * A real thumbnail is an <img> so the browser applies EXIF orientation.
+     * The .s-* gradient classes + their noise overlay are the example-mode
+     * stand-ins and are the only place hex colours live in this file. */
+    .scene { background-size: cover; }
+    .scene::after
+    {
+        content: "";
+        position: absolute;
+        inset: 0;
+        mix-blend-mode: overlay;
+        opacity: 0.4;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+        background-size: 120px;
+    }
+    /* a real photo shows its own pixels - no placeholder noise / decoration */
+    .scene.is-photo { background: var(--card2); }
+    .scene.is-photo::after,
+    .scene.is-photo::before { content: none; }
+    .scene .ph
+    {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .lb-photo .scene .ph { object-fit: contain; }
+
+    .s-river   { background: linear-gradient(180deg, #2b3a6b 0%, #7a5a8f 30%, #e08a4c 56%, #f2b56a 70%, #8a6a5a 73%, #3f4a63 100%); }
+    .s-river::before   { content: ""; position: absolute; left: 60%; top: 34%; width: 20%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #ffe6b0, #f4a94e 68%, transparent 72%); }
+    .s-azulejo { background: repeating-linear-gradient(45deg, #1e5aa8 0 13px, #4f8bd0 13px 26px), linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent); background-blend-mode: multiply, normal; }
+    .s-tram    { background: linear-gradient(118deg, #c49a54 0 38%, #ecc267 38% 56%, #b0754a 56% 100%); }
+    .s-facade  { background: linear-gradient(92deg, #e7b7c4 0 25%, #f2d69a 25% 50%, #bfe0cf 50% 75%, #e7c1a0 75% 100%); }
+    .s-facade::before  { content: ""; position: absolute; inset: 14% 10%; background-image: linear-gradient(#0000 62%, rgba(60, 40, 30, 0.18) 63%), linear-gradient(90deg, #0000 60%, rgba(60, 40, 30, 0.16) 61%); background-size: 24% 30%; }
+    .s-roofs   { background: linear-gradient(180deg, #8fb7d8 0 44%, #d98a5e 44% 60%, #b5623a 60% 100%); }
+    .s-castle  { background: linear-gradient(180deg, #a9c4d8 0 42%, #9a8f7e 42% 100%); }
+    .s-castle::before  { content: ""; position: absolute; left: 0; right: 0; top: 38%; height: 11%; background: repeating-linear-gradient(90deg, #7c7161 0 11%, transparent 11% 19%); }
+    .s-street  { background: linear-gradient(178deg, #e6dcc6 0 20%, #cdb994 20% 33%, #9a8a6d 33% 60%, #5f5442 100%); }
+    .s-street::before  { content: ""; position: absolute; inset: 0; background: linear-gradient(102deg, transparent 38%, rgba(255, 240, 205, 0.34) 51%, transparent 64%); }
+    .s-food    { background: radial-gradient(circle at 50% 56%, #efe0c4 0 24%, #c99a5e 25% 38%, #7a5636 39% 100%); }
+    .s-pena    { background: linear-gradient(120deg, #c9433a 0 36%, #e3b23c 36% 64%, #d98a2b 64% 100%); }
+    .s-night   { background: linear-gradient(180deg, #10162e, #1d2749 68%, #0c1022); }
+    .s-night::before   { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, #ffd98a 0 38%, transparent 44%); background-size: 8% 11%; background-position: 10% 62%; opacity: 0.5; }
+
+    @media (max-width: 640px)
+    {
+        .search-toggle              { display: inline-flex; }
+        .tb-end .topbar-search      { display: none; }
+        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
+        .pase-cap { left: 14px; bottom: 88px; max-width: 78%; }
+        .pase-cap .t { font-size: 1.1rem; }
+        .lb-nav.prev { left: 8px; }
+        .lb-nav.next { right: 8px; }
+    }
+    @media (prefers-reduced-motion: reduce)
+    {
+        .pase-kb .scene { transition: none !important; }
+    }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
+            <h1>Photos</h1>
+
+            <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+
+            <div class="topbar-actions">
+                <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ui.sync.synced"></div>
+            </div>
+
+            <span class="bar-info" id="subStrip"></span>
+        </header>
+
+        <div class="view-bar" id="viewBar">
+            <div class="tb-modes" role="tablist" data-i18n-attr="aria-label:photos.galleryMode">
+                <button class="icon-btn is-active" data-mode="grid" role="tab" aria-selected="true" data-i18n-attr="title:photos.grid, aria-label:photos.grid">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                </button>
+                <button class="icon-btn" data-mode="lista" role="tab" aria-selected="false" data-i18n-attr="title:photos.list, aria-label:photos.list">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </button>
+                <button class="icon-btn" data-mode="map" role="tab" aria-selected="false" data-i18n-attr="title:photos.map, aria-label:photos.map">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                </button>
+                <button class="icon-btn" data-mode="pase" role="tab" aria-selected="false" data-i18n-attr="title:photos.slideshow, aria-label:photos.slideshow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </button>
+                <button class="icon-btn" data-mode="editar" role="tab" aria-selected="false" data-i18n-attr="title:photos.edit, aria-label:photos.edit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+            </div>
+
+            <input type="file" id="addInput" accept="image/*" multiple hidden>
+
+            <div class="tb-actions">
+                <div class="tb-sep"></div>
+                <button class="icon-btn" id="addBtn" type="button" hidden data-i18n-attr="title:photos.uploadHere, aria-label:photos.uploadHere">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </button>
+
+                <button class="icon-btn" id="shareBtn" type="button" hidden data-i18n-attr="title:photos.shareAlbumTip, aria-label:photos.shareAlbum">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
+                </button>
+            </div>
+
+            <div class="tb-end">
+                <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
+                <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+                <button class="icon-btn" id="reloadBtn" type="button" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                </button>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="edit-hint" id="editHint" hidden data-i18n="photos.editHint"></div>
+
+        <div class="stage">
+            <div class="pane" id="grid"></div>
+
+            <div class="pane" id="map" hidden>
+                <div class="lmap" id="lmap"></div>
+                <div class="map-head">
+                    <span data-i18n="photos.places"></span>
+                    <button class="info-dot" data-i18n-attr="data-info:photos.placesInfo"></button>
+                </div>
+                <div class="map-empty" id="mapEmpty" hidden data-i18n="photos.noPlaces"></div>
+                <button class="pill" id="nogeoChip" hidden></button>
+                <aside class="strip" id="strip">
+                    <div class="strip-head">
+                        <span id="stripTitle"></span>
+                        <button class="icon-btn sm" id="stripX" data-i18n-attr="title:ui.close, aria-label:ui.close">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                    <div class="strip-scroll" id="stripScroll"></div>
+                </aside>
+            </div>
+
+            <div class="pane" id="pase" hidden>
+                <div class="pase-frame" id="paseFrame">
+                    <div class="pase-photo" id="paseA"></div>
+                    <div class="pase-photo" id="paseB"></div>
+                </div>
+                <div class="pase-top"><div class="pase-prog" id="paseProg"></div><div id="paseTicks"></div></div>
+                <button class="pase-x" id="paseX" data-i18n-attr="title:photos.exitSlideshow, aria-label:photos.exitSlideshow">&times;</button>
+                <div class="pase-count" id="paseCount"></div>
+                <div class="pase-cap"><div class="t" id="paseTitle"></div><div class="m" id="paseMeta"></div><div class="c" id="paseNote" hidden></div></div>
+                <div class="pase-ctrl">
+                    <button id="pPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg></button>
+                    <button id="pPlay" class="play" data-i18n-attr="title:photos.playPause, aria-label:photos.playPause"></button>
+                    <button id="pNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg></button>
+                    <button id="pSpeed" class="pase-speed" data-i18n-attr="title:photos.secondsPerPhoto, aria-label:photos.secondsPerPhoto">6 s</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="lb" id="lb" aria-modal="true" role="dialog" data-i18n-attr="aria-label:photos.lightbox">
+        <div class="lb-photo">
+            <div class="scene" id="lbScene"></div>
+            <button class="lb-x" id="lbX" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
+            <button class="lb-nav prev" id="lbPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="lb-nav next" id="lbNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
+        <div class="lb-foot">
+            <div class="lb-foot-row">
+                <div class="lb-cap"><div class="t" id="lbTitle"></div><div class="m" id="lbMeta"></div></div>
+                <button class="lb-btn primary" id="lbPlay"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span data-i18n="photos.startHere"></span></button>
+                <button class="lb-btn" id="lbMap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg> <span data-i18n="photos.seeOnMap"></span></button>
+            </div>
+            <div class="lb-note" id="lbNote" hidden><p class="note-text" id="lbNoteText"></p></div>
+        </div>
+    </div>
+
+    <!-- EDITAR mode: the photo opens here, in this tab (TOAST UI Image Editor).
+         On close the edited pixels + comment are saved and the views re-render. -->
+    <div id="editorBackdrop" class="editor-backdrop" role="dialog" aria-modal="true" data-i18n-attr="aria-label:photos.editorTitle">
+        <div class="editor-bar">
+            <span id="editorName" class="editor-title"></span>
+            <span class="editor-actions">
+                <button id="editorSaveBtn"   class="editor-btn" data-i18n-attr="title:ui.save, aria-label:ui.save"></button>
+                <button id="editorSaveAsBtn" class="editor-btn" data-i18n-attr="title:photos.saveAsCopy, aria-label:photos.saveAsCopy"></button>
+                <button id="editorCloseBtn"  class="editor-btn" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
+            </span>
+        </div>
+        <div id="tuiEditor" class="editor-canvas"></div>
+        <textarea id="editorComment" class="editor-comment" rows="2" data-i18n-attr="placeholder:photos.commentPh"></textarea>
+    </div>
+
+    <!-- "Guardar como copia" dialog. Sits above the editor overlay (sheet-backdrop
+         z-index 100 > editor-backdrop 60). Closes only via its buttons / Escape. -->
+    <div id="saveAsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="photos.saveAsCopy"></h2>
+            <div class="field">
+                <label for="saveAsName" data-i18n="ui.fileName"></label>
+                <input type="text" id="saveAsName" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="sheet-actions">
+                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.saveCopy"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+<script src="../shared/media.js"></script>
+<script>
+"use strict";
+const $  = s => document.querySelector( s );
+const $$ = s => document.querySelectorAll( s );
+const reduced = () => matchMedia( "(prefers-reduced-motion:reduce)" ).matches;
+// The helpers shared with Music / Movies live in shared/media.js (one copy).
+const { esc, extOf, baseName, fmtSize, sleep, pool } = NayiveMedia;
+
+/* ============================================================================
+ * WHICH FOLDER
+ *
+ * Drive opens Photos as  ?dir=<folder path relative to the file root>
+ * e.g. "files/viajes/lisboa". With no ?dir= the page runs in DEMO mode on a
+ * small built-in example set (a Lisbon trip) - handy for opening it directly.
+ * ==========================================================================*/
+const PARAMS = new URLSearchParams( location.search );
+// DIR / DEMO are resolved for real in boot(): with no ?dir= we try the folder
+// remembered in data/photos/config.json (or ask for it), and only a visitor who
+// is not signed in falls back to DEMO.
+let DIR  = ( () => { const d = PARAMS.get( "dir" ); return d != null ? d.replace( /\/+$/, "" ) : null; } )();
+let DEMO = DIR === null;
+// "shared/<algo>" = an album another user shared with us (lib/shares.py). We can
+// look at it, never change it - the server refuses every write there anyway.
+// Note what stays ON: thumbnails, the EXIF cache, places and our own comments
+// all live in OUR OWN data/photos/, so they work exactly as for our own photos.
+let RO   = DIR !== null && DIR.indexOf( "shared/" ) === 0;
+// ...unless whoever shared it ticked "pueden añadir archivos". Then, and only
+// then, we may ADD photos of our own to the album - never overwrite one, never
+// delete one, never edit one, never pass the album on. Resolved in boot() from
+// the grant itself (NayiveUI.canAddTo -> /api/shares), because a path cannot
+// tell you what you are allowed to do with it.
+let CAN_ADD = false;
+
+const COMMENTS_PATH = "data/photos/comments.json";
+const PLACES_PATH   = "data/photos/places.json";
+const SCAN_PATH     = "data/photos/scan-cache.json";
+const IMG_EXT   = [ "jpg", "jpeg", "png", "gif", "webp", "bmp", "avif" ];
+const EDIT_EXT  = [ "jpg", "jpeg", "png", "webp" ];   // formats TOAST UI can re-encode
+const EXIF_EXT  = [ "jpg", "jpeg" ];
+
+/* -------- state -------- */
+const st = {
+    mode: "grid", q: "", cluster: undefined, lb: 0, list: [],
+    paseIdx: 0, playing: false, speed: 6000, timer: null, ab: false, paseStarted: false,
+    map: null, markers: [], geoReady: false,
+};
+
+/* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust,
+ *            scene, hue }]   (scene / hue only in DEMO mode) */
+let PHOTOS   = [];
+let CLUSTERS = [];     // [{ id, lat, lon, items:[photo], place }]
+const EDITS  = {};     // DEMO only: photo id -> edited data URL
+let COMMENTS = {};     // photo id -> comment text
+let PLACES   = {};     // "lat,lon" (3 dp) -> reverse-geocoded name
+// data/photos/scan-cache.json: image path -> { size, mtime, ts, lat, lon } - the
+// cached EXIF read of every image (any type); see SCAN CACHE below.
+const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
+
+// The photos the grid / list / lightbox work on: all of them, or - when the
+// header search box has text - just those whose file name matches.
+function photos()
+{
+    const q = st.q.trim().toLowerCase();
+    return q ? PHOTOS.filter( p => p.name.toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
+}
+function pad2( n ) { return String( n ).padStart( 2, "0" ); }
+function dayOf( ts )  { const d = new Date( ts ); return d.getFullYear() + "-" + pad2( d.getMonth() + 1 ) + "-" + pad2( d.getDate() ); }
+function timeOf( ts ) { const d = new Date( ts ); return pad2( d.getHours() ) + ":" + pad2( d.getMinutes() ); }
+function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.localeCompare( b.name, NayiveUI.lang() ) ); }
+
+/* ---------------------------------------------------------------------------
+ * RENDERING A PHOTO
+ *
+ * A real photo is an <img> (so the browser applies EXIF orientation). In DEMO
+ * mode an un-edited photo is a CSS gradient via its .s-* class; an edited one
+ * (DEMO) becomes an <img> of the editor's data URL.
+ * -------------------------------------------------------------------------*/
+const NOTE_MARK = '<span class="note-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>';
+
+/* ---------------------------------------------------------------------------
+ * THUMBNAILS  - made here, in the browser; the server only stores them.
+ *
+ * A grid tile wants a ~500 px JPEG, not a 4 MB photo. Those used to be made
+ * on the server (Pillow); now the browser makes them, so the server's CPU and
+ * RAM are never touched for pictures. A thumbnail is a plain file,
+ *
+ *     data/photos/thumbs/<size>_<mtime>.jpg
+ *
+ * keyed by the photo's size + mtime: a move or rename keeps both (so the thumb
+ * follows the photo with no re-keying), an edit changes them (so a fresh one
+ * gets made). How a tile finds its thumb, with zero extra requests when it
+ * exists:
+ *
+ *   1. <img src=thumb URL>. Present -> done (the common case, every visit
+ *      after the first).
+ *   2. 404 -> the delegated `error` handler swaps in the full photo. The
+ *      browser then decodes it to show the tile anyway...
+ *   3. ...and the `load` handler draws THAT already-decoded image onto a
+ *      canvas at THUMB_W px, toBlob(JPEG) and PUTs the result. Next render
+ *      uses the thumb. The photo is never downloaded twice for this.
+ *
+ * A photo just uploaded from this page is shrunk from the local File right
+ * away (PENDING_FILES), so it isn't even downloaded once. Thumbs of photos
+ * that are gone (deleted, edited) are orphans: Drive purges the ones it
+ * trashes, and sweepThumbs() here removes the rest once a day per device
+ * (one listing of the thumbs folder against the keys in the scan cache).
+ * -------------------------------------------------------------------------*/
+const THUMB_DIR = "data/photos/thumbs";
+const THUMB_W   = 500;                 // tiles are <= ~250 CSS px wide -> x2 for retina
+const THUMB_Q   = 0.82;                // JPEG quality; ~30-40 KB per thumb
+const THUMB_SWEEP_KEY = "photos-thumb-sweep";   // localStorage: yyyy-mm-dd of the last sweep
+
+const THUMB_STATE   = new Map();       // thumb key -> "missing" | "pending" | "ok" | "failed"
+const PENDING_FILES = new Map();       // file name -> File just uploaded from this page
+const THUMB_QUEUE   = [];              // [ { p, source } ] waiting for a worker
+let   thumbWorkers  = 0;
+
+function thumbKey( p )  { return p.size + "_" + p.mtime + ".jpg"; }
+function thumbPath( p ) { return THUMB_DIR + "/" + thumbKey( p ); }
+
+function realPhoto( p ) { return ! DEMO || !! EDITS[ p.id ]; }
+function srcFor( p )
+{
+    if( EDITS[ p.id ] ) return EDITS[ p.id ];
+    if( p.localUrl )    return p.localUrl;      // just uploaded: show the local bytes
+    // The photo's mtime in the URL makes it content-addressed (an edit changes
+    // the mtime -> a new URL), so the browser may keep it for good instead of
+    // asking "still current?" every time the lightbox / Pase shows it.
+    // ...but NOT on an album someone shared with us: "immutable" would let the
+    // browser keep their photo for a year, so taking the share back would not
+    // take the copy back. Without it the browser revalidates and gets a 403.
+    if( p.mtime && ! p.bust ) return p.url + "&v=" + p.mtime + ( RO ? "" : "&immutable=1" );
+    return p.url + ( p.bust ? ( "&t=" + p.bust ) : "" );
+}
+// Grid / strip source + which stage the <img> starts in (see the handlers
+// below). "thumb" = try the stored thumbnail; "fallback" = we already know it
+// is missing, go straight to the full photo (and make the thumb from it).
+function thumbSrc( p )
+{
+    if( EDITS[ p.id ] || p.localUrl || ! p.size || ! p.mtime ) return { src: srcFor( p ), stage: "full" };
+    const state = THUMB_STATE.get( thumbKey( p ) );
+    if( state === "missing" || state === "pending" || state === "failed" ) return { src: srcFor( p ), stage: "fallback" };
+    // `immutable`: the key IS the content, so the browser may cache it for good.
+    return { src: GumApi.fileUrl( thumbPath( p ) ) + "&immutable=1", stage: "thumb" };
+}
+
+function photoById( id ) { return PHOTOS.find( p => p.id === id ) || null; }
+
+// error/load don't bubble, so listen in the capture phase on the document:
+// one pair of listeners covers every tile the grid, the strip and the
+// lightbox will ever create.
+document.addEventListener( "error", e =>
+{
+    const img = e.target;
+    if( ! ( img instanceof HTMLImageElement ) || ! img.classList.contains( "ph" ) ) return;
+    const p = photoById( img.dataset.id );
+    if( img.dataset.stage === "thumb" && p )
+    {
+        THUMB_STATE.set( thumbKey( p ), "missing" );
+        img.dataset.stage = "fallback";
+        img.src = srcFor( p );
+        return;
+    }
+    img.style.display = "none";                // the photo itself won't load
+}, true );
+
+document.addEventListener( "load", e =>
+{
+    const img = e.target;
+    if( ! ( img instanceof HTMLImageElement ) || img.dataset.stage !== "fallback" ) return;
+    const p = photoById( img.dataset.id );
+    if( p && ! DEMO ) queueThumb( p, img );
+}, true );
+
+/* Ask for a thumbnail of `p` from `source` (a loaded <img>, or a File/Blob).
+ * At most 2 run at once; a photo already pending or done is skipped. */
+function queueThumb( p, source )
+{
+    if( DEMO || ! p.size || ! p.mtime ) return;
+    const key = thumbKey( p );
+    const st  = THUMB_STATE.get( key );
+    if( st === "pending" || st === "ok" || st === "failed" ) return;
+    THUMB_STATE.set( key, "pending" );
+    THUMB_QUEUE.push( { p, source } );
+    runThumbQueue();
+}
+
+function runThumbQueue()
+{
+    while( thumbWorkers < 2 && THUMB_QUEUE.length )
+    {
+        const job = THUMB_QUEUE.shift();
+        thumbWorkers++;
+        makeThumb( job.p, job.source )
+            .catch( () => {} )
+            .then( () => { thumbWorkers--; runThumbQueue(); } );
+    }
+}
+
+async function makeThumb( p, source )
+{
+    const key = thumbKey( p );
+    try
+    {
+        const blob = await NayivePhoto.shrinkToJpeg( source, { maxW: THUMB_W, quality: THUMB_Q } );
+        await GumApi.writeFileBytes( thumbPath( p ), blob );
+        THUMB_STATE.set( key, "ok" );
+    }
+    catch( _ )
+    {
+        // Quota full (507), offline, whatever: don't try this one again until
+        // the next open - re-uploading on every re-render would just fail again.
+        THUMB_STATE.set( key, "failed" );      // the tile keeps showing the full photo
+        return;
+    }
+    if( p.localUrl )                           // uploaded from here: local preview no longer needed
+    {
+        try { URL.revokeObjectURL( p.localUrl ); } catch( _ ) {}
+        delete p.localUrl;
+    }
+}
+
+/* Once a day per device: delete thumbnails no photo refers to any more. The
+ * scan cache lists every image of every folder scanned from this account with
+ * its size + mtime, so the set of keys it implies (plus the folder on screen)
+ * is exactly the set of thumbs worth keeping. Only runs when the cache was
+ * really read (SCAN_CACHE.loaded) - never on a guess. */
+async function sweepThumbs()
+{
+    if( DEMO || ! SCAN_CACHE.loaded ) return;
+    const today = dayOf( Date.now() );
+    let last = null;
+    try { last = localStorage.getItem( THUMB_SWEEP_KEY ); } catch( _ ) {}
+    if( last === today ) return;
+
+    let listing;
+    try { listing = await GumApi.listDir( THUMB_DIR ); }
+    catch( err )
+    {
+        if( String( err && err.message ).indexOf( "HTTP 404" ) === -1 ) return;   // offline etc: try tomorrow
+        listing = { nodes: [] };                                                // no thumbs folder yet
+    }
+
+    const keep = new Set();
+    for( const e of Object.values( SCAN_CACHE.map ) )
+        if( e && e.size && e.mtime ) keep.add( e.size + "_" + e.mtime + ".jpg" );
+    for( const p of PHOTOS ) if( p.size && p.mtime ) keep.add( thumbKey( p ) );
+
+    const dead = ( listing.nodes || [] )
+        .filter( n => n.nodes == null && ! keep.has( baseName( n.path ) ) )
+        .map( n => n.path );
+
+    try
+    {
+        for( let i = 0; i < dead.length; i += 100 )       // keep each URL a sane length
+            await GumApi.purgePaths( dead.slice( i, i + 100 ) );
+        localStorage.setItem( THUMB_SWEEP_KEY, today );
+    }
+    catch( _ ) {}
+}
+
+/* After the editor rewrote `p` in place its size + mtime changed: fetch the
+ * new ones (one folder listing) so the thumb key moves on and the stale
+ * thumbnail is never shown. The scan-cache entry is re-keyed too, keeping the
+ * capture date + GPS the editor's re-encode may have stripped. */
+async function refreshStat( p )
+{
+    let folder;
+    try { folder = await GumApi.listDir( DIR ); } catch( _ ) { return; }
+    const n = ( folder.nodes || [] ).find( n => n.path === p.path );
+    if( ! n ) return;
+    p.size = n.size || 0; p.mtime = n.mtime || 0;
+    const e = SCAN_CACHE.map[ p.path ];
+    if( e ) { e.size = p.size; e.mtime = p.mtime; SCAN_CACHE.saveNow(); }
+}
+
+function sceneClass( p ) { return realPhoto( p ) ? "scene is-photo" : ( "scene " + p.scene ); }
+function sceneStyle( p ) { return realPhoto( p ) ? "" : ( "filter:hue-rotate(" + p.hue + ")" ); }
+function sceneInner( p, thumb )
+{
+    if( ! realPhoto( p ) ) return "";
+    const t = thumb ? thumbSrc( p ) : { src: srcFor( p ), stage: "full" };
+    return '<img class="ph" loading="lazy" decoding="async" alt="" src="' + esc( t.src ) + '"'
+         + ' data-id="' + esc( p.id ) + '" data-stage="' + t.stage + '">';
+}
+function sceneHtml( p, thumb )
+{
+    const style = sceneStyle( p );
+    return '<div class="' + sceneClass( p ) + '"' + ( style ? ' style="' + style + '"' : "" ) + '>' + sceneInner( p, thumb ) + '</div>';
+}
+function paintScene( el, p, thumb )
+{
+    if( ! p ) return;
+    el.className     = sceneClass( p );
+    el.style.cssText = sceneStyle( p );
+    el.innerHTML     = sceneInner( p, thumb );
+}
+
+/* ---------------------------------------------------------------------------
+ * EXAMPLE DATA (DEMO mode only)
+ * -------------------------------------------------------------------------*/
+const DEMO_HOME = {   // rough real coordinates so the map + geocoder still demo
+    baixa:  [ 38.7108, -9.1394 ], alfama: [ 38.7118, -9.1300 ],
+    belem:  [ 38.6975, -9.2064 ], nacoes: [ 38.7636, -9.0945 ],
+    sintra: [ 38.7876, -9.3904 ],
+};
+const DEMO_GROUPS = [
+    { day: "2025-10-09", h: 11, cl: "baixa",  scenes: [ "street", "tram", "facade", "street" ] },
+    { day: "2025-10-09", h: 15, cl: null,     scenes: [ "food", "azulejo" ] },
+    { day: "2025-10-09", h: 18, cl: "baixa",  scenes: [ "river", "river", "night" ] },
+    { day: "2025-10-10", h: 10, cl: "belem",  scenes: [ "castle", "street", "castle", "river", "street" ] },
+    { day: "2025-10-10", h: 13, cl: null,     scenes: [ "food", "food" ] },
+    { day: "2025-10-10", h: 16, cl: "sintra", scenes: [ "pena", "pena", "castle", "street", "roofs" ] },
+    { day: "2025-10-11", h: 10, cl: "alfama", scenes: [ "castle", "roofs", "street", "roofs" ] },
+    { day: "2025-10-11", h: 13, cl: "alfama", scenes: [ "roofs", "azulejo", "roofs" ] },
+    { day: "2025-10-11", h: 16, cl: null,     scenes: [ "street", "facade" ] },
+    { day: "2025-10-11", h: 18, cl: "baixa",  scenes: [ "river", "roofs", "river" ] },
+    { day: "2025-10-12", h: 11, cl: "nacoes", scenes: [ "street", "night" ] },
+    { day: "2025-10-12", h: 14, cl: "baixa",  scenes: [ "food", "street" ] },
+];
+function buildDemo()
+{
+    PHOTOS = [];
+    DEMO_GROUPS.forEach( ( g, gi ) =>
+    {
+        const base = new Date( g.day + "T00:00:00" ).getTime();
+        g.scenes.forEach( ( sc, i ) =>
+        {
+            const ts = base + ( g.h * 60 + i * 8 ) * 60000;
+            const c  = g.cl ? DEMO_HOME[ g.cl ] : null;
+            PHOTOS.push( {
+                id: "d" + gi + "_" + i, name: NayiveUI.tf( "photos.photoN", { n: PHOTOS.length + 1 } ),
+                ts: ts, day: dayOf( ts ), time: timeOf( ts ), place: "",
+                scene: "s-" + sc, hue: ( ( gi * 37 + i * 13 ) % 24 ) - 12 + "deg",
+                lat: c ? c[ 0 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
+                lon: c ? c[ 1 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
+            } );
+        } );
+    } );
+    sortPhotos();
+    try { COMMENTS = JSON.parse( localStorage.getItem( "photos-comments" ) || "{}" ); }
+    catch( _ ) { COMMENTS = {}; }
+
+    buildClusters();
+    st.geoReady = true;
+    setCrumb();
+    updateNoGeoChip();
+    geocode().then( () => { renderGrid(); if( st.mode === "map" ) drawMap(); } );
+}
+
+/* A stand-in "photo" for the editor in DEMO mode: the gradient painted to a
+ * canvas so TOAST UI has real pixels to load. */
+const SCENES = {
+    "s-river":   { angle: 180, stops: [ [ 0, "#2b3a6b" ], [ 0.3, "#7a5a8f" ], [ 0.56, "#e08a4c" ], [ 0.7, "#f2b56a" ], [ 0.73, "#8a6a5a" ], [ 1, "#3f4a63" ] ] },
+    "s-azulejo": { angle: 45,  stops: [ [ 0, "#1e5aa8" ], [ 0.5, "#4f8bd0" ], [ 1, "#1e5aa8" ] ] },
+    "s-tram":    { angle: 118, stops: [ [ 0, "#c49a54" ], [ 0.38, "#ecc267" ], [ 0.56, "#b0754a" ], [ 1, "#b0754a" ] ] },
+    "s-facade":  { angle: 92,  stops: [ [ 0, "#e7b7c4" ], [ 0.33, "#f2d69a" ], [ 0.66, "#bfe0cf" ], [ 1, "#e7c1a0" ] ] },
+    "s-roofs":   { angle: 180, stops: [ [ 0, "#8fb7d8" ], [ 0.44, "#d98a5e" ], [ 0.6, "#b5623a" ], [ 1, "#b5623a" ] ] },
+    "s-castle":  { angle: 180, stops: [ [ 0, "#a9c4d8" ], [ 0.42, "#9a8f7e" ], [ 1, "#9a8f7e" ] ] },
+    "s-street":  { angle: 178, stops: [ [ 0, "#e6dcc6" ], [ 0.2, "#cdb994" ], [ 0.33, "#9a8a6d" ], [ 1, "#5f5442" ] ] },
+    "s-food":    { radial: true, stops: [ [ 0, "#efe0c4" ], [ 0.38, "#c99a5e" ], [ 1, "#7a5636" ] ] },
+    "s-pena":    { angle: 120, stops: [ [ 0, "#c9433a" ], [ 0.36, "#e3b23c" ], [ 0.64, "#d98a2b" ], [ 1, "#d98a2b" ] ] },
+    "s-night":   { angle: 180, stops: [ [ 0, "#10162e" ], [ 0.68, "#1d2749" ], [ 1, "#0c1022" ] ] },
+};
+function sceneImage( p )
+{
+    const W = 1400, H = 933;
+    const c = document.createElement( "canvas" );
+    c.width = W; c.height = H;
+    const x = c.getContext( "2d" );
+    const def = SCENES[ p.scene ] || SCENES[ "s-street" ];
+
+    let g;
+    if( def.radial )
+        g = x.createRadialGradient( W * 0.5, H * 0.56, 8, W * 0.5, H * 0.56, Math.max( W, H ) * 0.72 );
+    else
+    {
+        const a  = ( def.angle || 180 ) * Math.PI / 180;
+        const dx = Math.sin( a ), dy = -Math.cos( a );
+        const half = ( Math.abs( dx ) * W + Math.abs( dy ) * H ) / 2;
+        g = x.createLinearGradient( W / 2 - dx * half, H / 2 - dy * half, W / 2 + dx * half, H / 2 + dy * half );
+    }
+    def.stops.forEach( s => g.addColorStop( s[ 0 ], s[ 1 ] ) );
+
+    try { x.filter = "hue-rotate(" + p.hue + ")"; } catch( _ ) {}
+    x.fillStyle = g;
+    x.fillRect( 0, 0, W, H );
+    return c.toDataURL( "image/png" );
+}
+
+/* ---------------------------------------------------------------------------
+ * LOADING A REAL FOLDER
+ * -------------------------------------------------------------------------*/
+function setGridMsg( text, busy )
+{
+    $( "#grid" ).innerHTML = '<div class="grid-msg' + ( busy ? " busy" : "" ) + '">' + esc( text ) + "</div>";
+}
+
+/* The header sync dot: "saving" (blue) while a PUT is in flight, "synced"
+ * otherwise. shared/ui.js owns the classes and the title; Photos only overrides
+ * the two states it words its own way. Its dot is #sync, not #syncIndicator.
+ * A wrapper rather than NayiveUI.syncIndicator(): this script runs at parse
+ * time, before the deferred ui.js has set window.NayiveUI. */
+const SYNC_TITLES = { titles: { saving: 'photos.uploading', offline: 'photos.offline' } };
+
+function setSync( state )
+{
+    NayiveUI.applySyncState( 'sync', state, SYNC_TITLES );
+}
+
+/* "foto.jpg" -> "foto (2).jpg" if the name is already taken in this folder. */
+function uniqueName( name, taken )
+{
+    if( ! taken.has( name ) ) return name;
+    const dot  = name.lastIndexOf( "." );
+    const stem = dot > 0 ? name.slice( 0, dot ) : name;
+    const ext  = dot > 0 ? name.slice( dot )    : "";
+    let i = 2;
+    while( taken.has( stem + " (" + i + ")" + ext ) ) i++;
+    return stem + " (" + i + ")" + ext;
+}
+
+/* Upload the picked images into the folder Photos is showing (DIR), then
+ * reload so the scan cache picks up just the new files. Wired to #addBtn. */
+async function handleAddPhotos( fileList )
+{
+    const files = Array.from( fileList || [] ).filter( f => f && f.type.indexOf( "image/" ) === 0 );
+    $( "#addInput" ).value = "";
+    if( ! files.length ) return;
+    if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoUpload' ) ); return; }
+
+    // Friendly up-front space check, with the offer to empty the papelera when
+    // that alone would make room (the server enforces the quota too).
+    // Skipped on somebody else's album: ?stat=disk reports OUR free space, but
+    // the bytes fill THEIR home. Asking the wrong home would just say "plenty of
+    // room" and then fail; the server's answer below is the honest one.
+    if( ! RO )
+    {
+        const need = files.reduce( ( n, f ) => n + ( f.size || 0 ), 0 );
+        if( ! await NayiveUI.ensureRoom( need ) ) return;
+    }
+
+    // If this user has a max photo size, every photo is shrunk to it and turned
+    // into JPEG here, in the browser, before a single byte is sent.
+    const maxPx   = await NayivePhoto.limit();
+    const taken   = new Set( PHOTOS.map( p => p.name ) );
+    const emptied = ! PHOTOS.length;          // nothing on screen -> ok to use the grid for progress
+    let   done    = 0;
+
+    setSync( 'saving' );
+    $( "#addBtn" ).disabled = true;
+
+    for( let i = 0; i < files.length; i++ )
+    {
+        const f = files[ i ];
+
+        if( emptied ) setGridMsg( NayiveUI.tf( "photos.uploadingN", { i: i + 1, n: files.length } ), true );
+
+        // No limit -> ready.blob is the original file, untouched.
+        const ready = await NayivePhoto.prepare( f, maxPx );
+        const name  = uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
+        taken.add( name );
+
+        try
+        {
+            await GumApi.writeFileBytes( DIR + "/" + name, ready.blob );   // fetch() streams it
+            PENDING_FILES.set( name, ready.blob );                 // its thumb is made from these bytes, not re-downloaded
+            done++;
+        }
+        catch( err )
+        {
+            const msg = String( err && err.message );
+
+            // 507: no room left. On a shared album that is the OWNER's disk, not
+            // ours, and there is nothing we can empty to fix it - say whose it is.
+            if( msg.indexOf( "507" ) !== -1 )
+            {
+                NayiveUI.toast( RO ? NayiveUI.t( 'photos.ownerNoSpace' )
+                                   : NayiveUI.t( "ui.quotaExceeded" ) );
+                break;
+            }
+
+            // 409: that name is already taken. Only a shared folder answers this
+            // (you may add, never replace) - keep going, the rest may be fine.
+            if( msg.indexOf( "409" ) !== -1 )
+            {
+                NayiveUI.toast( NayiveUI.tf( "photos.alreadyThere", { name: name } ) );
+                continue;
+            }
+
+            NayiveUI.toast( NayiveUI.tf( "photos.uploadFailed", { name: name } ) );
+        }
+    }
+
+    $( "#addBtn" ).disabled = false;
+    setSync( "synced" );
+    NayiveUI.toast( NayiveUI.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+
+    if( done ) await loadFolder();
+    else if( emptied ) await loadFolder();     // restore the "no images" hint
+}
+
+async function loadFolder( folder )
+{
+    setGridMsg( NayiveUI.t( 'photos.loadingPhotos' ), true );
+    // Upload: our own album, or one we were given permission to add to.
+    $( "#addBtn" ).hidden = DEMO || ( RO && ! CAN_ADD );
+    // Sharing and editing stay OURS alone: you never pass on what was lent to
+    // you, and editing a photo would overwrite the owner's file.
+    $( "#shareBtn" ).hidden = DEMO || RO;
+    const editTab = $( '[data-mode="editar"]' );
+    if( editTab ) editTab.hidden = RO;         // nothing to edit in someone else's album
+
+    // `folder` is a GumApi.listDir() result - { path, nodes: [ ... ] } holding
+    // just this one folder's direct entries (files + sub-folders), never the
+    // whole recursive tree. Passed in by boot(); fetched here on a reload.
+    if( ! folder )
+    {
+        try { folder = await GumApi.listDir( DIR ); }
+        catch( _ ) { setGridMsg( NayiveUI.t( 'photos.loadFailed' ) ); return; }
+    }
+
+    const files = ( ( folder && folder.nodes ) || [] ).filter( n => n.nodes == null );
+    const imgs  = files.filter( n => IMG_EXT.indexOf( extOf( n.path ) ) !== -1 );
+
+    // Keep the crumb usable (change folder) even when the folder is a dead end.
+    setCrumbPath( dirLabel() );
+
+    if( ! imgs.length )
+    {
+        PHOTOS = [];
+        setGridMsg( DEMO ? NayiveUI.t( 'photos.noImages' )
+                         : NayiveUI.t( 'photos.noPhotosYet' ) );
+        return;
+    }
+
+    PHOTOS = imgs.map( n =>
+    {
+        const ts = ( n.mtime || 0 ) * 1000;
+        return {
+            id: n.path, path: n.path, name: baseName( n.path ), url: GumApi.fileUrl( n.path ),
+            ts: ts, day: dayOf( ts ), time: timeOf( ts ),
+            lat: null, lon: null, place: "", cluster: null,
+            size: n.size || 0, mtime: n.mtime || 0,
+        };
+    } );
+    sortPhotos();
+
+    // Photos uploaded from this page a moment ago: show the local bytes and
+    // make their thumbnails from them - no download of what we just sent.
+    for( const p of PHOTOS )
+    {
+        const f = PENDING_FILES.get( p.name );
+        if( ! f ) continue;
+        PENDING_FILES.delete( p.name );
+        p.localUrl = URL.createObjectURL( f );
+        queueThumb( p, f );
+    }
+
+    await loadComments();
+    sweepComments();
+
+    setCrumb();
+    renderGrid();
+
+    enrich();                 // EXIF dates + GPS, then clusters + place names
+}
+
+/* ---------------------------------------------------------------------------
+ * SCAN CACHE
+ *
+ * Reading EXIF means a Range request per JPEG - fine for a handful, slow for a
+ * folder of a thousand, and pure waste to repeat every time Photos opens. The
+ * result (capture date + GPS) is stored in data/photos/scan-cache.json keyed
+ * by the image's path, alongside its size + mtime. On the next open a photo
+ * whose size + mtime still match is taken straight from the cache; only new or
+ * changed files are actually read. Dead entries for this folder are pruned so
+ * the file can't grow without bound (same idea as sweepComments()) - Drive also
+ * re-keys entries on a move/rename and drops them on a trash, so this local
+ * prune is only the fallback for the currently-open folder.
+ * -------------------------------------------------------------------------*/
+async function scanExif()
+{
+    await SCAN_CACHE.load();
+
+    const todo = [];
+    let dirty  = false;
+    for( const p of PHOTOS )
+    {
+        const hit = SCAN_CACHE.hit( p );
+        if( hit )
+        {
+            if( hit.ts ) { p.ts = hit.ts; p.day = dayOf( hit.ts ); p.time = timeOf( hit.ts ); }
+            if( hit.lat != null ) { p.lat = hit.lat; p.lon = hit.lon; }
+        }
+        else if( EXIF_EXT.indexOf( extOf( p.name ) ) === -1 )
+        {
+            // Not a JPEG: nothing to read, but record it anyway - the cache is
+            // also the registry of every image (its size + mtime) that the
+            // thumbnail sweep keeps thumbs for.
+            SCAN_CACHE.set( p, { ts: 0, lat: null, lon: null } );
+            dirty = true;
+        }
+        else todo.push( p );
+    }
+
+    dirty = dirty || todo.length > 0;
+
+    await pool( todo, 5, async p =>
+    {
+        const x = await exifFor( p );
+        if( ! x ) return;                       // fetch failed - try again next open
+        if( x.ts ) { p.ts = x.ts; p.day = dayOf( x.ts ); p.time = timeOf( x.ts ); }
+        if( x.lat != null ) { p.lat = x.lat; p.lon = x.lon; }
+        SCAN_CACHE.set( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
+    } );
+
+    // Only this folder's own entries (not a sub-folder's) can be judged dead
+    // from this one listing.
+    const prefix  = DIR ? ( DIR + "/" ) : "";
+    const inScope = k => k.indexOf( prefix ) === 0 && k.slice( prefix.length ).indexOf( "/" ) === -1;
+    if( SCAN_CACHE.prune( new Set( PHOTOS.map( p => p.path ) ), inScope ) ) dirty = true;
+
+    if( dirty && ! DEMO ) SCAN_CACHE.saveNow();
+}
+
+async function enrich()
+{
+    await scanExif();
+
+    sortPhotos();
+    st.geoReady = true;
+    buildClusters();
+    renderGrid();
+    updateNoGeoChip();
+    if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
+    if( st.mode === "map" ) drawMap();
+
+    await geocode();
+    renderGrid();
+    if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
+    if( st.mode === "map" ) drawMap();
+
+    sweepThumbs();                       // background; once a day per device
+}
+
+/* ---- EXIF : capture date + GPS from a JPEG's first bytes ---- */
+async function exifFor( p )
+{
+    if( EXIF_EXT.indexOf( extOf( p.name ) ) === -1 ) return null;
+    try
+    {
+        const buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-262143" } } );
+        // a JPEG with no Exif still counts as "scanned" - return an empty
+        // result (not null) so scanExif() caches it and never re-reads it.
+        return parseJpegExif( buf ) || { ts: null, lat: null, lon: null };
+    }
+    catch( _ ) { return null; }
+}
+
+function parseJpegExif( u8 )
+{
+    if( ! u8 || u8.length < 12 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
+
+    // walk the JPEG marker segments to the Exif APP1
+    let i = 2, tiff = -1;
+    while( i + 4 <= u8.length )
+    {
+        if( u8[ i ] !== 0xFF ) break;
+        const marker = u8[ i + 1 ];
+        if( marker === 0xD9 || marker === 0xDA ) break;         // EOI / start of scan
+        const len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
+        if( len < 2 ) break;
+        if( marker === 0xE1 && i + 10 <= u8.length &&
+            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 &&      // "Ex"
+            u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 &&      // "if"
+            u8[ i + 8 ] === 0x00 )
+        { tiff = i + 10; break; }
+        i += 2 + len;
+    }
+    if( tiff < 0 || tiff + 8 > u8.length ) return null;
+
+    const le  = u8[ tiff ] === 0x49;                            // 'II' little / 'MM' big
+    const u16 = o => o + 2 > u8.length ? 0
+        : ( le ? ( u8[ o ] | ( u8[ o + 1 ] << 8 ) ) : ( ( u8[ o ] << 8 ) | u8[ o + 1 ] ) );
+    const u32 = o => o + 4 > u8.length ? 0
+        : ( ( le ? ( u8[ o ] | ( u8[ o + 1 ] << 8 ) | ( u8[ o + 2 ] << 16 ) | ( u8[ o + 3 ] << 24 ) )
+                 : ( ( u8[ o ] << 24 ) | ( u8[ o + 1 ] << 16 ) | ( u8[ o + 2 ] << 8 ) | u8[ o + 3 ] ) ) >>> 0 );
+    if( u16( tiff + 2 ) !== 0x002A ) return null;
+
+    const TSIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+
+    function readIfd( ifd )
+    {
+        const out = {};
+        if( ifd <= 0 || ifd + 2 > u8.length ) return out;
+        const n = u16( ifd );
+        for( let k = 0; k < n; k++ )
+        {
+            const e = ifd + 2 + k * 12;
+            if( e + 12 > u8.length ) break;
+            const tag = u16( e ), type = u16( e + 2 ), count = u32( e + 4 );
+            const bytes = ( TSIZE[ type ] || 1 ) * count;
+            out[ tag ] = { type, count, off: bytes <= 4 ? ( e + 8 ) : ( tiff + u32( e + 8 ) ) };
+        }
+        return out;
+    }
+    function ascii( ent )
+    {
+        if( ! ent ) return "";
+        let s = "";
+        for( let k = 0; k < ent.count && ent.off + k < u8.length; k++ )
+        {
+            const c = u8[ ent.off + k ];
+            if( ! c ) break;
+            s += String.fromCharCode( c );
+        }
+        return s;
+    }
+    function rat( o ) { const d = u32( o + 4 ); return d ? u32( o ) / d : 0; }
+    function sub( ent ) { return ent ? readIfd( tiff + u32( ent.off ) ) : null; }
+
+    function parseDT( s )
+    {
+        const m = String( s ).match( /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/ );
+        return m ? new Date( +m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6] ).getTime() : null;
+    }
+
+    const ifd0 = readIfd( tiff + u32( tiff + 4 ) );
+    let ts = null, lat = null, lon = null;
+
+    const exif = sub( ifd0[ 0x8769 ] );
+    if( exif ) ts = parseDT( ascii( exif[ 0x9003 ] ) ) || parseDT( ascii( exif[ 0x9004 ] ) );
+    if( ! ts ) ts = parseDT( ascii( ifd0[ 0x0132 ] ) );
+
+    const gps = sub( ifd0[ 0x8825 ] );
+    if( gps && gps[ 0x0002 ] && gps[ 0x0004 ] &&
+        gps[ 0x0002 ].off + 24 <= u8.length && gps[ 0x0004 ].off + 24 <= u8.length )
+    {
+        const dms = e => rat( e.off ) + rat( e.off + 8 ) / 60 + rat( e.off + 16 ) / 3600;
+        let la = dms( gps[ 0x0002 ] ), lo = dms( gps[ 0x0004 ] );
+        if( /S/i.test( ascii( gps[ 0x0001 ] ) ) ) la = -la;
+        if( /W/i.test( ascii( gps[ 0x0003 ] ) ) ) lo = -lo;
+        if( isFinite( la ) && isFinite( lo ) && ( la || lo ) &&
+            Math.abs( la ) <= 90 && Math.abs( lo ) <= 180 ) { lat = la; lon = lo; }
+    }
+
+    return { ts, lat, lon };
+}
+
+/* ---- clustering (proximity, no plugin) ---- */
+function haversine( a, b )
+{
+    const R = 6371000, toR = Math.PI / 180;
+    const dLat = ( b.lat - a.lat ) * toR, dLon = ( b.lon - a.lon ) * toR;
+    const s = Math.sin( dLat / 2 ) ** 2 +
+              Math.cos( a.lat * toR ) * Math.cos( b.lat * toR ) * Math.sin( dLon / 2 ) ** 2;
+    return 2 * R * Math.asin( Math.min( 1, Math.sqrt( s ) ) );
+}
+function buildClusters()
+{
+    CLUSTERS = [];
+    for( const p of PHOTOS ) p.cluster = null;
+    for( const p of PHOTOS.filter( x => x.lat != null ) )
+    {
+        let best = null, bestD = Infinity;
+        for( const c of CLUSTERS )
+        {
+            const d = haversine( c, p );
+            if( d < 180 && d < bestD ) { best = c; bestD = d; }
+        }
+        if( best )
+        {
+            best.items.push( p );
+            best.lat = best.items.reduce( ( s, q ) => s + q.lat, 0 ) / best.items.length;
+            best.lon = best.items.reduce( ( s, q ) => s + q.lon, 0 ) / best.items.length;
+        }
+        else CLUSTERS.push( { id: 0, lat: p.lat, lon: p.lon, items: [ p ], place: "" } );
+    }
+    CLUSTERS.forEach( ( c, i ) => { c.id = i; c.items.forEach( p => { p.cluster = i; } ); } );
+    applyPlaces();
+}
+function placeKey( c ) { return c.lat.toFixed( 3 ) + "," + c.lon.toFixed( 3 ); }
+function applyPlaces()
+{
+    CLUSTERS.forEach( c =>
+    {
+        c.place = PLACES[ placeKey( c ) ] || "";
+        c.items.forEach( p => { p.place = c.place; } );
+    } );
+}
+
+/* ---- reverse geocoding (Nominatim), cached in data/photos/places.json ---- */
+async function geocode()
+{
+    if( ! CLUSTERS.length ) return;
+
+    try { PLACES = JSON.parse( await GumApi.readFile( PLACES_PATH ) ) || {}; }
+    catch( _ ) { if( ! PLACES ) PLACES = {}; }
+
+    let added = false;
+    for( const c of CLUSTERS )
+    {
+        const key = placeKey( c );
+        if( PLACES[ key ] != null ) continue;
+        const name = await reverseGeocode( c.lat, c.lon );
+        PLACES[ key ] = name;                    // "" is a valid cached "unknown"
+        added = true;
+        await sleep( 1100 );                     // Nominatim: <= 1 request / second
+    }
+    applyPlaces();
+
+    if( added && ! DEMO )
+        GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( PLACES, null, 1 ) ) ).catch( () => {} );
+}
+async function reverseGeocode( lat, lon )
+{
+    try
+    {
+        const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=" + NayiveUI.locale()
+                  + "&lat=" + lat + "&lon=" + lon;
+        const r = await fetch( url, { headers: { Accept: "application/json" }, referrerPolicy: "strict-origin-when-cross-origin" } );
+        if( ! r.ok ) return "";
+        const j = await r.json();
+        const a = j.address || {};
+        const local = a.neighbourhood || a.suburb || a.quarter || a.city_district || a.hamlet || a.village || "";
+        const city  = a.city || a.town || a.municipality || a.county || "";
+        const parts = [ local, city ].filter( Boolean );
+        if( parts.length ) return parts.join( ", " );
+        if( j.name ) return j.name;
+        return ( j.display_name || "" ).split( "," ).slice( 0, 2 ).join( "," ).trim();
+    }
+    catch( _ ) { return ""; }
+}
+
+/* ---------------------------------------------------------------------------
+ * PER-PHOTO COMMENTS
+ *
+ * Real: data/photos/comments.json, keyed by the image's files/ path - the
+ * same sidecar Drive's image editor reads and writes. DEMO: localStorage.
+ * -------------------------------------------------------------------------*/
+async function loadComments()
+{
+    if( DEMO ) return;                           // handled in buildDemo()
+    try { COMMENTS = JSON.parse( await GumApi.readFile( COMMENTS_PATH ) ) || {}; }
+    catch( err )
+    {
+        COMMENTS = {};
+        if( ! /HTTP 40[34]/.test( String( err && err.message ) ) )
+            NayiveUI.toast( NayiveUI.t( 'photos.commentsFailed' ) );
+    }
+}
+async function saveComment( id, text )
+{
+    if( DEMO )
+    {
+        if( text ) COMMENTS[ id ] = text; else delete COMMENTS[ id ];
+        try { localStorage.setItem( "photos-comments", JSON.stringify( COMMENTS ) ); } catch( _ ) {}
+        return;
+    }
+    // read-modify-write the whole sidecar, so a stale in-memory copy can't wipe
+    // a note added elsewhere (Drive's editor) since we loaded.
+    let map;
+    try { map = JSON.parse( await GumApi.readFile( COMMENTS_PATH ) ) || {}; }
+    catch( _ ) { map = {}; }
+    if( text ) map[ id ] = text; else delete map[ id ];
+    COMMENTS = map;
+    try { await GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( map, null, 1 ) ) ); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); }
+}
+/* Drop notes for photos that no longer exist in THIS folder (deleted from disk,
+ * or a trash-restore that landed under a new name - Drive re-keys move/rename/
+ * copy but not those). Only ever touches keys that sit directly in DIR. */
+function sweepComments()
+{
+    if( DEMO || ! PHOTOS.length ) return;
+    const alive  = new Set( PHOTOS.map( p => p.name.toLowerCase() ) );
+    const prefix = DIR ? ( DIR + "/" ) : "";
+    let removed = false;
+    for( const key of Object.keys( COMMENTS ) )
+    {
+        if( prefix && key.indexOf( prefix ) !== 0 ) continue;
+        const rest = key.slice( prefix.length );
+        if( rest.indexOf( "/" ) !== -1 ) continue;             // inside a sub-folder
+        if( ! alive.has( rest.toLowerCase() ) ) { delete COMMENTS[ key ]; removed = true; }
+    }
+    if( removed )
+        GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( COMMENTS, null, 1 ) ) ).catch( () => {} );
+}
+
+/* ---------------------------------------------------------------------------
+ * HEADER CRUMB
+ * -------------------------------------------------------------------------*/
+// The folder path shown in the crumb (never a count - that goes in .bar-info).
+const dirLabel     = () => NayiveMedia.dirLabel( DIR );
+const setCrumbPath = NayiveMedia.setCrumb;
+
+function setCrumb()
+{
+    const total = PHOTOS.length;
+    const shown = photos().length;
+    const count = ( st.q.trim() && shown !== total )
+        ? NayiveUI.tf( "photos.shownOfTotal", { shown: shown, total: total } )
+        : NayiveUI.tf( total === 1 ? "photos.onePhoto" : "photos.nPhotos", { n: total } );
+    setCrumbPath( DEMO ? NayiveUI.t( 'photos.demoCrumb' ) : dirLabel() );
+    $( "#subStrip" ).textContent = count;
+}
+
+/* ---------------------------------------------------------------------------
+ * GRID (contact sheet)
+ *
+ * A folder can hold thousands of photos. The grid is built a few day-groups at
+ * a time; a 1px sentinel near the bottom, watched with an IntersectionObserver,
+ * pulls in the next batch as you scroll. Each thumbnail is <img loading="lazy">
+ * (see sceneInner), so only the ones actually on screen are ever downloaded.
+ * Clicks are handled once, by delegation on #grid (wired further down).
+ * -------------------------------------------------------------------------*/
+let gridObs = null;
+
+function tileHtml( p )
+{
+    const cap  = esc( p.time + ( p.place ? " · " + p.place : "" ) );
+    // .tmeta is shown only in list view (CSS); .cap only in grid view.
+    const bits = [ p.day + " " + p.time ];
+    if( p.place )      bits.push( p.place );
+    if( p.size )       bits.push( fmtSize( p.size ) );
+    return '<button class="tile" data-id="' + esc( p.id ) + '" title="' + cap + '">'
+         + sceneHtml( p, true )
+         + '<span class="geo-dot' + ( p.lat != null ? "" : " no" ) + '"></span>'
+         + ( COMMENTS[ p.id ] ? NOTE_MARK : "" )
+         + '<span class="cap">' + cap + "</span>"
+         + '<span class="tmeta"><b>' + esc( p.name ) + "</b><i>" + esc( bits.join( " · " ) ) + "</i></span>"
+         + "</button>";
+}
+
+function renderGrid()
+{
+    const list = photos();
+    st.list = list;
+
+    const grid = $( "#grid" );
+    if( gridObs ) { gridObs.disconnect(); gridObs = null; }
+    grid.innerHTML = "";
+    if( ! list.length )
+    {
+        if( st.q.trim() ) setGridMsg( NayiveUI.tf( "photos.noMatch", { q: st.q.trim() } ) );
+        return;
+    }
+
+    // list is already sorted by ts - split it into consecutive day-groups
+    const groups = [];
+    for( const p of list )
+    {
+        const g = groups[ groups.length - 1 ];
+        if( g && g.day === p.day ) g.items.push( p );
+        else groups.push( { day: p.day, items: [ p ] } );
+    }
+
+    const sentinel = document.createElement( "div" );
+    sentinel.style.height = "1px";
+    grid.appendChild( sentinel );
+
+    let gi = 0;
+    function addBatch()
+    {
+        const frag = document.createDocumentFragment();
+        const end  = Math.min( groups.length, gi + 4 );
+        for( ; gi < end; gi++ )
+        {
+            const g = groups[ gi ];
+            const h = document.createElement( "div" );
+            h.className = "day-h";
+            h.innerHTML = esc( g.day ) + "<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: g.items.length } ) ) + "</span>";
+            const shots = document.createElement( "div" );
+            shots.className = "shots";
+            shots.innerHTML = g.items.map( tileHtml ).join( "" );
+            frag.appendChild( h );
+            frag.appendChild( shots );
+        }
+        grid.insertBefore( frag, sentinel );
+        if( gi >= groups.length && gridObs ) { gridObs.disconnect(); gridObs = null; sentinel.remove(); }
+    }
+
+    gridObs = new IntersectionObserver( es =>
+    {
+        if( es.some( e => e.isIntersecting ) ) addBatch();
+    }, { root: grid, rootMargin: "800px" } );
+    gridObs.observe( sentinel );
+
+    addBatch();                 // first batch straight away
+}
+
+/* ---------------------------------------------------------------------------
+ * MAP (real Leaflet map)
+ * -------------------------------------------------------------------------*/
+let leafletPromise = null;
+function ensureLeaflet()
+{
+    if( window.L ) return Promise.resolve();
+    if( leafletPromise ) return leafletPromise;
+    const base = "../trips/lib/leaflet_v1.9.4/";
+    const css = document.createElement( "link" );
+    css.rel = "stylesheet"; css.href = base + "leaflet.css";
+    document.head.appendChild( css );
+    leafletPromise = new Promise( ( resolve, reject ) =>
+    {
+        const s = document.createElement( "script" );
+        s.src = base + "leaflet.js";
+        s.onload  = () => { try { window.L.Icon.Default.imagePath = base + "images/"; } catch( _ ) {} resolve(); };
+        s.onerror = () => { leafletPromise = null; reject( new Error( "leaflet" ) ); };
+        document.head.appendChild( s );
+    } );
+    return leafletPromise;
+}
+
+async function drawMap()
+{
+    const geo = PHOTOS.filter( p => p.lat != null );
+    updateNoGeoChip();
+    $( "#mapEmpty" ).hidden = ! st.geoReady || geo.length > 0;
+
+    if( ! geo.length )
+    {
+        if( st.map ) { st.map.remove(); st.map = null; st.markers = []; }
+        return;
+    }
+
+    try { await ensureLeaflet(); }
+    catch( _ )
+    {
+        $( "#mapEmpty" ).textContent = NayiveUI.t( 'photos.mapFailed' );
+        $( "#mapEmpty" ).hidden = false;
+        return;
+    }
+    if( st.mode !== "map" ) return;
+
+    if( ! st.map )
+    {
+        st.map = L.map( "lmap", { zoomControl: true, attributionControl: true } );
+        L.tileLayer( "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } ).addTo( st.map );
+    }
+
+    st.markers.forEach( m => m.remove() );
+    st.markers = CLUSTERS.map( c =>
+    {
+        const icon = L.divIcon( {
+            className: "", iconSize: [ 34, 30 ], iconAnchor: [ 17, 15 ],
+            html: '<div class="mk">' + c.items.length + "</div>",
+        } );
+        const m = L.marker( [ c.lat, c.lon ], { icon, title: c.place || NayiveUI.tf( "photos.nPhotos", { n: c.items.length } ) } );
+        m.on( "click", () => openCluster( c.id ) );
+        return m.addTo( st.map );
+    } );
+
+    const b = L.latLngBounds( geo.map( p => [ p.lat, p.lon ] ) );
+    st.map.fitBounds( b.pad( 0.25 ), { maxZoom: 16, animate: false } );
+    setTimeout( () => { if( st.map ) st.map.invalidateSize(); }, 60 );
+}
+
+function updateNoGeoChip()
+{
+    const noN = PHOTOS.filter( p => p.lat == null ).length;
+    const chip = $( "#nogeoChip" );
+    chip.hidden = ! st.geoReady || noN === 0;
+    chip.textContent = NayiveUI.tf( "photos.nNoPlace", { n: noN } );
+}
+
+function openCluster( id )
+{
+    let list, title;
+    if( id === "__none" )
+    {
+        list  = PHOTOS.filter( p => p.lat == null );
+        title = NayiveUI.t( 'photos.noPlace' );
+        st.cluster = "__none";
+    }
+    else
+    {
+        const c = CLUSTERS[ id ];
+        if( ! c ) return;
+        list  = c.items.slice();
+        title = c.place || NayiveUI.tf( "photos.nPhotos", { n: c.items.length } );
+        st.cluster = id;
+        if( st.map ) st.map.panTo( [ c.lat, c.lon ], { animate: true } );
+    }
+    if( ! list.length ) return;
+
+    st.list = list;
+    $( "#stripTitle" ).textContent = title + "  ·  " + list.length;
+    $( "#stripScroll" ).innerHTML = list.map( p =>
+        '<button class="tile" data-id="' + esc( p.id ) + '" title="' + esc( p.time + ( p.place ? " · " + p.place : "" ) ) + '">' + sceneHtml( p, true ) + '<span class="cap">' + esc( p.time ) + "</span></button>" ).join( "" );
+    $$( "#stripScroll .tile" ).forEach( el => el.addEventListener( "click", () => openLb( el.dataset.id, list ) ) );
+    $( "#strip" ).classList.add( "open" );
+}
+function closeStrip()
+{
+    $( "#strip" ).classList.remove( "open" );
+    st.cluster = undefined;
+}
+
+/* ---------------------------------------------------------------------------
+ * LIGHTBOX
+ * -------------------------------------------------------------------------*/
+function openLb( id, list )
+{
+    st.list = list || photos();
+    st.lb   = Math.max( 0, st.list.findIndex( p => p.id === id ) );
+    paintLb();
+    $( "#lb" ).classList.add( "open" );
+}
+function paintLb()
+{
+    const p = st.list[ st.lb ];
+    if( ! p ) return;
+    paintScene( $( "#lbScene" ), p );
+    $( "#lbTitle" ).textContent = p.place || p.name;
+    $( "#lbMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#lbMap" ).style.display = ( p.cluster != null ) ? "" : "none";
+    const c = COMMENTS[ p.id ] || "";
+    $( "#lbNote" ).hidden = ! c;
+    $( "#lbNoteText" ).textContent = c;
+}
+function lbStep( d ) { st.lb = ( st.lb + d + st.list.length ) % st.list.length; paintLb(); }
+function closeLb() { $( "#lb" ).classList.remove( "open" ); }
+
+/* ---------------------------------------------------------------------------
+ * PASE (automatic playback)
+ * -------------------------------------------------------------------------*/
+function startPase( idx, autoplay )
+{
+    const list = photos();
+    st.paseStarted = true;
+    st.paseIdx = idx % list.length;
+    st.ab = false;
+    $( "#paseA" ).className = "pase-photo"; $( "#paseB" ).className = "pase-photo";
+    $( "#paseA" ).innerHTML = ""; $( "#paseB" ).innerHTML = "";
+    renderTicks( list );
+    showPase();
+    setPlaying( autoplay !== false );
+}
+function renderTicks( list )
+{
+    const box = $( "#paseTicks" );
+    box.innerHTML = "";
+    if( list.length < 2 ) return;
+    list.forEach( ( p, i ) =>
+    {
+        if( i > 0 && p.day !== list[ i - 1 ].day )
+        {
+            const t = document.createElement( "div" );
+            t.className = "pase-tick";
+            t.style.left = ( i / ( list.length - 1 ) * 100 ) + "%";
+            box.appendChild( t );
+        }
+    } );
+}
+function showPase()
+{
+    const list = photos();
+    const p    = list[ st.paseIdx ];
+    if( ! p ) return;
+    const cur  = st.ab ? $( "#paseB" ) : $( "#paseA" );
+    const nxt  = st.ab ? $( "#paseA" ) : $( "#paseB" );
+
+    nxt.innerHTML = sceneHtml( p );
+    nxt.style.setProperty( "--dwell", ( st.speed / 1000 ) + "s" );
+    nxt.classList.toggle( "pase-kb", ! reduced() );
+    const sc = nxt.querySelector( ".scene" );
+    if( sc && ! reduced() )
+    {
+        sc.style.transform = "scale(1)";
+        requestAnimationFrame( () => requestAnimationFrame( () => { sc.style.transform = "scale(1.09)"; } ) );
+    }
+    nxt.classList.add( "show" );
+    cur.classList.remove( "show" );
+    st.ab = ! st.ab;
+
+    $( "#paseTitle" ).textContent = p.place || p.name;
+    $( "#paseMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#paseCount" ).textContent = ( st.paseIdx + 1 ) + " / " + list.length;
+    $( "#paseProg" ).style.width  = ( ( st.paseIdx + 1 ) / list.length * 100 ) + "%";
+
+    const c = COMMENTS[ p.id ] || "";
+    $( "#paseNote" ).hidden = ! c;
+    $( "#paseNote" ).textContent = c;
+}
+function paseStep( d )
+{
+    const list = photos();
+    st.paseIdx = ( st.paseIdx + d + list.length ) % list.length;
+    showPase();
+    if( st.playing ) armTimer();
+}
+function armTimer()
+{
+    clearTimeout( st.timer );
+    st.timer = setTimeout( () => paseStep( 1 ), st.speed );
+}
+function setPlaying( on )
+{
+    st.playing = on;
+    $( "#pPlay" ).innerHTML = on
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    if( on ) armTimer();
+    else clearTimeout( st.timer );
+}
+
+/* ---------------------------------------------------------------------------
+ * EDITAR : open the photo in the image editor, in this tab
+ *
+ * Same TOAST UI build Drive ships, loaded from ../drive/lib on first use.
+ * Closing (checkmark or X) always applies: an image edit is written back to
+ * the file (real mode) or kept in EDITS (demo), and the comment is saved -
+ * then the grid / map strip / lightbox re-render.
+ * -------------------------------------------------------------------------*/
+let editorLibPromise = null;
+function loadEditorLib()
+{
+    if( editorLibPromise ) return editorLibPromise;
+    const add = ( tag, attrs ) => new Promise( ( res, rej ) =>
+    {
+        const el = document.createElement( tag );
+        Object.assign( el, attrs );
+        el.onload = res;
+        el.onerror = () => rej( new Error( "load " + ( attrs.href || attrs.src ) ) );
+        document.head.appendChild( el );
+        if( tag === "link" ) res();
+    } );
+    const base = "../drive/lib/";
+    add( "link", { rel: "stylesheet", href: base + "tui-color-picker_v2.2.8.min.css" } );
+    add( "link", { rel: "stylesheet", href: base + "tui-image-editor_v3.15.3.min.css" } );
+    editorLibPromise = add( "script", { src: base + "tui-color-picker_v2.2.8.min.js" } )
+        .then( () => add( "script", { src: base + "tui-image-editor_v3.15.3.min.js" } ) )
+        .catch( err => { editorLibPromise = null; throw err; } );
+    return editorLibPromise;
+}
+
+let imageEditor  = null;      // the live tui.ImageEditor, or null
+let editorPhoto  = null;      // the photo being edited
+let editorDirty  = false;     // an image edit is on the undo stack
+
+function editPhoto( id )
+{
+    const p = photos().find( x => x.id === id );
+    if( ! p ) return;
+    if( ! DEMO && EDIT_EXT.indexOf( extOf( p.name ) ) === -1 )
+    {
+        NayiveUI.toast( NayiveUI.t( 'photos.cantEdit' ) );
+        openLb( id, photos() );
+        return;
+    }
+    openImageEditor( p );
+}
+
+async function openImageEditor( p )
+{
+    editorPhoto = p;
+    editorDirty = false;
+    $( "#editorName" ).textContent = ( p.place || p.name ) + "  ·  " + p.day + " · " + p.time;
+    $( "#editorSaveBtn"   ).innerHTML = NayiveUI.icon( "check" );
+    $( "#editorSaveAsBtn" ).innerHTML = NayiveUI.icon( "saveas" );
+    $( "#editorCloseBtn"  ).innerHTML = "&times;";
+    $( "#editorComment" ).value = COMMENTS[ p.id ] || "";
+    NayiveUI.setOpen( "editorBackdrop", true );
+
+    try { await loadEditorLib(); }
+    catch( _ )
+    {
+        NayiveUI.setOpen( "editorBackdrop", false );
+        NayiveUI.toast( NayiveUI.t( 'photos.editorFailed' ) );
+        return;
+    }
+    if( editorPhoto !== p ) return;             // closed again while the library loaded
+
+    const host = $( "#tuiEditor" );
+    host.innerHTML = "";
+    const path = EDITS[ p.id ] || ( DEMO ? sceneImage( p ) : srcFor( p ) );
+    imageEditor = new tui.ImageEditor( host, {
+        includeUI: {
+            loadImage: { path, name: p.name },
+            menu: [ "crop", "flip", "rotate", "draw", "shape", "icon", "text", "mask", "filter" ],
+            initMenu: "",
+            menuBarPosition: "bottom",
+            uiSize: { width: "100%", height: "100%" },
+        },
+        cssMaxWidth:  window.innerWidth,
+        cssMaxHeight: window.innerHeight - 44,
+        selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
+        usageStatistics: false,
+    } );
+    imageEditor.on( "undoStackChanged", len => { editorDirty = len > 0; } );
+}
+
+function editorFormat( name )
+{
+    const e = extOf( name );
+    return e === "png" ? "png" : ( e === "webp" ? "webp" : "jpeg" );
+}
+function dataUrlToBytes( u )
+{
+    const bin = atob( u.slice( u.indexOf( "," ) + 1 ) );
+    const out = new Uint8Array( bin.length );
+    for( let i = 0; i < bin.length; i++ ) out[ i ] = bin.charCodeAt( i );
+    return out;
+}
+
+async function closeImageEditor( announce )
+{
+    const p = editorPhoto;
+
+    let dataUrl = null;
+    if( p && imageEditor && editorDirty )
+    {
+        const fmt  = editorFormat( p.name );
+        const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
+        try { dataUrl = imageEditor.toDataURL( opts ); } catch( _ ) {}
+    }
+    const comment = p ? $( "#editorComment" ).value.trim() : "";
+
+    // tear the editor down first - the save round-trip shouldn't hold the UI
+    if( imageEditor ) { try { imageEditor.destroy(); } catch( _ ) {} imageEditor = null; }
+    $( "#tuiEditor" ).innerHTML = "";
+    editorPhoto = null;
+    editorDirty = false;
+    NayiveUI.setOpen( "editorBackdrop", false );
+
+    if( ! p ) return;
+
+    if( dataUrl )
+    {
+        if( DEMO ) EDITS[ p.id ] = dataUrl;
+        else
+        {
+            try
+            {
+                await GumApi.writeFileBytes( p.path, dataUrlToBytes( dataUrl ) );
+                p.bust = Date.now();
+                await refreshStat( p );           // new size + mtime -> new thumbnail key
+            }
+            catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.saveImageFailed' ) ); }
+        }
+    }
+    await saveComment( p.id, comment );
+
+    renderGrid();
+    if( st.cluster != null ) openCluster( st.cluster );
+    if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
+    if( announce ) NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) );
+}
+
+/* "Guardar como copia": opens the #saveAsBackdrop sheet to name the copy;
+ * confirmSaveAs() then writes the edited pixels to a NEW file in the same
+ * folder (leaving the original untouched), carries the note over to the copy,
+ * and re-scans the folder so the new photo shows up. */
+function saveImageEditorAs()
+{
+    const p = editorPhoto;
+    if( ! p || ! imageEditor ) return;
+
+    const cur  = p.name;
+    const dot  = cur.lastIndexOf( "." );
+    const seed = dot > 0 ? cur.slice( 0, dot ) + "-editado" + cur.slice( dot ) : cur + "-editado";
+
+    const inp = $( "#saveAsName" );
+    inp.value = seed;
+    NayiveUI.setOpen( "saveAsBackdrop", true );
+    inp.focus();
+    // preselect the base name, leaving the extension out of the selection
+    try { inp.setSelectionRange( 0, dot > 0 ? seed.length - ( cur.length - dot ) : seed.length ); }
+    catch( _ ) {}
+}
+
+async function confirmSaveAs()
+{
+    const p    = editorPhoto;
+    const name = ( $( "#saveAsName" ).value || "" ).trim();
+    if( ! p || ! imageEditor || ! name ) return;
+
+    NayiveUI.setOpen( "saveAsBackdrop", false );
+
+    const fmt  = editorFormat( name );
+    const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
+    let dataUrl;
+    try { dataUrl = imageEditor.toDataURL( opts ); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }
+
+    const comment = $( "#editorComment" ).value.trim();
+
+    // tear the editor down first (same order as closeImageEditor)
+    try { imageEditor.destroy(); } catch( _ ) {}
+    imageEditor = null;
+    $( "#tuiEditor" ).innerHTML = "";
+    editorPhoto = null;
+    editorDirty = false;
+    NayiveUI.setOpen( "editorBackdrop", false );
+
+    if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoCreate' ) ); return; }
+
+    const dir  = p.path.slice( 0, p.path.lastIndexOf( "/" ) + 1 );   // "" at the root
+    const dest = dir + name;
+    try { await GumApi.writeFileBytes( dest, dataUrlToBytes( dataUrl ) ); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
+
+    if( comment ) await saveComment( dest, comment );
+
+    await loadFolder();
+    NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) );
+}
+
+/* ---------------------------------------------------------------------------
+ * MODES
+ * -------------------------------------------------------------------------*/
+function setMode( m )
+{
+    st.mode = m;
+    // "grid" and "lista" are the same pane (#grid), just laid out differently;
+    // "lista" adds body.view-list, which the #grid CSS keys off.
+    const sheet = ( m === "grid" || m === "lista" || m === "editar" );
+    $( "#grid" ).hidden = ! sheet;
+    $( "#map" ).hidden  = m !== "map";
+    $( "#pase" ).hidden = m !== "pase";
+    $( "#editHint" ).hidden = m !== "editar";
+    document.body.classList.toggle( "pase", m === "pase" );
+    document.body.classList.toggle( "view-list", m === "lista" );
+    $$( ".tb-modes .icon-btn" ).forEach( b =>
+    {
+        const on = b.dataset.mode === m;
+        b.classList.toggle( "is-active", on );
+        b.setAttribute( "aria-selected", on );
+    } );
+
+    if( m !== "editar" ) closeImageEditor( false );
+    if( m !== "map" ) closeStrip();
+
+    if( m === "pase" )
+    {
+        if( ! PHOTOS.length ) { NayiveUI.toast( NayiveUI.t( 'photos.noPhotos' ) ); return; }
+        if( ! st.paseStarted ) startPase( 0, true );
+        else setPlaying( true );
+    }
+    else setPlaying( false );
+
+    if( m === "map" ) drawMap();
+}
+
+/* ---------------------------------------------------------------------------
+ * WIRING
+ * -------------------------------------------------------------------------*/
+$$( ".tb-modes .icon-btn" ).forEach( b => b.addEventListener( "click", () => setMode( b.dataset.mode ) ) );
+
+// Header search: filter the sheet by file name (see photos()). Also re-labels
+// the count ("12 de 240 fotos").
+$( "#searchInput" ).addEventListener( "input", e =>
+{
+    st.q = e.target.value;
+    renderGrid();
+    setCrumb();
+} );
+
+NayiveMedia.wireSearchToggle();                        // phone magnifier
+
+// Reload: re-list the folder from the server (picks up added / removed files).
+$( "#reloadBtn" ).addEventListener( "click", () =>
+{
+    if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoReload' ) ); return; }
+    loadFolder();
+} );
+
+// One delegated click for every grid tile, present and future (the grid fills
+// in batches as you scroll). Album-index cards carry their own handlers.
+$( "#grid" ).addEventListener( "click", e =>
+{
+    const el = e.target.closest( ".tile" );
+    if( ! el ) return;
+    if( st.mode === "editar" && ! RO ) editPhoto( el.dataset.id );
+    else openLb( el.dataset.id, photos() );
+} );
+
+// The crumb changes the folder Photos remembers, then re-opens on it. In DEMO
+// (not signed in) there is nothing to change, so it does nothing.
+NayiveMedia.wireCrumbPicker( { app: "photos", allowRoot: true, when: () => ! DEMO } );
+
+$( "#addBtn"   ).addEventListener( "click", () => $( "#addInput" ).click() );
+$( "#shareBtn" ).addEventListener( "click", () =>
+{
+    // The album we are looking at, shared read-only with another user of this
+    // server. DEMO / already-shared folders never get here (the button is hidden).
+    NayiveUI.shareSheet( { path: DIR, app: "photos", title: dirLabel(), canAdd: true } );
+} );
+$( "#addInput" ).addEventListener( "change", e => handleAddPhotos( e.target.files ) );
+
+$( "#nogeoChip" ).addEventListener( "click", () => openCluster( "__none" ) );
+$( "#stripX" ).addEventListener( "click", closeStrip );
+
+$( "#lbPrev" ).addEventListener( "click", () => lbStep( -1 ) );
+$( "#lbNext" ).addEventListener( "click", () => lbStep( 1 ) );
+
+// Phone: a swipe left / right on the photo steps through the list (the arrow
+// buttons stay for mouse users). A mostly-vertical drag is left alone.
+( function ()
+{
+    const zone = $( "#lb .lb-photo" );
+    let x0 = null, y0 = null;
+    zone.addEventListener( "touchstart", e => { const t = e.touches[ 0 ]; x0 = t.clientX; y0 = t.clientY; }, { passive: true } );
+    zone.addEventListener( "touchend", e =>
+    {
+        if( x0 == null ) return;
+        const t = e.changedTouches[ 0 ], dx = t.clientX - x0, dy = t.clientY - y0;
+        x0 = y0 = null;
+        if( Math.abs( dx ) > 48 && Math.abs( dx ) > Math.abs( dy ) * 1.5 ) lbStep( dx < 0 ? 1 : -1 );
+    }, { passive: true } );
+} )();
+$( "#lbX" ).addEventListener( "click", closeLb );
+$( "#lbMap" ).addEventListener( "click", () =>
+{
+    const p = st.list[ st.lb ];
+    closeLb();
+    setMode( "map" );
+    if( p && p.cluster != null ) openCluster( p.cluster );
+} );
+$( "#lbPlay" ).addEventListener( "click", () =>
+{
+    const startId = st.list[ st.lb ].id;
+    closeLb();
+    setMode( "pase" );
+    startPase( Math.max( 0, photos().findIndex( p => p.id === startId ) ), true );
+} );
+
+$( "#pPrev" ).addEventListener( "click", () => paseStep( -1 ) );
+$( "#pNext" ).addEventListener( "click", () => paseStep( 1 ) );
+$( "#pPlay" ).addEventListener( "click", () => setPlaying( ! st.playing ) );
+$( "#pSpeed" ).addEventListener( "click", () =>
+{
+    st.speed = st.speed === 3000 ? 6000 : st.speed === 6000 ? 12000 : 3000;
+    $( "#pSpeed" ).textContent = ( st.speed / 1000 ) + " s";
+    if( st.playing ) armTimer();
+} );
+$( "#paseX" ).addEventListener( "click", () => setMode( "grid" ) );
+
+$( "#editorSaveBtn"   ).addEventListener( "click", () => closeImageEditor( true ) );
+$( "#editorSaveAsBtn" ).addEventListener( "click", saveImageEditorAs );
+$( "#editorCloseBtn"  ).addEventListener( "click", () => closeImageEditor( false ) );
+
+$( "#saveAsCancelBtn"  ).addEventListener( "click", () => NayiveUI.setOpen( "saveAsBackdrop", false ) );
+$( "#saveAsConfirmBtn" ).addEventListener( "click", confirmSaveAs );
+$( "#saveAsName" ).addEventListener( "keydown", e =>
+{
+    if( e.key === "Enter" ) { e.preventDefault(); confirmSaveAs(); }
+} );
+
+document.addEventListener( "keydown", e =>
+{
+    if( $( "#saveAsBackdrop" ).classList.contains( "open" ) )
+    {
+        if( e.key === "Escape" ) NayiveUI.setOpen( "saveAsBackdrop", false );
+        return;
+    }
+    if( $( "#lb" ).classList.contains( "open" ) )
+    {
+        if( e.key === "Escape" ) closeLb();
+        if( e.key === "ArrowLeft" ) lbStep( -1 );
+        if( e.key === "ArrowRight" ) lbStep( 1 );
+        return;
+    }
+    if( $( "#editorBackdrop" ).classList.contains( "open" ) )
+    {
+        if( e.key === "Escape" ) closeImageEditor( false );
+        if( ( e.ctrlKey || e.metaKey ) && e.key === "Enter" ) closeImageEditor( true );
+        return;
+    }
+    if( st.mode === "pase" )
+    {
+        if( e.key === "Escape" ) setMode( "grid" );
+        if( e.key === " " ) { e.preventDefault(); setPlaying( ! st.playing ); }
+        if( e.key === "ArrowLeft" ) paseStep( -1 );
+        if( e.key === "ArrowRight" ) paseStep( 1 );
+    }
+} );
+
+/* ---------------------------------------------------------------------------
+ * BOOT
+ * -------------------------------------------------------------------------*/
+async function boot()
+{
+    if( ! DIR )
+    {
+        const picked = await NayiveUI.launcherFolder( {
+            app: "photos", allowRoot: true, noRedirect: true,
+            title: NayiveUI.t( 'photos.whereFolder' ),
+            note:  NayiveUI.t( 'photos.whereFolderNote' ),
+            rootLabel: NayiveUI.t( "ui.fp.allFiles" )
+        } );
+        if( picked ) { DIR = picked; DEMO = false; }
+    }
+
+    if( DEMO ) { buildDemo(); renderGrid(); return; }
+
+    // Before the first loadFolder(), which decides what the toolbar shows.
+    CAN_ADD = await NayiveUI.canAddTo( DIR );
+
+    const folder = await NayiveMedia.loadFolderTree( DIR, setGridMsg, false );
+    if( ! folder ) return;
+
+    // Album index: a folder that only holds sub-folders (one album per trip,
+    // say) shows those first; picking one re-opens Photos at ?dir=<that album>.
+    const kids = ( folder && folder.nodes ) || [];
+    const subs = kids.filter( n => Array.isArray( n.nodes ) );
+    const imgs = kids.filter( n => n.nodes == null && IMG_EXT.indexOf( extOf( n.path ) ) !== -1 );
+    if( subs.length && ! imgs.length ) { renderAlbums( subs ); return; }
+
+    await loadFolder( folder );
+}
+// shared/gum-api.js, shared/ui.js and shared/photo.js load deferred now, so
+// wait for them (deferred scripts all run before DOMContentLoaded) before
+// boot() touches GumApi / NayiveUI / NayivePhoto.
+NayiveI18n.ready.then( () =>
+{
+    // The install nudge lives in the launcher only (it is a full dialog now, too
+    // much to throw at someone in the middle of their photos). The launcher's
+    // settings row also has an "Instalar app" button for asking on purpose.
+    boot();
+} );
+
+/* ---------------------------------------------------------------------------
+ * ALBUM INDEX  - sub-folders of the chosen folder, shown as cards. No EXIF, no
+ * map, no slideshow here: it is just a way in to one album.
+ * -------------------------------------------------------------------------*/
+function renderAlbums( subs )
+{
+    $( ".tb-modes" ).hidden = true;                // no gallery modes on the album index
+    $( "#searchInput" ).hidden = true;
+    $( "#reloadBtn" ).hidden = true;
+    $( "#editHint" ).hidden = true;
+    $( "#addBtn" ).hidden = true;               // pick an album first, then upload into it
+
+    setCrumbPath( dirLabel() );
+    $( "#subStrip" ).textContent = NayiveUI.t( 'photos.pickAlbum' );
+
+    const FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+    const box = document.createElement( "div" );
+    box.className = "albums";
+    subs.sort( ( a, b ) => a.path.toLowerCase() < b.path.toLowerCase() ? -1 : 1 )
+        .forEach( n =>
+        {
+            const card = document.createElement( "button" );
+            card.type = "button";
+            card.className = "album-card";
+            card.innerHTML = FOLDER_SVG + '<span class="a-name"></span>';
+            card.querySelector( ".a-name" ).textContent = baseName( n.path );
+            card.addEventListener( "click", () =>
+            {
+                location.href = "?dir=" + encodeURIComponent( n.path );
+            } );
+            box.appendChild( card );
+        } );
+
+    const grid = $( "#grid" );
+    grid.innerHTML = "";
+    grid.appendChild( box );
+}
+</script>
+</body>
+</html>

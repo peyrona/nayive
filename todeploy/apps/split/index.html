@@ -1,0 +1,1985 @@
+<!-- index.html - Split: shared expenses between friends, in several currencies.
+     One folder per group under data/split/<id>/group.json (see docs/split-app.md);
+     all the arithmetic lives in money.js, everything on screen lives here. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Split</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 7A7 7 0 1 0 16.5 17'/%3E%3Cline x1='3' y1='10.2' x2='13.5' y2='10.2'/%3E%3Cline x1='3' y1='13.8' x2='13.5' y2='13.8'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <style>
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .icon-btn,
+           .pill, .card-row, .sheet and inputs all come from ../shared/app.css.
+           Only what is unique to Split lives here. */
+
+
+        /* PEOPLE COLOURS. The theme has one accent; people have to be told
+           apart at a glance, so each member gets one of eight fixed hues by
+           position in the group (wrapping). They are identity colours, not
+           theme colours, so they are the same in light and dark and white
+           text reads on all of them. */
+        .avatar
+        {
+            display: inline-flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
+            font-size: 0.76rem; font-weight: 700; letter-spacing: 0.02em;
+            color: white; background: var(--m-color, var(--accent));
+        }
+        .avatar.sm { width: 24px; height: 24px; font-size: 0.62rem; }
+        [data-c="0"] { --m-color: hsl(170 40% 38%); }
+        [data-c="1"] { --m-color: hsl(215 45% 50%); }
+        [data-c="2"] { --m-color: hsl(345 45% 52%); }
+        [data-c="3"] { --m-color: hsl(35 55% 46%); }
+        [data-c="4"] { --m-color: hsl(275 35% 52%); }
+        [data-c="5"] { --m-color: hsl(95 35% 40%); }
+        [data-c="6"] { --m-color: hsl(15 50% 52%); }
+        [data-c="7"] { --m-color: hsl(200 25% 45%); }
+
+        /* A round accent bubble for the rows that are not a person: a group
+           (€) or a payment (→). Same size as an avatar so the lists line up. */
+        .bubble
+        {
+            display: inline-flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
+            background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+        }
+        .bubble svg { width: 18px; height: 18px; }
+
+        /* LISTS. Every row is a .card-row (shared). An ENTRY row is a <button>,
+           so it needs the button look reset. A GROUP row cannot be one - it
+           carries its own delete button - so it is a <div role="button"> and
+           takes the pointer and the focus ring by hand instead. */
+        .list                { display: flex; flex-direction: column; gap: 6px; }
+        .list + .list,
+        .section-label + .list { margin-top: 0; }
+        button.card-row      { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+        .card-row[role="button"]                { cursor: pointer; }
+        .card-row[role="button"]:focus-visible  { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .card-row.ro         { cursor: default; }
+        /* Editar + Eliminar, at the right edge of a group's row. The trash keeps
+           plain .icon-btn.danger - red at rest, as shared/app.css spells out, so
+           a delete looks the same here as it does in Trips and in a dialog. */
+        .row-act             { flex: 0 0 auto; }
+        .row-main            { flex: 1 1 auto; min-width: 0; }
+        .row-title
+        {
+            display: flex; align-items: center; gap: 8px; min-width: 0;
+            font-size: 0.93rem; font-weight: 600; line-height: 1.3;
+        }
+        .row-title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row-meta
+        {
+            margin-top: 2px; font-size: 0.77rem; color: var(--text-dim);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .row-amt             { flex: 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; }
+        .row-amt .main       { font-size: 0.95rem; font-weight: 700; }
+        .row-amt .sub        { font-size: 0.72rem; color: var(--text-dim); margin-top: 1px; }
+        .pos                 { color: var(--ok); }
+        .neg                 { color: var(--danger); }
+        .zero                { color: var(--text-dim); }
+
+        .home-block          { margin-top: 18px; }
+        .home-block:first-child { margin-top: 4px; }
+        .archived-toggle     { margin-top: 18px; }
+
+        /* HEADER TITLE: on the group list it is the app icon + "Split" in
+           --accent (shared/app.css). Open a group and that pair is swapped for
+           the group's own name in --text, with the people count + currency
+           under it - the same shape Trips uses for an open trip
+           (.trip-header-title). The name stays an <h2>: shared/ui.js wires
+           every header <h1> as the way back to the launcher, and a group name
+           that walked out of the app on a click would be a trap.
+
+           The name is the ONE title in Nayive allowed to end in "...". The rule
+           in shared/app.css ("never truncate") guards the APP name - a short
+           fixed word that must always read in full. A group name is whatever
+           the user typed, and letting 40 characters push the tabs onto their
+           own line costs more than the tail of the name does. The full text
+           stays one hover away (title=, set in renderGroup) and is spelled out
+           in the edit sheet. `flex: 1 1 0` + `min-width: 0` all the way down is
+           what makes the ellipsis engage: at `1 1 auto` flex lays the row out
+           from the name's full width and wraps the tabs instead of shrinking. */
+        .head-title          { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .head-title-name     { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+        .head-title-name h2  { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); line-height: 1.3;
+                               min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .head-title-sub      { font-size: 0.8rem; color: var(--text-dim); }
+
+        /* TABS: Gastos | Saldos, at the right end of the title's row (Habits
+           does the same). nowrap - they are two short pills and splitting them
+           over two lines helps nobody. */
+        .tabs                { display: flex; gap: 6px; flex-wrap: wrap; }
+        .header .tabs        { flex: 0 0 auto; flex-wrap: nowrap; }
+
+        /* IN A GROUP the button bar drops to a row of its own - the same thing
+           .header already does on a narrow screen, made unconditional so the
+           tabs keep the title's row. The whole bar packs against the RIGHT margin
+           in one run - no gap opened up inside it - so it lines up with the tabs
+           above and with the button bar on the group list. */
+        .header.in-group .header-actions { flex: 0 0 100%; margin-left: 0; justify-content: flex-end; }
+        .search              { width: 100%; margin-bottom: 10px; }
+
+        /* BALANCES: one row per person, a thin bar under it showing how far
+           from zero they are, then "who pays whom". */
+        .totals              { margin: 0 0 10px; font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+        .row-between         { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .row-between .section-label { margin-bottom: 0; }
+        .bal                 { padding: 8px 2px 6px; }
+        .bal-row             { display: flex; align-items: center; gap: 10px; }
+        .bal-name            { flex: 1 1 auto; min-width: 0; font-size: 0.93rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bal-name small      { color: var(--text-dim); font-size: 0.78rem; }
+        .bal-amt             { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .bal-bar
+        {
+            position: relative; height: 4px; margin: 6px 0 0 42px; border-radius: 2px;
+            background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden;
+        }
+        .bal-bar > i         { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+        .bal-bar > i.pos     { left: 50%; background: var(--ok); }
+        .bal-bar > i.neg     { right: 50%; background: var(--danger); }
+        .bal-detail          { margin: 3px 0 0 42px; font-size: 0.74rem; color: var(--text-dim); }
+
+        .settle-row          { display: flex; align-items: center; gap: 8px; padding: 6px 2px; }
+        .settle-who          { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.93rem; }
+        .settle-who svg      { width: 16px; height: 16px; color: var(--text-dim); }
+        .settle-amt          { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .all-even            { display: flex; align-items: center; gap: 8px; padding: 8px 2px; font-size: 0.9rem; color: var(--ok); }
+        .all-even svg        { width: 18px; height: 18px; }
+        .actions-row         { display: flex; justify-content: center; margin-top: 16px; }
+        .cur-block           { margin-top: 14px; }
+        .cur-block:first-child { margin-top: 0; }
+
+        /* EMPTY STATES */
+        .empty
+        {
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            padding: 36px 10px 18px; color: var(--text-faint);
+        }
+        .empty svg           { margin-bottom: 10px; opacity: 0.6; }
+        .empty p             { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
+        .empty p + p         { margin-top: 4px; font-size: 0.8rem; font-weight: 400; color: var(--text-faint); }
+        .empty .text-btn     { margin-top: 14px; }
+
+        /* THE ENTRY SHEET (an expense or a payment). The amount first and big,
+           the currency right beside it, then the fewest possible questions. */
+        .kind-tabs           { margin: -4px 0 14px; }
+        .amount-row          { display: flex; gap: 8px; align-items: stretch; margin-bottom: 14px; }
+        .amount-input        { flex: 1 1 auto; min-width: 0; font-size: 1.7rem; font-weight: 700; text-align: right; padding: 8px 12px; }
+        .amount-row select   { flex: 0 0 auto; width: 7em; font-weight: 600; }   /* "USD" + arrow; the amount gets the rest */
+        .rate-row            { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .rate-row input      { flex: 0 1 150px; min-width: 0; }
+        .rate-row .preview   { font-size: 0.85rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+        .hint                { margin: 6px 0 0; font-size: 0.78rem; color: var(--text-dim); min-height: 1.1em; }
+        .hint.warn           { color: var(--warn); }
+        .field-label-row     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .field-label-row label { margin-bottom: 0; }
+        .field .field-label-row { margin-bottom: 5px; }
+        .link-btn            { border: none; background: none; padding: 0 4px; font: inherit; font-size: 0.8rem; color: var(--link); cursor: pointer; }
+        .chips               { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chips .pill         { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 4px; font-size: 0.82rem; }
+        .chips .pill .avatar { width: 24px; height: 24px; font-size: 0.62rem; }
+        .parts               { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+        .part-row            { display: flex; align-items: center; gap: 8px; }
+        .part-row .name      { flex: 1 1 auto; min-width: 0; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .part-row input      { width: 112px; text-align: right; font-variant-numeric: tabular-nums; }
+        .part-row .unit      { width: 2.4em; font-size: 0.8rem; color: var(--text-dim); }
+
+        /* Native date inputs render in the browser's own locale (dd/mm/yyyy);
+           the Nayive rule is yyyy-mm-dd. Hide the native text and overlay the
+           ISO value; the input stays underneath so a tap still opens the picker.
+           (Same trick as Calendar.) */
+        .date-wrap                   { position: relative; }
+        .date-wrap input[type=date]  { color: transparent; }
+        .date-wrap .date-display
+        {
+            position: absolute; inset: 0; display: flex; align-items: center;
+            padding: 0 11px; font-size: 1rem; color: var(--text); pointer-events: none;
+        }
+
+        /* PEOPLE SHEET */
+        .member-row              { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .member-row input[type=text] { flex: 1 1 auto; min-width: 0; }
+        .member-row label.me     { display: flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; cursor: pointer; }
+        .member-row.is-hidden input[type=text] { color: var(--text-faint); text-decoration: line-through; }
+        .member-row.is-hidden .avatar { opacity: 0.45; }
+        .people-add              { margin-top: 4px; }
+
+        /* PHONE (<= 640px, the shared rule). The card shell already goes edge to
+           edge; here only the touch targets and the big number change. */
+        @media (max-width: 640px)
+        {
+            .amount-input        { font-size: 1.5rem; }
+            .chips .pill         { min-height: 36px; }
+            .part-row input      { width: 100px; }
+            .row-meta            { white-space: normal; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" style="display: none;">
+        <div class="page">
+            <div class="page-inner">
+
+                <div class="card">
+
+                    <!-- Header, list:     [€] Split ............................. [+] [?] [•]
+                         Header, in group:  [←] Lisboa 2026… ....... [Gastos] [Saldos]
+                                                3 personas · EUR
+                                     ... [+] [personas] [editar] [compartir] [copiar] [csv] [?] [•]
+                         Archivar is NOT here - it lives on the group's row in the list.
+                         In a group the button bar takes a row of its own (.in-group),
+                         so the tabs get the title's row and the name has space to run. -->
+                    <div class="header">
+                        <!-- Inside a group: the way back to the list, before the app icon (as in Trips). -->
+                        <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.backToGroups, aria-label:split.backToGroups">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <!-- App icon + name on the group list; inside a group both give
+                             way to the group's own name + facts (see render()). -->
+                        <svg id="appIcon" class="app-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16.5 7A7 7 0 1 0 16.5 17"></path>
+                            <line x1="3" y1="10.2" x2="13.5" y2="10.2"></line>
+                            <line x1="3" y1="13.8" x2="13.5" y2="13.8"></line>
+                        </svg>
+                        <h1 id="appTitle">Split</h1>
+                        <div id="groupTitle" class="head-title" hidden>
+                            <div class="head-title-name">
+                                <h2 id="groupName"></h2>
+                                <span id="groupBadge"></span>
+                            </div>
+                            <div id="groupSub" class="head-title-sub"></div>
+                        </div>
+
+                        <!-- Gastos | Saldos ride the title's row (as in Habits). -->
+                        <div id="groupTabs" class="tabs" role="tablist" hidden>
+                            <button class="pill is-active" type="button" data-tab="entries" data-i18n="split.tabEntries"></button>
+                            <button class="pill" type="button" data-tab="balances" data-i18n="split.tabBalances"></button>
+                        </div>
+
+                        <div class="header-actions">
+                            <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:split.newGroup, aria-label:split.newGroup">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                            <!-- The two the ⋮ menu was asked for most often, promoted to the bar.
+                                 Icons only, the name lives in the tooltip. Both are edits, so a
+                                 group somebody shared with us (read-only) hides them. -->
+                            <!-- Its own key, not split.people: that one is the members sheet's
+                                 heading, where "Personas" is the right word for a title. -->
+                            <button id="peopleBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.peopleTip, aria-label:split.peopleTip">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                </svg>
+                            </button>
+                            <button id="editBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.editGroup, aria-label:split.editGroup">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                                </svg>
+                            </button>
+                            <button id="shareBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.shareGroup, aria-label:split.shareGroup">
+                                <!-- Drive's share glyph, verbatim: the tray-with-an-arrow reads as
+                                     "export a file", and this bar already has an export in the ⋮ menu. -->
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+                                </svg>
+                            </button>
+                            <!-- Copiar resumen / Exportar CSV. Both only READ the group, so a
+                                 read-only one keeps them. They emptied the ⋮ menu, which is why
+                                 there is no ⋮ button here any more. -->
+                            <button id="copySumBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.copySummary, aria-label:split.copySummary">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                            <button id="csvBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.exportCsv, aria-label:split.exportCsv">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </button>
+                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                        </div>
+                    </div>
+
+                    <!-- HOME: the groups -->
+                    <section id="homeView">
+                        <div id="groupList" class="list"></div>
+
+                        <div id="sharedBlock" class="home-block" hidden>
+                            <div class="section-label" data-i18n="split.sharedWithMe"></div>
+                            <div id="sharedList" class="list"></div>
+                        </div>
+
+                        <div id="archivedBlock" hidden>
+                            <button id="archivedToggle" class="pill archived-toggle" type="button"></button>
+                            <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
+                        </div>
+
+                        <div id="homeEmpty" class="empty" hidden>
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16.5 7A7 7 0 1 0 16.5 17"></path>
+                                <line x1="3" y1="10.2" x2="13.5" y2="10.2"></line>
+                                <line x1="3" y1="13.8" x2="13.5" y2="13.8"></line>
+                            </svg>
+                            <p data-i18n="split.noGroups"></p>
+                            <p data-i18n="split.noGroupsHint"></p>
+                        </div>
+                    </section>
+
+                    <!-- A GROUP: Gastos | Saldos -->
+                    <section id="groupView" hidden>
+                        <div id="entriesTab">
+                            <input id="searchInput" class="search" type="search" autocomplete="off" hidden data-i18n-attr="placeholder:split.searchPh">
+                            <div id="entryList" class="list"></div>
+                            <p id="noMatch" class="hint" hidden data-i18n="split.noMatch"></p>
+                            <div id="entriesEmpty" class="empty" hidden>
+                                <p data-i18n="split.noEntries"></p>
+                                <p data-i18n="split.noEntriesHint"></p>
+                            </div>
+                        </div>
+
+                        <div id="balancesTab" hidden>
+                            <div id="totalsLine" class="totals"></div>
+                            <div class="row-between">
+                                <div class="section-label" data-i18n="split.balances"></div>
+                                <button id="perCurBtn" class="pill" type="button" data-i18n="split.perCurrency" hidden data-i18n-attr="title:split.perCurrencyTip"></button>
+                            </div>
+                            <div id="balanceList"></div>
+                            <div class="actions-row">
+                                <button id="copyBtn" class="text-btn ghost" type="button" data-i18n-attr="title:split.copyTip">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    <span data-i18n="split.copySummary"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW / EDIT GROUP -->
+    <div class="sheet-backdrop" id="groupSheetBackdrop" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 id="groupSheetTitle" data-i18n="split.newGroup"></h2>
+            <div class="field">
+                <label for="groupNameInput" data-i18n="split.groupName"></label>
+                <input id="groupNameInput" type="text" autocomplete="off" data-i18n-attr="placeholder:split.groupNamePh">
+            </div>
+            <div class="field">
+                <label for="groupCurSel" data-i18n="split.groupCurrency"></label>
+                <select id="groupCurSel"></select>
+                <p id="groupCurHint" class="hint" hidden data-i18n="split.currencyLocked"></p>
+            </div>
+            <div id="groupPeople">
+                <div class="field">
+                    <label for="meNameInput" data-i18n="split.you"></label>
+                    <input id="meNameInput" type="text" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="othersInput" data-i18n="split.others"></label>
+                    <textarea id="othersInput" rows="3" placeholder="Ana&#10;Luis"></textarea>
+                </div>
+            </div>
+            <div class="sheet-actions">
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="groupSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW / EDIT ENTRY (expense or payment) -->
+    <div class="sheet-backdrop" id="entrySheetBackdrop" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 id="entrySheetTitle" data-i18n="split.newEntryTitle"></h2>
+            <div class="tabs kind-tabs" id="kindTabs">
+                <button class="pill is-active" type="button" data-kind="expense" data-i18n="split.kindExpense"></button>
+                <button class="pill" type="button" data-kind="payment" data-i18n="split.kindPayment"></button>
+            </div>
+
+            <div class="amount-row">
+                <input id="amountInput" class="amount-input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" data-i18n-attr="aria-label:split.amount">
+                <select id="currencySel" data-i18n-attr="aria-label:split.currency"></select>
+            </div>
+
+            <div class="field" id="rateField" hidden>
+                <label for="rateInput" id="rateLabel" data-i18n="split.fx"></label>
+                <div class="rate-row">
+                    <input id="rateInput" type="text" inputmode="decimal" placeholder="0,92" autocomplete="off">
+                    <span id="ratePreview" class="preview"></span>
+                </div>
+            </div>
+
+            <div class="field" id="textField">
+                <label for="textInput" data-i18n="split.concept"></label>
+                <input id="textInput" type="text" data-i18n-attr="placeholder:split.conceptPh" autocomplete="off">
+            </div>
+
+            <div class="field">
+                <label for="dateInput" data-i18n="split.date"></label>
+                <div class="date-wrap">
+                    <input id="dateInput" type="date">
+                    <span class="date-display" id="dateDisplay"></span>
+                </div>
+            </div>
+
+            <div class="field" id="payerField">
+                <label id="payerLabel" data-i18n="split.paidByLabel"></label>
+                <div id="payerChips" class="chips"></div>
+            </div>
+
+            <div class="field" id="toField" hidden>
+                <label data-i18n="split.toLabel"></label>
+                <div id="toChips" class="chips"></div>
+            </div>
+
+            <div class="field" id="amongField">
+                <div class="field-label-row">
+                    <label data-i18n="split.forLabel"></label>
+                    <button id="allBtn" class="link-btn" type="button" data-i18n="split.everyone"></button>
+                </div>
+                <div id="amongChips" class="chips"></div>
+            </div>
+
+            <div class="field" id="modeField">
+                <label data-i18n="split.splitLabel"></label>
+                <div class="tabs" id="modeTabs">
+                    <button class="pill is-active" type="button" data-mode="equal" data-i18n="split.modeEqual"></button>
+                    <button class="pill" type="button" data-mode="exact" data-i18n="split.modeExact"></button>
+                    <button class="pill" type="button" data-mode="shares" data-i18n="split.modeShares"></button>
+                    <button class="pill" type="button" data-mode="percent" data-i18n="split.modePercent"></button>
+                </div>
+                <div id="partsList" class="parts" hidden></div>
+            </div>
+
+            <p id="entryHint" class="hint"></p>
+
+            <div class="sheet-actions">
+                <button id="entryDelBtn" class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.delete"></button>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="entrySaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PEOPLE -->
+    <div class="sheet-backdrop" id="membersSheetBackdrop" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 data-i18n="split.people"></h2>
+            <p class="dialog-text" data-i18n="split.peopleLead"></p>
+            <div id="memberRows"></div>
+            <button id="addMemberBtn" class="text-btn dashed people-add" type="button" data-i18n="split.addPerson"></button>
+            <div class="sheet-actions">
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="membersSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <!-- File-API client (access probe, retrying fetch, file ops). -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Shared UI helpers: sheets, toast, dialogs, i18n, sharing. -->
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        var T = function ( k ) { return NayiveUI.t( k ); };
+
+        // TWO help cards, not one. Split is two screens under a single header
+        // (the list of groups, and one open group) and its toolbar buttons are
+        // `hidden`, not removed - so a single card would list, on both screens,
+        // controls that are only on one of them. render() calls
+        // NayiveUI.setIntro with the card for the screen you are looking at.
+        //
+        // Rows that name a real button with `sel` take their glyph and their
+        // name from it, so they always read like the screen. `#groupList
+        // .row-act` is the archive box on a live group and `#archivedList
+        // .row-act` the bin on an archived one: each row appears only while
+        // that button is really there. `:not([hidden])` does the same job for
+        // the four buttons a group shared with us (read-only) takes away.
+        var sync = { sel: '#syncIndicator', name: T( 'ui.syncName' ), text: T( 'split.introSync' ) };
+
+        var home = {
+            app:   'split',
+            title: 'Split',
+            lead:  T( 'split.introLead' ),
+            buttons: [
+                { sel: '#addBtn', text: T( 'split.introAddGroup' ) },
+                { icon: 'forward', name: T( 'split.introOpenName' ), text: T( 'split.introOpenGroup' ) },
+                { sel: '#groupList .row-act',   text: T( 'split.introArchive' ) },
+                { sel: '#archivedList .row-act', text: T( 'split.introDelete' ) },
+                { name: T( 'split.introArchivedName' ), text: T( 'split.introArchived' ) },
+                { icon: 'lock', name: T( 'split.sharedWithMe' ), text: T( 'split.introShared' ) },
+                sync
+            ]
+        };
+
+        var group = {
+            app:   'split',
+            title: 'Split',
+            lead:  T( 'split.introGroupLead' ),
+            buttons: [
+                { sel: '#backBtn', text: T( 'split.introBack' ) },
+                { sel: '#addBtn:not([hidden])',  text: T( 'split.introAddEntry' ) },
+                { name: T( 'split.tabEntries' ) + ' \u00b7 ' + T( 'split.tabBalances' ), text: T( 'split.introTabs' ) },
+                { icon: 'search', name: T( 'ui.search' ), text: T( 'split.introSearch' ) },
+                { icon: 'edit',   name: T( 'split.editEntry' ), text: T( 'split.introEditEntry' ) },
+                { icon: 'trash',  name: T( 'ui.delete' ), text: T( 'split.introDelEntry' ) },
+                { name: T( 'split.introModesName' ), text: T( 'split.introModes' ) },
+                { name: T( 'split.currency' ) + ' \u00b7 ' + T( 'split.fx' ), text: T( 'split.introFx' ) },
+                { sel: '#peopleBtn:not([hidden])', text: T( 'split.introPeople' ) },
+                { sel: '#editBtn:not([hidden])',   text: T( 'split.introEdit' ) },
+                { sel: '#shareBtn:not([hidden])',  text: T( 'split.introShare' ) },
+                { icon: 'check', name: T( 'split.introPayName' ), text: T( 'split.introPay' ) },
+                { name: T( 'split.perCurrency' ), text: T( 'split.introPerCur' ) },
+                { sel: '#copySumBtn', text: T( 'split.introCopy' ) },
+                { sel: '#csvBtn',     text: T( 'split.introCsv' ) },
+                sync
+            ]
+        };
+
+        // render() picks between them; firstRun does the wiring (the "?" button,
+        // the launcher's tour hook and the once-in-a-lifetime coach marks) and
+        // opens on the list, which is where every visit starts.
+        window.SPLIT_INTRO = { home: home, group: group };
+        NayiveUI.firstRun( home );
+    } );
+    </script>
+    <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
+    <script src="../shared/store.js" defer></script>
+    <!-- All the arithmetic (integers in cents, splits, balances, settlements). -->
+    <script src="money.js" defer></script>
+
+    <script type="module">
+        // Nothing is drawn from JS before the dictionary is in: without an
+        // in-source fallback, an early render would paint the bare keys.
+        await NayiveI18n.ready;
+
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const API_FILES = GumApi.API_FILES;
+        const DIR       = 'data/split';      // one folder per group: data/split/<id>/group.json
+        const FILE      = 'group.json';
+        const M         = SplitMoney;
+        const store     = NayiveStore.createStore( { apiBase: API_FILES } );
+
+        // Interface strings: Spanish here, translatable through shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        let groups  = [];      // every group we can see: ours + shared with us (._ro)
+        let current = null;    // the open group, or null on the home screen
+        let tab     = 'entries';
+        let perCur  = false;   // Saldos: true = one balance per currency, no conversion
+        let search  = '';
+        let meUser  = '';      // the login name, from /api/whoami
+        const sharedOwners = {};   // "shared/<slug>" -> who shared it
+
+        let es = null;         // the entry sheet's working state (see openEntrySheet)
+        let gs = null;         // the group sheet's
+        let ms = null;         // the people sheet's working copy of the members
+
+        //------------------------------------------------------------------------//
+        // SMALL HELPERS
+
+        const $ = id => document.getElementById( id );
+
+        function el( tag, cls, text )
+        {
+            const e = document.createElement( tag );
+            if( cls ) e.className = cls;
+            if( text != null ) e.textContent = text;
+            return e;
+        }
+
+        function pad2( n ) { return ( n < 10 ? '0' : '' ) + n; }
+
+        // Dates are stored and shown as yyyy-mm-dd (the Nayive rule); this is today's.
+        function todayIso()
+        {
+            const d = new Date();
+            return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() );
+        }
+
+        function newId( prefix )
+        {
+            return prefix + '_' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 6 );
+        }
+
+        function slugify( s )
+        {
+            const t = String( s || '' ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' )
+                        .toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ).slice( 0, 24 );
+            return t || 'grupo';
+        }
+
+        function fmt( minor, code, opts ) { return M.formatAmount( minor, code, opts ); }
+
+        const IC = {
+            arrow:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>',
+            euro:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>',
+            eye:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
+            archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>',
+            trash:   NayiveUI.icon( 'trash' ),
+            check:   NayiveUI.icon( 'check' ),
+            eyeoff:  NayiveUI.icon( 'eyeoff' )
+        };
+
+        //------------------------------------------------------------------------//
+        // MEMBERS
+
+        function members( g )         { return ( g && g.members ) || []; }
+        function visibleMembers( g )  { return members( g ).filter( m => ! m.hidden ); }
+        function memberOf( g, id )    { return members( g ).find( m => m.id === id ) || null; }
+        function nameOf( g, id )      { const m = memberOf( g, id ); return m ? ( m.name || '?' ) : '?'; }
+        function colorIndex( g, id )  { const i = members( g ).findIndex( m => m.id === id ); return ( i < 0 ? 7 : i ) % 8; }
+
+        function initials( name )
+        {
+            const words = String( name || '' ).trim().split( /\s+/ ).filter( Boolean );
+            if( ! words.length ) return '?';
+            if( words.length === 1 ) return words[ 0 ].slice( 0, 2 ).toUpperCase();
+            return ( words[ 0 ][ 0 ] + words[ 1 ][ 0 ] ).toUpperCase();
+        }
+
+        function avatarFor( colorIdx, name, small )
+        {
+            const a = el( 'span', 'avatar' + ( small ? ' sm' : '' ), initials( name ) );
+            a.setAttribute( 'data-c', String( colorIdx % 8 ) );
+            a.title = name || '';
+            return a;
+        }
+
+        function avatar( g, id, small ) { return avatarFor( colorIndex( g, id ), nameOf( g, id ), small ); }
+
+        function bubble( svg )
+        {
+            const b = el( 'span', 'bubble' );
+            b.innerHTML = svg;
+            return b;
+        }
+
+        // Who "I" am in a group. In my own groups: the member marked `me`. In a
+        // group shared with me the owner's mark is theirs, so I am the member
+        // whose name is my login name, if any.
+        function meId( g )
+        {
+            if( ! g ) return null;
+            let m;
+            if( ! g._ro ) m = members( g ).find( x => x.me );
+            else { const u = meUser.trim().toLowerCase(); m = u ? members( g ).find( x => ( x.name || '' ).trim().toLowerCase() === u ) : null; }
+            return m ? m.id : null;
+        }
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        NayiveI18n.ready.then( function()
+        {
+            $( 'addBtn'  ).addEventListener( 'click', function() { if( current ) openEntrySheet( null ); else openGroupSheet( null ); } );
+            $( 'backBtn' ).addEventListener( 'click', goHome );
+            $( 'copySumBtn' ).addEventListener( 'click', copySummary );
+            $( 'csvBtn'      ).addEventListener( 'click', exportCsv );
+            $( 'peopleBtn' ).addEventListener( 'click', openMembersSheet );
+            $( 'editBtn'    ).addEventListener( 'click', function() { openGroupSheet( current ); } );
+            $( 'shareBtn'  ).addEventListener( 'click', function()
+            {
+                const g = current;
+                if( ! g ) return;
+                NayiveUI.shareSheet( { path: g._base, app: 'split', title: g.name || 'Split' } );
+            } );
+
+            document.querySelectorAll( '[data-tab]' ).forEach( function( b )
+            {
+                b.addEventListener( 'click', function() { tab = b.dataset.tab; renderGroup(); } );
+            } );
+            $( 'searchInput' ).addEventListener( 'input', function() { search = this.value; renderEntries(); } );
+            $( 'perCurBtn' ).addEventListener( 'click', function() { perCur = ! perCur; renderBalances(); } );
+            $( 'copyBtn' ).addEventListener( 'click', copySummary );
+            $( 'archivedToggle' ).addEventListener( 'click', function()
+            {
+                const list = $( 'archivedList' );
+                list.hidden = ! list.hidden;
+                this.classList.toggle( 'is-active', ! list.hidden );
+            } );
+
+            // Group sheet
+            $( 'groupSaveBtn' ).addEventListener( 'click', saveGroup );
+            $( 'groupNameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveGroup(); } );
+
+            // Entry sheet
+            $( 'kindTabs' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-kind]' );
+                if( b && es ) { es.kind = b.dataset.kind; renderEntrySheet(); }
+            } );
+            $( 'modeTabs' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-mode]' );
+                if( b && es ) { es.mode = b.dataset.mode; renderEntrySheet(); }
+            } );
+            $( 'amountInput' ).addEventListener( 'input', function() { if( es ) { es.amountText = this.value; refreshEntryHints(); } } );
+            $( 'currencySel' ).addEventListener( 'change', function()
+            {
+                if( ! es ) return;
+                es.currency = this.value;
+                const known = current && current.rates && current.rates[ es.currency ];
+                es.rateText = es.currency === current.currency ? '' : ( known ? String( known ) : '' );
+                renderEntrySheet();
+                if( es.currency !== current.currency && ! es.rateText ) $( 'rateInput' ).focus();
+            } );
+            $( 'rateInput' ).addEventListener( 'input', function() { if( es ) { es.rateText = this.value; refreshEntryHints(); } } );
+            $( 'textInput' ).addEventListener( 'input', function() { if( es ) es.text = this.value; } );
+            $( 'dateInput' ).addEventListener( 'input', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
+            $( 'dateInput' ).addEventListener( 'change', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
+            $( 'allBtn' ).addEventListener( 'click', function()
+            {
+                if( ! es ) return;
+                es.among = visibleMembers( current ).map( m => m.id );
+                renderEntrySheet();
+            } );
+            $( 'entrySaveBtn' ).addEventListener( 'click', saveEntry );
+            $( 'entryDelBtn' ).addEventListener( 'click', deleteEntry );
+            $( 'amountInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
+            $( 'textInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
+
+            // People sheet
+            $( 'addMemberBtn' ).addEventListener( 'click', function()
+            {
+                if( ! ms ) return;
+                ms.push( { id: newId( 'm' ), name: '' } );
+                renderMembersSheet();
+                const inputs = $( 'memberRows' ).querySelectorAll( 'input[type=text]' );
+                if( inputs.length ) inputs[ inputs.length - 1 ].focus();
+            } );
+            $( 'membersSaveBtn' ).addEventListener( 'click', saveMembers );
+
+            // The × of every one of OUR sheets (shared/ui.js styles a data-act="close"
+            // button and flags it _nayiveClose; closing it is the app's job). The
+            // shared confirm/alert and share dialogs handle their own and carry no id.
+            document.addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( 'button' );
+                if( ! b || ! b._nayiveClose ) return;
+                const back = b.closest( '.sheet-backdrop' );
+                if( back && back.id ) closeSheet( back.id );
+            } );
+
+            // Escape closes the topmost of our sheets.
+            document.addEventListener( 'keydown', function( e )
+            {
+                if( e.key !== 'Escape' ) return;
+                const open = Array.from( document.querySelectorAll( '.sheet-backdrop.open' ) ).pop();
+                if( open && open.id ) { closeSheet( open.id ); e.preventDefault(); }
+            } );
+
+            // The store's state machine drives the header plug for every read and write.
+            store.onState( setSyncStatus );
+
+            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+            // path (shared/ui.js). Every save PUTs the whole group file (last write wins), so
+            // a tab left open all day would upload stale groups over an edit made on the
+            // phone. The default guard keeps the read out of an open sheet, where
+            // re-rendering would throw away what is being typed.
+            NayiveUI.wireRefresh( { store: store, read: loadGroups } );
+
+            // Probe the API, then load. On a failed probe the shared helper bounces to the
+            // sign-in page only when we are really online with nothing cached; otherwise it
+            // opens on the local cache and the store syncs once the connection is back.
+            NayiveUI.bootWithStore( store, async function( who )
+            {
+                meUser = ( who && who.user ) || '';   // null when we opened from the cache
+                await loadGroups();
+                applyOpenParam();
+            } );
+        } );
+
+        // Deep link: ?open=<group folder> lands straight on that group. Drive's
+        // "Compartido conmigo" uses it ("shared/<slug>"); applied once.
+        let openParamDone = false;
+        function applyOpenParam()
+        {
+            if( openParamDone ) return;
+            openParamDone = true;
+            const want = new URLSearchParams( location.search ).get( 'open' );
+            if( ! want ) return;
+            const g = groups.find( x => x._base === want.replace( /\/+$/, '' ) );
+            if( g ) openGroup( g );
+        }
+
+        //------------------------------------------------------------------------//
+        // PERSISTENCE - one folder per group: data/split/<id>/group.json. The
+        // folder is what user-sharing lends to another person, and it leaves
+        // room beside the JSON for receipts later. Which groups exist = the
+        // folder listing (online) or the store's cache (offline).
+
+        async function loadGroups()
+        {
+            let paths = null;
+
+            if( navigator.onLine )
+            {
+                try
+                {
+                    const node = await GumApi.listDirRecursive( DIR );
+                    const dirs = ( node.nodes || [] ).filter( n => Array.isArray( n.nodes ) );
+                    paths = dirs
+                        .filter( dn => ( dn.nodes || [] ).some( n => n.path === dn.path + '/' + FILE ) )
+                        .map( dn => dn.path + '/' + FILE );
+                }
+                catch( err )
+                {
+                    // No data/split folder yet (a fresh account) = no groups, not "offline".
+                    paths = String( err && err.message ).indexOf( 'HTTP 404' ) !== -1 ? [] : null;
+                }
+                if( paths !== null ) paths = paths.concat( await sharedGroupPaths() );
+            }
+
+            if( paths === null )
+            {
+                const own    = await store.listCached( DIR + '/' );
+                const shared = await store.listCached( 'shared/' );
+                paths = own.concat( shared ).filter( p => p.endsWith( '/' + FILE ) );
+            }
+
+            const results = await Promise.all( paths.map( p => store.read( p ).then( r => ( { path: p, res: r } ) ) ) );
+            const loaded  = [];
+
+            for( const { path, res } of results )
+            {
+                if( ! res.body ) continue;   // 'empty' (gone) or 'unknown' (unreachable, nothing cached)
+                try
+                {
+                    const g = JSON.parse( res.body );
+                    if( ! g || typeof g !== 'object' ) continue;
+                    g.members = Array.isArray( g.members ) ? g.members : [];
+                    g.entries = Array.isArray( g.entries ) ? g.entries : [];
+                    g.rates   = g.rates && typeof g.rates === 'object' ? g.rates : {};
+                    g._base   = path.slice( 0, -( FILE.length + 1 ) );
+                    g._ro     = g._base.indexOf( 'shared/' ) === 0;
+                    loaded.push( g );
+                }
+                catch( _ ) { /* one corrupt group.json must not take down the list */ }
+            }
+
+            groups = loaded;
+            if( current ) current = groups.find( g => g._base === current._base ) || null;
+
+            if( paths.length === 0 )                 // nothing to read -> the store never emitted
+                setSyncStatus( navigator.onLine ? 'synced' : 'offline' );
+
+            render();
+        }
+
+        // Groups other people shared with us: "shared/<slug>/group.json". A
+        // failure here just means no shared groups, never a broken list.
+        async function sharedGroupPaths()
+        {
+            try
+            {
+                const r = await fetch( window.location.origin + '/api/shares' );
+                if( ! r.ok ) return [];
+                const j = await r.json();
+                return ( j.with_me || [] )
+                    .filter( g => g.app === 'split' && ! g.gone )
+                    .map( g => { sharedOwners[ g.path ] = g.by; return g.path + '/' + FILE; } );
+            }
+            catch( _ ) { return []; }
+        }
+
+        // Writes ONE group back to its own folder. Cached at once, uploaded now
+        // or on reconnect. A group shared with us is never written.
+        function persist( g )
+        {
+            if( ! g || g._ro ) return;
+            const body = JSON.stringify( g, ( k, v ) => k.charAt( 0 ) === '_' ? undefined : v, 2 );
+            store.write( g._base + '/' + FILE, body );
+        }
+
+        // Called by the store on every sync-state change (same mapping as Tasks).
+        // The store drives the header plug; loadGroups() also calls it by hand when there is
+        // nothing to read and the store therefore never emits a state.
+        const setSyncStatus = NayiveUI.syncIndicator();
+
+        //------------------------------------------------------------------------//
+        // RENDER - home or one group
+
+        // Show / hide any element, <svg> included (see render()).
+        function setHidden( el, on )
+        {
+            if( on ) el.setAttribute( 'hidden', '' ); else el.removeAttribute( 'hidden' );
+        }
+
+        function render()
+        {
+            const inGroup = !! current;
+            $( 'homeView'  ).hidden = inGroup;
+            $( 'groupView' ).hidden = ! inGroup;
+            $( 'backBtn'   ).hidden = ! inGroup;
+
+            // Header title: "Split" on the list, the group's own name inside one.
+            // setAttribute, not `.hidden =`: the app icon is an <svg>, and the
+            // `hidden` IDL property lives on HTMLElement only - assigning it on
+            // an SVGElement silently sets a dead JS property and the icon stays.
+            setHidden( $( 'appIcon'    ), inGroup );
+            setHidden( $( 'appTitle'   ), inGroup );
+            setHidden( $( 'groupTitle' ), ! inGroup );
+            setHidden( $( 'groupTabs'  ), ! inGroup );
+
+            // .in-group drops the button bar to its own row (see the CSS).
+            document.querySelector( '.header' ).classList.toggle( 'in-group', inGroup );
+
+            // Personas, Editar and Compartir all change the group, so a read-only
+            // one hides them. Copiar resumen and Exportar CSV only read it, so
+            // they show for every open group.
+            const canEdit = inGroup && ! current._ro;
+            setHidden( $( 'peopleBtn'  ), ! canEdit );
+            setHidden( $( 'editBtn'    ), ! canEdit );
+            setHidden( $( 'shareBtn'   ), ! canEdit );
+            setHidden( $( 'copySumBtn' ), ! inGroup );
+            setHidden( $( 'csvBtn'     ), ! inGroup );
+
+            const add = $( 'addBtn' );
+            add.hidden = inGroup && current._ro;
+            add.title  = inGroup ? T( 'split.addEntry' ) : T( 'split.addGroup' );
+            add.setAttribute( 'aria-label', add.title );
+
+            // The "?" answers about the screen you are on (see SPLIT_INTRO).
+            if( window.SPLIT_INTRO && NayiveUI.setIntro )
+                NayiveUI.setIntro( inGroup ? SPLIT_INTRO.group : SPLIT_INTRO.home );
+
+            if( inGroup ) renderGroup(); else renderHome();
+        }
+
+        // Close one of our sheets and forget what it was editing.
+        function closeSheet( id )
+        {
+            NayiveUI.close( id );
+            if( id === 'entrySheetBackdrop' )   es = null;
+            if( id === 'groupSheetBackdrop' )   gs = null;
+            if( id === 'membersSheetBackdrop' ) ms = null;
+        }
+
+        function goHome()
+        {
+            current = null;
+            render();
+        }
+
+        function openGroup( g )
+        {
+            current = g;
+            tab     = 'entries';
+            search  = '';
+            $( 'searchInput' ).value = '';
+            render();
+        }
+
+        const byName = ( a, b ) => String( a.name || '' ).localeCompare( String( b.name || '' ), undefined, { sensitivity: 'base' } );
+
+        function renderHome()
+        {
+            const own    = groups.filter( g => ! g._ro && ! g.archived ).sort( byName );
+            const shared = groups.filter( g => g._ro ).sort( byName );
+            const arch   = groups.filter( g => ! g._ro && g.archived ).sort( byName );
+
+            const list = $( 'groupList' );
+            list.innerHTML = '';
+            own.forEach( g => list.appendChild( groupRow( g ) ) );
+
+            $( 'sharedBlock' ).hidden = ! shared.length;
+            const sl = $( 'sharedList' );
+            sl.innerHTML = '';
+            shared.forEach( g => sl.appendChild( groupRow( g ) ) );
+
+            $( 'archivedBlock' ).hidden = ! arch.length;
+            $( 'archivedToggle' ).textContent = TF( 'split.archivedN', { n: arch.length } );
+            const al = $( 'archivedList' );
+            al.innerHTML = '';
+            arch.forEach( g => al.appendChild( groupRow( g ) ) );
+            if( ! arch.length ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+
+            $( 'homeEmpty' ).hidden = groups.length > 0;
+        }
+
+        function membersLine( g )
+        {
+            const names = visibleMembers( g ).map( m => m.name || '?' );
+            if( ! names.length ) return T( 'split.nobody' );
+            if( names.length <= 4 ) return names.join( ', ' );
+            return names.slice( 0, 3 ).join( ', ' ) + ' +' + ( names.length - 3 );
+        }
+
+        function amountNode( minor, code, cls )
+        {
+            const sign = minor > 0 ? 'pos' : minor < 0 ? 'neg' : 'zero';
+            return el( 'div', ( cls || 'main' ) + ' ' + sign, fmt( minor, code, { plus: true } ) );
+        }
+
+        // The row is a <div role="button">, not a <button>: it carries its own
+        // delete button, and a <button> inside a <button> is invalid HTML - the
+        // parser unnests it and the row falls apart.
+        function groupRow( g )
+        {
+            const row = el( 'div', 'card-row' );
+            row.setAttribute( 'role', 'button' );
+            row.tabIndex = 0;
+            row.appendChild( bubble( IC.euro ) );
+
+            const main  = el( 'div', 'row-main' );
+            const title = el( 'div', 'row-title' );
+            title.appendChild( el( 'span', null, g.name || T( 'split.unnamed' ) ) );
+            if( g._ro ) title.appendChild( NayiveUI.sharedBadge( sharedOwners[ g._base ] || '' ) );
+            main.appendChild( title );
+            main.appendChild( el( 'div', 'row-meta', membersLine( g ) ) );
+            row.appendChild( main );
+
+            const amt = el( 'div', 'row-amt' );
+            const me  = meId( g );
+            if( me !== null )
+            {
+                const net = M.balances( g )[ me ] || 0;
+                amt.appendChild( amountNode( net, g.currency ) );
+                amt.appendChild( el( 'div', 'sub', net > 0 ? T( 'split.owedToYou' ) : net < 0 ? T( 'split.youOwe' ) : T( 'split.even' ) ) );
+            }
+            else
+            {
+                amt.appendChild( el( 'div', 'main', fmt( M.memberTotals( g ).total, g.currency ) ) );
+                amt.appendChild( el( 'div', 'sub', T( 'split.totalWord' ) ) );
+            }
+            row.appendChild( amt );
+
+            // ONE button at the right edge of every group we own, and it is the
+            // group's next step rather than a menu: a live group offers the
+            // archive box, and only once it is archived does that slot become
+            // the bin. You cannot delete a group you have not put away first,
+            // which is the whole point - it turns one tap on a live group into
+            // two deliberate ones. Eliminar still asks (see deleteGroup). To
+            // bring an archived group back, open it: the archive button in its
+            // toolbar then reads "Desarchivar".
+            if( ! g._ro )
+            {
+                const archived = !! g.archived;
+                const act = el( 'button', 'icon-btn sm row-act' + ( archived ? ' danger' : '' ) );
+                act.type  = 'button';
+                act.title = archived ? T( 'split.deleteGroup' ) : T( 'split.archive' );
+                act.setAttribute( 'aria-label', act.title );
+                act.innerHTML = archived ? IC.trash : IC.archive;
+                act.addEventListener( 'click', function()
+                {
+                    if( archived ) deleteGroup( g ); else toggleArchive( g );
+                } );
+                row.appendChild( act );
+            }
+
+            // The row opens the group - except where a real button caught the tap.
+            row.addEventListener( 'click', function( e )
+            {
+                if( e.target.closest( 'button' ) ) return;
+                openGroup( g );
+            } );
+            row.addEventListener( 'keydown', function( e )
+            {
+                if( e.key !== 'Enter' && e.key !== ' ' ) return;
+                if( e.target !== row ) return;          // the trash handles its own keys
+                e.preventDefault();                      // Space would scroll the page
+                openGroup( g );
+            } );
+            return row;
+        }
+
+        //------------------------------------------------------------------------//
+        // ONE GROUP
+
+        function renderGroup()
+        {
+            const g = current;
+            if( ! g ) return;
+
+            const gname = g.name || T( 'split.unnamed' );
+            $( 'groupName' ).textContent = gname;
+            $( 'groupName' ).title       = gname;   // the header clips it with "..."; hover gives it back
+            const badge = $( 'groupBadge' );
+            badge.innerHTML = '';
+            if( g._ro ) badge.appendChild( NayiveUI.sharedBadge( sharedOwners[ g._base ] || '' ) );
+
+            const facts = [ TF( 'split.nPeople', { n: visibleMembers( g ).length } ), g.currency ];
+            if( g.archived ) facts.push( T( 'split.archivedWord' ) );
+            $( 'groupSub' ).textContent = facts.join( ' · ' );
+
+            document.querySelectorAll( '[data-tab]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.tab === tab ) );
+            $( 'entriesTab'  ).hidden = tab !== 'entries';
+            $( 'balancesTab' ).hidden = tab !== 'balances';
+
+            if( tab === 'entries' ) renderEntries(); else renderBalances();
+        }
+
+        // Newest first: by date, then by the moment it was written.
+        function sortedEntries( g )
+        {
+            return ( g.entries || [] ).slice().sort( ( a, b ) =>
+                String( b.date || '' ).localeCompare( String( a.date || '' ) ) || ( b.created || 0 ) - ( a.created || 0 ) );
+        }
+
+        function entryMatches( g, e, q )
+        {
+            const bits = [ e.text || '', e.date || '', e.currency || '', M.toDecimal( e.amount, e.currency || g.currency, ',' ) ];
+            if( e.type === 'payment' ) bits.push( nameOf( g, e.from ), nameOf( g, e.to ), T( 'split.payment' ) );
+            else { bits.push( nameOf( g, e.paidBy ) ); M.participants( e ).ids.forEach( id => bits.push( nameOf( g, id ) ) ); }
+            return bits.join( ' ' ).toLowerCase().indexOf( q ) !== -1;
+        }
+
+        function renderEntries()
+        {
+            const g    = current;
+            const all  = sortedEntries( g );
+            const q    = search.trim().toLowerCase();
+            const rows = q ? all.filter( e => entryMatches( g, e, q ) ) : all;
+
+            $( 'searchInput' ).hidden = all.length < 6 && ! q;
+
+            const list = $( 'entryList' );
+            list.innerHTML = '';
+            rows.forEach( e => list.appendChild( entryRow( g, e ) ) );
+
+            $( 'noMatch' ).hidden = ! ( all.length && ! rows.length );
+
+            const empty = $( 'entriesEmpty' );
+            empty.hidden = all.length > 0;
+            empty.querySelector( 'p + p' ).hidden = g._ro;
+        }
+
+        function entryRow( g, e )
+        {
+            const ro  = g._ro;
+            const row = el( ro ? 'div' : 'button', 'card-row' + ( ro ? ' ro' : '' ) );
+            if( ! ro )
+            {
+                row.type = 'button';
+                row.title = T( 'split.editEntryTip' );
+                row.addEventListener( 'click', function() { openEntrySheet( e ); } );
+            }
+
+            const main = el( 'div', 'row-main' );
+            if( e.type === 'payment' )
+            {
+                row.appendChild( bubble( IC.arrow ) );
+                const title = el( 'div', 'row-title' );
+                title.appendChild( el( 'span', null, nameOf( g, e.from ) + ' → ' + nameOf( g, e.to ) ) );
+                main.appendChild( title );
+                main.appendChild( el( 'div', 'row-meta', T( 'split.payment' ) + ' · ' + ( e.date || '' ) ) );
+            }
+            else
+            {
+                row.appendChild( avatar( g, e.paidBy ) );
+                const title = el( 'div', 'row-title' );
+                title.appendChild( el( 'span', null, e.text || T( 'split.expense' ) ) );
+                main.appendChild( title );
+
+                const ids = M.participants( e ).ids;
+                const who = ids.length >= visibleMembers( g ).length && ids.length > 1 ? T( 'split.forAll' )
+                          : ids.length === 1 ? TF( 'split.forOne', { name: nameOf( g, ids[ 0 ] ) } )
+                          : TF( 'split.forN', { n: ids.length } );
+                main.appendChild( el( 'div', 'row-meta',
+                    TF( 'split.paidBy', { name: nameOf( g, e.paidBy ) } ) + ' · ' + who + ' · ' + ( e.date || '' ) ) );
+            }
+            row.appendChild( main );
+
+            const code = e.currency || g.currency;
+            const amt  = el( 'div', 'row-amt' );
+            amt.appendChild( el( 'div', 'main', fmt( e.amount, code ) ) );
+            if( code !== g.currency ) amt.appendChild( el( 'div', 'sub', '≈ ' + fmt( M.entryBase( e, g.currency ), g.currency ) ) );
+            row.appendChild( amt );
+
+            return row;
+        }
+
+        //------------------------------------------------------------------------//
+        // BALANCES
+
+        function renderBalances()
+        {
+            const g    = current;
+            const me   = meId( g );
+            const mt   = M.memberTotals( g );
+            const used = M.usedCurrencies( g );
+
+            const parts = [ TF( 'split.totalSpent', { amt: fmt( mt.total, g.currency ) } ) ];
+            if( me !== null && mt.members[ me ] )
+            {
+                parts.push( TF( 'split.yourShare', { amt: fmt( mt.members[ me ].share, g.currency ) } ) );
+                parts.push( TF( 'split.youPaid', { amt: fmt( mt.members[ me ].paid,  g.currency ) } ) );
+            }
+            $( 'totalsLine' ).textContent = parts.join( ' · ' );
+
+            const pcb = $( 'perCurBtn' );
+            pcb.hidden = used.length < 2;
+            pcb.classList.toggle( 'is-active', perCur && used.length > 1 );
+
+            const box = $( 'balanceList' );
+            box.innerHTML = '';
+
+            if( perCur && used.length > 1 )
+            {
+                const byCur = M.balancesByCurrency( g );
+                used.forEach( code =>
+                {
+                    const block = el( 'div', 'cur-block' );
+                    block.appendChild( el( 'div', 'section-label', code + ' · ' + M.currency( code ).name ) );
+                    balanceBlock( block, g, byCur[ code ] || {}, code, me, null );
+                    box.appendChild( block );
+                } );
+            }
+            else
+            {
+                balanceBlock( box, g, M.balances( g ), g.currency, me, mt );
+            }
+        }
+
+        // The rows for one balance map + the transfers that settle it.
+        function balanceBlock( box, g, net, code, me, mt )
+        {
+            const ids = members( g ).filter( m => ! m.hidden || ( net[ m.id ] || 0 ) !== 0 ).map( m => m.id )
+                            .sort( ( a, b ) => ( net[ b ] || 0 ) - ( net[ a ] || 0 ) );
+            const max = Math.max( 1, ...ids.map( id => Math.abs( net[ id ] || 0 ) ) );
+
+            ids.forEach( id =>
+            {
+                const v    = net[ id ] || 0;
+                const wrap = el( 'div', 'bal' );
+                const row  = el( 'div', 'bal-row' );
+                row.appendChild( avatar( g, id ) );
+
+                const name = el( 'div', 'bal-name', nameOf( g, id ) );
+                if( id === me ) { name.appendChild( document.createTextNode( ' ' ) ); name.appendChild( el( 'small', null, T( 'split.youParen' ) ) ); }
+                row.appendChild( name );
+
+                const sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+                row.appendChild( el( 'div', 'bal-amt ' + sign, fmt( v, code, { plus: true } ) ) );
+                wrap.appendChild( row );
+
+                const bar  = el( 'div', 'bal-bar' );
+                const fill = el( 'i', sign );
+                fill.style.width = ( 50 * Math.abs( v ) / max ).toFixed( 1 ) + '%';
+                bar.appendChild( fill );
+                wrap.appendChild( bar );
+
+                if( mt && mt.members[ id ] )
+                    wrap.appendChild( el( 'div', 'bal-detail',
+                        TF( 'split.paidShare', { paid: fmt( mt.members[ id ].paid, code ), share: fmt( mt.members[ id ].share, code ) } ) ) );
+
+                box.appendChild( wrap );
+            } );
+
+            box.appendChild( el( 'div', 'section-label', T( 'split.whoPays' ) ) ).style.marginTop = '12px';
+
+            const transfers = M.settle( net );
+            if( ! transfers.length )
+            {
+                const ok = el( 'div', 'all-even' );
+                ok.innerHTML = IC.check;
+                ok.appendChild( el( 'span', null, T( 'split.allEven' ) ) );
+                box.appendChild( ok );
+                return;
+            }
+
+            transfers.forEach( tr =>
+            {
+                const row = el( 'div', 'settle-row' );
+                const who = el( 'div', 'settle-who' );
+                who.appendChild( avatar( g, tr.from, true ) );
+                who.appendChild( el( 'span', null, nameOf( g, tr.from ) ) );
+                const arrow = el( 'span' ); arrow.innerHTML = IC.arrow;
+                who.appendChild( arrow );
+                who.appendChild( avatar( g, tr.to, true ) );
+                who.appendChild( el( 'span', null, nameOf( g, tr.to ) ) );
+                row.appendChild( who );
+                row.appendChild( el( 'div', 'settle-amt', fmt( tr.amount, code ) ) );
+
+                if( ! g._ro )
+                {
+                    const b = el( 'button', 'icon-btn sm' );
+                    b.type  = 'button';
+                    b.title = T( 'split.recordPayment' );
+                    b.setAttribute( 'aria-label', b.title );
+                    b.innerHTML = IC.check;
+                    b.addEventListener( 'click', function()
+                    {
+                        openEntrySheet( null, { kind: 'payment', from: tr.from, to: tr.to, amount: tr.amount, currency: code } );
+                    } );
+                    row.appendChild( b );
+                }
+                box.appendChild( row );
+            } );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE ENTRY SHEET - one dialog for an expense or a payment, new or edited.
+        // `es` holds what is on screen; nothing touches the group until ✓.
+
+        function openEntrySheet( entry, preset )
+        {
+            const g = current;
+            if( ! g || g._ro ) return;
+            preset = preset || {};
+
+            const vis = visibleMembers( g );
+            const me  = meId( g );
+
+            es = {
+                id:         entry ? entry.id : null,
+                created:    entry ? entry.created : null,
+                kind:       entry ? ( entry.type === 'payment' ? 'payment' : 'expense' ) : ( preset.kind || 'expense' ),
+                currency:   entry ? ( entry.currency || g.currency ) : ( preset.currency || g.currency ),
+                amountText: entry ? M.toDecimal( entry.amount, entry.currency || g.currency, ',' )
+                          : preset.amount ? M.toDecimal( preset.amount, preset.currency || g.currency, ',' ) : '',
+                rateText:   entry && entry.currency !== g.currency ? String( entry.rate || '' ) : '',
+                text:       entry ? ( entry.text || '' ) : '',
+                date:       entry ? ( entry.date || todayIso() ) : todayIso(),
+                paidBy:     entry ? entry.paidBy : ( me !== null ? me : ( vis[ 0 ] ? vis[ 0 ].id : null ) ),
+                among:      entry && entry.split && entry.split.mode === 'equal' ? ( entry.split.among || [] ).slice() : vis.map( m => m.id ),
+                mode:       entry && entry.split && entry.split.mode ? entry.split.mode : 'equal',
+                partText:   {},
+                from:       entry ? entry.from : ( preset.from || ( me !== null ? me : null ) ),
+                to:         entry ? entry.to : ( preset.to || null )
+            };
+
+            if( entry && entry.split && entry.split.parts )
+            {
+                Object.keys( entry.split.parts ).forEach( id =>
+                {
+                    const v = entry.split.parts[ id ];
+                    es.partText[ id ] = es.mode === 'exact' ? M.toDecimal( v, es.currency, ',' ) : String( v );
+                } );
+            }
+            if( es.currency !== g.currency && ! es.rateText && g.rates[ es.currency ] ) es.rateText = String( g.rates[ es.currency ] );
+
+            $( 'entrySheetTitle' ).textContent = entry ? T( 'split.editEntry' ) : T( 'split.newEntry' );
+            $( 'entryDelBtn' ).hidden = ! entry;
+            fillCurrencySelect( $( 'currencySel' ), g, es.currency );
+            $( 'amountInput' ).value = es.amountText;
+            $( 'textInput' ).value   = es.text;
+            $( 'dateInput' ).value   = es.date;
+
+            renderEntrySheet();
+            NayiveUI.open( 'entrySheetBackdrop' );
+            setTimeout( function() { $( 'amountInput' ).focus(); }, 60 );
+        }
+
+        // The currency <select>: the group's + the ones already used + the
+        // favourites first, then every other code alphabetically.
+        function fillCurrencySelect( sel, g, value )
+        {
+            sel.innerHTML = '';
+            const first = [];
+            const push  = c => { if( c && first.indexOf( c ) === -1 ) first.push( c ); };
+            if( g ) M.usedCurrencies( g ).forEach( push );
+            M.FAVOURITES.forEach( push );
+            push( value );
+
+            const optFor = c => { const o = el( 'option', null, c + ' · ' + M.currency( c ).name ); o.value = c; o.dataset.full = o.textContent; return o; };
+
+            const g1 = el( 'optgroup' ); g1.label = T( 'split.frequent' );
+            first.forEach( c => g1.appendChild( optFor( c ) ) );
+            sel.appendChild( g1 );
+
+            const g2 = el( 'optgroup' ); g2.label = T( 'split.allCurrencies' );
+            M.codes().filter( c => first.indexOf( c ) === -1 ).forEach( c => g2.appendChild( optFor( c ) ) );
+            sel.appendChild( g2 );
+
+            sel.value = value;
+            compactSelect( sel );
+        }
+
+        // A native <select> shows the chosen option's full text when closed, and
+        // "USD · Dólar estadounidense" leaves no room for the amount beside it.
+        // So: closed = the code only; while the list is open, every option
+        // shows code + name. Wired once per <select>.
+        function compactSelect( sel )
+        {
+            const relabel = open =>
+            {
+                Array.from( sel.options ).forEach( o =>
+                {
+                    o.textContent = ( ! open && o.selected ) ? o.value : ( o.dataset.full || o.value );
+                } );
+            };
+            if( ! sel._compact )
+            {
+                sel._compact = true;
+                [ 'mousedown', 'touchstart', 'focus', 'keydown' ].forEach( ev => sel.addEventListener( ev, function() { relabel( true ); }, { passive: true } ) );
+                [ 'change', 'blur' ].forEach( ev => sel.addEventListener( ev, function() { relabel( false ); } ) );
+            }
+            relabel( false );
+        }
+
+        function chip( g, id, active, onClick )
+        {
+            const b = el( 'button', 'pill' + ( active ? ' is-active' : '' ) );
+            b.type = 'button';
+            b.appendChild( avatar( g, id, true ) );
+            b.appendChild( el( 'span', null, nameOf( g, id ) ) );
+            b.setAttribute( 'aria-pressed', active ? 'true' : 'false' );
+            b.addEventListener( 'click', onClick );
+            return b;
+        }
+
+        // People offered in the chips: the visible members, plus anyone this
+        // entry already names (a hidden member on an old expense stays editable).
+        function chipMembers( g )
+        {
+            const ids = visibleMembers( g ).map( m => m.id );
+            [ es.paidBy, es.from, es.to ].concat( es.among ).concat( Object.keys( es.partText ) )
+                .forEach( id => { if( id && ids.indexOf( id ) === -1 && memberOf( g, id ) ) ids.push( id ); } );
+            return ids;
+        }
+
+        function renderEntrySheet()
+        {
+            const g = current;
+            if( ! g || ! es ) return;
+            const pay = es.kind === 'payment';
+
+            document.querySelectorAll( '#kindTabs [data-kind]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.kind === es.kind ) );
+            document.querySelectorAll( '#modeTabs [data-mode]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.mode === es.mode ) );
+
+            $( 'textField'  ).hidden = pay;
+            $( 'toField'    ).hidden = ! pay;
+            $( 'amongField' ).hidden = pay || es.mode !== 'equal';
+            $( 'modeField'  ).hidden = pay;
+            $( 'payerLabel' ).textContent = pay ? T( 'split.fromLabel' ) : T( 'split.paidByLabel' );
+            $( 'dateDisplay' ).textContent = es.date || '';
+
+            // exchange rate: only when the entry is not in the group currency
+            const foreign = es.currency !== g.currency;
+            $( 'rateField' ).hidden = ! foreign;
+            if( foreign )
+            {
+                $( 'rateLabel' ).textContent = TF( 'split.rateLabel', { from: es.currency, to: g.currency } );
+                $( 'rateInput' ).value = es.rateText;
+            }
+
+            const ids = chipMembers( g );
+
+            const payer = $( 'payerChips' );
+            payer.innerHTML = '';
+            ids.forEach( id => payer.appendChild( chip( g, id, ( pay ? es.from : es.paidBy ) === id, function()
+            {
+                if( pay ) es.from = id; else es.paidBy = id;
+                renderEntrySheet();
+            } ) ) );
+
+            if( pay )
+            {
+                const to = $( 'toChips' );
+                to.innerHTML = '';
+                ids.forEach( id => to.appendChild( chip( g, id, es.to === id, function() { es.to = id; renderEntrySheet(); } ) ) );
+            }
+            else if( es.mode === 'equal' )
+            {
+                const among = $( 'amongChips' );
+                among.innerHTML = '';
+                ids.forEach( id => among.appendChild( chip( g, id, es.among.indexOf( id ) !== -1, function()
+                {
+                    const at = es.among.indexOf( id );
+                    if( at === -1 ) es.among.push( id ); else es.among.splice( at, 1 );
+                    renderEntrySheet();
+                } ) ) );
+                $( 'allBtn' ).hidden = es.among.length >= ids.length;
+            }
+
+            // parts: one number per person for the other three modes
+            const partsBox = $( 'partsList' );
+            partsBox.hidden = pay || es.mode === 'equal';
+            partsBox.innerHTML = '';
+            if( ! partsBox.hidden )
+            {
+                const unit = es.mode === 'exact' ? M.currency( es.currency ).code : es.mode === 'percent' ? '%' : T( 'split.partsUnit' );
+                ids.forEach( id =>
+                {
+                    const row = el( 'div', 'part-row' );
+                    row.appendChild( avatar( g, id, true ) );
+                    row.appendChild( el( 'div', 'name', nameOf( g, id ) ) );
+                    const inp = el( 'input' );
+                    inp.type = 'text';
+                    inp.inputMode = 'decimal';
+                    inp.placeholder = es.mode === 'shares' ? '1' : '0';
+                    inp.value = es.partText[ id ] || '';
+                    inp.setAttribute( 'aria-label', nameOf( g, id ) );
+                    inp.addEventListener( 'input', function() { es.partText[ id ] = this.value; refreshEntryHints(); } );
+                    row.appendChild( inp );
+                    row.appendChild( el( 'span', 'unit', unit ) );
+                    partsBox.appendChild( row );
+                } );
+            }
+
+            refreshEntryHints();
+        }
+
+        // Reads the sheet's state and says whether it can be saved and why not.
+        // Returns { ok, hint, amount, rate, split }.
+        function validateEntry()
+        {
+            const g = current;
+            const amount = M.parseAmount( es.amountText, es.currency );
+            if( amount === null || amount <= 0 ) return { ok: false, hint: '' };
+
+            let rate = 1;
+            if( es.currency !== g.currency )
+            {
+                rate = Number( String( es.rateText || '' ).trim().replace( ',', '.' ) );
+                if( ! ( rate > 0 ) ) return { ok: false, hint: TF( 'split.needRate', { to: g.currency } ) };
+            }
+
+            if( es.kind === 'payment' )
+            {
+                if( ! es.from || ! es.to ) return { ok: false, hint: T( 'split.needTwo' ) };
+                if( es.from === es.to )    return { ok: false, hint: T( 'split.samePerson' ) };
+                return { ok: true, hint: '', amount, rate };
+            }
+
+            if( ! es.paidBy ) return { ok: false, hint: T( 'split.needPayer' ) };
+
+            if( es.mode === 'equal' )
+            {
+                if( ! es.among.length ) return { ok: false, hint: T( 'split.needSomeone' ) };
+                return { ok: true, hint: '', amount, rate, split: { mode: 'equal', among: es.among.slice() } };
+            }
+
+            const parts = {};
+            let sum = 0, count = 0;
+            Object.keys( es.partText ).forEach( id =>
+            {
+                const raw = String( es.partText[ id ] || '' ).trim();
+                if( ! raw ) return;
+                const v = es.mode === 'exact' ? M.parseAmount( raw, es.currency ) : Number( raw.replace( ',', '.' ) );
+                if( v === null || ! ( v > 0 ) ) return;
+                parts[ id ] = v;
+                sum   += v;
+                count += 1;
+            } );
+            if( ! count ) return { ok: false, hint: T( 'split.needSomeone' ) };
+
+            if( es.mode === 'exact' && sum !== amount )
+            {
+                const diff = amount - sum;
+                return { ok: false, hint: diff > 0 ? TF( 'split.missing', { amt: fmt( diff, es.currency ) } )
+                                                 : TF( 'split.over', { amt: fmt( -diff, es.currency ) } ) };
+            }
+            if( es.mode === 'percent' && Math.abs( sum - 100 ) > 0.001 )
+                return { ok: false, hint: TF( 'split.pctSum', { n: Math.round( sum * 100 ) / 100 } ) };
+
+            return { ok: true, hint: '', amount, rate, split: { mode: es.mode, parts } };
+        }
+
+        function refreshEntryHints()
+        {
+            const g = current;
+            if( ! g || ! es ) return;
+
+            // live "≈ 41,40 €" next to the rate
+            const amount = M.parseAmount( es.amountText, es.currency );
+            const rate   = Number( String( es.rateText || '' ).trim().replace( ',', '.' ) );
+            $( 'ratePreview' ).textContent = ( es.currency !== g.currency && amount && rate > 0 )
+                ? '≈ ' + fmt( M.toBase( amount, es.currency, rate, g.currency ), g.currency ) : '';
+
+            const v = validateEntry();
+            const hint = $( 'entryHint' );
+            hint.textContent = v.hint;
+            hint.classList.toggle( 'warn', !! v.hint );
+            $( 'entrySaveBtn' ).disabled = ! v.ok;
+        }
+
+        function saveEntry()
+        {
+            const g = current;
+            if( ! g || ! es ) return;
+            const v = validateEntry();
+            if( ! v.ok ) { refreshEntryHints(); return; }
+
+            const isNew = ! es.id;
+            const e = {
+                id:       es.id || newId( 'e' ),
+                type:     es.kind,
+                date:     /^\d{4}-\d{2}-\d{2}$/.test( es.date || '' ) ? es.date : todayIso(),
+                amount:   v.amount,
+                currency: es.currency,
+                rate:     es.currency === g.currency ? 1 : v.rate,
+                created:  es.created || Date.now()
+            };
+            if( es.kind === 'payment' ) { e.from = es.from; e.to = es.to; }
+            else { e.text = es.text.trim(); e.paidBy = es.paidBy; e.split = v.split; }
+
+            if( es.currency !== g.currency ) g.rates[ es.currency ] = e.rate;   // remembered for next time
+
+            const at = g.entries.findIndex( x => x.id === e.id );
+            if( at >= 0 ) g.entries[ at ] = e; else g.entries.push( e );
+
+            persist( g );
+            closeSheet( 'entrySheetBackdrop' );
+            renderGroup();
+            toast( isNew ? ( e.type === 'payment' ? T( 'split.paymentSaved' ) : T( 'split.expenseSaved' ) )
+                         : T( 'split.saved' ) );
+        }
+
+        // Delete = out at once, with six seconds to change your mind.
+        function deleteEntry()
+        {
+            const g = current;
+            if( ! g || ! es || ! es.id ) return;
+            const at = g.entries.findIndex( x => x.id === es.id );
+            if( at < 0 ) return;
+
+            const removed = g.entries.splice( at, 1 )[ 0 ];
+            persist( g );
+            closeSheet( 'entrySheetBackdrop' );
+            renderGroup();
+
+            showUndo( T( 'split.deleted' ), function()
+            {
+                g.entries.splice( Math.min( at, g.entries.length ), 0, removed );
+                persist( g );
+                if( current === g ) renderGroup();
+            } );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE GROUP SHEET - new group (name, currency, people) or edit (name, currency).
+
+        function openGroupSheet( g )
+        {
+            gs = { g: g || null };
+            $( 'groupSheetTitle' ).textContent = g ? T( 'split.editGroup' ) : T( 'split.newGroup' );
+            $( 'groupNameInput' ).value = g ? ( g.name || '' ) : '';
+            fillCurrencySelect( $( 'groupCurSel' ), g, g ? g.currency : 'EUR' );
+
+            const locked = !! ( g && g.entries.length );
+            $( 'groupCurSel' ).disabled = locked;
+            $( 'groupCurHint' ).hidden  = ! locked;
+
+            $( 'groupPeople' ).hidden = !! g;
+            if( ! g )
+            {
+                $( 'meNameInput' ).value = meUser || '';
+                $( 'othersInput' ).value = '';
+            }
+
+            NayiveUI.open( 'groupSheetBackdrop' );
+            setTimeout( function() { $( 'groupNameInput' ).focus(); }, 60 );
+        }
+
+        function saveGroup()
+        {
+            if( ! gs ) return;
+            const name = $( 'groupNameInput' ).value.trim();
+            if( ! name ) { $( 'groupNameInput' ).focus(); return; }
+            const cur = $( 'groupCurSel' ).value || 'EUR';
+
+            if( gs.g )
+            {
+                gs.g.name = name;
+                if( ! gs.g.entries.length ) gs.g.currency = cur;
+                persist( gs.g );
+                closeSheet( 'groupSheetBackdrop' );
+                render();
+                return;
+            }
+
+            const meName = $( 'meNameInput' ).value.trim() || meUser || T( 'split.meDefault' );
+            const others = $( 'othersInput' ).value.split( /[\n,;]/ ).map( s => s.trim() ).filter( Boolean );
+            const mem    = [ { id: newId( 'm' ), name: meName, me: true } ].concat( others.map( n => ( { id: newId( 'm' ), name: n } ) ) );
+            const id     = slugify( name ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
+
+            const g = { id, name, currency: cur, created: todayIso(), archived: false, members: mem, rates: {}, entries: [] };
+            g._base = DIR + '/' + id;
+            g._ro   = false;
+
+            groups.push( g );
+            persist( g );
+            closeSheet( 'groupSheetBackdrop' );
+            openGroup( g );
+            toast( T( 'split.groupCreated' ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE PEOPLE SHEET - edit names, say who is "me", add, hide or remove.
+
+        function openMembersSheet()
+        {
+            const g = current;
+            if( ! g || g._ro ) return;
+            ms = members( g ).map( m => Object.assign( {}, m ) );
+            renderMembersSheet();
+            NayiveUI.open( 'membersSheetBackdrop' );
+        }
+
+        function renderMembersSheet()
+        {
+            const box = $( 'memberRows' );
+            box.innerHTML = '';
+
+            ms.forEach( ( m, i ) =>
+            {
+                const row = el( 'div', 'member-row' + ( m.hidden ? ' is-hidden' : '' ) );
+                row.appendChild( avatarFor( i, m.name, false ) );
+
+                const inp = el( 'input' );
+                inp.type = 'text';
+                inp.value = m.name || '';
+                inp.placeholder = T( 'split.nameWord' );
+                inp.setAttribute( 'aria-label', T( 'split.nameWord' ) );
+                inp.addEventListener( 'input', function() { m.name = this.value; row.firstChild.textContent = initials( this.value ); } );
+                row.appendChild( inp );
+
+                const lab = el( 'label', 'me' );
+                const r   = el( 'input' );
+                r.type = 'radio';
+                r.name = 'meRadio';
+                r.checked = !! m.me;
+                r.addEventListener( 'change', function() { ms.forEach( x => { x.me = false; } ); m.me = true; } );
+                lab.appendChild( r );
+                lab.appendChild( document.createTextNode( T( 'split.meWord' ) ) );
+                row.appendChild( lab );
+
+                const btn = el( 'button', 'icon-btn sm' );
+                btn.type = 'button';
+                if( M.hasMovements( current, m.id ) )
+                {
+                    btn.innerHTML = m.hidden ? IC.eye : IC.eyeoff;
+                    btn.title = m.hidden ? T( 'split.showPerson' ) : T( 'split.hidePerson' );
+                    btn.addEventListener( 'click', function() { m.hidden = ! m.hidden; renderMembersSheet(); } );
+                }
+                else
+                {
+                    btn.classList.add( 'danger' );
+                    btn.innerHTML = IC.trash;
+                    btn.title = T( 'split.removePerson' );
+                    btn.addEventListener( 'click', function() { ms.splice( i, 1 ); renderMembersSheet(); } );
+                }
+                btn.setAttribute( 'aria-label', btn.title );
+                row.appendChild( btn );
+
+                box.appendChild( row );
+            } );
+        }
+
+        function saveMembers()
+        {
+            const g = current;
+            if( ! g || ! ms ) return;
+            const clean = ms.map( m => Object.assign( {}, m, { name: ( m.name || '' ).trim() } ) );
+            if( clean.some( m => ! m.name ) ) { toast( T( 'split.nameAll' ) ); return; }
+
+            g.members = clean;
+            persist( g );
+            closeSheet( 'membersSheetBackdrop' );
+            renderGroup();
+        }
+
+        //------------------------------------------------------------------------//
+        // THE ⋮ MENU
+
+        // Called only from a group's row in the list, so the group comes in as an
+        // argument. Never pass this straight to addEventListener: the click
+        // event would land in `g`.
+        function toggleArchive( g )
+        {
+            if( ! g || g._ro ) return;
+            g.archived = ! g.archived;
+            persist( g );
+            goHome();
+            toast( g.archived ? T( 'split.archived' ) : T( 'split.unarchived' ) );
+        }
+
+        // Called from the trash button on a group's row in the list - never from
+        // inside an open group, so the group comes in as an argument.
+        //
+        // Only an ARCHIVED group can be deleted. Archiving first is the pause
+        // that makes a delete deliberate: the row shows the archive box until
+        // the group is put away, and only then does it show the bin. The test
+        // is repeated here so no future caller can skip that step.
+        async function deleteGroup( g )
+        {
+            if( ! g || g._ro || ! g.archived ) return;
+
+            const ok = await NayiveUI.confirm( {
+                title:  T( 'split.deleteGroup' ),
+                body:   TF( 'split.deleteGroupBody', { name: g.name } ),
+                danger: true
+            } );
+            if( ! ok ) return;
+
+            if( ! navigator.onLine ) { toast( T( 'split.needOnline' ) ); return; }
+            try { await GumApi.deletePaths( g._base ); }
+            catch( _ ) { toast( T( 'split.deleteFailed' ) ); return; }
+
+            await store.forget( g._base + '/' + FILE );
+            groups  = groups.filter( x => x !== g );
+            current = null;
+            render();
+            toast( T( 'split.groupDeleted' ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // SHARE THE NUMBERS - as text (WhatsApp, Telegram, mail) or as a CSV file.
+
+        function summaryText( g )
+        {
+            const lines = [];
+            lines.push( ( g.name || 'Split' ) + ' · ' + T( 'split.balancesAt' ) + ' ' + todayIso() );
+            lines.push( T( 'split.totalSpentWord' ) + ': ' + fmt( M.memberTotals( g ).total, g.currency ) );
+
+            const used   = M.usedCurrencies( g );
+            const blocks = ( perCur && used.length > 1 )
+                ? used.map( code => ( { code, net: M.balancesByCurrency( g )[ code ] || {} } ) )
+                : [ { code: g.currency, net: M.balances( g ) } ];
+
+            blocks.forEach( b =>
+            {
+                lines.push( '' );
+                if( blocks.length > 1 ) lines.push( '[' + b.code + ']' );
+                Object.keys( b.net )
+                    .filter( id => memberOf( g, id ) && ( ! memberOf( g, id ).hidden || b.net[ id ] !== 0 ) )
+                    .sort( ( x, y ) => b.net[ y ] - b.net[ x ] )
+                    .forEach( id => lines.push( nameOf( g, id ) + ': ' + fmt( b.net[ id ], b.code, { plus: true } ) ) );
+
+                lines.push( '' );
+                lines.push( T( 'split.whoPays' ) + ':' );
+                const tr = M.settle( b.net );
+                if( ! tr.length ) lines.push( '· ' + T( 'split.allEven' ) );
+                tr.forEach( x => lines.push( '· ' + nameOf( g, x.from ) + ' → ' + nameOf( g, x.to ) + ': ' + fmt( x.amount, b.code ) ) );
+            } );
+            return lines.join( '\n' );
+        }
+
+        async function copySummary()
+        {
+            const g = current;
+            if( ! g ) return;
+            const text = summaryText( g );
+
+            // On a phone the share sheet is what people want (straight into a
+            // chat); on a PC the clipboard is.
+            const coarse = window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches;
+            if( coarse && navigator.share )
+            {
+                try { await navigator.share( { text } ); return; }
+                catch( e ) { if( e && e.name === 'AbortError' ) return; }
+            }
+            try
+            {
+                await navigator.clipboard.writeText( text );
+                toast( T( 'split.copied' ) );
+            }
+            catch( _ )
+            {
+                NayiveUI.alert( { title: T( 'split.summary' ), body: text } );
+            }
+        }
+
+        function csvText( g )
+        {
+            const SEP = ';';   // Spanish locale: ";" between fields, "," for decimals
+            const q   = s => '"' + String( s == null ? '' : s ).replace( /"/g, '""' ) + '"';
+            const rows = [ [ T( 'split.csvDate' ), T( 'split.csvKind' ), T( 'split.csvText' ),
+                             T( 'split.csvPayer' ), T( 'split.csvFor' ), T( 'split.csvAmount' ),
+                             T( 'split.csvCurrency' ), T( 'split.csvRate' ),
+                             TF( 'split.csvAmountIn', { cur: g.currency } ) ].map( q ).join( SEP ) ];
+
+            sortedEntries( g ).reverse().forEach( e =>
+            {
+                const pay  = e.type === 'payment';
+                const code = e.currency || g.currency;
+                rows.push( [
+                    e.date || '',
+                    T( pay ? 'split.csvPayment' : 'split.csvExpense' ),
+                    pay ? '' : ( e.text || '' ),
+                    nameOf( g, pay ? e.from : e.paidBy ),
+                    pay ? nameOf( g, e.to ) : M.participants( e ).ids.map( id => nameOf( g, id ) ).join( ', ' ),
+                    M.toDecimal( e.amount, code, ',' ),
+                    code,
+                    String( code === g.currency ? 1 : ( e.rate || '' ) ).replace( '.', ',' ),
+                    M.toDecimal( M.entryBase( e, g.currency ), g.currency, ',' )
+                ].map( q ).join( SEP ) );
+            } );
+            return '\ufeff' + rows.join( '\r\n' );   // BOM so Excel reads the accents
+        }
+
+        async function exportCsv()
+        {
+            const g = current;
+            if( ! g ) return;
+            const name = slugify( g.name ) + '.csv';
+            const blob = new Blob( [ csvText( g ) ], { type: 'text/csv;charset=utf-8' } );
+
+            if( navigator.canShare && window.File )
+            {
+                try
+                {
+                    const file = new File( [ blob ], name, { type: 'text/csv' } );
+                    if( navigator.canShare( { files: [ file ] } ) && window.matchMedia( '(pointer: coarse)' ).matches )
+                    {
+                        await navigator.share( { files: [ file ], title: g.name } );
+                        return;
+                    }
+                }
+                catch( e ) { if( e && e.name === 'AbortError' ) return; }
+            }
+
+            const url = URL.createObjectURL( blob );
+            const a   = document.createElement( 'a' );
+            a.href = url;
+            a.download = name;
+            document.body.appendChild( a );
+            a.click();
+            setTimeout( function() { document.body.removeChild( a ); URL.revokeObjectURL( url ); }, 1000 );
+        }
+
+        //------------------------------------------------------------------------//
+        // TOASTS
+
+        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
+        // shared/theme.css); these two names are kept only because the app calls them a lot.
+        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
+        // does not exist yet while this script is parsed.
+        function toast( msg )         { NayiveUI.toast( msg ); }
+        function showUndo( msg, fn )  { NayiveUI.undoToast( msg, fn ); }
+    </script>
+</body>
+</html>

@@ -1,0 +1,2134 @@
+/* =============================================================================
+ * app.css - the shared component layer for every Nayive app.
+ *
+ * WHAT THIS IS
+ *   Nayive is fourteen small single-page apps that must feel like one product. The
+ *   colour tokens and a few widgets already lived in shared/theme.css; this
+ *   file adds the rest of the common UI - the app shell, the header, the icon
+ *   button, the dialog, the form field, pills and cards - so an app's own
+ *   <style> block only has to hold what is genuinely unique to that app.
+ *
+ *   THIS FILE (plus theme.css and the ui.js header comment) IS the Nayive style
+ *   guide - the only one. Each block below is preceded by a comment that says
+ *   what the component is, when to use it, and the rules it must follow. If you
+ *   are building or changing Nayive UI, read the comment for the component you
+ *   are touching. There is no separate style-guide document to keep in sync.
+ *
+ * HOW TO LOAD  (in every app's <head>, in this order)
+ *     <script src="../shared/i18n.js"></script>             <!-- FIRST: hides the page until the dictionary is in -->
+ *     <meta name="theme-color" content="#1E1F23">           <!-- theme.js rewrites it to the live --bg -->
+ *     <link rel="stylesheet" href="../shared/theme.css">    <!-- tokens first -->
+ *     <link rel="stylesheet" href="../shared/app.css">
+ *     <script>try{ if(localStorage.getItem('balata-theme')!=='dark')
+ *         document.documentElement.setAttribute('data-theme','light'); }catch(e){}</script>
+ *     <script src="../shared/theme.js" defer></script>      <!-- scheme toggle + sync -->
+ *     <script src="../shared/gum-api.js" defer></script>    <!-- GumApi: the file API -->
+ *     <script src="../shared/ui.js" defer></script>         <!-- NayiveUI: sheets, toast, buttons -->
+ *     ... then the app's own <style> ...
+ *   Light is the default scheme; only an explicit "dark" choice is dark. The
+ *   inline script applies the saved scheme before first paint (no flash).
+ *   The app's <style> comes last, so on an equal-specificity clash the app
+ *   wins - use that only for real per-app layout, never to restyle a shared
+ *   component into a different look. PWA manifests set theme_color /
+ *   background_color to #1E1F23.
+ *
+ * THE TOKENS  (defined in theme.css - use the name, never the literal)
+ *   colour     --bg --card --card2 --line --text --text-dim --text-faint
+ *              --accent --on-accent --danger --link --ok --warn --busy --shadow
+ *              (each has a one-line "what it's for" comment in theme.css)
+ *   type       --font-sans --font-mono
+ *   radius     --radius-s (8) --radius-m (12) --radius-l (16) --radius-pill (999)
+ *   spacing    --space-1..5  (4 8 12 16 24)
+ *   elevation  --elev-card --elev-dialog --scrim
+ *   motion     --tr-fast (colour) --tr-move (transform)
+ *
+ * TYPE SIZES  (rem; weight 700 where noted)
+ *   app title (h1 / .app-title) 1.1  --accent 700    dialog title (h2)  1.15  700
+ *   body / list rows            0.9 - 0.95           field label / meta 0.8  --text-dim
+ *   section label               0.72 700 uppercase, letter-spacing 0.06em, --text-dim
+ *
+ * GLOBAL RULES
+ *   - Never write a hex colour, a raw box-shadow, or an off-scale corner radius
+ *     in an app. Add the value to theme.css if the scale is missing something.
+ *   - Hover / pressed tints use color-mix(in srgb, var(--text) N%, transparent)
+ *     so they flip light-on-dark and dark-on-light. Never a fixed rgba().
+ *   - An accent fill means "active / selected / primary". It is not a hover
+ *     colour - hover is a neutral --text tint.
+ *   - Every icon-only control needs a `title` and an `aria-label` - as i18n
+ *     keys (data-i18n-attr), never literal text.
+ *   - Every date shown to a person is yyyy-mm-dd. No locale or month-name form.
+ *   - No user-facing text lives in the source: every message is a key in
+ *     shared/i18n/*.json (see docs/i18n.md). App names keep their short label
+ *     ("Calc", "Drive", ...) in every language.
+ *   - A dialog closes on its own × / ✓ buttons and the Esc key only - never on
+ *     a click on the backdrop. shared/ui.js wires both for every static
+ *     .sheet-backdrop (a click on its data-act="close" button, Escape on the
+ *     top-most open one), so an app only adds a handler when closing must
+ *     also reset state.
+ *   - An element with the `hidden` attribute is hidden, whatever display its
+ *     class sets ([hidden] below is !important). Use it instead of a local
+ *     `.x[hidden] { display: none }` line.
+ *
+ * TWO LAYOUT MODES
+ *   Every app has two layouts and ONE breakpoint between them:
+ *     - PC + tablet  (wider than 640px): the default rules in every file. An
+ *       iPad in portrait (768px+) gets this layout on purpose - it has the room.
+ *     - Phone        (640px and under): one `@media (max-width: 640px)` block
+ *       per app plus the shared PHONE block at the end of this file.
+ *   640px is the phone break in EVERY app; do not invent a second one.
+ *   The one thing an app may add above it is a PANE break - the width at which
+ *   its side pane stops fitting and is dropped, which is not a phone at all:
+ *   Music 760, Movies 820, Trips 920 (its route map), and the card shell's own
+ *   480 for going edge to edge. An app with no side pane has only the 640.
+ *   What the phone layout does, so every app does it the same way:
+ *     - the header keeps the app name; secondary buttons go behind a "⋮" menu
+ *       (calendar, contacts, drive) or the toolbar wraps onto more rows (text);
+ *       side panes become a slide-in sheet (drive) or three icon buttons in a
+ *       slim header row (planner);
+ *     - a CROWDED TOOLBAR (write, calc) shrinks to ONE row of the controls that
+ *       get used most - picked by name in that app's phone block, never by
+ *       where they sit in the bar - with a "⋮" at the end that opens the whole
+ *       toolbar in place and closes it again. Both also FOLD the row away while
+ *       you type (write: you tap the text; calc: a cell editor opens) and an
+ *       "Aa" button in the header brings it back. Their file buttons move to a
+ *       second "⋮" in the header, and the "?" is moved there with them so help
+ *       survives the fold. See the phone block in write/ or calc/index.html;
+ *     - a dialog taller than the screen scrolls inside, with its button row
+ *       stuck to the bottom edge (.sheet-actions - see the PHONE block);
+ *     - touch targets are at least 36px and every text field is at least
+ *       16px, so iOS never zooms the page into a field;
+ *     - nothing is ever wider than the screen (no sideways page scroll).
+ *
+ * PER-APP OVERRIDES
+ *   An app's <style> may carry a few small overrides of the rules here - a
+ *   page that hides its own scroll, calc's tinted toolbar, trip's two-column
+ *   layout, the compose-bar submit in tasks, the entry-screen styling in
+ *   login.html / admin.html, the 30-32px "toolbar button" that calc / text /
+ *   write use instead of .icon-btn. Each such override carries a one-line
+ *   comment saying why. That comment is the record; there is no central list.
+ * ===========================================================================*/
+
+
+/* -----------------------------------------------------------------------------
+ * BASE / RESET
+ *
+ * border-box everywhere. The page never scrolls sideways. The body carries the
+ * UI font, the primary text colour and the page background so an app's <body>
+ * rule can be deleted. Links are the accent-independent --link blue, underline
+ * on hover only.
+ * ---------------------------------------------------------------------------*/
+*,
+*::before,
+*::after            { box-sizing: border-box; }
+
+html               { overflow-x: hidden; overflow-y: auto; }
+
+body
+{
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    -webkit-tap-highlight-color: transparent;
+}
+
+a                  { color: var(--link); text-decoration: none; }
+a:hover            { text-decoration: underline; opacity: 0.85; }
+
+/* The hidden attribute always wins - a class that sets display: flex on the
+   same element (an .icon-btn, a bar, a pane) must not un-hide it. */
+[hidden]           { display: none !important; }
+
+
+/* -----------------------------------------------------------------------------
+ * APP SHELL - two layouts, pick one per app
+ *
+ * A) TOOL SHELL  (.app)  - calc, calendar, drive, text, write, planner
+ *    A full-height flex column: a fixed .topbar on top, the work area (a grid,
+ *    an editor, a map) fills the rest and does its own scrolling. The page
+ *    background is --bg.
+ *
+ * B) CARD SHELL  (.page > .page-inner > .card)  - tasks, contact
+ *    A single centred column that reads like a sheet of paper. Max width
+ *    460px. On a real phone (<=480px) the card loses its border, radius and
+ *    shadow and goes edge to edge. The edge-to-edge rule is scoped to
+ *    .page > .page-inner > .card, so a standalone .card (login, a dialog-free
+ *    panel) keeps its box at every width.
+ *
+ *    trip is a card app too but runs its own two-column variant (.trip-panel,
+ *    not .card): the list on the left, a sticky route map on the right on a
+ *    wide viewport.
+ *
+ * Do not mix A and B. An app is either a tool or a list/document.
+ * ---------------------------------------------------------------------------*/
+.app
+{
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.page
+{
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    min-height: 100vh;
+    padding: 28px 14px;
+}
+
+.page-inner        { width: 100%; max-width: 460px; }
+
+.card
+{
+    padding: 20px 16px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--elev-card);
+}
+
+@media (max-width: 480px)
+{
+    .page                        { padding: 0; }
+    .page > .page-inner          { max-width: 100%; }
+    .page > .page-inner > .card
+    {
+        min-height: 100vh;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
+
+/* -----------------------------------------------------------------------------
+ * HEADER
+ *
+ * Same shape in every app, same order left to right:
+ *
+ *     [.app-icon]  [<h1> app name]  ... app controls ...  [.sync-indicator]
+ *
+ * - .topbar is the tool-shell header. It is ONE row while everything fits; when
+ *   the viewport is too narrow the button bar wraps onto the next line(s) - the
+ *   same way a toolbar overflows - and the title always stays fully readable
+ *   (it wraps its own text before it is ever clipped). Divider underneath.
+ *   Card-shell apps (.header) use a plain flex row with the same parts and the
+ *   same wrap behaviour, and `margin-bottom: var(--space-4)` instead of a border.
+ * - .app-icon: an inline SVG in --accent. Render it 20px in a .topbar, 26px in
+ *   a card header.
+ * - The <h1> (or .app-title) is ALWAYS --accent, 1.1rem, weight 700, no margin.
+ *   Do not colour it --text; do not size it per app. Never give it
+ *   `text-overflow: ellipsis` - the title is not allowed to be truncated.
+ * - The sync dot is ALWAYS the last child of the header.
+ * - Header buttons are .icon-btn (see below). The primary "new" one gets
+ *   .accent; a destructive one gets .danger.
+ * - Wrap the trailing controls (every button + the sync dot) in a
+ *   .topbar-actions / .header-actions group so the whole bar drops to the next
+ *   line together, instead of one lone button clinging to the title's line.
+ *   A header with just a control or two can skip the wrapper.
+ * ---------------------------------------------------------------------------*/
+.topbar
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;              /* a long title / crowded bar wraps to a second row, never truncates */
+    gap: 2px;
+    row-gap: 4px;                 /* breathing room between wrapped rows */
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;            /* safety net: a single un-wrappable wide child still scrolls */
+}
+
+.topbar h1,
+.app-title
+{
+    flex: 0 1 auto;             /* sit at its natural width; wrap its text before shrinking further */
+    min-width: min-content;    /* wrap the title's own text - never clip it */
+    margin: 0 10px 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: normal;
+}
+
+.app-icon          { flex: 0 0 auto; color: var(--accent); }
+/* .topbar's gap is 2px (a toolbar's), so the icon needs 6px more to sit the same
+   8px from the title as it does in a card .header, whose gap is --space-2.
+   Descendant, not child: Drive wraps its icon + title in a div. */
+.topbar .app-icon  { margin-right: 6px; }
+
+/* The app icon + name double as a button back to the launcher (wired in
+   shared/ui.js). Only the cursor + a light hover hint at it - the layout is
+   unchanged. Real controls inside the header keep their own action. */
+.nayive-home-link                    { cursor: pointer; }
+.topbar h1.nayive-home-link:hover,
+.header h1.nayive-home-link:hover,
+.app-title.nayive-home-link:hover    { text-decoration: underline; text-underline-offset: 3px; }
+.app-icon.nayive-home-link:hover     { opacity: 0.7; }
+
+/* -----------------------------------------------------------------------------
+ * EMBEDDED  - the page runs inside another Nayive page's <iframe> (Planner
+ * frames calendar + tasks + habits). shared/ui.js stamps html.is-embedded
+ * on load. The host page already shows the app name and ONE sync dot for both
+ * frames, so the framed app hides its own icon, title and dot. Its toolbar
+ * buttons (and its "?" help, which documents THAT toolbar) stay.
+ * ---------------------------------------------------------------------------*/
+html.is-embedded .topbar > .app-icon,
+html.is-embedded .header > .app-icon,
+html.is-embedded .topbar > h1,
+html.is-embedded .header > h1,
+html.is-embedded .sync-indicator         { display: none; }
+/* card-shell header (tasks): the <h1> was the spacer that pushed the buttons
+   to the right edge; keep them there without it */
+html.is-embedded .header                 { justify-content: flex-end; }
+
+/* ...EXCEPT the icon when the HOST is a PC / tablet (html.is-embedded-wide, see
+   shared/ui.js): there Planner shows the three panes at once, and the icon in
+   the top-left corner of each one says which app that area is. The title stays
+   off - the icon alone is the label, and a 25%-wide pane has no room for more.
+   On a phone Planner shows one pane at a time from three icon buttons in its
+   own header, so the class is absent and the rule above still hides the icon.
+
+   Nothing has to move to make room: calendar's .topbar starts with the icon,
+   tasks' always-open compose field (flex-grow) still pushes the buttons to the
+   right edge, and habits' .tabs already carry margin-right: auto. Two details
+   though. The icon is trimmed to 20px - the card headers draw it at 26px, which
+   is more than a narrow pane can spare (habits' header, already the fullest
+   row, wraps its buttons to a second line in a 25% pane either way). And the
+   header packs from the LEFT again: the flex-end above was written for a header
+   that began with a button, and it parked the icon at the right end of its row
+   the moment the row wrapped. */
+html.is-embedded.is-embedded-wide .topbar > .app-icon,
+html.is-embedded.is-embedded-wide .header > .app-icon { display: block; }
+html.is-embedded.is-embedded-wide .header > .app-icon { width: 20px; height: 20px; }
+html.is-embedded.is-embedded-wide .header             { justify-content: flex-start; }
+
+/* A framed card app (tasks, habits) fills its pane. The card shell centres a
+   460px sheet of paper on a wide screen, which is right when the app IS the
+   window; inside a Planner pane the pane already is the app's whole area, so
+   the sheet look would only add gutters and a second border around a box that
+   already has one. Same treatment as the <=480px phone rule further up -
+   no outer padding, no cap, no border / radius / shadow, and a min-height so a
+   short list does not leave a card-coloured box floating on the page
+   background. Standalone (own tab, installed PWA) the card is untouched. */
+html.is-embedded .page                       { padding: 0; }
+html.is-embedded .page > .page-inner         { max-width: 100%; }
+html.is-embedded .page > .page-inner > .card
+{
+    min-height: 100vh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* The trailing button bar, kept together so it wraps as one unit (see above). */
+.topbar-actions,
+.header-actions
+{
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    margin-left: auto;          /* hug the right edge while it shares the title's line */
+}
+
+/* Card-shell header: same parts, no divider. */
+.header
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    row-gap: 4px;
+    margin-bottom: var(--space-4);
+}
+.header h1,
+.header .app-title
+{
+    flex: 1 1 auto;
+    min-width: min-content;     /* wrap the title, never clip it; buttons wrap below instead */
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: normal;
+}
+
+
+/* -----------------------------------------------------------------------------
+ * FOLDER CRUMB  (.crumb)  and  VIEW BAR INFO  (.bar-info)
+ *
+ * Folder-backed viewers (Photos, Music, Movies) share ONE header layout:
+ *
+ *   row 1   [icon] <h1>   [.crumb  (folder) path]   ............   [sync dot]
+ *   row 2   [.bar-info  item counts / genres / totals]
+ *   row 3   .view-bar: [.tb-modes view/filter] [.tb-actions] [.tb-end: search, reload, help]
+ *
+ * - .crumb is a button in the .topbar. It carries a folder icon + the folder
+ *   path and opens the change-folder picker. It shows the PATH ONLY - never a
+ *   count, never a hint. Put an <svg> then a <span> inside it.
+ * - .bar-info is the ONE place for item counts, genres, totals and the like.
+ *   It is the LAST child of the .topbar and rides its own row, flush under the
+ *   title + crumb. Empty -> hidden. Never repeat the folder path here.
+ * - .view-bar is row 3 itself. It holds .tb-modes (the buttons that switch what
+ *   is shown), then .tb-actions (the buttons that act on it, behind a .tb-sep),
+ *   then .tb-end. Photos hangs it under the header; Music and Movies put it at
+ *   the top of their library pane so it does not stretch over the queue - both
+ *   are right, the bar belongs to whatever it filters. An app whose content is
+ *   indented more than 16px re-states padding-inline, nothing else.
+ * - .tb-end groups the search field + reload + help right after the view/filter
+ *   buttons. Only the sync dot stays up in the header. On a phone
+ *   the search field collapses behind a magnifier (.search-toggle); tapping it
+ *   toggles `.show` on the field. The rescan button is #reloadBtn in all three.
+ * ---------------------------------------------------------------------------*/
+.crumb
+{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0 var(--space-2) 0 0;
+    padding: 4px 10px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--card2);
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.crumb svg    { width: 14px; height: 14px; flex: 0 0 auto; }
+.crumb span   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb:hover  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.crumb:empty  { display: none; }
+
+.bar-info
+{
+    flex: 1 0 100%;               /* own row, full width, flush under title + crumb */
+    margin: 3px 0 0;
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+.bar-info:empty { display: none; }
+
+/* The trailing group of the view/filter toolbar: search + reload + help.
+   Sits right after the view/filter buttons - not pushed to the right edge. */
+.tb-end
+{
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+/* Desktop shows the text field, so the magnifier stays hidden. Each app's own
+   narrow-viewport @media flips this (field -> .search-toggle) at its breakpoint. */
+.search-toggle { display: none; }
+
+/* Row 3 of a folder-backed viewer. .tb-modes switches WHAT is shown, .tb-actions
+   acts ON what is shown (introduced by a .tb-sep), .tb-end closes the row. The
+   action group carries its own divider inside it, so a group whose buttons are
+   all hidden takes the divider with it instead of leaving it hanging. */
+.view-bar
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    row-gap: 2px;
+    flex: 0 0 auto;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--line);
+}
+.tb-modes,
+.tb-actions       { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.tb-actions:not(:has(> button:not([hidden]))) { display: none; }
+
+/* Scoped, NOT a bare .tb-sep: text uses that name for a vertical divider of its
+   own and write for a HORIZONTAL one inside .tb-popup - a global width: 1px
+   would squash write's to a sliver. */
+.view-bar .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
+
+/* One search field for all three viewers - the apps used to set 200/220/240.
+   Only the WIDTH lives here: the look (padding, font size, fill, border) is the
+   one shared input rule - see FORM FIELD below. */
+.tb-end .topbar-search { flex: 0 1 220px; min-width: 0; }
+
+
+/* -----------------------------------------------------------------------------
+ * ICON BUTTON  (.icon-btn)  - the workhorse control
+ *
+ * A round, borderless, icon-only button used in headers, toolbars and rows.
+ *
+ *   size        36px (use .icon-btn.sm = 30px for dense toolbars)
+ *   shape       circle, no border, transparent background
+ *   colour      --text-dim at rest, --text on hover
+ *   hover       a neutral --text 9% wash (NEVER an accent tint)
+ *   pressed     --text 14%
+ *   focus       a visible --accent ring for keyboard users
+ *   disabled    opacity 0.45, no pointer, no hover
+ *
+ * The SVG inside: 24x24 viewBox, stroke="currentColor", fill="none",
+ * stroke-width ~2, round caps and joins (Feather style). Rendered 18-20px.
+ *
+ * MODIFIERS
+ *   .accent   solid --accent fill, --on-accent icon. The "new item" button.
+ *   .danger   a DELETE button: a --danger icon at rest (not just on hover);
+ *             hover adds a faint --danger wash. Borderless like every other
+ *             .icon-btn - the red icon alone marks it. Matches the dialog
+ *             .btn-danger so "delete" looks the same everywhere.
+ *   .is-active  solid --accent fill for a toggle that is currently on
+ *               (e.g. the calendar view switch).
+ * ---------------------------------------------------------------------------*/
+.icon-btn
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.icon-btn svg           { width: 19px; height: 19px; display: block; }
+.icon-btn:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.icon-btn:active        { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.icon-btn:focus         { outline: none; }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-btn:disabled      { opacity: 0.45; cursor: default; background: transparent; color: var(--text-dim); }
+
+.icon-btn.sm            { width: 30px; height: 30px; }
+.icon-btn.sm svg        { width: 17px; height: 17px; }
+
+/* There is no accent variant of .icon-btn. The "new / add" button in Tasks,
+ * Habits, Calendar, Contacts and Split is a plain one: same --text-dim glyph,
+ * same grey hover as every other button in the row. Its icon says what it does.
+ * (.danger below is the one colour variant, and it is a warning, not emphasis.) */
+
+.icon-btn.danger        { color: var(--danger); }
+.icon-btn.danger:hover  { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+
+.icon-btn.is-active         { background: var(--accent); color: var(--on-accent); }
+.icon-btn.is-active:hover   { background: var(--accent); }
+
+/* TOOLBAR BUTTON - a related but distinct component, NOT styled here.
+ * calc (.fmt-btn), text (.tb-btn) and write (#writeTools .icon-btn) each define
+ * their own: a 30-32px rounded SQUARE (--radius-s), --text-dim icon, and an
+ * ACCENT-tinted hover (color-mix(--accent 14%)) / active (--accent 24%) because
+ * the button acts on document content, not app chrome. It stays per-app on
+ * purpose - the three toolbars differ enough that a shared class earns nothing.
+ * If you add a fourth, copy one of the existing three. */
+
+
+/* -----------------------------------------------------------------------------
+ * TEXT BUTTON  (.text-btn)  - a wide call to action
+ *
+ * Use when a button needs a word, not just an icon: "Añadir", "Importar",
+ * "Guardar cambios" on a full-width row. Accent fill, --on-accent text.
+ * For a dialog's confirm / cancel row use the round .btn set from theme.css
+ * instead (see DIALOG BUTTONS below).
+ *
+ *   .text-btn.ghost   quiet version: no fill, --line border, --text-dim text.
+ *   .text-btn.dashed  an "add another" affordance: dashed accent border on a
+ *                     faint accent wash (trip's "Añadir etapa").
+ * ---------------------------------------------------------------------------*/
+.text-btn
+{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-s);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter var(--tr-fast), background-color var(--tr-fast);
+}
+.text-btn:hover     { filter: brightness(1.08); }
+.text-btn:active    { filter: brightness(0.94); }
+.text-btn:disabled  { opacity: 0.45; cursor: default; filter: none; }
+
+.text-btn.ghost
+{
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+}
+.text-btn.ghost:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); filter: none; }
+
+.text-btn.dashed
+{
+    width: 100%;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+    border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.text-btn.dashed:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); filter: none; }
+
+
+/* -----------------------------------------------------------------------------
+ * DIALOG BUTTONS  (.sheet-actions / .btn / .btn-*)  - defined in theme.css
+ *
+ * The bottom row of a dialog is a right-aligned line of round 44px icon-only
+ * buttons. Mark them up declaratively and let shared/ui.js fill in class + SVG:
+ *
+ *     <div class="sheet-actions">
+ *       <button data-act="close"   title="Cancelar"></button>
+ *       <button data-act="primary" title="Guardar"></button>
+ *     </div>
+ *
+ * Roles: close (X) - primary (check) - danger (trash) - ghost (help).
+ * .sheet-actions-left pins a delete button to the far left.
+ *
+ * ONE ICON PER MEANING (dialogs and toolbars alike):
+ *   check   = confirm / apply / save / rename / create - always, any verb.
+ *   saveas  = "save as a new copy" (check + a small +). Nothing else.
+ *   trash   = a destructive confirm. Never looks like a save.
+ *   A different verb keeps its own glyph: edit (opens a form), search (runs a
+ *   query), plus (a compose bar).
+ *
+ * A dialog whose only action is "close" has NO bottom row - ui.js moves the
+ * lone close button to the top-right corner as .sheet-close.
+ * ---------------------------------------------------------------------------*/
+
+
+/* -----------------------------------------------------------------------------
+ * DIALOG / SHEET  (.sheet-backdrop > .sheet)
+ *
+ *     <div class="sheet-backdrop" id="fooBackdrop">
+ *       <div class="sheet">
+ *         <h2>Título</h2>
+ *         ... .field rows ...
+ *         <div class="sheet-actions"> ... </div>
+ *       </div>
+ *     </div>
+ *
+ * - The backdrop is a fixed --scrim layer; add .open (or NayiveUI.open(id)) to
+ *   show it. It centres the sheet on desktop.
+ * - The sheet is a --card panel, --radius-l corners, --elev-dialog shadow,
+ *   scrolls inside at tall content. Default max-width 460px; add .sheet--wide
+ *   for 560px when the content is genuinely wide (a table, a wide form).
+ * - .sheet--pack shrinks the dialog to the width its content actually needs
+ *   (clamped to [300px, 460px] and to the screen). NayiveUI.setOpen() runs the
+ *   fit on open; NayiveUI.pack(el, {min,max}) does it by hand with custom bounds.
+ *   Use it for short forms (a few selects / a checkbox) that look lost at 460px.
+ * - CLOSING: only the × / ✓ buttons and the Esc key close a dialog. Never wire
+ *   a click on the backdrop to close - it loses half-typed input.
+ * - The backdrop is a flex box that centres the sheet both ways, so every
+ *   dialog sits in the middle of the visible area on any screen size.
+ * - MOVABLE: on PC / tablet the dialog can be dragged anywhere on screen by
+ *   pressing a free spot of it (not a control) - shared/ui.js does this for
+ *   every .sheet, there is nothing to add to a dialog. It always reopens
+ *   centred. Phones (<= 640px) never move a dialog.
+ * ---------------------------------------------------------------------------*/
+.sheet-backdrop
+{
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--scrim);
+}
+.sheet-backdrop.open { display: flex; }
+
+.sheet
+{
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    max-height: 92vh;
+    max-height: 92dvh;            /* dvh: the visible height once iOS's URL bar is accounted for */
+    overflow-y: auto;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--elev-dialog);
+}
+.sheet--wide       { max-width: 560px; }
+
+/* Content-fit width. JS (NayiveUI) sets an exact px width on open; this is the
+ * pre-JS / fallback look so the sheet never flashes at the full 460px first. */
+.sheet--pack       { width: max-content; min-width: 300px; }
+
+/* MOVING A DIALOG (shared/ui.js). The whole dialog is the handle - press on any
+ * free spot and drag - so there is nothing to draw until a drag really starts.
+ * Then: the "held" cursor everywhere, and text selection off so the pointer
+ * does not paint the dialog blue on its way across. The sheet is moved with an
+ * inline `transform: translate(...)`, which is dropped when it closes. */
+.sheet.is-dragging,
+.sheet.is-dragging *
+{
+    cursor: grabbing;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.sheet h2
+{
+    margin: 0 0 14px;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+/* Body copy in a NayiveUI.confirm / NayiveUI.alert sheet (shared/ui.js). */
+.sheet > p.dialog-text
+{
+    margin: 0 0 14px;
+    color: var(--text-dim);
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+.sheet > p.dialog-text:last-of-type { margin-bottom: 4px; }
+
+/* A dialog header row: a title on the left, one small control on the right
+ * (an "all day" switch, a step counter). */
+.sheet-header
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 2px 0 16px;
+}
+.sheet-header h2   { margin: 0; }
+
+@media (max-width: 640px)
+{
+    /* Still a centred card on a phone - just let it use the full width and a
+     * touch more height. The backdrop keeps centring it vertically. */
+    .sheet { max-height: 90vh; max-height: 90dvh; }
+}
+
+
+/* -----------------------------------------------------------------------------
+ * FORM FIELD  (.field)
+ *
+ *     <div class="field">
+ *       <label for="x">Etiqueta</label>
+ *       <input id="x" type="text">
+ *     </div>
+ *
+ * - Label: 0.8rem, --text-dim, sentence case (NOT uppercase - that style is
+ *   reserved for .section-label).
+ * - Inputs, selects and textareas share one look: --card2 fill, --line border,
+ *   --radius-s, 7px 10px padding, the page font at --field-fs (theme.css), no
+ *   default outline. That is EVERY text field in EVERY app - see SPECIFICITY
+ *   below.
+ * - Focus shows a slightly stronger border (--text 30%). No glow, no colour
+ *   change - the same treatment on every field in every app.
+ * - Put two fields side by side by wrapping them in .field-row.
+ *
+ * SPECIFICITY: the input rules below are deliberately kept at their weakest
+ * (`input, select, textarea`), so ANY rule an app already has - a
+ * `.loc-input-wrap input`, a `.topbar-search` - still wins. That weakness is
+ * for LAYOUT (width, flex, a padding-right that clears an inline button), NOT
+ * for a second look: there is ONE text-field look in Nayive and it is the one
+ * below. A toolbar search, a header compose field, a dialog field and a table
+ * cell field are all the same --field-fs / 7px 10px box. If you find an app
+ * setting its own padding, font-size or height on a field, delete it.
+ *
+ * There are exactly TWO exceptions, and both are shared classes below - an app
+ * still never rolls its own:
+ *   .field-edit  (EDIT IN PLACE)   a click-to-rename box that has to sit exactly
+ *                                  where a line of text was, so it runs a
+ *                                  tighter 3px 7px.
+ *   .tb-select   (TOOLBAR SELECT)  a drop-down that lives in a toolbar row, so
+ *                                  it is button-height and transparent, not a
+ *                                  filled field.
+ * ---------------------------------------------------------------------------*/
+.field             { margin-bottom: 14px; }
+
+.field label
+{
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.field-row
+{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.field-row .field  { flex: 1 1 120px; min-width: 0; }
+
+/* A field's control fills the row. Scoped to .field so it never stretches a
+ * toolbar / search input that lives outside a form. */
+.field input,
+.field select,
+.field textarea    { width: 100%; }
+
+input,
+select,
+textarea
+{
+    padding: 7px 10px;
+    font: inherit;
+    font-size: var(--field-fs);
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    outline: none;
+}
+textarea           { resize: vertical; min-height: 54px; }
+
+/* A <select> is given ~2px more inner box than an <input> of the same font, so
+ * the identical 7px above would leave it standing 2px taller than the field
+ * next to it in a .field-row. One pixel off the top and bottom lines the two up
+ * exactly - measured in Chromium at the field size and at the phone's 16px,
+ * gap is the same 2px both times, so this is a constant and not a magic number
+ * tuned to one size. */
+select             { padding-block: 6px; }
+
+input:focus,
+select:focus,
+textarea:focus     { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+
+::placeholder      { color: var(--text-faint); }
+
+/* The drop-down list a <select> opens is painted by the OS, and left alone it
+ * comes back white-on-white in the dark theme. Tokenised here so a dialog select
+ * in Calendar / Split / Write opens the same list as a toolbar one. The closed
+ * box keeps the platform chevron - that is the same on every select, so it stays
+ * native rather than being redrawn per app. */
+select option      { color: var(--text); background: var(--card2); }
+
+/* Browser autofill paints its own pale background + a hard border. Force the
+ * themed look back. Chrome/Edge: the inset box-shadow is the only way to cover
+ * the autofill background. Firefox: honours background-color on :autofill. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus
+{
+    -webkit-text-fill-color: var(--text);
+    -webkit-box-shadow: 0 0 0 100px var(--card2) inset;
+    caret-color: var(--text);
+    border: 1px solid var(--line);
+}
+input:autofill { background-color: var(--card2); color: var(--text); }
+
+/* Checkbox / radio / colour / file / range keep the browser's box - the field
+ * look above is for text-like inputs only. */
+input[type="checkbox"],
+input[type="radio"],
+input[type="color"],
+input[type="file"],
+input[type="range"]
+{
+    width: auto;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    accent-color: var(--accent);
+}
+
+
+/* -----------------------------------------------------------------------------
+ * EDIT IN PLACE  (.field-edit-text / .field-edit)
+ *
+ *     <span  class="field-edit-text is-editable">Comprar pan</span>   <!-- rest -->
+ *     <input class="field-edit" type="text" value="Comprar pan">   <!-- editing -->
+ *
+ * The ONE sanctioned second field look, and the only exception to "one text
+ * field look" above. It is not a size variant - it is a MODE: a line of text
+ * you click to rename in place. Used by the document name in Calc / Text /
+ * Write and by the task and sub-task rows in Tasks.
+ *
+ * The two rules share the same box - same padding, same 1px border (transparent
+ * at rest), same radius, same --field-fs - so swapping span for input does
+ * not move a pixel and the row never jumps. That is the whole point; if you
+ * change the padding, change it in BOTH.
+ *
+ * The accent border is the only difference, and it is the "you are editing now"
+ * signal. Everything else - fill, radius, no outline - is the standard field.
+ *
+ * Add .is-editable for the click affordance (text cursor + hover fill). It is a
+ * separate class because a row can be shown but not renameable - a finished task
+ * keeps the box, and loses the invitation to click it.
+ *
+ * Apps set flex / min-width / margin / colour on top. They do NOT set
+ * font-size, padding or height: an edit box is the same size in every app.
+ * ---------------------------------------------------------------------------*/
+.field-edit-text
+{
+    padding: 3px 7px;
+    font-size: var(--field-fs);
+    line-height: 1.4;
+    border: 1px solid transparent;
+    border-radius: var(--radius-s);
+    cursor: default;
+}
+.field-edit-text.is-editable        { cursor: text; }
+.field-edit-text.is-editable:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+.field-edit
+{
+    padding: 3px 7px;
+    font: inherit;
+    font-size: var(--field-fs);
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-s);
+    outline: none;
+}
+
+
+/* -----------------------------------------------------------------------------
+ * TOOLBAR SELECT  (.tb-select)  -  Calc's format bar, Text's editor bar
+ *
+ *     <select class="tb-select">…</select>
+ *
+ * The second and last exception to the one field look. A drop-down that sits in
+ * a toolbar row, not in a form: it takes the row's 30px button height and stays
+ * transparent, so it reads as one of the toolbar's controls instead of a filled
+ * field parked in the chrome. 0.82rem is the toolbar's own type size.
+ *
+ * It keeps a 1px --line outline where the round .icon-btn next to it has none -
+ * a drop-down has to look pressable and show where it ends. Its hover is the
+ * accent wash Text's .tb-btn uses, not .icon-btn's grey.
+ *
+ * Give it a width from the app (.fmt-select-font, .fmt-select-narrow ...): how
+ * wide a font list needs to be is the app's business, the look is not.
+ * ---------------------------------------------------------------------------*/
+.tb-select
+{
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0 4px;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    cursor: pointer;
+    outline: none;
+}
+.tb-select:hover   { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+
+/* -----------------------------------------------------------------------------
+ * PILL  (.pill)  and  TAG  (.tag)
+ *
+ * .pill  - a small rounded button, used for filters and mode switches. At rest
+ *          it is a quiet --card2 chip; add .is-active for the accent state.
+ * .tag   - the same shape but read-only (a metadata chip on a card). No hover,
+ *          no active state, default cursor.
+ * ---------------------------------------------------------------------------*/
+.pill
+{
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 0.77rem;
+    color: var(--text-dim);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: opacity var(--tr-fast), background-color var(--tr-fast);
+}
+.pill:hover        { opacity: 0.85; }
+.pill.is-active
+{
+    color: var(--on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.tag
+{
+    padding: 4px 10px;
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+}
+
+
+/* -----------------------------------------------------------------------------
+ * CARD ROW  (.card-row)
+ *
+ * A row in a list - a file in Drive, a trip, a saved document. A --card2
+ * surface with --line border and --radius-m corners. Hover firms up the
+ * border; .is-selected fills it with accent and flips the text.
+ * ---------------------------------------------------------------------------*/
+.card-row
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    transition: border-color var(--tr-fast), background-color var(--tr-fast);
+}
+.card-row:hover        { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.card-row.is-selected  { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+
+
+/* -----------------------------------------------------------------------------
+ * SECTION LABEL  (.section-label)
+ *
+ * A small uppercase heading over a group of fields or rows ("DOCUMENTOS",
+ * "ETAPAS"). The one place uppercase + letter-spacing is used. Keep it short.
+ * ---------------------------------------------------------------------------*/
+.section-label
+{
+    margin: 4px 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+
+/* -----------------------------------------------------------------------------
+ * INFO DOT  (.info-dot)  +  INFO POPUP  (.info-popup)
+ *
+ * A small circled "i" you put next to a label or a control to explain it. Tap
+ * it and a little popup opens with the text; tap it again, tap anywhere else,
+ * press Esc or scroll and it closes. It is a POPUP, not a dialog - it has no
+ * "x", no backdrop, and never blocks the page.
+ *
+ * On a PC (a real mouse) it ALSO opens on hover, and stays open while the
+ * pointer is on the dot or on the popup itself; a click pins it, so from there
+ * on it behaves like on a phone. Touch screens are unchanged. See shared/ui.js.
+ *
+ *     <label for="tz">Zona horaria
+ *       <button class="info-dot" data-info="Las horas se guardan en UTC y se
+ *       muestran en tu zona."></button>
+ *     </label>
+ *
+ * shared/ui.js fills in the icon + ARIA and wires the open/close (it runs on
+ * load and watches for dots added later; call NayiveUI.applyInfoDots(root) after
+ * building markup by hand). The text comes from `data-info`; "\n" starts a new
+ * line. Keep it to a sentence or two - anything longer belongs in a dialog.
+ *
+ * COLOUR: --link (info-blue) for both the dot and the popup's border, so it
+ * stays legible at 17px in both schemes and never reads as the green --accent
+ * (reserved for active / primary). The dot goes --accent only on hover / while
+ * its popup is open.
+ * ---------------------------------------------------------------------------*/
+.info-dot
+{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 17px;                /* 15% smaller than the old 20px box */
+    height: 17px;
+    padding: 0;
+    margin: 0 0 0 4px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--link);        /* info-blue - readable at this size, not the green accent */
+    vertical-align: middle;
+    cursor: pointer;
+    transition: color var(--tr-fast);
+}
+.info-dot svg           { width: 16px; height: 16px; display: block; }
+.info-dot:hover,
+.info-dot.is-open       { color: var(--accent); }
+.info-dot:focus         { outline: none; }
+.info-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.info-popup
+{
+    position: absolute;
+    z-index: 200;                /* above sheets (100), below nothing else */
+    max-width: 260px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid var(--link);   /* info-blue, ties the popup to its dot */
+    border-radius: var(--radius-m);
+    box-shadow: var(--elev-dialog);
+    white-space: pre-wrap;       /* honour "\n" in data-info */
+}
+
+
+/* -----------------------------------------------------------------------------
+ * SYNC INDICATOR + TOAST  - defined in theme.css
+ *
+ * .sync-indicator  a filled-circle SVG in the header. Toggle the state class:
+ *     (none)     --danger red   not synced yet (the safe start state)
+ *     .synced    --ok green     saved
+ *     .busy      --busy blue    a GET / PUT is in flight
+ *     .offline   --warn gold    working offline, changes queued
+ *
+ * .toast  a bottom-centre transient message. Put <div id="toast" class="toast">
+ * in the page and call NayiveUI.toast("Guardado"). For confirmations only, not
+ * for errors that need the user to act.
+ * ---------------------------------------------------------------------------*/
+
+
+/* -----------------------------------------------------------------------------
+ * (Removed) TOOLTIP PEEK + FIRST-VISIT HELP NUDGE
+ *
+ * The old touch-only long-press "peek" overlay and the ~9 s idle "nudge" card
+ * were dropped for being too intrusive. The one-time first-run intro card
+ * (.intro-*, below) stays, and the "?" dot next to each app title re-opens it.
+ * ---------------------------------------------------------------------------*/
+
+/* A long-press on a button would otherwise pop the iOS callout / selection menu. */
+button { -webkit-touch-callout: none; }
+
+
+/* -----------------------------------------------------------------------------
+ * HELP DIALOG  (.intro-*)
+ *
+ * Opened by the "?" button at the end of an app's toolbar (a normal toolbar
+ * button carrying [data-intro-open]) - never on its own. Built on the shared
+ * .sheet by shared/ui.js (NayiveUI.firstRun / .showIntro): app name, an optional
+ * one-line summary, then one row per toolbar button (its glyph + name + a short
+ * explanation). The launcher's copy adds the "volver a las apps" tip and a
+ * "No volver a mostrar" button, and re-opens every visit until that is clicked.
+ * Closes on its corner × / Escape only, like any Nayive dialog.
+ * ---------------------------------------------------------------------------*/
+.intro-btns
+{
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+.intro-btns li
+{
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 2px;
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+.intro-btns li + li  { border-top: 1px solid var(--line); }
+
+.intro-btn-i
+{
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+.intro-btn-i svg     { width: 18px; height: 18px; display: block; }
+
+.intro-btn-t         { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.intro-btn-t b       { font-weight: 600; color: var(--text); }
+.intro-btn-t span    { color: var(--text-dim); }
+
+/* Close (x), top-right corner like every Nayive dialog. Floated so the title
+   flows beside it; sticky so it stays in the corner while a long list scrolls
+   under it (hence the --card backdrop). */
+.intro-close
+{
+    position: sticky;
+    top: 0;
+    float: right;
+    margin: -2px -4px 2px 10px;
+    background: var(--card);
+    border-radius: 50%;
+    box-shadow: 0 0 0 5px var(--card);   /* widen the mask over scrolling rows */
+    z-index: 2;
+}
+
+/* The optional `tip:` line under the list (launcher: "tap the app name / icon
+   to go back"; calendar: the daily Tareas sync). */
+.intro-home-hint
+{
+    margin-top: 14px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+}
+
+/* Launcher only: the wide "No volver a mostrar" button, alone in the bottom row. */
+.intro-dismiss
+{
+    flex: 1 1 auto;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--card2);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color var(--tr-fast), background var(--tr-fast);
+}
+.intro-dismiss:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+
+
+
+/* ---------------------------------------------------------------------------
+ * COACH MARKS  (.coach-*)
+ *
+ * The two bubbles a brand-new user meets ONCE, in the first Nayive app they
+ * open (shared/ui.js, NayiveUI.showCoach). A dim overlay over the whole page,
+ * an accent ring around each target - the app name/icon and the "?" button -
+ * and a small bubble hanging off each ring with a pointer and a hairline that
+ * keeps the two joined when the bubble has to move aside on a phone.
+ *
+ * The corner button counts 9..1 before it turns into a real (x): while it is
+ * counting nothing on the page can be tapped, so the two lines get read.
+ * Above .sheet (100) and .info-popup (200) - the help sheet must never open
+ * underneath the very bubble that is pointing at its button.
+ * ---------------------------------------------------------------------------*/
+.coach-overlay
+{
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: var(--scrim);
+    opacity: 0;
+    transition: opacity var(--tr-fast);
+}
+.coach-overlay.open { opacity: 1; }
+
+/* Rings + hairlines in the lower layer, bubbles in the upper one. */
+.coach-layer { position: absolute; inset: 0; pointer-events: none; }
+.coach-layer + .coach-layer > * { pointer-events: auto; }
+
+/* The target stays lit through the scrim; the ring says which one it is. */
+.coach-ring
+{
+    position: fixed;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-s);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent);
+    pointer-events: none;
+}
+
+/* Ring -> bubble hairline (only visible when the bubble sits away from it). */
+.coach-line
+{
+    position: fixed;
+    width: 2px;
+    background: var(--accent);
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.coach-bubble
+{
+    position: fixed;
+    max-width: 240px;
+    padding: 12px 14px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-m);
+    box-shadow: var(--elev-dialog);
+}
+.coach-bubble p
+{
+    margin: 0;
+    padding-right: 30px;          /* room for the corner countdown / (x) */
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+/* The pointer: a rotated square poking out of the bubble's top edge (bottom
+   edge when the bubble had to sit above its target). ui.js sets its left. */
+.coach-arrow
+{
+    position: absolute;
+    top: -6px;
+    width: 11px;
+    height: 11px;
+    margin-left: -6px;
+    background: var(--card);
+    border-left:   1px solid var(--accent);
+    border-top:    1px solid var(--accent);
+    transform: rotate(45deg);
+}
+.coach-bubble--up .coach-arrow
+{
+    top: auto;
+    bottom: -6px;
+    border: 0;
+    border-right:  1px solid var(--accent);
+    border-bottom: 1px solid var(--accent);
+}
+
+/* Countdown, then the close (x). Same 32px disc as .sheet-close, but pinned in
+   the corner and dimmed - and unclickable - while it is still a number. */
+.coach-close
+{
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    cursor: default;
+}
+.coach-close svg          { width: 17px; height: 17px; display: block; }
+.coach-close:not(:disabled)
+{
+    color: var(--text);
+    cursor: pointer;
+}
+.coach-close:not(:disabled):hover
+{
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+@media (max-width: 640px)
+{
+    .coach-bubble   { max-width: 232px; }
+    .coach-bubble p { font-size: 0.85rem; }
+}
+
+/* ---------------------------------------------------------------------------
+ * INSTALL-AS-APP DIALOG  (.install-*)
+ *
+ * Built by NayiveUI.offerInstall() on the shared .sheet, reusing the help
+ * dialog's row list (.intro-btns) for the three "what you get" lines and its
+ * wide button (.intro-dismiss) for the actions. Only the app logo, the numbered
+ * iOS steps and the filled primary button are new.
+ * ---------------------------------------------------------------------------*/
+/* The corner x is pinned instead of floated here: floating it steals width from
+   the first line and pushes the centred logo off-centre. */
+.install-sheet .intro-close
+{
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    float: none;
+    margin: 0;
+    box-shadow: none;
+}
+.install-logo
+{
+    display: block;
+    width: 64px;
+    height: 64px;
+    margin: 2px auto 10px;
+    border-radius: 16px;
+    box-shadow: var(--elev-card);
+}
+.install-title { text-align: center; }
+.install-lead  { text-align: center; }
+
+.install-h     { margin-top: 16px; }
+
+/* The three iOS steps: a counter bubble, the real glyph, then the sentence. */
+.install-steps
+{
+    counter-reset: install-step;
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+.install-steps li
+{
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 2px;
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+.install-steps li + li { border-top: 1px solid var(--line); }
+.install-steps li::before
+{
+    counter-increment: install-step;
+    content: counter(install-step);
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--card2);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+.install-steps b { font-weight: 600; color: var(--text); }
+
+.install-note
+{
+    margin-top: 14px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+}
+
+/* Stacked full-width actions: Instalar / Ahora no / No mostrar más. */
+.install-actions
+{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+.intro-dismiss.primary
+{
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.intro-dismiss.primary:hover { background: var(--accent); color: var(--on-accent); filter: brightness(1.06); }
+.install-never { border-color: transparent; background: none; font-size: 0.8rem; min-height: 36px; }
+.install-never:hover { background: none; color: var(--text); text-decoration: underline; }
+
+/* ---------------------------------------------------------------------------
+   SHARING  -  the "Compartir" dialog (NayiveUI.shareSheet) and the read-only
+   badge a shared item shows in an app header.
+   ------------------------------------------------------------------------- */
+.ro-badge
+{
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+/* The padlock is BLUE on purpose: it is the one thing in the chip that has to
+   read at a glance ("you cannot change this"), and blue is the only tone the
+   apps never use for an action. --link is the blue token, deep enough on the
+   beige light ground and bright enough on the dark one. */
+.ro-badge svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--link); }
+
+/* Who already has it: one row per person, with a round × to take it back. */
+.share-have
+{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0;
+}
+.share-row
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 6px 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card);
+}
+.share-drop
+{
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.share-drop:hover  { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.share-drop svg    { width: 16px; height: 16px; }
+.share-drop[disabled] { opacity: 0.5; cursor: default; }
+
+/* Who else could have it: one list box, a tick-box in front of every name.
+ * The tick-box is the browser's own <input type="checkbox"> (coloured by the
+ * accent-color rule up in the INPUT section), so it draws the same everywhere. */
+.share-pick
+{
+    display: flex;
+    flex-direction: column;
+    max-height: 44vh;
+    overflow-y: auto;
+    margin: 12px 0 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card);
+}
+.share-user
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.share-user:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+
+/* "Pueden añadir archivos" - one tick under the people list. Deliberately not
+   inside the .share-pick box: it is a property of the share, not of a person. */
+.share-add
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 2px 0;
+    font-size: 0.86rem;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.share-add input { flex: 0 0 auto; width: auto; margin: 0; }
+.share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.share-user input { flex: 0 0 auto; width: auto; margin: 0; }
+
+
+/* -----------------------------------------------------------------------------
+ * EMPTY STATE  (.empty-state)
+ *
+ * What a list shows when it has nothing to list: the app's own glyph, faint, a
+ * bold one-line title and a quieter second line. Same block in Tasks, Habits,
+ * Split, Contacts. Toggle it with the `hidden` attribute.
+ *
+ *     <div class="empty-state" hidden>
+ *       <svg ...></svg>
+ *       <p class="empty-title">Sin tareas</p>
+ *       <p>Pulsa + para crear la primera.</p>
+ *     </div>
+ * ---------------------------------------------------------------------------*/
+.empty-state
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 36px 10px 18px;
+    color: var(--text-faint);
+}
+.empty-state svg         { width: 44px; height: 44px; margin-bottom: 10px; opacity: 0.6; }
+.empty-state p           { margin: 4px 0 0; font-size: 0.8rem; }
+.empty-state .empty-title,
+.empty-state p:first-of-type { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
+.empty-state .text-btn   { margin-top: 14px; }
+
+
+/* -----------------------------------------------------------------------------
+ * "MORE" MENU  (.top-menu > .menu-item)  -  NayiveUI.wireMenu
+ *
+ * The small popup a header "⋮" button opens: view switch (Calendar), the
+ * phone-only import / export (Contacts), the file buttons (Calc, Write).
+ * position: fixed and anchored under its button by shared/ui.js, so a .topbar
+ * with overflow never clips it. One action per row: an 18px glyph + a label.
+ * `.mi-check` marks the current choice in a radio-style menu; `.menu-sep` is a
+ * hairline between groups; `.danger` is a destructive row.
+ * ---------------------------------------------------------------------------*/
+.top-menu
+{
+    position: fixed;
+    z-index: 150;
+    min-width: 210px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    box-shadow: var(--elev-dialog);
+}
+.menu-item
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 12px;
+    border: none;
+    border-radius: var(--radius-s);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+}
+.menu-item svg           { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-dim); }
+.menu-item:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.menu-item:active        { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.menu-item .mi-check     { width: 15px; flex: 0 0 auto; color: var(--accent); visibility: hidden; }
+.menu-item.is-active .mi-check { visibility: visible; }
+.menu-item.danger,
+.menu-item.danger svg    { color: var(--danger); }
+.menu-sep                { height: 1px; margin: 4px 6px; background: var(--line); }
+
+/* -----------------------------------------------------------------------------
+ * PULL-DOWN MENU BAR  (#menuBar > .menu-top, .menu-panel)  -  shared/menubar.js
+ *
+ * The classic "Archivo · Edición · Ver …" row Write and Calc offer instead of
+ * their icon toolbar. The bar is one row of text buttons; the drop-downs reuse
+ * the .top-menu / .menu-item vocabulary above (card, border, shadow, tick), and
+ * only tighten the rows and add the two things a pull-down has that a "⋮" popup
+ * does not: a shortcut column on the right and a submenu arrow.
+ *
+ * Each app keeps its own `#app.is-menus …` rule for collapsing its toolbar -
+ * what has to disappear differs, and Write's strip must collapse with
+ * visibility:hidden rather than display:none (SuperDoc measures its width).
+ * ---------------------------------------------------------------------------*/
+#menuBar
+{
+    flex: 0 0 auto;
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 1px; padding: 2px 6px;
+    border-bottom: 1px solid var(--line); background: var(--card);
+}
+#menuBar[hidden] { display: none; }
+
+.menu-top
+{
+    padding: 5px 10px;
+    border: none; border-radius: var(--radius-s);
+    background: none; color: var(--text);
+    font: inherit; font-size: 0.92rem; line-height: 1.2;
+    white-space: nowrap; cursor: pointer;
+}
+.menu-top:hover                 { background: color-mix(in srgb, var(--text)  9%, transparent); }
+.menu-top[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 16%, transparent); }
+
+.menu-panel                      { max-height: calc(100vh - 80px); overflow-y: auto; min-width: 236px; }
+.menu-panel .menu-item           { padding: 7px 10px; font-size: 0.9rem; gap: 8px; }
+.menu-panel .menu-item[disabled] { opacity: 0.42; cursor: default; }
+.menu-panel .menu-item[disabled]:hover { background: none; }
+.menu-panel .mi-label            { flex: 1 1 auto; }
+.menu-panel .mi-key              { flex: 0 0 auto; padding-left: 20px; color: var(--text-dim); font-size: 0.8rem; }
+.menu-panel .mi-arrow            { flex: 0 0 auto; padding-left: 20px; color: var(--text-dim); font-size: 0.8rem; }
+
+/* A colour entry (text colour / fill) shows the colour itself. */
+.menu-panel .mi-swatch
+{ width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 3px; }
+
+
+/* -----------------------------------------------------------------------------
+ * DATE / TIME FIELD  (.dt-field)
+ *
+ * A native <input type=date|time> shows its value in the browser's own locale
+ * (mm/dd/yyyy). The Nayive rule is yyyy-mm-dd and 24 h, so the native text is
+ * hidden (color: transparent) and a .dt-display overlay shows the ISO value;
+ * the input stays underneath, so a tap still opens the native picker. The app
+ * keeps the overlay's text in step on `input` (Calendar, Contacts, Split, Trips).
+ * `.placeholder` on the overlay draws it dim while the field is empty.
+ *
+ *     <div class="dt-field"><input type="date" id="x"><span class="dt-display"></span></div>
+ * ---------------------------------------------------------------------------*/
+.dt-field                { position: relative; }
+.dt-field input[type=date],
+.dt-field input[type=time] { color: transparent; }
+.dt-field .dt-display
+{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: var(--field-fs);
+    color: var(--text);
+    pointer-events: none;
+    white-space: nowrap;
+}
+.dt-field .dt-display.placeholder { color: var(--text-dim); }
+
+
+/* -----------------------------------------------------------------------------
+ * "MORE FIELDS" TOGGLE  (.more-toggle)
+ *
+ * The pill-on-a-line that folds the rarely used half of a long form away
+ * (Calendar's event sheet, Contacts' edit form). The app toggles .open and
+ * flips the label; the chevron turns on its own.
+ * ---------------------------------------------------------------------------*/
+.more-toggle
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: 4px 0 14px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.more-toggle .more-pill
+{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 6px 14px;
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    transition: background-color var(--tr-fast), border-color var(--tr-fast);
+}
+.more-toggle:hover .more-pill  { background: color-mix(in srgb, var(--text) 10%, var(--card2)); border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.more-toggle:active .more-pill { background: color-mix(in srgb, var(--text) 16%, var(--card2)); }
+.more-toggle .more-chevron     { display: inline-block; font-size: 1rem; line-height: 1; transition: transform var(--tr-move); }
+.more-toggle.open .more-chevron { transform: rotate(90deg); }
+.more-toggle .more-line        { flex: 1 1 auto; height: 1px; background: var(--line); }
+
+
+/* -----------------------------------------------------------------------------
+ * OFFICE CHROME  (.file-label, .open-list, .folder-pick)  -  Calc, Text, Write
+ *
+ * The three document editors share one header shape: after the app name, the
+ * open document's name (.file-label - click it to rename in place, which swaps
+ * in .file-label-input), then the sync plug. Their "Abrir documento" dialog is
+ * one plain folder browser: a breadcrumb (.open-crumb) over a one-level list
+ * (.open-list) of folders and openable files. Their "Guardar como" dialog asks
+ * where the document goes with .folder-pick - a button dressed as a field
+ * control that opens NayiveUI.pickFolder. shared/office.js builds all three.
+ * ---------------------------------------------------------------------------*/
+/* The document name is an EDIT IN PLACE pair: .file-label (span, at rest) swaps
+ * for .file-label-input (the box). Both carry the shared .field-edit-text /
+ * .field-edit look - only the header layout is set here. */
+.file-label
+{
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.file-label-input        { flex: 1 1 auto; min-width: 0; }
+
+.open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
+                           font-size: 0.85rem; color: var(--text-dim); }
+.open-crumb.is-note      { display: block; font-style: italic; }
+.open-crumb .crumb-seg   { background: none; border: none; padding: 3px 5px; border-radius: var(--radius-s);
+                           color: var(--accent); font: inherit; cursor: pointer; }
+.open-crumb .crumb-seg:disabled { color: var(--text-dim); cursor: default; }
+.open-crumb .crumb-seg:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.open-crumb .crumb-sep   { color: var(--text-dim); }
+
+.open-list               { list-style: none; margin: 0 0 14px; padding: 0; min-height: 120px; max-height: 46vh;
+                           overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.open-list li            { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer;
+                           border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.open-list li:last-child { border-bottom: none; }
+.open-list li:hover      { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.open-list li.is-loading,
+.open-list li.is-empty   { cursor: default; color: var(--text-dim); }
+.open-list li.is-loading:hover,
+.open-list li.is-empty:hover { background: none; }
+.open-list li.is-empty   { justify-content: center; padding: 16px; font-size: 0.88rem; }
+.open-list .open-ic      { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.open-list .open-ic svg  { width: 17px; height: 17px; }
+.open-list .open-nm      { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-list li.is-folder .open-nm { font-weight: 600; }
+.open-list li.is-folder::after   { content: "\203A"; color: var(--text-dim); flex: 0 0 auto; padding-right: 2px; }
+
+/* The folder row of a save-as dialog. It sits inside a .field, so it has to
+ * look exactly like the <input> above it - only the folder icon and the
+ * pointer say it opens something. */
+.folder-pick
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: var(--field-fs);
+    text-align: left;
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    cursor: pointer;
+}
+.folder-pick:hover,
+.folder-pick:focus-visible { border-color: color-mix(in srgb, var(--text) 30%, transparent); outline: none; }
+.folder-pick .fp-btn-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
+.folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* -----------------------------------------------------------------------------
+ * MEDIA VIEWER  (.main-row, .folder-row, .scope-chip, .empty-hint, .player-bar)
+ *
+ * Photos, Music and Movies are one app shape wearing three skins: a folder tree
+ * (or scope chip) on the left, a scrolling library in the middle, a transport
+ * bar at the bottom. They already share their JavaScript (shared/media.js);
+ * these are the rules all three (or, for the player bar, the two with a
+ * transport) had pasted into their own <style> byte for byte.
+ *
+ * What stays per-app is only the sizes that genuinely differ: the poster is
+ * 34x50, the album cover 48x48; Movies' elapsed label holds "1:23:45" and needs
+ * 54px where Music's "3:21" needs 34. Those overrides sit in the app, each next
+ * to the grid it belongs to.
+ * ---------------------------------------------------------------------------*/
+.main-row          { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* A row in the folder tree / side list. Also the "pick a folder" rows. */
+.folder-row
+{
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: var(--radius-s);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.folder-row:hover           { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.folder-row.is-active       { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.folder-row svg             { width: 16px; height: 16px; flex: 0 0 auto; color: var(--text-dim); }
+.folder-row.is-active svg   { color: var(--accent); }
+
+/* "You are looking at <folder> [x]" - the pill above a scoped library. */
+.scope-chip
+{
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 6px 6px 12px;
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+.scope-chip button
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.scope-chip button:hover    { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
+.scope-chip button svg      { width: 12px; height: 12px; }
+
+/* The media apps' "nothing to show yet" panel. (.empty-state above is the
+   list apps' version; this one is centred in a whole pane and can carry a
+   .text-btn call to action.) */
+.empty-hint
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 44px 20px;
+    color: var(--text-faint);
+    text-align: center;
+}
+.empty-hint svg             { width: 32px; height: 32px; opacity: 0.5; }
+.empty-hint p               { margin: 0; font-size: 0.86rem; max-width: 320px; }
+.empty-hint .text-btn       { margin-top: 6px; }
+
+/* The transport bar pinned under the library (Music, Movies). Left: what is
+   playing. Middle: the buttons and the seek bar. Right: volume. */
+.player-bar
+{
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 22px;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+}
+/* Left third of the bar: the cover, then the title over the sub-line. Only the
+   COVER's box differs between the two apps (a 34x50 poster, a 48x48 sleeve) and
+   with it .player-now's width - both stay in the app. */
+.player-now                 { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; min-width: 0; }
+.player-art                 { display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+                              color: rgba(255, 255, 255, 0.85); }
+.player-meta                { min-width: 0; }
+.player-title               { font-size: 0.88rem; font-weight: 600; color: var(--text);
+                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-sub                 { font-size: 0.76rem; color: var(--text-dim);
+                              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.transport                  { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.transport-btn
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.transport-btn:hover          { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.transport-btn:disabled       { opacity: 0.4; cursor: default; }
+.transport-btn:disabled:hover { background: transparent; color: var(--text-dim); }
+.transport-btn svg            { width: 18px; height: 18px; }
+
+/* The one accent-filled control in the bar: play / pause. */
+.play-btn                   { width: 44px; height: 44px; background: var(--accent); color: var(--on-accent); }
+.play-btn:hover             { background: var(--accent); color: var(--on-accent); filter: brightness(1.08); }
+.play-btn svg               { width: 20px; height: 20px; }
+
+.seek-block                 { flex: 1 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 120px; }
+.time-label                 { flex: 0 0 auto; width: 34px; font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono); }
+.time-label.end             { text-align: right; }
+.volume-block               { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; width: 130px; }
+.volume-block svg           { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
+
+/* The seek + volume sliders. The browser's own range input, tokenised. */
+input[type=range]
+{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line);
+    outline: none;
+}
+input[type=range]::-webkit-slider-thumb
+{
+    -webkit-appearance: none;
+    width: 12px; height: 12px; margin-top: -4px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+}
+input[type=range]::-moz-range-thumb  { width: 12px; height: 12px; border: none; border-radius: 50%;
+                                       background: var(--accent); cursor: pointer; }
+input[type=range]::-moz-range-track  { height: 4px; border-radius: 2px; background: var(--line); }
+input[type=range]:disabled           { opacity: 0.5; }
+
+/* On a narrow window the bar goes to two rows with the seek bar full width
+   underneath. That lives in each media app's own narrow block, not here: the two
+   drop their side pane at different widths (Music 760, Movies 820) and the bar
+   has to fold at the same moment - see TWO LAYOUT MODES at the top of this file.
+   */
+
+
+/* -----------------------------------------------------------------------------
+ * IMAGE EDITOR CHROME  (.editor-backdrop > .editor-bar / .editor-canvas /
+ *                        .editor-comment)  -  Drive and Photos
+ *
+ * The frame around the TOAST UI Image Editor, which both apps load on first use.
+ * It is a FIXED DARK surface in both schemes - literal colours on purpose, never
+ * the theme tokens: you judge a photo against a neutral dark ground, the same
+ * reason Drive's lightbox is always dark. That is the one place in Nayive where
+ * a hex colour is the right answer.
+ *
+ * The two apps differ only in the stacking context they open over, so each sets
+ * its own `z-index` on .editor-backdrop (Drive 200, Photos 60).
+ * ---------------------------------------------------------------------------*/
+.editor-backdrop
+{
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    background: #1e1e1e;
+}
+.editor-backdrop.open { display: flex; }
+
+.editor-bar
+{
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    padding: 0 8px 0 14px;
+    background: #151515;
+    border-bottom: 1px solid #000;
+}
+.editor-title
+{
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+.editor-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.editor-btn
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.editor-btn:hover  { background: rgba(255, 255, 255, 0.22); }
+.editor-btn svg    { width: 18px; height: 18px; }
+.editor-canvas     { flex: 1 1 auto; min-height: 0; position: relative; }
+
+/* A free-text note for the picture, saved into the comments sidecar together
+   with the image. No label - the placeholder explains it. */
+.editor-comment
+{
+    flex: 0 0 auto;
+    resize: none;
+    border: none;
+    border-top: 1px solid #000;
+    outline: none;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: var(--field-fs);
+    line-height: 1.4;
+    color: #fff;
+    background: #151515;
+}
+.editor-comment::placeholder { color: rgba(255, 255, 255, 0.4); }
+
+/* The library's own top bar is just its logo + Load / Download; both apps drive
+   save and close from .editor-bar instead. Its undo / redo / reset controls sit
+   in a separate element (.tui-image-editor-help-menu) and stay visible. */
+.editor-canvas .tui-image-editor-header { display: none; }
+
+
+/* -----------------------------------------------------------------------------
+ * LEAFLET CHROME  -  Trips (the route map) and Photos (the "where" map)
+ *
+ * Leaflet ships its own white popup, zoom buttons and attribution box, which look
+ * pasted-on in either scheme. These five rules put them on the Nayive tokens.
+ *
+ * EVERY selector is scoped under `.leaflet-container`, and that is not decoration:
+ * both apps load `lib/.../leaflet.css` AFTER this file, so an equal-specificity
+ * rule would lose to Leaflet's own (its link colour is `.leaflet-container a`).
+ * The extra class puts these ahead whatever the load order. The `!important`s are
+ * Leaflet's own, matched.
+ *
+ * The map TILES are desaturated per map (`.route-map`, `.lmap`), not here: only
+ * the app knows which element is a map, and a print stylesheet wants it too.
+ * ---------------------------------------------------------------------------*/
+.leaflet-container .leaflet-popup-content-wrapper,
+.leaflet-container .leaflet-popup-tip     { background: var(--card2); color: var(--text); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--text-dim); }
+.leaflet-container .leaflet-control-zoom a { background: var(--card2) !important; color: var(--text) !important;
+                                            border-color: var(--line) !important; }
+.leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--bg) 78%, transparent) !important;
+                                            color: var(--text-dim) !important; }
+.leaflet-container .leaflet-control-attribution a { color: var(--text-dim); }
+
+
+/* -----------------------------------------------------------------------------
+ * PHONE  (640px and under)  - the shared half of the phone layout; see TWO
+ * LAYOUT MODES in the header. App-specific phone rules live in each app's own
+ * @media (max-width: 640px) block.
+ * ---------------------------------------------------------------------------*/
+@media (max-width: 640px)
+{
+    /* A text field under 16px makes iOS Safari zoom the whole page in when it
+       gets focus - and it never zooms back out. So on a phone every field is at
+       least 16px. Attribute selectors: this must beat an app's single-class
+       rule (a .search-input, a .scm-num ...), and an element selector would not. */
+    input[type]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+    input:not([type]),
+    select,
+    textarea           { font-size: 16px; }
+
+    /* Fingers, not pointers: the dense 30px toolbar button grows to 36px, and
+       the toolbar select grows with it so the row stays one height. */
+    .icon-btn.sm       { width: 36px; height: 36px; }
+    .tb-select         { height: 36px; }
+}
+
+/* A phone in either orientation (narrow, or short when turned sideways): a
+   dialog taller than the screen scrolls inside (.sheet has overflow-y), and
+   its button row sticks to the bottom edge so Save / Cancel / Close are always
+   within reach. The negative margins let the strip cover the sheet's own
+   padding, so it sits flush with the sheet's bottom edge. Only a row that closes
+   the sheet (:last-child) - the launcher's colour-scheme dialog has a Save row in
+   the middle of a longer form, and that one must stay in place. */
+@media (max-width: 640px), (max-height: 520px)
+{
+    .sheet .sheet-actions:last-child
+    {
+        position: sticky;
+        bottom: calc(-16px - env(safe-area-inset-bottom));   /* the sticky box is inset by the sheet's padding; this reaches its real edge */
+        z-index: 2;
+        margin: 18px -16px calc(-16px - env(safe-area-inset-bottom));
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+        background: var(--card);
+        border-top: 1px solid var(--line);
+    }
+}

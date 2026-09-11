@@ -1,0 +1,2789 @@
+<!-- index.html - Personal single-user address book. Source of truth is a single vCard 3.0
+     file (apps/contact/contacts.vcf), backed by Gum's file-manager API. vCard 3.0 (RFC 2426)
+     is chosen over 4.0 for import/export interoperability with phones (Android, iOS, Google
+     Contacts all read and write 3.0 natively). -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Contacts</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'/%3E%3Ccircle cx='9' cy='11' r='2.2'/%3E%3Cpath d='M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3'/%3E%3Cline x1='14' y1='10' x2='18' y2='10'/%3E%3Cline x1='14' y1='14' x2='18' y2='14'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'contact',
+            title: 'Contacts',
+            lead:  T( 'contact.introLead' ),
+            buttons: [
+                { sel: '#importBtn', text: T( 'contact.introImport' ) },
+                { sel: '#exportBtn', text: T( 'contact.introExport' ) },
+                { sel: '#dedupBtn',  text: T( 'contact.introDedup' ) },
+                { sel: '#selectBtn', text: T( 'contact.introSelect' ) },
+                { sel: '#moreBtn',   text: T( 'contact.introMore' ) },
+                { sel: '#addBtn',    text: T( 'contact.introAdd' ) },
+                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
+                  text: T( 'contact.introSync' ) }
+            ]
+        } );
+    } );
+    </script>
+
+    <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
+    <script src="../shared/store.js" defer></script>
+
+    <style>
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .app-icon,
+           .icon-btn, .sheet, .field and the input look all come from
+           ../shared/app.css. Only what is unique to the address book lives here. */
+
+        #detailBackdrop { z-index: 110; }   /* a contact opened from the Duplicates sheet floats above it */
+        /* ...but a dialog built on the fly by shared/ui.js (confirm, alert,
+           folder picker - the only backdrops that carry role="dialog") is
+           always the top-most thing on screen, above the detail card. */
+        .sheet-backdrop[role="dialog"] { z-index: 120; }
+
+        /* Text inputs that sit outside a .field (search bar, multi-value rows) —
+           app.css styles the look; they only need their width set here. */
+        .search-input,
+        .multi-row input,
+        .multi-row select { width: 100%; }
+
+        /* Search */
+        .search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+        .search-box { position: relative; flex: 1 1 auto; min-width: 0; }
+
+        /* --- Overflow menu (phone only) - same look as Calendar's -------------
+           Import / export / duplicates leave the header on a phone (six buttons
+           plus the title did not fit in 390px and wrapped onto a second row) and
+           come back in this "⋮" menu. "Select to merge" is not in here: it lives
+           in the search row, where it is always reachable. .card is its
+           containing block. */
+        .card    { position: relative; }
+        #moreBtn { display: none; }
+        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
+           anchored under its button by NayiveUI.wireMenu. Nothing local. */
+
+        /* --- Phone layout (see TWO LAYOUT MODES in shared/app.css) --- */
+        @media (max-width: 640px)
+        {
+            #importBtn, #exportBtn, #dedupBtn { display: none; }
+            #moreBtn { display: flex; }
+        }
+        .search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
+        /* Look from app.css (FORM FIELD) like every other text field; only the
+           right padding is local, to clear the magnifier / clear button. */
+        .search-input { padding-right: 38px; }
+        .search-clear
+        {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            width: 28px; height: 28px; border: none; background: transparent; color: var(--text-dim);
+            border-radius: 50%; cursor: pointer; display: none; align-items: center; justify-content: center;
+        }
+        .search-clear.show { display: flex; }
+        .search-clear:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+
+
+        /* Contact list */
+        /* Sticky so the letter you are inside of stays named while you scroll a
+           700-row book. The page itself is the scroller (.page has no overflow,
+           see shared/app.css), so top:0 is the viewport top. The opaque
+           background is required — rows would slide under a transparent head. */
+        .letter-head
+        {
+            position: sticky; top: 0; z-index: 3;
+            background: var(--card);
+            font-size: 0.75rem; font-weight: 700; color: var(--accent);
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 12px 2px 4px; border-bottom: 1px solid var(--line); margin-bottom: 2px;
+        }
+
+        /* --- A-Z jump rail ---------------------------------------------------
+           Fixed to the right edge of the *card*, not of the window: on a phone
+           the card fills the screen and max() yields the 2px floor, on a desktop
+           calc(50% - 228px) lands it just inside the 460px card (shared/app.css
+           .page-inner). Only letters that actually have contacts are painted, so
+           the rail is short in a small address book. Below the sheets (z 110+),
+           so an open detail card covers it. */
+        .az-rail
+        {
+            position: fixed; right: max(2px, calc(50% - 228px)); top: 50%;
+            transform: translateY(-50%); z-index: 5;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 4px 3px; border-radius: 999px;
+            background: color-mix(in srgb, var(--card) 88%, transparent);
+            user-select: none; touch-action: none; cursor: pointer;
+        }
+        .az-rail[hidden] { display: none; }
+        /* A 23px-wide strip is a ~6mm thumb target, and a miss opens whatever
+           contact row is underneath. This invisible flap widens the catch area to
+           the left without widening the pill; events on a pseudo-element are
+           dispatched to the element itself, so the rail still gets the pointer. */
+        .az-rail::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; left: -18px; }
+        .az-letter
+        {
+            border: none; background: transparent; padding: 0;
+            width: 17px; text-align: center;
+            font-size: clamp(8px, 2vh, 11px); line-height: 1.32; font-weight: 700;
+            color: var(--text-dim); pointer-events: none;   /* the rail tracks the finger, not each letter */
+        }
+        .az-rail:hover .az-letter,
+        .az-rail.dragging .az-letter { color: var(--text); }
+        .az-letter.on { color: var(--accent); }
+
+        /* The letter under the finger while dragging the rail. */
+        .az-bubble
+        {
+            position: fixed; right: max(24px, calc(50% - 206px)); top: 50%;
+            transform: translateY(-50%); z-index: 6;
+            min-width: 46px; padding: 8px 10px; border-radius: var(--radius-m);
+            background: var(--accent); color: var(--on-accent);
+            font-size: 1.3rem; font-weight: 700; text-align: center;
+            pointer-events: none;
+        }
+        .az-bubble[hidden] { display: none; }
+
+        .contact-row
+        {
+            display: flex; align-items: center; gap: 12px;
+            padding: 9px 4px; border-radius: var(--radius-s); cursor: pointer;
+        }
+        .contact-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+        .avatar
+        {
+            flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.86rem; font-weight: 700; color: #fff; user-select: none;
+        }
+        .avatar.lg { width: 60px; height: 60px; font-size: 1.35rem; }
+
+        /* --- Pick-several mode (see MANUAL MERGE in the script) --------------
+           The duplicate scanner only finds what it can prove; two cards that
+           look the same to a human but share no phone / email never group. This
+           mode lets the eye do it: tick two rows in the list, then Merge - the
+           same preview sheet the Duplicates flow uses. */
+        .select-bar
+        {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+            padding: 6px 8px 6px 4px;
+            background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
+        }
+        .select-bar[hidden] { display: none; }   /* class selector would otherwise beat [hidden]'s UA style */
+        .select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); }
+        .btn-pill:disabled { opacity: 0.45; cursor: default; filter: none; }
+
+        /* The tick is the same native checkbox the merge preview uses. */
+        .contact-row .pick
+        {
+            flex: 0 0 auto; width: 17px; height: 17px; margin-left: 2px;
+            accent-color: var(--accent); pointer-events: none;
+        }
+        .contact-row.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+        /* Long-pressing a row opens the mode; stop the phone from selecting the
+           name or popping its own copy callout while the finger is down. */
+        .contact-row { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+
+        .contact-meta { flex: 1 1 auto; min-width: 0; }
+        .contact-name { font-size: 0.95rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contact-sub { font-size: 0.80rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Empty state */
+        .empty { display: none; flex-direction: column; align-items: center; text-align: center; padding: 40px 10px 20px; color: var(--text-faint); }
+        .empty p { margin: 4px 0 0; font-size: 0.82rem; }
+        .empty .empty-title { margin: 10px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+
+
+        /* Native date inputs render in the browser's own locale (e.g. mm/dd/yyyy). Hide the
+           native text and overlay our own yyyy-mm-dd label; the input stays tappable
+           underneath so the picker still opens. Same technique as Calendar / Trip. */
+        /* .dt-field is the shared DATE / TIME FIELD block (shared/app.css). */
+
+        /* Repeatable multi-value rows (phones, emails, addresses) */
+        .multi-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+        .multi-row select { flex: 0 0 96px; }
+        .multi-row .multi-fields { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+        .multi-row .remove-btn
+        {
+            flex: 0 0 auto; width: 38px; height: 40px; border: 1px solid var(--line); background: var(--card2);
+            color: var(--text-dim); border-radius: var(--radius-s); cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .multi-row .remove-btn:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+
+        /* Section title with an inline "+" that adds a row (phones, emails, addresses, sites) */
+        .section-head
+        {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 0.80rem; color: var(--text-dim); margin: 8px 0 6px;
+        }
+        .add-mini
+        {
+            flex: 0 0 auto; width: 15px; height: 15px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: none; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+            cursor: pointer;
+        }
+        .add-mini:active { filter: brightness(0.9); }
+
+        /* The "más campos" fold is the shared .more-toggle block (shared/app.css). */
+
+        hr.divider { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+
+        /* Detail view */
+        .detail-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; margin-bottom: 16px; }
+        .detail-name { font-size: 1.2rem; font-weight: 700; }
+        .detail-org { font-size: 0.86rem; color: var(--text-dim); }
+
+        .detail-group { margin-bottom: 12px; }
+        .detail-group + .detail-group { border-top: 1px solid var(--line); padding-top: 12px; }
+        .detail-item { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
+        .detail-item .di-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+        .detail-item .di-value { font-size: 0.98rem; color: var(--text); word-break: break-word; }
+        .detail-item .di-value.multiline { white-space: pre-wrap; }
+
+        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css */
+
+        /* .toast, .toast.show, .toast.actionable and .toast-undo all live in
+           ../shared/theme.css - the same "Deshacer" as Habits and Split. */
+
+        /* Duplicates */
+        .dedup-count { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); margin-left: 6px; }
+        .dedup-empty { color: var(--text-dim); font-size: 0.92rem; text-align: center; padding: 24px 8px; }
+
+        /* Shown while findDuplicateGroups() runs (its O(n²) scan blocks the main thread). */
+        .dedup-scanning { padding: 28px 8px; text-align: center; color: var(--text-dim); }
+        .dedup-scanning p { margin: 12px 0 0; font-size: 0.9rem; }
+        .scan-bar { position: relative; height: 4px; border-radius: 2px; background: var(--card2); overflow: hidden; }
+        .scan-bar > span
+        {
+            position: absolute; top: 0; left: -40%; height: 100%; width: 40%;
+            background: var(--accent); border-radius: 2px;
+            animation: scan-slide 1s ease-in-out infinite;
+        }
+        @keyframes scan-slide { from { left: -40%; } to { left: 100%; } }
+
+        .dup-group
+        {
+            border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px;
+            margin-bottom: 12px; background: var(--card2);
+        }
+        .dup-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .dup-chip
+        {
+            font-size: 0.72rem; padding: 3px 9px; border-radius: var(--radius-pill);
+            background: var(--card); border: 1px solid var(--line); color: var(--text-dim);
+        }
+        .dup-conf { font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-pill); }
+        .dup-conf.alta  { background: var(--accent); color: var(--on-accent); }
+        .dup-conf.media { background: transparent; color: var(--text-dim); border: 1px solid var(--line); }
+
+        .dup-contact { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-radius: var(--radius-s); cursor: pointer; }
+        .dup-contact:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+        /* Per-row "this one doesn't belong" — drops the contact from the group so the rest can be merged. */
+        .dup-remove
+        {
+            flex: 0 0 auto; width: 30px; height: 30px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: none; border-radius: 50%; background: transparent;
+            color: var(--text-dim); cursor: pointer;
+        }
+        .dup-remove:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+
+        .dup-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+        .btn-text
+        {
+            background: none; border: none; color: var(--text-dim);
+            font-family: inherit; font-size: 0.85rem; cursor: pointer; padding: 8px 6px;
+        }
+        .btn-text:hover { color: var(--text); }
+        .btn-pill
+        {
+            padding: 8px 18px; border-radius: var(--radius-pill); border: none;
+            background: var(--accent); color: var(--on-accent);
+            font-family: inherit; font-size: 0.85rem; cursor: pointer;
+        }
+        .btn-pill:active { filter: brightness(0.92); }
+
+        /* Merge preview */
+        .merge-section { margin-top: 10px; }
+        .merge-section > .ms-label { font-size: 0.80rem; color: var(--text-dim); margin-bottom: 4px; }
+        .merge-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 2px; font-size: 0.92rem; }
+        .merge-row input[type=checkbox] { width: 17px; height: 17px; flex: 0 0 auto; margin-top: 2px; accent-color: var(--accent); }
+        .merge-row .mr-type { color: var(--text-dim); font-size: 0.76rem; flex: 0 0 auto; min-width: 52px; padding-top: 1px; }
+        .merge-row .mr-val { color: var(--text); word-break: break-word; white-space: pre-wrap; }
+        .merge-note-preview { font-size: 0.86rem; color: var(--text); white-space: pre-wrap; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; }
+    </style>
+</head>
+
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="page" style="display: none;">
+        <div class="page-inner">
+            <div class="card">
+
+                <div class="header">
+                    <svg class="app-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                        <circle cx="9" cy="11" r="2.2"></circle>
+                        <path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path>
+                        <line x1="14" y1="10" x2="18" y2="10"></line>
+                        <line x1="14" y1="14" x2="18" y2="14"></line>
+                    </svg>
+                    <h1>Contacts</h1>
+
+                    <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
+                        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <button id="importBtn" class="icon-btn" data-i18n-attr="title:contact.importVcf">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 9 12 4 17 9"></polyline><line x1="12" y1="4" x2="12" y2="16"></line></svg>
+                    </button>
+                    <button id="exportBtn" class="icon-btn" data-i18n-attr="title:contact.exportVcf">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                    <button id="dedupBtn" class="icon-btn" data-i18n-attr="title:contact.findDupes">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </button>
+                    <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    </button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                    <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+                </div>
+
+                <div id="topMenu" class="top-menu" role="menu" hidden>
+                    <button type="button" class="menu-item" data-menu="import" role="menuitem">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span data-i18n="contact.importVcf"></span>
+                    </button>
+                    <button type="button" class="menu-item" data-menu="export" role="menuitem">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span data-i18n="contact.exportVcf"></span>
+                    </button>
+                    <button type="button" class="menu-item" data-menu="dedup" role="menuitem">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span data-i18n="contact.findDupes"></span>
+                    </button>
+                </div>
+
+                <div class="search-row">
+                    <div class="search-box">
+                        <svg id="searchIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0">
+                        <button id="searchClear" class="search-clear" data-i18n-attr="title:contact.clear">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+                    <button id="selectBtn" class="icon-btn" hidden data-i18n-attr="title:contact.selectMode">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6.2"></circle><circle cx="15" cy="12" r="6.2"></circle></svg>
+                    </button>
+                </div>
+
+                <div id="selectBar" class="select-bar" hidden>
+                    <button id="selectCancel" class="icon-btn" data-i18n-attr="title:ui.cancel">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    <span id="selectCount" class="select-count"></span>
+                    <button id="selectMergeBtn" class="btn-pill" disabled></button>
+                </div>
+
+                <div id="contactList"></div>
+
+                <!-- A-Z jump rail + the drag bubble. Both are filled by render(). -->
+                <div id="azRail" class="az-rail" role="navigation" hidden data-i18n-attr="aria-label:contact.azRail"></div>
+                <div id="azBubble" class="az-bubble" hidden aria-hidden="true"></div>
+
+                <div id="emptyState" class="empty">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+                        <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                        <circle cx="9" cy="11" r="2.2"></circle>
+                        <path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path>
+                        <line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line>
+                    </svg>
+                    <p class="empty-title" id="emptyTitle"></p>
+                    <p id="emptyBody"></p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail view -->
+    <div id="detailBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="detail-head">
+                <div id="detailAvatar" class="avatar lg"></div>
+                <div>
+                    <div id="detailName" class="detail-name"></div>
+                    <div id="detailOrg" class="detail-org"></div>
+                </div>
+            </div>
+
+            <div id="detailBody"></div>
+
+            <div class="sheet-actions">
+                <button id="detailDeleteBtn" class="sheet-actions-left" data-act="danger" data-i18n-attr="title:ui.delete"></button>
+                <button id="detailEditBtn"   data-act="primary:edit" data-i18n-attr="title:contact.edit"></button>
+                <button id="detailCloseBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add / edit form -->
+    <div id="editBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 id="editTitle" data-i18n="contact.newContact"></h2>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="fGiven" data-i18n="contact.firstName"></label>
+                    <input type="text" id="fGiven" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="fFamily" data-i18n="contact.lastName"></label>
+                    <input type="text" id="fFamily" autocomplete="off">
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="fOrg" data-i18n="contact.org"></label>
+                    <input type="text" id="fOrg" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="fJobTitle" data-i18n="contact.jobTitle"></label>
+                    <input type="text" id="fJobTitle" autocomplete="off">
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <div class="section-head">
+                <span data-i18n="contact.phones"></span>
+                <button type="button" class="add-mini" data-add="tel" data-i18n-attr="title:contact.addPhone">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+            </div>
+            <div id="telRows"></div>
+
+            <div class="section-head">
+                <span data-i18n="contact.emails"></span>
+                <button type="button" class="add-mini" data-add="email" data-i18n-attr="title:contact.addEmail">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+            </div>
+            <div id="emailRows"></div>
+
+            <button type="button" id="moreToggle" class="more-toggle" aria-expanded="false" aria-controls="moreSection">
+                <span class="more-pill">
+                    <span id="moreChevron" class="more-chevron">&#8250;</span>
+                    <span id="moreLabel" data-i18n="contact.moreFields"></span>
+                </span>
+                <span class="more-line"></span>
+            </button>
+
+            <div id="moreSection" style="display:none;">
+                <div class="section-head">
+                    <span data-i18n="contact.addresses"></span>
+                    <button type="button" class="add-mini" data-add="adr" data-i18n-attr="title:contact.addAddress">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                </div>
+                <div id="adrRows"></div>
+
+                <div class="section-head">
+                    <span data-i18n="contact.websites"></span>
+                    <button type="button" class="add-mini" data-add="url" data-i18n-attr="title:contact.addWebsite">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                </div>
+                <div id="urlRows"></div>
+
+                <hr class="divider">
+
+                <div class="field">
+                    <label for="fBday" data-i18n="contact.birthday"></label>
+                    <div class="dt-field">
+                        <input type="date" id="fBday">
+                        <span class="dt-display placeholder" id="fBdayDisplay" data-i18n="ui.dateHint"></span>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="fNote" data-i18n="ui.notes"></label>
+                    <textarea id="fNote"></textarea>
+                </div>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="editCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="editSaveBtn"  data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duplicates -->
+    <div id="dedupBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2><span data-i18n="contact.dupes"></span><span id="dedupCount" class="dedup-count"></span></h2>
+            <div id="dedupList"></div>
+            <div class="sheet-actions">
+                <button id="dedupCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Merge preview -->
+    <div id="mergeBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="contact.mergeContacts"></h2>
+            <div id="mergeBody"></div>
+            <div class="sheet-actions">
+                <button id="mergeCloseBtn"   data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="mergeConfirmBtn" data-act="primary" data-i18n-attr="title:contact.merge"></button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
+    <a id="downloadAnchor" style="display:none;"></a>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const CONTACTS_FILE  = 'data/contacts.vcf';
+        const META_FILE      = 'data/contacts-meta.json';   // local UX state only, never contact data
+
+        // Interface strings: every one of them lives in shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        // Filled in on DOMContentLoaded: shared/gum-api.js and shared/store.js
+        // now load deferred, so GumApi / NayiveStore are not defined yet while
+        // this script is parsed. Every reader runs later (DCL or an event), so
+        // a plain `let` here is enough.
+        let API_FILES;
+        let store;                    // offline-capable persistence (see ../shared/store.js)
+
+        // Types offered in the editor selects. Imported cards with any other TYPE keep their
+        // own value (it is prepended as an extra <option> so nothing is silently lost).
+        // Built on demand: the labels come from the dictionary, which lands after
+        // this script has been parsed.
+        const TEL_TYPES   = () => [ [ 'CELL', T( 'contact.typeMobile' ) ], [ 'HOME', T( 'contact.typeHome' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'FAX', 'Fax' ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
+        const ADR_TYPES   = () => [ [ 'HOME', T( 'contact.typeHome' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
+        const EMAIL_TYPES = () => [ [ 'HOME', T( 'contact.typePersonal' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
+
+        const SEARCH_PLACEHOLDER = () => T( 'contact.searchPh' );   // shown after a "[<count>] " prefix
+
+        let contacts   = [];      // source of truth: array of contact objects (see makeContact)
+        let query      = '';
+        let editingUid = null;    // uid of the contact open in the edit form, or null when adding
+        let dismissed  = new Set();   // dismissKey() strings for pairs the user marked "not a duplicate"
+        let mergeGroup = null;    // the group currently open in the merge preview sheet
+        let undoState  = null;    // { contacts: [...], label } snapshot for the "Deshacer" toast
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        NayiveI18n.ready.then( function()
+        {
+            API_FILES = GumApi.API_FILES;
+            store     = NayiveStore.createStore( { apiBase: API_FILES } );
+
+            wireStaticUI();
+
+            // The store's state machine drives the header plug for every read and write.
+            store.onState( NayiveUI.syncIndicator() );
+
+            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+            // path (shared/ui.js). `contacts` is this tab's private snapshot and every
+            // saveContacts() PUTs the whole .vcf (last write wins, no merge), so a tab left
+            // open all day showed a stale agenda AND could upload it over a contact added on
+            // the phone. The guard keeps the read out of an open dialog: loadContacts() ends
+            // in render(), which would repaint under a detail / edit / duplicates sheet.
+            NayiveUI.wireRefresh( { store: store, read: loadContacts } );
+
+            // Probe the API, then load. On a failed probe the shared helper bounces to the
+            // sign-in page only when we are really online with nothing cached; otherwise it
+            // opens on the local cache and the store syncs once the connection is back.
+            NayiveUI.bootWithStore( store, async function()
+            {
+                await loadContacts();
+                document.getElementById( 'searchInput' ).focus();   // ready to search straight away
+            } );
+        });
+
+        //------------------------------------------------------------------------//
+        // PERSISTENCE
+
+        async function loadContacts()
+        {
+            const [ vcf, meta ] = await Promise.all(
+            [
+                store.read( CONTACTS_FILE ),
+                store.read( META_FILE )
+            ]);
+
+            if( vcf.source === 'empty' )    contacts = [];                        // first run, file not created yet
+            else if( vcf.body !== null )    contacts = vcfToContacts( vcf.body );
+            // else: server unreachable AND nothing cached — keep what we have,
+            // never fall back to [] here (that is the save-over-real-data bug).
+
+            dismissed = new Set();
+
+            if( meta.body !== null )
+            {
+                try
+                {
+                    const parsed = JSON.parse( meta.body );
+                    ( parsed.notDuplicate || [] ).forEach( pair => dismissed.add( dismissKey( pair[ 0 ], pair[ 1 ] ) ) );
+                }
+                catch( _ ) { /* corrupt meta file — start with an empty dismissed set */ }
+            }
+
+            render();
+        }
+
+        // AUTO RE-READ
+        //
+        // Persists the "not a duplicate" set. Prunes entries whose contacts no longer exist.
+        function saveMeta()
+        {
+            const live = new Set( contacts.map( c => c.uid ) );
+
+            const notDuplicate = [ ...dismissed ]
+                .map( k => k.split( ' ' ) )
+                .filter( pair => live.has( pair[ 0 ] ) && live.has( pair[ 1 ] ) );
+
+            dismissed = new Set( notDuplicate.map( p => dismissKey( p[ 0 ], p[ 1 ] ) ) );
+
+            return store.write( META_FILE, JSON.stringify( { notDuplicate }, null, 2 ) );
+        }
+
+        function dismissKey( u1, u2 ) { return [ u1, u2 ].sort().join( ' ' ); }
+
+        function saveContacts()
+        {
+            // Writes the local cache now and queues the upload; the store flushes
+            // it immediately, on reconnect, or on tab focus. Fire-and-forget.
+            return store.write( CONTACTS_FILE, contactsToVcf( contacts ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // vCard 3.0  <->  contact MODEL
+        //
+        // A contact object:
+        // {
+        //   uid,
+        //   fn,                                   // formatted / display name (vCard FN, required on write)
+        //   n: { family, given, additional, prefix, suffix },
+        //   org, title,
+        //   tels:   [ { type, value } ],
+        //   emails: [ { type, value } ],
+        //   adrs:   [ { type, street, city, region, postal, country } ],
+        //   urls:   [ { value } ],
+        //   bday,                                 // 'YYYY-MM-DD' or ''
+        //   note
+        // }
+
+        function makeContact()
+        {
+            return {
+                uid  : 'contact-' + Date.now() + '-' + Math.random().toString( 36 ).slice( 2, 8 ),
+                fn   : '',
+                n    : { family: '', given: '', additional: '', prefix: '', suffix: '' },
+                org  : '', title: '',
+                tels : [], emails: [], adrs: [], urls: [],
+                bday : '', note: ''
+            };
+        }
+
+        // --- Parsing ---------------------------------------------------------
+
+        function vcfToContacts( text )
+        {
+            const unfolded = text.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).replace( /\n[ \t]/g, '' );
+            const lines    = unfolded.split( '\n' );
+            const out      = [];
+            let   block    = null;
+
+            for( const line of lines )
+            {
+                const tag = line.trim().toUpperCase();
+
+                if( tag === 'BEGIN:VCARD' ) { block = []; continue; }
+
+                if( tag === 'END:VCARD' )
+                {
+                    if( block )
+                    {
+                        try { out.push( normalizeContact( parseVCard( block ) ) ); }
+                        catch( _ ) { /* skip one malformed card rather than losing the whole file */ }
+                    }
+                    block = null;
+                    continue;
+                }
+
+                if( block && line.trim() !== '' )
+                    block.push( line );
+            }
+
+            return out.sort( byDisplayName );
+        }
+
+        function parseVCard( blockLines )
+        {
+            const c = makeContact();
+
+            for( const raw of blockLines )
+            {
+                const [ left, value ] = splitOnce( raw, ':' );
+                if( left === null ) continue;
+
+                const segs   = splitOutsideQuotes( left, ';' );
+                const name   = segs[ 0 ].split( '.' ).pop().toUpperCase();   // drop any "groupN." prefix
+                const params = parseParams( segs.slice( 1 ) );
+
+                switch( name )
+                {
+                    case 'FN':
+                        c.fn = unescapeText( value );
+                        break;
+
+                    case 'N':
+                    {
+                        const p = splitEscaped( value, ';' ).map( unescapeText );
+                        c.n = { family: p[0] || '', given: p[1] || '', additional: p[2] || '', prefix: p[3] || '', suffix: p[4] || '' };
+                        break;
+                    }
+
+                    case 'ORG':
+                        c.org = splitEscaped( value, ';' ).map( unescapeText ).filter( Boolean ).join( ' · ' );
+                        break;
+
+                    case 'TITLE':
+                        c.title = unescapeText( value );
+                        break;
+
+                    case 'TEL':
+                        c.tels.push( { type: pickType( params, 'CELL' ), value: unescapeText( value ).trim() } );
+                        break;
+
+                    case 'EMAIL':
+                        c.emails.push( { type: pickType( params, 'HOME' ), value: unescapeText( value ).trim() } );
+                        break;
+
+                    case 'ADR':
+                    {
+                        // ADR components: pobox ; ext ; street ; locality ; region ; postal ; country
+                        const p = splitEscaped( value, ';' ).map( unescapeText );
+                        c.adrs.push(
+                        {
+                            type   : pickType( params, 'HOME' ),
+                            street : [ p[0], p[1], p[2] ].filter( Boolean ).join( ', ' ).trim(),
+                            city   : p[3] || '', region: p[4] || '', postal: p[5] || '', country: p[6] || ''
+                        });
+                        break;
+                    }
+
+                    case 'URL':
+                        c.urls.push( { value: value.trim() } );
+                        break;
+
+                    case 'BDAY':
+                        c.bday = normalizeBday( value.trim() );
+                        break;
+
+                    case 'NOTE':
+                        c.note = unescapeText( value );
+                        break;
+
+                    case 'UID':
+                        if( value.trim() ) c.uid = value.trim();
+                        break;
+                }
+            }
+
+            return c;
+        }
+
+        // Fill in whatever the source card left implicit so the rest of the app can rely on it.
+        function normalizeContact( c )
+        {
+            if( ! c.n.given && ! c.n.family && c.fn )
+            {
+                const parts = c.fn.trim().split( /\s+/ );
+                c.n.given  = parts.shift() || '';
+                c.n.family = parts.join( ' ' );
+            }
+
+            if( ! c.fn )
+                c.fn = displayName( c );
+
+            return c;
+        }
+
+        function splitOnce( line, sep )
+        {
+            let inQ = false;
+
+            for( let i = 0; i < line.length; i++ )
+            {
+                const ch = line[ i ];
+
+                if( ch === '"' )               inQ = ! inQ;
+                else if( ch === sep && ! inQ ) return [ line.slice( 0, i ), line.slice( i + 1 ) ];
+            }
+
+            return [ null, null ];
+        }
+
+        function splitOutsideQuotes( str, sep )
+        {
+            const parts = [];
+            let   cur   = '';
+            let   inQ   = false;
+
+            for( const ch of str )
+            {
+                if( ch === '"' )               { inQ = ! inQ; cur += ch; }
+                else if( ch === sep && ! inQ ) { parts.push( cur ); cur = ''; }
+                else                            cur += ch;
+            }
+
+            parts.push( cur );
+            return parts;
+        }
+
+        // Split a structured value on an UNescaped separator (so "\;" and "\," stay literal).
+        function splitEscaped( str, sep )
+        {
+            const parts = [];
+            let   cur   = '';
+
+            for( let i = 0; i < str.length; i++ )
+            {
+                const ch = str[ i ];
+
+                if( ch === '\\' && i + 1 < str.length ) { cur += ch + str[ ++i ]; continue; }
+                if( ch === sep )                        { parts.push( cur ); cur = ''; continue; }
+                cur += ch;
+            }
+
+            parts.push( cur );
+            return parts;
+        }
+
+        function parseParams( segs )
+        {
+            const out = [];
+
+            for( const seg of segs )
+            {
+                const eq = seg.indexOf( '=' );
+
+                if( eq === -1 )
+                {
+                    out.push( { key: 'TYPE', val: seg.trim().toUpperCase() } );   // vCard 2.1 style: TEL;HOME;VOICE:
+                    continue;
+                }
+
+                const key = seg.slice( 0, eq ).trim().toUpperCase();
+
+                for( const v of seg.slice( eq + 1 ).split( ',' ) )
+                    out.push( { key: key, val: v.replace( /^"|"$/g, '' ).trim().toUpperCase() } );
+            }
+
+            return out;
+        }
+
+        // First meaningful TYPE value (ignoring transport/preference noise), else the fallback.
+        function pickType( params, fallback )
+        {
+            const skip  = new Set( [ 'VOICE', 'PREF', 'INTERNET', '' ] );
+            const types = params.filter( p => p.key === 'TYPE' ).map( p => p.val ).filter( v => ! skip.has( v ) );
+
+            return types[ 0 ] || fallback;
+        }
+
+        function normalizeBday( s )
+        {
+            if( /^\d{4}-\d{2}-\d{2}/.test( s ) ) return s.slice( 0, 10 );
+            if( /^\d{8}$/.test( s ) )            return s.slice( 0, 4 ) + '-' + s.slice( 4, 6 ) + '-' + s.slice( 6, 8 );
+            return '';   // 4.0-style "--MM-DD" (no year) and free text are dropped rather than shown wrong
+        }
+
+        // --- Serialization --------------------------------------------------
+
+        function contactsToVcf( list )
+        {
+            return list.map( contactToVCard ).join( '\r\n' ) + '\r\n';
+        }
+
+        function contactToVCard( c )
+        {
+            const L = [];
+
+            L.push( 'BEGIN:VCARD' );
+            L.push( 'VERSION:3.0' );
+            L.push( 'UID:' + c.uid );
+            L.push( 'FN:' + escapeText( displayName( c ) ) );
+            L.push( 'N:' + [ c.n.family, c.n.given, c.n.additional, c.n.prefix, c.n.suffix ].map( escapeText ).join( ';' ) );
+
+            if( c.org )   L.push( 'ORG:' + escapeText( c.org ) );
+            if( c.title ) L.push( 'TITLE:' + escapeText( c.title ) );
+
+            for( const t of c.tels )
+                if( t.value.trim() )
+                    L.push( 'TEL;TYPE=' + ( t.type || 'VOICE' ) + ':' + escapeText( t.value.trim() ) );
+
+            for( const e of c.emails )
+                if( e.value.trim() )
+                    L.push( 'EMAIL;TYPE=' + ( e.type || 'HOME' ) + ':' + escapeText( e.value.trim() ) );
+
+            for( const a of c.adrs )
+            {
+                if( ! ( a.street || a.city || a.region || a.postal || a.country ) )
+                    continue;
+
+                L.push( 'ADR;TYPE=' + ( a.type || 'HOME' ) + ':' +
+                        [ '', '', a.street, a.city, a.region, a.postal, a.country ].map( escapeText ).join( ';' ) );
+            }
+
+            for( const u of c.urls )
+                if( u.value.trim() )
+                    L.push( 'URL:' + u.value.trim() );
+
+            if( c.bday ) L.push( 'BDAY:' + c.bday );
+            if( c.note ) L.push( 'NOTE:' + escapeText( c.note ) );
+
+            L.push( 'REV:' + new Date().toISOString().replace( /\.\d+Z$/, 'Z' ) );
+            L.push( 'END:VCARD' );
+
+            return L.map( foldLine ).join( '\r\n' );
+        }
+
+        function escapeText( s )
+        {
+            return String( s == null ? '' : s )
+                .replace( /\\/g, '\\\\' )
+                .replace( /\n/g, '\\n' )
+                .replace( /,/g,  '\\,' )
+                .replace( /;/g,  '\\;' );
+        }
+
+        function unescapeText( s )
+        {
+            let out = '';
+
+            for( let i = 0; i < s.length; i++ )
+            {
+                const ch = s[ i ];
+
+                if( ch === '\\' && i + 1 < s.length )
+                {
+                    const nx = s[ ++i ];
+                    out += ( nx === 'n' || nx === 'N' ) ? '\n' : nx;
+                }
+                else
+                {
+                    out += ch;
+                }
+            }
+
+            return out;
+        }
+
+        // RFC 6350 §3.2: fold content lines longer than 75 octets. Continuation lines begin
+        // with a single space. Folding is done on UTF-8 octet boundaries without splitting a
+        // multi-byte character.
+        function foldLine( line )
+        {
+            const bytes = new TextEncoder().encode( line );
+
+            if( bytes.length <= 75 )
+                return line;
+
+            const dec = new TextDecoder();
+            let   out = '';
+            let   pos = 0;
+            let   max = 75;
+
+            while( pos < bytes.length )
+            {
+                let end = Math.min( pos + max, bytes.length );
+
+                while( end < bytes.length && ( bytes[ end ] & 0xC0 ) === 0x80 )
+                    end--;
+
+                out += ( pos === 0 ? '' : '\r\n ' ) + dec.decode( bytes.slice( pos, end ) );
+                pos  = end;
+                max  = 74;   // continuation lines spend one octet on the leading space
+            }
+
+            return out;
+        }
+
+        //------------------------------------------------------------------------//
+        // DERIVED HELPERS
+
+        function displayName( c )
+        {
+            if( c.fn && c.fn.trim() )
+                return c.fn.trim();
+
+            const nm = [ c.n.given, c.n.additional, c.n.family ].filter( Boolean ).join( ' ' ).trim();
+            if( nm ) return nm;
+
+            if( c.org ) return c.org;
+
+            const e = c.emails.find( x => x.value.trim() );
+            if( e ) return e.value.trim();
+
+            const t = c.tels.find( x => x.value.trim() );
+            if( t ) return t.value.trim();
+
+            return T( 'contact.noName' );
+        }
+
+        function subLine( c )
+        {
+            if( c.org && c.title ) return c.title + ' · ' + c.org;
+            if( c.org )            return c.org;
+            if( c.title )          return c.title;
+
+            const t = c.tels.find( x => x.value.trim() );
+            if( t ) return t.value.trim();
+
+            const e = c.emails.find( x => x.value.trim() );
+            if( e ) return e.value.trim();
+
+            return '';
+        }
+
+        // Many countries use two surnames (father's + mother's). Take the FIRST
+        // word of the given name and the FIRST word of the family name, so
+        // "Ana Sofía Pérez Ruiz" gives 'AP', not 'AR'.
+        function initials( c, sName )
+        {
+            const firstWord = s => ( s || '' ).trim().split( /\s+/ )[ 0 ] || '';
+
+            const g = firstWord( c && c.n && c.n.given );
+            const f = firstWord( c && c.n && c.n.family );
+
+            if( g && f ) return ( g[ 0 ] + f[ 0 ] ).toUpperCase();
+
+            const parts = ( sName || '' ).trim().split( /\s+/ ).filter( Boolean );
+
+            if( parts.length === 0 ) return '?';
+            if( parts.length === 1 ) return parts[ 0 ].slice( 0, 2 ).toUpperCase();
+
+            return ( parts[ 0 ][ 0 ] + parts[ parts.length - 1 ][ 0 ] ).toUpperCase();
+        }
+
+        // Stable pastel-ish colour derived from the name, tuned for the dark theme.
+        function avatarColor( sName )
+        {
+            let h = 0;
+            for( let i = 0; i < sName.length; i++ )
+                h = ( h * 31 + sName.charCodeAt( i ) ) % 360;
+
+            return 'hsl(' + h + ', 42%, 42%)';
+        }
+
+        function foldForSearch( s )
+        {
+            return String( s ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, "" ).toLowerCase();
+        }
+
+        function byDisplayName( a, b )
+        {
+            return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base' } );
+        }
+
+        function findContact( uid )
+        {
+            return contacts.find( c => c.uid === uid );
+        }
+
+        //------------------------------------------------------------------------//
+        // DUPLICATE DETECTION
+        //
+        // Deterministic and explainable: every candidate pair records WHY it matched.
+        // Biased towards precision — a wrong merge loses data, a missed duplicate is only an
+        // annoyance. A fuzzy name match must be corroborated by a second signal; an exact
+        // (accent/case/order-insensitive) name match is surfaced on its own for review.
+
+        const NAME_SIM_THRESHOLD = 0.85;   // ~1 substitution in a short surname (Gonzalez/Gonzales); still needs corroboration
+
+        function normPhone( raw )
+        {
+            const d = String( raw || '' ).replace( /\D/g, '' );
+            return d.length >= 5 ? d : '';
+        }
+
+        // Compare on the last 9 digits so "+34 600 123 456", "0034600123456" and "600123456"
+        // all match despite country-code / trunk-prefix differences.
+        function phoneTail( digits )
+        {
+            return digits.length > 9 ? digits.slice( -9 ) : digits;
+        }
+
+        function normEmail( raw )
+        {
+            return String( raw || '' ).trim().toLowerCase();
+        }
+
+        function nameTokens( c )
+        {
+            return foldForSearch( [ c.n.given, c.n.additional, c.n.family ].filter( Boolean ).join( ' ' ) )
+                .replace( /[^a-z0-9]+/g, ' ' ).trim().split( ' ' ).filter( Boolean );
+        }
+
+        function contactKeys( c )
+        {
+            const tokens = nameTokens( c );
+            const emails = c.emails.map( e => normEmail( e.value ) ).filter( Boolean );
+
+            return {
+                uid    : c.uid,
+                phones : new Set( c.tels.map( t => phoneTail( normPhone( t.value ) ) ).filter( Boolean ) ),
+                emails : new Set( emails ),
+                domains: new Set( emails.map( e => e.slice( e.indexOf( '@' ) + 1 ) ).filter( Boolean ) ),
+                org    : foldForSearch( c.org || '' ).trim(),
+                tokens : tokens,
+                nameKey: tokens.slice().sort().join( ' ' )
+            };
+        }
+
+        function intersects( a, b )
+        {
+            for( const x of a ) if( b.has( x ) ) return true;
+            return false;
+        }
+
+        // Classic two-row Levenshtein edit distance.
+        function levenshtein( a, b )
+        {
+            if( a === b )     return 0;
+            if( ! a.length )  return b.length;
+            if( ! b.length )  return a.length;
+
+            let prev = Array.from( { length: b.length + 1 }, ( _, i ) => i );
+
+            for( let i = 1; i <= a.length; i++ )
+            {
+                const cur = [ i ];
+
+                for( let j = 1; j <= b.length; j++ )
+                {
+                    const cost = a[ i - 1 ] === b[ j - 1 ] ? 0 : 1;
+                    cur[ j ] = Math.min( cur[ j - 1 ] + 1, prev[ j ] + 1, prev[ j - 1 ] + cost );
+                }
+
+                prev = cur;
+            }
+
+            return prev[ b.length ];
+        }
+
+        function nameSim( a, b )
+        {
+            const max = Math.max( a.length, b.length );
+            return max === 0 ? 0 : 1 - levenshtein( a, b ) / max;
+        }
+
+        // True when `short` reads as an abbreviation of `long`: same surname (last token) and
+        // every other short token is a prefix of a distinct other long token — so
+        // "j m perez" ~ "julia maria perez" and "jose m" ~ "jose maria".
+        function isAbbrevOf( short, long )
+        {
+            if( short.length < 2 || long.length < 2 || short.length > long.length ) return false;
+            if( short[ short.length - 1 ] !== long[ long.length - 1 ] )              return false;
+
+            const pool = long.slice( 0, -1 );
+            let   matched = 0;
+
+            for( const tok of short.slice( 0, -1 ) )
+            {
+                const idx = pool.findIndex( p => p.startsWith( tok ) );
+                if( idx === -1 ) return false;
+                pool.splice( idx, 1 );
+                matched++;
+            }
+
+            return matched > 0;
+        }
+
+        /**
+         * Scans the whole address book for likely-duplicate groups.
+         *
+         * @param   list          contact array to scan.
+         * @param   dismissedSet  Set of dismissKey() strings to skip (defaults to the module set).
+         * @returns array of { contacts:[...], reasons:string[], confidence:'alta'|'media' },
+         *          most-actionable first.
+         */
+        function findDuplicateGroups( list, dismissedSet = dismissed )
+        {
+            const keys   = list.map( contactKeys );
+            const parent = keys.map( ( _, i ) => i );
+
+            const find  = x => { while( parent[ x ] !== x ) x = parent[ x ] = parent[ parent[ x ] ]; return x; };
+            const union = ( a, b ) => { a = find( a ); b = find( b ); if( a !== b ) parent[ a ] = b; };
+
+            const pairReasons = new Map();   // "i,j" -> string[]
+            const pairConf    = new Map();   // "i,j" -> 'alta' | 'media'
+
+            for( let i = 0; i < keys.length; i++ )
+            {
+                for( let j = i + 1; j < keys.length; j++ )
+                {
+                    const A = keys[ i ], B = keys[ j ];
+
+                    if( dismissedSet.has( dismissKey( A.uid, B.uid ) ) )
+                        continue;
+
+                    const reasons = [];
+
+                    const samePhone = intersects( A.phones, B.phones );
+                    const sameMail  = intersects( A.emails, B.emails );
+                    if( samePhone ) reasons.push( T( 'contact.samePhone' ) );
+                    if( sameMail )  reasons.push( T( 'contact.sameEmail' ) );
+                    const sharedContact = samePhone || sameMail;
+
+                    const bothNamed = !! ( A.nameKey && B.nameKey );
+                    const sameName  = bothNamed && A.nameKey === B.nameKey;
+                    const simName   = bothNamed && ! sameName && nameSim( A.nameKey, B.nameKey ) >= NAME_SIM_THRESHOLD;
+                    const abbrev    = bothNamed && ! sameName &&
+                                      ( isAbbrevOf( A.tokens, B.tokens ) || isAbbrevOf( B.tokens, A.tokens ) );
+
+                    if( sameName )     reasons.push( T( 'contact.sameName' ) );
+                    else if( simName ) reasons.push( T( 'contact.similarName' ) );
+                    else if( abbrev )  reasons.push( T( 'contact.shortName' ) );
+
+                    // A second signal INDEPENDENT of the name (a shared surname is not one — the
+                    // name match already implies it).
+                    const corroboration = sharedContact
+                                       || ( !! A.org && A.org === B.org )
+                                       || intersects( A.domains, B.domains );
+
+                    const isCandidate = sharedContact
+                                     || sameName
+                                     || ( ( simName || abbrev ) && corroboration );
+
+                    if( ! isCandidate )
+                        continue;
+
+                    pairReasons.set( i + ',' + j, reasons );
+                    pairConf.set( i + ',' + j, ( sharedContact || ( sameName && corroboration ) ) ? 'alta' : 'media' );
+                    union( i, j );
+                }
+            }
+
+            const buckets = new Map();
+
+            for( const [ key, reasons ] of pairReasons )
+            {
+                const [ i, j ] = key.split( ',' ).map( Number );
+                const root     = find( i );
+
+                if( ! buckets.has( root ) )
+                    buckets.set( root, { idx: new Set(), reasons: new Set(), confidence: 'media' } );
+
+                const b = buckets.get( root );
+                b.idx.add( i ).add( j );
+                reasons.forEach( r => b.reasons.add( r ) );
+                if( pairConf.get( key ) === 'alta' ) b.confidence = 'alta';
+            }
+
+            const rank = { alta: 0, media: 1 };
+
+            return [ ...buckets.values() ]
+                .map( b => ({
+                    contacts  : [ ...b.idx ].map( n => list[ n ] ).sort( byDisplayName ),
+                    reasons   : [ ...b.reasons ],
+                    confidence: b.confidence
+                }) )
+                .sort( ( a, b ) =>
+                       rank[ a.confidence ] - rank[ b.confidence ]
+                    || b.contacts.length - a.contacts.length
+                    || byDisplayName( a.contacts[ 0 ], b.contacts[ 0 ] ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // RENDERING
+
+        function render()
+        {
+            contacts.sort( byDisplayName );
+
+            const listEl  = document.getElementById( 'contactList' );
+            const emptyEl = document.getElementById( 'emptyState' );
+
+            listEl.innerHTML = '';
+
+            const matcher = buildMatcher( query );
+            const visible = matcher ? contacts.filter( matcher ) : contacts;
+
+            document.getElementById( 'searchInput' ).placeholder = '[' + contacts.length + '] ' + SEARCH_PLACEHOLDER();
+
+            if( visible.length === 0 )
+            {
+                listEl.style.display = 'none';
+                emptyEl.style.display = 'flex';
+                buildAzRail( [] );
+
+                if( contacts.length === 0 )
+                {
+                    document.getElementById( 'emptyTitle' ).textContent = T( 'contact.emptyTitle' );
+                    document.getElementById( 'emptyBody' ).textContent  = T( 'contact.emptyBody' );
+                }
+                else
+                {
+                    document.getElementById( 'emptyTitle' ).textContent = T( 'contact.noResults' );
+                    document.getElementById( 'emptyBody' ).textContent  = TF( 'contact.noMatch', { q: query.trim() } );
+                }
+
+                return;
+            }
+
+            emptyEl.style.display = 'none';
+            listEl.style.display  = '';
+
+            // Each letter is its own <div>: a sticky head only stays pinned while its
+            // OWN parent is on screen, so wrapping is what makes A stop hovering at
+            // the top once you have scrolled down into B. Flat siblings would pile
+            // every head already scrolled past on top of each other at top:0.
+            let currentLetter = null;
+            let groupEl       = null;
+            const letters     = [];
+
+            for( const c of visible )
+            {
+                const letter = firstLetter( displayName( c ) );
+
+                if( letter !== currentLetter )
+                {
+                    currentLetter = letter;
+                    letters.push( letter );
+
+                    groupEl = document.createElement( 'div' );
+                    groupEl.className = 'letter-group';
+
+                    const head = document.createElement( 'div' );
+                    head.className   = 'letter-head';
+                    head.textContent = letter;
+                    head.dataset.letter = letter;
+                    groupEl.appendChild( head );
+
+                    listEl.appendChild( groupEl );
+                }
+
+                groupEl.appendChild( buildContactRow( c ) );
+            }
+
+            buildAzRail( letters );
+        }
+
+        /* --- A-Z jump rail ------------------------------------------------------
+         * Paints one tick per letter that render() actually emitted a head for, in
+         * the same order, and hides itself when the list is short enough to thumb
+         * through (AZ_RAIL_MIN) - a rail over 30 rows is clutter, not a shortcut.
+         * -----------------------------------------------------------------------*/
+        const AZ_RAIL_MIN = 30;             // rows below this: no rail
+
+        function buildAzRail( letters )
+        {
+            const rail = document.getElementById( 'azRail' );
+
+            rail.innerHTML = '';
+            azHideBubble();
+
+            // One letter is not a jump target, and neither is a list you can flick past.
+            if( letters.length < 2 ||
+                contactList().querySelectorAll( '.contact-row' ).length < AZ_RAIL_MIN )
+            {
+                rail.hidden = true;
+                return;
+            }
+
+            for( const letter of letters )
+            {
+                const b = document.createElement( 'button' );
+                b.type      = 'button';
+                b.className = 'az-letter';
+                b.dataset.letter  = letter;
+                b.textContent     = letter;
+                b.tabIndex        = -1;     // the rail is one target, not 27 tab stops
+                b.setAttribute( 'aria-hidden', 'true' );
+                rail.appendChild( b );
+            }
+
+            rail.hidden = false;
+        }
+
+        function contactList()
+        {
+            return document.getElementById( 'contactList' );
+        }
+
+        // Which rail tick sits under this y? Geometry, not elementFromPoint: the
+        // ticks are pointer-events:none so the rail keeps the capture while dragging.
+        function azLetterAt( y )
+        {
+            const ticks = document.getElementById( 'azRail' ).children;
+            if( ! ticks.length ) return null;
+
+            for( const t of ticks )
+            {
+                const r = t.getBoundingClientRect();
+                if( y < r.bottom ) return t;
+            }
+
+            return ticks[ ticks.length - 1 ];
+        }
+
+        function azJumpTo( letter )
+        {
+            const head = contactList().querySelector( '.letter-head[data-letter="' + letter + '"]' );
+            if( ! head ) return;
+
+            // 'auto', not 'smooth': while scrubbing the rail a queued smooth scroll
+            // per letter fights the finger.
+            head.scrollIntoView( { block: 'start', behavior: 'auto' } );
+
+            for( const t of document.getElementById( 'azRail' ).children )
+                t.classList.toggle( 'on', t.dataset.letter === letter );
+        }
+
+        function azHideBubble()
+        {
+            const bub = document.getElementById( 'azBubble' );
+            bub.hidden = true;
+            bub.textContent = '';
+        }
+
+        function wireAzRail()
+        {
+            const rail = document.getElementById( 'azRail' );
+            const bub  = document.getElementById( 'azBubble' );
+
+            function track( ev )
+            {
+                const tick = azLetterAt( ev.clientY );
+                if( ! tick ) return;
+
+                azJumpTo( tick.dataset.letter );
+
+                bub.textContent = tick.dataset.letter;
+                bub.hidden      = false;
+            }
+
+            rail.addEventListener( 'pointerdown', ev => {
+                ev.preventDefault();                       // no text selection, no page scroll
+                rail.setPointerCapture( ev.pointerId );
+                rail.classList.add( 'dragging' );
+                track( ev );
+            } );
+
+            rail.addEventListener( 'pointermove', ev => {
+                if( rail.hasPointerCapture( ev.pointerId ) ) track( ev );
+            } );
+
+            function end( ev )
+            {
+                if( rail.hasPointerCapture( ev.pointerId ) ) rail.releasePointerCapture( ev.pointerId );
+                rail.classList.remove( 'dragging' );
+                azHideBubble();
+            }
+
+            rail.addEventListener( 'pointerup',     end );
+            rail.addEventListener( 'pointercancel', end );
+        }
+
+        // Text fields only (names, org, title, note, emails). Phones are matched separately,
+        // digit-by-digit, so that spaces, "+", "(0)" etc. on either side are ignored.
+        function contactHaystack( c )
+        {
+            return foldForSearch( [
+                displayName( c ), c.org, c.title, c.note,
+                ...c.emails.map( e => e.value )
+            ].join( ' ' ) );
+        }
+
+        // Returns a predicate over contacts, or null when the query is empty. Plain
+        // accent-insensitive substring match on text; if the query carries any digits it also
+        // matches against each phone reduced to bare digits.
+        function buildMatcher( rawQuery )
+        {
+            const qText   = foldForSearch( rawQuery.trim() );
+            const qDigits = rawQuery.replace( /\D/g, '' );
+
+            if( ! qText )
+                return null;
+
+            return function( c )
+            {
+                if( contactHaystack( c ).includes( qText ) )
+                    return true;
+
+                return qDigits.length > 0 &&
+                       c.tels.some( t => t.value.replace( /\D/g, '' ).includes( qDigits ) );
+            };
+        }
+
+        function firstLetter( sName )
+        {
+            const ch = foldForSearch( sName ).charAt( 0 ).toUpperCase();
+            return /[A-Z]/.test( ch ) ? ch : '#';
+        }
+
+        function buildContactRow( c )
+        {
+            const name = displayName( c );
+
+            const row = document.createElement( 'div' );
+            row.className = 'contact-row' + ( selectMode && picked.has( c.uid ) ? ' picked' : '' );
+            row.dataset.uid = c.uid;
+            row.addEventListener( 'click', () => selectMode ? togglePick( c.uid ) : openDetail( c.uid ) );
+
+            if( selectMode )
+            {
+                const tick = document.createElement( 'input' );
+                tick.type    = 'checkbox';
+                tick.className = 'pick';
+                tick.checked = picked.has( c.uid );
+                tick.tabIndex = -1;                     // the row itself is the target
+                tick.setAttribute( 'aria-hidden', 'true' );
+                row.appendChild( tick );
+            }
+
+            const av = document.createElement( 'div' );
+            av.className = 'avatar';
+            av.style.background = avatarColor( name );
+            av.textContent = initials( c, name );
+            row.appendChild( av );
+
+            const meta = document.createElement( 'div' );
+            meta.className = 'contact-meta';
+
+            const nm = document.createElement( 'div' );
+            nm.className = 'contact-name';
+            nm.textContent = name;
+            meta.appendChild( nm );
+
+            const sub = subLine( c );
+            if( sub )
+            {
+                const sb = document.createElement( 'div' );
+                sb.className = 'contact-sub';
+                sb.textContent = sub;
+                meta.appendChild( sb );
+            }
+
+            row.appendChild( meta );
+            return row;
+        }
+
+        //------------------------------------------------------------------------//
+        // MANUAL MERGE - pick several rows in the list
+        //
+        // findDuplicateGroups() only groups what it can prove (same phone, same
+        // email, near-identical name). Two cards for the same person written in
+        // two different ways never meet. Here the user is the matcher: tick the
+        // rows, press Fusionar, and land in the very same merge preview the
+        // Duplicates sheet uses - nothing below openMergeFor() knows the
+        // difference.
+
+        let selectMode = false;
+        const picked   = new Set();     // uids, kept across searches
+
+        /* The toggle lives in the search row and only shows when it is of use:
+           while a search is on (its whole point - pick two hits and merge), or
+           while pick-several mode is already running, so it never vanishes from
+           under a pick that started with a long press. */
+        function syncSelectBtn()
+        {
+            document.getElementById( 'selectBtn' ).hidden = ! ( query || selectMode );
+        }
+
+        function setSelectMode( on )
+        {
+            if( selectMode === on ) return;
+
+            selectMode = on;
+            if( ! on ) picked.clear();
+
+            syncSelectBtn();
+
+            document.getElementById( 'selectBar' ).hidden = ! on;
+            updateSelectBar();
+            render();
+        }
+
+        function togglePick( uid )
+        {
+            if( picked.has( uid ) ) picked.delete( uid );
+            else                    picked.add( uid );
+
+            updateSelectBar();
+            render();
+        }
+
+        function updateSelectBar()
+        {
+            const n = picked.size;
+
+            document.getElementById( 'selectCount' ).textContent =
+                n < 2 ? T( 'contact.selectHint' ) : TF( 'contact.nSelected', { n: n } );
+
+            const btn = document.getElementById( 'selectMergeBtn' );
+            btn.textContent = T( 'contact.merge' );
+            btn.disabled    = n < 2;
+        }
+
+        function mergePicked()
+        {
+            const members = [ ...picked ].map( findContact ).filter( Boolean );
+
+            if( members.length < 2 )
+            {
+                flashToast( T( 'contact.selectHint' ) );
+                return;
+            }
+
+            openMergeFor( members );
+        }
+
+        // Long-press a row to open the mode with that row already ticked. The
+        // press rebuilds the list, so the click that follows the finger lifting
+        // would land on a brand-new row and untick it again - swallowClick eats
+        // exactly that one click.
+        function wireLongPress()
+        {
+            const list = document.getElementById( 'contactList' );
+
+            let timer = null, startX = 0, startY = 0, swallowClick = false;
+
+            const cancel = () => { clearTimeout( timer ); timer = null; };
+
+            list.addEventListener( 'pointerdown', function( e )
+            {
+                const row = e.target.closest( '.contact-row' );
+                if( ! row || selectMode ) return;
+
+                startX = e.clientX;
+                startY = e.clientY;
+
+                timer = setTimeout( function()
+                {
+                    timer        = null;
+                    swallowClick = true;
+                    setTimeout( () => swallowClick = false, 400 );   // in case no click follows
+
+                    picked.add( row.dataset.uid );
+                    setSelectMode( true );
+                }, 500 );
+            });
+
+            list.addEventListener( 'pointermove', function( e )
+            {
+                if( timer && ( Math.abs( e.clientX - startX ) > 8 || Math.abs( e.clientY - startY ) > 8 ) )
+                    cancel();
+            });
+
+            list.addEventListener( 'pointerup',     cancel );
+            list.addEventListener( 'pointercancel', cancel );   // a scroll lands here
+            list.addEventListener( 'pointerleave',  cancel );
+
+            list.addEventListener( 'click', function( e )
+            {
+                if( ! swallowClick ) return;
+
+                swallowClick = false;
+                e.stopPropagation();
+                e.preventDefault();
+            }, true );
+
+            // Android raises its own context menu on a long press.
+            list.addEventListener( 'contextmenu', e => { if( e.target.closest( '.contact-row' ) ) e.preventDefault(); } );
+        }
+
+        //------------------------------------------------------------------------//
+        // DETAIL VIEW
+
+        let detailUid = null;
+
+        function openDetail( uid )
+        {
+            const c = findContact( uid );
+            if( ! c ) return;
+
+            detailUid = uid;
+
+            const name = displayName( c );
+
+            const av = document.getElementById( 'detailAvatar' );
+            av.style.background = avatarColor( name );
+            av.textContent = initials( c, name );
+
+            document.getElementById( 'detailName' ).textContent = name;
+
+            const orgLine = [ c.title, c.org ].filter( Boolean ).join( ' · ' );
+            document.getElementById( 'detailOrg' ).textContent = orgLine;
+            document.getElementById( 'detailOrg' ).style.display = orgLine ? '' : 'none';
+
+            const body = document.getElementById( 'detailBody' );
+            body.innerHTML = '';
+
+            const phoneGroup = buildDetailGroup( c.tels.filter( t => t.value.trim() ).map( t => ({
+                label: typeLabel( TEL_TYPES(), t.type ),
+                value: t.value,
+                href : 'tel:' + t.value.replace( /[^\d+]/g, '' )
+            })) );
+            if( phoneGroup ) body.appendChild( phoneGroup );
+
+            const mailGroup = buildDetailGroup( c.emails.filter( e => e.value.trim() ).map( e => ({
+                label: typeLabel( EMAIL_TYPES(), e.type ),
+                value: e.value,
+                href : 'mailto:' + e.value
+            })) );
+            if( mailGroup ) body.appendChild( mailGroup );
+
+            const adrGroup = buildDetailGroup( c.adrs
+                .map( a => ({ label: typeLabel( ADR_TYPES(), a.type ), value: formatAddress( a ) }) )
+                .filter( x => x.value ) );
+            if( adrGroup ) body.appendChild( adrGroup );
+
+            const urlGroup = buildDetailGroup( c.urls.filter( u => u.value.trim() ).map( u => ({
+                label: 'Web', value: u.value, href: /^https?:/i.test( u.value ) ? u.value : 'https://' + u.value
+            })) );
+            if( urlGroup ) body.appendChild( urlGroup );
+
+            const misc = [];
+            if( c.bday ) misc.push( { label: T( 'contact.birthday' ), value: formatBday( c.bday ) } );
+            if( c.note ) misc.push( { label: NayiveUI.t( 'ui.notes' ), value: c.note, multiline: true } );
+            const miscGroup = buildDetailGroup( misc );
+            if( miscGroup ) body.appendChild( miscGroup );
+
+            if( ! body.children.length )
+            {
+                const p = document.createElement( 'div' );
+                p.className = 'detail-item';
+                p.innerHTML = '<span class="di-value" style="color:var(--text-dim)" data-i18n="contact.noContactData"></span>';
+                body.appendChild( p );
+            }
+
+            openBackdrop( 'detailBackdrop' );
+        }
+
+        function buildDetailGroup( items )
+        {
+            if( ! items.length )
+                return null;
+
+            const group = document.createElement( 'div' );
+            group.className = 'detail-group';
+
+            for( const it of items )
+            {
+                const wrap = document.createElement( 'div' );
+                wrap.className = 'detail-item';
+
+                const lbl = document.createElement( 'span' );
+                lbl.className = 'di-label';
+                lbl.textContent = it.label;
+                wrap.appendChild( lbl );
+
+                if( it.href )
+                {
+                    const a = document.createElement( 'a' );
+                    a.className = 'di-value';
+                    a.href = it.href;
+                    a.textContent = it.value;
+                    wrap.appendChild( a );
+                }
+                else
+                {
+                    const v = document.createElement( 'span' );
+                    v.className = 'di-value' + ( it.multiline ? ' multiline' : '' );
+                    v.textContent = it.value;
+                    wrap.appendChild( v );
+                }
+
+                group.appendChild( wrap );
+            }
+
+            return group;
+        }
+
+        function formatAddress( a )
+        {
+            return [ a.street, [ a.postal, a.city ].filter( Boolean ).join( ' ' ), a.region, a.country ]
+                .map( s => s.trim() ).filter( Boolean ).join( '\n' );
+        }
+
+        // c.bday is always stored as ANSI yyyy-mm-dd (see normalizeBday), which is also
+        // how we show it — no locale-dependent reformatting.
+        function formatBday( sIso )
+        {
+            return sIso;
+        }
+
+        function typeLabel( table, sType )
+        {
+            const hit = table.find( r => r[ 0 ] === sType );
+            return hit ? hit[ 1 ] : ( sType || T( 'contact.typeOther' ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // EDIT FORM
+
+        function openEditForNew()
+        {
+            editingUid = null;
+            document.getElementById( 'editTitle' ).textContent = T( 'contact.newContact' );
+
+            fillForm( makeContact() );
+
+            // Seed one empty phone + email row so the common case needs no extra taps.
+            addMultiRow( 'tel',   { type: 'CELL', value: '' } );
+            addMultiRow( 'email', { type: 'HOME', value: '' } );
+
+            setMoreOpen( false );
+            openBackdrop( 'editBackdrop' );
+            setTimeout( () => document.getElementById( 'fGiven' ).focus(), 0 );
+        }
+
+        function openEditForExisting( uid )
+        {
+            const c = findContact( uid );
+            if( ! c ) return;
+
+            editingUid = uid;
+            document.getElementById( 'editTitle' ).textContent = T( 'contact.editContact' );
+
+            fillForm( c );
+
+            c.tels.forEach( t => addMultiRow( 'tel', t ) );
+            c.emails.forEach( e => addMultiRow( 'email', e ) );
+            c.adrs.forEach( a => addMultiRow( 'adr', a ) );
+            c.urls.forEach( u => addMultiRow( 'url', u ) );
+
+            const hasMore = c.adrs.length || c.urls.length || c.bday || c.note;
+            setMoreOpen( !! hasMore );
+
+            openBackdrop( 'editBackdrop' );
+        }
+
+        function fillForm( c )
+        {
+            document.getElementById( 'fGiven'    ).value = c.n.given;
+            document.getElementById( 'fFamily'   ).value = c.n.family;
+            document.getElementById( 'fOrg'      ).value = c.org;
+            document.getElementById( 'fJobTitle' ).value = c.title;
+            document.getElementById( 'fBday'     ).value = c.bday;
+            document.getElementById( 'fNote'     ).value = c.note;
+            refreshBdayDisplay();
+
+            [ 'telRows', 'emailRows', 'adrRows', 'urlRows' ].forEach( id =>
+            {
+                document.getElementById( id ).innerHTML = '';
+            });
+        }
+
+        // The native date input's .value is always yyyy-mm-dd whatever the browser
+        // locale shows, so this overlay renders the date in ANSI format directly.
+        function refreshBdayDisplay()
+        {
+            const el   = document.getElementById( 'fBday' );
+            const disp = document.getElementById( 'fBdayDisplay' );
+            disp.textContent = el.value || T( 'ui.dateHint' );
+            disp.classList.toggle( 'placeholder', ! el.value );
+        }
+
+        function addMultiRow( kind, data )
+        {
+            data = data || {};
+
+            const host = document.getElementById(
+                kind === 'tel' ? 'telRows' : kind === 'email' ? 'emailRows' : kind === 'adr' ? 'adrRows' : 'urlRows' );
+
+            const row = document.createElement( 'div' );
+            row.className = 'multi-row';
+
+            if( kind === 'tel' || kind === 'email' || kind === 'adr' )
+            {
+                const table = kind === 'tel' ? TEL_TYPES() : kind === 'email' ? EMAIL_TYPES() : ADR_TYPES();
+                row.appendChild( buildTypeSelect( table, data.type ) );
+            }
+
+            const fields = document.createElement( 'div' );
+            fields.className = 'multi-fields';
+
+            if( kind === 'tel' )
+            {
+                fields.appendChild( makeInput( 'tel', T( 'contact.numberPh' ), data.value || '' ) );
+            }
+            else if( kind === 'email' )
+            {
+                fields.appendChild( makeInput( 'email', T( 'contact.emailPh' ), data.value || '' ) );
+            }
+            else if( kind === 'url' )
+            {
+                fields.appendChild( makeInput( 'url', 'https://…', data.value || '' ) );
+            }
+            else if( kind === 'adr' )
+            {
+                fields.appendChild( makeInput( 'text', T( 'contact.streetPh' ), data.street || '' ) );
+
+                const cityRow = document.createElement( 'div' );
+                cityRow.style.display = 'flex';
+                cityRow.style.gap = '6px';
+                cityRow.appendChild( makeInput( 'text', 'C.P.', data.postal || '' ) );
+                cityRow.appendChild( makeInput( 'text', T( 'contact.cityPh' ), data.city || '' ) );
+                fields.appendChild( cityRow );
+
+                const regionRow = document.createElement( 'div' );
+                regionRow.style.display = 'flex';
+                regionRow.style.gap = '6px';
+                regionRow.appendChild( makeInput( 'text', T( 'contact.regionPh' ), data.region || '' ) );
+                regionRow.appendChild( makeInput( 'text', T( 'contact.countryPh' ), data.country || '' ) );
+                fields.appendChild( regionRow );
+            }
+
+            row.appendChild( fields );
+
+            const rm = document.createElement( 'button' );
+            rm.type = 'button';
+            rm.className = 'remove-btn';
+            rm.title = T( 'contact.remove' );
+            rm.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            rm.addEventListener( 'click', () => row.remove() );
+            row.appendChild( rm );
+
+            host.appendChild( row );
+        }
+
+        function buildTypeSelect( table, current )
+        {
+            const sel = document.createElement( 'select' );
+
+            const known = new Set( table.map( r => r[ 0 ] ) );
+
+            if( current && ! known.has( current ) )
+            {
+                const opt = document.createElement( 'option' );
+                opt.value = current;
+                opt.textContent = current;
+                sel.appendChild( opt );
+            }
+
+            for( const [ val, label ] of table )
+            {
+                const opt = document.createElement( 'option' );
+                opt.value = val;
+                opt.textContent = label;
+                sel.appendChild( opt );
+            }
+
+            sel.value = current || table[ 0 ][ 0 ];
+            return sel;
+        }
+
+        function makeInput( type, placeholder, value )
+        {
+            const inp = document.createElement( 'input' );
+            inp.type = type;
+            inp.placeholder = placeholder;
+            inp.value = value;
+            inp.autocomplete = 'off';
+            return inp;
+        }
+
+        function readMultiRows( hostId, kind )
+        {
+            const out = [];
+
+            for( const row of document.getElementById( hostId ).querySelectorAll( '.multi-row' ) )
+            {
+                const sel    = row.querySelector( 'select' );
+                const inputs = row.querySelectorAll( 'input' );
+
+                if( kind === 'adr' )
+                {
+                    const rec = {
+                        type   : sel ? sel.value : 'HOME',
+                        street : inputs[ 0 ].value.trim(),
+                        postal : inputs[ 1 ].value.trim(),
+                        city   : inputs[ 2 ].value.trim(),
+                        region : inputs[ 3 ].value.trim(),
+                        country: inputs[ 4 ].value.trim()
+                    };
+
+                    if( rec.street || rec.city || rec.region || rec.postal || rec.country )
+                        out.push( rec );
+                }
+                else if( kind === 'url' )
+                {
+                    const v = inputs[ 0 ].value.trim();
+                    if( v ) out.push( { value: v } );
+                }
+                else
+                {
+                    const v = inputs[ 0 ].value.trim();
+                    if( v ) out.push( { type: sel ? sel.value : 'OTHER', value: v } );
+                }
+            }
+
+            return out;
+        }
+
+        function commitEdit()
+        {
+            const given  = document.getElementById( 'fGiven'  ).value.trim();
+            const family = document.getElementById( 'fFamily' ).value.trim();
+            const org    = document.getElementById( 'fOrg'    ).value.trim();
+
+            const tels   = readMultiRows( 'telRows',   'tel' );
+            const emails = readMultiRows( 'emailRows', 'email' );
+
+            if( ! given && ! family && ! org && ! tels.length && ! emails.length )
+            {
+                flashToast( T( 'contact.needSomething' ) );
+                return;
+            }
+
+            const c = editingUid ? findContact( editingUid ) : makeContact();
+            if( ! editingUid ) contacts.push( c );
+
+            c.n.given  = given;
+            c.n.family = family;
+            c.fn       = [ given, family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
+            c.org      = org;
+            c.title    = document.getElementById( 'fJobTitle' ).value.trim();
+            c.tels     = tels;
+            c.emails   = emails;
+            c.adrs     = readMultiRows( 'adrRows', 'adr' );
+            c.urls     = readMultiRows( 'urlRows', 'url' );
+            c.bday     = document.getElementById( 'fBday' ).value;
+            c.note     = document.getElementById( 'fNote' ).value.trim();
+
+            closeBackdrop( 'editBackdrop' );
+            render();
+            saveContacts();
+            refreshDedupIfOpen();
+        }
+
+        async function deleteCurrent()
+        {
+            if( ! detailUid ) return;
+
+            const uid = detailUid;
+            const c   = contacts.find( x => x.uid === uid );
+            if( ! c ) return;
+
+            const ok = await NayiveUI.confirm( {
+                title:   T( 'contact.deleteContact' ),
+                body:    TF( 'contact.deleteContactBody', { name: displayName( c ) } ),
+                confirm: T( 'ui.delete' ),
+                danger:  true
+            } );
+            if( ! ok ) return;
+
+            contacts = contacts.filter( x => x.uid !== uid );
+
+            closeBackdrop( 'detailBackdrop' );
+            render();
+            saveContacts();
+            refreshDedupIfOpen();
+        }
+
+        function setMoreOpen( open )
+        {
+            document.getElementById( 'moreToggle' ).classList.toggle( 'open', open );
+            document.getElementById( 'moreToggle' ).setAttribute( 'aria-expanded', String( open ) );
+            document.getElementById( 'moreSection' ).style.display = open ? '' : 'none';
+            document.getElementById( 'moreLabel' ).textContent = open ? T( 'contact.fewerFields' ) : T( 'contact.moreFields' );
+        }
+
+        //------------------------------------------------------------------------//
+        // DUPLICATES — review sheet
+
+        let dupGroups  = [];     // last findDuplicateGroups() result, backing the dedup sheet
+        let mergeModel = null;   // union preview backing the merge sheet
+
+        // Phone-only "⋮" menu: the three header buttons that do not fit beside the
+        // title on a 390px screen (import / export / duplicates). Same shape as
+        // Calendar's: a button toggles it, any click elsewhere closes it.
+        // The shared header "..." popup (shared/ui.js): anchors itself under the button and
+        // closes on a pick, a click outside, Escape or a resize.
+        function wireTopMenu()
+        {
+            NayiveUI.wireMenu(
+            {
+                btn: 'moreBtn', menu: 'topMenu',
+                onPick: function( item )
+                {
+                    if(      item.dataset.menu === 'import' ) document.getElementById( 'importInput' ).click();
+                    else if( item.dataset.menu === 'export' ) exportVcf();
+                    else if( item.dataset.menu === 'dedup'  ) openDedupSheet();
+                }
+            } );
+        }
+
+        function openDedupSheet()
+        {
+            openBackdrop( 'dedupBackdrop' );
+            renderDedupScanning();
+
+            // Yield twice so the sheet + progress bar actually paint before the
+            // synchronous scan freezes the main thread.
+            requestAnimationFrame( () => requestAnimationFrame( () =>
+            {
+                dupGroups = findDuplicateGroups( contacts );
+                renderDedupSheet();
+            }));
+        }
+
+        // Placeholder shown in the dedup sheet while findDuplicateGroups() is running.
+        function renderDedupScanning()
+        {
+            document.getElementById( 'dedupCount' ).textContent = '';
+            document.getElementById( 'dedupList' ).innerHTML =
+                '<div class="dedup-scanning">'
+              +     '<div class="scan-bar"><span></span></div>'
+              +     '<p data-i18n="contact.scanning"></p>'
+              + '</div>';
+        }
+
+        function refreshDedupIfOpen()
+        {
+            if( document.getElementById( 'dedupBackdrop' ).classList.contains( 'open' ) )
+            {
+                dupGroups = findDuplicateGroups( contacts );
+                renderDedupSheet();
+            }
+        }
+
+        function renderDedupSheet()
+        {
+            const host = document.getElementById( 'dedupList' );
+            host.innerHTML = '';
+
+            document.getElementById( 'dedupCount' ).textContent = dupGroups.length ? ' (' + dupGroups.length + ')' : '';
+
+            if( ! dupGroups.length )
+            {
+                const p = document.createElement( 'p' );
+                p.className = 'dedup-empty';
+                p.textContent = T( 'contact.noDupes' );
+                host.appendChild( p );
+                return;
+            }
+
+            dupGroups.forEach( ( g, gi ) => host.appendChild( buildDupGroupCard( g, gi ) ) );
+        }
+
+        function buildDupGroupCard( g, gi )
+        {
+            const card = document.createElement( 'div' );
+            card.className = 'dup-group';
+
+            const chips = document.createElement( 'div' );
+            chips.className = 'dup-chips';
+
+            const conf = document.createElement( 'span' );
+            conf.className = 'dup-conf ' + g.confidence;
+            conf.textContent = g.confidence === 'alta' ? T( 'contact.confHigh' ) : T( 'contact.confLow' );
+            chips.appendChild( conf );
+
+            g.reasons.forEach( r =>
+            {
+                const chip = document.createElement( 'span' );
+                chip.className = 'dup-chip';
+                chip.textContent = r;
+                chips.appendChild( chip );
+            });
+            card.appendChild( chips );
+
+            g.contacts.forEach( c =>
+            {
+                const row = document.createElement( 'div' );
+                row.className = 'dup-contact';
+                row.addEventListener( 'click', () => openDetail( c.uid ) );
+
+                const name = displayName( c );
+
+                const av = document.createElement( 'div' );
+                av.className = 'avatar';
+                av.style.background = avatarColor( name );
+                av.textContent = initials( c, name );
+                row.appendChild( av );
+
+                const meta = document.createElement( 'div' );
+                meta.className = 'contact-meta';
+
+                const nm = document.createElement( 'div' );
+                nm.className = 'contact-name';
+                nm.textContent = name;
+                meta.appendChild( nm );
+
+                const sub = subLine( c );
+                if( sub )
+                {
+                    const sb = document.createElement( 'div' );
+                    sb.className = 'contact-sub';
+                    sb.textContent = sub;
+                    meta.appendChild( sb );
+                }
+
+                row.appendChild( meta );
+
+                // With 3+ members the group may have swept in someone who only shares a surname
+                // (union-find joins the whole connected component). Let the user drop them.
+                if( g.contacts.length > 2 )
+                {
+                    const rm = document.createElement( 'button' );
+                    rm.type = 'button';
+                    rm.className = 'dup-remove';
+                    rm.title = T( 'contact.removeFromGroup' );
+                    rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>';
+                    rm.addEventListener( 'click', e =>
+                    {
+                        e.stopPropagation();
+                        excludeFromDupGroup( gi, c.uid );
+                    });
+                    row.appendChild( rm );
+                }
+
+                card.appendChild( row );
+            });
+
+            const actions = document.createElement( 'div' );
+            actions.className = 'dup-actions';
+
+            const dismiss = document.createElement( 'button' );
+            dismiss.type = 'button';
+            dismiss.className = 'btn-text';
+            dismiss.textContent = T( 'contact.notDupes' );
+            dismiss.addEventListener( 'click', () => dismissDupGroup( gi ) );
+            actions.appendChild( dismiss );
+
+            const merge = document.createElement( 'button' );
+            merge.type = 'button';
+            merge.className = 'btn-pill';
+            merge.textContent = T( 'contact.merge' );
+            merge.addEventListener( 'click', () => openMergeSheet( gi ) );
+            actions.appendChild( merge );
+
+            card.appendChild( actions );
+            return card;
+        }
+
+        function dismissDupGroup( gi )
+        {
+            const g = dupGroups[ gi ];
+            if( ! g ) return;
+
+            for( let a = 0; a < g.contacts.length; a++ )
+                for( let b = a + 1; b < g.contacts.length; b++ )
+                    dismissed.add( dismissKey( g.contacts[ a ].uid, g.contacts[ b ].uid ) );
+
+            saveMeta();
+            dupGroups = findDuplicateGroups( contacts );
+            renderDedupSheet();
+        }
+
+        // Drops one contact from a group: marks it "not a duplicate" of every other member
+        // so the next scan won't pull it back, then re-renders. The rest of the group stays
+        // together (their own matching pairs are untouched) and can be merged.
+        function excludeFromDupGroup( gi, uid )
+        {
+            const g = dupGroups[ gi ];
+            if( ! g ) return;
+
+            g.contacts.forEach( other =>
+            {
+                if( other.uid !== uid )
+                    dismissed.add( dismissKey( uid, other.uid ) );
+            });
+
+            saveMeta();
+            dupGroups = findDuplicateGroups( contacts );
+            renderDedupSheet();
+        }
+
+        //------------------------------------------------------------------------//
+        // DUPLICATES — merge preview
+
+        function firstNonEmpty( arr )
+        {
+            return ( arr.map( s => ( s || '' ).trim() ).find( Boolean ) ) || '';
+        }
+
+        // Most-complete card: most N components filled, then longest display name.
+        function mostComplete( list )
+        {
+            return list.slice().sort( ( a, b ) =>
+            {
+                const fa = [ a.n.given, a.n.family, a.n.additional, a.n.prefix, a.n.suffix ].filter( Boolean ).length;
+                const fb = [ b.n.given, b.n.family, b.n.additional, b.n.prefix, b.n.suffix ].filter( Boolean ).length;
+                return fb - fa || displayName( b ).length - displayName( a ).length;
+            })[ 0 ];
+        }
+
+        function unionValues( lists, keyFn )
+        {
+            const seen = new Set();
+            const out  = [];
+
+            for( const list of lists )
+                for( const it of list )
+                {
+                    const k = keyFn( it );
+                    if( ! k || seen.has( k ) ) continue;
+                    seen.add( k );
+                    out.push( it );
+                }
+
+            return out;
+        }
+
+        function openMergeSheet( gi )
+        {
+            const group = dupGroups[ gi ];
+            if( ! group ) return;
+
+            const members = group.contacts.filter( c => findContact( c.uid ) );
+
+            if( members.length < 2 )
+            {
+                flashToast( T( 'contact.groupClean' ) );
+                refreshDedupIfOpen();
+                return;
+            }
+
+            openMergeFor( members );
+        }
+
+        // Builds the union preview and opens the sheet. Called both by the
+        // duplicate scanner (a group) and by the manual pick (ticked rows).
+        function openMergeFor( members )
+        {
+            const withVal  = arr => arr.filter( x => ( x.value || '' ).trim() );
+            const realAdrs = c => c.adrs.filter( a => a.street || a.city || a.region || a.postal || a.country );
+            const telKey   = t => { const d = normPhone( t.value ); return d ? phoneTail( d ) : foldForSearch( ( t.value || '' ).trim() ); };
+            const mailKey  = e => normEmail( e.value );
+            const adrKey   = a => foldForSearch( [ a.street, a.city, a.region, a.postal, a.country ].join( '|' ) ).replace( /[^a-z0-9|]/g, '' );
+            const urlKey   = u => ( u.value || '' ).trim().toLowerCase().replace( /\/+$/, '' );
+
+            mergeModel = {
+                members : members,
+                primary : members.map( c => c.uid ).sort()[ 0 ],
+                names   : [ ...new Set( members.map( displayName ) ) ],
+                nameSrc : mostComplete( members ),
+                orgs    : [ ...new Set( members.map( c => c.org.trim() ).filter( Boolean ) ) ],
+                titles  : [ ...new Set( members.map( c => c.title.trim() ).filter( Boolean ) ) ],
+                tels    : unionValues( members.map( c => withVal( c.tels ) ),   telKey ),
+                emails  : unionValues( members.map( c => withVal( c.emails ) ), mailKey ),
+                adrs    : unionValues( members.map( realAdrs ),                 adrKey ),
+                urls    : unionValues( members.map( c => withVal( c.urls ) ),   urlKey ),
+                bday    : firstNonEmpty( members.map( c => c.bday ) ),
+                notes   : [ ...new Set( members.map( c => c.note.trim() ).filter( Boolean ) ) ]
+            };
+
+            renderMergePreview();
+            openBackdrop( 'mergeBackdrop' );
+        }
+
+        function renderMergePreview()
+        {
+            const m    = mergeModel;
+            const body = document.getElementById( 'mergeBody' );
+            body.innerHTML = '';
+
+            body.appendChild( mergePickField( T( 'contact.firstName' ), 'mergeName', m.names, displayName( m.nameSrc ) ) );
+
+            if( m.orgs.length )   body.appendChild( mergePickField( T( 'contact.org' ), 'mergeOrg', m.orgs, m.orgs[ 0 ] ) );
+            if( m.titles.length ) body.appendChild( mergePickField( T( 'contact.jobTitle' ), 'mergeTitle', m.titles, m.titles[ 0 ] ) );
+
+            mergeCheckSection( body, T( 'contact.phones' ),   'tel',   m.tels,   t => [ typeLabel( TEL_TYPES(), t.type ),   t.value ] );
+            mergeCheckSection( body, T( 'contact.emails' ),     'email', m.emails, e => [ typeLabel( EMAIL_TYPES(), e.type ), e.value ] );
+            mergeCheckSection( body, T( 'contact.addresses' ), 'adr',   m.adrs,   a => [ typeLabel( ADR_TYPES(), a.type ),   formatAddress( a ) ] );
+            mergeCheckSection( body, T( 'contact.websites' ),  'url',   m.urls,   u => [ 'Web', u.value ] );
+
+            if( m.bday )
+            {
+                const sec = document.createElement( 'div' );
+                sec.className = 'merge-section';
+                sec.innerHTML = '<div class="ms-label" data-i18n="contact.birthday"></div>';
+                const v = document.createElement( 'div' );
+                v.className = 'mr-val';
+                v.textContent = formatBday( m.bday );
+                sec.appendChild( v );
+                body.appendChild( sec );
+            }
+
+            if( m.notes.length )
+            {
+                const sec = document.createElement( 'div' );
+                sec.className = 'merge-section';
+                sec.innerHTML = '<div class="ms-label" data-i18n="ui.notes"></div>';
+                const v = document.createElement( 'div' );
+                v.className = 'merge-note-preview';
+                v.textContent = m.notes.join( '\n———\n' );
+                sec.appendChild( v );
+                body.appendChild( sec );
+            }
+        }
+
+        function mergePickField( label, id, options, selected )
+        {
+            const field = document.createElement( 'div' );
+            field.className = 'field';
+
+            const lbl = document.createElement( 'label' );
+            lbl.textContent = label;
+            field.appendChild( lbl );
+
+            if( options.length <= 1 )
+            {
+                const input = document.createElement( 'input' );
+                input.type = 'hidden';
+                input.id = id;
+                input.value = options[ 0 ] || selected || '';
+                field.appendChild( input );
+
+                const span = document.createElement( 'div' );
+                span.className = 'mr-val';
+                span.textContent = input.value;
+                field.appendChild( span );
+            }
+            else
+            {
+                const sel = document.createElement( 'select' );
+                sel.id = id;
+
+                options.forEach( o =>
+                {
+                    const opt = document.createElement( 'option' );
+                    opt.value = o;
+                    opt.textContent = o;
+                    sel.appendChild( opt );
+                });
+
+                sel.value = selected;
+                field.appendChild( sel );
+            }
+
+            return field;
+        }
+
+        function mergeCheckSection( body, label, kind, items, fmt )
+        {
+            if( ! items.length ) return;
+
+            const sec = document.createElement( 'div' );
+            sec.className = 'merge-section';
+
+            const l = document.createElement( 'div' );
+            l.className = 'ms-label';
+            l.textContent = label;
+            sec.appendChild( l );
+
+            items.forEach( ( it, idx ) =>
+            {
+                const [ type, value ] = fmt( it );
+
+                const row = document.createElement( 'label' );
+                row.className = 'merge-row';
+
+                const cb = document.createElement( 'input' );
+                cb.type = 'checkbox';
+                cb.checked = true;
+                cb.dataset.kind = kind;
+                cb.dataset.idx  = idx;
+                row.appendChild( cb );
+
+                const t = document.createElement( 'span' );
+                t.className = 'mr-type';
+                t.textContent = type;
+                row.appendChild( t );
+
+                const v = document.createElement( 'span' );
+                v.className = 'mr-val';
+                v.textContent = value;
+                row.appendChild( v );
+
+                sec.appendChild( row );
+            });
+
+            body.appendChild( sec );
+        }
+
+        function collectChecked( kind )
+        {
+            const list = mergeModel[ kind === 'adr' ? 'adrs' : kind + 's' ];
+            const out  = [];
+
+            document.querySelectorAll( '#mergeBody input[data-kind="' + kind + '"]' ).forEach( cb =>
+            {
+                if( cb.checked ) out.push( list[ Number( cb.dataset.idx ) ] );
+            });
+
+            return out;
+        }
+
+        function doMerge()
+        {
+            const m = mergeModel;
+            if( ! m ) return;
+
+            const groupUids  = new Set( m.members.map( c => c.uid ) );
+            const chosenName = ( document.getElementById( 'mergeName' ).value || '' ).trim();
+            const nameSrc    = m.members.find( c => displayName( c ) === chosenName ) || m.nameSrc;
+
+            const merged  = makeContact();
+            merged.uid    = m.primary;
+            merged.n      = { ...nameSrc.n };
+            merged.fn     = chosenName || displayName( nameSrc );
+            merged.org    = ( document.getElementById( 'mergeOrg' )   || {} ).value || firstNonEmpty( m.members.map( c => c.org ) );
+            merged.title  = ( document.getElementById( 'mergeTitle' ) || {} ).value || firstNonEmpty( m.members.map( c => c.title ) );
+            merged.tels   = collectChecked( 'tel' );
+            merged.emails = collectChecked( 'email' );
+            merged.adrs   = collectChecked( 'adr' );
+            merged.urls   = collectChecked( 'url' );
+            merged.bday   = m.bday;
+            merged.note   = m.notes.join( '\n———\n' );
+
+            const hadDismissals = dismissed.size > 0;
+
+            undoState = { contacts: contacts.slice() };
+
+            contacts = contacts.filter( c => ! groupUids.has( c.uid ) );
+            contacts.push( merged );
+
+            closeBackdrop( 'mergeBackdrop' );
+            setSelectMode( false );     // no-op unless the merge came from a manual pick
+            render();
+            saveContacts();
+
+            if( hadDismissals )
+                saveMeta();                 // prunes dismissed pairs that referenced the removed cards
+
+            flashUndo( T( 'contact.merged' ) );
+            refreshDedupIfOpen();
+        }
+
+        function undoMerge()
+        {
+            if( ! undoState ) return;
+
+            contacts  = undoState.contacts;
+            undoState = null;
+
+            render();
+            saveContacts();
+            refreshDedupIfOpen();
+        }
+
+        //------------------------------------------------------------------------//
+        // IMPORT / EXPORT
+
+        function exportVcf()
+        {
+            if( ! contacts.length )
+            {
+                flashToast( T( 'contact.nothingToExport' ) );
+                return;
+            }
+
+            const blob = new Blob( [ contactsToVcf( contacts ) ], { type: 'text/vcard;charset=utf-8' } );
+            const url  = URL.createObjectURL( blob );
+            const a    = document.getElementById( 'downloadAnchor' );
+
+            a.href     = url;
+            a.download = 'contactos.vcf';
+            a.click();
+
+            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+        }
+
+        async function importVcf( file )
+        {
+            let text;
+            try   { text = await file.text(); }
+            catch { flashToast( T( 'contact.readFailed' ) ); return; }
+
+            const incoming = vcfToContacts( text );
+
+            if( ! incoming.length )
+            {
+                flashToast( T( 'contact.noVcards' ) );
+                return;
+            }
+
+            const byUid = new Map( contacts.map( c => [ c.uid, c ] ) );
+            let   added = 0, updated = 0;
+
+            for( const inc of incoming )
+            {
+                if( byUid.has( inc.uid ) )
+                {
+                    Object.assign( byUid.get( inc.uid ), inc );
+                    updated++;
+                }
+                else
+                {
+                    contacts.push( inc );
+                    byUid.set( inc.uid, inc );
+                    added++;
+                }
+            }
+
+            render();
+            await saveContacts();
+
+            flashToast( TF( 'contact.imported', { added: added, updated: updated } ) );
+
+            // Imports are where duplicates are actually created — surface them right away.
+            if( findDuplicateGroups( contacts ).length )
+                openDedupSheet();
+        }
+
+        //------------------------------------------------------------------------//
+        // UI WIRING
+
+        function wireStaticUI()
+        {
+            document.getElementById( 'addBtn'    ).addEventListener( 'click', openEditForNew );
+
+            document.getElementById( 'selectBtn'      ).addEventListener( 'click', () => setSelectMode( ! selectMode ) );
+            document.getElementById( 'selectCancel'   ).addEventListener( 'click', () => setSelectMode( false ) );
+            document.getElementById( 'selectMergeBtn' ).addEventListener( 'click', mergePicked );
+            wireLongPress();
+            wireAzRail();
+
+            document.getElementById( 'exportBtn' ).addEventListener( 'click', exportVcf );
+
+            document.getElementById( 'importBtn' ).addEventListener( 'click', () => document.getElementById( 'importInput' ).click() );
+            document.getElementById( 'importInput' ).addEventListener( 'change', function()
+            {
+                if( this.files && this.files[ 0 ] )
+                    importVcf( this.files[ 0 ] );
+
+                this.value = '';
+            });
+
+            const search = document.getElementById( 'searchInput' );
+            search.addEventListener( 'input', function()
+            {
+                query = this.value;
+                document.getElementById( 'searchClear' ).classList.toggle( 'show', !! query );
+                document.getElementById( 'searchIcon' ).style.display = query ? 'none' : '';   // hide magnifier so it never overlaps the clear (x)
+                syncSelectBtn();
+                render();
+            });
+            document.getElementById( 'searchClear' ).addEventListener( 'click', function()
+            {
+                search.value = '';
+                query = '';
+                this.classList.remove( 'show' );
+                document.getElementById( 'searchIcon' ).style.display = '';
+                syncSelectBtn();
+                render();
+                search.focus();
+            });
+
+            document.getElementById( 'detailCloseBtn'  ).addEventListener( 'click', () => closeBackdrop( 'detailBackdrop' ) );
+            document.getElementById( 'detailEditBtn'    ).addEventListener( 'click', function()
+            {
+                const uid = detailUid;
+                closeBackdrop( 'detailBackdrop' );
+                openEditForExisting( uid );
+            });
+            document.getElementById( 'detailDeleteBtn'  ).addEventListener( 'click', deleteCurrent );
+
+            document.getElementById( 'editCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'editBackdrop' ) );
+            document.getElementById( 'editSaveBtn'   ).addEventListener( 'click', commitEdit );
+            document.getElementById( 'fBday'         ).addEventListener( 'input', refreshBdayDisplay );
+
+            document.getElementById( 'dedupBtn'        ).addEventListener( 'click', openDedupSheet );
+            wireTopMenu();
+            document.getElementById( 'dedupCloseBtn'   ).addEventListener( 'click', () => closeBackdrop( 'dedupBackdrop' ) );
+            document.getElementById( 'mergeCloseBtn'   ).addEventListener( 'click', () => closeBackdrop( 'mergeBackdrop' ) );
+            document.getElementById( 'mergeConfirmBtn' ).addEventListener( 'click', doMerge );
+
+            document.getElementById( 'moreToggle' ).addEventListener( 'click', function()
+            {
+                setMoreOpen( ! this.classList.contains( 'open' ) );
+            });
+
+            document.querySelectorAll( 'button[data-add]' ).forEach( function( btn )
+            {
+                btn.addEventListener( 'click', () => addMultiRow( btn.dataset.add, {} ) );
+            });
+
+            document.addEventListener( 'keydown', function( e )
+            {
+                if( e.key !== 'Escape' ) return;
+
+                // Close the top-most open sheet only. Detail floats above the rest (z-index).
+                const order = [ 'detailBackdrop', 'mergeBackdrop', 'editBackdrop', 'dedupBackdrop' ];
+
+                for( const id of order )
+                {
+                    if( document.getElementById( id ).classList.contains( 'open' ) )
+                    {
+                        closeBackdrop( id );
+                        return;
+                    }
+                }
+
+                setSelectMode( false );   // no sheet open: Escape leaves pick-several mode
+            });
+        }
+
+        function openBackdrop( id )  { NayiveUI.open( id ); }     // impl in shared/ui.js
+        function closeBackdrop( id ) { NayiveUI.close( id ); }
+
+        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
+        // shared/theme.css); these two names are kept only because the app calls them a lot.
+        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
+        // does not exist yet while this script is parsed.
+        function flashToast( msg ) { NayiveUI.toast( msg ); }
+        function flashUndo( msg )  { NayiveUI.undoToast( msg, undoMerge ); }
+
+    </script>
+</body>
+</html>

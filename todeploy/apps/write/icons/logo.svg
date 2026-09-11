@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor">
+  <!-- Write — fountain pen behind an ink bottle. Colour follows `currentColor`. -->
+  <mask id="writeNibCut" maskContentUnits="userSpaceOnUse">
+    <rect width="512" height="512" fill="#fff"/>
+    <g transform="translate(45 465) rotate(-48)">
+      <circle cx="75" cy="0" r="7.5" fill="#000"/>
+      <line x1="0" y1="0" x2="67.5" y2="0" stroke="#000" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+  </mask>
+
+  <g mask="url(#writeNibCut)">
+    <g transform="translate(45 465) rotate(-48)">
+      <path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"/>
+      <rect x="132" y="-26" width="350" height="52"/>
+      <path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"/>
+    </g>
+  </g>
+
+  <rect x="262" y="220" width="176" height="50" rx="12"/>
+  <path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"
+        d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"/>
+  <path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"/>
+</svg>

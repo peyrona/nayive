@@ -1,0 +1,5 @@
+# deploy.local.sh - the private VPS address deploy.sh uses.
+# Copy this file to deploy.local.sh and fill it in. Git ignores deploy.local.sh.
+REMOTE_USER="your-user"
+REMOTE_HOST="your.vps.address"
+REMOTE_PORT="22"                          # VPS SSH port

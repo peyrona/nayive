@@ -1,0 +1,762 @@
+<!-- This is an admin/ops tool, not a user-facing app - it will never be
+     translated into any language other than English. -->
+<!-- admin.html - Nayive admin panel: create/rename/edit/delete users, the admin
+     account, and the external-storage rules. Open with no login only until an
+     admin account exists; after that it asks you to sign in as that admin.
+     Talks to /api/admin.
+     NO timezone here: a timezone belongs to a person, so each account picks its
+     own in the launcher's "Mi cuenta" dialog (/api/tz). -->
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="shared/i18n.js"></script>
+    <title>Nayive · Admin</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="shared/theme.js" defer></script>
+    <script src="shared/ui.js" defer></script>
+
+    <style>
+        /* Base reset + fonts from ../shared/app.css. Standalone admin panel -
+           keeps its own single-column layout and uppercase entry-form labels. */
+        html, body { min-height: 100%; }
+        body
+        {
+            font-size: 15px; line-height: 1.5;
+            padding: 24px 16px 60px;
+        }
+        .wrap { max-width: 720px; margin: 0 auto; }
+
+        .brand
+        {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1.3rem; font-weight: 700; margin: 4px 0 22px;
+        }
+        .brand > svg { width: 26px; height: 26px; color: var(--accent); flex: 0 0 auto; }
+        /* the one page-wide Save + the Back button live at the right of the title */
+        .brand-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+        section
+        {
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: var(--radius-l); padding: 20px 20px 22px; margin-bottom: 20px;
+            box-shadow: var(--elev-card);
+        }
+        h2 { font-size: 1rem; margin: 0 0 14px; letter-spacing: 0.02em; }
+        /* a card heading with an action button next to it (Users "+") */
+        .sec-title { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+        .sec-title h2 { margin: 0; }
+
+        .banner
+        {
+            background: color-mix( in srgb, var(--accent) 16%, transparent );
+            border: 1px solid color-mix( in srgb, var(--accent) 40%, transparent );
+            color: var(--text); border-radius: var(--radius-s);
+            padding: 10px 12px; margin: 0 0 16px; font-size: 0.9rem;
+        }
+
+        label
+        {
+            display: block; font-size: 0.72rem; color: var(--text-dim);
+            margin: 0 0 4px 2px; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        /* Look + focus from app.css (FORM FIELD) - the same text field as every
+           other app. Only the full-row width is local. */
+        input, select { width: 100%; }
+        .row2 { display: flex; gap: 12px; }
+        .row2 > * { flex: 1; }
+
+        select:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* sub-section header inside a card (e.g. "External Storage") */
+        .subhead
+        {
+            display: flex; align-items: center;
+            font-size: 0.9rem; font-weight: 600; letter-spacing: 0.02em;
+            margin: 22px 0 14px; padding-top: 16px;
+            border-top: 1px solid var(--line);
+        }
+        .ext-size { display: flex; align-items: center; gap: 8px; }
+        .ext-size input { width: 90px; text-align: right; }
+        .ext-size span { font-size: 0.9rem; color: var(--text-dim); }
+
+        /* Action buttons use the shared .btn convention (round icon buttons,
+           filled in by shared/ui.js); .pw-eye keeps its own bare look. Anything
+           else falls back to this plain pill. */
+        button
+        {
+            font: inherit; cursor: pointer; border: none; border-radius: var(--radius-s);
+            padding: 9px 16px; color: var(--on-accent); background: var(--accent);
+        }
+
+        /* password field with an inline show/hide eye (same as login.html) */
+        .pw-wrap { position: relative; }
+        .pw-wrap input { padding-right: 42px; }
+        .pw-eye
+        {
+            position: absolute; top: 0; right: 0; height: 100%;
+            width: 38px; display: flex; align-items: center; justify-content: center;
+            border: none; background: none; padding: 0; margin: 0; cursor: pointer;
+            color: var(--text-dim); border-radius: 0;
+        }
+        .pw-eye:hover { color: var(--text); filter: none; }
+        .pw-eye svg { width: 17px; height: 17px; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th
+        {
+            text-align: left; font-size: 0.7rem; text-transform: uppercase;
+            letter-spacing: 0.04em; color: var(--text-dim);
+            padding: 0 8px 8px; border-bottom: 1px solid var(--line);
+        }
+        td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+        .col-user  { font-weight: 600; white-space: nowrap; }
+        .col-user input { width: 100%; min-width: 96px; font-weight: 600; }
+        .col-quota { width: 92px; }
+        .col-quota input { width: 72px; text-align: right; }
+        .col-photo { width: 108px; }
+        .col-photo input { width: 88px; text-align: right; }
+        .col-use   { width: 118px; color: var(--text-dim); font-size: 0.86rem; white-space: nowrap; }
+        .col-use .pct { display: block; font-size: 0.78rem; }
+        .col-use .over { color: var(--danger); }
+        .col-pass  { width: 170px; }
+        .col-act   { width: 1%; white-space: nowrap; }
+        .row-acts  { display: flex; gap: 6px; justify-content: flex-end; }
+
+        .msg  { font-size: 0.9rem; min-height: 1.3em; margin: 4px 2px 0; }
+        .msg.ok   { color: var(--ok, var(--accent) ); }
+        .msg.err  { color: var(--danger); }
+        .msg:empty { min-height: 0; margin: 0; }
+        .hint { font-size: 0.82rem; color: var(--text-dim); margin: 12px 2px 0; }
+
+        a.link { color: var(--link, var(--accent) ); }
+        .hide { display: none !important; }
+        @media ( max-width: 560px )
+        {
+            .col-pass, thead .col-pass { display: none; }
+            .row2 { flex-direction: column; gap: 0; }
+            .brand { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+        </svg>
+        <span>Nayive · Admin</span>
+        <div class="brand-acts">
+            <button id="saveAll" data-act="primary" title="Save changes"></button>
+            <button id="backBtn" data-act="secondary:back" title="Back to apps"></button>
+        </div>
+    </div>
+
+    <p class="msg" id="saveMsg"></p>
+    <p class="msg err" id="fatal"></p>
+
+    <!-- ADMIN ACCOUNT -------------------------------------------------------- -->
+    <section id="adminSec" class="hide">
+        <h2>Admin account</h2>
+        <p class="banner" id="firstRunBanner">
+            First run: create the admin account. After saving it you'll be
+            asked to sign in with it.
+        </p>
+        <div class="row2">
+            <div class="field">
+                <label for="adminName">Username</label>
+                <input id="adminName" type="text" autocapitalize="none" autocorrect="off" spellcheck="false">
+            </div>
+            <div class="field">
+                <label for="adminPass">Password</label>
+                <div class="pw-wrap">
+                    <input id="adminPass" type="password" autocomplete="new-password"
+                           placeholder="leave blank = don't change">
+                    <button type="button" class="pw-eye" id="adminPwEye" aria-label="Show password"></button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SERVER SETTINGS ------------------------------------------------------ -->
+    <section id="serverSec" class="hide">
+        <h2>Server settings</h2>
+        <h3 class="subhead">External Storage<button class="info-dot" data-info="Servers with a big local disk are expensive. It is often cheaper to rent a smaller server and add cheap bulk storage separately, mounted into the filesystem.&#10;&#10;When a mount path is set, big files (movies, music, disk images...) are written to that external storage instead of the server's own disk.&#10;&#10;A file goes to external storage when its extension is in the &quot;always send&quot; list, or - if it is in neither list - when it is at least the size below. Extensions in the &quot;never send&quot; list always stay on the server.&#10;&#10;Leave &quot;Mounted at&quot; empty to keep every file on the server."></button></h3>
+
+        <div class="field">
+            <label for="extMount">Mounted at</label>
+            <input id="extMount" type="text" placeholder="/mnt/rented-storage"
+                   autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="field">
+            <label for="extAlways">File types to always send</label>
+            <input id="extAlways" type="text" placeholder=".mp3, .mov, .mkv, .iso">
+        </div>
+        <div class="field">
+            <label for="extNever">File types to never send</label>
+            <input id="extNever" type="text" placeholder=".docx, .xlsx, .odt">
+        </div>
+        <div class="field">
+            <label for="extMinMB">Files not listed above &mdash; always send when this size or larger</label>
+            <div class="ext-size">
+                <input id="extMinMB" type="number" min="0" step="1" placeholder="3">
+                <span>MB or more</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- USERS ------------------------------------------------------------- -->
+    <section id="usersSec" class="hide">
+        <div class="sec-title">
+            <h2>Users</h2>
+            <button id="addUser" data-act="secondary:plus" title="Add a user"></button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-user">Username</th>
+                    <th class="col-quota">Quota&nbsp;GiB</th>
+                    <th class="col-photo">Photo&nbsp;px<button class="info-dot" data-info="Photos are the biggest thing most people store, and a phone photo is far larger than any screen can show.&#10;&#10;Give a user a number here and their browser shrinks every photo they upload so that neither side is longer than that many pixels - the shape is kept, nothing is squashed - and saves it as JPEG. 2048 is a good value: still sharp on any screen or TV, and about ten times smaller than the original.&#10;&#10;When the original is a JPEG (what every phone camera makes), its date and GPS position are carried over, so the map and the timeline keep working.&#10;&#10;Leave it empty to store the photos exactly as they come out of the camera."></button></th>
+                    <th class="col-use">Usage</th>
+                    <th class="col-pass">Password</th>
+                    <th class="col-act"></th>
+                </tr>
+            </thead>
+            <tbody id="userRows"></tbody>
+            <!-- rows added by the "+" button next to the Users heading; kept in
+                 their own tbody so re-rendering the saved users never wipes them -->
+            <tbody id="newRows"></tbody>
+        </table>
+        <p class="hint">The <strong>+</strong> button next to the heading adds an empty row for a new user;
+           its (&times;) drops the row again.
+           Edits and new users are saved with the <strong>Save</strong> button at the top.
+           Changing a username renames the account: everything the person owns travels with it, but
+           they are signed out and must sign in again with the new name.
+           The trash icon deletes a user (after a confirmation) along with all their data.</p>
+    </section>
+</div>
+
+<script>
+( function ()
+{
+    var $ = function ( id ) { return document.getElementById( id ); };
+
+    function api( body )
+    {
+        var opt = { method: 'GET', credentials: 'same-origin' };
+        if ( body )
+        {
+            opt.method  = 'POST';
+            opt.headers = { 'Content-Type': 'application/json' };
+            opt.body    = JSON.stringify( body );
+        }
+        return fetch( '/api/admin', opt ).then( function ( r )
+        {
+            // The admin panel does not load shared/gum-api.js, so raise the
+            // shared "tu sesión ha caducado" bar here instead - otherwise a form
+            // submitted after the session died just fails silently. load()'s own
+            // 401 branch redirects, so the bar is only ever seen mid-session.
+            if ( r.status === 401 && window.NayiveUI && NayiveUI.sessionExpired )
+                NayiveUI.sessionExpired();
+            return r;
+        } );
+    }
+
+    function humanSize( n )
+    {
+        if ( !n ) return '0 B';
+        var u = [ 'B', 'KB', 'MB', 'GB', 'TB' ], i = 0;
+        while ( n >= 1024 && i < u.length - 1 ) { n /= 1024; i++; }
+        return ( n < 10 && i > 0 ? n.toFixed( 1 ) : Math.round( n ) ) + ' ' + u[ i ];
+    }
+
+    var GIB = 1024 * 1024 * 1024;
+
+    // Fill a "Uso" cell: bytes used, and - when the user has a quota - how much
+    // of it that is. `quota` comes from the server as a number of GiB.
+    function fillUsage( td, usage, quota )
+    {
+        usage = usage || 0;
+        var q = ( quota === null || quota === undefined || quota === '' ) ? null : Number( quota );
+        if ( !q )
+        {
+            td.textContent = humanSize( usage );
+            return;
+        }
+        var qBytes = q * GIB;
+        var pct    = usage / qBytes * 100;
+        var over   = usage > qBytes;
+        td.innerHTML = humanSize( usage ) + ' / ' + humanSize( qBytes ) +
+            '<span class="pct' + ( over ? ' over' : '' ) + '">' +
+            ( pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed( pct < 10 ? 1 : 0 ) ) + '%</span>';
+    }
+
+    function flash( el, text, kind )
+    {
+        el.textContent = text || '';
+        el.className = 'msg' + ( kind ? ' ' + kind : '' );
+        if ( text && kind === 'ok' )
+            setTimeout( function () { if ( el.textContent === text ) el.textContent = ''; }, 3000 );
+    }
+
+    async function errText( res )
+    {
+        var d = await res.json().catch( function () { return {}; } );
+        return d.error || ( 'Error ' + res.status );
+    }
+
+    // -- load ---------------------------------------------------------------
+    var CONFIGURED = false;
+
+    // When the server has never been given external-storage rules, we pre-fill
+    // the two lists with sensible defaults so the admin starts from something
+    // instead of a blank box. "always send" = the big bulky media (photos,
+    // music, movies, disk images, archives); "never send" = the small stuff
+    // that must stay fast on the server (documents, text, calendar/contacts).
+    // These only populate the input fields - nothing is saved until the admin
+    // presses Save, so they can still edit or clear them first.
+    var EXT_DEFAULTS = {
+        always: [
+            // photos
+            '.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif',
+            '.tif', '.tiff', '.bmp', '.raw', '.cr2', '.nef', '.arw', '.dng',
+            // music
+            '.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.oga', '.opus',
+            '.wma', '.aiff', '.alac',
+            // movies
+            '.mp4', '.mov', '.mkv', '.avi', '.wmv', '.flv', '.webm', '.m4v',
+            '.mpg', '.mpeg', '.3gp', '.ts',
+            // disk images and archives
+            '.iso', '.img', '.dmg', '.zip', '.tar', '.gz', '.tgz', '.7z', '.rar'
+        ],
+        never: [
+            '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.odt', '.ods', '.odp', '.rtf', '.txt', '.md', '.csv',
+            '.pdf', '.json', '.ics', '.vcf', '.html', '.css', '.js'
+        ]
+    };
+
+    async function load()
+    {
+        var res;
+        try { res = await api(); }
+        catch ( e ) { $( 'fatal' ).textContent = "Can't reach the server."; return; }
+
+        if ( res.status === 401 )
+        {
+            location.href = '/nayive/login.html?return=' + encodeURIComponent( '/nayive/admin.html' );
+            return;
+        }
+        if ( res.status === 403 )
+        {
+            $( 'fatal' ).className = 'banner';
+            $( 'fatal' ).innerHTML =
+                'This page is for the administrator only. You are currently ' +
+                'signed in with a regular account. To administer, sign out ' +
+                'and sign back in with the admin account.' +
+                '<span style="display:block;margin-top:12px"><a class="link" href="/api/logout">Sign out</a></span>';
+            return;
+        }
+        if ( !res.ok ) { $( 'fatal' ).textContent = await errText( res ); return; }
+
+        var data = await res.json();
+        CONFIGURED = !!data.configured;
+
+        $( 'adminSec' ).classList.remove( 'hide' );
+        $( 'firstRunBanner' ).classList.toggle( 'hide', CONFIGURED );
+        $( 'adminName' ).value = ( data.admin && data.admin.name ) || '';
+        $( 'adminPass' ).placeholder = CONFIGURED ? "leave blank = don't change"
+                                                  : 'new password';
+
+        if ( CONFIGURED )
+        {
+            $( 'serverSec' ).classList.remove( 'hide' );
+
+            var ext = data.external_storage || {};
+            var always = ext.always_ext || [];
+            var never  = ext.never_ext  || [];
+            if ( ! always.length ) always = EXT_DEFAULTS.always;
+            if ( ! never.length  ) never  = EXT_DEFAULTS.never;
+            $( 'extMount'  ).value = ext.mount || '';
+            $( 'extAlways' ).value = always.join( ', ' );
+            $( 'extNever'  ).value = never.join( ', ' );
+            $( 'extMinMB'  ).value = ext.min_mb ? String( ext.min_mb ) : '';
+            syncExtEnabled();
+
+            $( 'usersSec' ).classList.remove( 'hide' );
+            renderUsers( data.users || [] );
+        }
+    }
+
+    // -- admin account ----------------------------------------------------
+    // Inline show / hide eye on the password field (same as login.html).
+    ( function ()
+    {
+        var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+        var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
+        var eye = $( 'adminPwEye' ), pw = $( 'adminPass' );
+        eye.innerHTML = EYE;
+        eye.addEventListener( 'click', function ()
+        {
+            var show = pw.type === 'password';
+            pw.type = show ? 'text' : 'password';
+            eye.innerHTML = show ? EYE_OFF : EYE;
+            eye.setAttribute( 'aria-label', show ? 'Hide password' : 'Show password' );
+            pw.focus();
+        } );
+    } )();
+
+    // -- "Back to apps" (top-right, after Save) ------------------------
+    $( 'backBtn' ).addEventListener( 'click', function () { location.href = '/nayive/'; } );
+
+    // -- the one Save button (top-right) ------------------------------
+    // Commits, in order: the admin account, then - once an admin exists - the
+    // external-storage rules, every changed user row and the "new user" row.
+    // Deleting a user stays immediate (its trash icon).
+    $( 'saveAll' ).addEventListener( 'click', saveAll );
+
+    async function saveAll()
+    {
+        var btn = $( 'saveAll' );
+        btn.disabled = true;
+        flash( $( 'saveMsg' ), 'Saving…', '' );
+        var errs = [];
+
+        // 1. admin account ---------------------------------------------
+        var aName = $( 'adminName' ).value.trim();
+        var aPass = $( 'adminPass' ).value;
+        if ( !aName )
+            errs.push( 'admin username is empty' );
+        else if ( !CONFIGURED && !aPass )
+            errs.push( 'admin password is empty' );
+        else
+        {
+            var action = CONFIGURED ? 'set-admin' : 'setup';
+            var r = await api( { action: action, name: aName, password: aPass } );
+            if ( !r.ok )
+                errs.push( 'admin: ' + await errText( r ) );
+            else if ( action === 'setup' )
+            {
+                // First admin created - we now hold an admin session. Reload
+                // into full mode (later visitors get the login page).
+                flash( $( 'saveMsg' ), 'Admin created.', 'ok' );
+                setTimeout( function () { location.reload(); }, 600 );
+                return;
+            }
+            else
+                $( 'adminPass' ).value = '';
+        }
+
+        if ( CONFIGURED )
+        {
+            // 2. external storage -----------------------------------
+            var mb   = parseFloat( $( 'extMinMB' ).value );
+            var rExt = await api( {
+                action:     'set-extstore',
+                mount:      $( 'extMount' ).value.trim(),
+                always_ext: parseExts( $( 'extAlways' ).value ),
+                never_ext:  parseExts( $( 'extNever' ).value ),
+                min_mb:     ( isFinite( mb ) && mb > 0 ) ? mb : 0
+            } );
+            if ( !rExt.ok )
+                errs.push( 'external storage: ' + await errText( rExt ) );
+            else
+            {
+                var ext = ( await rExt.json().catch( function () { return {}; } ) ).external_storage || {};
+                $( 'extAlways' ).value = ( ext.always_ext || [] ).join( ', ' );
+                $( 'extNever'  ).value = ( ext.never_ext  || [] ).join( ', ' );
+                $( 'extMinMB'  ).value = ext.min_mb ? String( ext.min_mb ) : '';
+            }
+
+            // 3. changed user rows --------------------------------
+            for ( var i = 0; i < USER_CTLS.length; i++ )
+            {
+                var c   = USER_CTLS[ i ];
+                var nn  = c.nameIn.value.trim();
+                if ( nn === c.name &&
+                     String( c.quota.value ).trim() === c.orig &&
+                     String( c.photo.value ).trim() === c.origPhoto && !c.pass.value )
+                    continue;                        // nothing touched on this row
+
+                // A rename goes first and on its own: the other fields are then
+                // sent under the new name. If it fails we say so and carry on
+                // with the old name, so the quota / password edits still land.
+                if ( nn !== c.name )
+                {
+                    if ( !nn )
+                        errs.push( c.name + ': username is empty' );
+                    else
+                    {
+                        var rr = await api( { action: 'rename-user',
+                                              name: c.name, new_name: nn } );
+                        if ( rr.ok ) c.name = nn;
+                        else errs.push( c.name + ' -> ' + nn + ': ' + await errText( rr ) );
+                    }
+                    c.nameIn.value = c.name;
+                }
+
+                var ub = { action: 'update-user', name: c.name, quota: c.quota.value,
+                           photo_max: c.photo.value };
+                if ( c.pass.value ) ub.password = c.pass.value;
+                var ru = await api( ub );
+                if ( !ru.ok ) errs.push( c.name + ': ' + await errText( ru ) );
+            }
+
+            // 4. the rows added with "+" ---------------------------
+            // A copy of the list: a created row is taken out of NEW_CTLS as we go.
+            var pending = NEW_CTLS.slice();
+            for ( var k = 0; k < pending.length; k++ )
+            {
+                var nc    = pending[ k ];
+                var nName = nc.nameIn.value.trim();
+                var nPass = nc.pass.value;
+                if ( !nName && !nPass ) continue;      // untouched row - ignore it
+                if ( !nName ) { errs.push( 'new user needs a name' ); continue; }
+
+                // A blank password is fine: the user picks one on first sign-in.
+                var rn = await api( {
+                    action: 'create-user', name: nName, password: nPass,
+                    quota:     nc.quota.value,
+                    photo_max: nc.photo.value
+                } );
+                if ( !rn.ok ) errs.push( 'new user "' + nName + '": ' + await errText( rn ) );
+                else dropNewRow( nc );                 // saved - the refresh lists it
+            }
+        }
+
+        btn.disabled = false;
+        if ( errs.length )
+            flash( $( 'saveMsg' ), errs.join( ' · ' ), 'err' );
+        else
+        {
+            flash( $( 'saveMsg' ), 'Saved.', 'ok' );
+            if ( CONFIGURED ) refresh();
+        }
+    }
+
+    // -- external storage -----------------------------------------------
+    // No mount path -> nothing is offloaded, so the rule fields are dead.
+    function syncExtEnabled()
+    {
+        var off = !$( 'extMount' ).value.trim();
+        [ 'extAlways', 'extNever', 'extMinMB' ].forEach( function ( id )
+        {
+            $( id ).disabled = off;
+        } );
+    }
+    $( 'extMount' ).addEventListener( 'input', syncExtEnabled );
+
+    // ".MP3 ; mov , mkv" -> [".mp3", ".mov", ".mkv"]  (deduped, lower-case)
+    function parseExts( str )
+    {
+        var seen = {}, out = [];
+        ( str || '' ).split( /[\s,;]+/ ).forEach( function ( t )
+        {
+            t = t.trim().toLowerCase();
+            if ( ! t ) return;
+            if ( t.charAt( 0 ) !== '.' ) t = '.' + t;
+            if ( ! seen[ t ] ) { seen[ t ] = 1; out.push( t ); }
+        } );
+        return out;
+    }
+
+    // -- users ----------------------------------------------------------
+    // renderUsers() records one control-set per row in USER_CTLS; saveAll()
+    // walks that list and sends a "rename-user" for every row whose username
+    // changed, then an "update-user" for every row whose quota, photo limit or
+    // password box was touched. `.name` is the name the SERVER knows the row
+    // by, and saveAll() updates it after a successful rename. There is no
+    // per-row Save button any more - only the page-wide one at the top.
+    var USER_CTLS = [];
+
+    // Rows created by the "+" button and not saved yet. Same control-set shape as
+    // USER_CTLS, plus `tr` so a row can be taken off the page again.
+    var NEW_CTLS = [];
+
+    function dropNewRow( ctl )
+    {
+        var i = NEW_CTLS.indexOf( ctl );
+        if ( i >= 0 ) NEW_CTLS.splice( i, 1 );
+        if ( ctl.tr.parentNode ) ctl.tr.parentNode.removeChild( ctl.tr );
+    }
+
+    // "+" next to the Users heading: one empty row per click, saved by the
+    // page-wide Save button. Its (x) throws the row away again.
+    function addNewRow()
+    {
+        var tr = document.createElement( 'tr' );
+
+        var tdName = document.createElement( 'td' );
+        tdName.className = 'col-user';
+        var n = document.createElement( 'input' );
+        n.type = 'text'; n.placeholder = 'new';
+        n.autocapitalize = 'none'; n.spellcheck = false;
+        n.setAttribute( 'autocorrect', 'off' );
+        tdName.appendChild( n );
+
+        var tdQ = document.createElement( 'td' );
+        tdQ.className = 'col-quota';
+        var q = document.createElement( 'input' );
+        q.type = 'number'; q.min = '0'; q.step = '0.5'; q.placeholder = '—';
+        tdQ.appendChild( q );
+
+        var tdM = document.createElement( 'td' );
+        tdM.className = 'col-photo';
+        var m = document.createElement( 'input' );
+        m.type = 'number'; m.min = '200'; m.max = '20000'; m.step = '1'; m.placeholder = '2048';
+        m.title = 'Longest side, in pixels. Empty = keep the originals.';
+        tdM.appendChild( m );
+
+        var tdU = document.createElement( 'td' );
+        tdU.className = 'col-use';
+        tdU.textContent = '—';
+
+        var tdP = document.createElement( 'td' );
+        tdP.className = 'col-pass';
+        var p = document.createElement( 'input' );
+        p.type = 'text'; p.placeholder = 'blank = user sets it';
+        tdP.appendChild( p );
+
+        var tdA = document.createElement( 'td' );
+        tdA.className = 'col-act';
+        var acts = document.createElement( 'div' );
+        acts.className = 'row-acts';
+        var drop = document.createElement( 'button' );
+        drop.setAttribute( 'data-act', 'close' );
+        drop.title = 'Discard this row';
+        acts.appendChild( drop );
+        tdA.appendChild( acts );
+        if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
+
+        tr.appendChild( tdName ); tr.appendChild( tdQ ); tr.appendChild( tdM );
+        tr.appendChild( tdU ); tr.appendChild( tdP ); tr.appendChild( tdA );
+        $( 'newRows' ).appendChild( tr );
+
+        var ctl = { tr: tr, nameIn: n, quota: q, photo: m, pass: p };
+        NEW_CTLS.push( ctl );
+        drop.addEventListener( 'click', function () { dropNewRow( ctl ); } );
+
+        n.focus();
+        if ( tr.scrollIntoView ) tr.scrollIntoView( { block: 'nearest' } );
+    }
+    $( 'addUser' ).addEventListener( 'click', addNewRow );
+
+    function renderUsers( users )
+    {
+        var tb = $( 'userRows' );
+        tb.innerHTML = '';
+        USER_CTLS = [];
+        if ( !users.length )
+        {
+            tb.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim)">No users yet.</td></tr>';
+            return;
+        }
+        users.forEach( function ( u )
+        {
+            var tr = document.createElement( 'tr' );
+
+            var tdName = document.createElement( 'td' );
+            tdName.className = 'col-user';
+            var n = document.createElement( 'input' );
+            n.type = 'text';
+            n.value = u.name;
+            n.autocapitalize = 'none'; n.spellcheck = false;
+            n.setAttribute( 'autocorrect', 'off' );   // not a real IDL property
+            n.title = 'Renaming signs this user out; they sign back in with the new name.';
+            tdName.appendChild( n );
+
+            var tdQ = document.createElement( 'td' );
+            tdQ.className = 'col-quota';
+            var q = document.createElement( 'input' );
+            q.type = 'number'; q.min = '0'; q.step = '0.5'; q.placeholder = '—';
+            q.value = ( u.quota === null || u.quota === undefined ) ? '' : u.quota;
+            tdQ.appendChild( q );
+
+            var tdM = document.createElement( 'td' );
+            tdM.className = 'col-photo';
+            var m = document.createElement( 'input' );
+            m.type = 'number'; m.min = '200'; m.max = '20000'; m.step = '1'; m.placeholder = '—';
+            m.title = 'Longest side, in pixels. Empty = keep the originals.';
+            m.value = ( u.photo_max === null || u.photo_max === undefined ) ? '' : u.photo_max;
+            tdM.appendChild( m );
+
+            var tdU = document.createElement( 'td' );
+            tdU.className = 'col-use';
+            fillUsage( tdU, u.usage, u.quota );
+
+            var tdP = document.createElement( 'td' );
+            tdP.className = 'col-pass';
+            var p = document.createElement( 'input' );
+            p.type = 'text';
+            p.placeholder = u.has_password ? 'new password' : 'not set — user will pick it';
+            tdP.appendChild( p );
+
+            var tdA = document.createElement( 'td' );
+            tdA.className = 'col-act';
+            var acts = document.createElement( 'div' );
+            acts.className = 'row-acts';
+            var del = document.createElement( 'button' );
+            del.setAttribute( 'data-act', 'danger' );
+            del.title = 'Delete';
+            acts.appendChild( del );
+            tdA.appendChild( acts );
+            if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
+
+            // Recorded before the delete handler, so that handler can read
+            // ctl.name - the name the server currently knows this row by, which
+            // a rename in the same Save changes.
+            var ctl = { name: u.name, nameIn: n, quota: q, photo: m, pass: p,
+                        orig: String( q.value ).trim(),
+                        origPhoto: String( m.value ).trim() };
+            USER_CTLS.push( ctl );
+
+            del.addEventListener( 'click', async function ()
+            {
+                if ( ! await NayiveUI.confirm( {
+                    title: 'Delete user',
+                    body: 'Delete "' + ctl.name + '"?\n\n'
+                        + 'This permanently removes the account and EVERYTHING tied to it: '
+                        + 'all their files and folders, app data, calendar, contacts, photos, '
+                        + 'trash and settings.\n\n'
+                        + 'There is no way back.',
+                    confirm: 'Delete', danger: true } ) ) return;
+                del.disabled = true;
+                var res = await api( { action: 'delete-user', name: ctl.name } );
+                if ( !res.ok ) { del.disabled = false; flash( $( 'saveMsg' ), await errText( res ), 'err' ); return; }
+                flash( $( 'saveMsg' ), ctl.name + ' deleted.', 'ok' );
+                refresh();
+            } );
+
+            tr.appendChild( tdName ); tr.appendChild( tdQ ); tr.appendChild( tdM );
+            tr.appendChild( tdU ); tr.appendChild( tdP ); tr.appendChild( tdA );
+            tb.appendChild( tr );
+        } );
+    }
+
+    async function refresh()
+    {
+        var res = await api();
+        if ( !res.ok ) return;
+        var data = await res.json();
+        renderUsers( data.users || [] );
+    }
+
+    // Wait for shared/ui.js (a deferred script) so NayiveUI.applySheetButtons is
+    // there when we build the user rows.
+    if ( document.readyState === 'loading' )
+        NayiveI18n.ready.then( load );
+    else
+        load();
+} )();
+</script>
+</body>
+</html>

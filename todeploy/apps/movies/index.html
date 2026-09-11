@@ -1,0 +1,1473 @@
+<!-- index.html - "Movies": browse and play the video files in one Drive folder
+     (and its subfolders). Opened as  ?dir=<folder path>  from Drive's "Abrir
+     con" dialog (a double-clicked file no app claims) - Drive has no Movies
+     button any more.
+
+     Opened from the launcher there is no ?dir=: the page uses the folder it
+     remembers in data/movies/config.json, and the first time (no config yet)
+     asks for it with NayiveUI.pickFolder and saves the answer. The crumb in the
+     header re-opens that picker to change folder. Only if the visitor cancels
+     the picker (or isn't signed in) does the "open me from Drive" hint show.
+
+     Real folders only: the file list comes from GumApi.listDirRecursive(dir)
+     (GET /api/files?dir=&recursive=1 - the whole subtree in one call), each
+     film plays straight from GumApi.fileUrl(path) through a real <video>
+     element (the server streams it with Range support - the same endpoint
+     Drive's own built-in A/V player uses). There is no reliable in-browser way
+     to read a title / year out of an MKV or MP4 container with a small Range
+     read (the way Music does ID3 for .mp3), so title + year come from the file
+     NAME ("Title (2021).mkv", "Title.2021.1080p...") and the GENRE from the
+     folder the file sits in. A sibling image ("<name>.jpg", or poster/folder/
+     cover.*) is used as the poster; a sibling "<name>.txt" as a short synopsis;
+     a sibling "<name>.vtt" / "<name>.srt" as subtitles (SRT is converted to
+     WebVTT in the browser so a plain <track> can show it).
+
+     For films with no sibling poster, the "Buscar carátulas" button
+     (#postersBtn) fills the gaps from The Movie Database - one search per film,
+     cached in data/movies/posters.json so it never repeats, image downloaded
+     into data/movies/posters/ (or the remote URL kept if the fetch is
+     CORS-blocked). Needs a free TMDB API key, asked for once. This cache is
+     keyed by title + year, not by path, so moving or re-encoding a film keeps
+     its poster with no re-lookup; deleting a film just leaves an unused entry
+     and image behind (harmless - a same title+year film would reuse them).
+
+     "Continuar viendo" resume points and the "vista" flag live in
+     data/movies/progress.json, keyed by file path (a real file's path is
+     already a stable id).
+
+     Known gaps (fine for a first real version): no real container metadata, so
+     everything is name-derived; .mkv often will not play (browser codec
+     support), same as Drive's built-in player; only one subtitle track. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Movies</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='2' width='20' height='20' rx='2.18'/%3E%3Cline x1='7' y1='2' x2='7' y2='22'/%3E%3Cline x1='17' y1='2' x2='17' y2='22'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cline x1='2' y1='7' x2='7' y2='7'/%3E%3Cline x1='2' y1='17' x2='7' y2='17'/%3E%3Cline x1='17' y1='17' x2='22' y2='17'/%3E%3Cline x1='17' y1='7' x2='22' y2='7'/%3E%3C/svg%3E">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'movies',
+            title: 'Movies',
+            lead:  NayiveUI.t( 'movies.introLead' ),
+            buttons: [
+                { sel: '#crumb',        text: NayiveUI.t( 'movies.introFolder' ) },
+                { sel: '#searchInput',  text: NayiveUI.t( 'movies.introSearch' ) },
+                { sel: '#reloadBtn',   text: NayiveUI.t( 'movies.introRescan' ) },
+                { sel: '#filterMovies', name: NayiveUI.t( 'movies.introGroupName' ), text: NayiveUI.t( 'movies.introGroup' ) },
+                { sel: '#postersBtn',   text: NayiveUI.t( 'movies.introPosters' ) }
+            ]
+        } );
+    } );
+    </script>
+
+    <style>
+    /* ===================================================================
+     * MOVIES - per-app layout only. The chrome (header, .icon-btn, .field,
+     * .sheet, .btn, .toast) comes from shared/theme.css + app.css; this
+     * block holds the poster library, the movie detail, the video stage and
+     * the player bar - none of which exists anywhere else except, in spirit,
+     * in Music's own <style>.
+     * =================================================================*/
+    html, body { height: 100%; }
+
+    /* Elements below force their own `display` - [hidden]'s UA display:none
+       loses to that unless restated here (same pattern Music/Photos use). */
+    #mainRow[hidden], #noDirHint[hidden], #playerBar[hidden], #videoStage[hidden], #subsBtn[hidden] { display: none; }
+
+    /* .crumb, .bar-info, .tb-end and the .view-bar row come from shared/app.css
+       (folder-backed viewers), search field included. */
+
+    /* ---- main row: just the library (no queue pane) ------------------ */
+    .lib-pane   { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
+    /* The toolbar row is shared/app.css's .view-bar; it only re-states the
+       padding, so it stays flush with .lib-content's own indent. */
+    .view-bar   { padding-inline: 24px; }
+
+    .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 24px 30px; }
+    .lib-inner  { max-width: 1180px; }
+
+    /* continue-watching strip */
+    .strip-head { font-size: 0.82rem; font-weight: 700; color: var(--text); margin: 2px 0 10px; }
+    .continue-strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 22px; }
+    .continue-card  { flex: 0 0 auto; width: 172px; display: flex; flex-direction: column; gap: 8px;
+                      background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+    .continue-thumb { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: var(--radius-s);
+                      display: flex; align-items: center; justify-content: center;
+                      color: rgba(255,255,255,.30); overflow: hidden; background-size: cover; background-position: center; }
+    .continue-thumb > svg { width: 26px; height: 26px; }
+    .continue-thumb .resume { position: absolute; width: 36px; height: 36px; border-radius: 50%;
+                              background: color-mix(in srgb, #000 42%, transparent); color: #fff;
+                              display: flex; align-items: center; justify-content: center; }
+    .continue-thumb .resume svg { width: 16px; height: 16px; }
+    .continue-bar   { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, #000 45%, transparent); }
+    .continue-bar > span { display: block; height: 100%; background: var(--accent); }
+    .continue-title { font-size: 0.8rem; font-weight: 600; color: var(--text);
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .continue-sub   { font-size: 0.72rem; color: var(--text-dim); }
+
+    /* poster + genre grids */
+    .poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+    .poster-card { display: flex; flex-direction: column; padding: 0; overflow: hidden;
+                   background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+                   cursor: pointer; text-align: left; font: inherit; color: inherit;
+                   transition: border-color var(--tr-fast), background-color var(--tr-fast); }
+    .poster-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    .poster-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+    .poster-art  { position: relative; width: 100%; aspect-ratio: 2 / 3;
+                   display: flex; align-items: center; justify-content: center;
+                   color: rgba(255,255,255,.28); background-size: cover; background-position: center; }
+    .poster-art > svg { width: 34%; height: 34%; }
+    .poster-scrim{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                   background: color-mix(in srgb, #000 44%, transparent); opacity: 0; transition: opacity var(--tr-fast); }
+    .poster-card:hover .poster-scrim { opacity: 1; }
+    .poster-play { width: 42px; height: 42px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
+                   background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
+    .poster-play svg { width: 19px; height: 19px; }
+    .poster-seen { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%;
+                   background: color-mix(in srgb, var(--accent) 88%, #000); color: var(--on-accent);
+                   display: flex; align-items: center; justify-content: center; }
+    .poster-seen svg { width: 13px; height: 13px; }
+    .poster-bar  { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, #000 45%, transparent); }
+    .poster-bar > span { display: block; height: 100%; background: var(--accent); }
+    .poster-body { padding: 8px 10px 10px; }
+    .poster-title{ font-size: 0.84rem; font-weight: 600; color: var(--text);
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .poster-sub  { font-size: 0.74rem; color: var(--text-dim); margin-top: 1px; }
+
+    .genre-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .genre-card  { display: flex; flex-direction: column; gap: 10px; padding: 12px;
+                   background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+                   cursor: pointer; text-align: left; font: inherit; color: inherit;
+                   transition: border-color var(--tr-fast), background-color var(--tr-fast); }
+    .genre-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    .genre-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+    .genre-art   { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-s);
+                   display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
+    .genre-art svg { width: 26px; height: 26px; }
+    .genre-name  { font-size: 0.86rem; font-weight: 600; color: var(--text);
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .genre-meta  { font-size: 0.76rem; color: var(--text-dim); }
+
+    /* The folder tree, the scope chip and the empty hint are the shared MEDIA
+       VIEWER block in shared/app.css; only the bar's own margin is Movies'. */
+    .scope-bar  { display: flex; align-items: center; margin: 18px 0 14px; }
+
+    /* movie detail */
+    .movie-detail  { display: flex; gap: 22px; padding: 20px; background: var(--card2);
+                     border: 1px solid var(--line); border-radius: var(--radius-l); max-width: 820px; }
+    .movie-poster  { flex: 0 0 auto; width: 160px; height: 240px; border-radius: var(--radius-s);
+                     display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.28);
+                     background-size: cover; background-position: center; }
+    .movie-poster svg { width: 46px; height: 46px; }
+    .movie-info    { flex: 1 1 auto; min-width: 0; }
+    .movie-info h3 { margin: 2px 0 8px; font-size: 1.3rem; font-weight: 700; color: var(--text); }
+    .movie-tags    { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 14px; }
+    .movie-tag     { padding: 3px 9px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-pill); }
+    .movie-tag.seen{ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+    .movie-synopsis{ margin: 0 0 20px; font-size: 0.9rem; line-height: 1.55; color: var(--text); max-width: 60ch; white-space: pre-wrap; }
+    .movie-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .btn-cta       { display: flex; align-items: center; gap: 8px; padding: 9px 18px; border: none; border-radius: var(--radius-pill);
+                     background: var(--accent); color: var(--on-accent); font: inherit; font-size: 0.86rem; font-weight: 600;
+                     cursor: pointer; transition: filter var(--tr-fast); }
+    .btn-cta:hover { filter: brightness(1.08); }
+    .btn-cta svg   { width: 16px; height: 16px; }
+    .btn-outline   { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1px solid var(--line);
+                     border-radius: var(--radius-pill); background: transparent; color: var(--text-dim);
+                     font: inherit; font-size: 0.86rem; cursor: pointer;
+                     transition: color var(--tr-fast), border-color var(--tr-fast), background-color var(--tr-fast); }
+    .btn-outline:hover     { color: var(--text); border-color: color-mix(in srgb, var(--text) 26%, transparent); }
+    .btn-outline.is-active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+                             background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .btn-outline svg { width: 16px; height: 16px; }
+
+    /* ---- video stage - covers the library while a film plays ---------- */
+    .video-stage { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #0C0D10; }
+    .stage-frame { flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .stage-frame video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+    .stage-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                     background: color-mix(in srgb, #000 22%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--tr-fast); }
+    .video-stage.is-paused .stage-overlay { opacity: 1; }
+    .stage-play  { width: 70px; height: 70px; border-radius: 50%; border: none; cursor: pointer; pointer-events: auto;
+                   background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
+    .stage-play svg { width: 30px; height: 30px; }
+    .stage-btn   { position: absolute; z-index: 2; width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+                   background: color-mix(in srgb, #000 45%, transparent); color: #fff; display: flex; align-items: center; justify-content: center; }
+    .stage-btn svg { width: 18px; height: 18px; }
+    .stage-collapse{ top: 14px; right: 14px; }
+    .stage-full    { top: 14px; right: 60px; }
+    .stage-badge   { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; align-items: center; gap: 7px;
+                     max-width: 60%; font-size: 0.74rem; color: rgba(244,244,246,.72); font-family: var(--font-mono);
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stage-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .video-stage:fullscreen .stage-badge, .video-stage:fullscreen .stage-btn { display: none; }
+
+    /* ---- player bar: the shared MEDIA VIEWER block (shared/app.css). What is
+       Movies' own: the 34x50 poster (and the column width it sets), the "skip
+       10 s" number drawn inside a transport button, the wider elapsed label
+       ("1:23:45" needs 54px where a song's "3:21" needs 34) and the extra
+       controls group to the right of the volume. ------------------------- */
+    .player-now { width: 280px; }
+    .player-art { width: 34px; height: 50px; border-radius: var(--radius-s); color: rgba(255,255,255,.3);
+                  background-size: cover; background-position: center; }
+    .player-art svg { width: 16px; height: 16px; }
+
+    .transport-btn { position: relative; }
+    .transport-btn .skip-n { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center;
+                             font-size: 0.5rem; font-weight: 700; font-family: var(--font-mono); }
+
+    .time-label     { width: 54px; }
+    .player-extra   { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .volume-block   { width: 120px; }
+
+    @media (max-width: 820px)
+    {
+        .search-toggle              { display: inline-flex; }
+        .tb-end .topbar-search      { display: none; }
+        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
+        .view-bar      { padding-inline: 16px; }
+        .lib-content   { padding: 16px 16px 26px; }
+        .volume-block  { display: none; }
+        /* Player bar in two rows: poster + title + transport + open-video, then the
+           seek bar full width underneath (one row pushed the video button off-screen). */
+        .player-bar    { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+        .player-now    { flex: 1 1 0; min-width: 0; width: auto; }
+        .seek-block    { flex: 1 0 100%; order: 5; min-width: 0; }
+        .time-label    { width: auto; }
+        .player-extra  { gap: 2px; }
+        .movie-detail  { flex-direction: column; gap: 16px; }
+        .movie-poster  { width: 120px; height: 180px; }
+    }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <header class="topbar">
+        <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+        <h1>Movies</h1>
+        <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <div class="topbar-actions">
+            <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
+        </div>
+        <span class="bar-info" id="subStrip"></span>
+    </header>
+
+    <div class="main-row" id="mainRow" hidden>
+        <div class="lib-pane">
+            <div class="view-bar">
+                <div class="tb-modes">
+                    <button class="icon-btn is-active" id="filterMovies" type="button" data-i18n-attr="title:movies.movies, aria-label:movies.movies">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+                    </button>
+                    <button class="icon-btn" id="filterGenres" type="button" data-i18n-attr="title:movies.genres, aria-label:movies.genres">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    </button>
+                    <button class="icon-btn" id="filterFolders" type="button" data-i18n-attr="title:movies.folders, aria-label:movies.folders">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
+                    </button>
+                </div>
+
+                <div class="tb-actions">
+                    <div class="tb-sep"></div>
+                    <button class="icon-btn" id="postersBtn" type="button" data-i18n-attr="title:movies.findPostersTip, aria-label:movies.findPosters">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21"/></svg>
+                    </button>
+                </div>
+
+                <div class="tb-end">
+                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
+                    <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </button>
+                    <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    </button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="lib-content" id="libContent"></div>
+
+            <div class="video-stage" id="videoStage" hidden>
+                <div class="stage-frame">
+                    <video id="stageVideo" playsinline></video>
+                    <div class="stage-overlay">
+                        <button class="stage-play" id="stagePlayBtn" data-i18n-attr="title:media.play, aria-label:media.play">
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>
+                        </button>
+                    </div>
+                    <span class="stage-badge" id="stageBadge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 21h8M12 17v4"/></svg>
+                        <span id="stagePath"></span>
+                    </span>
+                    <button class="stage-btn stage-full" id="stageFullBtn" data-i18n-attr="title:movies.fullscreen, aria-label:movies.fullscreen">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                    </button>
+                    <button class="stage-btn stage-collapse" id="stageCollapseBtn" data-i18n-attr="title:movies.collapse, aria-label:movies.collapse">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="empty-hint" id="noDirHint" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+        <p data-i18n="movies.needFolder"></p>
+        <a class="text-btn" href="../drive/index.html" data-i18n="ui.openDrive"></a>
+    </div>
+
+    <div class="player-bar" id="playerBar" hidden>
+        <div class="player-now">
+            <span class="player-art" id="playerArt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5"/><line x1="7.5" y1="2.5" x2="7.5" y2="21.5"/><line x1="16.5" y1="2.5" x2="16.5" y2="21.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/></svg>
+            </span>
+            <span class="player-meta">
+                <div class="player-title" id="playerTitle" data-i18n="movies.nothingPlaying"></div>
+                <div class="player-sub" id="playerSub" data-i18n="movies.pickMovie"></div>
+            </span>
+        </div>
+
+        <div class="transport">
+            <button class="transport-btn" id="back10Btn" disabled data-i18n-attr="title:movies.back10, aria-label:movies.back10">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4 3 12l8 8"/><path d="M3 12h13a5 5 0 0 1 0 10h-3"/></svg>
+                <span class="skip-n">10</span>
+            </button>
+            <button class="transport-btn play-btn" id="playBtn" data-i18n-attr="title:media.play, aria-label:media.play" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>
+            </button>
+            <button class="transport-btn" id="fwd30Btn" disabled data-i18n-attr="title:movies.fwd30, aria-label:movies.fwd30">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4l8 8-8 8"/><path d="M21 12H8a5 5 0 0 0 0 10h3"/></svg>
+                <span class="skip-n">30</span>
+            </button>
+        </div>
+
+        <div class="seek-block">
+            <span class="time-label" id="elapsedLabel">0:00</span>
+            <input type="range" id="seekRange" min="0" max="1" value="0" step="1" disabled>
+            <span class="time-label end" id="totalLabel">0:00</span>
+        </div>
+
+        <div class="player-extra">
+            <button class="icon-btn" id="subsBtn" hidden data-i18n-attr="title:movies.subtitles, aria-label:movies.subtitles">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="9" y2="12"/><line x1="12" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/><line x1="16" y1="16" x2="17" y2="16"/></svg>
+            </button>
+            <button class="icon-btn" id="stageBtn" disabled data-i18n-attr="title:movies.openVideo, aria-label:movies.openVideo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            </button>
+            <div class="volume-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+                <input type="range" id="volumeRange" min="0" max="100" value="90">
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+</div>
+
+<!-- TMDB API key. Closes on its buttons / Escape only (dialog-close rule). -->
+<div id="tmdbBackdrop" class="sheet-backdrop">
+    <div class="sheet">
+        <h2 data-i18n="movies.tmdbTitle"></h2>
+        <p class="dialog-text" data-i18n="movies.tmdbLead"></p>
+        <div class="field">
+            <label for="tmdbKey" data-i18n="movies.tmdbKey"></label>
+            <input type="text" id="tmdbKey" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.tmdbKeyPh">
+        </div>
+        <div class="sheet-actions">
+            <button id="tmdbCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+            <button id="tmdbSaveBtn"   data-act="primary" data-i18n-attr="title:movies.saveAndSearch"></button>
+        </div>
+    </div>
+</div>
+
+<script src="../shared/media.js"></script>
+<script>
+"use strict";
+
+var $  = function ( s ) { return document.querySelector( s ); };
+var $$ = function ( s ) { return Array.prototype.slice.call( document.querySelectorAll( s ) ); };
+
+var PARAMS = new URLSearchParams( location.search );
+var DIR    = ( function () { var d = PARAMS.get( "dir" ); return d ? d.replace( /\/+$/, "" ) : null; } )();
+
+// No ?dir= means we were opened from the launcher, not from Drive: DIR is filled
+// in from data/movies/config.json (or the folder picker) in boot().
+
+var PROGRESS_PATH = "data/movies/progress.json";
+var POSTERS_PATH  = "data/movies/posters.json";      // { key, items: { "<title>|<year>": {...} } }
+var TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500";
+var VIDEO_EXT = [ "mp4", "m4v", "webm", "ogv", "mov", "mkv" ];
+var IMG_EXT   = [ "jpg", "jpeg", "png", "webp", "avif", "gif" ];
+var SUB_EXT   = [ "vtt", "srt" ];
+var POSTER_NAMES = [ "poster", "folder", "cover", "fanart" ];
+
+// The helpers shared with Photos / Music live in shared/media.js (one copy).
+var esc = NayiveMedia.esc, cssEsc = NayiveMedia.cssEsc, cssUrl = NayiveMedia.cssUrl,
+    extOf = NayiveMedia.extOf, baseName = NayiveMedia.baseName, dirOf = NayiveMedia.dirOf,
+    stripExt = NayiveMedia.stripExt, norm = NayiveMedia.norm, colorFor = NayiveMedia.colorFor,
+    fmtClock = NayiveMedia.fmtClock, fmtRuntime = NayiveMedia.fmtRuntime, sleep = NayiveMedia.sleep;
+
+/* ---------------------------------------------------------------------------
+ * TITLE / YEAR / GENRE FROM THE PATH
+ *
+ * "El Último Tren (2021).mkv"          -> "El Último Tren", 2021
+ * "Orbita.Cero.2022.1080p.WEB-DL.mkv"  -> "Orbita Cero", 2022
+ * "Documental sin año.mp4"             -> "Documental sin año", null
+ * Genre = the folder the file sits in, unless that folder is the film's own
+ *   folder ("<title> (<year>)/") in which case the folder above it.
+ * -------------------------------------------------------------------------*/
+function parseTitleYear( base )
+{
+    var year = null, title = base;
+
+    var mP = /[([]\s*((?:19|20)\d{2})\s*[)\]]/.exec( base );          // year in ( ) or [ ]
+    if( mP )
+    {
+        year  = parseInt( mP[ 1 ], 10 );
+        title = base.slice( 0, mP.index );
+    }
+    else
+    {
+        var re = /[ ._-]((?:19|20)\d{2})(?=[ ._-]|$)/g, m, last = null;
+        while( ( m = re.exec( base ) ) ) last = m;                    // last bare year token
+        if( last ) { year = parseInt( last[ 1 ], 10 ); title = base.slice( 0, last.index ); }
+    }
+
+    title = title.replace( /[._]+/g, " " ).replace( /\s{2,}/g, " " ).trim();
+    title = title.replace( /[\s\-_(\[]+$/, "" ).trim();
+    if( ! title ) title = base;
+    return { title: title, year: year };
+}
+
+function deriveMovie( fileNode )
+{
+    var rel   = fileNode.path.slice( DIR.length ).replace( /^\/+/, "" );
+    var segs  = rel.split( "/" );
+    var name  = segs.pop();
+    var folders = segs;                       // folder chain under DIR
+
+    var ty = parseTitleYear( stripExt( name ) );
+
+    var genre = null;
+    if( folders.length )
+    {
+        var parent = folders[ folders.length - 1 ];
+        var pInfo  = parseTitleYear( parent );
+        if( folders.length >= 2 && norm( pInfo.title ) === norm( ty.title ) )
+            genre = folders[ folders.length - 2 ];
+        else
+            genre = parent;
+    }
+
+    return {
+        path:   fileNode.path,
+        size:   fileNode.size,
+        mtime:  fileNode.mtime,
+        name:   name,
+        title:  ty.title,
+        year:   ty.year,
+        genre:  genre,
+        dir:    dirOf( fileNode.path ),        // the folder that holds the file
+        color:  colorFor( ty.title ),
+        poster: null,
+        subtitle: null,                        // { path, kind:'vtt'|'srt' }
+        synopsis: null,
+        duration: null
+    };
+}
+
+/* ---------------------------------------------------------------------------
+ * STATE
+ * -------------------------------------------------------------------------*/
+var st = {
+    movies: [],
+    folderTree: null,
+    filter: "movies",                          // movies | genres | folders
+    search: "",
+    selectedMovie: null,                       // a movie.path
+    selectedGenre: null,
+    selectedFolder: null,
+    current: null,                             // the movie playing / loaded in the stage
+    stageOpen: false,
+    subsOn: false,
+    prog: { version: 1, watched: {}, resume: {} },
+    posters: { key: "", items: {} },           // data/movies/posters.json, see fetchPosters()
+    saveTimer: null,
+    trackUrl: null                             // active blob: URL for the subtitle <track>
+};
+
+var video = $( "#stageVideo" );
+
+/* ---------------------------------------------------------------------------
+ * SCAN
+ * -------------------------------------------------------------------------*/
+function pickPoster( movie, byDir )
+{
+    var list = byDir[ movie.dir ] || [];
+    var wantBase = norm( stripExt( movie.name ) );
+    var same = null, named = null;
+    for( var i = 0; i < list.length; i++ )
+    {
+        var b = norm( stripExt( list[ i ].name ) );
+        if( b === wantBase ) same = list[ i ].path;
+        else if( POSTER_NAMES.indexOf( stripExt( list[ i ].name ).toLowerCase() ) !== -1 ) named = named || list[ i ].path;
+    }
+    return same || named || null;
+}
+
+function pickSubtitle( movie, byDir )
+{
+    var list = byDir[ movie.dir ] || [];
+    var wantBase = norm( stripExt( movie.name ) );
+    var best = null;
+    for( var i = 0; i < list.length; i++ )
+    {
+        var s = list[ i ];
+        var kind = extOf( s.name );
+        // "<name>.srt", "<name>.es.srt", "<name>.spa.vtt" ... - the base up to
+        // the first dot after the film's base name still starts with wantBase.
+        var sb = norm( stripExt( s.name ).replace( /\.[a-z]{2,3}$/i, "" ) );
+        var matches = sb === wantBase || norm( stripExt( s.name ) ) === wantBase;
+        var rank = ( matches ? 0 : 2 ) + ( kind === "vtt" ? 0 : 1 );
+        if( ! best || rank < best.rank ) best = { path: s.path, kind: kind, rank: rank };
+    }
+    return best ? { path: best.path, kind: best.kind } : null;
+}
+
+async function scan()
+{
+    setLibMsg( NayiveUI.t( 'movies.scanning' ) );
+    var tree = await NayiveMedia.loadFolderTree( DIR, setLibMsg, true );
+    if( ! tree ) return;
+    st.folderTree = { path: DIR, nodes: tree.nodes };
+
+    var files = NayiveMedia.flattenFiles( st.folderTree );
+
+    var videos = files.filter( function ( f ) { return VIDEO_EXT.indexOf( extOf( f.path ) ) !== -1; } );
+
+    var imgByDir = {}, subByDir = {}, txtByDir = {};
+    files.forEach( function ( f )
+    {
+        var e = extOf( f.path ), d = dirOf( f.path );
+        var rec = { name: baseName( f.path ), path: f.path };
+        if( IMG_EXT.indexOf( e ) !== -1 ) ( imgByDir[ d ] = imgByDir[ d ] || [] ).push( rec );
+        else if( SUB_EXT.indexOf( e ) !== -1 ) ( subByDir[ d ] = subByDir[ d ] || [] ).push( rec );
+        else if( e === "txt" ) ( txtByDir[ d ] = txtByDir[ d ] || [] ).push( rec );
+    } );
+
+    st.movies = videos.map( function ( f )
+    {
+        var mv = deriveMovie( f );
+        mv.poster = pickPoster( mv, imgByDir );
+        if( ! mv.poster )                       // no sibling image - use a TMDB one we fetched before
+        {
+            var cp = st.posters.items[ posterKey( mv ) ];
+            if( cp && cp.poster ) mv.poster = cp.poster;
+        }
+        mv.subtitle = pickSubtitle( mv, subByDir );
+        var txts = txtByDir[ mv.dir ] || [];
+        for( var i = 0; i < txts.length; i++ )
+            if( norm( stripExt( txts[ i ].name ) ) === norm( stripExt( mv.name ) ) ) mv.synopsis = txts[ i ].path;
+        return mv;
+    } );
+
+    st.movies.sort( function ( a, b )
+    {
+        return ( a.genre || "\uffff" ).localeCompare( b.genre || "\uffff", NayiveUI.lang() ) ||
+               ( a.year || 0 ) - ( b.year || 0 ) ||
+               a.title.localeCompare( b.title, NayiveUI.lang() );
+    } );
+
+    loadSynopses();
+    renderCollectionSummary();
+    renderLibrary();
+    loadDurations();
+}
+
+/* Real duration via a throwaway <video> + preload=metadata (cheap: the server
+ * supports Range, so the browser only pulls the header). Small batches. */
+async function loadDurations()
+{
+    await NayiveMedia.pool( st.movies, 2, async function ( mv )
+    {
+        var d = await NayiveMedia.probeDuration( "video", GumApi.fileUrl( mv.path ) );
+        if( d == null ) return;
+        mv.duration = d;
+        renderRuntime( mv );
+    } );
+    renderCollectionSummary();     // now the "N h en total" is known
+}
+
+async function loadSynopses()
+{
+    for( var i = 0; i < st.movies.length; i++ )
+    {
+        var mv = st.movies[ i ];
+        if( ! mv.synopsis || typeof mv.synopsis !== "string" ) continue;
+        try
+        {
+            var txt = await GumApi.readFile( mv.synopsis );
+            mv.synopsis = ( txt || "" ).trim().slice( 0, 1200 ) || null;
+        }
+        catch( e ) { mv.synopsis = null; }
+    }
+    if( st.selectedMovie ) renderLibrary();
+}
+
+/* ---------------------------------------------------------------------------
+ * POSTERS  (data/movies/posters.json + data/movies/posters/*.jpg)
+ *
+ * A film with no sibling image ("<name>.jpg", poster/folder/cover.*) gets a
+ * plain coloured tile. The "Buscar carátulas" button fills those gaps from
+ * The Movie Database: ONE search per film, by title + year. What it finds is
+ * remembered in posters.json keyed by "<normalised title>|<year>", so a film
+ * is never looked up twice - not the ones that matched, and not the ones that
+ * didn't ({ "tmdb": null } is the "asked, nothing there" marker). The image
+ * itself is downloaded next to the file; if the browser blocks that
+ * cross-origin fetch, the remote TMDB URL is stored instead and used directly.
+ *
+ * The TMDB API key (free) lives in posters.json too - asked for once via the
+ * #tmdbBackdrop sheet. posters.json is its own file so changing the remembered
+ * folder (which rewrites data/movies/config.json) can't wipe it.
+ *
+ * Invalidation: the key is title|year, not a path, so moving or re-encoding a
+ * film keeps its poster with no work. Deleting a film leaves its entry and its
+ * posters/*.jpg behind unused - harmless (a later film with the same title+year
+ * just reuses them), and nothing prunes them.
+ * -------------------------------------------------------------------------*/
+function posterKey( mv ) { return norm( mv.title ) + "|" + ( mv.year || "" ); }
+
+function posterFileName( mv )
+{
+    return ( norm( mv.title ) || "film" ).slice( 0, 60 ) + "-" + ( mv.year || "x" );
+}
+
+async function loadPosters()
+{
+    try
+    {
+        var raw = await GumApi.readJson( POSTERS_PATH );
+        st.posters = {
+            key:   raw && typeof raw.key === "string" ? raw.key : "",
+            items: raw && raw.items && typeof raw.items === "object" ? raw.items : {}
+        };
+    }
+    catch( e ) { st.posters = { key: "", items: {} }; }
+}
+
+function savePosters() { return GumApi.writeJson( POSTERS_PATH, st.posters ).catch( function () {} ); }
+
+function openTmdbKeySheet()
+{
+    $( "#tmdbKey" ).value = st.posters.key || "";
+    NayiveUI.setOpen( "tmdbBackdrop", true );
+    $( "#tmdbKey" ).focus();
+}
+
+async function fetchPosters()
+{
+    if( ! st.posters.key ) { openTmdbKeySheet(); return; }
+
+    var todo = st.movies.filter( function ( mv )
+    { return ! mv.poster && ! st.posters.items[ posterKey( mv ) ]; } );
+
+    if( ! todo.length ) { NayiveUI.toast( NayiveUI.t( 'movies.allHavePosters' ) ); return; }
+
+    var ok = 0, miss = 0;
+    for( var i = 0; i < todo.length; i++ )
+    {
+        var mv  = todo[ i ];
+        var key = posterKey( mv );
+        NayiveUI.toast( NayiveUI.t( 'movies.searchingPosters' ) + ( i + 1 ) + " / " + todo.length, { ms: 4000 } );
+        try
+        {
+            var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent( st.posters.key )
+                    + "&language=" + NayiveUI.locale() + "&include_adult=false&query=" + encodeURIComponent( mv.title )
+                    + ( mv.year ? "&year=" + mv.year : "" );
+            var res = await fetch( url, { headers: { Accept: "application/json" } } );
+            if( res.status === 401 )
+            {
+                await savePosters();
+                NayiveUI.toast( NayiveUI.t( 'movies.badKey' ) );
+                openTmdbKeySheet();
+                return;
+            }
+            var j    = await res.json();
+            var hit  = ( j.results || [] ).filter( function ( r ) { return r.poster_path; } )[ 0 ];
+            if( ! hit ) { st.posters.items[ key ] = { tmdb: null }; miss++; }
+            else
+            {
+                var stored = await downloadPoster( mv, TMDB_IMG_BASE + hit.poster_path );
+                st.posters.items[ key ] = { tmdb: hit.id, poster: stored,
+                                            title: hit.title || mv.title, year: mv.year || null };
+                mv.poster = stored;
+                ok++;
+            }
+        }
+        catch( e ) { miss++; }
+        renderLibrary();
+        await sleep( 250 );                 // stay well under TMDB's rate limit
+    }
+    await savePosters();
+    NayiveUI.toast( NayiveUI.tf( ok === 1 ? "movies.onePoster" : "movies.nPosters", { n: ok } )
+                + ( miss ? "  ·  " + NayiveUI.tf( "movies.nNoResult", { n: miss } ) : "" ), { ms: 3500 } );
+}
+
+async function downloadPoster( mv, remoteUrl )
+{
+    try
+    {
+        var bytes = await GumApi.fetchBinary( remoteUrl );
+        var path  = "data/movies/posters/" + posterFileName( mv ) + ".jpg";
+        await GumApi.writeFileBytes( path, bytes );
+        return path;
+    }
+    catch( e )
+    {
+        return remoteUrl;      // CORS-blocked / offline / over quota - point at TMDB directly
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * PROGRESS FILE  (data/movies/progress.json)
+ * -------------------------------------------------------------------------*/
+async function loadProgress()
+{
+    try
+    {
+        var raw = JSON.parse( await GumApi.readFile( PROGRESS_PATH ) ) || {};
+        st.prog = {
+            version: 1,
+            watched: raw.watched && typeof raw.watched === "object" ? raw.watched : {},
+            resume:  raw.resume  && typeof raw.resume  === "object" ? raw.resume  : {}
+        };
+    }
+    catch( e ) { st.prog = { version: 1, watched: {}, resume: {} }; }
+}
+
+function scheduleSaveProgress()
+{
+    if( st.saveTimer ) return;
+    st.saveTimer = setTimeout( function () { st.saveTimer = null; saveProgressNow(); }, 4000 );
+}
+
+async function saveProgressNow()
+{
+    if( st.saveTimer ) { clearTimeout( st.saveTimer ); st.saveTimer = null; }
+    try
+    {
+        await GumApi.writeFileBytes( PROGRESS_PATH,
+            new TextEncoder().encode( JSON.stringify( st.prog, null, 1 ) ) );
+    }
+    catch( e ) { /* a lost resume point is not worth a toast */ }
+}
+
+function isWatched( mv )  { return !! st.prog.watched[ mv.path ]; }
+function resumeOf( mv )   { return st.prog.resume[ mv.path ] || null; }
+
+function progressPct( mv )
+{
+    var r = resumeOf( mv );
+    var d = ( r && r.d ) || mv.duration || 0;
+    if( ! r || ! d ) return 0;
+    return Math.max( 1, Math.min( 99, Math.round( ( r.t / d ) * 100 ) ) );
+}
+
+function recordProgress()
+{
+    var mv = st.current;
+    if( ! mv || ! video.duration || ! isFinite( video.duration ) ) return;
+    var t = video.currentTime, d = video.duration;
+
+    if( t >= d - 15 || t >= d * 0.97 )
+    {
+        st.prog.watched[ mv.path ] = true;
+        delete st.prog.resume[ mv.path ];
+    }
+    else if( t > 20 )
+    {
+        st.prog.resume[ mv.path ] = { t: Math.floor( t ), d: Math.floor( d ), at: Math.floor( Date.now() / 1000 ) };
+    }
+    scheduleSaveProgress();
+}
+
+function toggleWatched( mv )
+{
+    if( st.prog.watched[ mv.path ] ) delete st.prog.watched[ mv.path ];
+    else { st.prog.watched[ mv.path ] = true; delete st.prog.resume[ mv.path ]; }
+    saveProgressNow();
+    renderLibrary();
+}
+
+/* ---------------------------------------------------------------------------
+ * DERIVED GROUPINGS
+ * -------------------------------------------------------------------------*/
+function genreName( mv ) { return mv.genre || NayiveUI.t( 'movies.noGenre' ); }
+
+function computeGenres()
+{
+    var map = {};
+    st.movies.forEach( function ( mv )
+    {
+        var g = genreName( mv );
+        if( ! map[ g ] ) map[ g ] = { name: g, count: 0, color: colorFor( "g:" + g ) };
+        map[ g ].count++;
+    } );
+    return Object.keys( map ).map( function ( k ) { return map[ k ]; } )
+        .sort( function ( a, b ) { return a.name.localeCompare( b.name, NayiveUI.lang() ); } );
+}
+
+function moviesInGenre( g )  { return st.movies.filter( function ( mv ) { return genreName( mv ) === g; } ); }
+function moviesUnder( path ) { return st.movies.filter( function ( mv ) { return mv.path.slice( 0, path.length + 1 ) === path + "/"; } ); }
+
+function filteredMovies()
+{
+    var q = st.search.trim().toLowerCase();
+    if( ! q ) return st.movies;
+    return st.movies.filter( function ( mv )
+    { return ( mv.title + " " + genreName( mv ) + " " + ( mv.year || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+}
+
+/* ---------------------------------------------------------------------------
+ * RENDER
+ * -------------------------------------------------------------------------*/
+var FILM_ICON   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5"/><line x1="7.5" y1="2.5" x2="7.5" y2="21.5"/><line x1="16.5" y1="2.5" x2="16.5" y2="21.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/><line x1="2.5" y1="7.25" x2="7.5" y2="7.25"/><line x1="2.5" y1="16.75" x2="7.5" y2="16.75"/><line x1="16.5" y1="7.25" x2="21.5" y2="7.25"/><line x1="16.5" y1="16.75" x2="21.5" y2="16.75"/></svg>';
+var FOLDER_ICON = NayiveMedia.ICONS.folder;
+var GENRE_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+var PLAY_ICON   = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>';
+var CHECK_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
+var X_ICON      = NayiveMedia.ICONS.x;
+var SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+
+function setLibMsg( text )
+{
+    $( "#libContent" ).innerHTML = '<div class="lib-inner"><div class="empty-hint"><p>' + esc( text ) + '</p></div></div>';
+}
+
+function renderCollectionSummary()
+{
+    var g = computeGenres().length;
+    var mins = st.movies.reduce( function ( a, mv ) { return a + ( mv.duration || 0 ); }, 0 );
+    var hrs  = mins > 0 ? " · " + NayiveUI.tf( "movies.nHours", { n: Math.round( mins / 3600 ) } ) : "";
+    $( "#subStrip" ).textContent =
+        NayiveUI.tf( st.movies.length === 1 ? "movies.oneMovie" : "movies.nMovies", { n: st.movies.length } ) +
+        " · " + NayiveUI.tf( g === 1 ? "movies.oneGenre" : "movies.nGenres", { n: g } ) + hrs;
+    setCrumb();
+}
+
+function setCrumb() { if( DIR ) NayiveMedia.setCrumb( NayiveMedia.dirLabel( DIR ) ); }
+
+// A poster is either a file path in the user's storage (a sibling image, or one
+// we downloaded from TMDB) or - when the download was blocked - a full TMDB URL.
+function posterUrl( p ) { return /^https?:\/\//i.test( p ) ? p : GumApi.fileUrl( p ); }
+
+function artStyle( color, poster )
+{
+    return poster
+        ? 'style="background-color:' + color + ';background-image:' + cssUrl( posterUrl( poster ) ) + '"'
+        : 'style="background:' + color + '"';
+}
+
+function posterCardHtml( mv )
+{
+    var active = st.selectedMovie === mv.path;
+    var pct    = progressPct( mv );
+    var subLabel = ( mv.year ? mv.year : "" ) +
+                   ( mv.year && mv.duration ? " · " : "" ) +
+                   ( mv.duration ? fmtRuntime( mv.duration ) : "" );
+
+    return '<div class="poster-card' + ( active ? ' is-active' : '' ) + '" data-open="' + esc( mv.path ) + '">' +
+        '<span class="poster-art" ' + artStyle( mv.color, mv.poster ) + '>' +
+            ( mv.poster ? '' : FILM_ICON ) +
+            ( isWatched( mv ) ? '<span class="poster-seen">' + CHECK_ICON + '</span>' : '' ) +
+            '<span class="poster-scrim"><button class="poster-play" data-play="' + esc( mv.path ) + '" data-i18n-attr="title:movies.watchNow, aria-label:movies.watchNow">' + PLAY_ICON + '</button></span>' +
+            ( pct ? '<span class="poster-bar"><span style="width:' + pct + '%"></span></span>' : '' ) +
+        '</span>' +
+        '<span class="poster-body">' +
+            '<div class="poster-title">' + esc( mv.title ) + '</div>' +
+            '<div class="poster-sub" data-runtime="' + esc( mv.path ) + '">' + esc( subLabel || "—" ) + '</div>' +
+        '</span>' +
+    '</div>';
+}
+
+function posterGridHtml( list )
+{
+    if( ! list.length ) return '<div class="empty-hint">' + FILM_ICON + '<p data-i18n="movies.nothingHere"></p></div>';
+    return '<div class="poster-grid">' + list.map( posterCardHtml ).join( "" ) + '</div>';
+}
+
+var scopeBarHtml = NayiveMedia.scopeBarHtml;
+
+function findMovie( path ) { return st.movies.filter( function ( m ) { return m.path === path; } )[ 0 ] || null; }
+
+function movieDetailHtml( mv )
+{
+    var r = resumeOf( mv );
+    var playLabel = r ? NayiveUI.t( 'movies.resume' ) : NayiveUI.t( 'movies.watchNow' );
+    var tags = [];
+    if( mv.year )     tags.push( '<span class="movie-tag">' + mv.year + '</span>' );
+    tags.push( '<span class="movie-tag">' + esc( genreName( mv ) ) + '</span>' );
+    if( mv.duration ) tags.push( '<span class="movie-tag">' + esc( fmtRuntime( mv.duration ) ) + '</span>' );
+    if( isWatched( mv ) ) tags.push( '<span class="movie-tag seen" data-i18n="movies.watched"></span>' );
+
+    return scopeBarHtml( mv.title + ( mv.year ? " (" + mv.year + ")" : "" ), NayiveUI.t( 'movies.backToAll' ) ) +
+        '<div class="movie-detail">' +
+            '<span class="movie-poster" ' + artStyle( mv.color, mv.poster ) + '>' + ( mv.poster ? '' : FILM_ICON ) + '</span>' +
+            '<div class="movie-info">' +
+                '<h3>' + esc( mv.title ) + '</h3>' +
+                '<div class="movie-tags">' + tags.join( "" ) + '</div>' +
+                ( mv.synopsis && typeof mv.synopsis === "string" ? '<p class="movie-synopsis">' + esc( mv.synopsis ) + '</p>' : '' ) +
+                '<div class="movie-actions">' +
+                    '<button class="btn-cta" data-play="' + esc( mv.path ) + '">' + PLAY_ICON + ' ' + playLabel + '</button>' +
+                    '<button class="btn-outline' + ( isWatched( mv ) ? ' is-active' : '' ) + '" data-watched="' + esc( mv.path ) + '">' +
+                        CHECK_ICON + ' ' + esc( NayiveUI.t( isWatched( mv ) ? 'movies.watched' : 'movies.markWatched' ) ) + '</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+}
+
+function renderLibrary()
+{
+    var host = $( "#libContent" );
+    var mv;
+    var html = '<div class="lib-inner">';
+
+    if( st.filter === "movies" )
+    {
+        mv = st.selectedMovie ? findMovie( st.selectedMovie ) : null;
+        if( mv && ! st.search.trim() )
+        {
+            html += movieDetailHtml( mv );
+        }
+        else
+        {
+            var searching = !! st.search.trim();
+            if( ! searching )
+            {
+                var resuming = st.movies.filter( resumeOf )
+                    .sort( function ( a, b ) { return ( resumeOf( b ).at || 0 ) - ( resumeOf( a ).at || 0 ); } );
+                if( resuming.length )
+                {
+                    html += '<div class="strip-head" data-i18n="movies.keepWatching"></div><div class="continue-strip">' +
+                        resuming.map( function ( m )
+                        {
+                            return '<button class="continue-card" data-play="' + esc( m.path ) + '">' +
+                                '<span class="continue-thumb" ' + artStyle( m.color, m.poster ) + '>' +
+                                    ( m.poster ? '' : FILM_ICON ) +
+                                    '<span class="resume">' + PLAY_ICON + '</span>' +
+                                    '<span class="continue-bar"><span style="width:' + progressPct( m ) + '%"></span></span>' +
+                                '</span>' +
+                                '<span class="continue-title">' + esc( m.title ) + '</span>' +
+                                '<span class="continue-sub">' + esc( NayiveUI.tf( "movies.pctWatched", { pct: progressPct( m ) } ) ) + '</span>' +
+                            '</button>';
+                        } ).join( "" ) + '</div>';
+                }
+            }
+            var list = filteredMovies();
+            html += '<div class="strip-head">' + ( searching ? esc( NayiveUI.tf( "movies.resultsFor", { q: st.search } ) ) : NayiveUI.t( 'movies.allMovies' ) ) + '</div>';
+            if( ! list.length && searching )
+                html += '<div class="empty-hint">' + SEARCH_ICON + '<p>' + esc( NayiveUI.tf( "movies.noMatch", { q: st.search } ) ) + '</p></div>';
+            else
+                html += posterGridHtml( list );
+        }
+    }
+    else if( st.filter === "genres" )
+    {
+        var genres = computeGenres();
+        html += '<div class="genre-grid">' + genres.map( function ( g )
+        {
+            var active = st.selectedGenre === g.name;
+            return '<button class="genre-card' + ( active ? ' is-active' : '' ) + '" data-genre="' + esc( g.name ) + '">' +
+                '<span class="genre-art" style="background:' + g.color + '">' + GENRE_ICON + '</span>' +
+                '<span class="genre-name">' + esc( g.name ) + '</span>' +
+                '<span class="genre-meta">' + esc( NayiveUI.tf( g.count === 1 ? 'movies.oneMovie' : 'movies.nMovies', { n: g.count } ) ) + '</span></button>';
+        } ).join( "" ) + '</div>';
+
+        if( st.selectedGenre )
+        {
+            var gm = moviesInGenre( st.selectedGenre );
+            html += scopeBarHtml( st.selectedGenre + " · " + NayiveUI.tf( gm.length === 1 ? "movies.oneMovie" : "movies.nMovies", { n: gm.length } ) ) + posterGridHtml( gm );
+        }
+        else html += '<div class="empty-hint">' + GENRE_ICON + '<p data-i18n="movies.pickGenre"></p></div>';
+    }
+    else // folders
+    {
+        html += '<div class="folder-tree">' + NayiveMedia.folderTreeHtml( st.folderTree, st.selectedFolder ) + '</div>';
+        if( st.selectedFolder )
+        {
+            var fm = moviesUnder( st.selectedFolder );
+            var label = st.selectedFolder.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) || DIR.split( "/" ).pop();
+            html += scopeBarHtml( label + " · " + NayiveUI.tf( fm.length === 1 ? "movies.oneMovie" : "movies.nMovies", { n: fm.length } ) ) + posterGridHtml( fm );
+        }
+        else html += '<div class="empty-hint">' + FOLDER_ICON + '<p data-i18n="movies.pickFolder"></p></div>';
+    }
+
+    html += '</div>';
+    host.innerHTML = html;
+    wireLibrary();
+}
+
+function renderRuntime( mv )
+{
+    var sub = ( mv.year ? mv.year : "" ) + ( mv.year && mv.duration ? " · " : "" ) + ( mv.duration ? fmtRuntime( mv.duration ) : "" );
+    $$( '.poster-sub[data-runtime="' + cssEsc( mv.path ) + '"]' ).forEach( function ( el ) { el.textContent = sub || "—"; } );
+}
+
+function wireLibrary()
+{
+    $$( "#libContent [data-open]" ).forEach( function ( el )
+    {
+        el.addEventListener( "click", function ( e )
+        {
+            if( e.target.closest( "[data-play]" ) ) return;   // the ▶ button handles itself
+            openMovie( el.getAttribute( "data-open" ) );
+        } );
+    } );
+    $$( "#libContent [data-play]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ( e )
+        {
+            e.stopPropagation();
+            var m = findMovie( btn.getAttribute( "data-play" ) );
+            if( m ) playMovie( m );
+        } );
+    } );
+    $$( "#libContent [data-watched]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var m = findMovie( btn.getAttribute( "data-watched" ) );
+            if( m ) toggleWatched( m );
+        } );
+    } );
+    $$( "#libContent [data-genre]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var g = btn.getAttribute( "data-genre" );
+            st.selectedGenre = st.selectedGenre === g ? null : g;
+            renderLibrary();
+        } );
+    } );
+    $$( "#libContent [data-folder]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var p = btn.getAttribute( "data-folder" );
+            st.selectedFolder = st.selectedFolder === p ? null : p;
+            renderLibrary();
+        } );
+    } );
+    var clear = $( "#clearScopeBtn" );
+    if( clear ) clear.addEventListener( "click", function ()
+    {
+        st.selectedMovie = st.selectedGenre = st.selectedFolder = null;
+        renderLibrary();
+    } );
+}
+
+function openMovie( path )
+{
+    st.filter = "movies";
+    setFilterPills();
+    st.selectedMovie = path;
+    st.selectedGenre = st.selectedFolder = null;
+    st.search = "";
+    $( "#searchInput" ).value = "";
+    renderLibrary();
+}
+
+/* ---------------------------------------------------------------------------
+ * PLAYBACK
+ * -------------------------------------------------------------------------*/
+function playMovie( mv )
+{
+    if( st.current && st.current.path === mv.path )
+    {
+        openStage();
+        video.play().catch( function () {} );
+        return;
+    }
+
+    // flush the outgoing film's position before we switch away
+    if( st.current ) recordProgress();
+
+    st.current = mv;
+    clearTrack();
+    video.src = GumApi.fileUrl( mv.path );
+
+    var r = resumeOf( mv );
+    st._seekOnLoad = r ? r.t : 0;
+
+    video.play().catch( function () {} );
+    openStage();
+    updatePlayerBar();
+    loadSubtitle( mv );
+    updateMediaSession( mv );
+    renderLibrary();
+}
+
+function openStage()
+{
+    st.stageOpen = true;
+    $( "#videoStage" ).hidden = false;
+    $( "#stageBtn" ).classList.add( "is-active" );
+    $( "#stageBtn" ).title = NayiveUI.t( 'movies.collapseVideo' );
+    $( "#stagePath" ).textContent = st.current ? st.current.path.replace( /^files\//, "" ) : "";
+    syncStagePaused();
+}
+
+function closeStage()
+{
+    st.stageOpen = false;
+    $( "#videoStage" ).hidden = true;
+    $( "#stageBtn" ).classList.remove( "is-active" );
+    $( "#stageBtn" ).title = NayiveUI.t( 'movies.openVideo' );
+}
+
+function toggleStage() { if( ! st.current ) return; st.stageOpen ? closeStage() : openStage(); }
+
+function togglePlay()
+{
+    if( ! st.current ) return;
+    if( video.paused ) video.play().catch( function () {} );
+    else video.pause();
+}
+
+function skip( delta )
+{
+    if( ! st.current || ! isFinite( video.duration ) ) return;
+    video.currentTime = Math.max( 0, Math.min( video.duration - 0.5, video.currentTime + delta ) );
+}
+
+function syncStagePaused()
+{
+    $( "#videoStage" ).classList.toggle( "is-paused", video.paused );
+}
+
+function updatePlayerBar()
+{
+    var mv = st.current;
+    $( "#playerTitle" ).textContent = mv ? mv.title : NayiveUI.t( 'movies.nothingPlaying' );
+    $( "#playerSub" ).textContent   = mv ? ( ( mv.year ? mv.year + " · " : "" ) + genreName( mv ) ) : NayiveUI.t( 'movies.pickMovie' );
+    $( "#playerArt" ).style.backgroundColor = mv ? mv.color : "#3A3C42";
+    $( "#playerArt" ).style.backgroundImage = mv && mv.poster ? cssUrl( GumApi.fileUrl( mv.poster ) ) : "none";
+
+    var has = !! mv;
+    $( "#back10Btn" ).disabled = ! has;
+    $( "#fwd30Btn" ).disabled  = ! has;
+    $( "#playBtn" ).disabled   = ! has;
+    $( "#seekRange" ).disabled = ! has;
+    $( "#stageBtn" ).disabled  = ! has;
+
+    var subsBtn = $( "#subsBtn" );
+    subsBtn.hidden = ! ( mv && mv.subtitle );
+    subsBtn.classList.toggle( "is-active", st.subsOn );
+}
+
+var setPlayIcon = NayiveMedia.setPlayIcon;
+
+/* ---------------------------------------------------------------------------
+ * SUBTITLES - one sidecar track. SRT is converted to WebVTT in the browser so
+ * a plain <track> can render it (a <track src> must be VTT).
+ * -------------------------------------------------------------------------*/
+function clearTrack()
+{
+    var old = video.querySelector( "track" );
+    if( old ) old.remove();
+    if( st.trackUrl ) { URL.revokeObjectURL( st.trackUrl ); st.trackUrl = null; }
+    st.subsOn = false;
+}
+
+function srtToVtt( srt )
+{
+    return "WEBVTT\n\n" + String( srt )
+        .replace( /\r+/g, "" )
+        .replace( /^\d+\s*$/gm, "" )
+        .replace( /(\d\d:\d\d:\d\d),(\d\d\d)/g, "$1.$2" )
+        .replace( /\n{3,}/g, "\n\n" )
+        .trim() + "\n";
+}
+
+async function loadSubtitle( mv )
+{
+    if( ! mv.subtitle ) { updatePlayerBar(); return; }
+    try
+    {
+        var text = await GumApi.readFile( mv.subtitle.path );
+        var vtt  = mv.subtitle.kind === "vtt" ? text : srtToVtt( text );
+        st.trackUrl = URL.createObjectURL( new Blob( [ vtt ], { type: "text/vtt" } ) );
+
+        var track = document.createElement( "track" );
+        track.kind    = "subtitles";
+        track.label   = NayiveUI.t( 'movies.subtitles' );
+        track.srclang = "es";
+        track.src     = st.trackUrl;
+        track.default = false;
+        video.appendChild( track );
+
+        // The TextTrack is only reachable once the browser has parsed the cue
+        // list; give it a tick, then leave it hidden until the CC button asks.
+        setTimeout( function ()
+        {
+            if( video.textTracks && video.textTracks[ 0 ] ) video.textTracks[ 0 ].mode = "hidden";
+        }, 0 );
+    }
+    catch( e ) { st.trackUrl = null; }
+    updatePlayerBar();
+}
+
+function toggleSubs()
+{
+    var mv = st.current;
+    if( ! mv || ! mv.subtitle ) return;
+    var tt = video.textTracks && video.textTracks[ 0 ];
+    if( ! tt ) return;
+    st.subsOn = tt.mode !== "showing";
+    tt.mode = st.subsOn ? "showing" : "hidden";
+    updatePlayerBar();
+}
+
+/* ---------------------------------------------------------------------------
+ * MEDIASESSION - lock-screen / notification controls when supported.
+ * -------------------------------------------------------------------------*/
+function updateMediaSession( mv )
+{
+    if( ! mv ) return;
+    NayiveMedia.mediaSession(
+        {
+            title:  mv.title,
+            artist: genreName( mv ) + ( mv.year ? " · " + mv.year : "" ),
+            album:  "Movies",
+            artwork: mv.poster ? [ { src: posterUrl( mv.poster ) } ] : []
+        },
+        {
+            play:         function () { video.play().catch( function () {} ); },
+            pause:        function () { video.pause(); },
+            seekbackward: function () { skip( -10 ); },
+            seekforward:  function () { skip( 30 ); },
+            seekto:       function ( d ) { if( d.seekTime != null ) video.currentTime = d.seekTime; }
+        } );
+}
+
+function updatePositionState()
+{
+    if( ! ( "mediaSession" in navigator ) || ! navigator.mediaSession.setPositionState ) return;
+    if( ! isFinite( video.duration ) || video.duration <= 0 ) return;
+    try
+    {
+        navigator.mediaSession.setPositionState( {
+            duration: video.duration,
+            position: Math.min( video.currentTime, video.duration ),
+            playbackRate: video.playbackRate || 1
+        } );
+    }
+    catch( e ) {}
+}
+
+/* ---------------------------------------------------------------------------
+ * STATIC WIRING
+ * -------------------------------------------------------------------------*/
+function setFilterPills()
+{
+    [ "Movies", "Genres", "Folders" ].forEach( function ( name )
+    { $( "#filter" + name ).classList.toggle( "is-active", name.toLowerCase() === st.filter ); } );
+}
+
+function setFilter( f )
+{
+    st.filter = f;
+    st.selectedMovie = st.selectedGenre = st.selectedFolder = null;
+    setFilterPills();
+    renderLibrary();
+}
+
+function wireStaticUI()
+{
+    $( "#filterMovies"  ).addEventListener( "click", function () { setFilter( "movies" ); } );
+    $( "#filterGenres"  ).addEventListener( "click", function () { setFilter( "genres" ); } );
+    $( "#filterFolders" ).addEventListener( "click", function () { setFilter( "folders" ); } );
+
+    $( "#searchInput" ).addEventListener( "input", function ( e )
+    {
+        st.search = e.target.value;
+        if( st.search.trim() ) st.selectedMovie = null;
+        renderLibrary();
+    } );
+
+    NayiveMedia.wireSearchToggle();                     // phone magnifier
+    NayiveMedia.wireCrumbPicker( { app: "movies" } );   // crumb -> folder picker
+
+    $( "#reloadBtn" ).addEventListener( "click", function ()
+    {
+        st.selectedMovie = st.selectedGenre = st.selectedFolder = null;
+        scan();
+    } );
+
+    $( "#postersBtn" ).addEventListener( "click", fetchPosters );
+    $( "#tmdbCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "tmdbBackdrop", false ); } );
+    $( "#tmdbSaveBtn" ).addEventListener( "click", async function ()
+    {
+        var k = ( $( "#tmdbKey" ).value || "" ).trim();
+        if( ! k ) return;
+        st.posters.key = k;
+        NayiveUI.setOpen( "tmdbBackdrop", false );
+        await savePosters();
+        fetchPosters();
+    } );
+    $( "#tmdbKey" ).addEventListener( "keydown", function ( e )
+    {
+        if( e.key === "Enter" ) { e.preventDefault(); $( "#tmdbSaveBtn" ).click(); }
+    } );
+
+    $( "#playBtn" ).addEventListener( "click", togglePlay );
+    $( "#back10Btn" ).addEventListener( "click", function () { skip( -10 ); } );
+    $( "#fwd30Btn" ).addEventListener( "click", function () { skip( 30 ); } );
+    $( "#stageBtn" ).addEventListener( "click", toggleStage );
+    $( "#subsBtn" ).addEventListener( "click", toggleSubs );
+
+    $( "#stagePlayBtn" ).addEventListener( "click", togglePlay );
+    $( "#stageCollapseBtn" ).addEventListener( "click", closeStage );
+    $( "#stageFullBtn" ).addEventListener( "click", function ()
+    {
+        var s = $( "#videoStage" );
+        if( document.fullscreenElement ) document.exitFullscreen();
+        else if( s.requestFullscreen ) s.requestFullscreen().catch( function () {} );
+    } );
+    video.addEventListener( "click", togglePlay );
+    video.addEventListener( "dblclick", function () { $( "#stageFullBtn" ).click(); } );
+
+    var seekRange = $( "#seekRange" ), seeking = false;
+    seekRange.addEventListener( "input", function () { seeking = true; $( "#elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
+    seekRange.addEventListener( "change", function () { if( isFinite( video.duration ) ) video.currentTime = Number( seekRange.value ); seeking = false; } );
+
+    var volumeRange = $( "#volumeRange" );
+    video.volume = Number( volumeRange.value ) / 100;
+    volumeRange.addEventListener( "input", function () { video.volume = Number( volumeRange.value ) / 100; } );
+
+    video.addEventListener( "loadedmetadata", function ()
+    {
+        seekRange.max = Math.floor( video.duration ) || 1;
+        $( "#totalLabel" ).textContent = fmtClock( video.duration );
+        if( st._seekOnLoad ) { try { video.currentTime = st._seekOnLoad; } catch( e ) {} st._seekOnLoad = 0; }
+        if( st.current && ! st.current.duration && isFinite( video.duration ) )
+        { st.current.duration = video.duration; renderRuntime( st.current ); }
+        updatePositionState();
+    } );
+
+    var lastTick = 0;
+    video.addEventListener( "timeupdate", function ()
+    {
+        if( ! seeking )
+        {
+            seekRange.value = Math.floor( video.currentTime );
+            $( "#elapsedLabel" ).textContent = fmtClock( video.currentTime );
+        }
+        var now = Date.now();
+        if( now - lastTick > 15000 ) { lastTick = now; recordProgress(); updatePositionState(); }
+    } );
+
+    video.addEventListener( "play",  function ()
+    {
+        setPlayIcon( true ); syncStagePaused();
+        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "playing";
+    } );
+    video.addEventListener( "pause", function ()
+    {
+        setPlayIcon( false ); syncStagePaused(); recordProgress(); saveProgressNow();
+        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "paused";
+    } );
+    video.addEventListener( "ended", function ()
+    {
+        if( st.current ) { st.prog.watched[ st.current.path ] = true; delete st.prog.resume[ st.current.path ]; }
+        saveProgressNow();
+        renderLibrary();
+        NayiveUI.toast( NayiveUI.t( 'movies.theEnd' ) );
+    } );
+    video.addEventListener( "error", function ()
+    {
+        if( ! st.current ) return;
+        NayiveUI.toast( NayiveUI.t( 'movies.cantPlay' ) );
+    } );
+
+    document.addEventListener( "fullscreenchange", function ()
+    {
+        $( "#stageFullBtn" ).title = document.fullscreenElement ? NayiveUI.t( 'movies.exitFullscreen' ) : NayiveUI.t( 'movies.fullscreen' );
+    } );
+
+    document.addEventListener( "keydown", function ( e )
+    {
+        if( $( "#tmdbBackdrop" ).classList.contains( "open" ) )
+        {
+            if( e.key === "Escape" ) NayiveUI.setOpen( "tmdbBackdrop", false );
+            return;
+        }
+        var tag = ( e.target && e.target.tagName ) || "";
+        if( tag === "INPUT" || tag === "TEXTAREA" ) return;
+        if( ! st.current ) return;
+        if( e.key === " " || e.key === "k" ) { e.preventDefault(); togglePlay(); }
+        else if( e.key === "ArrowLeft" )  skip( -10 );
+        else if( e.key === "ArrowRight" ) skip( 30 );
+        else if( e.key === "f" ) $( "#stageFullBtn" ).click();
+        else if( e.key === "Escape" && st.stageOpen && ! document.fullscreenElement ) closeStage();
+    } );
+
+    // Flush the resume point when the tab is hidden or closed - the reliable
+    // moments a phone actually gives us before the page goes away.
+    document.addEventListener( "visibilitychange", function ()
+    {
+        if( document.visibilityState === "hidden" ) { recordProgress(); saveProgressNow(); }
+    } );
+    window.addEventListener( "pagehide", function () { recordProgress(); saveProgressNow(); } );
+}
+
+/* ---------------------------------------------------------------------------
+ * BOOT
+ * -------------------------------------------------------------------------*/
+async function boot()
+{
+    wireStaticUI();
+
+    if( ! DIR )
+    {
+        DIR = await NayiveUI.launcherFolder( {
+            app:   "movies",
+            title: NayiveUI.t( 'movies.whereFolder' ),
+            note:  NayiveUI.t( 'movies.whereFolderNote' )
+        } );
+        if( ! DIR )
+        {
+            $( "#noDirHint" ).hidden = false;
+            return;
+        }
+    }
+
+    setCrumb();
+    $( "#mainRow" ).hidden   = false;
+    $( "#playerBar" ).hidden = false;
+
+    await loadProgress();
+    await loadPosters();
+    await scan();
+}
+
+NayiveI18n.ready.then( boot );
+</script>
+</body>
+</html>

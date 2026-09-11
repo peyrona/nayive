@@ -1,0 +1,1417 @@
+<!-- index.html - "Music": browse and play the audio files in one Drive folder
+     (and its subfolders). Opened as  ?dir=<folder path>  from Drive's "Abrir
+     con" dialog (a double-clicked file no app claims) - Drive has no Music
+     button any more.
+
+     Opened from the launcher there is no ?dir=: the page uses the folder it
+     remembers in data/music/config.json, and the first time (no config yet)
+     asks for it with NayiveUI.pickFolder and saves the answer. The crumb in the
+     header re-opens that picker to change folder. Only if the visitor cancels
+     the picker (or isn't signed in) does the "open me from Drive" hint show.
+
+     Real folders only: the file list comes from GumApi.listDirRecursive(dir)
+     (GET /api/files?dir=&recursive=1 - the whole subtree in one call), each
+     song plays straight from GumApi.fileUrl(path) through a real <audio>
+     element (the server already streams that with Range support - the same
+     endpoint Drive's own built-in A/V player uses). Title/artist/album come
+     from the file's ID3v2 tags when it is an .mp3 (a small Range read, same
+     trick Photos uses for EXIF), else from the path: "Artist/Album/NN - Title"
+     when the folder structure has it, the bare filename otherwise. The ID3 read
+     and the track-length probe are both a network hit per file, so their
+     results are cached in data/music/scan-cache.json (keyed by path + size +
+     mtime): a big library is only scanned once, later opens read the cache and
+     the song list itself renders in pages as you scroll. That cache stays in
+     step: Drive re-keys it on a move / rename and drops entries on a trash
+     (remapMediaCaches / purgeMediaCaches), Music itself sweeps entries for
+     files no longer in the library every time it opens, and a stale entry
+     never matches anyway (the size + mtime guard). Saved
+     playlists live in data/music/playlists.json (paths, not IDs - a real
+     file's path is already a stable identifier). The Now Playing queue is
+     session-only, like any player's queue.
+
+     Known gaps (fine for a first real version, not yet built): only .mp3
+     carries real tag reading (FLAC/OGG stay filename-derived); nothing writes
+     a guessed tag back into the file yet. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Music</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E">
+
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'music',
+            title: 'Music',
+            lead:  NayiveUI.t( 'music.introLead' ),
+            buttons: [
+                { sel: '#crumb',        text: NayiveUI.t( 'music.introFolder' ) },
+                { sel: '#searchInput',  text: NayiveUI.t( 'music.introSearch' ) },
+                { sel: '#reloadBtn',   text: NayiveUI.t( 'music.introRescan' ) },
+                { sel: '#filterSongs',  name: NayiveUI.t( 'music.introGroupName' ), text: NayiveUI.t( 'music.introGroup' ) },
+                { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ) },
+                { sel: '#loadListBtn',  text: NayiveUI.t( 'music.introLoadList' ) },
+                { sel: '#saveListBtn',  text: NayiveUI.t( 'music.introSaveList' ) },
+                { sel: '#clearQueueBtn', text: NayiveUI.t( 'music.introClear' ) }
+            ]
+        } );
+    } );
+    </script>
+
+    <style>
+    /* ===================================================================
+     * MUSIC - per-app layout only. Chrome (header, .icon-btn, .field,
+     * .sheet, .btn) comes from shared/theme.css + app.css; this block holds
+     * the library / queue split and the player bar, none of which exists
+     * anywhere else yet.
+     * =================================================================*/
+    html, body { height: 100%; }
+
+    /* Elements below force their own `display` (flex, mostly) - the [hidden]
+       attribute's UA display:none loses to that unless restated here. Same
+       pattern Photos already uses (.edit-hint[hidden] etc.). */
+    #mainRow[hidden], #noDirHint[hidden], #playerBar[hidden], #loadActions[hidden] { display: none; }
+
+    /* .crumb, .bar-info, .tb-end and the .view-bar row come from shared/app.css
+       (folder-backed viewers), search field included. */
+
+    /* ---- main row: library + queue ----------------------------------
+       .main-row, .folder-row, .scope-chip, .empty-hint and the whole player
+       bar are the shared MEDIA VIEWER block in shared/app.css. Only what is
+       really Music's own is below. */
+
+    .pane-resizer { flex: 0 0 auto; width: 5px; cursor: col-resize; background: transparent;
+                     transition: background-color var(--tr-fast); }
+    .pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
+
+    .lib-pane   { flex: 1 1 auto; min-width: 420px; display: flex; flex-direction: column; overflow: hidden; }
+    /* The toolbar row is shared/app.css's .view-bar; it only re-states the
+       padding, so it stays flush with .lib-content's own indent. */
+    .view-bar   { padding-inline: 20px; }
+
+    .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 20px 28px; }
+
+    .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .album-card, .artist-card
+    { display: flex; flex-direction: column; gap: 10px; padding: 12px;
+      background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+      cursor: pointer; text-align: left; font: inherit; color: inherit;
+      transition: border-color var(--tr-fast), background-color var(--tr-fast); }
+    .album-card:hover, .artist-card:hover { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    .album-card.is-active, .artist-card.is-active
+    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+    .album-art  { width: 100%; aspect-ratio: 1; border-radius: var(--radius-s);
+                  display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
+    .album-art svg { width: 32%; height: 32%; }
+    .album-card-title, .artist-name
+    { font-size: 0.86rem; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .album-card-sub, .artist-meta { font-size: 0.76rem; color: var(--text-dim); }
+
+    .artist-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
+    .artist-card  { align-items: center; text-align: center; padding: 18px 10px; }
+    .artist-avatar{ width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center;
+                     justify-content: center; font-size: 1.3rem; font-weight: 700; color: rgba(255,255,255,.92); }
+
+    .scope-bar  { display: flex; align-items: center; margin: 18px 0 12px; }
+
+    .show-more { display: block; width: 100%; margin: 10px 0 4px; padding: 10px;
+                 border: 1px dashed var(--line); border-radius: var(--radius-s);
+                 background: transparent; color: var(--text-dim); font: inherit;
+                 font-size: 0.82rem; cursor: pointer; }
+    .show-more:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+                       color: var(--text); }
+
+    /* ---- library rows: one song, real drag source ------------------- */
+    .song-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
+                background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+                cursor: grab; transition: border-color var(--tr-fast); }
+    .song-row:hover  { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    .song-row:active { cursor: grabbing; }
+    .song-row.is-playing { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+                            background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
+    .song-row.is-playing .song-title { color: var(--accent); }
+    .song-art  { flex: 0 0 auto; width: 38px; height: 38px; border-radius: var(--radius-s);
+                 display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
+    .song-art svg { width: 18px; height: 18px; }
+    .song-meta { flex: 1 1 auto; min-width: 0; }
+    .song-title{ font-size: 0.88rem; font-weight: 600; color: var(--text);
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .song-sub  { font-size: 0.76rem; color: var(--text-dim); margin-top: 1px;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .song-dur  { flex: 0 0 auto; font-size: 0.78rem; color: var(--text-dim); font-family: var(--font-mono); width: 38px; text-align: right; }
+    .song-add  { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: none;
+                 background: transparent; color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+                 cursor: pointer; transition: background-color var(--tr-fast), color var(--tr-fast); }
+    .song-add:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+    .song-add svg   { width: 16px; height: 16px; }
+
+    /* ---- queue pane --------------------------------------------------- */
+    .queue-pane { flex: 0 0 auto; display: flex; flex-direction: column; min-width: 260px; max-width: 560px;
+                  background: var(--bg); border-left: 1px solid var(--line); overflow: hidden; }
+    .queue-header{ flex: 0 0 auto; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+    .queue-title-row{ margin-bottom: 12px; }
+    .queue-title-row h2 { margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--text); }
+    .queue-mode-row  { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mode-pills      { display: flex; gap: 6px; }
+    .queue-actions   { display: flex; align-items: center; gap: 4px; }
+
+    .queue-list  { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
+    .queue-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+                   padding: 56px 24px; color: var(--text-faint); text-align: center; }
+    .queue-empty svg { width: 30px; height: 30px; opacity: .5; }
+    .queue-empty p   { margin: 0; font-size: 0.84rem; }
+    .queue-tail  { height: 26px; }
+
+    .queue-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
+                 background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+                 cursor: grab; transition: border-color var(--tr-fast), background-color var(--tr-fast); }
+    .queue-row:hover  { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    .queue-row:active { cursor: grabbing; }
+    .queue-row.is-playing { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+                             background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
+    .queue-row.is-playing .queue-title { color: var(--accent); }
+    .queue-row.drag-over { box-shadow: inset 0 2px 0 var(--accent); }
+    .queue-indicator { flex: 0 0 auto; width: 16px; color: var(--text-faint); display: flex; align-items: center; }
+    .queue-indicator svg { width: 14px; height: 16px; display: block; }
+    .eq  { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+    .eq span { width: 3px; background: var(--accent); border-radius: 1px; animation: eqBounce .9s ease-in-out infinite; transform-origin: bottom; }
+    .eq span:nth-child(1) { height: 40%; animation-delay: 0s; }
+    .eq span:nth-child(2) { height: 100%; animation-delay: .15s; }
+    .eq span:nth-child(3) { height: 65%; animation-delay: .3s; }
+    @keyframes eqBounce { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+    .queue-art { flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-s); border: none;
+                 display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); cursor: pointer; padding: 0; }
+    .queue-art svg { width: 17px; height: 17px; }
+    .queue-meta{ flex: 1 1 auto; min-width: 0; }
+    .queue-title{ font-size: 0.86rem; font-weight: 600; color: var(--text);
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .queue-sub { font-size: 0.74rem; color: var(--text-dim); margin-top: 1px;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .queue-dur { flex: 0 0 auto; font-size: 0.74rem; color: var(--text-dim); }
+    .queue-remove{ flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: none;
+                    background: transparent; color: var(--text-faint); display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; transition: background-color var(--tr-fast), color var(--tr-fast); }
+    .queue-remove:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+    .queue-remove svg { width: 14px; height: 14px; }
+
+    .saved-list { padding: 0; }
+    .saved-row  { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px;
+                  background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m); }
+    .saved-row-icon{ flex: 0 0 auto; width: 38px; height: 38px; border-radius: var(--radius-s);
+                      background: color-mix(in srgb, var(--accent) 20%, var(--card2)); color: var(--accent);
+                      display: flex; align-items: center; justify-content: center; }
+    .saved-row-icon svg { width: 18px; height: 18px; }
+    .saved-row-meta { flex: 1 1 auto; min-width: 0; }
+    .saved-row-name { font-size: 0.88rem; font-weight: 600; color: var(--text);
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .saved-row-count{ font-size: 0.76rem; color: var(--text-dim); }
+    .saved-row-load, .saved-row-del
+    { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%; border: none;
+      background: transparent; color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background-color var(--tr-fast), color var(--tr-fast); }
+    .saved-row-load:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+    .saved-row-del:hover  { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+    .saved-row-load svg, .saved-row-del svg { width: 16px; height: 16px; }
+
+    /* ---- player bar: the shared MEDIA VIEWER block (shared/app.css).
+       Only the album cover and the "what is playing" column are Music's. ---- */
+    .player-now     { width: 270px; }
+    .player-art     { width: 48px; height: 48px; border-radius: var(--radius-s); }
+    .player-art svg { width: 22px; height: 22px; }
+
+    @media (max-width: 760px)
+    {
+        .queue-pane, .pane-resizer { display: none; }
+        .lib-pane                   { min-width: 0; }   /* the 420px floor made the page 551px wide on a phone */
+        .search-toggle              { display: inline-flex; }
+        .tb-end .topbar-search      { display: none; }
+        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
+        .volume-block { display: none; }
+        /* Player bar in two rows: cover + title + transport, then the seek bar
+           full width underneath (one row clipped the "next" button off-screen). */
+        .player-bar  { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+        .player-now  { flex: 1 1 0; min-width: 0; width: auto; }
+        .seek-block  { flex: 1 0 100%; order: 5; min-width: 0; }
+        .time-label  { width: auto; }
+    }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <header class="topbar">
+        <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <h1>Music</h1>
+        <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <div class="topbar-actions">
+            <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
+        </div>
+        <span class="bar-info" id="subStrip"></span>
+    </header>
+
+    <div class="main-row" id="mainRow" hidden>
+
+        <div class="lib-pane">
+            <div class="view-bar">
+                <div class="tb-modes">
+                    <button class="icon-btn is-active" id="filterSongs" data-i18n-attr="title:music.songs, aria-label:music.songs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                    </button>
+                    <button class="icon-btn" id="filterAlbums" data-i18n-attr="title:music.albums, aria-label:music.albums">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="icon-btn" id="filterArtists" data-i18n-attr="title:music.artists, aria-label:music.artists">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+                    </button>
+                    <button class="icon-btn" id="filterFolders" data-i18n-attr="title:music.folders, aria-label:music.folders">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
+                    </button>
+                </div>
+                <div class="tb-end">
+                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
+                    <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </button>
+                    <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    </button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="lib-content" id="libContent"></div>
+        </div>
+
+        <div class="pane-resizer" id="paneResizer" data-i18n-attr="title:music.dragWidth"></div>
+
+        <div class="queue-pane" id="queuePane">
+            <div class="queue-header">
+                <div class="queue-title-row"><h2 data-i18n="music.queue"></h2></div>
+                <div class="queue-mode-row">
+                    <div class="mode-pills">
+                        <button class="icon-btn is-active" id="seqBtn" data-i18n-attr="title:music.playSeq, aria-label:music.playSeq">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                        </button>
+                        <button class="icon-btn" id="shuffleBtn" data-i18n-attr="title:music.playShuffle, aria-label:music.playShuffle">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        </button>
+                    </div>
+                    <div class="queue-actions">
+                        <button class="icon-btn" id="loadListBtn" data-i18n-attr="title:music.loadSaved, aria-label:music.loadSaved">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 18h16"/></svg>
+                        </button>
+                        <button class="icon-btn" id="saveListBtn" disabled data-i18n-attr="title:music.saveQueue, aria-label:music.saveQueue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h11l3 3v11H5V5Z"/><path d="M8 5v5h7V5"/><path d="M8 14h8"/></svg>
+                        </button>
+                        <button class="icon-btn danger" id="clearQueueBtn" disabled data-i18n-attr="title:music.clearQueue, aria-label:music.clearQueue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="queueList"></div>
+        </div>
+
+    </div>
+
+    <div class="empty-hint" id="noDirHint" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <p data-i18n="music.needFolder"></p>
+        <a class="text-btn" href="../drive/index.html" data-i18n="ui.openDrive"></a>
+    </div>
+
+    <div class="player-bar" id="playerBar" hidden>
+        <div class="player-now">
+            <span class="player-art" id="playerArt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </span>
+            <span class="player-meta">
+                <div class="player-title" id="playerTitle" data-i18n="music.nothingPlaying"></div>
+                <div class="player-sub" id="playerSub" data-i18n="music.pickSong"></div>
+            </span>
+        </div>
+
+        <div class="transport">
+            <button class="transport-btn" id="prevBtn" disabled data-i18n-attr="title:ui.prev, aria-label:ui.prev">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 20 9 12l10-8v16Z"/><rect x="4.5" y="4" width="2" height="16" rx="1"/></svg>
+            </button>
+            <button class="transport-btn play-btn" id="playBtn" data-i18n-attr="title:media.play, aria-label:media.play" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="playIcon"><path d="M8 5v14l11-7-11-7Z"/></svg>
+            </button>
+            <button class="transport-btn" id="nextBtn" disabled data-i18n-attr="title:ui.next, aria-label:ui.next">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 4l10 8-10 8V4Z"/><rect x="17.5" y="4" width="2" height="16" rx="1"/></svg>
+            </button>
+        </div>
+
+        <div class="seek-block">
+            <span class="time-label" id="elapsedLabel">0:00</span>
+            <input type="range" id="seekRange" min="0" max="1" value="0" step="1" disabled>
+            <span class="time-label end" id="totalLabel">0:00</span>
+        </div>
+
+        <div class="volume-block">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+            <input type="range" id="volumeRange" min="0" max="100" value="80">
+        </div>
+    </div>
+
+    <audio id="player" preload="metadata"></audio>
+
+    <!-- SAVE PLAYLIST SHEET ------------------------------------------------- -->
+    <div class="sheet-backdrop" id="saveBackdrop">
+        <div class="sheet">
+            <h2 data-i18n="music.saveList"></h2>
+            <p class="dialog-text" id="saveHint"></p>
+            <div class="field">
+                <label for="playlistName" data-i18n="music.listName"></label>
+                <input id="playlistName" type="text" autocomplete="off" data-i18n-attr="placeholder:music.listNamePh">
+            </div>
+            <div class="sheet-actions">
+                <button data-act="close" id="saveCancelBtn" data-i18n-attr="title:ui.cancel"></button>
+                <button data-act="primary" id="saveConfirmBtn" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOAD PLAYLIST SHEET ------------------------------------------------- -->
+    <div class="sheet-backdrop" id="loadBackdrop">
+        <div class="sheet">
+            <h2 data-i18n="music.loadList"></h2>
+            <div id="loadList"></div>
+            <div class="sheet-actions" id="loadActions" hidden>
+                <button data-act="close" id="loadCloseBtn" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="../shared/media.js"></script>
+<script>
+"use strict";
+
+var $  = function ( s ) { return document.querySelector( s ); };
+var $$ = function ( s ) { return Array.prototype.slice.call( document.querySelectorAll( s ) ); };
+
+var PARAMS = new URLSearchParams( location.search );
+var DIR    = ( function () { var d = PARAMS.get( "dir" ); return d ? d.replace( /\/+$/, "" ) : null; } )();
+
+// No ?dir= means we were opened from the launcher, not from Drive: DIR is filled
+// in from data/music/config.json (or the folder picker) in boot().
+
+var PLAYLISTS_PATH = "data/music/playlists.json";
+var SCAN_PATH      = "data/music/scan-cache.json";
+var AUDIO_EXT = [ "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "weba" ];
+
+// The helpers shared with Photos / Movies live in shared/media.js (one copy).
+var esc = NayiveMedia.esc, extOf = NayiveMedia.extOf, colorFor = NayiveMedia.colorFor,
+    fmtClock = NayiveMedia.fmtClock, FOLDER_SVG = NayiveMedia.ICONS.folder;
+
+/* ---------------------------------------------------------------------------
+ * STATE
+ * -------------------------------------------------------------------------*/
+var st = {
+    songs: [],              // every scanned audio file: {path, dirPath, title, artist, album, track, color, duration, durationKnown}
+    folderTree: null,       // the recursive {path, nodes} scan result, rooted at DIR
+    filter: "songs",        // songs | albums | artists | folders
+    search: "",
+    selectedAlbum: null,    // "artist‡album" key
+    selectedArtist: null,
+    selectedFolder: null,   // a folder path
+    queue: [],              // songs currently queued, by reference to entries in st.songs
+    playingIndex: -1,       // index into st.queue
+    isPlaying: false,
+    shuffle: false,
+    playlists: [],          // [{id, name, paths:[...]}]
+    queueWidth: 360,
+    dragPayload: null       // { type:'library', song } | { type:'queue', index }
+};
+
+var audio = $( "#player" );
+
+// data/music/scan-cache.json: path -> { size, mtime, title, artist, album,
+// track, duration, tagRead }. Read by applyCache(), topped up by refineTags()
+// / loadDurations() as they read files (shared/media.js scanCache).
+var SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
+
+// The "Canciones" list is built one page at a time - a whole library at once
+// is a lot of DOM and refineTags() re-renders it on nearly every frame while
+// it scans. listShown grows as you scroll (see wireLibraryRows); it resets
+// whenever the filter or the search text changes.
+var LIST_PAGE = 250;
+var listShown = LIST_PAGE;
+
+/* ---------------------------------------------------------------------------
+ * SCAN - walk the recursive tree the server returns and flatten it into
+ * st.songs, deriving a first-guess title/artist/album from the path. ID3
+ * tags for .mp3 files are read afterwards, in the background, and override
+ * the guess as each one resolves (see refineTags()).
+ * -------------------------------------------------------------------------*/
+function deriveFromPath( fullPath )
+{
+    var rel = fullPath.slice( DIR.length ).replace( /^\/+/, "" );
+    var segs = rel.split( "/" );
+    var filename = segs[ segs.length - 1 ];
+    var folders  = segs.slice( 0, -1 );
+
+    var title = filename.replace( /\.[a-z0-9]+$/i, "" );
+    var track = null;
+    var mTrack = /^\s*(\d{1,3})[\s._-]+(.*)$/.exec( title );
+    if( mTrack ) { track = parseInt( mTrack[ 1 ], 10 ); title = mTrack[ 2 ]; }
+
+    var artist = null, album = null;
+    if( folders.length >= 2 )
+    {
+        artist = folders[ folders.length - 2 ];
+        album  = folders[ folders.length - 1 ];
+    }
+    else if( folders.length === 1 )
+    {
+        album = folders[ 0 ];
+        var mAA = /^(.+?)\s*-\s*(.+)$/.exec( album );
+        if( mAA ) { artist = mAA[ 1 ]; album = mAA[ 2 ]; }
+    }
+    if( ! artist )
+    {
+        var mTA = /^(.+?)\s*-\s*(.+)$/.exec( title );
+        if( mTA ) { artist = mTA[ 1 ].trim(); title = mTA[ 2 ].trim(); }
+    }
+
+    return {
+        title:  title.trim() || filename,
+        artist: artist ? artist.trim() : null,
+        album:  album ? album.trim() : null,
+        track:  track,
+        folder: folders.join( "/" )
+    };
+}
+
+async function scan()
+{
+    setLibMsg( NayiveUI.t( 'music.scanning' ) );
+    var tree = await NayiveMedia.loadFolderTree( DIR, setLibMsg, true );
+    if( ! tree ) return;
+    st.folderTree = { path: DIR, nodes: tree.nodes };
+
+    var files = NayiveMedia.flattenFiles( st.folderTree, AUDIO_EXT );
+
+    st.songs = files.map( function ( f )
+    {
+        var d = deriveFromPath( f.path );
+        return {
+            path: f.path, size: f.size, mtime: f.mtime,
+            title: d.title, artist: d.artist, album: d.album, track: d.track, folder: d.folder,
+            color: colorFor( ( d.artist || "" ) + "‡" + ( d.album || d.folder || "" ) ),
+            duration: null, tagRead: false
+        };
+    } );
+    st.songs.sort( songCmp );
+
+    await applyCache();          // reuse tags + durations read on a previous open
+
+    renderCollectionSummary();
+    renderLibrary();
+    refineTags();
+    loadDurations();
+}
+
+function songCmp( a, b )
+{
+    return ( a.artist || "" ).localeCompare( b.artist || "" ) ||
+           ( a.album  || "" ).localeCompare( b.album  || "" ) ||
+           ( ( a.track || 999 ) - ( b.track || 999 ) ) ||
+           a.title.localeCompare( b.title );
+}
+
+/* ---------------------------------------------------------------------------
+ * SCAN CACHE  (data/music/scan-cache.json)
+ *
+ * ID3 tags and track lengths each cost a network round-trip per file. For a
+ * library of a thousand songs that is a slow, wasteful thing to redo on every
+ * open, so the results are remembered here keyed by path, alongside the file's
+ * size + mtime. A song that still matches its cached entry is taken as-is;
+ * refineTags()/loadDurations() only touch the rest. Entries for files no
+ * longer in the library are dropped on save - applyCache() sweeps them every
+ * open, and Drive re-keys / drops them on a move / rename / trash too.
+ * -------------------------------------------------------------------------*/
+async function applyCache()
+{
+    await SCAN_CACHE.load();
+
+    st.songs.forEach( function ( s )
+    {
+        var hit = SCAN_CACHE.hit( s );
+        if( ! hit ) return;
+        if( hit.title  ) s.title  = hit.title;
+        if( hit.artist ) s.artist = hit.artist;
+        if( hit.album  ) s.album  = hit.album;
+        if( hit.track != null ) s.track = hit.track;
+        if( hit.duration != null ) s.duration = hit.duration;
+        s.color   = colorFor( ( s.artist || "" ) + "‡" + ( s.album || s.folder || "" ) );
+        // an mp3 is only "done" once its tags were actually read; other formats
+        // never get an ID3 pass, so a size/mtime match is all they need.
+        s.tagRead = hit.tagRead === true || extOf( s.path ) !== "mp3";
+    } );
+
+    st.songs.sort( songCmp );   // cached tags may have changed artist/album/track
+
+    // A song gone from the library (deleted, or moved out) leaves a dead entry.
+    // refineTags()/loadDurations() may both do nothing this open (all cached),
+    // so sweep here: drop the orphans and rewrite the file.
+    if( SCAN_CACHE.prune( new Set( st.songs.map( function ( s ) { return s.path; } ) ) ) )
+        SCAN_CACHE.save();
+}
+
+/* ---------------------------------------------------------------------------
+ * ID3v2 TAGS - a small Range read of the file's start, same trick Photos uses
+ * for EXIF. Text frames only (TIT2/TPE1/TALB/TRCK); v2.2/2.3/2.4. Anything
+ * that fails (not an mp3, no tag, a shape we don't parse) just keeps the
+ * filename-derived guess - never throws.
+ * -------------------------------------------------------------------------*/
+function syncSafeOrPlain( b, off, syncsafe )
+{
+    if( syncsafe )
+        return ( ( b[ off ] & 0x7f ) << 21 ) | ( ( b[ off + 1 ] & 0x7f ) << 14 ) |
+               ( ( b[ off + 2 ] & 0x7f ) << 7 ) | ( b[ off + 3 ] & 0x7f );
+    return ( b[ off ] << 24 ) | ( b[ off + 1 ] << 16 ) | ( b[ off + 2 ] << 8 ) | b[ off + 3 ];
+}
+
+function decodeId3Text( bytes )
+{
+    if( ! bytes || ! bytes.length ) return "";
+    var enc = bytes[ 0 ];
+    var body = bytes.subarray( 1 );
+    try
+    {
+        var out;
+        if( enc === 0 )      out = new TextDecoder( "iso-8859-1" ).decode( body );
+        else if( enc === 3 ) out = new TextDecoder( "utf-8" ).decode( body );
+        else
+        {
+            var be = enc === 2;
+            var start = 0;
+            if( body.length >= 2 && body[ 0 ] === 0xff && body[ 1 ] === 0xfe ) { be = false; start = 2; }
+            else if( body.length >= 2 && body[ 0 ] === 0xfe && body[ 1 ] === 0xff ) { be = true;  start = 2; }
+            out = new TextDecoder( be ? "utf-16be" : "utf-16le" ).decode( body.subarray( start ) );
+        }
+        return out.replace( /\u0000+$/, "" ).trim();
+    }
+    catch( e ) { return ""; }
+}
+
+function parseId3v2( bytes )
+{
+    if( bytes.length < 10 || bytes[ 0 ] !== 0x49 || bytes[ 1 ] !== 0x44 || bytes[ 2 ] !== 0x33 ) return null;
+    var verMajor = bytes[ 3 ];
+    var declaredSize = syncSafeOrPlain( bytes, 6, true ) + 10;
+    var end = Math.min( declaredSize, bytes.length );
+    var idLen = verMajor === 2 ? 3 : 4;
+    var headerLen = verMajor === 2 ? 6 : 10;
+    var frames = {};
+    var pos = 10;
+
+    while( pos + idLen + ( verMajor === 2 ? 3 : 4 ) <= end )
+    {
+        var id = "";
+        for( var i = 0; i < idLen; i++ )
+        {
+            var c = bytes[ pos + i ];
+            if( c === 0 ) break;
+            id += String.fromCharCode( c );
+        }
+        if( ! id ) break;
+
+        var size;
+        if( verMajor === 2 ) size = ( bytes[ pos + 3 ] << 16 ) | ( bytes[ pos + 4 ] << 8 ) | bytes[ pos + 5 ];
+        else                 size = syncSafeOrPlain( bytes, pos + 4, verMajor === 4 );
+
+        if( size <= 0 || pos + headerLen + size > bytes.length ) break;
+        frames[ id ] = bytes.subarray( pos + headerLen, pos + headerLen + size );
+        pos += headerLen + size;
+    }
+
+    function text( v2, v3 ) { var d = frames[ verMajor === 2 ? v2 : v3 ]; return d ? decodeId3Text( d ) : ""; }
+    return {
+        title:  text( "TT2", "TIT2" ),
+        artist: text( "TP1", "TPE1" ),
+        album:  text( "TAL", "TALB" ),
+        track:  text( "TRK", "TRCK" )
+    };
+}
+
+async function refineTags()
+{
+    var mp3s = st.songs.filter( function ( s ) { return extOf( s.path ) === "mp3" && ! s.tagRead; } );
+    if( ! mp3s.length ) return;
+    var CONCURRENCY = 4, next = 0, dirty = false;
+
+    function scheduleRepaint()
+    {
+        if( dirty ) return;
+        dirty = true;
+        requestAnimationFrame( function () { dirty = false; renderLibrary(); renderQueueList(); } );
+    }
+
+    async function worker()
+    {
+        while( next < mp3s.length )
+        {
+            var song = mp3s[ next++ ];
+            try
+            {
+                var bytes = await GumApi.fetchBinary( GumApi.fileUrl( song.path ), { headers: { Range: "bytes=0-262143" } } );
+                var tag = parseId3v2( bytes );
+                if( tag )
+                {
+                    if( tag.title  ) song.title  = tag.title;
+                    if( tag.artist ) song.artist = tag.artist;
+                    if( tag.album  ) song.album  = tag.album;
+                    if( tag.track  ) { var n = parseInt( tag.track, 10 ); if( ! isNaN( n ) ) song.track = n; }
+                    song.color = colorFor( ( song.artist || "" ) + "‡" + ( song.album || song.folder || "" ) );
+                }
+            }
+            catch( e ) { /* keep the filename guess */ }
+            song.tagRead = true;
+            SCAN_CACHE.set( song, {
+                tagRead: true, title: song.title, artist: song.artist,
+                album: song.album, track: song.track
+            } );
+            scheduleRepaint();
+        }
+    }
+    var workers = [];
+    for( var i = 0; i < CONCURRENCY; i++ ) workers.push( worker() );
+    await Promise.all( workers );
+}
+
+// Real duration via a throwaway Audio() + preload=metadata (cheap: the server
+// supports Range, so the browser only pulls enough to read the header, not
+// the whole file). Small batches so a big folder doesn't open 200 connections
+// at once.
+async function loadDurations()
+{
+    var pending = st.songs.filter( function ( s ) { return s.duration == null; } );
+    if( ! pending.length ) return;
+    await NayiveMedia.pool( pending, 4, async function ( song )
+    {
+        var d = await NayiveMedia.probeDuration( "audio", GumApi.fileUrl( song.path ) );
+        if( d == null ) return;
+        song.duration = d;
+        SCAN_CACHE.set( song, { duration: d } );
+        renderLibraryDuration( song );
+        renderQueueDuration( song );
+    } );
+    SCAN_CACHE.saveNow();       // final flush once everything is probed
+}
+
+/* ---------------------------------------------------------------------------
+ * DERIVED GROUPINGS - recomputed on demand from st.songs' current metadata
+ * (cheap for a personal library; keeps albums/artists correct as ID3 tags
+ * refine the filename guess).
+ * -------------------------------------------------------------------------*/
+function albumKey( s ) { return ( s.artist || "" ) + "‡" + ( s.album || s.folder || "" ); }
+
+function computeAlbums()
+{
+    var map = {};
+    st.songs.forEach( function ( s )
+    {
+        var key = albumKey( s );
+        if( ! map[ key ] ) map[ key ] = {
+            key: key, title: s.album || NayiveUI.t( 'music.unknownAlbum' ),
+            artist: s.artist || NayiveUI.t( 'music.unknownArtist' ), color: s.color, count: 0
+        };
+        map[ key ].count++;
+    } );
+    return Object.keys( map ).map( function ( k ) { return map[ k ]; } )
+        .sort( function ( a, b ) { return a.artist.localeCompare( b.artist, NayiveUI.lang() ) || a.title.localeCompare( b.title, NayiveUI.lang() ); } );
+}
+
+function computeArtists()
+{
+    var map = {};
+    st.songs.forEach( function ( s )
+    {
+        var name = s.artist || NayiveUI.t( 'music.unknownArtist' );
+        if( ! map[ name ] ) map[ name ] = { name: name, songCount: 0, albums: {}, color: colorFor( name ) };
+        map[ name ].songCount++;
+        map[ name ].albums[ s.album || s.folder || "" ] = true;
+    } );
+    return Object.keys( map ).map( function ( k )
+    {
+        var a = map[ k ];
+        return { name: a.name, songCount: a.songCount, albumCount: Object.keys( a.albums ).length, color: a.color };
+    } ).sort( function ( a, b ) { return a.name.localeCompare( b.name, NayiveUI.lang() ); } );
+}
+
+/* ---------------------------------------------------------------------------
+ * RENDER - LIBRARY
+ * -------------------------------------------------------------------------*/
+var MUSIC_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
+
+function songRowHtml( s )
+{
+    var cur = st.queue[ st.playingIndex ];
+    var playing = !! cur && cur.song === s;
+    return '<div class="song-row' + ( playing ? ' is-playing' : '' ) + '" draggable="true" data-path="' + esc( s.path ) + '">' +
+        '<span class="song-art" style="background:' + s.color + '">' + MUSIC_NOTE_SVG + '</span>' +
+        '<span class="song-meta">' +
+            '<div class="song-title">' + esc( s.title ) + '</div>' +
+            '<div class="song-sub">' + esc( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + esc( s.album || NayiveUI.t( 'music.unknownAlbum' ) ) + '</div>' +
+        '</span>' +
+        '<span class="song-dur">' + ( s.duration != null ? fmtClock( s.duration ) : "…" ) + '</span>' +
+        '<button class="song-add" data-add="' + esc( s.path ) + '" data-i18n-attr="title:music.addToQueue, aria-label:music.addToQueue">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+        '</button>' +
+    '</div>';
+}
+
+function songListHtml( list, windowed )
+{
+    if( ! list.length ) return '<div class="empty-hint"><p data-i18n="music.noMatch"></p></div>';
+    if( windowed && list.length > listShown )
+        return list.slice( 0, listShown ).map( songRowHtml ).join( "" ) +
+            '<button class="show-more" id="showMoreBtn">' +
+            esc( NayiveUI.tf( "music.showMore", { n: list.length - listShown } ) ) + '</button>';
+    return list.map( songRowHtml ).join( "" );
+}
+
+var scopeBarHtml = NayiveMedia.scopeBarHtml;
+
+function renderCollectionSummary()
+{
+    var albums  = computeAlbums().length;
+    var artists = computeArtists().length;
+    $( "#subStrip" ).textContent = NayiveUI.tf( "music.libraryCounts", { songs: st.songs.length, albums: albums, artists: artists } );
+    setCrumb();
+}
+
+function setLibMsg( text )
+{
+    $( "#libContent" ).innerHTML = '<div class="empty-hint"><p>' + esc( text ) + '</p></div>';
+}
+
+function renderLibrary()
+{
+    var host = $( "#libContent" );
+    var html = "";
+
+    if( st.filter === "songs" )
+    {
+        var q = st.search.trim().toLowerCase();
+        var list = ! q ? st.songs : st.songs.filter( function ( s )
+        { return ( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+        html = songListHtml( list, true );
+    }
+    else if( st.filter === "albums" )
+    {
+        var albums = computeAlbums();
+        html += '<div class="album-grid">' + albums.map( function ( a )
+        {
+            var active = st.selectedAlbum === a.key;
+            return '<button class="album-card' + ( active ? ' is-active' : '' ) + '" data-album="' + esc( a.key ) + '">' +
+                '<span class="album-art" style="background:' + a.color + '">' + MUSIC_NOTE_SVG + '</span>' +
+                '<span class="album-card-title">' + esc( a.title ) + '</span>' +
+                '<span class="album-card-sub">' + esc( a.artist ) + ' · ' + a.count + '</span></button>';
+        } ).join( "" ) + '</div>';
+        if( st.selectedAlbum )
+        {
+            var picked = albums.filter( function ( a ) { return a.key === st.selectedAlbum; } )[ 0 ];
+            var songs = st.songs.filter( function ( s ) { return albumKey( s ) === st.selectedAlbum; } );
+            html += scopeBarHtml( picked ? picked.title + " · " + picked.artist : "" ) + songListHtml( songs );
+        }
+        else html += '<div class="empty-hint">' + MUSIC_NOTE_SVG + '<p data-i18n="music.pickAlbum"></p></div>';
+    }
+    else if( st.filter === "artists" )
+    {
+        var artists = computeArtists();
+        html += '<div class="artist-grid">' + artists.map( function ( a )
+        {
+            var active = st.selectedArtist === a.name;
+            return '<button class="artist-card' + ( active ? ' is-active' : '' ) + '" data-artist="' + esc( a.name ) + '">' +
+                '<span class="artist-avatar" style="background:' + a.color + '">' + esc( a.name.charAt( 0 ).toUpperCase() ) + '</span>' +
+                '<span class="artist-name">' + esc( a.name ) + '</span>' +
+                '<span class="artist-meta">' + esc( NayiveUI.tf( "music.artistCounts", { albums: a.albumCount, songs: a.songCount } ) ) + '</span></button>';
+        } ).join( "" ) + '</div>';
+        if( st.selectedArtist )
+        {
+            var songs2 = st.songs.filter( function ( s ) { return ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
+            html += scopeBarHtml( st.selectedArtist ) + songListHtml( songs2 );
+        }
+        else html += '<div class="empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><p data-i18n="music.pickArtist"></p></div>';
+    }
+    else // folders
+    {
+        html += '<div class="folder-tree">' + NayiveMedia.folderTreeHtml( st.folderTree, st.selectedFolder ) + '</div>';
+        if( st.selectedFolder )
+        {
+            var prefix = st.selectedFolder;
+            var songs3 = st.songs.filter( function ( s ) { return s.path.slice( 0, prefix.length + 1 ) === prefix + "/"; } );
+            html += scopeBarHtml( prefix.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) ) + songListHtml( songs3 );
+        }
+        else html += '<div class="empty-hint">' + FOLDER_SVG + '<p data-i18n="music.pickFolder"></p></div>';
+    }
+
+    host.innerHTML = html;
+    wireLibraryRows();
+}
+
+function renderLibraryDuration( song )
+{
+    $$( '.song-row[data-path="' + cssEsc( song.path ) + '"] .song-dur' ).forEach( function ( el )
+    { el.textContent = song.duration != null ? fmtClock( song.duration ) : "…"; } );
+}
+
+function cssEsc( s ) { return String( s ).replace( /["\\]/g, "\\$&" ); }
+
+function wireLibraryRows()
+{
+    $$( "#libContent .song-row" ).forEach( function ( row )
+    {
+        row.addEventListener( "dragstart", function ()
+        {
+            var song = findSong( row.getAttribute( "data-path" ) );
+            st.dragPayload = { type: "library", song: song };
+        } );
+    } );
+    $$( "#libContent [data-add]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ( e )
+        {
+            e.stopPropagation();
+            addToQueue( findSong( btn.getAttribute( "data-add" ) ) );
+        } );
+    } );
+    $$( "#libContent [data-album]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var key = btn.getAttribute( "data-album" );
+            st.selectedAlbum = st.selectedAlbum === key ? null : key;
+            renderLibrary();
+        } );
+    } );
+    $$( "#libContent [data-artist]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var name = btn.getAttribute( "data-artist" );
+            st.selectedArtist = st.selectedArtist === name ? null : name;
+            renderLibrary();
+        } );
+    } );
+    $$( "#libContent [data-folder]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ()
+        {
+            var path = btn.getAttribute( "data-folder" );
+            st.selectedFolder = st.selectedFolder === path ? null : path;
+            renderLibrary();
+        } );
+    } );
+    var clearScope = $( "#clearScopeBtn" );
+    if( clearScope ) clearScope.addEventListener( "click", function ()
+    {
+        st.selectedAlbum = st.selectedArtist = st.selectedFolder = null;
+        renderLibrary();
+    } );
+
+    // "Mostrar más" - by tap, or on its own when it scrolls into view
+    var more = $( "#showMoreBtn" );
+    if( more )
+    {
+        var grow = function () { listShown += LIST_PAGE; renderLibrary(); };
+        more.addEventListener( "click", grow );
+        var mo = new IntersectionObserver( function ( es )
+        {
+            // ignore a stale observer whose button a re-render already replaced
+            if( ! more.isConnected ) { mo.disconnect(); return; }
+            if( es[ 0 ].isIntersecting ) { mo.disconnect(); grow(); }
+        }, { root: $( "#libContent" ), rootMargin: "600px" } );
+        mo.observe( more );
+    }
+}
+
+function findSong( path ) { return st.songs.filter( function ( s ) { return s.path === path; } )[ 0 ] || null; }
+
+/* ---------------------------------------------------------------------------
+ * RENDER - QUEUE
+ * -------------------------------------------------------------------------*/
+function queueRowHtml( entry, index )
+{
+    var song = entry.song;
+    var playing = index === st.playingIndex;
+    return '<div class="queue-row' + ( playing ? ' is-playing' : '' ) + '" draggable="true" data-index="' + index + '">' +
+        '<span class="queue-indicator">' + ( playing
+            ? '<span class="eq"><span></span><span></span><span></span></span>'
+            : GRIP_SVG ) + '</span>' +
+        '<button class="queue-art" style="background:' + song.color + '" data-play="' + index + '" data-i18n-attr="title:music.playThis, aria-label:music.playThis">' + MUSIC_NOTE_SVG + '</button>' +
+        '<span class="queue-meta">' +
+            '<div class="queue-title">' + esc( song.title ) + '</div>' +
+            '<div class="queue-sub">' + esc( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + '</div>' +
+        '</span>' +
+        '<span class="queue-dur">' + ( song.duration != null ? fmtClock( song.duration ) : "…" ) + '</span>' +
+        '<button class="queue-remove" data-remove="' + index + '" data-i18n-attr="title:music.removeFromQueue, aria-label:music.removeFromQueue">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' +
+        '</button>' +
+    '</div>';
+}
+
+function renderQueueList()
+{
+    var host = $( "#queueList" );
+    if( ! st.queue.length )
+    {
+        host.innerHTML = '<div class="queue-empty">' + MUSIC_NOTE_SVG +
+            '<p data-i18n="music.queueEmpty"></p></div>';
+    }
+    else
+    {
+        host.innerHTML = '<div class="queue-list" id="queueListInner">' +
+            st.queue.map( queueRowHtml ).join( "" ) + '<div class="queue-tail"></div></div>';
+    }
+    wireQueueRows();
+
+    $( "#clearQueueBtn" ).disabled = ! st.queue.length;
+    $( "#saveListBtn"  ).disabled = ! st.queue.length;
+}
+
+function renderQueueDuration( song )
+{
+    var idx = -1;
+    for( var i = 0; i < st.queue.length; i++ ) { if( st.queue[ i ].song === song ) { idx = i; break; } }
+    if( idx === -1 ) return;
+    var el = $( '.queue-row[data-index="' + idx + '"] .queue-dur' );
+    if( el ) el.textContent = song.duration != null ? fmtClock( song.duration ) : "…";
+}
+
+function wireQueueRows()
+{
+    var inner = $( "#queueListInner" );
+    $$( "#queueList .queue-row" ).forEach( function ( row )
+    {
+        var index = parseInt( row.getAttribute( "data-index" ), 10 );
+        row.addEventListener( "dragstart", function () { st.dragPayload = { type: "queue", index: index }; } );
+        row.addEventListener( "dragover", function ( e ) { e.preventDefault(); row.classList.add( "drag-over" ); } );
+        row.addEventListener( "dragleave", function () { row.classList.remove( "drag-over" ); } );
+        row.addEventListener( "drop", function ( e )
+        {
+            e.preventDefault(); e.stopPropagation(); row.classList.remove( "drag-over" );
+            handleQueueDrop( index );
+        } );
+    } );
+    $$( "#queueList [data-play]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function () { playIndex( parseInt( btn.getAttribute( "data-play" ), 10 ) ); } );
+    } );
+    $$( "#queueList [data-remove]" ).forEach( function ( btn )
+    {
+        btn.addEventListener( "click", function ( e )
+        {
+            e.stopPropagation();
+            removeFromQueue( parseInt( btn.getAttribute( "data-remove" ), 10 ) );
+        } );
+    } );
+    if( inner )
+    {
+        inner.addEventListener( "dragover", function ( e ) { e.preventDefault(); } );
+        inner.addEventListener( "drop", function ( e ) { e.preventDefault(); handleQueueDrop( st.queue.length ); } );
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * QUEUE LOGIC
+ * -------------------------------------------------------------------------*/
+function addToQueue( song )
+{
+    if( ! song ) return;
+    st.queue.push( { song: song } );
+    renderQueueList();
+    renderLibrary();
+    if( st.playingIndex === -1 ) playIndex( st.queue.length - 1 );
+}
+
+function handleQueueDrop( targetIndex )
+{
+    var payload = st.dragPayload;
+    st.dragPayload = null;
+    if( ! payload ) return;
+
+    if( payload.type === "queue" )
+    {
+        var from = payload.index;
+        if( from === targetIndex ) return;
+        var wasPlaying = st.queue[ st.playingIndex ];
+        var moved = st.queue.splice( from, 1 )[ 0 ];
+        var insertAt = targetIndex > from ? targetIndex - 1 : targetIndex;
+        st.queue.splice( insertAt, 0, moved );
+        st.playingIndex = st.queue.indexOf( wasPlaying );
+    }
+    else if( payload.type === "library" )
+    {
+        st.queue.splice( Math.min( targetIndex, st.queue.length ), 0, { song: payload.song } );
+        if( st.playingIndex >= targetIndex ) st.playingIndex++;
+    }
+    renderQueueList();
+}
+
+function removeFromQueue( index )
+{
+    var wasPlaying = index === st.playingIndex;
+    st.queue.splice( index, 1 );
+    if( ! st.queue.length ) { st.playingIndex = -1; stopPlayback(); }
+    else if( wasPlaying ) playIndex( Math.min( index, st.queue.length - 1 ) );
+    else if( index < st.playingIndex ) st.playingIndex--;
+    renderQueueList();
+    renderLibrary();
+}
+
+function clearQueue()
+{
+    st.queue = []; st.playingIndex = -1;
+    stopPlayback();
+    renderQueueList();
+    renderLibrary();
+}
+
+/* ---------------------------------------------------------------------------
+ * PLAYBACK - a real <audio> element; this is what makes it keep playing while
+ * you browse other views (nothing here pauses it on navigation because there
+ * is none - Music is one page) and, where the browser/OS allow it, while the
+ * tab is in the background too (MediaSession below gives it lock-screen /
+ * notification controls, same as any native player).
+ * -------------------------------------------------------------------------*/
+function playIndex( index )
+{
+    if( index < 0 || index >= st.queue.length ) return;
+    st.playingIndex = index;
+    var song = st.queue[ index ].song;
+    audio.src = GumApi.fileUrl( song.path );
+    audio.play().catch( function () {} );   // autoplay may be blocked - controls still work
+    renderQueueList();
+    renderLibrary();
+    updatePlayerBar();
+    updateMediaSession( song );
+}
+
+function stopPlayback()
+{
+    audio.pause();
+    audio.removeAttribute( "src" );
+    audio.load();
+    updatePlayerBar();
+}
+
+function togglePlay()
+{
+    if( st.playingIndex === -1 ) { if( st.queue.length ) playIndex( 0 ); return; }
+    if( audio.paused ) audio.play().catch( function () {} );
+    else audio.pause();
+}
+
+function advance( dir )
+{
+    if( ! st.queue.length ) return;
+    var idx;
+    if( st.shuffle )
+    {
+        idx = st.queue.length === 1 ? 0 : Math.floor( Math.random() * st.queue.length );
+        while( st.queue.length > 1 && idx === st.playingIndex ) idx = Math.floor( Math.random() * st.queue.length );
+    }
+    else idx = ( st.playingIndex + dir + st.queue.length ) % st.queue.length;
+    playIndex( idx );
+}
+
+function updatePlayerBar()
+{
+    var entry = st.queue[ st.playingIndex ];
+    var song = entry ? entry.song : null;
+    $( "#playerTitle" ).textContent = song ? song.title : NayiveUI.t( 'music.nothingPlaying' );
+    $( "#playerSub"   ).textContent = song ? ( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ( song.album ? " · " + song.album : "" )
+                                            : NayiveUI.t( 'music.pickSong' );
+    $( "#playerArt"   ).style.background = song ? song.color : "#3A3C42";
+
+    var has = !! song;
+    $( "#prevBtn" ).disabled = ! has;
+    $( "#nextBtn" ).disabled = ! has;
+    $( "#playBtn" ).disabled = ! has;
+    $( "#seekRange" ).disabled = ! has;
+}
+
+/* ---------------------------------------------------------------------------
+ * MEDIASESSION - lock-screen / notification transport controls, when the
+ * browser supports it. Purely additive: everything above already works
+ * without it.
+ * -------------------------------------------------------------------------*/
+function updateMediaSession( song )
+{
+    if( ! song ) return;
+    NayiveMedia.mediaSession(
+        { title: song.title, artist: song.artist || NayiveUI.t( 'music.unknownArtist' ), album: song.album || "" },
+        {
+            play:          function () { audio.play().catch( function () {} ); },
+            pause:         function () { audio.pause(); },
+            previoustrack: function () { advance( -1 ); },
+            nexttrack:     function () { advance( 1 ); }
+        } );
+}
+
+/* ---------------------------------------------------------------------------
+ * PLAYLISTS - data/music/playlists.json, an array of {id, name, paths}.
+ * Paths are real file paths - a real file's path is already a stable id.
+ * -------------------------------------------------------------------------*/
+async function loadPlaylists()
+{
+    try { st.playlists = JSON.parse( await GumApi.readFile( PLAYLISTS_PATH ) ) || []; }
+    catch( e ) { st.playlists = []; }
+}
+
+async function writePlaylists()
+{
+    await GumApi.writeFileBytes( PLAYLISTS_PATH,
+        new TextEncoder().encode( JSON.stringify( st.playlists, null, 1 ) ) );
+}
+
+function openSaveSheet()
+{
+    if( ! st.queue.length ) return;
+    $( "#saveHint" ).textContent = NayiveUI.tf( "music.saveHint", { n: st.queue.length } );
+    $( "#playlistName" ).value = "";
+    NayiveUI.open( "saveBackdrop" );
+    $( "#playlistName" ).focus();
+}
+
+async function confirmSave()
+{
+    var name = $( "#playlistName" ).value.trim();
+    if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
+    st.playlists.push( { id: "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) } );
+    NayiveUI.setOpen( "saveBackdrop", false );
+    try { await writePlaylists(); NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); }
+    catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) ); }
+}
+
+function renderLoadList()
+{
+    var host = $( "#loadList" );
+    if( ! st.playlists.length )
+    {
+        host.innerHTML = '<p class="dialog-text" data-i18n="music.noLists"></p>';
+        $( "#loadActions" ).hidden = false;
+        return;
+    }
+    $( "#loadActions" ).hidden = true;
+    host.innerHTML = '<div class="saved-list">' + st.playlists.map( function ( pl )
+    {
+        return '<div class="saved-row">' +
+            '<span class="saved-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"/></svg></span>' +
+            '<span class="saved-row-meta"><div class="saved-row-name">' + esc( pl.name ) + '</div>' +
+            '<div class="saved-row-count">' + esc( NayiveUI.tf( "music.nSongs", { n: pl.paths.length } ) ) + '</div></span>' +
+            '<button class="saved-row-del" data-del="' + esc( pl.id ) + '" data-i18n-attr="title:ui.delete, aria-label:ui.delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+            '<button class="saved-row-load" data-load="' + esc( pl.id ) + '" data-i18n-attr="title:music.loadIntoQueue, aria-label:music.loadIntoQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 18h16"/></svg></button>' +
+        '</div>';
+    } ).join( "" ) + '</div>';
+
+    $$( "#loadList [data-load]" ).forEach( function ( btn )
+    { btn.addEventListener( "click", function () { loadPlaylist( btn.getAttribute( "data-load" ) ); } ); } );
+    $$( "#loadList [data-del]" ).forEach( function ( btn )
+    { btn.addEventListener( "click", function () { deletePlaylist( btn.getAttribute( "data-del" ) ); } ); } );
+}
+
+function loadPlaylist( id )
+{
+    var pl = st.playlists.filter( function ( p ) { return p.id === id; } )[ 0 ];
+    if( ! pl ) return;
+    var found = pl.paths.map( findSong ).filter( Boolean ).map( function ( s ) { return { song: s }; } );
+    var missing = pl.paths.length - found.length;
+    st.queue = found;
+    st.playingIndex = -1;
+    stopPlayback();
+    renderQueueList();
+    NayiveUI.setOpen( "loadBackdrop", false );
+    if( found.length ) playIndex( 0 );
+    if( missing ) NayiveUI.toast( NayiveUI.tf( missing === 1 ? "music.oneMissing" : "music.nMissing", { n: missing } ) );
+}
+
+async function deletePlaylist( id )
+{
+    var pl = st.playlists.filter( function ( p ) { return p.id === id; } )[ 0 ];
+    if( ! pl ) return;
+    if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'music.deleteList' ), body: NayiveUI.tf( "music.deleteListBody", { name: pl.name } ), confirm: NayiveUI.t( 'ui.delete' ), danger: true } ) ) return;
+    st.playlists = st.playlists.filter( function ( p ) { return p.id !== id; } );
+    renderLoadList();
+    try { await writePlaylists(); }
+    catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+}
+
+/* ---------------------------------------------------------------------------
+ * RESIZABLE QUEUE PANE
+ * -------------------------------------------------------------------------*/
+function wireResizer()
+{
+    var resizer = $( "#paneResizer" ), pane = $( "#queuePane" );
+    resizer.addEventListener( "mousedown", function ( e )
+    {
+        e.preventDefault();
+        var startX = e.clientX, startWidth = st.queueWidth;
+        resizer.classList.add( "dragging" );
+        function onMove( ev )
+        {
+            var next = Math.min( 560, Math.max( 260, startWidth - ( ev.clientX - startX ) ) );
+            st.queueWidth = next;
+            pane.style.width = next + "px";
+            pane.style.flexBasis = next + "px";
+        }
+        function onUp()
+        {
+            document.removeEventListener( "mousemove", onMove );
+            document.removeEventListener( "mouseup", onUp );
+            resizer.classList.remove( "dragging" );
+        }
+        document.addEventListener( "mousemove", onMove );
+        document.addEventListener( "mouseup", onUp );
+    } );
+}
+
+/* ---------------------------------------------------------------------------
+ * STATIC WIRING
+ * -------------------------------------------------------------------------*/
+function setFilter( f )
+{
+    st.filter = f; st.selectedAlbum = st.selectedArtist = st.selectedFolder = null;
+    listShown = LIST_PAGE;
+    [ "Songs", "Albums", "Artists", "Folders" ].forEach( function ( name )
+    { $( "#filter" + name ).classList.toggle( "is-active", name.toLowerCase() === f ); } );
+    renderLibrary();
+}
+
+function wireStaticUI()
+{
+    $( "#filterSongs"   ).addEventListener( "click", function () { setFilter( "songs" ); } );
+    $( "#filterAlbums"  ).addEventListener( "click", function () { setFilter( "albums" ); } );
+    $( "#filterArtists" ).addEventListener( "click", function () { setFilter( "artists" ); } );
+    $( "#filterFolders" ).addEventListener( "click", function () { setFilter( "folders" ); } );
+
+    $( "#searchInput" ).addEventListener( "input", function ( e )
+    { st.search = e.target.value; listShown = LIST_PAGE; renderLibrary(); } );
+
+    NayiveMedia.wireSearchToggle();                     // phone magnifier
+    NayiveMedia.wireCrumbPicker( { app: "music" } );    // crumb -> folder picker
+
+    $( "#reloadBtn" ).addEventListener( "click", function ()
+    {
+        st.selectedAlbum = st.selectedArtist = st.selectedFolder = null;
+        scan();
+    } );
+
+    $( "#seqBtn" ).addEventListener( "click", function ()
+    { st.shuffle = false; $( "#seqBtn" ).classList.add( "is-active" ); $( "#shuffleBtn" ).classList.remove( "is-active" ); } );
+    $( "#shuffleBtn" ).addEventListener( "click", function ()
+    { st.shuffle = true; $( "#shuffleBtn" ).classList.add( "is-active" ); $( "#seqBtn" ).classList.remove( "is-active" ); } );
+
+    $( "#clearQueueBtn" ).addEventListener( "click", async function ()
+    {
+        if( ! st.queue.length ) return;
+        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'music.clearQueue' ), body: NayiveUI.t( "music.clearQueueBody" ), confirm: NayiveUI.t( "music.empty" ), danger: true } ) ) return;
+        clearQueue();
+    } );
+
+    $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
+    $( "#saveCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "saveBackdrop", false ); } );
+    $( "#saveConfirmBtn" ).addEventListener( "click", confirmSave );
+    $( "#playlistName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) confirmSave(); } );
+
+    $( "#loadListBtn" ).addEventListener( "click", function () { renderLoadList(); NayiveUI.open( "loadBackdrop" ); } );
+    $( "#loadCloseBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "loadBackdrop", false ); } );
+
+    $( "#prevBtn" ).addEventListener( "click", function () { advance( -1 ); } );
+    $( "#nextBtn" ).addEventListener( "click", function () { advance( 1 ); } );
+    $( "#playBtn" ).addEventListener( "click", togglePlay );
+
+    $( "#queueList" ).addEventListener( "dragover", function ( e ) { e.preventDefault(); } );
+
+    var seekRange = $( "#seekRange" ), seeking = false;
+    seekRange.addEventListener( "input", function () { seeking = true; $( "#elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
+    seekRange.addEventListener( "change", function () { audio.currentTime = Number( seekRange.value ); seeking = false; } );
+
+    var volumeRange = $( "#volumeRange" );
+    audio.volume = Number( volumeRange.value ) / 100;
+    volumeRange.addEventListener( "input", function () { audio.volume = Number( volumeRange.value ) / 100; } );
+
+    audio.addEventListener( "loadedmetadata", function ()
+    {
+        seekRange.max = Math.floor( audio.duration ) || 1;
+        $( "#totalLabel" ).textContent = fmtClock( audio.duration );
+    } );
+    audio.addEventListener( "timeupdate", function ()
+    {
+        if( seeking ) return;
+        seekRange.value = Math.floor( audio.currentTime );
+        $( "#elapsedLabel" ).textContent = fmtClock( audio.currentTime );
+    } );
+    audio.addEventListener( "play",  function () { st.isPlaying = true;  setPlayIcon( true ); } );
+    audio.addEventListener( "pause", function () { st.isPlaying = false; setPlayIcon( false ); } );
+    audio.addEventListener( "ended", function () { advance( 1 ); } );
+
+    wireResizer();
+
+    document.addEventListener( "keydown", function ( e )
+    {
+        if( $( "#saveBackdrop" ).classList.contains( "open" ) ) { if( e.key === "Escape" ) NayiveUI.setOpen( "saveBackdrop", false ); return; }
+        if( $( "#loadBackdrop" ).classList.contains( "open" ) ) { if( e.key === "Escape" ) NayiveUI.setOpen( "loadBackdrop", false ); return; }
+    } );
+}
+
+var setPlayIcon = NayiveMedia.setPlayIcon;
+
+/* ---------------------------------------------------------------------------
+ * BOOT
+ * -------------------------------------------------------------------------*/
+async function boot()
+{
+    wireStaticUI();
+
+    if( ! DIR )
+    {
+        DIR = await NayiveUI.launcherFolder( {
+            app:   "music",
+            title: NayiveUI.t( "music.whereFolder" ),
+            note:  NayiveUI.t( "music.whereFolderNote" )
+        } );
+        if( ! DIR )
+        {
+            $( "#noDirHint" ).hidden = false;
+            return;
+        }
+    }
+
+    setCrumb();
+    $( "#mainRow"   ).hidden = false;
+    $( "#playerBar" ).hidden = false;
+
+    await loadPlaylists();
+    await scan();
+}
+
+function setCrumb() { if( DIR ) NayiveMedia.setCrumb( NayiveMedia.dirLabel( DIR ) ); }
+
+NayiveI18n.ready.then( boot );
+</script>
+</body>
+</html>

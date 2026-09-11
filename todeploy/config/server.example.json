@@ -1,0 +1,12 @@
+{
+    "host": "0.0.0.0",
+    "port": 4343,
+    "base_dir": ".",
+    "session_hours": 12,
+    "log_level": "error",
+    "tls": {
+        "cert_file": "",
+        "key_file": ""
+    },
+    "admin": { "name": null, "password": null }
+}

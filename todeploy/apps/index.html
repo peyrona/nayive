@@ -1,0 +1,1806 @@
+<!-- index.html - Launcher for the Balata single-page apps. A 3-column grid of the twelve
+     apps (the last three - Photos / Music / Movies - are folder viewers: opened from here
+     they use the folder each remembers in its own data/<app>/config.json, asking once via
+     NayiveUI.pickFolder the first time),
+     centred in the viewport, with a settings row below: a gear button that, when pressed,
+     rolls from the centre to the left edge while the other tool buttons unfold into place
+     to its right, one after another (right-to-left as the gear rolls out, mirrored on the
+     way back) - the shared colour-scheme (dark / light) toggle, the
+     palette button that opens the "Esquemas de color" dialog (create / edit custom dark +
+     light schemes; shared/theme.js applies the active one everywhere), an account button
+     (opens the "Mi cuenta" dialog: change the sign-in password, the trash /
+     trip reminder periods and this device's notifications), and the "Cerrar sesión"
+     button. Pressing the gear again - or clicking anything else in the launcher - plays it
+     all in reverse. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="shared/i18n.js"></script>
+    <title>Apps</title>
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+
+    <!-- Shared colour scheme (dark default, opt-in light) — same as every other Balata app. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/app.css">
+    <script src="shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'launcher',
+            title: NayiveUI.t( 'launcher.introTitle' ),
+            lead:  NayiveUI.t( 'launcher.introLead' ),
+            autoShow:    true,
+            dismissible: true,
+            buttons: [
+                { sel: '#gearBtn',           text: NayiveUI.t( 'launcher.introGear' ) },
+                { sel: '[data-theme-toggle]', name: NayiveUI.t( 'ui.theme' ), text: NayiveUI.t( 'launcher.introTheme' ) },
+                { sel: '#schemesBtn',        text: NayiveUI.t( 'launcher.introSchemes' ) },
+                { sel: '#accountBtn',        text: NayiveUI.t( 'launcher.introAccount' ) },
+                { sel: '#installBtn',        text: NayiveUI.t( 'launcher.introInstall' ) },
+                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ) }
+            ],
+            tip: NayiveUI.t( 'launcher.introTip' )
+        } );
+    } );
+    </script>
+    <script>try{
+        var _r = document.documentElement;
+        if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) _r.setAttribute( 'data-theme', 'light' );
+        var _d = JSON.parse( localStorage.getItem( 'balata-schemes' ) || 'null' );
+        if( _d && _d.schemes ){
+            var _id = _r.getAttribute( 'data-theme' ) === 'light' ? _d.activeLight : _d.activeDark, _s = null;
+            for( var _i = 0; _i < _d.schemes.length; _i++ ) if( _d.schemes[ _i ].id === _id ) _s = _d.schemes[ _i ];
+            if( _s && _s.tokens ) [ '--bg', '--card', '--card2', '--line' ].forEach( function ( k ){ if( _s.tokens[ k ] ) _r.style.setProperty( k, _s.tokens[ k ] ); } );
+        }
+    }catch( e ){}</script>
+    <script src="shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL.
+         This one service worker (apps/sw.js) also serves the tasks / calendar / contact / planner shells offline. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Nayive">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( 'sw.js' ).catch( function () {} ); } );
+
+        // Offer to install the PWA (so photos can be shared straight into it).
+        // Runs on every launcher load - so on every login - until the app is
+        // installed or the user clicks "No mostrar más". Waits a moment so it
+        // doesn't fight the first paint; NayiveUI decides whether to actually
+        // show anything (installed / declined / unsupported).
+        window.addEventListener( 'load', function () {
+            setTimeout( function () { if( window.NayiveUI ) NayiveUI.offerInstall(); }, 1500 );
+        } );
+        window.addEventListener( 'beforeinstallprompt', function () {
+            setTimeout( function () { if( window.NayiveUI ) NayiveUI.offerInstall(); }, 300 );
+        } );
+
+        // The "Instalar app" button in the settings row: opens the same dialog by
+        // hand (ignores the snooze), so installing is never lost after "No mostrar
+        // más". Already installed -> the button leaves the DOM, and with it the
+        // help list's row for it.
+        NayiveI18n.ready.then( function () {
+            var b = document.getElementById( 'installBtn' );
+            if( ! b ) return;
+            if( window.NayiveUI && NayiveUI.isStandalone() ) { b.remove(); return; }
+            b.addEventListener( 'click', function () {
+                if( window.NayiveUI ) NayiveUI.offerInstall( { manual: true } );
+            } );
+            window.addEventListener( 'appinstalled', function () { b.remove(); } );
+        } );
+    </script>
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        html, body { min-height: 100%; }
+
+        body
+        {
+            margin: 0;
+            font-family: var(--font-sans);
+            color: var(--text);
+            background: var(--bg);
+        }
+
+        .launcher
+        {
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 28px 16px;
+        }
+
+        .panel
+        {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            padding: 32px 30px 26px;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--card);
+            box-shadow: 0 16px 40px var(--shadow);
+        }
+
+        .grid
+        {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px 24px;
+        }
+
+        .tile
+        {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: clamp(88px, 27vw, 110px);
+            padding: 16px 8px 12px;
+            border-radius: var(--radius-l);
+            color: var(--text);
+            text-decoration: none;
+            transition: background .12s ease, transform .1s ease;
+        }
+        .tile:hover  { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+        .tile:active { transform: scale(0.95); }
+
+        .tile svg { width: 40px; height: 40px; color: var(--accent); flex: 0 0 auto; }
+
+        .tile span
+        {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            text-align: center;
+            line-height: 1.2;
+        }
+        .tile:hover span { color: var(--text); }
+
+        .theme-btn
+        {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 1px solid var(--line);
+            background: var(--card2);
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 0;
+            text-decoration: none;
+        }
+        .theme-btn:hover  { color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--card2)); }
+        .theme-btn:active { transform: scale(0.94); }
+
+        /* Settings row: the gear sits dead-centre on its own. Pressing it rolls the gear
+           along to the left border - it spins the whole way - while the other tool
+           buttons (theme, palette, account, logout) unfold into place to its
+           right, one after another. Pressing it again plays the whole thing in reverse. */
+        .tools
+        {
+            position: relative;               /* containing block for the absolutely-placed gear */
+            container-type: inline-size;       /* lets the gear park itself at 50cqw (row centre) */
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            flex-wrap: wrap;                  /* last resort on a very narrow screen: a second line */
+            row-gap: 10px;
+            width: 100%;
+            min-height: 42px;
+            padding-left: 0;
+            overflow: hidden;                 /* clips the extras while they widen into place */
+            transition: padding-left .55s ease-in-out;
+        }
+        .tools.open { padding-left: 42px; }    /* leaves room for the gear at the left edge */
+
+        /* The gear is taken out of the flex flow so it can glide from the centre to the
+           left border on its own - and, being sized only by itself, it can never be
+           squeezed out of round. It rests at row-centre (closed) or the left edge (open);
+           the roll between the two is run from JS (script at the end of <body>) so it
+           plays even when the OS has "reduce motion" on. */
+        #gearBtn
+        {
+            position: absolute;
+            left: 0;
+            top: 21px;                        /* half a 42px line - NOT 50%: the row is two lines
+                                                 tall when it wraps, and the gear belongs on the first */
+            transform: translateX(calc(50cqw - 50%)) translateY(-50%);   /* parked at row centre */
+            z-index: 1;
+        }
+        #gearBtn svg { width: 20px; height: 20px; }
+        #gearBtn[aria-expanded="true"]        /* the "pressed" look - unchanged */
+        {
+            color: var(--text);
+            background: color-mix(in srgb, var(--accent) 24%, var(--card2));
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+        }
+        .tools.open #gearBtn { transform: translateX(0) translateY(-50%); }   /* at the left edge */
+
+        /* Inset ring so .tools' overflow:hidden can't swallow the keyboard focus outline. */
+        .theme-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+
+        /* Each extra button is a zero-width slot until the row opens, then it widens in.
+           Staggered delays make them arrive (and, on close, leave) one after another. */
+        .tool-extra
+        {
+            flex: 0 0 auto;
+            width: 42px;
+            min-width: 0;                     /* let it actually collapse to nothing */
+            /* The gap gives way before the row does. 10px when there is room; on a narrow
+               viewport (Android "Display size" / Chrome page zoom shrink it to ~320 CSS px
+               or less) it tightens to 4px, which keeps all five buttons on one line.
+               cqw is the row's content box, so the gear's 42px slot is already excluded. */
+            margin-left: clamp(4px, calc((100cqw - 5 * 42px) / 5), 10px);
+            overflow: hidden;
+            transition: width .24s ease, margin-left .24s ease, opacity .2s ease, visibility .24s;
+        }
+        .tools:not(.open) .tool-extra
+        {
+            width: 0;
+            margin-left: 0;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        /* The extras appear in step with the rolling gear. On OPEN the gear rolls
+           right-to-left, so the buttons show up right-to-left too: the right-most
+           (Cerrar sesión) first, the left-most (Tema) last - a button is never
+           revealed on the left of the gear before the gear has rolled past its
+           slot. On CLOSE the gear rolls left-to-right and the order is mirrored: the
+           left-most button leaves first, the right-most last.
+           nth-child counts the gear as child 1, so the five extras are 2..6. */
+        .tools.open       .tool-extra:nth-child(6) { transition-delay: 0s;   }
+        .tools.open       .tool-extra:nth-child(5) { transition-delay: .08s; }
+        .tools.open       .tool-extra:nth-child(4) { transition-delay: .16s; }
+        .tools.open       .tool-extra:nth-child(3) { transition-delay: .24s; }
+        .tools.open       .tool-extra:nth-child(2) { transition-delay: .32s; }
+        .tools:not(.open) .tool-extra:nth-child(2) { transition-delay: 0s;   }
+        .tools:not(.open) .tool-extra:nth-child(3) { transition-delay: .08s; }
+        .tools:not(.open) .tool-extra:nth-child(4) { transition-delay: .16s; }
+        .tools:not(.open) .tool-extra:nth-child(5) { transition-delay: .24s; }
+        .tools:not(.open) .tool-extra:nth-child(6) { transition-delay: .32s; }
+
+        .tool-extra svg { width: 20px; height: 20px; }
+
+        /* Build date, stamped in by deploy.sh (replaces the literal "ver.26-09-02").
+           Sits in the panel's own bottom-right corner (panel is position:relative). */
+        .version
+        {
+            position: absolute;
+            right: 10px;
+            bottom: 6px;
+            font-size: 0.7rem;
+            line-height: 1;
+            color: var(--text-faint);
+            letter-spacing: 0.02em;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
+           width - 30px padding + 24px column gaps + 27vw tiles made it 426px wide
+           on a 390px screen, so the page scrolled sideways and the build date was
+           cut off. Tiles now share the panel's width three-up. */
+        @media (max-width: 640px)
+        {
+            .launcher { padding: 16px 10px; }
+            .panel    { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
+            .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
+            .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
+        }
+
+        /* ---- eye toggle inside a password field (Mi cuenta dialog) ---- */
+        .pw-wrap { position: relative; margin: 10px 0; }
+        .pw-wrap .scm-input { margin: 0; padding-right: 42px; }
+        .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+        .scm-check-row[hidden] { display: none; }
+        .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; }
+        .scm-check-row .scm-check { margin: 0; }
+        .scm-check input { flex: 0 0 auto; }
+        .pw-eye
+        {
+            position: absolute; top: 0; right: 0; height: 100%;
+            width: 38px; display: flex; align-items: center; justify-content: center;
+            border: none; background: none; padding: 0; cursor: pointer; color: var(--text-dim);
+        }
+        .pw-eye:hover { color: var(--text); }
+        .pw-eye svg { width: 18px; height: 18px; }
+
+        /* ---- "Esquemas de color" dialog ------------------------------- */
+        /* Shell follows the shared Nayive dialog convention: .sheet / .sheet-backdrop
+           here, .sheet-actions + .btn / .sheet-close from shared/theme.css, and the
+           lone close button cornered by shared/ui.js (NayiveUI.applySheetButtons). */
+        .sheet-backdrop
+        {
+            position: fixed; inset: 0; z-index: 100;
+            display: flex; overflow-y: auto;
+            padding: 24px 16px;
+            background: var(--scrim);
+        }
+        .sheet-backdrop[hidden] { display: none; }
+
+        .sheet
+        {
+            position: relative;
+            margin: auto;                 /* centres both axes; scrolls when taller than the viewport */
+            width: 100%; max-width: 400px;
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: var(--radius-l); padding: 20px 20px 18px;
+            box-shadow: 0 16px 40px var(--shadow);
+        }
+        .sheet h2 { margin: 0; padding-right: 40px; font-size: 1.05rem; font-weight: 600; }
+        .scm-h
+        {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-dim); margin: 18px 0 8px;
+        }
+
+        .scm-list { display: flex; flex-direction: column; gap: 6px; }
+        .scm-row
+        {
+            display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+            background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
+            padding: 8px 10px; color: var(--text); font: inherit; font-size: 0.88rem; cursor: pointer;
+        }
+        .scm-row.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+        .scm-sw { display: flex; flex: 0 0 auto; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+        .scm-sw i { width: 10px; height: 18px; display: block; }
+        .scm-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .scm-kind { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
+        .scm-badge
+        {
+            font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+            background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); padding: 1px 7px;
+        }
+
+        /* Look from app.css (FORM FIELD); only width and the gap are local. */
+        .scm-input { width: 100%; margin: 10px 0; }
+
+        .scm-seg { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; width: max-content; }
+        .scm-seg button
+        {
+            font: inherit; font-size: 0.82rem; padding: 7px 16px; border: none;
+            background: var(--card2); color: var(--text-dim); cursor: pointer;
+        }
+        .scm-seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+        .scm-tok { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+        .scm-tok input[type="color"]
+        {
+            width: 32px; height: 32px; flex: 0 0 auto; border: none; background: none; padding: 0;
+            border-radius: 7px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line);
+        }
+        .scm-tok input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .scm-tok input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
+        .scm-tok code { flex: 1 1 auto; font-size: 0.82rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; }
+        .scm-tok input[type="text"]
+        {
+            width: 96px; flex: 0 0 auto; text-align: center; text-transform: uppercase;
+            font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; padding: 6px;
+            border-radius: 7px; border: 1px solid var(--line); background: var(--card2); color: var(--text);
+        }
+        .scm-tok input[type="text"].bad { border-color: var(--danger); color: var(--danger); }
+        /* Action row + buttons: shared .sheet-actions / .btn (../shared/theme.css). */
+        .scm-msg { font-size: 0.8rem; color: var(--danger); margin: 10px 0 0; }
+        .scm-msg[hidden] { display: none; }
+
+        .scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
+        .scm-assign.scm-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
+        .scm-assign select
+        {
+            font: inherit; font-size: 0.85rem; padding: 7px 9px; border-radius: var(--radius-s);
+            border: 1px solid var(--line); background: var(--card2); color: var(--text); max-width: 190px;
+        }
+        /* The zone list is the widest select in the dialog, and on a narrow phone
+           it left too little for its own label ("Fuseau horaire" wrapped). Cap it
+           at a share of the row instead, so the label always gets one line. */
+        #tzSel { max-width: min( 190px, 55% ); }
+        .trash-days-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.85rem; }
+        .scm-num { width: 4.5em; text-align: center; }
+    </style>
+</head>
+
+<body>
+    <div class="launcher">
+
+      <div class="panel">
+
+        <div class="grid">
+            <!-- 4 rows of 3 (2026-09-08): Drive+Planner+Contacts / Write+Calc+Text / Photos+Music+Movies / Trips+Split+Games -->
+            <a class="tile" href="drive/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
+                <span>Drive</span>
+            </a>
+            <a class="tile" href="planner/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>Planner</span>
+            </a>
+            <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
+            <a class="tile" href="contact/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
+                <span>Contacts</span>
+            </a>
+
+            <a class="tile" href="write/index.html">
+                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
+                <span>Write</span>
+            </a>
+            <a class="tile" href="calc/index.html">
+                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
+                <span>Calc</span>
+            </a>
+            <a class="tile" href="text/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                <span>Text</span>
+            </a>
+
+            <a class="tile" href="photos/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>
+                <span>Photos</span>
+            </a>
+            <a class="tile" href="music/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                <span>Music</span>
+            </a>
+            <a class="tile" href="movies/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                <span>Movies</span>
+            </a>
+
+            <a class="tile" href="trips/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"></path></svg>
+                <span>Trips</span>
+            </a>
+            <a class="tile" href="split/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>
+                <span>Split</span>
+            </a>
+            <!-- Habits has no tile (2026-09-06): it opens inside Planner. -->
+            <a class="tile" href="games/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59c-.08.67-.7 5.87-.7 7.41a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.41.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.54-.62-6.74-.7-7.41A4 4 0 0 0 17.32 5z"></path></svg>
+                <span>Games</span>
+            </a>
+        </div>
+
+        <div class="tools" id="tools">
+
+            <button class="theme-btn" id="gearBtn" type="button" aria-expanded="false"
+                    aria-controls="tools" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+
+            <button class="theme-btn tool-extra" data-theme-toggle type="button" data-i18n-attr="title:ui.theme, aria-label:ui.themeToggle"></button>
+
+            <button class="theme-btn tool-extra" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
+                    <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
+                </svg>
+            </button>
+
+            <button class="theme-btn tool-extra" id="accountBtn" type="button" data-i18n-attr="title:ui.account, aria-label:ui.account">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            </button>
+            <!-- Removed from the DOM by the script below when Nayive already runs
+                 installed (so it also drops out of the help list). -->
+            <button class="theme-btn tool-extra" id="installBtn" type="button" data-i18n-attr="title:launcher.installApp, aria-label:launcher.installApp">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </button>
+
+            <a class="theme-btn tool-extra" id="logoutBtn" href="/api/logout" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </a>
+
+        </div>
+
+        <div class="version">ver.26-09-02</div>
+
+      </div>
+
+    </div>
+
+    <!-- "Esquemas de color" dialog - opened by the palette button in the settings row. -->
+    <div class="sheet-backdrop" id="scmBackdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.colorSchemes">
+            <h2 data-i18n="ui.colorSchemes"></h2>
+
+            <p class="scm-h" data-i18n="scm.saved"></p>
+            <div class="scm-list" id="scmList"></div>
+
+            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-dot" data-i18n-attr="data-info:scm.info"></button></p>
+            <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
+            <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
+                <button type="button" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
+                <button type="button" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
+            </div>
+            <div id="scmTokens">
+                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
+            </div>
+            <div class="sheet-actions">
+                <button id="scmDelete"  class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:scm.deleteThis"></button>
+                <button id="scmSaveNew" type="button" data-act="secondary:saveas" data-i18n-attr="title:scm.saveAsNew"></button>
+                <button id="scmSave"    type="button" data-act="primary" data-i18n-attr="title:scm.saveChanges"></button>
+            </div>
+            <p class="scm-msg" id="scmMsg" hidden></p>
+
+            <p class="scm-h" data-i18n="scm.assignHead"></p>
+            <label class="scm-assign"><span data-i18n="scm.darkMode"></span><select id="scmActiveDark"></select></label>
+            <label class="scm-assign"><span data-i18n="scm.lightMode"></span><select id="scmActiveLight"></select></label>
+
+            <div class="sheet-actions">
+                <button id="scmCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- "Mi cuenta" dialog - opened by the account button in the settings row. -->
+    <div class="sheet-backdrop" id="pwBackdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.account">
+            <h2 data-i18n="ui.account"></h2>
+
+            <div class="pw-wrap">
+                <input class="scm-input" id="pwCurrent" type="password"
+                       autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword">
+                <button type="button" class="pw-eye" data-eye="pwCurrent" data-i18n-attr="aria-label:ui.showPassword"></button>
+            </div>
+            <div class="pw-wrap">
+                <input class="scm-input" id="pwNew" type="password"
+                       autocomplete="new-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.newPassword">
+                <button type="button" class="pw-eye" data-eye="pwNew" data-i18n-attr="aria-label:ui.showPassword"></button>
+            </div>
+
+            <p class="scm-msg" id="pwMsg" hidden></p>
+
+            <label class="scm-assign" for="langSel">
+                <span data-i18n="acct.languagePrompt"></span>
+                <select id="langSel">
+                    <!-- Index 0 = no choice made: the browser's language decides.
+                         The rest are endonyms and stay literal. -->
+                    <option value="" data-i18n="acct.langDefault"></option>
+                    <option value="de">Deutsch</option>
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="fr">Français</option>
+                    <option value="it">Italiano</option>
+                    <option value="la">Latina</option>
+                    <option value="pt">Português</option>
+                </select>
+            </label>
+            <p class="scm-msg" id="langMsg" hidden></p>
+
+            <label class="scm-assign" for="tzSel">
+                <span data-i18n="acct.timezone"></span>
+                <!-- Filled from Intl.supportedValuesOf('timeZone'), so the list is
+                     always the browser's own IANA database and nobody can type a
+                     zone that does not exist. -->
+                <select id="tzSel"></select>
+            </label>
+            <p class="scm-msg" id="tzMsg" hidden></p>
+
+            <!-- Automatic light/dark. Unlike the timezone this is DEVICE state,
+                 not account state (shared/theme.js keeps it in localStorage):
+                 the person is one, but the phone and the PC can be in different
+                 places, and each must follow its own sun. -->
+            <div class="scm-check-row" id="autoThemeWrap">
+                <label class="scm-check">
+                    <input type="checkbox" id="autoThemeChk">
+                    <span data-i18n="acct.themeAuto"></span>
+                </label>
+                <button class="info-dot" data-i18n-attr="data-info:acct.themeAutoInfo"></button>
+            </div>
+            <p class="scm-msg" id="autoThemeMsg" hidden></p>
+
+            <label class="scm-assign" for="trashDaysAcct">
+                <span data-i18n="acct.autoDeleteAfter"></span>
+                <span class="trash-days-field">
+                    <input class="scm-num" id="trashDaysAcct" type="number" min="1" max="90" value="30" inputmode="numeric"> <span data-i18n="acct.days"></span>
+                </span>
+            </label>
+            <p class="scm-msg" id="trashDaysMsg" hidden></p>
+
+            <label class="scm-assign" for="tripDaysAcct">
+                <span data-i18n="acct.remindTrip"></span>
+                <span class="trash-days-field">
+                    <input class="scm-num" id="tripDaysAcct" type="number" min="0" max="90" inputmode="numeric"> <span data-i18n="acct.daysBefore"></span>
+                </span>
+            </label>
+            <p class="scm-msg" id="tripDaysMsg" hidden></p>
+
+            <div class="scm-check-row" id="pushChkWrap">
+                <label class="scm-check">
+                    <input type="checkbox" id="pushChk">
+                    <span data-i18n="acct.notifsOff"></span>
+                </label>
+                <button class="info-dot" data-i18n-attr="data-info:acct.notifsInfo"></button>
+            </div>
+            <label class="scm-assign scm-assign-inline" for="pushWindow">
+                <span data-i18n="acct.notifyMe"></span>
+                <span class="trash-days-field">
+                    <input class="scm-num" id="pushWindow" type="number" min="1" max="1440" value="30" inputmode="numeric"> <span data-i18n="acct.minBefore"></span>
+                </span>
+            </label>
+            <p class="scm-msg" id="pushMsg" hidden></p>
+
+            <div class="sheet-actions">
+                <button id="pwCancel" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="pwSave"   type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        ( function ()
+        {
+            var tools = document.getElementById( 'tools' );
+            var gear  = document.getElementById( 'gearBtn' );
+            if( ! tools || ! gear ) return;
+
+            // Roll the gear between its two resting spots (row-centre <-> left edge). It turns
+            // like a wheel: one full turn, counter-clockwise on the way out to the left,
+            // clockwise on the way back. Rotation shares the keyframes with the travel so the
+            // two stay in step (a wheel that isn't slipping). Driven here rather than via a CSS
+            // transition so it runs even when the OS has "reduce motion" on; CSS holds the
+            // resting spots. While it rolls the gear sweeps over the other buttons, so it's
+            // made click-through for the duration - otherwise a click meant for a tool button
+            // hits the gear and toggles the row shut.
+            var rollSeq = 0;
+            function rollGear( open )
+            {
+                if( ! gear.animate ) return;
+                var cx  = ( tools.clientWidth - gear.offsetWidth ) / 2;   // centre offset from the left edge
+                var deg = open ? -360 : 360;                             // out = counter-clockwise, back = clockwise
+                var mine = ++rollSeq;
+                var anim = gear.animate(
+                    [ { transform: 'translateX(' + ( open ? cx : 0 ) + 'px) translateY(-50%) rotate(0deg)' },
+                      { transform: 'translateX(' + ( open ? 0 : cx ) + 'px) translateY(-50%) rotate(' + deg + 'deg)' } ],
+                    { duration: 700, easing: 'cubic-bezier(.65, 0, .35, 1)' } );
+
+                gear.style.pointerEvents = 'none';
+                anim.onfinish = anim.oncancel = function () { if( mine === rollSeq ) gear.style.pointerEvents = ''; };
+            }
+
+            function setOpen( open )
+            {
+                rollGear( open );
+                tools.classList.toggle( 'open', open );
+                gear.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
+            }
+
+            gear.addEventListener( 'click', function () { setOpen( ! tools.classList.contains( 'open' ) ); } );
+
+            // Clicking anything else in the launcher - a tool button in the row, or one of the
+            // app tiles - rolls the row back to its original state (the lone, centred gear).
+            // Runs in the capture phase, before the button's own handler fires: the theme
+            // toggle rewrites its own <svg> on click, which would orphan e.target and defeat a
+            // later bubble-phase check. The gear is skipped so it keeps toggling the row.
+            var panel = document.querySelector( '.panel' );
+            panel.addEventListener( 'click', function ( e )
+            {
+                var btn = e.target.closest( 'a, button' );
+                if( btn && btn !== gear && tools.classList.contains( 'open' ) ) setOpen( false );
+            }, true );
+
+            document.addEventListener( 'keydown', function ( e )
+            {
+                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && scmBack.hidden ) setOpen( false );
+            } );
+
+            /* ---- "Esquemas de color" ---------------------------------- */
+            var KEY   = 'balata-schemes';
+            var NKEYS = [ '--bg', '--card', '--card2', '--line' ];
+            var HEX   = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+            // The two built-in schemes' names are DATA, not interface text: they are
+            // written into localStorage (and the user can rename them), so they stay
+            // literal in every language - like "Beige" beside them.
+            var SEED  = {
+                schemes: [
+                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' } },
+                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' } }
+                ],
+                activeDark: 'dark-default',
+                activeLight: 'light-default'
+            };
+
+            var root     = document.documentElement;
+            var openBtn  = document.getElementById( 'schemesBtn' );
+            var scmBack  = document.getElementById( 'scmBackdrop' );
+            var listEl   = document.getElementById( 'scmList' );
+            var nameEl   = document.getElementById( 'scmName' );
+            var titleEl  = document.getElementById( 'scmEditTitle' );
+            var kindDark = document.getElementById( 'scmKindDark' );
+            var kindLite = document.getElementById( 'scmKindLight' );
+            var saveBtn  = document.getElementById( 'scmSave' );
+            var newBtn   = document.getElementById( 'scmSaveNew' );
+            var delBtn   = document.getElementById( 'scmDelete' );
+            var msgEl    = document.getElementById( 'scmMsg' );
+            var selDark  = document.getElementById( 'scmActiveDark' );
+            var selLite  = document.getElementById( 'scmActiveLight' );
+            var closeBtn = document.getElementById( 'scmCloseBtn' );
+
+            var col = {}, hex = {};
+            scmBack.querySelectorAll( '.scm-tok input[type="color"]' ).forEach( function ( el ){ col[ el.dataset.k ] = el; } );
+            scmBack.querySelectorAll( '.scm-tok input[type="text"]'  ).forEach( function ( el ){ hex[ el.dataset.k ] = el; } );
+
+            var data      = load();
+            var editingId = null;
+            var draft     = null;
+
+            function load()
+            {
+                try
+                {
+                    var d = JSON.parse( localStorage.getItem( KEY ) || 'null' );
+                    if( d && d.schemes && d.schemes.some( isDark ) && d.schemes.some( isLight ) ) return d;
+                }
+                catch ( e ) { /* ignore */ }
+                return JSON.parse( JSON.stringify( SEED ) );
+            }
+            function isDark( s ){ return s.kind === 'dark'; }
+            function isLight( s ){ return s.kind === 'light'; }
+            function persist(){ try { localStorage.setItem( KEY, JSON.stringify( data ) ); } catch ( e ) {} }
+            function find( id ){ for( var i = 0; i < data.schemes.length; i++ ) if( data.schemes[ i ].id === id ) return data.schemes[ i ]; return null; }
+            function firstOfKind( k ){ for( var i = 0; i < data.schemes.length; i++ ) if( data.schemes[ i ].kind === k ) return data.schemes[ i ]; return null; }
+            function countKind( k, exceptId ){ return data.schemes.filter( function ( s ){ return s.kind === k && s.id !== exceptId; } ).length; }
+            function reconcile()
+            {
+                if( ! find( data.activeDark )  || find( data.activeDark ).kind  !== 'dark'  ) data.activeDark  = firstOfKind( 'dark' ).id;
+                if( ! find( data.activeLight ) || find( data.activeLight ).kind !== 'light' ) data.activeLight = firstOfKind( 'light' ).id;
+            }
+            function loadDraft()
+            {
+                var s = find( editingId ) || firstOfKind( 'dark' );
+                editingId = s.id;
+                draft = { name: s.name, kind: s.kind, tokens: { '--bg': s.tokens[ '--bg' ], '--card': s.tokens[ '--card' ], '--card2': s.tokens[ '--card2' ], '--line': s.tokens[ '--line' ] } };
+            }
+            function norm( h )
+            {
+                h = h.trim().toLowerCase();
+                if( h && h[ 0 ] !== '#' ) h = '#' + h;
+                if( h.length === 4 ) h = '#' + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ] + h[ 3 ] + h[ 3 ];
+                return h;
+            }
+            function flash( t ){ if( window.NayiveUI ) NayiveUI.toast( t ); }
+            function showMsg( t ){ msgEl.textContent = t; msgEl.hidden = false; }
+            function clearMsg(){ msgEl.hidden = true; }
+
+            // Paint the draft on :root so the whole launcher previews it live.
+            function previewDraft()
+            {
+                if( draft.kind === 'light' ) root.setAttribute( 'data-theme', 'light' );
+                else                         root.removeAttribute( 'data-theme' );
+                NKEYS.forEach( function ( k ){ root.style.setProperty( k, draft.tokens[ k ] ); } );
+            }
+
+            function render()
+            {
+                // scheme list
+                listEl.innerHTML = '';
+                data.schemes.forEach( function ( s )
+                {
+                    var b = document.createElement( 'button' );
+                    b.type = 'button';
+                    b.className = 'scm-row' + ( s.id === editingId ? ' sel' : '' );
+                    b.dataset.id = s.id;
+                    var isActive = s.id === data.activeDark || s.id === data.activeLight;
+                    b.innerHTML =
+                        '<span class="scm-sw">' + NKEYS.map( function ( k ){ return '<i style="background:' + s.tokens[ k ] + '"></i>'; } ).join( '' ) + '</span>' +
+                        '<span class="scm-name"></span>' +
+                        '<span class="scm-kind">' + ( s.kind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) ) + '</span>' +
+                        ( isActive ? '<span class="scm-badge" data-i18n="scm.activeBadge"></span>' : '' );
+                    b.querySelector( '.scm-name' ).textContent = s.name;
+                    listEl.appendChild( b );
+                } );
+
+                if( document.activeElement !== nameEl ) nameEl.value = draft.name;
+                titleEl.textContent = NayiveUI.tf( 'scm.editing', { name: draft.name || NayiveUI.t( 'scm.unnamed' ) } );
+                kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark'  ? 'true' : 'false' );
+                kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' ? 'true' : 'false' );
+
+                NKEYS.forEach( function ( k )
+                {
+                    if( document.activeElement !== col[ k ] ) col[ k ].value = draft.tokens[ k ];
+                    if( document.activeElement !== hex[ k ] ) { hex[ k ].value = draft.tokens[ k ].toUpperCase(); hex[ k ].classList.remove( 'bad' ); }
+                } );
+
+                delBtn.disabled = countKind( find( editingId ).kind, editingId ) === 0;
+
+                fillSelect( selDark, 'dark', data.activeDark );
+                fillSelect( selLite, 'light', data.activeLight );
+
+                previewDraft();
+            }
+
+            function fillSelect( sel, kind, activeId )
+            {
+                sel.innerHTML = '';
+                data.schemes.filter( function ( s ){ return s.kind === kind; } ).forEach( function ( s )
+                {
+                    var o = document.createElement( 'option' );
+                    o.value = s.id; o.textContent = s.name;
+                    if( s.id === activeId ) o.selected = true;
+                    sel.appendChild( o );
+                } );
+            }
+
+            function openDialog()
+            {
+                editingId = ( root.getAttribute( 'data-theme' ) === 'light' ) ? data.activeLight : data.activeDark;
+                loadDraft();
+                clearMsg();
+                scmBack.hidden = false;
+                render();
+            }
+            function closeDialog()
+            {
+                scmBack.hidden = true;
+                NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
+                if( window.BalataTheme ) window.BalataTheme.refresh();
+            }
+
+            openBtn.addEventListener( 'click', openDialog );
+            closeBtn.addEventListener( 'click', closeDialog );
+            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! scmBack.hidden ) closeDialog(); } );
+
+            listEl.addEventListener( 'click', function ( e )
+            {
+                var row = e.target.closest( '.scm-row' );
+                if( ! row ) return;
+                editingId = row.dataset.id;
+                loadDraft();
+                clearMsg();
+                render();
+            } );
+
+            nameEl.addEventListener( 'input', function (){ draft.name = this.value; render(); } );
+
+            [ kindDark, kindLite ].forEach( function ( btn )
+            {
+                btn.addEventListener( 'click', function ()
+                {
+                    var k = this.dataset.kind;
+                    if( k === draft.kind ) return;
+                    var savedKind = find( editingId ).kind;
+                    if( savedKind !== k && countKind( savedKind, editingId ) === 0 )
+                    {
+                        showMsg( NayiveUI.tf( 'scm.needOne', { kind: savedKind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) } ) );
+                        return;
+                    }
+                    draft.kind = k;
+                    clearMsg();
+                    render();
+                } );
+            } );
+
+            NKEYS.forEach( function ( k )
+            {
+                col[ k ].addEventListener( 'input', function (){ draft.tokens[ k ] = this.value.toLowerCase(); render(); } );
+                hex[ k ].addEventListener( 'input', function ()
+                {
+                    var v = norm( this.value );
+                    if( HEX.test( v ) ) { draft.tokens[ k ] = v; this.classList.remove( 'bad' ); render(); }
+                    else this.classList.add( 'bad' );
+                } );
+                hex[ k ].addEventListener( 'blur', render );
+            } );
+
+            saveBtn.addEventListener( 'click', function ()
+            {
+                var s = find( editingId );
+                s.name   = draft.name.trim() || s.name;
+                s.kind   = draft.kind;
+                s.tokens = { '--bg': draft.tokens[ '--bg' ], '--card': draft.tokens[ '--card' ], '--card2': draft.tokens[ '--card2' ], '--line': draft.tokens[ '--line' ] };
+                reconcile();
+                loadDraft();
+                persist(); clearMsg(); flash( NayiveUI.t( 'ui.saved' ) ); render();
+            } );
+
+            newBtn.addEventListener( 'click', function ()
+            {
+                var id = 's' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 5 );
+                data.schemes.push( {
+                    id: id,
+                    name: draft.name.trim() || NayiveUI.t( 'scm.newScheme' ),
+                    kind: draft.kind,
+                    tokens: { '--bg': draft.tokens[ '--bg' ], '--card': draft.tokens[ '--card' ], '--card2': draft.tokens[ '--card2' ], '--line': draft.tokens[ '--line' ] }
+                } );
+                editingId = id;
+                loadDraft();
+                persist(); clearMsg(); flash( NayiveUI.t( 'scm.created' ) ); render();
+            } );
+
+            delBtn.addEventListener( 'click', function ()
+            {
+                if( delBtn.disabled ) return;
+                var s = find( editingId );
+                data.schemes = data.schemes.filter( function ( x ){ return x.id !== s.id; } );
+                reconcile();
+                editingId = ( firstOfKind( s.kind ) || data.schemes[ 0 ] ).id;
+                loadDraft();
+                persist(); clearMsg(); render();
+            } );
+
+            selDark.addEventListener( 'change', function (){ data.activeDark  = this.value; persist(); render(); } );
+            selLite.addEventListener( 'change', function (){ data.activeLight = this.value; persist(); render(); } );
+
+            // Keep the in-memory model consistent, but don't write to localStorage until
+            // the user actually changes something - a fresh install stays 100% theme.css.
+            reconcile();
+        } )();
+    </script>
+
+    <!-- Eye toggle: show / hide the text of a password field. Also used, inline,
+         by apps/login.html. -->
+    <script>
+        window.NayivePwEye = function ( btn )
+        {
+            var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+            var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
+            var input = document.getElementById( btn.dataset.eye );
+            if( ! input ) return;
+            btn.innerHTML = EYE;
+            btn.addEventListener( 'click', function ()
+            {
+                var show = input.type === 'password';
+                input.type = show ? 'text' : 'password';
+                btn.innerHTML = show ? EYE_OFF : EYE;
+                btn.setAttribute( 'aria-label', show ? NayiveUI.t( 'ui.hidePassword' ) : NayiveUI.t( 'ui.showPassword' ) );
+                input.focus();
+            } );
+        };
+    </script>
+
+    <!-- "Mi cuenta" dialog: change the sign-in password (POST /api/password) and
+         the trash retention period (GET/POST /api/files?trash=days). -->
+    <script>
+        ( function ()
+        {
+            var openBtn = document.getElementById( 'accountBtn' );
+            var back    = document.getElementById( 'pwBackdrop' );
+            var curEl   = document.getElementById( 'pwCurrent' );
+            var newEl   = document.getElementById( 'pwNew' );
+            var msgEl   = document.getElementById( 'pwMsg' );
+            var saveBtn = document.getElementById( 'pwSave' );
+            var cancel  = document.getElementById( 'pwCancel' );
+            var daysEl  = document.getElementById( 'trashDaysAcct' );
+            var daysMsg = document.getElementById( 'trashDaysMsg' );
+            var tripEl  = document.getElementById( 'tripDaysAcct' );
+            var tripMsg = document.getElementById( 'tripDaysMsg' );
+            var pushChk   = document.getElementById( 'pushChk' );
+            var pushWrap  = document.getElementById( 'pushChkWrap' );
+            var pushWin   = document.getElementById( 'pushWindow' );
+            var pushMsgEl = document.getElementById( 'pushMsg' );
+            var langSel = document.getElementById( 'langSel' );
+            var langMsg = document.getElementById( 'langMsg' );
+            var tzSel   = document.getElementById( 'tzSel' );
+            var tzMsg   = document.getElementById( 'tzMsg' );
+            var autoChk = document.getElementById( 'autoThemeChk' );
+            var autoMsg = document.getElementById( 'autoThemeMsg' );
+            var curWrap = curEl.closest( '.pw-wrap' );
+            if( ! openBtn || ! back ) return;
+
+            // "mandatory" = a brand-new user who signed in with a blank password.
+            // They must pick one here before the dialog will close.
+            var mandatory = false;
+
+            // Set just before the language change reloads the page; the boot
+            // script at the end of this file reads it once and reopens this
+            // dialog, so changing the language does not throw the user out of
+            // the settings they were in the middle of.
+            var REOPEN_KEY = 'balata-acct-reopen';
+
+            // Interface language. It belongs to the ACCOUNT (POST /api/lang), so
+            // a choice made on the phone reaches the PC; shared/i18n.js keeps a
+            // copy on this device to paint with, and reloads so every string
+            // re-renders. See NayiveI18n.adopt and lib/users.user_lang.
+            if( langSel && window.NayiveI18n )
+            {
+                // The CHOICE, not the language in use: with nothing stored the
+                // box sits on "por defecto" even though the UI is in some
+                // language. Picking it again clears the choice. By the time the
+                // dialog opens the boot probe has already copied the account's
+                // language down here, so this shows the account's answer.
+                langSel.value = NayiveI18n.saved() || '';
+                langSel.addEventListener( 'change', function ()
+                {
+                    var code = langSel.value;
+                    langSel.disabled = true;
+                    lmsg( '' );
+
+                    // The SERVER first. Switch this device on a save that
+                    // failed and the next boot reads the old value back from
+                    // /api/whoami and silently undoes the choice - the user
+                    // would see their language revert with no explanation.
+                    fetch( '/api/lang?value=' + encodeURIComponent( code ),
+                           { method: 'POST', credentials: 'same-origin' } )
+                        .then( function ( r ) { if( ! r.ok ) throw new Error( 'lang' ); } )
+                        .then( function ()
+                        {
+                            langSel.disabled = false;
+
+                            // setLang() reloads, so this dialog would vanish and
+                            // the user would have to dig it out again to change
+                            // anything else. Leave a note for the boot script to
+                            // reopen it (per TAB, so another tab is unaffected),
+                            // and take the note back if nothing is reloading
+                            // after all - it would pop the dialog open on some
+                            // unrelated reload later.
+                            try { sessionStorage.setItem( REOPEN_KEY, '1' ); } catch ( e ) {}
+                            if( ! NayiveI18n.setLang( code ) )
+                                try { sessionStorage.removeItem( REOPEN_KEY ); } catch ( e ) {}
+                        } )
+                        .catch( function ()
+                        {
+                            langSel.disabled = false;
+                            langSel.value = NayiveI18n.saved() || '';
+                            lmsg( NayiveUI.t( 'acct.langFailed' ), false );
+                        } );
+                } );
+            }
+
+            back.querySelectorAll( '.pw-eye' ).forEach( window.NayivePwEye );
+
+            function msg( t, ok )
+            {
+                msgEl.textContent = t;
+                msgEl.hidden = ! t;
+                msgEl.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function dmsg( t, ok )
+            {
+                daysMsg.textContent = t;
+                daysMsg.hidden = ! t;
+                daysMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function tmsg( t, ok )
+            {
+                tripMsg.textContent = t;
+                tripMsg.hidden = ! t;
+                tripMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function lmsg( t, ok )
+            {
+                langMsg.textContent = t;
+                langMsg.hidden = ! t;
+                langMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function tzmsg( t, ok )
+            {
+                tzMsg.textContent = t;
+                tzMsg.hidden = ! t;
+                tzMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function amsg( t, ok )
+            {
+                autoMsg.textContent = t;
+                autoMsg.hidden = ! t;
+                autoMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+            function pushmsg( t, ok )
+            {
+                pushMsgEl.textContent = t;
+                pushMsgEl.hidden = ! t;
+                pushMsgEl.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+            }
+
+            // --- timezone ------------------------------------------------- //
+            // A timezone belongs to the PERSON, not to the server: it decides
+            // what a floating "10:00" in the calendar means and which clock a
+            // reminder prints. Stored on the ACCOUNT (POST /api/tz), so the
+            // zone follows the person to every device - and is picked from a
+            // list, never typed, so an unknown zone can't be saved.
+            var tzSaved = null;            // last value confirmed by the server
+
+            // Every zone the browser knows. Ancient browsers have no
+            // supportedValuesOf; they get a short list plus (below) whatever is
+            // already saved, which is enough to see and keep the current value.
+            function knownZones()
+            {
+                try { return Intl.supportedValuesOf( 'timeZone' ); }
+                catch ( e )
+                {
+                    return [ 'UTC','Europe/Madrid','Europe/London','Europe/Paris','Europe/Berlin',
+                             'Europe/Rome','Europe/Lisbon','America/New_York','America/Chicago',
+                             'America/Denver','America/Los_Angeles','America/Sao_Paulo',
+                             'America/Mexico_City','Asia/Tokyo','Asia/Shanghai','Asia/Hong_Kong',
+                             'Asia/Singapore','Asia/Dubai','Asia/Kolkata','Australia/Sydney',
+                             'Pacific/Auckland' ];
+                }
+            }
+
+            function fillZones( current )
+            {
+                var zones = knownZones().slice();
+                // The saved zone ALWAYS gets an entry, even when this browser's
+                // list has never heard of it (an old IANA alias, a newer server).
+                // Without this the box would silently snap to the first option
+                // and the next stray change would overwrite a good value.
+                if( current && zones.indexOf( current ) === -1 ) zones.unshift( current );
+
+                tzSel.textContent = '';
+                zones.forEach( function ( z )
+                {
+                    var o = document.createElement( 'option' );
+                    o.value = z; o.textContent = z;
+                    tzSel.appendChild( o );
+                } );
+                tzSel.value = current || '';
+            }
+
+            async function loadTz()
+            {
+                tzmsg( '' );
+                try
+                {
+                    var r = await fetch( '/api/tz', { credentials: 'same-origin' } );
+                    var d = await r.json();
+                    if( r.ok ) tzSaved = d.tz || '';
+                }
+                catch ( e ) { /* keep whatever we had */ }
+                fillZones( tzSaved || NayiveUI.viewerTz() );
+            }
+
+            tzSel.addEventListener( 'change', async function ()
+            {
+                var z = tzSel.value;
+                tzSel.disabled = true;
+                try
+                {
+                    var r = await fetch( '/api/tz?value=' + encodeURIComponent( z ),
+                                         { method: 'POST', credentials: 'same-origin' } );
+                    var d = await r.json().catch( function (){ return {}; } );
+                    if( r.ok ) { tzSaved = d.tz || ''; tzSel.value = tzSaved; tzmsg( '' ); }
+                    else { fillZones( tzSaved ); tzmsg( d.error || NayiveUI.t( 'acct.tzFailed' ) ); }
+                }
+                catch ( e ) { fillZones( tzSaved ); tzmsg( NayiveUI.t( 'login.noServer' ) ); }
+                tzSel.disabled = false;
+            } );
+
+            // --- automatic light / dark ------------------------------------ //
+            // shared/theme.js does the sun arithmetic and owns the storage; all
+            // this dialog does is turn it on and hand it a pair of coordinates.
+            // Asking for the location needs a real click, which is exactly what
+            // ticking the box is - so it is asked for here and nowhere else.
+            function autoState()
+            {
+                if( ! window.BalataTheme || ! window.BalataTheme.isAuto() ) return '';
+                return window.BalataTheme.hasGeo() ? 'acct.themeAutoGeo' : 'acct.themeAutoNoGeo';
+            }
+
+            function askGeo()
+            {
+                if( ! navigator.geolocation )
+                {
+                    amsg( NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                    return;
+                }
+
+                amsg( NayiveUI.t( 'acct.themeAutoLocating' ), true );
+
+                navigator.geolocation.getCurrentPosition(
+                    function ( pos )
+                    {
+                        window.BalataTheme.setGeo( pos.coords.latitude, pos.coords.longitude );
+                        amsg( NayiveUI.t( 'acct.themeAutoGeo' ), true );
+                    },
+                    function ()
+                    {
+                        // Refused, or the device simply does not know where it
+                        // is. Auto mode stays ON: theme.js falls back to a plain
+                        // 7-19 window, which is better than nothing.
+                        amsg( NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                    },
+                    { timeout: 10000, maximumAge: 24 * 3600 * 1000 } );
+            }
+
+            // People travel, and a stale set of coordinates would keep flipping
+            // the theme on the old continent's clock. Refresh quietly whenever
+            // the dialog is opened - but ONLY when permission is already
+            // granted, so opening "Mi cuenta" can never raise a fresh prompt.
+            function refreshGeoQuietly()
+            {
+                if( ! navigator.permissions || ! navigator.permissions.query ) return;
+
+                navigator.permissions.query( { name: 'geolocation' } ).then( function ( st )
+                {
+                    if( st.state !== 'granted' ) return;
+
+                    navigator.geolocation.getCurrentPosition(
+                        function ( pos ) { window.BalataTheme.setGeo( pos.coords.latitude, pos.coords.longitude ); },
+                        function () { /* keep what we had */ },
+                        { timeout: 10000, maximumAge: 6 * 3600 * 1000 } );
+                } ).catch( function () { /* browser without the geolocation permission name */ } );
+            }
+
+            function loadAuto()
+            {
+                if( ! window.BalataTheme ) { autoWrap().hidden = true; return; }
+
+                var on = window.BalataTheme.isAuto();
+                autoChk.checked = on;
+
+                var key = autoState();
+                amsg( key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' );
+
+                if( on && window.BalataTheme.hasGeo() ) refreshGeoQuietly();
+            }
+
+            function autoWrap() { return document.getElementById( 'autoThemeWrap' ); }
+
+            autoChk.addEventListener( 'change', function ()
+            {
+                if( ! window.BalataTheme ) return;
+
+                if( ! autoChk.checked ) { window.BalataTheme.setAuto( false ); amsg( '' ); return; }
+
+                // On FIRST, so the theme is already following the fallback
+                // window even if the location request is refused or times out.
+                window.BalataTheme.setAuto( true );
+                askGeo();
+            } );
+
+            var daysSaved = null;          // last value confirmed by the server
+            var tripSaved = null;
+
+            async function loadDays()
+            {
+                daysEl.value = '30'; dmsg( '' );          // 30 días is the default until the server says otherwise
+                try
+                {
+                    var r = await fetch( '/api/files?trash=days', { credentials: 'same-origin' } );
+                    var d = await r.json();
+                    if( r.ok ) { daysSaved = d.days; daysEl.value = d.days; }
+                }
+                catch ( e ) { /* keep the 30-day default shown */ }
+            }
+
+            async function loadTripDays()
+            {
+                tripEl.value = ''; tmsg( '' );
+                try
+                {
+                    var r = await fetch( '/api/files?tripdays=1', { credentials: 'same-origin' } );
+                    var d = await r.json();
+                    if( r.ok ) { tripSaved = d.days; tripEl.value = d.days; }
+                }
+                catch ( e ) { /* leave it blank */ }
+            }
+
+            // --- native OS notifications (Web Push) ------------------------- //
+            // PER DEVICE, not per account: the browser owns the subscription, so
+            // the user turns this on once on each phone, tablet and PC. The
+            // server only ever sees an endpoint + two keys (see /api/push).
+            var pushState = {
+                vapid: '', window_minutes: 30, subscribed: false, sub: null,
+                supported: ( 'serviceWorker' in navigator ) && ( 'PushManager' in window )
+                           && ( 'Notification' in window )
+            };
+
+            // base64url -> Uint8Array. applicationServerKey will not take the string.
+            function b64ToU8( s )
+            {
+                var pad = '='.repeat( ( 4 - s.length % 4 ) % 4 );
+                var raw = atob( ( s + pad ).replace( /-/g, '+' ).replace( /_/g, '/' ) );
+                var out = new Uint8Array( raw.length );
+                for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
+                return out;
+            }
+
+            // Does this subscription still match the server's VAPID key? If the
+            // key was regenerated, the push service will reject every message
+            // for it forever - and nothing would ever say so.
+            function sameKey( sub, b64 )
+            {
+                try
+                {
+                    var a = new Uint8Array( sub.options.applicationServerKey );
+                    var b = b64ToU8( b64 );
+                    if( a.length !== b.length ) return false;
+                    for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
+                    return true;
+                }
+                catch ( e ) { return true; }        // can't tell -> don't nag the user
+            }
+
+            async function pushGet( endpoint )
+            {
+                var q = endpoint ? '?endpoint=' + encodeURIComponent( endpoint ) : '';
+                var r = await fetch( '/api/push' + q, { credentials: 'same-origin' } );
+                return { ok: r.ok, data: await r.json().catch( function (){ return {}; } ) };
+            }
+
+            async function postSub( sub )
+            {
+                var r = await fetch( '/api/push',
+                {
+                    method:      'POST',
+                    headers:     { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify( { subscription:    sub.toJSON(),
+                                            window_minutes:  pushState.window_minutes,
+                                            lang:  ( NayiveUI.lang ? NayiveUI.lang() : 'es' ),
+                                            label: navigator.platform || '' } )
+                } );
+                var d = await r.json().catch( function (){ return {}; } );
+                if( r.ok ) pushState.subscribed = true;
+                return { ok: r.ok, data: d };
+            }
+
+            // Runs every time the sheet opens. Fetching the VAPID key HERE is
+            // load-bearing: enablePush must not await anything before it calls
+            // requestPermission (see there).
+            //
+            // It is also the SELF-HEAL. If this browser holds a subscription the
+            // server has forgotten - a restored backup, or a
+            // pushsubscriptionchange whose POST hit an expired session - it is
+            // quietly registered again instead of going silent forever.
+            async function loadPush()
+            {
+                pushmsg( '' );
+                if( ! pushState.supported ) { renderPush(); return; }
+                try
+                {
+                    var first = await pushGet( '' );
+                    if( ! first.ok )
+                    {
+                        pushState.vapid = '';
+                        pushmsg( first.data.error || '' );
+                        renderPush();
+                        return;
+                    }
+                    pushState.vapid          = first.data.vapid_public || '';
+                    pushState.window_minutes = first.data.window_minutes || 30;
+                    pushWin.value            = pushState.window_minutes;
+
+                    var reg = await navigator.serviceWorker.ready;
+                    var sub = await reg.pushManager.getSubscription();
+                    pushState.sub = sub;
+
+                    if( ! sub ) { pushState.subscribed = false; }
+                    else if( pushState.vapid && ! sameKey( sub, pushState.vapid ) )
+                    {
+                        try { await sub.unsubscribe(); } catch ( e ) {}
+                        pushState.sub = null;
+                        pushState.subscribed = false;
+                        pushmsg( NayiveUI.t( 'acct.notifsStale' ) );
+                    }
+                    else
+                    {
+                        var mine = await pushGet( sub.endpoint );
+                        pushState.subscribed = !! mine.data.subscribed;
+                        if( ! pushState.subscribed ) await postSub( sub );
+                    }
+                }
+                catch ( e ) { /* leave the section in whatever state we reached */ }
+                renderPush();
+            }
+
+            function renderPush()
+            {
+                if( ! pushChk ) return;
+
+                // iOS BEFORE the support test, for the same reason enablePush
+                // tests it first. In a Safari TAB there is no PushManager at
+                // all, so the plain support test would answer "this browser
+                // does not support notifications" - a dead end, when the true
+                // answer is "install Nayive on the Home Screen and it works".
+                // installMode() says "ios" only on iOS and NOT installed.
+                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
+                {
+                    if( pushWrap ) pushWrap.hidden = true;
+                    pushmsg( NayiveUI.t( 'acct.notifsIos' ) );
+                    return;
+                }
+
+                if( ! pushState.supported )
+                {
+                    // Hide the whole label - hiding only the box leaves its text stranded.
+                    if( pushWrap ) pushWrap.hidden = true;
+                    pushmsg( NayiveUI.t( 'acct.notifsUnsupported' ) );
+                    return;
+                }
+                var blocked = ( Notification.permission === 'denied' );
+                if( pushWrap ) pushWrap.hidden = false;
+                pushChk.disabled = blocked;
+                pushChk.checked  = pushState.subscribed;
+                if( blocked ) pushmsg( NayiveUI.t( 'acct.notifsBlocked' ) );
+            }
+
+            // The click handler. The order of the first steps is NOT negotiable.
+            async function enablePush()
+            {
+                pushmsg( '' );
+
+                // iOS FIRST, before any permission call. Outside an installed
+                // PWA, requestPermission() resolves to "denied" - and denied is
+                // STICKY, so one naive attempt would permanently poison this
+                // user's ability to ever turn notifications on. installMode()
+                // returns "ios" only when we are on iOS and NOT installed.
+                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
+                {
+                    pushmsg( NayiveUI.t( 'acct.notifsIos' ) );
+                    renderPush();
+                    if( NayiveUI.offerInstall ) NayiveUI.offerInstall( { manual: true } );
+                    return;
+                }
+                if( ! pushState.supported )
+                    { pushmsg( NayiveUI.t( 'acct.notifsUnsupported' ) ); renderPush(); return; }
+                if( Notification.permission === 'denied' )
+                    { renderPush(); return; }
+                if( ! pushState.vapid )
+                    { pushmsg( NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
+
+                // requestPermission MUST be the first await in this handler. Any
+                // await before it spends the user activation and the browser
+                // refuses the prompt without ever showing it.
+                var perm = await Notification.requestPermission();
+                if( perm !== 'granted' ) { renderPush(); return; }
+
+                try
+                {
+                    var reg = await navigator.serviceWorker.ready;
+                    var sub = await reg.pushManager.subscribe(
+                                    { userVisibleOnly: true,
+                                      applicationServerKey: b64ToU8( pushState.vapid ) } );
+                    var res = await postSub( sub );
+                    if( res.ok ) pushState.sub = sub;
+                    else
+                    {
+                        try { await sub.unsubscribe(); } catch ( e ) {}   // leave no orphan
+                        pushState.subscribed = false;
+                        pushmsg( res.data.error || NayiveUI.t( 'ui.saveFailed' ) );
+                    }
+                }
+                catch ( e ) { pushmsg( NayiveUI.t( 'ui.saveFailed' ) ); }
+                renderPush();
+            }
+
+            async function disablePush()
+            {
+                pushmsg( '' );
+                var sub = pushState.sub;
+                var ep  = sub && sub.endpoint;
+                try { if( sub ) await sub.unsubscribe(); } catch ( e ) {}
+                try
+                {
+                    if( ep ) await fetch( '/api/push?endpoint=' + encodeURIComponent( ep ),
+                                          { method: 'DELETE', credentials: 'same-origin' } );
+                }
+                catch ( e ) {}
+                pushState.sub        = null;
+                pushState.subscribed = false;
+                renderPush();
+            }
+
+            if( pushChk )
+                pushChk.addEventListener( 'change', function ()
+                {
+                    return pushChk.checked ? enablePush() : disablePush();
+                } );
+
+            // "avisarme N minutos antes" saves on change, like the trash and trip
+            // periods - it has to work with notifications switched OFF, which is
+            // exactly when someone goes looking for the setting.
+            pushWin.addEventListener( 'change', async function ()
+            {
+                var v = parseInt( pushWin.value, 10 );
+                if( ! isFinite( v ) ) { pushWin.value = pushState.window_minutes; return; }
+                v = Math.max( 1, Math.min( 1440, v ) );
+                pushWin.disabled = true;
+                try
+                {
+                    var r = await fetch( '/api/push',
+                    {
+                        method:      'POST',
+                        headers:     { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify( { window_minutes: v } )
+                    } );
+                    var d = await r.json().catch( function (){ return {}; } );
+                    if( r.ok ) { pushState.window_minutes = d.window_minutes; pushWin.value = d.window_minutes; }
+                    else pushmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) );
+                }
+                catch ( e ) { pushmsg( NayiveUI.t( 'login.noServer' ) ); }
+                pushWin.disabled = false;
+            } );
+
+            daysEl.addEventListener( 'change', async function ()
+            {
+                var v = parseInt( daysEl.value, 10 );
+                if( ! isFinite( v ) ) { daysEl.value = ( daysSaved == null ? '' : daysSaved ); return; }
+                v = Math.max( 1, Math.min( 90, v ) );
+
+                daysEl.disabled = true;
+                try
+                {
+                    var q = new URLSearchParams( { trash: 'days', value: String( v ) } ).toString();
+                    var r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
+                    var d = await r.json().catch( function (){ return {}; } );
+                    if( r.ok ) { daysSaved = d.days; daysEl.value = d.days; dmsg( NayiveUI.tf( 'acct.autoDeleteMsg', { n: d.days } ), true ); }
+                    else { daysEl.value = ( daysSaved == null ? '' : daysSaved ); dmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) ); }
+                }
+                catch ( e ) { daysEl.value = ( daysSaved == null ? '' : daysSaved ); dmsg( NayiveUI.t( 'login.noServer' ) ); }
+                daysEl.disabled = false;
+            } );
+
+            tripEl.addEventListener( 'change', async function ()
+            {
+                var v = parseInt( tripEl.value, 10 );
+                if( ! isFinite( v ) ) { tripEl.value = ( tripSaved == null ? '' : tripSaved ); return; }
+                v = Math.max( 0, Math.min( 90, v ) );
+
+                tripEl.disabled = true;
+                try
+                {
+                    var q = new URLSearchParams( { tripdays: '1', value: String( v ) } ).toString();
+                    var r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
+                    var d = await r.json().catch( function (){ return {}; } );
+                    if( r.ok )
+                    {
+                        tripSaved = d.days; tripEl.value = d.days;
+                        tmsg( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : NayiveUI.t( 'acct.tripNone' ), true );
+                    }
+                    else { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) ); }
+                }
+                catch ( e ) { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( NayiveUI.t( 'login.noServer' ) ); }
+                tripEl.disabled = false;
+            } );
+
+            function open( opts )
+            {
+                mandatory = !!( opts && opts.mandatory === true );
+                curEl.value = ''; newEl.value = '';
+                msg( mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
+
+                // No current password to confirm, and no way out until it's set.
+                curWrap.hidden = mandatory;
+                cancel.hidden  = mandatory;
+
+                loadTz();
+                loadAuto();
+                loadDays();
+                loadTripDays();
+                loadPush();
+                back.hidden = false;
+
+                // Normally the password field, the top of the dialog. Reopened
+                // after a language change it is the language box instead: that
+                // is where the user was, and landing on a password field would
+                // pop the keyboard up on a phone for no reason.
+                var asked   = ( opts && opts.focus ) || null;
+                var focusEl = mandatory ? newEl : asked || curEl;
+                setTimeout( function ()
+                {
+                    focusEl.focus();
+                    // Only for a field asked for by name - the dialog scrolls,
+                    // and the two default targets are at the top anyway.
+                    if( ! mandatory && asked && asked.scrollIntoView )
+                        asked.scrollIntoView( { block: 'center' } );
+                }, 0 );
+            }
+            function close()
+            {
+                if( mandatory ) return;          // can't leave without a password
+                back.hidden = true;
+            }
+
+            // Let the whoami check (further down) force this open for a new user,
+            // or reopen it on the far side of a language change.
+            window.openAccountDialog = open;
+
+            // ---- after installing, get the native notifications switched on --//
+            // Running installed is the first moment push can actually work (on
+            // iPhone it is the ONLY moment), and it is also the moment nobody
+            // thinks to go digging in "Mi cuenta" for it. So the first launch
+            // inside the installed app opens this dialog straight on the
+            // notifications row, once per device.
+            //
+            // It NUDGES, it cannot switch them on by itself: the permission
+            // prompt has to come out of a real tap on the checkbox. Called
+            // without a user gesture, requestPermission is refused - and on iOS
+            // a refusal is permanent (see enablePush). So the last step stays
+            // the user's, one tap away and already on screen.
+            var PUSH_ASKED = 'nayive-push-asked';
+
+            function nudgeDue()
+            {
+                if( ! window.NayiveUI || ! NayiveUI.isStandalone || ! NayiveUI.isStandalone() ) return false;
+                if( ! pushState.supported ) return false;
+                // 'granted' - already on. 'denied' - the browser has slammed the
+                // door and only its own settings can reopen it. Either way,
+                // nothing to ask.
+                if( Notification.permission !== 'default' ) return false;
+                try { return localStorage.getItem( PUSH_ASKED ) !== '1'; }
+                catch ( e ) { return false; }          // no storage -> would ask on every launch
+            }
+
+            // Any dialog on screen at all - ours (hidden-driven) or one NayiveUI
+            // built (the welcome card, the install sheet). getClientRects() is
+            // empty exactly when the thing is display:none, which covers both.
+            function sheetUp()
+            {
+                var all = document.querySelectorAll( '.sheet-backdrop' );
+                for( var i = 0; i < all.length; i++ ) if( all[ i ].getClientRects().length ) return true;
+                return false;
+            }
+
+            var nudgeTries = 0;
+            function nudgePush()
+            {
+                if( ! nudgeDue() ) return;
+
+                // Never stack on another dialog - the mandatory password, the
+                // welcome card, the install sheet. Wait for it to close, then
+                // ask; give up after ~half a minute rather than ambush someone
+                // in the middle of something else. Next launch tries again.
+                if( sheetUp() )
+                {
+                    if( ++nudgeTries > 40 ) return;
+                    setTimeout( nudgePush, 800 );
+                    return;
+                }
+
+                try { localStorage.setItem( PUSH_ASKED, '1' ); } catch ( e ) {}
+                open( { focus: pushChk } );
+                // After open(): loadPush clears this line on its way in, but it
+                // clears it synchronously, before its first await.
+                pushmsg( NayiveUI.t( 'acct.notifsAsk' ), true );
+            }
+
+            // Read by the boot script at the end of this file.
+            window.nudgePushAfterInstall = nudgePush;
+
+            openBtn.addEventListener( 'click', function (){ open(); } );
+            cancel.addEventListener( 'click', close );
+            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! back.hidden ) close(); } );
+
+            saveBtn.addEventListener( 'click', async function ()
+            {
+                // The trash / trip periods and the notification settings all
+                // save themselves on change. Guardar only commits the password
+                // (when both fields are filled in).
+                saveBtn.disabled = true;
+
+                var wantPw = mandatory || curEl.value || newEl.value;
+
+                if( wantPw )
+                {
+                    if( ! mandatory && ! curEl.value )
+                        { msg( NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                    if( ! newEl.value )
+                        { msg( mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                    if( newEl.value.length < 4 )
+                        { msg( NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
+                    try
+                    {
+                        var res = await fetch( '/api/password',
+                        {
+                            method:      'POST',
+                            headers:     { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify( { current: curEl.value, new: newEl.value } )
+                        } );
+                        var data = await res.json().catch( function (){ return {}; } );
+                        if( res.ok )
+                        {
+                            if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
+                            // Mandatory lock lifted: restore the normal dialog.
+                            mandatory = false;
+                            curWrap.hidden = false;
+                            cancel.hidden  = false;
+                        }
+                        else { msg( data.error || NayiveUI.t( 'acct.changeFailed' ) ); saveBtn.disabled = false; return; }
+                    }
+                    catch ( e ) { msg( NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
+                }
+
+                saveBtn.disabled = false;
+                close();
+            } );
+        } )();
+    </script>
+
+    <!-- If the session has expired, don't sit on a launcher whose every tile 401s.
+         Otherwise, name the signed-in user on the "Cerrar sesión" button. -->
+    <script>
+        // Read the "reopen the settings dialog" note ONCE, before anything can
+        // bail out: left behind, it would open the dialog on a later reload.
+        var acctReopen = false;
+        try
+        {
+            acctReopen = sessionStorage.getItem( 'balata-acct-reopen' ) === '1';
+            sessionStorage.removeItem( 'balata-acct-reopen' );
+        }
+        catch ( e ) {}
+
+        fetch( '/api/whoami', { credentials: 'same-origin' } )
+            .then( function ( r ) {
+                if( r.status === 401 ) { location.href = '/nayive/login.html'; return null; }
+                return r.json().catch( function () { return null; } );
+            } )
+            .then( function ( me ) {
+                if( ! me || ! me.user ) return;
+
+                // The ACCOUNT's language beats this device's, so a language
+                // picked on the phone lands here. adopt() reloads when it
+                // changes anything - then there is nothing else worth doing on
+                // a page that is on its way out. See NayiveI18n.adopt.
+                if( window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( me.lang ) ) return;
+
+                document.getElementById( 'logoutBtn' ).title = NayiveUI.tf( 'launcher.logoutUser', { user: me.user } );
+
+                // No timezone on this account yet: adopt THIS browser's, once.
+                // The browser knows the real answer (the OS zone) - an IP lookup
+                // only guesses it, and guesses wrong behind a VPN. Until it is
+                // stored, a floating "10:00" in the calendar and every reminder
+                // clock fall back to the server's own zone, which is nobody's.
+                // Only ever fills a BLANK; changing it later is the "Mi cuenta"
+                // dialog's job. The raw Intl value on purpose, not viewerTz():
+                // its "UTC" fallback would persist a zone the user never has.
+                if( me.tz == null )
+                {
+                    var here = '';
+                    try { here = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+                    catch ( e ) {}
+                    if( here )
+                        fetch( '/api/tz?value=' + encodeURIComponent( here ),
+                               { method: 'POST', credentials: 'same-origin' } )
+                            .catch( function () {} );
+                }
+
+                // Brand-new user, no password yet: make them set one right now.
+                // That beats the reopen - the note is already cleared either way.
+                if( me.must_set_password && window.openAccountDialog )
+                {
+                    if( window.NayiveUI && NayiveUI.holdIntro ) NayiveUI.holdIntro();
+                    window.openAccountDialog( { mandatory: true } );
+                }
+                else if( acctReopen && window.openAccountDialog )
+                {
+                    if( window.NayiveUI && NayiveUI.holdIntro ) NayiveUI.holdIntro();
+                    window.openAccountDialog( { focus: document.getElementById( 'langSel' ) } );
+                }
+
+                // Installed app, notifications never asked for: offer them.
+                // Waits its turn behind anything opened just above.
+                if( window.nudgePushAfterInstall )
+                    setTimeout( window.nudgePushAfterInstall, 1500 );
+            } )
+            .catch( function () {} );
+    </script>
+</body>
+</html>

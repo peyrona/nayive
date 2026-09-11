@@ -1,0 +1,2211 @@
+<!-- index.html - Personal single-user calendar (vCal/.ics), backed by Gum's file-manager API -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Calendar</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <!-- Vendored libs (all pinned, no build step). luxon + rrule live in shared/lib/ (tasks loads the same two files, so one download + one cache entry). Order matters: classic scripts run before the deferred module script below. -->
+    <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
+    <script src="../shared/lib/rrule_v2.8.1.min.js"></script>
+    <script src="lib/fullcalendar-core_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-daygrid_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-timegrid_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-interaction_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-list_v6.1.21.min.js"></script>
+    <!-- One small locale pack per language Nayive offers; English is FullCalendar's
+         own default and needs none. `locale:` below picks the active one. -->
+    <script src="lib/fullcalendar-locale-es_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-locale-pt_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-locale-fr_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-locale-de_v6.1.21.min.js"></script>
+    <script src="lib/fullcalendar-locale-it_v6.1.21.min.js"></script>
+
+    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'calendar',
+            title: 'Calendar',
+            // A phone shows the month as a dots grid + the picked day's list (PHONE MONTH below), so
+            // its lead and its extra "+" row differ from the PC ones.
+            lead:  window.matchMedia( '(max-width: 640px)' ).matches
+                 ? NayiveUI.t( 'calendar.introLeadPhone' )
+                 : NayiveUI.t( 'calendar.introLead' ),
+            buttons: [
+                { sel: '.topbar [data-view="timeGridDay"]',  text: NayiveUI.t( 'calendar.introDay' ) },
+                { sel: '.topbar [data-view="rollWeek"]',     text: NayiveUI.t( 'calendar.introWeek' ) },
+                { sel: '.topbar [data-view="dayGridMonth"]', text: NayiveUI.t( 'calendar.introMonth' ) },
+                { sel: '#prevBtn',   text: NayiveUI.t( 'calendar.introPrev'   ) },
+                { sel: '#nextBtn',   text: NayiveUI.t( 'calendar.introNext'   ) },
+                { sel: '#searchBtn', text: NayiveUI.t( 'calendar.introSearch' ) },
+                { sel: '#gotoBtn',   text: NayiveUI.t( 'calendar.introGoTo'   ) },
+                { sel: '#exportBtn', text: NayiveUI.t( 'calendar.introExport' ) },
+                { sel: '#moreBtn',   text: NayiveUI.t( 'calendar.introViews'  ) }
+            ]
+            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
+            // so its row would document a control that is not on screen.
+            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
+                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
+                  text: NayiveUI.t( 'calendar.introSync' ) } ] )
+            .concat( window.matchMedia( '(max-width: 640px)' ).matches
+                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] ),
+            // The tasks app fills a task with today's events once a day (see its
+            // CALENDAR SYNC): worth saying here, where the events are written.
+            tip:  NayiveUI.t( 'calendar.introTasksLink' )
+        } );
+    } );
+    </script>
+
+    <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
+    <script src="../shared/store.js" defer></script>
+
+    <style>
+        /* Base reset, .app shell, .topbar, .icon-btn, .sheet, .sheet-header,
+           .field and the input look all come from ../shared/app.css. Calendar
+           overrides the page scroll and adds its toolbar + dialog specifics. */
+        html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+
+        .app { position: relative; }                 /* containing block for the dropdown menu */
+        .topbar { padding: 8px 6px; }                 /* tighter - the bar is button-heavy */
+
+        .date-nav { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; justify-content: center; }
+        .topbar .range-label { font-size: 0.82rem; color: var(--text-dim); flex: 0 1 auto; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+
+        /* View switch (Día / Semana / Mes) - a toggle, so its "on" button is an accent fill. */
+
+        /* Calendar host */
+        #calHost { flex: 1 1 auto; min-height: 0; padding: 0 6px 6px; overflow: hidden; }
+
+        /* Event dialog - wider than the default sheet (many fields, 2-col rows). */
+        .sheet { max-width: 520px; }
+        .sheet-header .allday-inline { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+        .sheet-header .allday-inline span:first-child { font-size: 0.82rem; color: var(--text-dim); white-space: nowrap; }
+
+        /* "Ir a..." dialog: narrower box; fields in ANSI order (Año / Mes / Día),
+           Año and Día kept narrow, Mes takes the slack. Widths key off the input ids,
+           not the position, so reordering the row cannot swap them again. */
+        #goToBackdrop .sheet { max-width: 360px; }
+        #goToRow .field:has( #gYear )  { flex: 0 1 88px; }
+        #goToRow .field:has( #gMonth ) { flex: 1 1 130px; }
+        #goToRow .field:has( #gDay )   { flex: 0 1 68px; }
+
+        /* "Hoy" in that dialog. The one deliberate exception to the round icon-only
+           action row (shared/theme.css): it took over from a toolbar button, so it has
+           to read as a shortcut at a glance - accent fill, the word spelled out, and
+           the row's own 44px height so it still lines up with the X and the check. */
+        .today-pill
+        {
+            display: flex; align-items: center; justify-content: center;
+            height: 44px; padding: 0 22px; flex: 0 0 auto;
+            border: none; border-radius: var(--radius-pill); cursor: pointer;
+            font: inherit; font-size: 1rem; font-weight: 700; letter-spacing: 0.01em;
+            background: var(--accent); color: var(--on-accent);
+            transition: filter var(--tr-fast);
+        }
+        .today-pill:hover  { filter: brightness(1.13); }
+        .today-pill:active { filter: brightness(0.92); }
+
+        /* Export dialog: two dates side by side + the format. */
+        #exportBackdrop .sheet { max-width: 400px; }
+
+        .switch { position: relative; width: 44px; height: 26px; flex: 0 0 auto; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .switch .track { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
+        .switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .switch input:checked + .track { background: var(--accent); }
+        .switch input:checked + .track::before { transform: translateX(18px); }
+
+        /* The "más campos" fold is the shared .more-toggle block (shared/app.css). */
+
+        .dow-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+        .dow-btn
+        {
+            width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2);
+            color: var(--text-dim); font-size: 0.82rem; cursor: pointer;
+        }
+        .dow-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+        .radio-row { display: flex; flex-direction: column; gap: 8px; }
+        .radio-opt { display: flex; align-items: center; gap: 8px; font-size: 0.94rem; }
+        .radio-opt input { width: 17px; height: 17px; }
+        .radio-opt .inline-input { max-width: 90px; }
+        .radio-opt .dt-field-inline { width: 90px; margin-left: 4px; }
+
+        .tz-hint { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+
+        /* Native date/time inputs render in the browser's own UI locale (e.g. mm/dd/yyyy),
+           ignoring this page's language. Force ISO 8601 (yyyy-mm-dd) + 24h time by hiding
+           the native text (color: transparent) and overlaying our own label; the input
+           itself stays put underneath so tapping it still opens the native picker. */
+        /* .dt-field is the shared DATE / TIME FIELD (shared/app.css); only this
+           narrow inline variant, used inside the repeat sentence, is local. */
+        .dt-field-inline { position: relative; display: inline-block; vertical-align: middle; }
+        .dt-field-inline .dt-display { padding: 0 8px; font-size: 0.94rem; }
+
+        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css (this app is
+           the reference for that style — see Calendar -> "Ir a fecha"). */
+
+        .section-divider { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+
+        /* Search-events sheet */
+        .search-results { margin-top: 2px; max-height: 52vh; overflow-y: auto; }
+        .search-result
+        {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            padding: 11px 6px; background: none; border: none; border-top: 1px solid var(--line);
+            color: var(--text); font-family: inherit; text-align: left; cursor: pointer;
+        }
+        .search-result:first-child { border-top: none; }
+        .search-result:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+        .search-result:active { background: color-mix(in srgb, var(--text) 13%, transparent); }
+        .search-result .sr-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.95rem; }
+        .search-result .sr-recur { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+        .search-result .sr-when { flex: 0 0 auto; font-size: 0.8rem; color: var(--text-dim); }
+        .search-empty { padding: 18px 6px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+
+        /* FullCalendar touch-friendly overrides */
+        .fc { --fc-border-color: var(--line); --fc-page-bg-color: transparent; --fc-neutral-bg-color: color-mix(in srgb, var(--text) 5%, transparent); height: 100%; }
+        /* Event fill: one fixed blue, the same in light and dark - it sits on the
+           day cell, not on the page background, so it does not need to follow the
+           scheme. White title: #3273B3 has luminance 0.16, far under the 3:1 line. */
+        .fc
+        {
+            --fc-event-bg-color:     #3273B3;
+            --fc-event-border-color: #3273B3;
+            --fc-event-text-color:   #FFFFFF;
+        }
+        .fc .fc-toolbar { display: none; }   /* we drive navigation from our own topbar/view-switch */
+        .fc-theme-standard td, .fc-theme-standard th { border-color: var(--line); }
+        .fc .fc-scrollgrid { border: none; }
+        /* Day / week: the day-name row and the "Jornada" (all-day) row are their own
+           scrollers, and FullCalendar forces `overflow-y: scroll` on them so their
+           columns line up with the hour grid, which has the real scrollbar. Keep
+           that gutter (the alignment needs it) but paint the scrollbar invisible. */
+        .fc .fc-scrollgrid-section-header .fc-scroller,
+        .fc .fc-scrollgrid-section-body:not(.fc-scrollgrid-section-liquid) .fc-scroller
+        { scrollbar-color: transparent transparent; }
+        .fc-col-header-cell { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; padding: 6px 0; }
+        .fc-timegrid .fc-daygrid-day-frame { min-height: 1.5em; }
+        .fc-timegrid .fc-daygrid-body-unbalanced .fc-daygrid-day-events,
+        .fc-timegrid .fc-daygrid-body-natural .fc-daygrid-day-events { min-height: 0; margin-top: 0; margin-bottom: 0; }
+        .fc-timegrid-slot-label { color: var(--text-dim); font-size: 0.78rem; }
+        .fc-timegrid-axis { color: var(--text-dim); }
+        .alldaytz-label { font-size: 0.82rem; color: var(--text-dim); }
+        .corner-tz-badge { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.02em; }
+        .fc-scrollgrid-section-header .fc-timegrid-axis-frame { display: flex; align-items: center; justify-content: center; }
+        .fc-daygrid-day-number { color: var(--text); font-size: 0.86rem; padding: 6px; }
+        .fc-day-today { background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+        .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: var(--accent); font-weight: 700; }
+        /* No text selection / callout on an event: a phone's long-press menu would
+           otherwise cancel the touch before FullCalendar starts the drag. */
+        .fc-event { border-radius: 6px; border: none; padding: 2px 5px; font-size: 0.85rem; cursor: pointer;
+                    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+        .fc-timegrid-event { padding: 3px 6px; }
+        .fc-daygrid-event { padding: 2px 4px; overflow: hidden; }
+        /* Month grid: a long title is cut with "..." inside its own day cell - it used
+           to run on over the next day's events (worst on a phone's narrow columns). */
+        .fc-daygrid-event .fc-event-main-frame { display: flex; min-width: 0; overflow: hidden; }
+        .fc-daygrid-event .fc-event-title      { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fc-event .tz-tag { opacity: 0.75; font-size: 0.78em; margin-left: 4px; }
+        .fc-list-event-dot { display: none; }
+        .fc-list-day-cushion { background: color-mix(in srgb, var(--text) 5%, transparent) !important; color: var(--text-dim); }
+        .fc-list-event td { color: var(--text); border-color: var(--line); }
+        .fc-timegrid-now-indicator-line { border-color: var(--accent); }
+        .fc-timegrid-now-indicator-arrow { border-color: var(--accent); color: var(--accent); }
+
+        /* Bigger touch targets for drag/resize handles (month-view dot) */
+        .fc-daygrid-event .fc-event-resizer { width: 14px !important; height: 14px !important; }
+
+        /* Timed events: thick bottom border doubles as the resize handle (light blue),
+           always visible so it reads as grabbable. Drag it up/down to shrink/extend. */
+        .fc-timegrid-event .fc-event-resizer-start { display: none !important; }
+        .fc-timegrid-event .fc-event-resizer-end
+        {
+            display: block !important;
+            height: 4px !important; bottom: 0 !important; left: 0 !important; right: 0 !important; width: auto !important;
+            background-color: #63BFFF !important;
+            border-radius: 0 0 5px 5px !important;
+            cursor: ns-resize !important;
+        }
+
+        /* --- Overflow menu (phone only) -------------------------------- */
+        #moreBtn { display: none; }
+
+        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
+           anchored under its button by NayiveUI.wireMenu. Nothing local. */
+
+        /* --- Phone layout (single breakpoint; PC + tablet keep the default) --- */
+        @media (max-width: 640px)
+        {
+            /* #gotoBtn stays a real button here: jumping to another month is an
+               everyday move on a phone, too common to bury in the "⋮" menu. */
+            .topbar h1,
+            .topbar .view-btn { display: none; }
+
+            /* One extra button costs the bar a whole second row unless the date
+               navigator gives ground first: with flex-wrap, a `flex-basis: auto`
+               child breaks the line at its CONTENT width. Zero basis lets the
+               month label ellipsis instead ("sept… 2026"), keeping one row. */
+            .date-nav { flex-basis: 0; }
+
+            #moreBtn { display: flex; }
+
+            .fc-daygrid-event .tz-tag { display: none; }   /* no room for the zone tag in a phone's month cell */
+
+            /* Dialogs stay centred cards, just wider on a phone */
+            .sheet { width: 100%; max-width: none; max-height: 90vh; }
+            #goToBackdrop .sheet { max-width: none; }
+        }
+
+        /* --- PHONE MONTH (phone only) -----------------------------------------
+           #app gets .phone-month while a phone shows dayGridMonth: the grid is a
+           fixed-height block of day numbers with up to three dots each (.pm-dots,
+           painted by paintPhoneDots; FullCalendar's own event pills are hidden),
+           and #dayList underneath lists the picked day's events with a "+" to add
+           one. PC / tablet never get the class, so nothing here touches them. */
+        #dayList { display: none; }
+
+        @media (max-width: 640px)
+        {
+            /* !important: FullCalendar's `height: '100%'` option writes an inline height on the host. */
+            .phone-month #calHost { flex: 0 0 auto; height: min(46vh, 340px) !important; }
+            .phone-month #dayList { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; border-top: 1px solid var(--line); }
+
+            .dl-head { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding: 4px 6px 4px 12px; }
+            .dl-head .dl-date { flex: 1 1 auto; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+            .dl-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+            .dl-row
+            {
+                display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px;
+                border: none; border-radius: var(--radius-m); background: var(--card2); color: var(--text);
+                font: inherit; text-align: left; cursor: pointer;
+            }
+            .dl-row:active { background: color-mix(in srgb, var(--text) 13%, var(--card2)); }
+            .dl-row time { flex: 0 0 auto; min-width: 4em; color: var(--accent); font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+            .dl-row .dl-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .dl-row .dl-tz { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-dim); }
+            .dl-empty { padding: 18px 6px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+
+            /* The grid: number centred, dots row under it, FullCalendar's event pills and "+N más" off. */
+            .phone-month .fc-daygrid-day-frame { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; padding: 3px 0; }
+            .phone-month .fc-daygrid-day-top { flex-direction: row; justify-content: center; }
+            .phone-month .fc-daygrid-day-number { padding: 3px 4px; font-size: 0.9rem; line-height: 1.2; text-decoration: none; }   /* the number is an <a>: no tap underline */
+            .phone-month .fc-daygrid-day-events,
+            .phone-month .fc-daygrid-day-bottom { display: none; }
+            .phone-month .fc-day-other .fc-daygrid-day-number { opacity: 0.45; }
+            .pm-dots { display: flex; gap: 3px; justify-content: center; height: 6px; }
+            .pm-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+            /* The picked day is an accent fill (today keeps its tint underneath). */
+            .phone-month .fc-daygrid-day.is-picked .fc-daygrid-day-frame { background: var(--accent); border-radius: var(--radius-s); }
+            .phone-month .fc-daygrid-day.is-picked .fc-daygrid-day-number { color: var(--on-accent); font-weight: 700; opacity: 1; }
+            .phone-month .fc-daygrid-day.is-picked .pm-dots i { background: var(--on-accent); }
+        }
+
+        /* --- EXPORT -> PDF (print) ---------------------------------------------
+           No PDF library: exportPdf() fills #printRoot with a plain, light-theme
+           listing and calls window.print(); the user picks "Save as PDF" in the
+           browser's own dialog. Same shape trips uses. #printRoot is display:none
+           on screen and only shown on paper. */
+        #printRoot { display: none; }
+
+        /* Scoped to .printing (set on <html> by exportPdf, dropped on afterprint) so a
+           plain Ctrl+P still prints the page itself rather than a blank sheet. */
+        @media print
+        {
+            @page { margin: 14mm; }
+            /* The app locks the page (html, body { height: 100%; overflow: hidden })
+               so the calendar can own the scroll - left alone that clips the printed
+               listing to a single page. */
+            .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
+            .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
+            .printing #printRoot { display: block !important; }
+        }
+
+        #printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 18px; }
+        #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; color: #111; }
+        #printRoot .pr-range { font-size: 13px; color: #444; }
+        #printRoot .pr-day { margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; }
+        #printRoot .pr-day > h2 { font-size: 12px; margin: 0 0 5px; padding-bottom: 3px; border-bottom: 1px solid #bbb;
+                                   text-transform: uppercase; letter-spacing: .05em; color: #111; }
+        #printRoot table.pr-ev { border-collapse: collapse; width: 100%; }
+        #printRoot table.pr-ev td { vertical-align: top; padding: 3px 10px 3px 0; border-bottom: 1px solid #e2e2e2; }
+        #printRoot table.pr-ev td.pr-when { width: 140px; white-space: nowrap; color: #444; font-variant-numeric: tabular-nums; }
+        #printRoot .pr-title { font-weight: 600; }
+        #printRoot .pr-meta { color: #555; font-size: 10.5px; white-space: pre-line; }
+        #printRoot .pr-empty { color: #666; font-style: italic; }
+        #printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
+    </style>
+</head>
+
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <div class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <h1>Calendar</h1>
+            <button data-view="timeGridDay" class="icon-btn view-btn" data-i18n-attr="title:calendar.day">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><rect x="9.5" y="13" width="5" height="4.5" fill="currentColor" stroke="none"></rect></svg>
+            </button>
+            <button data-view="rollWeek" class="icon-btn view-btn" data-i18n-attr="title:calendar.week">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><rect x="6" y="13" width="12" height="4.5" fill="currentColor" stroke="none"></rect></svg>
+            </button>
+            <button data-view="dayGridMonth" class="icon-btn view-btn" data-i18n-attr="title:calendar.month">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line><line x1="9.3" y1="10" x2="9.3" y2="20"></line><line x1="14.7" y1="10" x2="14.7" y2="20"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
+            </button>
+
+            <div class="date-nav">
+                <button id="prevBtn" class="icon-btn" data-i18n-attr="title:ui.prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <span id="rangeLabel" class="range-label"></span>
+                <button id="nextBtn" class="icon-btn" data-i18n-attr="title:ui.next">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+            </div>
+
+            <button id="searchBtn" class="icon-btn" data-i18n-attr="title:calendar.searchEvent">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </button>
+            <button id="gotoBtn" class="icon-btn" data-i18n-attr="title:calendar.goTo">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
+            </button>
+
+            <button id="exportBtn" class="icon-btn" data-i18n-attr="title:calendar.exportEvents">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+            <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+            </button>
+            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </button>
+            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+        </div>
+
+        <div id="topMenu" class="top-menu" role="menu" hidden>
+            <button type="button" class="menu-item" data-mview="timeGridDay"  role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.day"></span></button>
+            <button type="button" class="menu-item" data-mview="dayGridMonth" role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.month"></span></button>
+            <button type="button" class="menu-item" data-mview="listMonth"    role="menuitem"><span class="mi-check">&#10003;</span><span data-i18n="calendar.agenda"></span></button>
+        </div>
+
+        <div id="calHost"></div>
+
+        <!-- Phone month only (see PHONE MONTH): the picked day's events + a "+" to add one. -->
+        <div id="dayList">
+            <div class="dl-head">
+                <span class="dl-date" id="dlDate"></span>
+                <button id="dlAddBtn" class="icon-btn" type="button" data-i18n-attr="title:calendar.newEvent, aria-label:calendar.newEvent">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+            </div>
+            <div class="dl-rows" id="dlRows"></div>
+        </div>
+
+    </div>
+
+    <!-- Add/Edit event sheet -->
+    <div id="sheetBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <h2 id="sheetTitle" data-i18n="calendar.newEvent"></h2>
+                <label class="allday-inline">
+                    <span data-i18n="calendar.allDay"></span>
+                    <span class="switch"><input type="checkbox" id="fAllDay"><span class="track"></span></span>
+                </label>
+            </div>
+
+            <div class="field">
+                <label for="fTitle" data-i18n="calendar.title"></label>
+                <input type="text" id="fTitle" autocomplete="off" data-i18n-attr="placeholder:calendar.titlePh">
+            </div>
+
+            <div class="field">
+                <label for="fNotes" data-i18n="ui.notes"></label>
+                <textarea id="fNotes" data-i18n-attr="placeholder:calendar.optional"></textarea>
+            </div>
+
+            <button type="button" id="moreToggle" class="more-toggle" aria-expanded="false" aria-controls="moreSection">
+                <span class="more-pill">
+                    <span id="moreChevron" class="more-chevron">&#8250;</span>
+                    <span id="moreLabel" data-i18n="calendar.more"></span>
+                </span>
+                <span class="more-line"></span>
+            </button>
+
+            <div id="moreSection" style="display:none;">
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="fStartDate" data-i18n="calendar.starts"></label>
+                        <div class="dt-field"><input type="date" id="fStartDate"><span class="dt-display"></span></div>
+                    </div>
+                    <div class="field" id="fStartTimeWrap">
+                        <label for="fStartTime">&nbsp;</label>
+                        <div class="dt-field"><input type="time" id="fStartTime"><span class="dt-display"></span></div>
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="fEndDate" data-i18n="calendar.ends"></label>
+                        <div class="dt-field"><input type="date" id="fEndDate"><span class="dt-display"></span></div>
+                    </div>
+                    <div class="field" id="fEndTimeWrap">
+                        <label for="fEndTime">&nbsp;</label>
+                        <div class="dt-field"><input type="time" id="fEndTime"><span class="dt-display"></span></div>
+                    </div>
+                </div>
+
+                <div class="field" id="fTzWrap">
+                    <label for="fFloating" data-i18n="calendar.timezone"></label>
+                    <select id="fFloating">
+                        <option value="0" data-i18n="calendar.tzPinned"></option>
+                        <option value="1" data-i18n="calendar.tzFloating"></option>
+                    </select>
+                    <div id="fTzPickerWrap" style="margin-top:8px;">
+                        <input type="text" id="fTzid" list="tzList" autocomplete="off" data-i18n-attr="placeholder:calendar.tzPh">
+                        <datalist id="tzList"></datalist>
+                    </div>
+                    <div class="tz-hint" id="fTzHint"></div>
+                </div>
+
+                <hr class="section-divider">
+
+                <div class="field">
+                    <label for="fRepeat" data-i18n="calendar.repeat"></label>
+                    <select id="fRepeat">
+                        <option value="none" data-i18n="calendar.repeatNone"></option>
+                        <option value="daily" data-i18n="calendar.repeatDaily"></option>
+                        <option value="weekly" data-i18n="calendar.repeatWeekly"></option>
+                        <option value="monthly" data-i18n="calendar.repeatMonthly"></option>
+                        <option value="yearly" data-i18n="calendar.repeatYearly"></option>
+                    </select>
+                </div>
+
+                <div id="repeatDetails" style="display:none;">
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="fInterval" data-i18n="calendar.every"></label>
+                            <input type="number" id="fInterval" min="1" value="1">
+                        </div>
+                        <div class="field">
+                            <label id="fIntervalUnitLabel">&nbsp;</label>
+                            <input type="text" id="fIntervalUnitDisp" disabled>
+                        </div>
+                    </div>
+
+                    <div class="field" id="dowField" style="display:none;">
+                        <label data-i18n="calendar.onDays"></label>
+                        <!-- Filled from Intl (shared/i18n.js) so the initials follow the language. -->
+                        <div class="dow-picker" id="dowPicker"></div>
+                    </div>
+
+                    <div class="field">
+                        <label data-i18n="calendar.ends"></label>
+                        <div class="radio-row">
+                            <label class="radio-opt"><input type="radio" name="endMode" value="never" checked> <span data-i18n="calendar.never"></span></label>
+                            <label class="radio-opt"><input type="radio" name="endMode" value="on"> <span data-i18n="calendar.onDate"></span> <span class="dt-field dt-field-inline"><input type="date" id="fUntil" class="inline-input"><span class="dt-display"></span></span></label>
+                            <label class="radio-opt"><input type="radio" name="endMode" value="after"> <span data-i18n="calendar.after"></span> <input type="number" id="fCount" class="inline-input" min="1" value="10"> <span data-i18n="calendar.repeats"></span></label>
+                        </div>
+                    </div>
+                    <div class="tz-hint" data-i18n="calendar.editsSeries"></div>
+                </div>
+
+                <hr class="section-divider">
+
+                <div class="field">
+                    <label for="fLocation" data-i18n="calendar.location"></label>
+                    <input type="text" id="fLocation" autocomplete="off" data-i18n-attr="placeholder:calendar.optional">
+                </div>
+
+            </div>
+
+            <div class="sheet-actions">
+                <button id="deleteBtn" class="sheet-actions-left" style="display:none" data-act="danger" data-i18n-attr="title:ui.delete"></button>
+                <button id="helpBtn"   data-act="ghost" data-i18n-attr="title:ui.help"></button>
+                <button id="cancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="saveBtn"   data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help sheet: timezone handling only, per user request -->
+    <div id="helpBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <h2 data-i18n="calendar.timezones"></h2>
+            </div>
+
+            <p style="margin-top:0; color: var(--text); line-height:1.5;">
+                <span data-i18n="calendar.tzHelpLead"></span> <em data-i18n="calendar.tzField"></em>:
+            </p>
+
+            <p style="line-height:1.5;">
+                <strong data-i18n="calendar.tzPinned"></strong> <span data-i18n="calendar.tzPinnedHelp"></span>
+            </p>
+
+            <p style="line-height:1.5;">
+                <strong data-i18n="calendar.tzFloating"></strong> <span data-i18n="calendar.tzFloatingHelp"></span>
+            </p>
+
+            <p style="line-height:1.5;">
+                <strong data-i18n="calendar.tzInCal"></strong> <span data-i18n="calendar.tzInCalHelp"></span>
+            </p>
+
+            <div class="sheet-actions">
+                <button id="helpCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jump to a given month/year -->
+    <div id="goToBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <h2 data-i18n="calendar.goTo"></h2>
+            </div>
+
+            <div class="field-row" id="goToRow">
+                <div class="field">
+                    <label for="gYear" data-i18n="calendar.year"></label>
+                    <input type="number" id="gYear" step="1">
+                </div>
+                <div class="field">
+                    <label for="gMonth" data-i18n="calendar.month"></label>
+                    <!-- Month names come from Intl (shared/i18n.js). -->
+                    <select id="gMonth"></select>
+                </div>
+                <div class="field">
+                    <label for="gDay" data-i18n="calendar.day"></label>
+                    <input type="number" id="gDay" min="1" max="31" step="1">
+                </div>
+            </div>
+
+            <!-- "Hoy" is the shortcut this dialog replaced the toolbar button with, so it is
+                 a LABELLED pill (not one more round icon): the one control here you can hit
+                 without filling in the three fields above. .sheet-actions-left pins it to the
+                 left margin, away from the cancel / go pair. -->
+            <div class="sheet-actions">
+                <button id="goToTodayBtn" type="button" class="today-pill sheet-actions-left" data-i18n="calendar.today"></button>
+                <button id="goToCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="goToGoBtn"     data-act="primary" data-i18n-attr="title:calendar.go"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search events -->
+    <div id="searchBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <h2 data-i18n="calendar.searchEvent"></h2>
+            </div>
+
+            <div class="field">
+                <input type="text" id="fSearch" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh">
+            </div>
+
+            <div id="searchResults" class="search-results"></div>
+
+            <div class="sheet-actions">
+                <button id="searchCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="searchApplyBtn" data-act="primary:search" data-i18n-attr="title:ui.search"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export every event between two dates: PDF (the browser's own print dialog),
+         plain text, or .ics. See EXPORT in the module below. -->
+    <div id="exportBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <h2 data-i18n="calendar.exportEvents"></h2>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="xFrom" data-i18n="calendar.exportFrom"></label>
+                    <div class="dt-field"><input type="date" id="xFrom"><span class="dt-display"></span></div>
+                </div>
+                <div class="field">
+                    <label for="xTo" data-i18n="calendar.exportTo"></label>
+                    <div class="dt-field"><input type="date" id="xTo"><span class="dt-display"></span></div>
+                </div>
+            </div>
+
+            <!-- One affirmative action (the check), so the format is a field, not three
+                 buttons - see THE ONE ICON PER MEANING RULE in shared/ui.js. -->
+            <div class="field">
+                <label for="xFormat" data-i18n="calendar.exportFormat"></label>
+                <select id="xFormat">
+                    <option value="pdf">PDF</option>
+                    <option value="txt">TXT</option>
+                    <option value="ics">ICS</option>
+                </select>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="exportCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="exportGoBtn"     data-act="primary" data-i18n-attr="title:ui.download"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Where a .txt / .ics export lands (a click on this anchor is the download). -->
+    <a id="downloadAnchor" hidden></a>
+
+    <!-- Filled by exportPdf() just before window.print(), cleared on afterprint.
+         display:none on screen; the @media print block shows it and hides the app. -->
+    <div id="printRoot"></div>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        // Nothing is drawn from JS before the dictionary is in: without an
+        // in-source fallback, an early render would paint the bare keys.
+        await NayiveI18n.ready;
+
+        // ICS model + DST-safe recurrence engine — shared with the tasks app (see ../shared/ical.js).
+        import { makeEventDef, icsToEventDefs, eventDefsToIcs,
+                 expandEventDef, instantiate, pad2 } from '../shared/ical.js';
+
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const API_FILES = GumApi.API_FILES;
+        const CAL_FILE   = 'data/calendar.ics';
+
+        // Offline-capable persistence for CAL_FILE (see ../shared/store.js).
+        const store = NayiveStore.createStore( { apiBase: API_FILES } );
+
+        // Interface strings: every one of them lives in shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        // Day initials + month names come from the browser (shared/i18n.js), so
+        // they follow the interface language without a list in the dictionary.
+        ( function buildDateWidgets()
+        {
+            const RRULE_DOW = [ 'MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU' ];
+            const picker = document.getElementById( 'dowPicker' );
+
+            RRULE_DOW.forEach( function( code, i )
+            {
+                const b = document.createElement( 'button' );
+                b.type          = 'button';
+                b.className     = 'dow-btn';
+                b.dataset.dow   = code;
+                b.textContent   = NayiveUI.weekday( i + 1, 'narrow' );
+                b.title         = NayiveUI.weekday( i + 1 );
+                picker.appendChild( b );
+            } );
+
+            const months = document.getElementById( 'gMonth' );
+            for( let m = 0; m < 12; m++ )
+            {
+                const o = document.createElement( 'option' );
+                o.value       = String( m );
+                o.textContent = NayiveUI.month( m );
+                months.appendChild( o );
+            }
+        } )();
+
+        const { DateTime, Settings } = luxon;
+        Settings.defaultLocale = NayiveUI.locale();
+        // NB: the rrule + ical_esm libs are still loaded in <head> — ../shared/ical.js reads them.
+
+        const VIEWER_TZ = NayiveUI.viewerTz();
+        const PHONE     = window.matchMedia( '(max-width: 640px)' ).matches;
+
+        const LAST_VIEW_KEY = 'gum_calendar_last_view';
+        const LAST_DATE_KEY = 'gum_calendar_last_date';   // anchor date (YYYY-MM-DD) so a reload stays where you were
+
+        // ?date=YYYY-MM-DD - another app (e.g. Trips) links here to land on a specific day.
+        // It opens in day view on that date; normal navigation afterwards is unaffected.
+        const DEEP_LINK_DATE = (function()
+        {
+            const d = new URLSearchParams( location.search ).get( 'date' );
+            return d && /^\d{4}-\d{2}-\d{2}$/.test( d ) ? d : null;
+        })();
+
+        let eventDefs   = [];   // source of truth: array of event definitions (see makeEventDef)
+        let dragBusy    = false;   // a finger / mouse is down on an event (press through drop)
+        let dragMoving  = false;   // ...and FullCalendar has started dragging / resizing it
+        let refetchHeld = false;   // a re-read landed meanwhile; repaint once the drop is done
+        let editingUid   = null;   // uid of the event being edited in the sheet, or null when adding
+        let calendar     = null;
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        NayiveI18n.ready.then( function()
+        {
+            populateTimezoneList();
+            wireStaticUI();
+
+            // The store's state machine drives the header plug for every read and write.
+            store.onState( NayiveUI.syncIndicator() );
+
+            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+            // path (shared/ui.js). `eventDefs` is this tab's private snapshot and every
+            // saveCalendar() PUTs the whole .ics (last write wins, no merge), so a tab left
+            // open all day held a stale calendar AND uploaded it over an event added on the
+            // phone. The guard keeps the read out of an open dialog: loadCalendar() +
+            // refetchAll() would repaint under an event being edited.
+            NayiveUI.wireRefresh(
+            {
+                store: store,
+                // The press that starts a drag also focuses the window (on a phone in
+                // Planner, the calendar pane), so this read can finish mid-drag.
+                // FullCalendar grabs the event at that press and merges it back on the
+                // drop, so a refetch in between leaves the old copy on the grid next to
+                // the dropped one - hold the repaint until the drop is done.
+                read:  async function()
+                {
+                    await loadCalendar();
+                    if( dragBusy ) refetchHeld = true;
+                    else           refetchAll();
+                },
+                guard: function() { return ! calendar || anyBackdropOpen(); }
+            } );
+
+            // Probe the API, then load. On a failed probe the shared helper bounces to the
+            // sign-in page only when we are really online with nothing cached; otherwise it
+            // opens on the local cache and the store syncs once the connection is back.
+            NayiveUI.bootWithStore( store, async function()
+            {
+                await loadCalendar();
+                initFullCalendar();
+            } );
+        });
+
+        //------------------------------------------------------------------------//
+        // PERSISTENCE
+
+        async function loadCalendar()
+        {
+            const res = await store.read( CAL_FILE );
+
+            if( res.source === 'empty' )
+            {
+                eventDefs = [];   // genuinely no calendar.ics on the server yet — safe first run
+            }
+            else if( res.body !== null )
+            {
+                eventDefs = icsToEventDefs( res.body );
+            }
+            // else: server unreachable AND nothing cached (res.source === 'unknown').
+            // Leave `eventDefs` untouched — treating that as an empty calendar is
+            // exactly the bug that let the next save overwrite the real file.
+        }
+
+        // AUTO RE-READ
+        //
+        function saveCalendar()
+        {
+            // Writes the local cache now and queues the upload; the store flushes
+            // it immediately, on reconnect, or on tab focus. Fire-and-forget.
+            store.write( CAL_FILE, eventDefsToIcs( eventDefs ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // The event model + recurrence engine now live in ../shared/ical.js.
+
+        function findDef( uid ) { return eventDefs.find( d => d.uid === uid ); }
+
+        //------------------------------------------------------------------------//
+        // FULLCALENDAR WIRING
+
+        function initFullCalendar()
+        {
+            const host      = document.getElementById( 'calHost' );
+            const startView = DEEP_LINK_DATE ? 'timeGridDay' : pickInitialView();
+
+            calendar = new FullCalendar.Calendar( host,
+            {
+                // No explicit `plugins:` needed — the global <script> builds for daygrid/timegrid/
+                // interaction/list self-register into FullCalendar.globalPlugins when loaded.
+                initialView: startView,
+                // Week always opens centred on today, so the stored anchor is
+                // deliberately ignored for it. undefined -> FullCalendar uses today.
+                initialDate: DEEP_LINK_DATE
+                          || ( startView === 'rollWeek' ? undefined
+                                                        : localStorage.getItem( LAST_DATE_KEY ) || undefined ),
+                headerToolbar: false,
+                height: '100%',
+                nowIndicator: true,
+                dayMaxEvents: PHONE ? 2 : 3,
+                // Colliding events split the slot into strict equal columns
+                // instead of overlapping each other with a visible sliver — so
+                // two same-time, same-length events show as two equal boxes.
+                slotEventOverlap: false,
+                slotDuration: '00:30:00',
+                scrollTime: earlyOfDayHint(),
+                timeZone: 'local',
+                locale: NayiveUI.locale(),
+                allDayText: T( 'calendar.allDayCol' ),
+                slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+                eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+                editable: true,
+                eventStartEditable: true,
+                eventDurationEditable: true,
+                // Touch: hold an event this long, then drag it. FullCalendar's 1 s
+                // default loses to the phone's own long-press menu (~0.5 s).
+                eventLongPressDelay: 300,
+                selectable: true,
+
+                // "Semana" = a rolling 7-day window centred on the anchor date:
+                // the 3 days before it, the day itself, the 3 days after.
+                //
+                // Every way of *entering* the view — first visit, reload, tapping
+                // Semana — anchors on today, so today always sits in the middle
+                // (see `initialDate` above and showView()). Only moving around
+                // inside it shifts the anchor: prev/next page by 7 days, a search
+                // hit jumps to its own day.
+                //
+                // It has to be a *custom* view name: overriding the built-in
+                // `timeGridWeek` doesn't work because that name carries a fixed
+                // 1-week duration that makes FullCalendar ignore `visibleRange`.
+                views: {
+                    rollWeek: {
+                        type: 'timeGrid',
+                        dateIncrement: { days: 7 },
+                        visibleRange: function( currentDate )
+                        {
+                            const d = DateTime.fromJSDate( currentDate ).startOf( 'day' );
+                            return { start: d.minus({ days: 3 }).toJSDate(),
+                                     end:   d.plus ({ days: 4 }).toJSDate() };
+                        }
+                    }
+                },
+
+                datesSet: function( arg )
+                {
+                    updateRangeLabel( arg.view );
+                    highlightActiveView( arg.view.type );
+                    updateCornerTzBadge();
+                    localStorage.setItem( LAST_VIEW_KEY, arg.view.type );
+                    // Where a reload should land. Week is the one view that ignores
+                    // this on load (it re-centres on today), so what gets stored
+                    // while Week is showing only matters if you switch to Day/Mes
+                    // and reload from there - hence the anchor, the day in the
+                    // middle, rather than the window's first day.
+                    const anchor = ( arg.view.type === 'rollWeek' )
+                                 ? arg.view.calendar.getDate()
+                                 : arg.view.currentStart;
+                    localStorage.setItem( LAST_DATE_KEY, DateTime.fromJSDate( anchor ).toISODate() );
+                    syncPhoneMonth( arg.view );
+                },
+
+                events: function( fetchInfo, successCallback )
+                {
+                    const out = [];
+
+                    for( const def of eventDefs )
+                    {
+                        for( const inst of expandEventDef( def, fetchInfo.start.getTime(), fetchInfo.end.getTime() ) )
+                            out.push( instToFcEvent( inst ) );
+                    }
+
+                    successCallback( out );
+                },
+
+                eventContent: function( arg )
+                {
+                    const zoneTag = arg.event.extendedProps.showZoneTag
+                        ? '<span class="tz-tag">' + arg.event.extendedProps.tzAbbrev + '</span>' : '';
+
+                    return { html: '<div class="fc-event-main-frame"><span class="fc-event-title">' +
+                                   escapeHtml( arg.event.title ) + '</span>' + zoneTag + '</div>' };
+                },
+
+                allDayContent: function( arg )
+                {
+                    return { html: '<span class="alldaytz-label">' + escapeHtml( arg.text ) + '</span>' };
+                },
+
+                // Phone month: a tap picks the day for the list below instead of opening the sheet.
+                dateClick: function( arg )
+                {
+                    if( isPhoneMonth() ) pickPhoneDay( DateTime.fromJSDate( arg.date ).toISODate() );
+                    else                 openSheetForNew( arg.date, arg.allDay );
+                },
+
+                select: function( arg )
+                {
+                    if( isPhoneMonth() ) { calendar.unselect(); return; }
+                    openSheetForNew( arg.start, arg.allDay, arg.end );
+                },
+
+                eventClick: function( arg ) { openSheetForEdit( arg.event.extendedProps.uid ); },
+
+                eventDragStart:   function() { dragBusy = dragMoving = true; },
+                eventResizeStart: function() { dragBusy = dragMoving = true; },
+                eventDragStop:    endDrag,
+                eventResizeStop:  endDrag,
+
+                eventDrop: function( arg ) { applyDragOrResize( arg.event ); },
+                eventResize: function( arg ) { applyDragOrResize( arg.event ); }
+            });
+
+            calendar.render();
+
+            // The hold starts at the PRESS, not at eventDragStart: see the read in wireRefresh.
+            host.addEventListener( 'pointerdown', function( e )
+            {
+                if( e.target.closest( '.fc-event' ) ) dragBusy = true;
+            }, true );
+            document.addEventListener( 'pointerup',     releasePress, true );
+            document.addEventListener( 'pointercancel', releasePress, true );
+        }
+
+        function earlyOfDayHint() { return '07:00:00'; }
+
+        // Restore the last-used view, but never land on a view whose button isn't
+        // reachable in the current layout: phones hide Week, PC/tablet hide Agenda.
+        // First visit: a phone opens the month (see PHONE MONTH), PC/tablet the day.
+        function pickInitialView()
+        {
+            let v = localStorage.getItem( LAST_VIEW_KEY ) || ( PHONE ? 'dayGridMonth' : 'timeGridDay' );
+            if( v === 'timeGridWeek' ) v = 'rollWeek';   // migrate a value stored before the rolling-week view
+            if(   PHONE && v === 'rollWeek' ) v = 'timeGridDay';
+            if( ! PHONE && v === 'listMonth'    ) v = 'dayGridMonth';
+            return v;
+        }
+
+        function instToFcEvent( inst )
+        {
+            const isRecurring = !! inst.def.rrule;
+            const zone        = inst.def.floating ? VIEWER_TZ : inst.def.tzid;
+            const showTag     = ! inst.allDay && zone !== VIEWER_TZ;
+
+            return {
+                id: inst.uid + '::' + inst.start,
+                title: inst.def.title || T( 'calendar.untitledEvent' ),
+                start: inst.start,
+                end: inst.end,
+                allDay: inst.allDay,
+                startEditable: ! isRecurring,
+                durationEditable: ! isRecurring,
+                extendedProps: { uid: inst.uid, showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
+            };
+        }
+
+        function zoneAbbrev( zone )
+        {
+            try { return DateTime.now().setZone( zone ).toFormat( 'ZZZZ' ); }
+            catch( _ ) { return zone; }
+        }
+
+        // Short "GMT+N" form (only shows minutes when the offset isn't a whole hour, e.g. GMT+5:30).
+        function gmtLabel( zone )
+        {
+            try
+            {
+                const offsetMin = DateTime.now().setZone( zone ).offset;
+                const sign = offsetMin < 0 ? '-' : '+';
+                const abs   = Math.abs( offsetMin );
+                const hh    = Math.floor( abs / 60 );
+                const mm    = abs % 60;
+
+                return 'GMT' + sign + hh + (mm ? ':' + pad2( mm ) : '');
+            }
+            catch( _ ) { return zone; }
+        }
+
+        function escapeHtml( s )
+        {
+            return String( s ).replace( /[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]) );
+        }
+
+        // eventDragStop / eventResizeStop fire BEFORE eventDrop / eventResize, so the
+        // held repaint waits one tick: by then the drop is saved into eventDefs.
+        function endDrag()
+        {
+            setTimeout( function()
+            {
+                dragBusy = dragMoving = false;
+                if( refetchHeld ) { refetchHeld = false; refetchAll(); }
+            }, 0 );
+        }
+
+        // Released without a drag (a tap, or a touch that turned into a scroll). Once a
+        // drag has started, eventDragStop / eventResizeStop end the hold instead - the
+        // release reaches us before FullCalendar's own mouseup / touchend drop.
+        function releasePress()
+        {
+            if( dragBusy && ! dragMoving ) endDrag();
+        }
+
+        function applyDragOrResize( fcEvent )
+        {
+            const def = findDef( fcEvent.extendedProps.uid );
+            if( ! def ) return;
+
+            const zone = def.floating ? VIEWER_TZ : def.tzid;
+
+            if( fcEvent.allDay )
+            {
+                def.start.date = DateTime.fromJSDate( fcEvent.start ).toISODate();
+                const endExclusive = fcEvent.end ? DateTime.fromJSDate( fcEvent.end ) : DateTime.fromJSDate( fcEvent.start ).plus({days:1});
+                def.end.date = endExclusive.minus( { days: 1 } ).toISODate();
+            }
+            else
+            {
+                const s = DateTime.fromJSDate( fcEvent.start ).setZone( zone );
+                const e = DateTime.fromJSDate( fcEvent.end || fcEvent.start ).setZone( zone );
+                def.start = { date: s.toISODate(), time: s.toFormat( 'HH:mm' ) };
+                def.end   = { date: e.toISODate(), time: e.toFormat( 'HH:mm' ) };
+            }
+
+            saveCalendar();
+        }
+
+        //------------------------------------------------------------------------//
+        // TOP BAR / VIEW SWITCHING
+
+        // Move one period back (dir -1) or forward (dir +1).
+        //
+        // FullCalendar's built-in prev()/next() first snap the anchor to the
+        // start of the current range unit, then apply dateIncrement. For the
+        // custom 7-day "rollWeek" view that unit resolves to "week", so the
+        // first step from a today-centred window jumped an irregular number of
+        // days and every later step locked onto Monday boundaries — the
+        // inconsistency users saw. incrementDate() just shifts the anchor by
+        // the delta with no snapping, so the window stays a true rolling
+        // ±7 days around whatever day you were looking at.
+        function navPeriod( dir )
+        {
+            if( ! calendar ) return;
+
+            if( calendar.view.type === 'rollWeek' ) calendar.incrementDate( { days: 7 * dir } );
+            else if( dir < 0 )                      calendar.prev();
+            else                                    calendar.next();
+        }
+
+        // Switch view. Semana always re-centres on today (3 days back, today,
+        // 3 days ahead) however you got there; the other views keep the date
+        // you were on.
+        //
+        // changeView( name, date ) alone is NOT enough: FullCalendar builds the
+        // new view's range from that date but leaves the anchor (currentDate) on
+        // the date the old view was showing, then only snaps it to the range
+        // start when it falls outside. Coming from a Mes parked in March you'd
+        // land on a window ending today instead of centred on it, and even when
+        // the window looked right the stale anchor made the next prev/next jump
+        // from the wrong day. today() sets the range and the anchor together.
+        function showView( name )
+        {
+            if( ! calendar ) return;
+
+            calendar.changeView( name );
+            if( name === 'rollWeek' ) calendar.today();
+        }
+
+        function wireStaticUI()
+        {
+            document.getElementById( 'prevBtn' ).addEventListener( 'click', () => navPeriod( -1 ) );
+            document.getElementById( 'nextBtn' ).addEventListener( 'click', () => navPeriod(  1 ) );
+
+            document.querySelectorAll( 'button[data-view]' ).forEach( function( btn )
+            {
+                btn.addEventListener( 'click', function() { showView( btn.dataset.view ); } );
+            });
+
+            wireTopMenu();
+            wireMobileGestures();
+            wirePhoneMonth();
+
+            wireSheetUI();
+        }
+
+        // Phone-only overflow menu: view switching (Día / Mes / Agenda).
+        // The shared header "..." popup (shared/ui.js): anchors itself under the button and
+        // closes on a pick, a click outside, Escape or a resize.
+        function wireTopMenu()
+        {
+            NayiveUI.wireMenu(
+            {
+                btn: 'moreBtn', menu: 'topMenu',
+                onPick: function( item ) { if( item.dataset.mview ) showView( item.dataset.mview ); }
+            } );
+        }
+
+        // Swipe on the calendar body to move to the next / previous period.
+        // Right-to-left  -> next period.
+        // Left-to-right  -> previous period. The browser would otherwise read
+        // this as a "back" gesture and leave the app for the launcher, so once a
+        // drag is clearly horizontal we claim it with preventDefault().
+        function wireMobileGestures()
+        {
+            const host = document.getElementById( 'calHost' );
+            let x0 = null, y0 = null, onEvent = false, horiz = false;
+
+            host.addEventListener( 'touchstart', function( e )
+            {
+                if( e.touches.length !== 1 ) { x0 = null; return; }
+                x0 = e.touches[ 0 ].clientX;
+                y0 = e.touches[ 0 ].clientY;
+                horiz = false;
+                onEvent = !! e.target.closest( '.fc-event' );   // let event drag win
+            }, { passive: true } );
+
+            host.addEventListener( 'touchmove', function( e )
+            {
+                if( x0 === null || onEvent || e.touches.length !== 1 ) return;
+
+                const dx = e.touches[ 0 ].clientX - x0;
+                const dy = e.touches[ 0 ].clientY - y0;
+
+                if( ! horiz && Math.abs( dx ) > 12 && Math.abs( dx ) > Math.abs( dy ) )
+                    horiz = true;
+
+                if( horiz && e.cancelable ) e.preventDefault();   // stop the browser "back" swipe
+            }, { passive: false } );
+
+            host.addEventListener( 'touchend', function( e )
+            {
+                if( x0 === null || onEvent ) { x0 = null; return; }
+
+                const dx = e.changedTouches[ 0 ].clientX - x0;
+                const dy = e.changedTouches[ 0 ].clientY - y0;
+                x0 = null;
+
+                if( Math.abs( dx ) < 60 || Math.abs( dx ) < Math.abs( dy ) * 1.5 ) return;
+                if( anyBackdropOpen() || ! calendar ) return;
+
+                if( dx < 0 ) navPeriod( 1 ); else navPeriod( -1 );
+            }, { passive: true } );
+        }
+
+        function anyBackdropOpen()
+        {
+            return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'searchBackdrop', 'exportBackdrop' ]
+                   .some( id => document.getElementById( id ).classList.contains( 'open' ) );
+        }
+
+        function updateRangeLabel( view )
+        {
+            const label = document.getElementById( 'rangeLabel' );
+            const start = DateTime.fromJSDate( view.currentStart );
+
+            // A phone's toolbar has no room for "septiembre 2026" now that "Ir a..."
+            // is a button there: the short month name keeps the YEAR visible, which
+            // matters more than the spelling. PC / tablet keep the full name.
+            if( view.type === 'dayGridMonth' || view.type === 'listMonth' )
+                label.textContent = start.toFormat( PHONE ? 'LLL yyyy' : 'LLLL yyyy' );
+            else if( view.type === 'rollWeek' )
+                label.textContent = start.toFormat( 'LLL d' ) + ' – ' + DateTime.fromJSDate( view.currentEnd ).minus({days:1}).toFormat( 'LLL d' );
+            else
+                label.textContent = start.toFormat( 'LLL d' );
+        }
+
+        function highlightActiveView( type )
+        {
+            document.querySelectorAll( 'button[data-view], #topMenu button[data-mview]' ).forEach( function( btn )
+            {
+                btn.classList.toggle( 'is-active', (btn.dataset.view || btn.dataset.mview) === type );
+            });
+        }
+
+        // Day/Week only — dayGridMonth has no axis column, so this cell doesn't exist there and
+        // the query below simply finds nothing. That empty header corner cell (the box above the
+        // day-of-week header's axis column, left of "Todo el día") is otherwise unused by FullCalendar.
+        function updateCornerTzBadge()
+        {
+            const frame = document.querySelector( '.fc-scrollgrid-section-header .fc-timegrid-axis-frame' );
+            if( ! frame ) return;
+
+            frame.innerHTML = '<span class="corner-tz-badge">' + escapeHtml( gmtLabel( VIEWER_TZ ) ) + '</span>';
+        }
+
+        //------------------------------------------------------------------------//
+        // PHONE MONTH
+        //
+        // On a phone the month is a compact grid - the day number with one dot per
+        // event under it (max three), FullCalendar's own event pills hidden by CSS -
+        // and the picked day's events listed underneath (#dayList). Tapping a day
+        // PICKS it (on PC a click opens the new-event sheet); the "+" in the list
+        // header adds an event on that day. PC / tablet never enter this mode.
+        //
+        // All-day instances carry plain dates ('yyyy-mm-dd', UTC-anchored millis),
+        // timed ones a real instant - so days are matched by DATE for the former
+        // and by millisecond overlap for the latter, never by mixing the two.
+
+        let phoneDay = null;   // the picked day, 'yyyy-mm-dd'; only meaningful while in phone-month mode
+
+        function isPhoneMonth() { return PHONE && !! calendar && calendar.view.type === 'dayGridMonth'; }
+
+        // Re-reads eventDefs into the grid and, on a phone, into the dots + day list.
+        function refetchAll()
+        {
+            calendar.refetchEvents();
+            refreshPhoneMonth();
+        }
+
+        // datesSet: first paint, prev/next, view change. Enters / leaves the mode
+        // and keeps the picked day inside the month on show (today when it is there).
+        function syncPhoneMonth( view )
+        {
+            const on  = PHONE && view.type === 'dayGridMonth';
+            const app = document.getElementById( 'app' );
+            const was = app.classList.contains( 'phone-month' );
+
+            app.classList.toggle( 'phone-month', on );
+
+            // The host just changed height (fixed block <-> fill the page): let FullCalendar re-measure
+            // once the class has painted. Not synchronously - datesSet fires from inside a render.
+            if( was !== on ) requestAnimationFrame( function() { calendar && calendar.updateSize(); } );
+
+            if( ! on ) return;
+
+            const monthStart = DateTime.fromJSDate( view.currentStart ).toISODate();
+            const monthEnd   = DateTime.fromJSDate( view.currentEnd ).toISODate();     // exclusive
+            const today      = DateTime.now().toISODate();
+
+            if( ! phoneDay || phoneDay < monthStart || phoneDay >= monthEnd )
+                phoneDay = ( today >= monthStart && today < monthEnd ) ? today : monthStart;
+
+            refreshPhoneMonth();
+        }
+
+        // Repaints dots + list after the cells exist (datesSet can run before the DOM does).
+        function refreshPhoneMonth()
+        {
+            if( ! isPhoneMonth() ) return;
+
+            requestAnimationFrame( function()
+            {
+                if( ! isPhoneMonth() ) return;
+                paintPhoneDots();
+                renderPhoneDayList();
+            } );
+        }
+
+        function pickPhoneDay( iso )
+        {
+            phoneDay = iso;
+            markPickedCell();
+            renderPhoneDayList();
+        }
+
+        function markPickedCell()
+        {
+            document.querySelectorAll( '#calHost .fc-daygrid-day.is-picked' ).forEach( td => td.classList.remove( 'is-picked' ) );
+
+            const td = document.querySelector( '#calHost .fc-daygrid-day[data-date="' + phoneDay + '"]' );
+            if( td ) td.classList.add( 'is-picked' );
+        }
+
+        // The local days ('yyyy-mm-dd') an instance covers, clipped to [fromIso, toIso).
+        function instDays( inst, fromIso, toIso )
+        {
+            let first, last;   // inclusive DateTimes at local midnight
+
+            if( inst.allDay )
+            {
+                first = DateTime.fromISO( inst.start );
+                last  = DateTime.fromISO( inst.end ).minus( { days: 1 } );
+            }
+            else
+            {
+                first = DateTime.fromMillis( inst.startMs ).startOf( 'day' );
+                last  = DateTime.fromMillis( inst.endMs - 1 ).startOf( 'day' );   // -1: ending at midnight does not spill over
+            }
+
+            const out = [];
+            for( let d = first; d <= last; d = d.plus( { days: 1 } ) )
+            {
+                const iso = d.toISODate();
+                if( iso >= toIso ) break;
+                if( iso >= fromIso ) out.push( iso );
+            }
+            return out;
+        }
+
+        // One dot per event touching the day, max three. Instances are expanded once
+        // for the whole visible grid (plus a day each side, see the header note).
+        function paintPhoneDots()
+        {
+            const cells = document.querySelectorAll( '#calHost .fc-daygrid-day[data-date]' );
+            if( ! cells.length ) return;
+
+            const view    = calendar.view;
+            const fromIso = DateTime.fromJSDate( view.activeStart ).toISODate();
+            const toIso   = DateTime.fromJSDate( view.activeEnd ).toISODate();
+            const fromMs  = view.activeStart.getTime() - 86400000;
+            const toMs    = view.activeEnd.getTime()   + 86400000;
+            const counts  = {};
+
+            for( const def of eventDefs )
+                for( const inst of expandEventDef( def, fromMs, toMs ) )
+                    for( const iso of instDays( inst, fromIso, toIso ) )
+                        counts[ iso ] = ( counts[ iso ] || 0 ) + 1;
+
+            cells.forEach( function( td )
+            {
+                const frame = td.querySelector( '.fc-daygrid-day-frame' );
+                if( ! frame ) return;
+
+                let box = frame.querySelector( '.pm-dots' );
+                if( ! box ) { box = document.createElement( 'div' ); box.className = 'pm-dots'; frame.appendChild( box ); }
+
+                box.innerHTML = '<i></i>'.repeat( Math.min( counts[ td.dataset.date ] || 0, 3 ) );
+            } );
+
+            markPickedCell();
+        }
+
+        function renderPhoneDayList()
+        {
+            if( ! phoneDay ) return;
+
+            const day    = DateTime.fromISO( phoneDay );
+            const dow    = day.toFormat( 'cccc' );
+            document.getElementById( 'dlDate' ).textContent = phoneDay + ' · ' + dow;
+
+            const fromMs = day.toMillis();
+            const toMs   = day.plus( { days: 1 } ).toMillis();
+            const rows   = [];
+
+            for( const def of eventDefs )
+                for( const inst of expandEventDef( def, fromMs - 86400000, toMs + 86400000 ) )
+                    if( instDays( inst, phoneDay, day.plus( { days: 1 } ).toISODate() ).length )
+                        rows.push( inst );
+
+            rows.sort( ( a, b ) => ( b.allDay - a.allDay ) || ( a.startMs - b.startMs ) );   // all-day first, then by time
+
+            const box = document.getElementById( 'dlRows' );
+            box.innerHTML = '';
+
+            if( ! rows.length )
+            {
+                box.innerHTML = '<div class="dl-empty" data-i18n="calendar.noEvents"></div>';
+                return;
+            }
+
+            for( const inst of rows )
+            {
+                const zone = inst.def.floating ? VIEWER_TZ : inst.def.tzid;
+                const when = inst.allDay          ? T( 'calendar.allDayCol' )
+                           : inst.startMs < fromMs ? '…'                                    // started on an earlier day
+                                                    : DateTime.fromMillis( inst.startMs ).toFormat( 'HH:mm' );
+                const tag  = ( ! inst.allDay && zone !== VIEWER_TZ )
+                           ? '<span class="dl-tz">' + escapeHtml( zoneAbbrev( zone ) ) + '</span>' : '';
+
+                const btn = document.createElement( 'button' );
+                btn.type      = 'button';
+                btn.className = 'dl-row';
+                btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
+                btn.addEventListener( 'click', () => openSheetForEdit( inst.uid ) );
+                box.appendChild( btn );
+            }
+        }
+
+        // "+" in the list header: a new event on the picked day. Today -> the next
+        // full hour (23:00 at the latest); any other day -> 09:00.
+        function wirePhoneMonth()
+        {
+            document.getElementById( 'dlAddBtn' ).addEventListener( 'click', function()
+            {
+                if( ! phoneDay ) return;
+
+                const day = DateTime.fromISO( phoneDay );
+                const now = DateTime.now();
+                let   at  = day.set( { hour: 9 } );
+
+                if( day.hasSame( now, 'day' ) )
+                    at = now.hour >= 23 ? day.set( { hour: 23 } ) : now.plus( { hours: 1 } ).startOf( 'hour' );
+
+                openSheetForNew( at.toJSDate(), false );
+            } );
+        }
+
+        //------------------------------------------------------------------------//
+        // ADD / EDIT SHEET
+
+        // Native date/time inputs display in the browser's own UI locale, not this page's —
+        // these fields are overlaid with a Spain-formatted label (see .dt-display CSS).
+        const DT_FIELD_IDS = [ 'fStartDate', 'fEndDate', 'fStartTime', 'fEndTime', 'fUntil', 'xFrom', 'xTo' ];
+
+        function refreshDtDisplay( el )
+        {
+            const disp = el.nextElementSibling;
+            if( ! disp || ! disp.classList.contains( 'dt-display' ) ) return;
+
+            disp.textContent = ! el.value ? ''
+                              : el.type === 'date' ? DateTime.fromISO( el.value ).toFormat( 'yyyy-MM-dd' )
+                                                    : el.value;   // native time value is already 24h "HH:mm"
+        }
+
+        function refreshAllDtDisplays()
+        {
+            DT_FIELD_IDS.forEach( id => refreshDtDisplay( document.getElementById( id ) ) );
+        }
+
+        function wireSheetUI()
+        {
+            DT_FIELD_IDS.forEach( function( id )
+            {
+                document.getElementById( id ).addEventListener( 'input', function() { refreshDtDisplay( this ); } );
+            });
+
+            document.getElementById( 'fAllDay' ).addEventListener( 'change', updateSheetVisibility );
+            document.getElementById( 'fFloating' ).addEventListener( 'change', updateSheetVisibility );
+            document.getElementById( 'fRepeat' ).addEventListener( 'change', updateRepeatDetails );
+
+            document.getElementById( 'moreToggle' ).addEventListener( 'click', function()
+            {
+                setMoreOpen( ! this.classList.contains( 'open' ) );
+            });
+
+            document.querySelectorAll( '.dow-btn' ).forEach( function( btn )
+            {
+                btn.addEventListener( 'click', function() { btn.classList.toggle( 'active' ); } );
+            });
+
+            document.getElementById( 'cancelBtn' ).addEventListener( 'click', closeSheet );
+            document.getElementById( 'saveBtn' ).addEventListener( 'click', commitSheet );
+            document.getElementById( 'deleteBtn' ).addEventListener( 'click', deleteFromSheet );
+
+            // Enter in the Título field triggers Guardar.
+            document.getElementById( 'fTitle' ).addEventListener( 'keydown', function( e )
+            {
+                if( e.key === 'Enter' ) { e.preventDefault(); commitSheet(); }
+            });
+
+            document.addEventListener( 'keydown', function( e )
+            {
+                if( e.key !== 'Escape' )
+                    return;
+
+                const tm = document.getElementById( 'topMenu' );
+                if( tm && ! tm.hidden ) { tm.hidden = true; return; }
+
+                if( document.getElementById( 'sheetBackdrop' ).classList.contains( 'open' ) )
+                    closeSheet();
+                else if( document.getElementById( 'helpBackdrop' ).classList.contains( 'open' ) )
+                    closeHelp();
+                else if( document.getElementById( 'goToBackdrop' ).classList.contains( 'open' ) )
+                    closeGoTo();
+                else if( document.getElementById( 'searchBackdrop' ).classList.contains( 'open' ) )
+                    closeSearch();
+                else if( document.getElementById( 'exportBackdrop' ).classList.contains( 'open' ) )
+                    closeExport();
+            });
+
+            document.getElementById( 'helpBtn' ).addEventListener( 'click', function()
+            {
+                document.getElementById( 'helpBackdrop' ).classList.add( 'open' );
+            });
+            document.getElementById( 'helpCloseBtn' ).addEventListener( 'click', closeHelp );
+
+            document.getElementById( 'gotoBtn' ).addEventListener( 'click', openGoTo );
+            document.getElementById( 'goToCancelBtn' ).addEventListener( 'click', closeGoTo );
+            document.getElementById( 'goToGoBtn' ).addEventListener( 'click', commitGoTo );
+            document.getElementById( 'goToTodayBtn' ).addEventListener( 'click', function()
+            {
+                if( calendar ) calendar.today();
+                closeGoTo();
+            });
+
+            document.getElementById( 'exportBtn' ).addEventListener( 'click', openExport );
+            document.getElementById( 'exportCancelBtn' ).addEventListener( 'click', closeExport );
+            document.getElementById( 'exportGoBtn' ).addEventListener( 'click', commitExport );
+
+            document.getElementById( 'searchBtn' ).addEventListener( 'click', openSearch );
+            document.getElementById( 'searchCloseBtn' ).addEventListener( 'click', closeSearch );
+            document.getElementById( 'searchApplyBtn' ).addEventListener( 'click', renderSearchResults );
+            document.getElementById( 'fSearch' ).addEventListener( 'keydown', function( e )
+            {
+                if( e.key === 'Enter' ) { e.preventDefault(); renderSearchResults(); }
+            });
+        }
+
+        function closeHelp() { document.getElementById( 'helpBackdrop' ).classList.remove( 'open' ); }
+
+        function openGoTo()
+        {
+            const base = calendar ? calendar.getDate() : new Date();
+            document.getElementById( 'gDay' ).value   = base.getDate();
+            document.getElementById( 'gMonth' ).value = base.getMonth();
+            document.getElementById( 'gYear' ).value  = base.getFullYear();
+            document.getElementById( 'goToBackdrop' ).classList.add( 'open' );
+        }
+
+        function closeGoTo() { document.getElementById( 'goToBackdrop' ).classList.remove( 'open' ); }
+
+        function commitGoTo()
+        {
+            const day   = parseInt( document.getElementById( 'gDay' ).value, 10 );
+            const month = parseInt( document.getElementById( 'gMonth' ).value, 10 );
+            const year  = parseInt( document.getElementById( 'gYear' ).value, 10 );
+
+            if( calendar && Number.isFinite( year ) )
+            {
+                const lastDay = new Date( year, month + 1, 0 ).getDate();
+                const d = Number.isFinite( day ) ? Math.min( Math.max( day, 1 ), lastDay ) : 1;
+                calendar.gotoDate( new Date( year, month, d ) );
+            }
+
+            closeGoTo();
+        }
+
+        //------------------------------------------------------------------------//
+        // SEARCH
+        //
+        // Text-matches every event-def by title / notes / location (accent- and
+        // case-insensitive) and lists one representative occurrence per match: the
+        // next upcoming one, or — when nothing is left in the future — the most
+        // recent past one. Picking a result jumps the calendar to that date and
+        // opens the event for editing.
+
+        function openSearch()
+        {
+            document.getElementById( 'fSearch' ).value = '';
+            renderSearchResults();
+            document.getElementById( 'searchBackdrop' ).classList.add( 'open' );
+            setTimeout( () => document.getElementById( 'fSearch' ).focus(), 0 );
+        }
+
+        function closeSearch() { document.getElementById( 'searchBackdrop' ).classList.remove( 'open' ); }
+
+        // Lower-case and strip diacritics so "medico" matches "Médico".
+        function foldText( s )
+        {
+            return String( s || '' ).toLowerCase().normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' );
+        }
+
+        function renderSearchResults()
+        {
+            const box = document.getElementById( 'searchResults' );
+            const q    = foldText( document.getElementById( 'fSearch' ).value.trim() );
+
+            box.innerHTML = '';
+
+            if( ! q )
+                return;
+
+            const nowMs   = Date.now();
+            const winFrom = nowMs - 2 * 366 * 86400000;
+            const winTo    = nowMs + 3 * 366 * 86400000;
+
+            const matches = [];
+
+            for( const def of eventDefs )
+            {
+                if( foldText( def.title + ' ' + def.notes + ' ' + def.location ).includes( q ) )
+                    matches.push( { def, occ: pickRepresentativeOccurrence( def, nowMs, winFrom, winTo ) } );
+            }
+
+            if( ! matches.length )
+            {
+                box.innerHTML = '<div class="search-empty" data-i18n="calendar.noMatch"></div>';
+                return;
+            }
+
+            matches.sort( ( a, b ) => (a.occ ? a.occ.startMs : Infinity) - (b.occ ? b.occ.startMs : Infinity) );
+
+            for( const m of matches )
+                box.appendChild( buildSearchResultRow( m.def, m.occ ) );
+        }
+
+        function pickRepresentativeOccurrence( def, nowMs, winFrom, winTo )
+        {
+            const insts = expandEventDef( def, winFrom, winTo );
+
+            if( ! insts.length )
+            {
+                // Single event outside the search window: instantiate it directly so it
+                // still shows and stays clickable. A finite series with nothing left in
+                // the window simply has no representative occurrence.
+                if( ! def.rrule )
+                {
+                    const zone = def.floating ? VIEWER_TZ : def.tzid;
+                    return instantiate( def, def.start, def.end, zone );
+                }
+                return null;
+            }
+
+            insts.sort( ( a, b ) => a.startMs - b.startMs );
+
+            return insts.find( i => i.startMs >= nowMs ) || insts[ insts.length - 1 ];
+        }
+
+        function buildSearchResultRow( def, occ )
+        {
+            const row = document.createElement( 'button' );
+            row.type      = 'button';
+            row.className = 'search-result';
+
+            const recurIcon = def.rrule
+                ? '<span class="sr-recur" data-i18n-attr="title:calendar.recurs"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M8 16H3v5"></path></svg></span>'
+                : '';
+
+            row.innerHTML = '<span class="sr-title">' + escapeHtml( def.title || T( 'calendar.untitledEvent' ) ) + '</span>' +
+                            recurIcon +
+                            '<span class="sr-when">' + escapeHtml( formatOccurrenceWhen( def, occ ) ) + '</span>';
+
+            row.addEventListener( 'click', function()
+            {
+                closeSearch();
+
+                if( occ && calendar )
+                    calendar.gotoDate( new Date( occ.startMs ) );
+
+                openSheetForEdit( def.uid );
+            });
+
+            return row;
+        }
+
+        function formatOccurrenceWhen( def, occ )
+        {
+            if( ! occ ) return '—';
+
+            if( def.allDay )
+                return DateTime.fromMillis( occ.startMs, { zone: 'utc' } ).toFormat( 'yyyy-MM-dd' );
+
+            const zone  = def.floating ? VIEWER_TZ : def.tzid;
+            const shown = DateTime.fromMillis( occ.startMs, { zone } ).toFormat( 'yyyy-MM-dd, HH:mm' );
+
+            return (! def.floating && zone !== VIEWER_TZ) ? shown + ' (' + gmtLabel( zone ) + ')' : shown;
+        }
+
+        //------------------------------------------------------------------------//
+        // EXPORT
+        //
+        // Every occurrence between two dates (inclusive, in the viewer's own
+        // calendar days) written out as PDF, plain text or .ics.
+        //
+        // A RECURRING SERIES IS FLATTENED: the export is "what is on the calendar
+        // between these two dates", so each occurrence becomes its own entry - and,
+        // in the .ics, its own RRULE-less VEVENT with a "<uid>-<startMs>" uid, so
+        // re-importing the file somewhere else can't collide with the series.
+
+        function openExport()
+        {
+            // Default to the range on screen. FullCalendar's activeEnd is exclusive.
+            // currentStart / currentEnd, not activeStart / activeEnd: a month view's
+            // ACTIVE range also holds the padding days of the two neighbouring months,
+            // so September would default to "31 Aug .. 4 Oct". currentEnd is exclusive.
+            const view = calendar ? calendar.view : null;
+            const from = view ? DateTime.fromJSDate( view.currentStart ) : DateTime.now().startOf( 'month' );
+            const to   = view ? DateTime.fromJSDate( view.currentEnd ).minus( { days: 1 } )
+                              : DateTime.now().endOf( 'month' );
+
+            document.getElementById( 'xFrom' ).value = from.toISODate();
+            document.getElementById( 'xTo'   ).value = to.toISODate();
+            refreshAllDtDisplays();
+
+            document.getElementById( 'exportBackdrop' ).classList.add( 'open' );
+        }
+
+        function closeExport() { document.getElementById( 'exportBackdrop' ).classList.remove( 'open' ); }
+
+        function commitExport()
+        {
+            const from   = document.getElementById( 'xFrom' ).value;
+            const to     = document.getElementById( 'xTo'   ).value;
+            const format = document.getElementById( 'xFormat' ).value;
+
+            if( ! from || ! to )        { NayiveUI.toast( T( 'calendar.exportNeedDates' ) ); return; }
+            if( from > to )             { NayiveUI.toast( T( 'calendar.exportBadRange' ) );  return; }
+
+            const rows = collectOccurrences( from, to );
+
+            if( ! rows.length )         { NayiveUI.toast( T( 'calendar.nothingToExport' ) ); return; }
+
+            closeExport();
+
+            const stem = 'calendar_' + from + '_' + to;
+
+            if( format === 'ics' )      downloadBlob( occurrencesToIcs( rows ), 'text/calendar;charset=utf-8', stem + '.ics' );
+            else if( format === 'txt' ) downloadBlob( occurrencesToText( rows, from, to ), 'text/plain;charset=utf-8', stem + '.txt' );
+            else                        exportPdf( rows, from, to, stem );
+        }
+
+        // Every occurrence overlapping [from, to] (both inclusive, ISO dates), as
+        // { inst, day, first, last } sorted for reading: by the day it is filed
+        // under, all-day entries first, then by start time.
+        //
+        // Why not a plain millisecond window: an all-day instance carries UTC
+        // midnights, a timed one real local millis, so ONE ms window either clips
+        // or leaks an all-day event at the edges depending on the offset's sign.
+        // Expand with a padded window, then compare CALENDAR DAYS.
+        function collectOccurrences( from, to )
+        {
+            const winFrom = DateTime.fromISO( from, { zone: VIEWER_TZ } ).startOf( 'day' ).toMillis() - 2 * 86400000;
+            const winTo   = DateTime.fromISO( to,   { zone: VIEWER_TZ } ).endOf( 'day' ).toMillis()   + 2 * 86400000;
+
+            const rows = [];
+
+            for( const def of eventDefs )
+            {
+                for( const inst of expandEventDef( def, winFrom, winTo ) )
+                {
+                    const span = occDayRange( inst );
+                    if( span.last < from || span.first > to ) continue;
+
+                    // A multi-day event that started before `from` is filed under the
+                    // first day of the range, so no day heading falls outside it.
+                    rows.push( { inst, day: span.first < from ? from : span.first, first: span.first, last: span.last } );
+                }
+            }
+
+            rows.sort( function( a, b )
+            {
+                if( a.day !== b.day ) return a.day < b.day ? -1 : 1;
+                if( a.inst.allDay !== b.inst.allDay ) return a.inst.allDay ? -1 : 1;
+                return a.inst.startMs - b.inst.startMs;
+            } );
+
+            return rows;
+        }
+
+        // The calendar days an occurrence covers, first and last INCLUSIVE.
+        function occDayRange( inst )
+        {
+            if( inst.allDay )
+                return { first: inst.start,                                        // DTEND is exclusive
+                         last:  DateTime.fromISO( inst.end, { zone: 'utc' } ).minus( { days: 1 } ).toISODate() };
+
+            // endMs is exclusive - an event ending at 00:00 belongs to the day before,
+            // which is also the only day the grid draws it on.
+            return { first: DateTime.fromMillis( inst.startMs,     { zone: VIEWER_TZ } ).toISODate(),
+                     last:  DateTime.fromMillis( inst.endMs - 1,   { zone: VIEWER_TZ } ).toISODate() };
+        }
+
+        // "09:00–10:00", "Todo el día", plus the zone tag when the event is pinned
+        // somewhere else - the same reading the search results give.
+        function occTimeLabel( inst )
+        {
+            const def = inst.def;
+            if( def.allDay ) return T( 'calendar.allDay' );
+
+            const zone  = def.floating ? VIEWER_TZ : def.tzid;
+            const shown = DateTime.fromMillis( inst.startMs, { zone } ).toFormat( 'HH:mm' ) + '–' +
+                          DateTime.fromMillis( inst.endMs,   { zone } ).toFormat( 'HH:mm' );
+
+            return ( ! def.floating && zone !== VIEWER_TZ ) ? shown + ' (' + gmtLabel( zone ) + ')' : shown;
+        }
+
+        function dayHeading( iso )
+        {
+            return DateTime.fromISO( iso ).toFormat( 'cccc, d LLLL yyyy' );
+        }
+
+        // "  (→ 2026-09-02)" for an entry that runs past the day it is listed under.
+        // Compared against `day`, not `first`: an event that runs past midnight is
+        // already filed on the day it ends, and would otherwise point at itself.
+        function spanNote( r )
+        {
+            return r.last > r.day ? '  (→ ' + r.last + ')' : '';
+        }
+
+        //---- .ics --------------------------------------------------------------//
+
+        function occurrencesToIcs( rows )
+        {
+            return eventDefsToIcs( rows.map( r => flattenOccurrence( r.inst ) ) );
+        }
+
+        // One occurrence as a standalone (RRULE-less) event def. Wall-clock fields are
+        // rebuilt in the event's own zone, so eventDefsToIcs writes back the same
+        // TZID / floating time the event was created with.
+        function flattenOccurrence( inst )
+        {
+            const def  = inst.def;
+            const zone = def.floating ? VIEWER_TZ : def.tzid;
+            const out  = Object.assign( {}, def, { uid: def.uid + '-' + inst.startMs, rrule: null } );
+
+            if( def.allDay )
+            {
+                // defToVEventComponent adds the exclusive +1 day back on, so store the
+                // last covered day, not the DTEND.
+                out.start = { date: inst.start, time: null };
+                out.end   = { date: DateTime.fromISO( inst.end, { zone: 'utc' } ).minus( { days: 1 } ).toISODate(), time: null };
+            }
+            else
+            {
+                const s = DateTime.fromMillis( inst.startMs, { zone } );
+                const e = DateTime.fromMillis( inst.endMs,   { zone } );
+                out.start = { date: s.toISODate(), time: s.toFormat( 'HH:mm' ) };
+                out.end   = { date: e.toISODate(), time: e.toFormat( 'HH:mm' ) };
+            }
+
+            return out;
+        }
+
+        //---- .txt --------------------------------------------------------------//
+
+        function occurrencesToText( rows, from, to )
+        {
+            const lines = [ T( 'calendar.events' ) + ' — ' + from + ' → ' + to, '' ];
+            let   day   = null;
+
+            for( const r of rows )
+            {
+                if( r.day !== day )
+                {
+                    if( day !== null ) lines.push( '' );
+                    day = r.day;
+                    lines.push( dayHeading( day ) );
+                }
+
+                // padEnd alone is not enough: "10:30–11:00 (GMT+2)" is longer than the
+                // column, and the title would then start with no gap at all.
+                const when = occTimeLabel( r.inst ).padEnd( 16 ) + '  ';
+                const span = spanNote( r );
+
+                lines.push( '  ' + when + ( r.inst.def.title || T( 'calendar.untitledEvent' ) ) + span );
+
+                const pad = ' '.repeat( 20 );
+                if( r.inst.def.location ) lines.push( pad + r.inst.def.location );
+                for( const n of String( r.inst.def.notes || '' ).split( '\n' ) )
+                    if( n.trim() ) lines.push( pad + n.trim() );
+            }
+
+            lines.push( '' );
+            return lines.join( '\r\n' );
+        }
+
+        //---- PDF ---------------------------------------------------------------//
+        //
+        // No PDF library: fill the hidden #printRoot with a light-theme listing and
+        // let the browser's print dialog write the file ("Save as PDF"). Same shape
+        // the trips app uses. document.title seeds the suggested file name.
+
+        function exportPdf( rows, from, to, stem )
+        {
+            const root = document.getElementById( 'printRoot' );
+            root.innerHTML = buildPrintHtml( rows, from, to );
+
+            const prevTitle = document.title;
+            document.title  = stem;
+            document.documentElement.classList.add( 'printing' );
+
+            window.addEventListener( 'afterprint', function done()
+            {
+                window.removeEventListener( 'afterprint', done );
+                document.documentElement.classList.remove( 'printing' );
+                document.title = prevTitle;
+                root.innerHTML = '';
+            } );
+
+            NayiveUI.toast( T( 'calendar.pdfHint' ), { ms: 5000 } );
+            setTimeout( function() { window.print(); }, 350 );
+        }
+
+        function buildPrintHtml( rows, from, to )
+        {
+            let html = '<div class="pr-head"><h1>' + escapeHtml( T( 'calendar.events' ) ) + '</h1>' +
+                       '<div class="pr-range">' + escapeHtml( from + '  →  ' + to ) + '</div></div>';
+
+            let day = null;
+
+            for( const r of rows )
+            {
+                if( r.day !== day )
+                {
+                    if( day !== null ) html += '</table></div>';
+                    day   = r.day;
+                    html += '<div class="pr-day"><h2>' + escapeHtml( dayHeading( day ) ) + '</h2><table class="pr-ev">';
+                }
+
+                const def  = r.inst.def;
+                const span = spanNote( r );
+                const meta = [ def.location || '', String( def.notes || '' ).trim() ].filter( Boolean ).join( '\n' );
+
+                html += '<tr><td class="pr-when">' + escapeHtml( occTimeLabel( r.inst ) ) + '</td><td>' +
+                        '<div class="pr-title">' + escapeHtml( ( def.title || T( 'calendar.untitledEvent' ) ) + span ) + '</div>' +
+                        ( meta ? '<div class="pr-meta">' + escapeHtml( meta ) + '</div>' : '' ) +
+                        '</td></tr>';
+            }
+
+            if( day !== null ) html += '</table></div>';
+
+            return html;
+        }
+
+        //---- download ----------------------------------------------------------//
+
+        function downloadBlob( text, mime, filename )
+        {
+            const url = URL.createObjectURL( new Blob( [ text ], { type: mime } ) );
+            const a   = document.getElementById( 'downloadAnchor' );
+
+            a.href     = url;
+            a.download = filename;
+            a.click();
+
+            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+        }
+
+        function openSheetForNew( date, allDay, endDate )
+        {
+            editingUid = null;
+
+            const d  = DateTime.fromJSDate( date );
+            const e  = endDate ? DateTime.fromJSDate( endDate ) : d.plus( allDay ? { days: 1 } : { minutes: 30 } );
+
+            resetSheet();
+            document.getElementById( 'sheetTitle' ).textContent = T( 'calendar.newEvent' );
+            document.getElementById( 'deleteBtn' ).style.display = 'none';
+
+            document.getElementById( 'fAllDay' ).checked = !! allDay;
+            document.getElementById( 'fStartDate' ).value = d.toISODate();
+            document.getElementById( 'fEndDate' ).value = (allDay ? e.minus({days:1}) : e).toISODate();
+            document.getElementById( 'fStartTime' ).value = d.toFormat( 'HH:mm' );
+            document.getElementById( 'fEndTime' ).value = e.toFormat( 'HH:mm' );
+            document.getElementById( 'fFloating' ).value = '0';
+            document.getElementById( 'fTzid' ).value = VIEWER_TZ;
+
+            updateSheetVisibility();
+            refreshAllDtDisplays();
+            openSheet();
+        }
+
+        function openSheetForEdit( uid )
+        {
+            const def = findDef( uid );
+            if( ! def ) return;
+
+            editingUid = uid;
+
+            resetSheet();
+            document.getElementById( 'sheetTitle' ).textContent = T( 'calendar.editEvent' );
+            document.getElementById( 'deleteBtn' ).style.display = '';
+
+            document.getElementById( 'fTitle' ).value = def.title;
+            document.getElementById( 'fLocation' ).value = def.location;
+            document.getElementById( 'fNotes' ).value = def.notes;
+            document.getElementById( 'fAllDay' ).checked = def.allDay;
+            document.getElementById( 'fStartDate' ).value = def.start.date;
+            document.getElementById( 'fEndDate' ).value = def.end.date;
+            document.getElementById( 'fStartTime' ).value = def.start.time || '09:00';
+            document.getElementById( 'fEndTime' ).value = def.end.time || '10:00';
+            document.getElementById( 'fFloating' ).value = def.floating ? '1' : '0';
+            document.getElementById( 'fTzid' ).value = def.tzid || VIEWER_TZ;
+
+            if( def.rrule )
+            {
+                document.getElementById( 'fRepeat' ).value = def.rrule.freq.toLowerCase();
+                document.getElementById( 'fInterval' ).value = def.rrule.interval || 1;
+
+                document.querySelectorAll( '.dow-btn' ).forEach( function( btn )
+                {
+                    btn.classList.toggle( 'active', !!(def.rrule.byweekday && def.rrule.byweekday.includes( btn.dataset.dow )) );
+                });
+
+                if( def.rrule.until )
+                {
+                    document.querySelector( 'input[name=endMode][value=on]' ).checked = true;
+                    document.getElementById( 'fUntil' ).value = def.rrule.until;
+                }
+                else if( def.rrule.count )
+                {
+                    document.querySelector( 'input[name=endMode][value=after]' ).checked = true;
+                    document.getElementById( 'fCount' ).value = def.rrule.count;
+                }
+            }
+
+            updateSheetVisibility();
+            updateRepeatDetails();
+            refreshAllDtDisplays();
+            openSheet();
+        }
+
+        function resetSheet()
+        {
+            document.getElementById( 'fTitle' ).value = '';
+            document.getElementById( 'fLocation' ).value = '';
+            document.getElementById( 'fNotes' ).value = '';
+            document.getElementById( 'fRepeat' ).value = 'none';
+            document.getElementById( 'fInterval' ).value = 1;
+            document.querySelectorAll( '.dow-btn' ).forEach( b => b.classList.remove( 'active' ) );
+            document.querySelector( 'input[name=endMode][value=never]' ).checked = true;
+            document.getElementById( 'fUntil' ).value = '';
+            document.getElementById( 'fCount' ).value = 10;
+            updateRepeatDetails();
+            setMoreOpen( false );
+        }
+
+        function setMoreOpen( open )
+        {
+            document.getElementById( 'moreToggle' ).classList.toggle( 'open', open );
+            document.getElementById( 'moreToggle' ).setAttribute( 'aria-expanded', String( open ) );
+            document.getElementById( 'moreSection' ).style.display = open ? '' : 'none';
+            document.getElementById( 'moreLabel' ).textContent = open ? T( 'calendar.less' ) : T( 'calendar.more' );
+        }
+
+        function updateSheetVisibility()
+        {
+            const allDay   = document.getElementById( 'fAllDay' ).checked;
+            const floating = document.getElementById( 'fFloating' ).value === '1';
+
+            document.getElementById( 'fStartTimeWrap' ).style.display = allDay ? 'none' : '';
+            document.getElementById( 'fEndTimeWrap' ).style.display = allDay ? 'none' : '';
+            document.getElementById( 'fTzWrap' ).style.display = allDay ? 'none' : '';
+            document.getElementById( 'fTzPickerWrap' ).style.display = (! allDay && ! floating) ? '' : 'none';
+
+            document.getElementById( 'fTzHint' ).textContent = floating
+                ? T( 'calendar.tzHintFloating' )
+                : T( 'calendar.tzHintPinned' );
+        }
+
+        function updateRepeatDetails()
+        {
+            const freq = document.getElementById( 'fRepeat' ).value;
+            const show = freq !== 'none';
+
+            document.getElementById( 'repeatDetails' ).style.display = show ? '' : 'none';
+            document.getElementById( 'dowField' ).style.display = (freq === 'weekly') ? '' : 'none';
+
+            const unitLabel = { daily: T( 'calendar.unitDays' ), weekly: T( 'calendar.unitWeeks' ), monthly: T( 'calendar.unitMonths' ), yearly: T( 'calendar.unitYears' ) }[ freq ] || '';
+            document.getElementById( 'fIntervalUnitDisp' ).value = unitLabel;
+        }
+
+        function openSheet()
+        {
+            document.getElementById( 'sheetBackdrop' ).classList.add( 'open' );
+            setTimeout( () => document.getElementById( 'fTitle' ).focus(), 0 );
+        }
+        function closeSheet() { document.getElementById( 'sheetBackdrop' ).classList.remove( 'open' ); }
+
+        function commitSheet()
+        {
+            const title = document.getElementById( 'fTitle' ).value.trim();
+            if( ! title ) { flashToast( T( 'calendar.needTitle' ) ); return; }
+
+            const allDay   = document.getElementById( 'fAllDay' ).checked;
+            const floating = document.getElementById( 'fFloating' ).value === '1';
+            const typedTzid = document.getElementById( 'fTzid' ).value.trim();
+
+            if( ! floating && ! allDay && typedTzid && ! isValidTimezone( typedTzid ) )
+            {
+                flashToast( TF( 'calendar.badTz', { tz: typedTzid } ) );
+                return;
+            }
+
+            const def = editingUid ? findDef( editingUid ) : makeEventDef();
+            if( ! editingUid ) eventDefs.push( def );
+
+            def.title    = title;
+            def.location = document.getElementById( 'fLocation' ).value.trim();
+            def.notes    = document.getElementById( 'fNotes' ).value.trim();
+            def.allDay   = allDay;
+            def.floating = floating;
+            def.tzid     = floating ? VIEWER_TZ : (typedTzid || VIEWER_TZ);
+
+            def.start = { date: document.getElementById( 'fStartDate' ).value,
+                          time: def.allDay ? null : document.getElementById( 'fStartTime' ).value };
+            def.end   = { date: document.getElementById( 'fEndDate' ).value,
+                          time: def.allDay ? null : document.getElementById( 'fEndTime' ).value };
+
+            const freq = document.getElementById( 'fRepeat' ).value;
+
+            if( freq === 'none' )
+            {
+                def.rrule = null;
+            }
+            else
+            {
+                const byweekday = Array.from( document.querySelectorAll( '.dow-btn.active' ) ).map( b => b.dataset.dow );
+                const endMode = document.querySelector( 'input[name=endMode]:checked' ).value;
+
+                def.rrule =
+                {
+                    freq: freq.toUpperCase(),
+                    interval: Math.max( 1, parseInt( document.getElementById( 'fInterval' ).value, 10 ) || 1 ),
+                    byweekday: (freq === 'weekly' && byweekday.length) ? byweekday : null,
+                    until: endMode === 'on' ? document.getElementById( 'fUntil' ).value || null : null,
+                    count: endMode === 'after' ? (parseInt( document.getElementById( 'fCount' ).value, 10 ) || null) : null
+                };
+            }
+
+            closeSheet();
+            refetchAll();
+            saveCalendar();
+        }
+
+        function deleteFromSheet()
+        {
+            if( ! editingUid ) return;
+
+            eventDefs = eventDefs.filter( d => d.uid !== editingUid );
+            closeSheet();
+            refetchAll();
+            saveCalendar();
+        }
+
+        function flashToast( msg ) { NayiveUI.toast( msg ); }   // <div id="toast"> below; styling in shared/theme.css
+
+        //------------------------------------------------------------------------//
+        // TIMEZONE LIST
+
+        let knownZones = [];
+
+        function populateTimezoneList()
+        {
+            const dl = document.getElementById( 'tzList' );
+
+            try { knownZones = Intl.supportedValuesOf( 'timeZone' ); } catch( _ ) { knownZones = COMMON_ZONES; }
+
+            for( const z of knownZones )
+            {
+                const opt = document.createElement( 'option' );
+                opt.value = z;
+                dl.appendChild( opt );
+            }
+        }
+
+        function isValidTimezone( sZone )
+        {
+            if( knownZones.includes( sZone ) )
+                return true;
+
+            try { Intl.DateTimeFormat( undefined, { timeZone: sZone } ); return true; }
+            catch( _ ) { return false; }
+        }
+
+        const COMMON_ZONES =
+        [
+            'UTC','Europe/Madrid','Europe/London','Europe/Paris','Europe/Berlin','Europe/Rome','Europe/Lisbon',
+            'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Sao_Paulo','America/Mexico_City',
+            'Asia/Tokyo','Asia/Shanghai','Asia/Hong_Kong','Asia/Singapore','Asia/Dubai','Asia/Kolkata',
+            'Australia/Sydney','Pacific/Auckland'
+        ];
+
+    </script>
+</body>
+</html>

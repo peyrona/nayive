@@ -1,0 +1,268 @@
+/*
+ * theme.css - Shared colour-scheme tokens for every Nayive page.
+ *
+ * There are two schemes:
+ *
+ *   - Light (default): :root[data-theme="light"]. A warm beige, never a
+ *                      white background. Applied on first run and whenever the
+ *                      stored choice is anything other than "dark".
+ *   - Dark  (opt-in) : the bare :root block below. A touch lighter than the
+ *                      apps' original #17181B so it is easier on the eyes.
+ *
+ * The scheme is chosen with the toggle button wired up by theme.js and is
+ * remembered in localStorage (key "balata-theme" - the historical name, kept so
+ * nobody's saved choice is lost - shared by all apps on this origin). A tiny inline script in each app's <head> applies the saved choice
+ * before first paint so there is no flash.
+ *
+ * Every app styles its components through these variables. The names match the
+ * ones the apps already used as literals, plus a few additions:
+ *
+ *   --text-faint   third text level (done items, disabled, placeholders)
+ *   --link         anchor colour (only a few apps use <a>)
+ *   --ok           "success" green for the sync indicators
+ *   --warn         "working offline / changes pending" gold for the sync indicators
+ *   --busy         "sending / retrieving data" blue for the sync indicators
+ *   --shadow       drop-shadow colour, lighter in the light scheme
+ *
+ * For hover / pressed tints, prefer  color-mix(in srgb, var(--text) N%, transparent)
+ * over a fixed rgba(): because --text flips between near-white and near-black,
+ * the same declaration gives a light overlay on dark and a dark overlay on light.
+ *
+ * Accent and danger are deliberately NOT the same tone in both schemes: on the
+ * beige light background the bright green (#16A085) and the muted rose-red
+ * (#D9707D) drop below a readable contrast when used as text/icons, so the light
+ * scheme uses a deeper green and a deeper red.
+ */
+
+:root
+{
+    color-scheme: dark;
+
+    --bg:          #1E1F23;               /* page background */
+    --card:        #25272B;               /* raised surface: dialogs, page cards */
+    --card2:       #2F3034;               /* input fields, inner cards, chips */
+    --line:        rgba(255, 255, 255, 0.10); /* every border and divider */
+
+    --text:        #E7E7E9;               /* primary text */
+    --text-dim:    #93959F;               /* secondary text, icon buttons at rest, field labels */
+    --text-faint:  #6B6E77;               /* done items, placeholders, disabled text */
+
+    --accent:      #16A085;               /* brand green: titles, primary buttons, active/selected */
+    --on-accent:   #0D0F17;               /* text / icon on an accent fill */
+    --danger:      #D9707D;               /* destructive actions, errors (muted rose-red) */
+
+    --link:        #5B9DF9;               /* <a> colour (only a few apps use <a>) */
+    --ok:          #7BA88F;               /* sync dot: saved (green) */
+    --warn:        #E0A21E;               /* sync dot: offline / changes pending (gold) */
+    --busy:        #2179CF;               /* sync dot: a GET/PUT is in flight (blue) */
+    --shadow:      rgba(0, 0, 0, 0.35);   /* drop-shadow colour, lighter in the light scheme */
+}
+
+:root[data-theme="light"]
+{
+    color-scheme: light;
+
+    --bg:          #D8D0C0;
+    --card:        #E0D9CB;
+    --card2:       #F2ECDF;
+    --line:        #735C2E;
+
+    --text:        #242732;
+    --text-dim:    #484C5B;
+    --text-faint:  #5E6472;
+
+    --accent:      #0A6151;
+    --on-accent:   #F9F9FB;
+    --danger:      #9C4150;
+
+    --link:        #1A4F9E;
+    --ok:          #2E6B4E;
+    --warn:        #8A5A0B;
+    --busy:        #1C5FA6;
+    --shadow:      rgba(0, 0, 0, 0.14);
+}
+
+/* ---------------------------------------------------------------------------
+ * NON-COLOUR TOKENS - the type, radius, spacing, elevation and motion scale.
+ *
+ * These do NOT change between the light and dark schemes, so they sit in a
+ * plain :root. Every app (and apps/shared/app.css) styles through these names
+ * instead of pasting a literal, so "the corner radius of a dialog" or "the
+ * card shadow" has one definition, not nine.
+ *
+ * RULE: an app's <style> must not introduce a new radius / shadow / font
+ * stack. If you need a value that isn't here, add it here first.
+ */
+:root
+{
+    /* Type. --font-sans is the UI face; --font-mono is for paths, code, IDs. */
+    --font-sans:  BlinkMacSystemFont, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono:  ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+    /* The size of TEXT YOU TYPE INTO. Every text field, select, textarea, the
+     * click-to-rename box and the date/time overlay read this one number, so
+     * making fields bigger or smaller across all eleven apps is this line and
+     * nothing else. It is deliberately a step under the page text: a field is a
+     * control, not prose.
+     * (A phone overrides it to 16px in app.css - anything smaller makes iOS
+     * Safari zoom the page in on focus and never zoom back out.) */
+    --field-fs:   0.77rem;
+
+    /* Corner radius - the whole scale. Pick the closest role; add nothing else.
+     *   --radius-s   inputs, small/toolbar buttons, chips
+     *   --radius-m   inner cards, list rows, menus
+     *   --radius-l   dialogs (.sheet) and full-page cards (.card)
+     *   --radius-pill  pills and round tags
+     * (icon buttons and avatars use border-radius: 50% directly.) */
+    --radius-s:     8px;
+    --radius-m:     12px;
+    --radius-l:     16px;
+    --radius-pill:  999px;
+
+    /* Spacing - multiples of 4. Use for gap / padding / margin between UI parts. */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  24px;
+
+    /* Elevation + the dialog scrim. --shadow (the colour) is per-scheme above. */
+    --elev-card:    0 8px 24px var(--shadow);        /* page cards, popups */
+    --elev-dialog:  0 12px 32px rgba(0, 0, 0, 0.45); /* .sheet over .scrim   */
+    --scrim:        rgba(0, 0, 0, 0.5);              /* .sheet-backdrop fill */
+
+    /* Motion. Keep it quick and boring - no entrance animations.
+     *   --tr-fast  colour / background / opacity
+     *   --tr-move  transforms (rotate a chevron, scale a tile) */
+    --tr-fast:  0.12s ease;
+    --tr-move:  0.15s ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * Shared components. Every app pasted its own copy of these; this is the one
+ * copy. Layout that varies per app (a margin, a flex context) stays in that
+ * app's <style>; only the parts that were byte-identical live here.
+ *
+ * The larger shared component set (app shell, header, icon button, dialog,
+ * form field, pill, card) lives in its own file, apps/shared/app.css, which
+ * doubles as the written style guide. Load it right after this file.
+ */
+
+/* Header sync dot. Red at rest ("not synced" is the safe starting state); the
+ * app toggles .synced / .busy / .offline as the network state changes.
+ * (calc / text / write / drive never set .offline - harmless, the rule just
+ * never matches.) */
+.sync-indicator          { flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+                           color: var(--danger); transition: color var(--tr-move); }
+.sync-indicator.synced   { color: var(--ok); }
+.sync-indicator.busy     { color: var(--busy); }   /* a GET/PUT is in flight - sending / retrieving data */
+.sync-indicator.offline  { color: var(--warn); }   /* working offline / changes queued - safe in the local cache */
+
+/* The glyph is ONE plug, injected by shared/ui.js (applySyncDots): .sy-in is it
+ * seated in its socket, .sy-out the same plug pulled out. Connected = .synced or
+ * .busy; everything else - no class (red, not synced yet / error) or .offline
+ * (gold) - draws it unplugged, so the state survives being read without colour. */
+.sync-indicator .sy-in           { display: none; }
+.sync-indicator.synced .sy-in,
+.sync-indicator.busy   .sy-in    { display: inline; }
+.sync-indicator.synced .sy-out,
+.sync-indicator.busy   .sy-out   { display: none; }
+
+/* In the apps that sync ONE document (tasks, calendar) the dot is also the
+ * refresh control - it is a <button class="sync-indicator">, so it needs a
+ * button's reset plus the hover / focus affordances of an .icon-btn. The plain
+ * <div> dot the other apps use never matches these rules. */
+button.sync-indicator          { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%;
+                                 background: transparent; cursor: pointer;
+                                 transition: background-color var(--tr-fast), color var(--tr-move); }
+button.sync-indicator:hover    { background: color-mix(in srgb, var(--text) 9%, transparent); }
+button.sync-indicator:active   { background: color-mix(in srgb, var(--text) 14%, transparent); }
+button.sync-indicator:focus         { outline: none; }
+button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Bottom-centre transient toast (every app). The page needs a
+ * <div id="toast" class="toast"></div>; add .show to reveal it. contact adds
+ * its own .toast.actionable / .toast-undo on top of this. */
+.toast                   { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+                           background: var(--card2); color: var(--text); border: 1px solid var(--line);
+                           border-radius: var(--radius-s); padding: 10px 16px; font-size: 0.9rem; z-index: 200;
+                           max-width: 90vw; text-align: center;
+                           opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.toast.show              { opacity: 1; }
+
+/* A toast with an "Undo" button, kept up longer (NayiveUI.undoToast - habits,
+ * split, contact). The button is plain accent text, no box. */
+.toast.actionable        { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
+.toast-undo              { border: none; background: none; padding: 0; font: inherit; font-weight: 700;
+                           color: var(--accent); cursor: pointer; }
+
+/* Upload progress (every app; shared/ui.js draws it from GumApi.putBinary's
+ * "nayive:upload" events). Shown only when an upload is not instant. Sits above
+ * the toast (bottom: 90px), so a "Guardado" that follows it stays readable. */
+.upload-bar              { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
+                           width: min(320px, 90vw); box-sizing: border-box;
+                           display: flex; flex-direction: column; gap: 8px;
+                           background: var(--card2); color: var(--text); border: 1px solid var(--line);
+                           border-radius: var(--radius-s); padding: 10px 16px; font-size: 0.9rem; z-index: 200;
+                           text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.upload-bar.show         { opacity: 1; }
+.upload-bar-track        { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.upload-bar-fill         { display: block; height: 100%; width: 0; background: var(--accent);
+                           transition: width 0.2s; }
+
+/* Top "your session expired" bar (shared/ui.js -> NayiveUI.sessionExpired()).
+ * Sits above .sheet (100), .toast / .info-popup (200) and .coach-overlay (300):
+ * whatever was open when the 401 arrived, this has to stay readable over it. */
+.session-bar             { position: fixed; top: 0; left: 0; right: 0; z-index: 400;
+                           display: flex; align-items: center; justify-content: center;
+                           flex-wrap: wrap; gap: 12px; padding: 10px 16px;
+                           font-size: 0.9rem; color: var(--text);
+                           background: var(--card2); border-bottom: 1px solid var(--line); }
+.session-bar-btn         { font: inherit; cursor: pointer; padding: 6px 14px;
+                           border: none; border-radius: var(--radius-s);
+                           background: var(--accent); color: var(--on-accent); }
+.session-bar-btn:hover   { filter: brightness(1.13); }
+.session-bar-btn:active  { filter: brightness(0.92); }
+
+/* Dialog action row - the one Nayive style (reference: Calendar -> "Ir a mes").
+ * A right-aligned line of round, borderless, icon-only buttons. Mark up the buttons with
+ * `data-act` and shared/ui.js fills in the class + SVG. Roles: btn-secondary
+ * (close, X), btn-primary (apply/save, check), btn-danger (destructive, trash),
+ * btn-ghost (tertiary, e.g. help). .sheet-actions-left pins a button (delete)
+ * to the far left. */
+.sheet-actions           { display: flex; align-items: center; justify-content: flex-end;
+                           gap: var(--space-2); margin-top: 18px; }
+.sheet-actions-left      { margin-right: auto; }
+
+.btn                     { display: flex; align-items: center; justify-content: center;
+                           width: 44px; height: 44px; flex: 0 0 auto;
+                           border: none; border-radius: 50%; padding: 0; cursor: pointer;
+                           font-family: inherit; background: var(--card2); color: var(--text);
+                           transition: filter var(--tr-fast), background-color var(--tr-fast); }
+.btn svg                 { width: 20px; height: 20px; display: block; }
+.btn:hover               { filter: brightness(1.13); }        /* background a touch brighter */
+.btn:active              { filter: brightness(0.92); }
+.btn:disabled            { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+/* All borderless (like .sheet-close): tell them apart by fill or icon colour,
+ * never a ring. -primary/-active carry a solid fill; -danger is a --danger icon;
+ * -secondary is the plain --card2 disc; -ghost is a bare dim icon. */
+.btn-primary             { background: var(--accent); color: var(--on-accent); }
+.btn-secondary           { background: var(--card2); color: var(--text); }
+.btn-danger              { background: transparent; color: var(--danger); }
+.btn-danger:hover        { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.btn-ghost               { background: transparent; color: var(--text-dim); }
+.btn-ghost:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+
+/* Top-right corner close - used when a dialog's ONLY action is "close" (a
+ * bottom .sheet-actions row is for dialogs that also have an Apply/Save/…).
+ * NayiveUI.applySheetButtons() moves a lone close button here and pins its
+ * position inline. Just the round-button look here; apps that still carry
+ * their own .sheet-close in a flex header keep that local copy. */
+.sheet-close             { display: flex; align-items: center; justify-content: center;
+                           width: 32px; height: 32px; flex: 0 0 auto; padding: 0; z-index: 1;
+                           border: none; border-radius: 50%; cursor: pointer;
+                           background: transparent; color: var(--text-dim);
+                           transition: background-color var(--tr-fast), color var(--tr-fast); }
+.sheet-close svg         { width: 18px; height: 18px; display: block; }
+.sheet-close:hover       { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }

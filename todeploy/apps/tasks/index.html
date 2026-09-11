@@ -1,0 +1,2446 @@
+<!-- index.html - Personal single-user task list, backed by Gum's file-manager API -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Tasks</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'%3E%3C/rect%3E%3Cpath d='M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1'%3E%3C/path%3E%3Cpolyline points='8 13 11 16 16 10.5'%3E%3C/polyline%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (dark default, opt-in light). Apply the saved choice before first paint to avoid a flash. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <style>
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .icon-btn,
+           .pill and inputs all come from ../shared/app.css. Only what is unique
+           to the task list lives here. */
+
+
+        /* The "new task" field. It lives in the header next to the title and is
+           hidden until [+] is pressed (see enterAddMode/exitAddMode). The LOOK is
+           the one shared text-field look (app.css, FORM FIELD) - the same box as
+           the search field in Photos / Movies / Music; only how it stretches
+           along the header row is set here. The 36px header buttons still set
+           the row height, so opening it never makes the row jump. */
+        .todo-input { flex: 1 1 auto; min-width: 0; }
+        /* Embedded (inside Planner - see EMBEDDED in shared/app.css): the icon and
+           title are gone, so the compose field is ALWAYS open and takes whatever
+           width the header row has left, growing / shrinking with the pane. A flex
+           basis of 0 (not the field's ~20-character natural width) keeps it on the
+           same row as the buttons even in a narrow pane. */
+        html.is-embedded .todo-input { flex: 1 1 0; min-width: 60px; }
+
+        /* The check button turns accent once its task/sub-task is done
+           (base .icon-btn look from app.css). */
+        .icon-btn.check.done
+        {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 18%, transparent);
+        }
+
+        .task-group
+        {
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+            border-radius: var(--radius-m);
+            transition: outline-color 0.1s ease, background 0.1s ease;
+            outline: 2px dashed transparent;
+            outline-offset: 4px;
+        }
+        .task-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .task-group.drop-hover { outline-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+        /* Today's calendar-sync task: pinned to the top of its list, set apart from plain tasks. */
+        .task-group.calendar-sync
+        {
+            background: color-mix(in srgb, var(--accent) 10%, transparent);
+            border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+            border-radius: var(--radius-m);
+            padding: 2px 8px;
+            margin-bottom: 10px;
+        }
+
+        .task-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; }
+
+        /* An open task: its sub-tasks hang right under it, so it keeps the 9px
+           above (that is the gap to the task before) and gives up the one below. */
+        .task-row.is-open { padding-bottom: 2px; }
+
+        /* Task text and its rename box are an EDIT IN PLACE pair (app.css):
+           .field-edit-text at rest, .field-edit while editing. Same box, so
+           clicking to rename never moves the row. Only layout / colour here. */
+        .task-text
+        {
+            flex: 1 1 auto; min-width: 0;
+            word-break: break-word; color: var(--text);
+        }
+        .task-text.done { color: var(--text-faint); text-decoration: line-through; }
+
+        .task-edit-input { flex: 1 1 auto; min-width: 0; }
+
+        .task-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+
+        .task-chevron
+        {
+            display: flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 24px; height: 24px;
+            margin-right: -6px; padding: 0;
+            border: none; background: transparent; color: var(--text-dim);
+            cursor: pointer;
+            transition: transform var(--tr-move), color var(--tr-fast);
+        }
+        .task-chevron:hover { color: var(--text); }
+        .task-chevron.expanded { transform: rotate(90deg); }
+
+        .subtask-list { display: flex; flex-direction: column; }
+
+        .subtask-row
+        {
+            display: flex; align-items: center; gap: 8px;
+            padding: 2px 2px 2px 8px; box-shadow: none;
+        }
+        .subtask-row.insert-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+        .subtask-row.insert-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
+
+        .subtask-handle
+        {
+            flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            width: 22px; height: 24px;
+            color: var(--text-faint); cursor: grab; touch-action: none;
+        }
+        .subtask-handle:hover { color: var(--text-dim); }
+
+        .calendar-sync .subtask-handle { cursor: default; }
+
+        /* Same EDIT IN PLACE pair as the task row above. A sub-task is set apart
+           by its indent and its dimmer colour, not by a smaller type size. */
+        .subtask-text
+        {
+            flex: 1 1 auto; min-width: 0;
+            word-break: break-word; color: var(--text-dim);
+        }
+        .subtask-text.done { color: var(--text-faint); text-decoration: line-through; }
+
+        .subtask-edit-input { flex: 1 1 auto; min-width: 0; }
+
+        .subtask-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+
+        /* The row is 24px tall now (see .subtask-handle), so its buttons are too.
+           Width follows only on the round ones: .icon-btn is a 50% radius, so a
+           30x24 box would draw an ellipse. .thin keeps the 16px pill it declares
+           below, and its 18px phone width with it. */
+        .subtask-actions .icon-btn.sm            { height: 24px; }
+        .subtask-actions .icon-btn.sm:not(.thin) { width: 24px; }
+
+        /* Same EDIT IN PLACE box as everywhere else, 1px tighter top and bottom so
+           the text fits the 24px row. app.css's rule holds: the span and the input
+           change together, so clicking to rename still does not move the row. */
+        .subtask-row .field-edit-text,
+        .subtask-row .field-edit { padding: 2px 7px; }
+
+        /* The one new per-row control: it opens the plan sheet (duration + "after").
+           Full row height so it lines up with the check, but 16px wide (18 on a
+           phone, with the other small buttons) so it costs the text almost nothing.
+           A pill, not a circle: .icon-btn's 50% would draw an ellipse on a box
+           this thin. */
+        .icon-btn.thin           { width: 16px; border-radius: var(--radius-pill); }
+        .icon-btn.thin svg       { width: 14px; height: 14px; }
+        @media (max-width: 640px) { .icon-btn.sm.thin { width: 18px; } }
+
+        /* WHAT A SUB-TASK'S PLAN LOOKS LIKE ON ITS ROW
+           A chip for the duration, and the rail below for the dependencies. Both
+           appear only when the sub-task (or its task) actually uses them - a task
+           that uses neither draws exactly the rows it drew before. */
+        /* Text and its chips on one line, so a chip sits next to the words instead
+           of drifting out to the buttons. The text keeps its own width here: it is
+           .row-line that takes the row's spare space. A row with no chips has no
+           .row-line and is the row this app always drew. */
+        .row-line   { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+        .row-line > .task-text,
+        .row-line > .subtask-text { flex: 0 1 auto; }
+        .chip
+        {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 1px 7px;
+            font-size: 0.72rem; line-height: 1.5;
+            color: var(--text-dim);
+            background: color-mix(in srgb, var(--text) 7%, transparent);
+            border-radius: var(--radius-pill);
+            white-space: nowrap;
+        }
+        .chip.total    { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+        .chip.is-done  { color: var(--text-faint); text-decoration: line-through; }
+        .count-tag     { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+
+        /* A sub-task still waiting for another one is dimmed - the same weight a
+           done row gets, without the line through it. */
+        .subtask-row.is-waiting .subtask-text { color: var(--text-faint); }
+
+        /* THE DEPENDENCY RAIL
+           Lane 0 carries every dot, so all the sub-task text stays on one left
+           edge; lane 1 carries only an edge that has to skip a row. Every piece is
+           a box positioned from the TOP of the cell (never the middle), so a row of
+           any height - the one being edited included - keeps its dot on the first
+           line of text. Two edges skipping the same rows share lane 1. */
+        .rail        { position: relative; flex: 0 0 auto; align-self: stretch; width: 22px; }
+        .rail i      { position: absolute; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+        .rail .v0    { left: 6.25px; width: 1.5px; }
+        .rail .v1    { left: 15.25px; width: 1.5px; }
+        .rail .up    { top: 0; height: 12px; }
+        .rail .dn    { top: 12px; bottom: 0; }
+        .rail .all   { top: 0; bottom: 0; }
+        .rail .h     { top: 11.25px; left: 7px; width: 9px; height: 1.5px; }
+        .rail b
+        {
+            position: absolute; top: 8.5px; left: 3.5px;
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--accent);
+        }
+        .rail b.waiting { background: var(--card); border: 1.5px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+        .rail b.done    { background: color-mix(in srgb, var(--text) 30%, transparent); }
+
+        /* THE PLAN STRIP - inside the expanded group, under its sub-tasks.
+           The axis is RELATIVE: day 1 is "when this task starts", so it is as many
+           columns as the task is long and it always fits the pane. The columns
+           share the width (minmax(0,1fr)), so nothing ever scrolls sideways. */
+        .plan            { margin: 2px 0 8px 8px; }
+        .plan-row        { display: flex; align-items: center; height: 26px; }
+        .plan-name
+        {
+            flex: 0 0 38%; max-width: 160px; padding-right: 8px;
+            font-size: 0.72rem; color: var(--text-dim);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .plan-name.done  { color: var(--text-faint); text-decoration: line-through; }
+        .plan-track      { flex: 1 1 auto; min-width: 0; display: grid; align-items: center; height: 26px; }
+        .plan-track > *  { grid-row: 1; }
+        .plan-cell       { height: 100%; border-left: 1px solid color-mix(in srgb, var(--line) 20%, transparent); }
+        .plan-axis       { font-size: 0.7rem; line-height: 1.2; text-align: center; color: var(--text-faint); }
+        .plan-bar        { height: 12px; margin: 0 1px; border-radius: 6px; background: var(--accent); }
+        .plan-bar.off    { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+        .plan-bar.done   { background: color-mix(in srgb, var(--text) 24%, transparent); }
+        /* What a sub-task with slack can lose without moving the end of the task. */
+        .plan-slack
+        {
+            height: 12px; margin: 0 1px; border-radius: 6px;
+            background: repeating-linear-gradient( 90deg,
+                        color-mix(in srgb, var(--accent) 22%, transparent) 0 5px, transparent 5px 9px );
+        }
+        .plan-total      { flex: 0 0 auto; padding-left: 6px; font-size: 0.72rem; color: var(--accent); white-space: nowrap; }
+
+        /* THE PLAN SHEET - a number of days and a tick-box per sibling. The
+           tick-box list is the .share-pick / .share-user pair from app.css, which
+           already exists for "who else could have this file". */
+        .step            { display: flex; align-items: center; gap: 8px; }
+        .step input      { width: 76px; text-align: center; }
+        .step-unit       { font-size: 0.8rem; color: var(--text-dim); }
+        .pick
+        {
+            display: flex; flex-direction: column;
+            max-height: 40vh; overflow-y: auto;
+            margin: 10px 0 4px; padding: 4px;
+            background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+        }
+        /* Two classes deep on purpose: a tick-box row is a <label> inside a .field,
+           and app.css's `.field label { display: block }` would otherwise win and
+           flatten the row back to inline flow. */
+        .pick .pick-row
+        {
+            display: flex; align-items: center; gap: 10px;
+            margin: 0; padding: 8px 12px;
+            border: 1px solid transparent; border-radius: 8px;
+            font-size: var(--field-fs); color: var(--text); cursor: pointer;
+        }
+        .pick .pick-row:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+        .pick .pick-row.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+        .pick .pick-row input { flex: 0 0 auto; width: auto; margin: 0; }
+        .pick-empty      { padding: 10px 12px; font-size: var(--field-fs); color: var(--text-faint); }
+
+        .drag-ghost
+        {
+            position: fixed; top: 0; left: 0;
+            z-index: 9999; pointer-events: none; opacity: 0.9;
+            background: var(--card2); border: 1px solid var(--accent);
+            border-radius: var(--radius-s);
+            box-shadow: 0 8px 20px var(--shadow);
+        }
+
+        /* Shared round icon-only .btn .btn-danger, plus a red border for this one. */
+        #clearCompletedBtn { border: 1px solid var(--danger); }
+
+        /* Phone: the icon alone names the app (it still links home) - the title's
+           width is better spent on the compose field and the header buttons. */
+        @media (max-width: 640px)
+        {
+            .header h1 { display: none; }
+        }
+    </style>
+</head>
+
+<body>
+    <noscript>
+        <h2 data-i18n="ui.needJs"></h2>
+    </noscript>
+
+    <div id="app" style="display: none;">
+        <div class="page">
+            <div class="page-inner">
+
+                <div class="card">
+
+                    <!-- Header -->
+                    <div class="header">
+                        <svg class="app-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                            <path d="M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"></path>
+                            <polyline points="8 13 11 16 16 10.5"></polyline>
+                        </svg>
+                        <h1 id="appTitle">Tasks</h1>
+
+                        <!-- Compose field: sits in the header, hidden until [+] is pressed. While it
+                             is open the title and the other header controls step aside. -->
+                        <input id="newTaskInput" class="todo-input" type="text"
+                               autocomplete="off" hidden data-i18n-attr="placeholder:tasks.addPh">
+
+                        <button id="addBtn" class="icon-btn" data-i18n-attr="title:tasks.addTask">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </button>
+                        <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                    </div>
+
+                    <!-- Status + filters -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 4px;">
+                        <span id="statusText" style="font-size: 0.80rem; color: var(--text-dim);"></span>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="pill" data-filter="active" data-i18n="tasks.filterActive"></button>
+                            <button class="pill" data-filter="done" data-i18n="tasks.filterDone"></button>
+                        </div>
+                    </div>
+
+                    <!-- Task list -->
+                    <div id="taskList" style="margin-top: 10px;"></div>
+
+                    <!-- Empty state -->
+                    <div id="emptyState" style="display: none; flex-direction: column; align-items: center; text-align: center; padding: 36px 10px 18px; color: var(--text-faint);">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 10px; opacity: 0.6;">
+                            <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                            <path d="M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"></path>
+                            <polyline points="8 13 11 16 16 10.5"></polyline>
+                        </svg>
+                        <p id="emptyTitle" style="margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim);"></p>
+                        <p id="emptyBody" style="margin: 4px 0 0; font-size: 0.80rem;"></p>
+                    </div>
+
+                    <!-- Clear completed -->
+                    <div id="clearCompletedRow" style="display: none; justify-content: flex-start; margin-top: 12px;">
+                        <button id="clearCompletedBtn" class="btn btn-danger" data-i18n-attr="title:tasks.clearCompleted">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- DURATION + ORDER, for one sub-task. Everything the plan needs is set here:
+         how many days it takes, and which of its siblings have to be done first.
+         Opened by the thin dots button on the sub-task row - there is no other way
+         in, so ADDING a sub-task stays exactly what it always was: type the text. -->
+    <div class="sheet-backdrop" id="planSheetBackdrop" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 data-i18n="tasks.planTitle"></h2>
+
+            <!-- The sub-task's own text, editable here as well: someone who opened
+                 this sheet to say how long it takes should not have to close it
+                 again to fix a typo in the name. -->
+            <div class="field" style="margin-top: 14px;">
+                <label for="planTextInput" data-i18n="tasks.planText"></label>
+                <input id="planTextInput" type="text" autocomplete="off" data-i18n-attr="placeholder:tasks.describeTask">
+            </div>
+
+            <div class="field" style="margin-top: 16px;">
+                <label for="planDaysInput" data-i18n="tasks.planDays"></label>
+                <div class="step">
+                    <button type="button" id="planDaysLess" class="icon-btn sm" data-i18n-attr="title:tasks.planLess">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <input id="planDaysInput" type="number" min="1" max="999" step="1" inputmode="numeric" autocomplete="off">
+                    <button type="button" id="planDaysMore" class="icon-btn sm" data-i18n-attr="title:tasks.planMore">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <span class="step-unit" data-i18n="tasks.planDaysUnit"></span>
+                </div>
+                <p style="margin: 8px 0 0; font-size: 0.72rem; color: var(--text-faint);" data-i18n="tasks.planDaysHint"></p>
+            </div>
+
+            <div class="field" style="margin-top: 16px;">
+                <label data-i18n="tasks.planAfter"></label>
+                <div class="pick" id="planAfterList"></div>
+                <p style="margin: 8px 0 0; font-size: 0.72rem; color: var(--text-faint); line-height: 1.45;" data-i18n="tasks.planAfterHint"></p>
+            </div>
+
+            <div class="sheet-actions">
+                <!-- The house "remove" action: a red bin, same as everywhere else. It
+                     takes the duration and the order off this sub-task and closes -
+                     it never deletes the sub-task, which this app has no button for. -->
+                <button type="button" id="planClearBtn" class="sheet-actions-left" data-act="danger" data-i18n-attr="title:tasks.planClear"></button>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button type="button" id="planSaveBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- The help dialog builds each row from the real button on screen, and the
+         sub-task dots button only exists while a group is open. This hidden copy is
+         what that row borrows its glyph from. -->
+    <span id="planGlyph" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg></span>
+
+    <!-- Vendored libs, only for the once-a-day calendar sync (see CALENDAR SYNC section below). Shared with calendar (shared/lib/): one download, one cache entry. -->
+    <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
+    <script src="../shared/lib/rrule_v2.8.1.min.js"></script>
+
+    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
+    <script src="../shared/ui.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'tasks',
+            title: 'Tasks',
+            lead:  NayiveUI.t( 'tasks.introLead' ),
+            buttons: [
+                { sel: '#addBtn',    text: ( document.documentElement.classList.contains( 'is-embedded' )
+                                             ? NayiveUI.t( 'tasks.introAdd' )
+                                             : NayiveUI.t( 'tasks.introOpen' ) )
+                                           + NayiveUI.t( 'tasks.introAddSub' ) },
+                { icon: 'grip', name: NayiveUI.t( 'tasks.introDragName' ), text: NayiveUI.t( 'tasks.introDrag' ) },
+                { sel: '#planGlyph', name: NayiveUI.t( 'tasks.introPlanName' ), text: NayiveUI.t( 'tasks.introPlan' ) },
+                { icon: 'undo', name: NayiveUI.t( 'tasks.introUndoneName' ), text: NayiveUI.t( 'tasks.introUndone' ) }
+            ]
+            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
+            // so its row would document a control that is not on screen.
+            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
+                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
+                  text: NayiveUI.t( 'tasks.introSync' ) } ] )
+        } );
+    } );
+    </script>
+
+    <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
+    <script src="../shared/store.js" defer></script>
+
+    <script type="module">
+        // Nothing is drawn from JS before the dictionary is in: without an
+        // in-source fallback, an early render would paint the bare keys.
+        await NayiveI18n.ready;
+
+        // ICS parsing + DST-safe recurrence engine — shared with the calendar app (see ../shared/ical.js).
+        import { icsToEventDefs, expandEventDef } from '../shared/ical.js';
+
+        const { DateTime } = luxon;
+
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const API_FILES  = GumApi.API_FILES;
+        const TASKS_FILE = 'data/tasks.json';
+
+        // Offline-capable persistence for TASKS_FILE (see ../shared/store.js).
+        const store = NayiveStore.createStore( { apiBase: API_FILES } );
+
+        // Interface strings: every one of them lives in shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        const CALENDAR_FILE          = 'data/calendar.ics';
+        const CALENDAR_SYNC_TITLE    = T( 'tasks.calendarSyncTitle' );
+        const CALENDAR_SYNC_DATE_KEY = 'tasks_calendar_sync_date';
+        const VIEWER_TZ              = NayiveUI.viewerTz();
+
+        const CONTACTS_FILE          = 'data/contacts.vcf';
+        const BIRTHDAY_SYNC_DATE_KEY = 'tasks_birthday_sync_date';
+        const BIRTHDAY_TASK_TITLE    = T( 'tasks.birthdayTitle' );
+        const TRIPS_DIR              = 'data/trips';
+        const TRIP_SYNC_DATE_KEY     = 'tasks_trip_sync_date';
+
+        let tasks          = [];
+        let filter         = 'active';
+        let editingId      = null;   // id of the task whose text is being edited
+        let editingSubtask = null;   // { taskId, subtaskId } of the sub-task being edited
+        let dragCtx        = null;   // in-progress sub-task drag (pointer-based, works on touch too)
+        let adding         = false;  // true while the header compose field is open
+        // Inside Planner (html.is-embedded, stamped by shared/ui.js) the field never
+        // closes: the icon / title are hidden there, so it owns the header's free
+        // width and `adding` simply mirrors "the field has focus" (see PINNED below).
+        const PINNED = document.documentElement.classList.contains( 'is-embedded' );
+        // Ids of the tasks whose sub-task list is open. Membership - not absence - is what
+        // opens a group, so everything starts collapsed on every load: a long list stays
+        // readable at a glance and you unfold only the one you are working on.
+        let expandedTasks = new Set();
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        NayiveI18n.ready.then( function()
+        {
+            const addBtn = document.getElementById( 'addBtn' );
+
+            // Keep focus in the field when [+] is used as the submit button (a plain
+            // click would blur the input first and trip the empty-blur exit below).
+            addBtn.addEventListener( 'mousedown', function( e ) { if( adding ) e.preventDefault(); } );
+            addBtn.addEventListener( 'click', onAddButton );
+
+            const newTaskInput = document.getElementById( 'newTaskInput' );
+
+            newTaskInput.addEventListener( 'keydown', function( e )
+            {
+                if( e.key === 'Enter' )  submitAdd();
+                if( e.key === 'Escape' ) exitAddMode();
+            });
+
+            // Clicking away with the field left empty backs out of add mode.
+            newTaskInput.addEventListener( 'blur', function()
+            {
+                if( adding && ! newTaskInput.value.trim() )
+                    exitAddMode();
+            });
+
+            if( PINNED )
+            {
+                newTaskInput.hidden = false;
+                // Clicking straight into the field (no [+] first) is add mode too.
+                newTaskInput.addEventListener( 'focus', function() { if( ! adding ) enterAddMode(); } );
+            }
+
+            document.querySelectorAll( '[data-filter]' ).forEach( function( btn )
+            {
+                btn.addEventListener( 'click', function() { setFilter( btn.dataset.filter ); } );
+            });
+
+            document.getElementById( 'clearCompletedBtn' ).addEventListener( 'click', clearCompleted );
+
+            document.getElementById( 'planDaysLess' ).addEventListener( 'click', function() { stepDays( -1 ); } );
+            document.getElementById( 'planDaysMore' ).addEventListener( 'click', function() { stepDays(  1 ); } );
+            document.getElementById( 'planClearBtn' ).addEventListener( 'click', function() { savePlanSheet( true ); } );
+            document.getElementById( 'planSaveBtn'  ).addEventListener( 'click', function() { savePlanSheet( false ); } );
+            // Escape and the backdrop's own close button go through shared/ui.js;
+            // this only clears the working state behind them.
+            document.getElementById( 'planSheetBackdrop' ).addEventListener( 'click', function( e )
+            {
+                if( e.target === e.currentTarget ) planSheet = null;
+            });
+
+            // The store's state machine drives the header plug for every read and write.
+            store.onState( NayiveUI.syncIndicator() );
+
+            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+            // path (shared/ui.js). The guard skips the read while a text field holds unsaved
+            // text: loadTasks() re-renders, which would throw away what is being typed. An
+            // OPEN but EMPTY compose field does not block it - inside Planner the field is
+            // always open (PINNED) and the cursor often just sits there.
+            //
+            // onVisible: iOS/Android Safari often restore a backgrounded tab from the bfcache
+            // instead of reloading it, so DOMContentLoaded never fires again and the once-a-day
+            // syncs would be missed. They run after the re-read, which is awaited first: every
+            // saveTasks() PUTs the whole list (last write wins), so syncing into a stale
+            // snapshot would delete whatever another device added meanwhile.
+            NayiveUI.wireRefresh(
+            {
+                store: store,
+                read:  loadTasks,
+                guard: function()
+                {
+                    const typing = adding && document.getElementById( 'newTaskInput' ).value.trim() !== '';
+                    return editingId !== null || editingSubtask !== null || typing;
+                },
+                onVisible: function()
+                {
+                    maybeSyncCalendarToday();
+                    maybeSyncBirthdaysToday();
+                    maybeSyncTripsToday();
+                }
+            } );
+
+            // Probe the API, then load. On a failed probe the shared helper bounces to the
+            // sign-in page only when we are really online with nothing cached; otherwise it
+            // opens on the local cache and the store syncs once the connection is back.
+            NayiveUI.bootWithStore( store, async function()
+            {
+                await loadTasks();
+                maybeSyncCalendarToday();    // background: re-renders itself once the calendar fetch resolves
+                maybeSyncBirthdaysToday();   // background: independent once-a-day scan of contacts.vcf
+                maybeSyncTripsToday();       // background: once-a-day "Preparar viaje a ..." from the trips
+            } );
+        });
+
+        //------------------------------------------------------------------------//
+        // PERSISTENCE
+
+        async function loadTasks()
+        {
+            const res = await store.read( TASKS_FILE );
+
+            if( res.source === 'empty' )
+            {
+                tasks = [];   // genuinely no tasks.json on the server yet — safe first run
+            }
+            else if( res.body !== null )
+            {
+                try
+                {
+                    const parsed = JSON.parse( res.body );
+                    // Sanitised here, not only on save: a file written by hand, by
+                    // an older build or by a newer one must not be able to hand the
+                    // renderer a 100000-day duration or a dangling dependency.
+                    tasks = sanitizePlan( Array.isArray( parsed ) ? parsed : [] );
+                }
+                catch( _ )
+                {
+                    tasks = [];
+                }
+            }
+            // else: the server was unreachable AND nothing is cached (res.source
+            // === 'unknown'). Leave `tasks` untouched — treating that as an empty
+            // list is exactly the bug that let the next save overwrite the real
+            // file. The store drives the indicator, which shows the problem.
+
+            dropLegacyYesterdayRow();
+            render();
+        }
+
+        // ONE-OFF CLEAN-UP, safe to delete once every device has re-synced.
+        // The calendar task used to open with an informative "events from yesterday
+        // are still undone" row. It was not an event and it is gone, but a copy can
+        // still be sitting in a tasks.json written before today's sync. This drops
+        // it in place of waiting for tomorrow morning's rebuild, without touching
+        // the ticks already made today.
+        function dropLegacyYesterdayRow()
+        {
+            const LEGACY = [ 'Hay eventos de ayer sin ejecutar',
+                             'There are events from yesterday left undone',
+                             'Há eventos de ontem por fazer',
+                             "Il reste des événements d'hier non faits",
+                             'Ci sono eventi di ieri non eseguiti',
+                             'Von gestern sind Termine offen geblieben',
+                             'Sunt eventa hesterna nondum acta' ];
+
+            const task = tasks.find( function( t ) { return t.isCalendarSync; } );
+
+            if( ! task || ! task.subtasks )
+                return;
+
+            const kept = task.subtasks.filter( function( s ) { return LEGACY.indexOf( s.text ) === -1; } );
+
+            if( kept.length === task.subtasks.length )
+                return;
+
+            task.subtasks = kept;
+            saveTasks();
+        }
+
+        function saveTasks()
+        {
+            // A sub-task added via [+] but not yet named is only a UI placeholder —
+            // strip those blanks so a save mid-typing can't persist an empty row.
+            const clean = sanitizePlan( tasks.map( function( t )
+            {
+                if( ! t.subtasks ) return t;
+
+                return { ...t, subtasks: t.subtasks.filter( function( s ) { return s.text && s.text.trim(); } )
+                                                   .map( function( s ) { return { ...s }; } ) };
+            }) );
+            // sanitizePlan() runs over that COPY, not over `tasks`: dropping a blank
+            // sub-task can orphan an `after` that pointed at it, and the file is where
+            // that has to be tidied - the row on screen is still being typed.
+
+            // Writes the local cache now and queues the upload; the store flushes
+            // it immediately, on reconnect, or on tab focus. Fire-and-forget —
+            // the data is safe the moment this returns.
+            store.write( TASKS_FILE, JSON.stringify( clean, null, 2 ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // CALENDAR SYNC — once a day (per device), pull today's events from the calendar app's own
+        // calendar.ics and mirror them into a pinned, highlighted task.
+        //
+        // No ICS parsing or recurrence maths lives below: this app and the calendar app both import
+        // icsToEventDefs() + expandEventDef() from ../shared/ical.js (see the import at the top), so
+        // the DST-safe expansion and the TZID handling are settled there, once, for both. What is
+        // here is only today's slice of that (getTodaysOccurrences) and the task-shaped mirroring
+        // of it (applyCalendarSyncResult).
+
+        async function maybeSyncCalendarToday()
+        {
+            const today = DateTime.now().setZone( VIEWER_TZ ).toISODate();
+
+            if( localStorage.getItem( CALENDAR_SYNC_DATE_KEY ) === today )
+                return;   // already checked today on this device
+
+            try
+            {
+                const icsText      = await GumApi.readFile( CALENDAR_FILE );
+                const defs         = icsToEventDefs( icsText );
+                const occurrences  = getTodaysOccurrences( defs, today );
+
+                applyCalendarSyncResult( occurrences );
+            }
+            catch( _ )
+            {
+                return;   // no calendar.ics yet, or the fetch failed — leave unmarked, retry next load
+            }
+
+            localStorage.setItem( CALENDAR_SYNC_DATE_KEY, today );
+        }
+
+        function applyCalendarSyncResult( occurrences )
+        {
+            let task = tasks.find( function( t ) { return t.isCalendarSync; } );
+
+            if( occurrences.length === 0 )
+            {
+                if( task )
+                {
+                    tasks = tasks.filter( function( t ) { return ! t.isCalendarSync; } );
+                    render();
+                    saveTasks();
+                }
+                return;
+            }
+
+            if( task )
+            {
+                task.subtasks = [];
+                task.done     = false;   // resurface it even if yesterday's copy had been marked done
+            }
+            else
+            {
+                task = { id: Date.now(), text: CALENDAR_SYNC_TITLE, done: false, subtasks: [], isCalendarSync: true };
+                tasks.push( task );
+            }
+
+            occurrences.forEach( function( occ, i )
+            {
+                task.subtasks.push( { id: Date.now() + i, text: occ, done: false } );
+            });
+
+            render();
+            saveTasks();
+        }
+
+        // Today's occurrences as ready-to-display "HH:mm Title" strings (all-day events use
+        // "Todo el día" in place of a time, matching the calendar app's own wording for that row).
+        function getTodaysOccurrences( defs, todayIso )
+        {
+            const dayStart = DateTime.fromISO( todayIso, { zone: VIEWER_TZ } );
+            const dayEnd   = dayStart.plus( { days: 1 } );
+            const results  = [];
+
+            for( const def of defs )
+            {
+                for( const inst of expandEventDef( def, dayStart.toMillis(), dayEnd.toMillis() ) )
+                {
+                    if( inst.allDay )
+                    {
+                        results.push( { time: '', sortMs: dayStart.toMillis(), label: TF( 'tasks.allDay', { title: def.title } ) } );
+                    }
+                    else
+                    {
+                        const zone = def.floating ? VIEWER_TZ : def.tzid;
+                        const dt   = DateTime.fromISO( inst.start ).setZone( zone );
+
+                        results.push( { sortMs: dt.toMillis(), label: dt.toFormat( 'HH:mm' ) + ' ' + def.title } );
+                    }
+                }
+            }
+
+            return results.sort( function( a, b ) { return a.sortMs - b.sortMs; } ).map( function( r ) { return r.label; } );
+        }
+
+        //------------------------------------------------------------------------//
+        // BIRTHDAY SYNC — once a day (per device), scan the contact app's own
+        // contacts.vcf for anyone whose birthday is today and drop in a reminder.
+        // Client-side only, exactly like the calendar sync above: this page just
+        // reads the shared .vcf through Gum's file API, no server involved.
+        //
+        //   · exactly one match  -> task "Felicitar el cumpleaños de <nombre>"
+        //   · two or more matches -> task "Felicitar cumpleaños" + one sub-task per person
+        //   · no match            -> nothing added
+        //
+        // The task carries a `birthdayDate` stamp: a second device opening the app
+        // the same day sees today's reminder already there and won't add a copy.
+        // Otherwise these are ordinary tasks — not pinned, not auto-removed: a
+        // greeting you didn't send should not silently vanish tomorrow.
+
+        async function maybeSyncBirthdaysToday()
+        {
+            const today = DateTime.now().setZone( VIEWER_TZ ).toISODate();
+
+            if( localStorage.getItem( BIRTHDAY_SYNC_DATE_KEY ) === today )
+                return;   // already checked today on this device
+
+            let names;
+
+            try
+            {
+                const vcfText = await GumApi.readFile( CONTACTS_FILE );
+                names = todaysBirthdayNames( vcfText );
+            }
+            catch( _ )
+            {
+                return;   // no contacts.vcf yet, or the fetch failed — retry on the next load
+            }
+
+            localStorage.setItem( BIRTHDAY_SYNC_DATE_KEY, today );
+
+            if( names.length === 0 )
+                return;
+
+            if( tasks.some( function( t ) { return t.birthdayDate === today; } ) )
+                return;   // another device already added today's reminder
+
+            let task;
+
+            if( names.length === 1 )
+            {
+                task = { id: Date.now(), text: TF( 'tasks.birthdayOne', { name: names[ 0 ] } ),
+                         done: false, subtasks: [], birthdayDate: today };
+            }
+            else
+            {
+                task = { id: Date.now(), text: BIRTHDAY_TASK_TITLE, done: false, birthdayDate: today,
+                         subtasks: names.map( function( n, i )
+                         {
+                             return { id: Date.now() + i + 1, text: n, done: false };
+                         }) };
+            }
+
+            tasks.push( task );
+            render();
+            saveTasks();
+        }
+
+        //------------------------------------------------------------------------//
+        // TRIP SYNC — once a day (per device): for every trip (trips app, one
+        // data/trips/<dir>/trip.json each) whose start date is within N days,
+        // add a plain "Preparar viaje a <destino> (sale el <fecha>)" task. N is
+        // the user's "trip_reminder_days" (launcher "Mi cuenta", GET
+        // /api/files?tripdays=1; 0 = off). Client-side like the two syncs above -
+        // it used to be a daily chore on the server, this is the same rule.
+        //
+        // The task carries `tripReminder: <trip id>`, so it is added once per
+        // trip whatever device runs first and however many days the window
+        // lasts; a task you already ticked off still counts as "reminded".
+
+        async function maybeSyncTripsToday()
+        {
+            const today = DateTime.now().setZone( VIEWER_TZ ).toISODate();
+
+            if( localStorage.getItem( TRIP_SYNC_DATE_KEY ) === today )
+                return;   // already checked today on this device
+
+            let due;
+
+            try
+            {
+                const pref = JSON.parse( await GumApi.fetchText( GumApi.API_FILES + '?tripdays=1' ) );
+                const lead = Number( pref.days ) || 0;
+
+                if( lead <= 0 )
+                {
+                    localStorage.setItem( TRIP_SYNC_DATE_KEY, today );
+                    return;   // trip reminders turned off
+                }
+
+                due = await tripsStartingWithin( lead, today );
+            }
+            catch( _ )
+            {
+                return;   // offline, or the fetch failed — retry on the next load
+            }
+
+            localStorage.setItem( TRIP_SYNC_DATE_KEY, today );
+
+            const have  = new Set( tasks.map( function( t ) { return t.tripReminder; } ) );
+            let   added = false;
+
+            due.forEach( function( trip, i )
+            {
+                if( have.has( trip.id ) )
+                    return;
+
+                tasks.push( { id: Date.now() + i, text: TF( 'tasks.tripReminder', { dest: trip.destination, date: trip.startDate } ),
+                              done: false, subtasks: [], tripReminder: trip.id } );
+                added = true;
+            });
+
+            if( added )
+            {
+                render();
+                saveTasks();
+            }
+        }
+
+        // [{ id, destination, startDate }] of every trip whose start date lies
+        // between today and `lead` days ahead - or a trip that started today (a
+        // device that was off on the trigger day still catches it). Dates are
+        // yyyy-mm-dd strings, so they compare as plain text.
+        async function tripsStartingWithin( lead, todayIso )
+        {
+            let tree;
+
+            try
+            {
+                tree = await GumApi.listDirRecursive( TRIPS_DIR );
+            }
+            catch( err )
+            {
+                if( String( err && err.message ).indexOf( 'HTTP 404' ) !== -1 )
+                    return [];   // no trips folder yet
+                throw err;
+            }
+
+            const lastIso = DateTime.fromISO( todayIso, { zone: VIEWER_TZ } ).plus( { days: lead } ).toISODate();
+            const out     = [];
+
+            for( const dir of tree.nodes || [] )
+            {
+                const file = ( dir.nodes || [] ).find( function( n ) { return n.nodes == null && n.path === dir.path + '/trip.json'; } );
+                if( ! file )
+                    continue;
+
+                let trip;
+                try { trip = JSON.parse( await GumApi.readFile( file.path ) ); }
+                catch( _ ) { continue; }
+
+                if( ! trip || trip.id == null )
+                    continue;
+
+                const dest  = String( trip.destination || '' ).trim();
+                const start = String( trip.startDate   || '' ).trim();
+
+                if( ! dest || ! /^\d{4}-\d{2}-\d{2}$/.test( start ) )
+                    continue;
+
+                if( todayIso <= start && start <= lastIso )
+                    out.push( { id: trip.id, destination: dest, startDate: start } );
+            }
+
+            return out;
+        }
+
+        // Display names (alphabetical) of every contact whose birthday falls today.
+        // Only FN / N and BDAY are needed, so this reads the vCard lines directly
+        // rather than building the full contact model (see contact/index.html for that).
+        function todaysBirthdayNames( vcfText )
+        {
+            const now   = DateTime.now().setZone( VIEWER_TZ );
+            const month = now.month;
+            const day   = now.day;
+
+            // Feb-29 birthdays are greeted on Feb-28 in non-leap years.
+            const catchLeap = ! now.isInLeapYear && month === 2 && day === 28;
+
+            const unfolded = vcfText.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).replace( /\n[ \t]/g, '' );
+            const names    = [];
+            let   card     = null;
+
+            for( const line of unfolded.split( '\n' ) )
+            {
+                const tag = line.trim().toUpperCase();
+
+                if( tag === 'BEGIN:VCARD' ) { card = { fn: '', n: '', md: null }; continue; }
+
+                if( tag === 'END:VCARD' )
+                {
+                    if( card && card.md && card.md.month === month &&
+                        ( card.md.day === day || ( catchLeap && card.md.day === 29 ) ) )
+                    {
+                        names.push( card.fn || card.n || T( 'tasks.noName' ) );
+                    }
+                    card = null;
+                    continue;
+                }
+
+                if( ! card )
+                    continue;
+
+                const colon = line.indexOf( ':' );
+                if( colon === -1 )
+                    continue;
+
+                const prop = line.slice( 0, colon ).split( ';' )[ 0 ].split( '.' ).pop().trim().toUpperCase();
+                const val  = line.slice( colon + 1 ).trim();
+
+                if( prop === 'FN' )         card.fn = vcardUnescape( val );
+                else if( prop === 'N' )     card.n  = nFromStructured( val );
+                else if( prop === 'BDAY' )  card.md = bdayMonthDay( val );
+            }
+
+            return names.sort( function( a, b )
+            {
+                return a.localeCompare( b, NayiveUI.lang(), { sensitivity: 'base' } );
+            });
+        }
+
+        // "family;given;additional;prefix;suffix" -> "Given Family".
+        function nFromStructured( val )
+        {
+            const p = val.split( ';' ).map( vcardUnescape );
+            return [ p[ 1 ], p[ 0 ] ].filter( Boolean ).join( ' ' ).trim();
+        }
+
+        // Month/day from a vCard BDAY value: 'YYYY-MM-DD', 'YYYYMMDD', '--MM-DD' or
+        // '--MMDD' (each optionally followed by a 'T…' time). Returns { month, day } or null.
+        function bdayMonthDay( raw )
+        {
+            const s = raw.trim();
+
+            let m = /^(\d{4})-?(\d{2})-?(\d{2})/.exec( s );
+            if( m )
+                return validMonthDay( Number( m[ 2 ] ), Number( m[ 3 ] ) );
+
+            m = /^--(\d{2})-?(\d{2})/.exec( s );   // vCard 4.0 year-less form, common from phones
+            if( m )
+                return validMonthDay( Number( m[ 1 ] ), Number( m[ 2 ] ) );
+
+            return null;
+        }
+
+        function validMonthDay( month, day )
+        {
+            return ( month >= 1 && month <= 12 && day >= 1 && day <= 31 ) ? { month: month, day: day } : null;
+        }
+
+        function vcardUnescape( s )
+        {
+            return String( s ).replace( /\\([,;\\nN])/g, function( _, ch )
+            {
+                return ( ch === 'n' || ch === 'N' ) ? '\n' : ch;
+            });
+        }
+
+        //------------------------------------------------------------------------//
+        // ACTIONS
+
+        // [+] in the header: first press opens the compose field, second press adds
+        // the task. Pressing it with an empty field just closes the field again.
+        function onAddButton()
+        {
+            if( ! adding )
+                enterAddMode();
+            else if( document.getElementById( 'newTaskInput' ).value.trim() )
+                submitAdd();
+            else
+                exitAddMode();
+        }
+
+        function enterAddMode()
+        {
+            adding = true;
+
+            if( ! PINNED )      // pinned: nothing steps aside, the field has its own room
+            {
+                document.getElementById( 'appTitle'      ).hidden = true;
+                document.getElementById( 'syncIndicator' ).hidden = true;
+            }
+
+            const input = document.getElementById( 'newTaskInput' );
+            input.hidden = false;
+            input.value  = '';
+            input.focus();
+        }
+
+        function exitAddMode()
+        {
+            adding = false;
+
+            const input = document.getElementById( 'newTaskInput' );
+            input.value  = '';
+            input.hidden = ! PINNED;        // pinned: stays open, just gives up the focus
+            if( PINNED ) input.blur();
+
+            if( ! PINNED )
+            {
+                document.getElementById( 'appTitle'      ).hidden = false;
+                document.getElementById( 'syncIndicator' ).hidden = false;
+            }
+        }
+
+        function submitAdd()
+        {
+            const sText = document.getElementById( 'newTaskInput' ).value.trim();
+
+            if( ! sText )
+                return;
+
+            addTask( sText );
+
+            if( PINNED )        // stay in add mode: clear, keep the keyboard here for the next one
+            {
+                const input = document.getElementById( 'newTaskInput' );
+                input.value = '';
+                input.focus();
+            }
+            else
+                exitAddMode();
+        }
+
+        function addTask( sText )
+        {
+            tasks.push( { id: Date.now(), text: sText, done: false, subtasks: [] } );
+            render();
+            saveTasks();
+        }
+
+        function toggleTask( id )
+        {
+            tasks = tasks.map( function( t ) { return t.id === id ? { ...t, done: ! t.done } : t; } );
+            render();
+            saveTasks();
+        }
+
+        function deleteTask( id )
+        {
+            tasks = tasks.filter( function( t ) { return t.id !== id; } );
+            render();
+            saveTasks();
+        }
+
+        function startEdit( id )
+        {
+            editingId = id;
+            render();
+        }
+
+        function commitEdit( id, sNewText )
+        {
+            const sText = sNewText.trim();
+
+            if( sText )
+            {
+                tasks = tasks.map( function( t ) { return t.id === id ? { ...t, text: sText } : t; } );
+                saveTasks();
+            }
+
+            editingId = null;
+            render();
+        }
+
+        function cancelEdit()
+        {
+            editingId = null;
+            render();
+        }
+
+        function setFilter( sFilter )
+        {
+            filter = sFilter;
+            render();
+        }
+
+        //------------------------------------------------------------------------//
+        // ADD SUB-TASK — drop in a blank sub-task and open it for editing right away
+        // (a text field with the "Describe la tarea" placeholder). An empty one is
+        // discarded on commit or cancel — see commitEditSubtask / cancelEditSubtask.
+
+        function startNewSubtask( taskId )
+        {
+            const task = findTask( taskId );
+
+            if( ! task )
+                return;
+
+            if( ! task.subtasks )
+                task.subtasks = [];
+
+            expandedTasks.add( taskId );   // make sure the new row is visible
+
+            const sub = { id: Date.now(), text: '', done: false };
+            task.subtasks.push( sub );
+
+            editingSubtask = { taskId: taskId, subtaskId: sub.id };
+            render();
+        }
+
+        function clearCompleted()
+        {
+            tasks = tasks.filter( function( t ) { return ! t.done; } );
+            render();
+            saveTasks();
+        }
+
+        //------------------------------------------------------------------------//
+        // SUB-TASK ACTIONS
+
+        function findTask( taskId )
+        {
+            return tasks.find( function( t ) { return t.id === taskId; } );
+        }
+
+        function toggleCollapse( taskId )
+        {
+            if( expandedTasks.has( taskId ) )
+                expandedTasks.delete( taskId );
+            else
+                expandedTasks.add( taskId );
+
+            render();
+        }
+
+        // Done sub-tasks sink to the bottom of their task. This rewrites the stored
+        // array rather than only the screen order: reorderSubtask() splices by the
+        // array index of the row you dropped on, so array order and display order
+        // have to stay the same or a drag lands somewhere else than it looks.
+        // Both halves keep their manual order (filter is stable), so dragging
+        // *within* the done block or the undone block still works as before.
+        function sortSubtasks( task )
+        {
+            if( ! task.subtasks )
+                return;
+
+            const undone = task.subtasks.filter( function( s ) { return ! s.done; } );
+            const done   = task.subtasks.filter( function( s ) { return   s.done; } );
+
+            task.subtasks = undone.concat( done );
+        }
+
+
+        //------------------------------------------------------------------------//
+        // THE PLAN  -  a duration in days and finish-to-start dependencies between
+        // the sub-tasks of ONE task. Both fields are optional, and NOTHING that can
+        // be computed is stored: `days` is a whole number, `after` a list of sibling
+        // ids, and everything else below - when a sub-task starts, how long the task
+        // is, what is still waiting - is worked out from those two on every render.
+        //
+        // There is no date anywhere. The plan is RELATIVE: day 1 is "whenever this
+        // task starts", which nobody has to decide. That is what keeps the strip
+        // inside a phone with no sideways scrolling.
+        //
+        // A sub-task with neither field is exactly the sub-task this app has always
+        // had, and a task where no sub-task uses either draws exactly the rows it
+        // drew before: no rail column, no chips, no strip.
+
+        const DAYS_MAX = 999;
+
+        // The plan's two fields, made safe. Runs on every load (a file can be hand
+        // edited, or written by an older or newer build) AND on every save, so
+        // nothing downstream - the schedule, the chips, the strip - ever sees a
+        // string, a negative, a duplicate or an id that points at nothing.
+        //
+        //   days  : a whole number 1..DAYS_MAX, or absent
+        //   after : sibling ids, no duplicates, never itself, or absent
+        function sanitizePlan( list )
+        {
+            list.forEach( function( t )
+            {
+                const subs = t.subtasks;
+
+                if( ! Array.isArray( subs ) )
+                    return;
+
+                const ids = subs.map( function( s ) { return s.id; } );
+
+                subs.forEach( function( s )
+                {
+                    const n = Math.round( Number( s.days ) );
+
+                    if( n > 0 ) s.days = Math.min( n, DAYS_MAX );
+                    else        delete s.days;
+
+                    const after = ( Array.isArray( s.after ) ? s.after : [] )
+                        .filter( function( id, i, all )
+                        {
+                            return id !== s.id && ids.indexOf( id ) !== -1 && all.indexOf( id ) === i;
+                        });
+
+                    if( after.length ) s.after = after;
+                    else               delete s.after;
+                });
+            });
+
+            return list;
+        }
+
+        // The siblings a sub-task waits for. An id that no longer resolves - the
+        // sibling was dragged to another task, or went with a cleared task - is
+        // ignored here and dropped from the file by saveTasks().
+        function preds( task, sub )
+        {
+            if( ! sub || ! Array.isArray( sub.after ) || ! sub.after.length )
+                return [];
+
+            const subs = task.subtasks || [];
+
+            return sub.after
+                .map( function( id ) { return subs.find( function( s ) { return s.id === id; } ); } )
+                .filter( Boolean );
+        }
+
+        // Predecessors that are not done yet: the sub-task cannot be started.
+        function waitingOn( task, sub )
+        {
+            return preds( task, sub ).filter( function( p ) { return ! p.done; } );
+        }
+
+        function taskHasDeps( task )
+        {
+            return ( task.subtasks || [] ).some( function( s ) { return preds( task, s ).length > 0; } );
+        }
+
+        // Does `sub` reach `targetId` through after[]? Used to keep the sheet from
+        // offering a choice that would close a loop - cheaper than detecting a cycle
+        // afterwards, and it cannot fail silently.
+        function dependsOn( task, sub, targetId )
+        {
+            const seen = new Set();
+
+            return ( function walk( s )
+            {
+                if( ! s || seen.has( s.id ) )
+                    return false;
+
+                seen.add( s.id );
+
+                return preds( task, s ).some( function( p )
+                {
+                    return p.id === targetId || walk( p );
+                });
+            } )( sub );
+        }
+
+        // The relative schedule: the first day each sub-task can start, the last day
+        // it runs, the length of the whole task (the LONGEST CHAIN, so work that runs
+        // in parallel is counted once) and how much each one can slip without moving
+        // the end.
+        //
+        // The stored order is the user's manual one, so a predecessor can sit below
+        // the sub-task that waits for it. Rather than sort, this walks the list again
+        // and again until nothing moves: that settles any order, and the pass limit
+        // stops it dead if the data ever contains a loop.
+        function planOf( task )
+        {
+            const subs = ( task.subtasks || [] ).filter( function( s ) { return s.days > 0; } );
+            const es = {}, ef = {}, slack = {};
+
+            subs.forEach( function( s ) { es[ s.id ] = 1; ef[ s.id ] = s.days; } );
+
+            for( let pass = 0; pass < subs.length; pass++ )
+            {
+                let moved = false;
+
+                subs.forEach( function( s )
+                {
+                    let start = 1;
+
+                    preds( task, s ).forEach( function( p )
+                    {
+                        // A predecessor with no duration of its own schedules nothing.
+                        if( ef[ p.id ] )
+                            start = Math.max( start, ef[ p.id ] + 1 );
+                    });
+
+                    if( start !== es[ s.id ] )
+                    {
+                        es[ s.id ] = start;
+                        ef[ s.id ] = start + s.days - 1;
+                        moved = true;
+                    }
+                });
+
+                if( ! moved )
+                    break;
+            }
+
+            const end = subs.reduce( function( n, s ) { return Math.max( n, ef[ s.id ] ); }, 0 );
+
+            subs.forEach( function( s )
+            {
+                const next = subs.filter( function( o )
+                {
+                    return preds( task, o ).some( function( p ) { return p.id === s.id; } );
+                });
+
+                const late = next.length
+                               ? Math.min.apply( null, next.map( function( o ) { return es[ o.id ] - 1; } ) )
+                               : end;
+
+                slack[ s.id ] = Math.max( 0, late - ef[ s.id ] );
+            });
+
+            return { subs: subs, es: es, ef: ef, end: end, slack: slack };
+        }
+
+        // What each sub-task row's rail cell has to draw. Lane 0 carries every dot,
+        // so all the text keeps one left edge; lane 1 carries only an edge that has
+        // to SKIP a row. Two edges skipping the same rows share lane 1 - with one
+        // level of sub-tasks that is a line, not a knot.
+        //
+        // The rail is undirected on purpose: which of two joined rows is waiting is
+        // said by its dot (hollow), not by an arrow head that would need a second
+        // colour and a second size at 12 px.
+        function railCells( task )
+        {
+            const list  = task.subtasks || [];
+            const cells = list.map( function() { return {}; } );
+            const idx   = {};
+
+            list.forEach( function( s, i ) { idx[ s.id ] = i; } );
+
+            list.forEach( function( s, j )
+            {
+                preds( task, s ).forEach( function( p )
+                {
+                    const i = idx[ p.id ];
+
+                    if( i === undefined )
+                        return;
+
+                    cells[ i ].node = true;
+                    cells[ j ].node = true;
+
+                    const a = Math.min( i, j );
+                    const b = Math.max( i, j );
+
+                    if( b - a === 1 )                       // neighbours: straight down lane 0
+                    {
+                        cells[ a ].v0dn = true;
+                        cells[ b ].v0up = true;
+                    }
+                    else                                    // has to get past the rows between
+                    {
+                        cells[ a ].elbow = true; cells[ a ].v1dn = true;
+                        cells[ b ].elbow = true; cells[ b ].v1up = true;
+
+                        for( let k = a + 1; k < b; k++ )
+                            cells[ k ].v1all = true;
+                    }
+                });
+            });
+
+            return cells;
+        }
+
+        // Ticking a sub-task that still waits for another one OFFERS to tick what it
+        // waits for as well - it never refuses the tick. Answering no just marks this
+        // one, which is what someone who did them out of order means.
+        async function toggleSubtask( taskId, subtaskId )
+        {
+            const task = findTask( taskId );
+
+            if( ! task )
+                return;
+
+            const sub = ( task.subtasks || [] ).find( function( s ) { return s.id === subtaskId; } );
+
+            if( ! sub )
+                return;
+
+            let alsoIds = [];
+
+            if( ! sub.done )
+            {
+                const waiting = waitingOn( task, sub );
+
+                if( waiting.length )
+                {
+                    const ok = await NayiveUI.confirm(
+                    {
+                        title: T( 'tasks.planAskTitle' ),
+                        body:  waiting.length === 1
+                                 ? TF( 'tasks.planAskOne',  { name: waiting[ 0 ].text } )
+                                 : TF( 'tasks.planAskMany', { n: waiting.length } )
+                    } );
+
+                    if( ok )
+                        alsoIds = waiting.map( function( p ) { return p.id; } );
+                }
+            }
+
+            task.subtasks = task.subtasks.map( function( s )
+            {
+                if( s.id === subtaskId )                 return { ...s, done: ! s.done };
+                if( alsoIds.indexOf( s.id ) !== -1 )     return { ...s, done: true };
+                return s;
+            });
+
+            render();
+            saveTasks();
+        }
+
+        function startEditSubtask( taskId, subtaskId )
+        {
+            editingSubtask = { taskId: taskId, subtaskId: subtaskId };
+            render();
+        }
+
+        function commitEditSubtask( taskId, subtaskId, sNewText )
+        {
+            const task  = findTask( taskId );
+            const sText = sNewText.trim();
+
+            if( task )
+            {
+                const sub = task.subtasks.find( function( s ) { return s.id === subtaskId; } );
+
+                if( sText )
+                {
+                    task.subtasks = task.subtasks.map( function( s ) { return s.id === subtaskId ? { ...s, text: sText } : s; } );
+                    saveTasks();
+                }
+                else if( sub && ! sub.text )
+                {
+                    // A just-added sub-task left blank — drop it silently.
+                    task.subtasks = task.subtasks.filter( function( s ) { return s.id !== subtaskId; } );
+                }
+            }
+
+            editingSubtask = null;
+            render();
+        }
+
+        function cancelEditSubtask()
+        {
+            discardBlankSubtask();
+
+            editingSubtask = null;
+            render();
+        }
+
+        // A sub-task added via [+] but never given text should not linger.
+        function discardBlankSubtask()
+        {
+            if( ! editingSubtask )
+                return;
+
+            const task = findTask( editingSubtask.taskId );
+
+            if( ! task || ! task.subtasks )
+                return;
+
+            const sub = task.subtasks.find( function( s ) { return s.id === editingSubtask.subtaskId; } );
+
+            if( sub && ! sub.text )
+                task.subtasks = task.subtasks.filter( function( s ) { return s.id !== editingSubtask.subtaskId; } );
+        }
+
+        function moveSubtask( subtaskId, fromTaskId, toTaskId )
+        {
+            if( fromTaskId === toTaskId )
+                return;
+
+            const fromTask = findTask( fromTaskId );
+            const toTask   = findTask( toTaskId );
+
+            if( ! fromTask || ! toTask )
+                return;
+
+            const idx = fromTask.subtasks.findIndex( function( s ) { return s.id === subtaskId; } );
+
+            if( idx === -1 )
+                return;
+
+            const [ subtask ] = fromTask.subtasks.splice( idx, 1 );
+
+            // Dependencies only ever join sub-tasks of the SAME task, so a sub-task
+            // that moves house loses both ends of them: what it waited for, and what
+            // was waiting for it.
+            delete subtask.after;
+
+            fromTask.subtasks.forEach( function( s )
+            {
+                if( Array.isArray( s.after ) )
+                    s.after = s.after.filter( function( id ) { return id !== subtaskId; } );
+            });
+
+            if( ! toTask.subtasks )
+                toTask.subtasks = [];
+
+            toTask.subtasks.push( subtask );
+            render();
+            saveTasks();
+        }
+
+        function reorderSubtask( taskId, subtaskId, targetSubtaskId, insertBefore )
+        {
+            if( subtaskId === targetSubtaskId )
+                return;
+
+            const task = findTask( taskId );
+
+            if( ! task )
+                return;
+
+            const fromIdx = task.subtasks.findIndex( function( s ) { return s.id === subtaskId; } );
+
+            if( fromIdx === -1 )
+                return;
+
+            const [ subtask ] = task.subtasks.splice( fromIdx, 1 );
+
+            let toIdx = task.subtasks.findIndex( function( s ) { return s.id === targetSubtaskId; } );
+
+            if( toIdx === -1 )
+                toIdx = task.subtasks.length;
+            else if( ! insertBefore )
+                toIdx += 1;
+
+            task.subtasks.splice( toIdx, 0, subtask );
+            render();
+            saveTasks();
+        }
+
+        //------------------------------------------------------------------------//
+        // RENDERING
+
+        function render()
+        {
+            // Single choke point: every mutator and loadTasks() come through here
+            // before saveTasks(), so both the screen and the saved file are sorted.
+            tasks.forEach( sortSubtasks );
+
+            const doneCount   = tasks.filter( function( t ) { return t.done; } ).length;
+            const activeCount = tasks.length - doneCount;
+
+            document.getElementById( 'statusText' ).textContent =
+                activeCount === 1 ? T( 'tasks.onePending' ) : TF( 'tasks.nPending', { n: activeCount } );
+
+            document.querySelectorAll( '[data-filter]' ).forEach( function( btn )
+            {
+                btn.classList.toggle( 'is-active', btn.dataset.filter === filter );
+            });
+
+            document.getElementById( 'clearCompletedRow' ).style.display =
+                (filter === 'done' && doneCount > 0) ? 'flex' : 'none';
+
+            // Sort key, high value first: the calendar-sync task is pinned above all,
+            // then any task that has sub-tasks, then plain tasks. Array.prototype.sort
+            // is stable, so tasks with the same rank keep their manual order.
+            function sortRank( t )
+            {
+                if( t.isCalendarSync )                 return 2;
+                if( t.subtasks && t.subtasks.length )  return 1;
+                return 0;
+            }
+
+            const visible = tasks
+                .filter( function( t ) { return filter === 'done' ? t.done : ! t.done; } )
+                .sort( function( a, b ) { return sortRank( b ) - sortRank( a ); } );
+
+            const listEl  = document.getElementById( 'taskList' );
+            const emptyEl = document.getElementById( 'emptyState' );
+
+            listEl.innerHTML = '';
+
+            if( visible.length === 0 )
+            {
+                let sTitle = '', sBody = '';
+
+                if( tasks.length === 0 )
+                {
+                    sTitle = T( 'tasks.emptyNoneTitle' );
+                    sBody  = T( 'tasks.emptyNoneBody' );
+                }
+                else if( filter === 'active' )
+                {
+                    sTitle = T( 'tasks.emptyActiveTitle' );
+                    sBody  = T( 'tasks.emptyActiveBody' );
+                }
+                else if( filter === 'done' )
+                {
+                    sTitle = T( 'tasks.emptyDoneTitle' );
+                    sBody  = T( 'tasks.emptyDoneBody' );
+                }
+
+                document.getElementById( 'emptyTitle' ).textContent = sTitle;
+                document.getElementById( 'emptyBody'  ).textContent = sBody;
+                emptyEl.style.display = 'flex';
+                listEl.style.display  = 'none';
+            }
+            else
+            {
+                emptyEl.style.display = 'none';
+                listEl.style.display  = '';
+
+                visible.forEach( function( t ) { listEl.appendChild( buildTaskGroup( t ) ); } );
+            }
+        }
+
+        function buildTaskGroup( t )
+        {
+            const group = document.createElement( 'div' );
+            group.className = 'task-group' + (t.isCalendarSync ? ' calendar-sync' : '');
+            group.dataset.taskId = t.id;
+
+            // Done tasks collapse to just the task line: no sub-task list, no chevron.
+            const hasSubtasks = !! (t.subtasks && t.subtasks.length) && ! t.done;
+            const isExpanded  = hasSubtasks && expandedTasks.has( t.id );
+
+            group.appendChild( buildTaskRow( t, hasSubtasks, isExpanded ) );
+
+            if( isExpanded )
+            {
+                const subtaskList = document.createElement( 'div' );
+                subtaskList.className = 'subtask-list';
+
+                // One rail cell per row, worked out once for the whole group: a cell
+                // has to know about edges that pass THROUGH its row, which a single
+                // row cannot see on its own. No dependencies anywhere in this task
+                // and there is no rail column at all.
+                const cells = taskHasDeps( t ) ? railCells( t ) : null;
+
+                t.subtasks.forEach( function( s, i )
+                {
+                    subtaskList.appendChild( buildSubtaskRow( t, s, cells ? cells[ i ] : null ) );
+                });
+
+                group.appendChild( subtaskList );
+
+                const strip = buildPlanStrip( t );
+
+                if( strip )
+                    group.appendChild( strip );
+            }
+
+            return group;
+        }
+
+        // text + chips as one flex line (see .row-line). Returns the text element
+        // untouched when there is nothing to put beside it.
+        function withChips( textEl, chips )
+        {
+            const line = document.createElement( 'div' );
+            line.className = 'row-line';
+            line.appendChild( textEl );
+            chips.forEach( function( c ) { line.appendChild( c ); } );
+
+            return line;
+        }
+
+        function buildTaskRow( t, hasSubtasks, isExpanded )
+        {
+            const row = document.createElement( 'div' );
+            row.className = 'task-row' + (isExpanded ? ' is-open' : '');
+
+            if( hasSubtasks )
+            {
+                const chevron = document.createElement( 'button' );
+                chevron.className = 'task-chevron' + (isExpanded ? ' expanded' : '');
+                chevron.title = T( isExpanded ? 'tasks.hideSubtasks' : 'tasks.showSubtasks' );
+                chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+                chevron.addEventListener( 'click', function() { toggleCollapse( t.id ); } );
+
+                row.appendChild( chevron );
+            }
+
+            if( t.id === editingId )
+            {
+                const input = document.createElement( 'input' );
+                input.type = 'text';
+                input.className = 'task-edit-input field-edit';
+                input.value = t.text;
+                input.autofocus = true;
+
+                input.addEventListener( 'keydown', function( e )
+                {
+                    if( e.key === 'Enter' )  commitEdit( t.id, input.value );
+                    if( e.key === 'Escape' ) cancelEdit();
+                });
+                input.addEventListener( 'blur', function() { commitEdit( t.id, input.value ); } );
+
+                row.appendChild( input );
+
+                requestAnimationFrame( function() { input.focus(); input.select(); } );
+            }
+            else
+            {
+                // The calendar task is a mirror of calendar.ics, rebuilt every morning:
+                // nothing in it is editable, so it gets neither the click affordance
+                // nor the click itself. Only the check marks are yours.
+                const editable = ! t.done && ! t.isCalendarSync;
+
+                const span = document.createElement( 'span' );
+                span.className = 'task-text field-edit-text' + (t.done ? ' done' : editable ? ' is-editable' : '');
+                span.textContent = t.text;
+
+                if( editable )
+                    span.addEventListener( 'click', function() { startEdit( t.id ); } );
+
+                if( t.isCalendarSync )
+                {
+                    const info = document.createElement( 'button' );
+                    info.className = 'info-dot';
+                    info.setAttribute( 'data-info', T( 'tasks.calendarSyncInfo' ) );
+                    info.addEventListener( 'click', function( e ) { e.stopPropagation(); } );
+                    span.appendChild( document.createTextNode( ' ' ) );
+                    span.appendChild( info );
+                    if( window.NayiveUI ) NayiveUI.applyInfoDots( span );
+                }
+
+                // Sub-tasks done out of the total, and - once any of them carries a
+                // duration - how long the task is: the LONGEST CHAIN through it, so
+                // two sub-tasks that run at the same time are counted once.
+                const chips = [];
+
+                if( t.subtasks && t.subtasks.length )
+                {
+                    const count = document.createElement( 'span' );
+                    count.className = 'count-tag';
+                    count.textContent = t.subtasks.filter( function( s ) { return s.done; } ).length
+                                        + '/' + t.subtasks.length;
+                    chips.push( count );
+
+                    const end = planOf( t ).end;
+
+                    if( end )
+                    {
+                        const total = document.createElement( 'span' );
+                        total.className = 'chip total';
+                        total.textContent = TF( 'tasks.planDaysChip', { n: end } );
+                        total.title = T( 'tasks.planTotalTitle' );
+                        chips.push( total );
+                    }
+                }
+
+                row.appendChild( chips.length ? withChips( span, chips ) : span );
+            }
+
+            const actions = document.createElement( 'div' );
+            actions.className = 'task-actions';
+
+            if( t.done )
+            {
+                const undoBtn = document.createElement( 'button' );
+                undoBtn.className = 'icon-btn';
+                undoBtn.title = T( 'tasks.backToActive' );
+                undoBtn.innerHTML = NayiveUI.icon( 'undo' );
+                undoBtn.addEventListener( 'click', function() { toggleTask( t.id ); } );
+
+                actions.appendChild( undoBtn );
+
+                const delBtn = document.createElement( 'button' );
+                delBtn.className = 'icon-btn danger';
+                delBtn.title = NayiveUI.t( 'ui.delete' );
+                delBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>';
+                delBtn.addEventListener( 'click', function() { deleteTask( t.id ); } );
+
+                actions.appendChild( delBtn );
+            }
+            else
+            {
+                const checkBtn = document.createElement( 'button' );
+                checkBtn.className = 'icon-btn check';
+                checkBtn.title = T( 'tasks.markDone' );
+                checkBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"></polyline></svg>';
+                checkBtn.addEventListener( 'click', function() { toggleTask( t.id ); } );
+
+                actions.appendChild( checkBtn );
+
+                if( ! t.isCalendarSync )
+                {
+                    const addSubBtn = document.createElement( 'button' );
+                    addSubBtn.className = 'icon-btn';
+                    addSubBtn.title = T( 'tasks.addSubtask' );
+                    addSubBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+                    addSubBtn.addEventListener( 'click', function() { startNewSubtask( t.id ); } );
+
+                    actions.appendChild( addSubBtn );
+                }
+            }
+
+            row.appendChild( actions );
+
+            return row;
+        }
+
+        // `cell` is this row's slice of the task's dependency rail, or null when the
+        // task has no dependencies at all - then no rail column is drawn and the row
+        // keeps the exact indent it has always had.
+        function buildSubtaskRow( task, s, cell )
+        {
+            const waiting = waitingOn( task, s ).length > 0 && ! s.done;
+
+            const row = document.createElement( 'div' );
+            row.className = 'subtask-row' + (waiting ? ' is-waiting' : '');
+            row.dataset.subtaskId = s.id;
+
+            // Read-only task: the handle stays as an empty spacer so the row keeps
+            // its indent, but there are no grip dots and nothing to drag.
+            const handle = document.createElement( 'div' );
+            handle.className = 'subtask-handle';
+
+            if( ! task.isCalendarSync )
+            {
+                handle.title = T( 'tasks.dragHandle' );
+                handle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
+                handle.addEventListener( 'pointerdown', function( e ) { onSubtaskDragStart( e, task.id, s.id ); } );
+            }
+
+            row.appendChild( handle );
+
+            if( cell )
+                row.appendChild( buildRail( cell, s.done ? 'done' : waiting ? 'waiting' : '' ) );
+
+            const isEditing = editingSubtask && editingSubtask.taskId === task.id && editingSubtask.subtaskId === s.id;
+
+            if( isEditing )
+            {
+                const input = document.createElement( 'input' );
+                input.type = 'text';
+                input.className = 'subtask-edit-input field-edit';
+                input.value = s.text;
+                input.placeholder = T( 'tasks.describeTask' );
+
+                input.addEventListener( 'keydown', function( e )
+                {
+                    if( e.key === 'Enter' )  commitEditSubtask( task.id, s.id, input.value );
+                    if( e.key === 'Escape' ) cancelEditSubtask();
+                });
+                input.addEventListener( 'blur', function() { commitEditSubtask( task.id, s.id, input.value ); } );
+
+                row.appendChild( input );
+
+                requestAnimationFrame( function() { input.focus(); input.select(); } );
+            }
+            else
+            {
+                const editable = ! s.done && ! task.isCalendarSync;
+
+                const span = document.createElement( 'span' );
+                span.className = 'subtask-text field-edit-text' + (s.done ? ' done' : editable ? ' is-editable' : '');
+                span.textContent = s.text;
+
+                if( editable )
+                    span.addEventListener( 'click', function() { startEditSubtask( task.id, s.id ); } );
+
+                // How long it takes, when it has been told. Nothing else about the
+                // plan is written on the row: the rail says what waits for what.
+                const chips = [];
+
+                if( s.days > 0 )
+                {
+                    const days = document.createElement( 'span' );
+                    days.className = 'chip' + (s.done ? ' is-done' : '');
+                    days.textContent = TF( 'tasks.planDaysChip', { n: s.days } );
+                    days.title = T( 'tasks.planDays' );
+                    chips.push( days );
+                }
+
+                row.appendChild( chips.length ? withChips( span, chips ) : span );
+            }
+
+            const actions = document.createElement( 'div' );
+            actions.className = 'subtask-actions';
+
+            const checkBtn = document.createElement( 'button' );
+            checkBtn.className = 'icon-btn sm check' + (s.done ? ' done' : '');
+            checkBtn.title = T( 'tasks.markDone' );
+            checkBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"></polyline></svg>';
+            checkBtn.addEventListener( 'click', function() { toggleSubtask( task.id, s.id ); } );
+
+            actions.appendChild( checkBtn );
+
+            // The one new control. Full height so the row keeps its shape, 16px wide
+            // so it takes almost nothing from the text. The calendar task is rebuilt
+            // from scratch every morning, so its sub-tasks never get one.
+            if( ! task.isCalendarSync )
+            {
+                const planBtn = document.createElement( 'button' );
+                planBtn.className = 'icon-btn sm thin subtask-plan-btn';
+                planBtn.title = T( 'tasks.planOpen' );
+                planBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>';
+                planBtn.addEventListener( 'click', function() { openPlanSheet( task.id, s.id ); } );
+
+                actions.appendChild( planBtn );
+            }
+
+            row.appendChild( actions );
+
+            return row;
+        }
+
+
+        // One rail cell. Every piece is placed from the TOP of the cell, never from
+        // its middle, so the dot lands on the row's first line of text whatever the
+        // row's height - the one being edited included.
+        function buildRail( cell, state )
+        {
+            const rail = document.createElement( 'div' );
+            rail.className = 'rail';
+
+            function seg( cls )
+            {
+                const i = document.createElement( 'i' );
+                i.className = cls;
+                rail.appendChild( i );
+            }
+
+            if( cell.v0up )  seg( 'v0 up' );
+            if( cell.v0dn )  seg( 'v0 dn' );
+            if( cell.v1all ) seg( 'v1 all' );
+            if( cell.v1up )  seg( 'v1 up' );
+            if( cell.v1dn )  seg( 'v1 dn' );
+            if( cell.elbow ) seg( 'h' );
+
+            if( cell.node )
+            {
+                const dot = document.createElement( 'b' );
+                dot.className = state;
+                dot.title = T( state === 'done'    ? 'tasks.planDotDone'
+                             : state === 'waiting' ? 'tasks.planDotWaiting'
+                             :                       'tasks.planDotReady' );
+                rail.appendChild( dot );
+            }
+
+            return rail;
+        }
+
+        // The plan strip: one lane per sub-task that has a duration, on a relative
+        // axis that is as many columns as the task is long. The columns share the
+        // width, so it fits any pane and never scrolls. The day numbers are dropped
+        // once there are too many of them to read - the total at the end still says
+        // how long the task is.
+        //
+        // It reads the schedule from planOf() and never touches the stored order:
+        // the list above stays the manual order the user dragged into place.
+        function buildPlanStrip( task )
+        {
+            const p = planOf( task );
+
+            if( ! p.end )
+                return null;
+
+            const wrap = document.createElement( 'div' );
+            wrap.className = 'plan';
+
+            const cols    = 'repeat(' + p.end + ', minmax(0, 1fr))';
+            const numbers = p.end <= 14;
+            // The day grid is one <div> per day per lane. Past a couple of months a
+            // per-day line is unreadable anyway, so the cells stop and the bars
+            // (grid tracks, which cost nothing) carry on alone.
+            const cells   = p.end <= 60;
+
+            function trackRow( nameEl, items, isAxis )
+            {
+                const row = document.createElement( 'div' );
+                row.className = 'plan-row';
+                row.appendChild( nameEl );
+
+                const track = document.createElement( 'div' );
+                track.className = 'plan-track';
+                track.style.gridTemplateColumns = cols;
+
+                // The day grid is real cells, not a background: a column here is a
+                // fraction of the pane, and a gradient cannot follow that.
+                if( cells )
+                {
+                    for( let d = 1; d <= p.end; d++ )
+                    {
+                        const c = document.createElement( 'div' );
+                        c.className = isAxis ? 'plan-axis' : 'plan-cell';
+                        c.style.gridColumn = d + ' / span 1';
+
+                        if( isAxis && numbers )
+                            c.textContent = String( d );
+
+                        track.appendChild( c );
+                    }
+                }
+
+                items.forEach( function( el ) { track.appendChild( el ); } );
+                row.appendChild( track );
+
+                return row;
+            }
+
+            const axisName = document.createElement( 'div' );
+            axisName.className = 'plan-name';
+            axisName.textContent = T( 'tasks.planDay' );
+
+            const axisRow = trackRow( axisName, [], true );
+
+            const total = document.createElement( 'span' );
+            total.className = 'plan-total';
+            total.textContent = TF( 'tasks.planDaysChip', { n: p.end } );
+            total.title = T( 'tasks.planTotalTitle' );
+            axisRow.appendChild( total );
+
+            wrap.appendChild( axisRow );
+
+            p.subs.forEach( function( s )
+            {
+                const name = document.createElement( 'div' );
+                name.className = 'plan-name' + (s.done ? ' done' : '');
+                name.textContent = s.text;
+                name.title = s.text;
+
+                const items = [];
+
+                const bar = document.createElement( 'div' );
+                // Solid on the longest chain (nothing to lose), lighter when it has
+                // room to slip, grey once it is done.
+                bar.className = 'plan-bar' + (s.done ? ' done' : p.slack[ s.id ] ? ' off' : '');
+                bar.style.gridColumn = p.es[ s.id ] + ' / span ' + s.days;
+                items.push( bar );
+
+                if( p.slack[ s.id ] && ! s.done )
+                {
+                    const tail = document.createElement( 'div' );
+                    tail.className = 'plan-slack';
+                    tail.style.gridColumn = ( p.ef[ s.id ] + 1 ) + ' / span ' + p.slack[ s.id ];
+                    tail.title = T( 'tasks.planSlack' );
+                    items.push( tail );
+                }
+
+                wrap.appendChild( trackRow( name, items, false ) );
+            });
+
+            return wrap;
+        }
+
+        //------------------------------------------------------------------------//
+        // THE PLAN SHEET  -  the only way into either field.
+
+        let planSheet = null;   // { taskId, subtaskId } while the sheet is open
+
+        function openPlanSheet( taskId, subtaskId )
+        {
+            const task = findTask( taskId );
+            const sub  = task && ( task.subtasks || [] ).find( function( s ) { return s.id === subtaskId; } );
+
+            if( ! sub )
+                return;
+
+            planSheet = { taskId: taskId, subtaskId: subtaskId };
+
+            document.getElementById( 'planTextInput' ).value = sub.text;
+            document.getElementById( 'planDaysInput' ).value = sub.days > 0 ? String( sub.days ) : '';
+
+            const list = document.getElementById( 'planAfterList' );
+            list.innerHTML = '';
+
+            // Every sibling except itself and the ones that already depend on it -
+            // offering those is the only way to close a loop, so they are simply not
+            // on the list. Cheaper than detecting a cycle afterwards, and it cannot
+            // fail silently.
+            const choices = ( task.subtasks || [] ).filter( function( o )
+            {
+                return o.id !== sub.id && o.text && ! dependsOn( task, o, sub.id );
+            });
+
+            if( ! choices.length )
+            {
+                const empty = document.createElement( 'p' );
+                empty.className = 'pick-empty';
+                empty.textContent = T( 'tasks.planNoSiblings' );
+                list.appendChild( empty );
+            }
+
+            choices.forEach( function( o )
+            {
+                const on  = ( sub.after || [] ).indexOf( o.id ) !== -1;
+                const row = document.createElement( 'label' );
+                row.className = 'pick-row' + (on ? ' on' : '');
+
+                const box = document.createElement( 'input' );
+                box.type    = 'checkbox';
+                box.checked = on;
+                box.value   = String( o.id );
+                box.addEventListener( 'change', function() { row.classList.toggle( 'on', box.checked ); } );
+                row.appendChild( box );
+
+                const name = document.createElement( 'span' );
+                name.style.flex = '1 1 auto';
+                name.style.minWidth = '0';
+                name.textContent = o.text;
+                row.appendChild( name );
+
+                if( o.days > 0 )
+                {
+                    const chip = document.createElement( 'span' );
+                    chip.className = 'chip';
+                    chip.textContent = TF( 'tasks.planDaysChip', { n: o.days } );
+                    row.appendChild( chip );
+                }
+
+                list.appendChild( row );
+            });
+
+            NayiveUI.open( 'planSheetBackdrop' );
+        }
+
+        function stepDays( by )
+        {
+            const input = document.getElementById( 'planDaysInput' );
+            const n     = Math.round( Number( input.value ) ) || 0;
+            const next  = Math.min( DAYS_MAX, Math.max( 0, n + by ) );
+
+            input.value = next ? String( next ) : '';
+        }
+
+        // Writes the whole sheet at once: whatever it says is what the sub-task has.
+        // `clearPlan` is the red bin - it keeps the text (a typo fixed on the way out
+        // is still a fix) and drops the duration and the order, which is the same
+        // state as a sub-task that never had either.
+        function savePlanSheet( clearPlan )
+        {
+            if( ! planSheet )
+                return;
+
+            const task = findTask( planSheet.taskId );
+            const sub  = task && ( task.subtasks || [] ).find( function( s ) { return s.id === planSheet.subtaskId; } );
+
+            if( ! sub )
+            {
+                closePlanSheet();
+                return;
+            }
+
+            // An empty box keeps the name it had: this is not the place a sub-task
+            // can be erased, and commitEditSubtask() treats a blanked name the same.
+            const sText = document.getElementById( 'planTextInput' ).value.trim();
+
+            if( sText )
+                sub.text = sText;
+
+            const n = clearPlan ? 0 : Math.round( Number( document.getElementById( 'planDaysInput' ).value ) );
+
+            if( n > 0 ) sub.days = Math.min( n, DAYS_MAX );
+            else        delete sub.days;
+
+            const after = clearPlan ? []
+                            : [].slice.call( document.querySelectorAll( '#planAfterList input:checked' ) )
+                                  .map( function( box ) { return Number( box.value ); } );
+
+            if( after.length ) sub.after = after;
+            else               delete sub.after;
+
+            closePlanSheet();
+            render();
+            saveTasks();
+        }
+
+        function closePlanSheet()
+        {
+            NayiveUI.close( 'planSheetBackdrop' );
+            planSheet = null;
+        }
+
+        //------------------------------------------------------------------------//
+        // SUB-TASK DRAG & DROP (Pointer Events — works with mouse, touch and pen alike)
+
+        function onSubtaskDragStart( e, fromTaskId, subtaskId )
+        {
+            e.preventDefault();
+
+            const handle = e.currentTarget;
+            const rowEl  = handle.closest( '.subtask-row' );
+            const rect   = rowEl.getBoundingClientRect();
+
+            handle.setPointerCapture( e.pointerId );
+
+            const ghost = rowEl.cloneNode( true );
+            ghost.classList.add( 'drag-ghost' );
+            ghost.style.width = rect.width + 'px';
+            document.body.appendChild( ghost );
+            positionGhost( ghost, e.clientX, e.clientY );
+
+            dragCtx = { fromTaskId: fromTaskId, subtaskId: subtaskId, ghostEl: ghost, hoverGroup: null, hoverRow: null, pointerId: e.pointerId };
+
+            rowEl.style.opacity = '0.35';
+
+            handle.addEventListener( 'pointermove', onSubtaskDragMove );
+            handle.addEventListener( 'pointerup', onSubtaskDragEnd );
+            handle.addEventListener( 'pointercancel', onSubtaskDragCancel );
+        }
+
+        function onSubtaskDragMove( e )
+        {
+            if( ! dragCtx )
+                return;
+
+            positionGhost( dragCtx.ghostEl, e.clientX, e.clientY );
+
+            const group    = findTaskGroupAt( e.clientX, e.clientY );
+            const sameTask = group && Number( group.dataset.taskId ) === dragCtx.fromTaskId;
+
+            // Whole-card highlight is only meaningful for reparenting onto a DIFFERENT task.
+            const cardHoverGroup = sameTask ? null : group;
+
+            if( cardHoverGroup !== dragCtx.hoverGroup )
+            {
+                if( dragCtx.hoverGroup )
+                    dragCtx.hoverGroup.classList.remove( 'drop-hover' );
+
+                if( cardHoverGroup )
+                    cardHoverGroup.classList.add( 'drop-hover' );
+
+                dragCtx.hoverGroup = cardHoverGroup;
+            }
+
+            // Row-level insertion line is only meaningful for reordering within the SAME task.
+            updateRowHover( sameTask ? findSubtaskDropAt( e.clientX, e.clientY, dragCtx.subtaskId ) : null );
+        }
+
+        function onSubtaskDragEnd( e )
+        {
+            if( ! dragCtx )
+                return;
+
+            const targetGroup = findTaskGroupAt( e.clientX, e.clientY );
+            const sameTask    = targetGroup && Number( targetGroup.dataset.taskId ) === dragCtx.fromTaskId;
+            const dropInfo    = sameTask ? findSubtaskDropAt( e.clientX, e.clientY, dragCtx.subtaskId ) : null;
+            const ctx         = dragCtx;
+
+            cleanupDrag( e.currentTarget );
+
+            if( sameTask )
+            {
+                if( dropInfo )
+                    reorderSubtask( ctx.fromTaskId, ctx.subtaskId, dropInfo.subtaskId, dropInfo.before );
+                else
+                    render();   // dropped back within the same task but not on a specific row
+            }
+            else if( targetGroup )
+            {
+                moveSubtask( ctx.subtaskId, ctx.fromTaskId, Number( targetGroup.dataset.taskId ) );
+            }
+            else
+            {
+                render();   // restore normal opacity even when dropped outside any task
+            }
+        }
+
+        function onSubtaskDragCancel( e )
+        {
+            if( ! dragCtx )
+                return;
+
+            cleanupDrag( e.currentTarget );
+            render();
+        }
+
+        function cleanupDrag( handle )
+        {
+            if( dragCtx )
+            {
+                dragCtx.ghostEl.remove();
+
+                if( dragCtx.hoverGroup )
+                    dragCtx.hoverGroup.classList.remove( 'drop-hover' );
+
+                if( dragCtx.hoverRow )
+                    dragCtx.hoverRow.classList.remove( 'insert-before', 'insert-after' );
+            }
+
+            handle.removeEventListener( 'pointermove', onSubtaskDragMove );
+            handle.removeEventListener( 'pointerup', onSubtaskDragEnd );
+            handle.removeEventListener( 'pointercancel', onSubtaskDragCancel );
+
+            dragCtx = null;
+        }
+
+        function positionGhost( ghost, clientX, clientY )
+        {
+            ghost.style.transform = 'translate(' + (clientX + 14) + 'px,' + (clientY - 18) + 'px)';
+        }
+
+        function findTaskGroupAt( clientX, clientY )
+        {
+            const el    = elementUnderGhost( clientX, clientY );
+            const group = el ? el.closest( '.task-group' ) : null;
+
+            // The calendar task is read-only: no sub-task from elsewhere can be
+            // dropped into it, so it never highlights and never accepts a move.
+            return group && group.classList.contains( 'calendar-sync' ) ? null : group;
+        }
+
+        // Which sub-task row the pointer is over, and whether it's hovering the top or bottom
+        // half of it (i.e. "insert before this row" vs "insert after this row"). Excludes the
+        // row currently being dragged — dropping on itself is not a meaningful reorder target.
+        function findSubtaskDropAt( clientX, clientY, excludeSubtaskId )
+        {
+            const el  = elementUnderGhost( clientX, clientY );
+            const row = el ? el.closest( '.subtask-row' ) : null;
+
+            if( ! row )
+                return null;
+
+            const id = Number( row.dataset.subtaskId );
+
+            if( id === excludeSubtaskId )
+                return null;
+
+            const rect   = row.getBoundingClientRect();
+            const before = (clientY - rect.top) < (rect.height / 2);
+
+            return { row: row, subtaskId: id, before: before };
+        }
+
+        function updateRowHover( dropInfo )
+        {
+            if( dragCtx.hoverRow && dragCtx.hoverRow !== (dropInfo && dropInfo.row) )
+                dragCtx.hoverRow.classList.remove( 'insert-before', 'insert-after' );
+
+            if( dropInfo )
+            {
+                dropInfo.row.classList.remove( 'insert-before', 'insert-after' );
+                dropInfo.row.classList.add( dropInfo.before ? 'insert-before' : 'insert-after' );
+            }
+
+            dragCtx.hoverRow = dropInfo ? dropInfo.row : null;
+        }
+
+        function elementUnderGhost( clientX, clientY )
+        {
+            const ghost = dragCtx ? dragCtx.ghostEl : null;
+
+            if( ghost )
+                ghost.style.display = 'none';
+
+            const el = document.elementFromPoint( clientX, clientY );
+
+            if( ghost )
+                ghost.style.display = '';
+
+            return el;
+        }
+
+    </script>
+</body>
+</html>

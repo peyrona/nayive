@@ -1,0 +1,938 @@
+<!-- index.html - Text: a plain-text / code editor (html, css, js, json, txt…) over the user's files. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Text</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='16 18 22 12 16 6'%3E%3C/polyline%3E%3Cpolyline points='8 6 2 12 8 18'%3E%3C/polyline%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme (light default, opt-in dark). The toggle lives in the launcher; this page just follows the saved choice. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
+         then modes and add-ons, then the deferred module script below. -->
+    <link rel="stylesheet" href="lib/codemirror-5.65.21/codemirror.min.css">
+    <link rel="stylesheet" href="lib/codemirror-5.65.21/theme/dracula.min.css">
+    <link rel="stylesheet" href="lib/codemirror-5.65.21/addon/dialog/dialog.min.css">
+    <link rel="stylesheet" href="lib/codemirror-5.65.21/addon/fold/foldgutter.min.css">
+
+    <script src="lib/codemirror-5.65.21/codemirror.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/meta.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/xml.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/javascript.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/css.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/htmlmixed.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/markdown.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/yaml.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/shell.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/sql.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/python.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/clike.min.js"></script>
+    <script src="lib/codemirror-5.65.21/mode/properties.min.js"></script>
+
+    <script src="lib/codemirror-5.65.21/addon/edit/matchbrackets.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/edit/closebrackets.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/xml-fold.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/edit/closetag.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/edit/matchtags.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/edit/trailingspace.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/selection/active-line.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/comment/comment.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/foldcode.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/foldgutter.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/brace-fold.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/indent-fold.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/fold/comment-fold.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/dialog/dialog.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/search/searchcursor.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/search/search.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/search/jump-to-line.min.js"></script>
+    <script src="lib/codemirror-5.65.21/addon/display/placeholder.min.js"></script>
+
+    <!-- The file API client: the access probe, retrying fetch, file ops. -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Shared UI helpers: sheets, toast, sync plug, i18n. -->
+    <script src="../shared/ui.js" defer></script>
+    <!-- What the three editors share: paths, the file label, the Open browser, the phone menu. -->
+    <script src="../shared/office.js" defer></script>
+    <!-- Offline-capable persistence: local cache + write outbox (see STATE). -->
+    <script src="../shared/store.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'text',
+            title: 'Text',
+            lead:  NayiveUI.t( 'text.introLead' ),
+            buttons: [
+                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
+                { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ) },
+                { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
+                { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
+                { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
+                { sel: '#indentSelect', text: NayiveUI.t( 'text.introIndent' ) },
+                { sel: '#marginInput',  text: NayiveUI.t( 'text.introMargin' ) },
+                { sel: '#zoomOutBtn',   text: NayiveUI.t( 'text.introZoomOut' ) },
+                { sel: '#zoomInBtn',    text: NayiveUI.t( 'text.introZoomIn' ) }
+            ]
+        } );
+    } );
+    </script>
+
+    <style>
+        /* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+           input look all come from ../shared/app.css. Text overrides the page
+           scroll and adds the editor chrome + its own toolbar. */
+        html, body { height: 100%; overflow: hidden; }
+
+
+
+        /* Sync-status dot, top-right of the top bar: blue while a request is in flight, green once synced, red on error. */
+        .sync-indicator { margin-left: 4px; }   /* base rule + states in ../shared/theme.css */
+
+        /* Action toolbar (CodeMirror's free build ships no chrome of its own) */
+        #toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto; overflow-x: auto; }
+        #toolbar .tb-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
+        /* Toolbar buttons: a distinct component from the header .icon-btn - 30px
+           rounded squares with an accent-tinted hover (they act on the text). */
+        .tb-btn
+        {
+            display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; flex: 0 0 auto;
+            border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
+            cursor: pointer; padding: 0;
+        }
+        .tb-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+        .tb-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+        /* .tb-select is shared - see TOOLBAR SELECT in app.css. Nothing local. */
+
+        /* Right-margin spinner: the same toolbar control as .tb-select (see TOOLBAR
+           SELECT in app.css), but a number box - it has to beat the filled FORM FIELD
+           look every <input> gets by default, so every property is restated here. It
+           keeps the browser's own up / down arrows: that is what makes it a spinner. */
+        .tb-num
+        {
+            width: 4.6em; height: 30px; flex: 0 0 auto;
+            padding: 0 0 0 6px;
+            font: inherit; font-size: 0.82rem;
+            color: var(--text); background: transparent;
+            border: 1px solid var(--line); border-radius: var(--radius-s);
+            outline: none;
+        }
+        .tb-num:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+        /* Editor host */
+        #editorHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+        /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar wraps onto
+           more rows instead of scrolling sideways - a scrolling bar hides half its
+           buttons with no hint they exist - and its buttons grow to finger size. */
+        @media (max-width: 640px)
+        {
+            #toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; padding: 4px 6px; }
+            #toolbar .tb-sep { margin: 4px 2px; }
+            .tb-btn    { width: 36px; height: 36px; }
+            .tb-num    { height: 36px; }   /* keeps the row one height - see .tb-select in app.css */
+        }
+
+        .CodeMirror
+        {
+            height: 100%;
+            font-family: var(--font-mono);
+            font-size: 13px; line-height: 1.5;
+        }
+        /* Editor chrome is token-driven for both CodeMirror themes (dracula in dark,
+           default in light — set by cmThemeName() in JS and swapped on balata:themechange).
+           Scoped under #editorHost so it outranks the theme stylesheets' own .cm-s-* rules. */
+        #editorHost .CodeMirror { background: var(--bg); color: var(--text); }
+        #editorHost .CodeMirror-gutters { background: var(--bg); border-right: 1px solid var(--line); }
+        #editorHost .CodeMirror-linenumber { color: var(--text-dim); }
+        #editorHost .CodeMirror-activeline-background { background: color-mix(in srgb, var(--text) 5%, transparent); }
+        #editorHost .CodeMirror-foldgutter-open:after,
+        #editorHost .CodeMirror-foldgutter-folded:after { color: var(--text-dim); }
+        #editorHost .CodeMirror-cursor { border-left-color: var(--text); }
+        /* Right-margin guide (drawn by updateRuler(), the rulers add-on is not vendored).
+           pointer-events off so the line never eats a click meant for the text. */
+        .CodeMirror-rulers { position: absolute; left: 0; right: 0; top: -50px; bottom: 0; overflow: hidden; pointer-events: none; }
+        /* A fine dotted hairline, half the weight of --line: it has to be findable at a
+           glance and invisible while reading, so it is never a solid rule. */
+        .CodeMirror-ruler  { position: absolute; top: 0; bottom: 0; border-left: 1px dotted color-mix( in srgb, var(--line) 55%, transparent ); }
+        .cm-trailingspace { background: color-mix(in srgb, var(--danger) 28%, transparent); }
+        .cm-searching { background: color-mix(in srgb, var(--accent) 35%, transparent) !important; }
+
+        /* Light mode uses CodeMirror's built-in 'default' theme; darken its faintest tokens
+           so they stay legible on the muted grey editor background. */
+        :root[data-theme="light"] .cm-s-default .cm-comment { color: #4E5259; }
+        :root[data-theme="light"] .cm-s-default .cm-meta    { color: #5A4A00; }
+        :root[data-theme="light"] .cm-s-default .cm-keyword { color: #7A1FA2; }
+        :root[data-theme="light"] .cm-s-default .cm-string  { color: #9A1414; }
+        :root[data-theme="light"] .cm-s-default .cm-number,
+        :root[data-theme="light"] .cm-s-default .cm-atom    { color: #1B5FA6; }
+
+        /* Search / jump-to-line dialog */
+        .CodeMirror-dialog
+        {
+            background: var(--card); color: var(--text);
+            border-bottom: 1px solid var(--line); padding: 7px 10px; font-size: 0.85rem;
+        }
+        /* The search / go-to-line box CodeMirror injects. Nothing local: it is the
+           shared text field (app.css, FORM FIELD) like every other one. */
+
+        /* "Guardar como" + "Abrir" dialogs: .sheet / .field / .file-label / .open-list all come from app.css. */
+    </style>
+</head>
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <div class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <h1>Text</h1>
+            <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
+            <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
+
+            <div id="syncIndicator" class="sync-indicator" data-i18n-attr="title:ui.sync.synced"></div>
+        </div>
+
+        <div id="toolbar">
+            <select id="langSelect" class="tb-select" data-i18n-attr="title:text.langSelect">
+                <option value="text/plain" data-i18n="text.plainText"></option>
+                <option value="text/html">HTML</option>
+                <option value="text/css">CSS</option>
+                <option value="text/javascript">JavaScript</option>
+                <option value="application/json">JSON</option>
+                <option value="application/xml">XML</option>
+                <option value="text/x-markdown">Markdown</option>
+                <option value="text/x-yaml">YAML</option>
+                <option value="text/x-sh">Shell</option>
+                <option value="text/x-sql">SQL</option>
+                <option value="text/x-python">Python</option>
+                <option value="text/x-csrc">C / C++ / Java</option>
+                <option value="text/x-properties" data-i18n="text.iniProps"></option>
+            </select>
+
+            <div class="tb-sep"></div>
+
+            <button id="wrapBtn" class="tb-btn" data-i18n-attr="title:text.wrap">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
+            </button>
+            <select id="indentSelect" class="tb-select" data-i18n-attr="title:text.indent">
+                <option value="4" selected data-i18n="text.indent4"></option>
+                <option value="2" data-i18n="text.indent2"></option>
+                <option value="tab" data-i18n="text.indentTab"></option>
+            </select>
+            <input id="marginInput" class="tb-num" type="number" min="20" max="500" step="1" inputmode="numeric"
+                   autocomplete="off" data-i18n-attr="title:text.margin">
+
+            <div class="tb-sep"></div>
+
+            <button id="zoomOutBtn" class="tb-btn" data-i18n-attr="title:text.zoomOut">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+            </button>
+            <button id="zoomInBtn" class="tb-btn" data-i18n-attr="title:text.zoomIn">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+            </button>
+
+            <div class="tb-sep"></div>
+
+            <button id="importBtn" class="tb-btn" data-i18n-attr="title:ui.importDevice">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </button>
+            <input id="importInput" type="file" style="display:none">
+            <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            </button>
+            <button id="saveAsBtn" class="tb-btn" data-i18n-attr="title:ui.saveAs">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+            </button>
+
+            <div class="tb-sep"></div>
+
+            <button class="tb-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </button>
+        </div>
+
+        <div id="editorHost"><textarea id="editor"></textarea></div>
+
+    </div>
+
+    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
+         document goes instead of dropping it in the folder Text was opened in;
+         #saveFormat is the extension, restricted to the ones Text can reopen. -->
+    <div id="saveAsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="ui.saveAs"></h2>
+            <div class="field">
+                <label for="saveName" data-i18n="ui.fileName"></label>
+                <input type="text" id="saveName" placeholder="nuevo.txt" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="saveFormat" data-i18n="text.format"></label>
+                <select id="saveFormat">
+                    <option value="txt">.txt</option>
+                    <option value="html">HTML (.html)</option>
+                    <option value="css">CSS (.css)</option>
+                    <option value="js">JavaScript (.js)</option>
+                    <option value="json">JSON (.json)</option>
+                    <option value="xml">XML (.xml)</option>
+                    <option value="md">Markdown (.md)</option>
+                    <option value="yaml">YAML (.yaml)</option>
+                    <option value="sh">Shell (.sh)</option>
+                    <option value="sql">SQL (.sql)</option>
+                    <option value="py">Python (.py)</option>
+                    <option value="c">C / C++ / Java (.c)</option>
+                    <option value="ini">.ini</option>
+                    <option value="" data-i18n="text.extOther"></option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="saveDirBtn" data-i18n="ui.folder"></label>
+                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
+                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
+                </button>
+            </div>
+            <div class="sheet-actions">
+                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Open dialog -->
+    <div id="openBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="ui.openDoc"></h2>
+            <div id="openCrumb" class="open-crumb"></div>
+            <ul id="openList" class="open-list"></ul>
+            <div class="sheet-actions">
+                <button id="openCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        // Nothing is drawn from JS before the dictionary is in: without an
+        // in-source fallback, an early render would paint the bare keys.
+        await NayiveI18n.ready;
+
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const O = NayiveOffice;   // paths, the file label, the Open browser (../shared/office.js)
+
+        // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
+        const APP_DIR = O.appDirFromUrl();
+
+        const AUTOSAVE_DELAY_MS = 2500;
+
+        // Text is the catch-all editor: its "Abrir documento" browser lists every
+        // file EXCEPT (a) formats another app owns and (b) known-binary types it
+        // could only mangle. Anything else — including unknown or no extension —
+        // is shown and opened as UTF-8 text.
+        //
+        // (a) owned elsewhere — mirrors each app's own extension list:
+        //     Write apps/write, Calc apps/calc, Photos apps/photos IMG_EXT,
+        //     Music apps/music AUDIO_EXT, Movies apps/movies VIDEO_EXT,
+        //     Contact apps/contact (.vcf), Calendar apps/calendar (.ics).
+        const OWNED_EXTS = new Set( [
+            'docx', 'doc', 'odt', 'rtf',                                  // Write (+ its future convert list)
+            'xlsx', 'xls', 'ods', 'csv',                                  // Calc  (+ its future convert list)
+            'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif',           // Photos
+            'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'weba',   // Music
+            'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv',                    // Movies
+            'vcf',                                                        // Contact
+            'ics'                                                         // Calendar
+        ] );
+        // (b) not text at all — opening these as text is never useful.
+        const BINARY_EXTS = new Set( [
+            'zip', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'zst', '7z', 'rar',
+            'pdf', 'ppt', 'pptx', 'pps', 'ppsx', 'odp', 'odg',
+            'heic', 'heif', 'tif', 'tiff', 'ico', 'psd', 'xcf', 'raw', 'cr2', 'nef', 'arw', 'dng',
+            'wma', 'wmv', 'avi', 'flv', '3gp', 'mid', 'midi', 'aiff', 'aif', 'mpg', 'mpeg',
+            'ttf', 'otf', 'woff', 'woff2', 'eot',
+            'exe', 'dll', 'so', 'dylib', 'bin', 'class', 'jar', 'wasm', 'pyc', 'pyo',
+            'sqlite', 'sqlite3', 'db', 'mdb', 'accdb',
+            'iso', 'img', 'dmg'
+        ] );
+
+        function textCanOpen( path )
+        {
+            const e = O.extOf( path );
+            return ! OWNED_EXTS.has( e ) && ! BINARY_EXTS.has( e );
+        }
+
+        // The browser never walks above the user's files/ root (the first path
+        // segment of APP_DIR — "files" when Text is opened from the launcher).
+        const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
+
+        let currentPath   = null;   // path relative to the file-manager root, or null = untitled
+        // True when the open file belongs to another user (a "shared/..." path):
+        // we can read it, never write it, so autosave is off and "Guardar" turns
+        // into "Guardar como" - into a file of our own.
+        let readOnly      = false;
+        let pendingName   = null;   // name typed/imported before the first save (no currentPath yet)
+        let editor         = null;   // CodeMirror instance
+        let autosaveTimer  = null;
+
+        // Offline-capable persistence (../shared/store.js), same as Write. Every
+        // save lands in a local IndexedDB cache and a write outbox BEFORE the PUT
+        // is attempted, so a caducated session or a dropped connection can no
+        // longer lose the text: it goes up on the next flush (reconnect, tab
+        // focus, or right after signing in again). Reads come from the network
+        // when there is one and from the last-known-good local copy when there is
+        // not - a failed GET is never mistaken for "the file is empty".
+        // Interface strings: every one of them lives in shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES } );
+        let lineWrap        = window.matchMedia( '(max-width: 640px)' ).matches;   // phone: wrap by default - scrolling code sideways on a phone is miserable; the button still toggles it
+        let suppressChange = false;   // true while the editor is being loaded programmatically
+
+        const FONT_KEY = 'gum_text_font_size';
+        const FONT_MIN = 9;
+        const FONT_MAX = 30;
+        let   fontSize = ( parseInt( localStorage.getItem( FONT_KEY ), 10 ) || 13 );
+
+        // Right margin: the guide line the toolbar spinner moves, in columns of the
+        // monospace grid. 132 is the wide-terminal width this editor is written to.
+        const MARGIN_KEY = 'gum_text_margin';
+        const MARGIN_MIN = 20;
+        const MARGIN_MAX = 500;
+        let   marginCols = ( parseInt( localStorage.getItem( MARGIN_KEY ), 10 ) || 132 );
+
+        // The name in the top bar (click to rename) and the Open browser: shared
+        // widgets, this app only supplies the policy (see commitRename / openDocument).
+        const fileLabel = O.fileLabel( { onCommit: commitRename } );
+        const browser   = O.openBrowser( { root: OPEN_ROOT, canOpen: textCanOpen, onOpen: openDocument,
+                                           emptyKey: 'text.noTextFiles' } );
+
+        // "Guardar como" asks where the document goes: a first save must never
+        // guess the folder. Shared widget, this app only supplies the default.
+        const dirField  = O.folderField();
+
+        // The header plug: store states straight from store.onState, plus the
+        // app's own 'saving' / 'error' moments (a rename in flight, a failed one).
+        const setSyncStatus = NayiveUI.syncIndicator();
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        wireStaticUI();
+
+        // The store's state machine drives the sync dot for every read and write
+        // it does - subscribe before the first read.
+        store.onState( setSyncStatus );
+
+        NayiveUI.bootWithStore( store, async function()
+        {
+            initEditor();
+
+            // Swap CodeMirror's syntax theme when the shared colour scheme is toggled.
+            window.addEventListener( 'balata:themechange', function()
+            {
+                if( editor ) editor.setOption( 'theme', cmThemeName() );
+            } );
+
+            const params     = new URLSearchParams( window.location.search );
+            const openPath   = params.get( 'file' );
+            const importPath = params.get( 'import' );
+
+            if(      openPath   ) await openDocument( openPath );
+            else if( importPath ) await importServerFile( importPath );
+            else                  newDocument();
+
+            editor.focus();   // caret in the text area on every startup path
+        } );
+
+        function wireStaticUI()
+        {
+            document.getElementById( 'importBtn'        ).addEventListener( 'click', function() { document.getElementById( 'importInput' ).click(); } );
+            document.getElementById( 'importInput'      ).addEventListener( 'change', function( e ) { handleImportFile( e.target.files[0] ); e.target.value = ''; } );
+            document.getElementById( 'openBtn'          ).addEventListener( 'click', function() { browser.open( APP_DIR ); } );
+            document.getElementById( 'saveAsBtn'        ).addEventListener( 'click', openSaveAs );
+            document.getElementById( 'saveAsConfirmBtn' ).addEventListener( 'click', confirmSaveAs );
+            document.getElementById( 'saveName'         ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmSaveAs(); } );
+            // The dialogs' × buttons and Escape are wired once for every app by shared/ui.js.
+
+            document.getElementById( 'langSelect'   ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); editor.focus(); } );
+            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); editor.focus(); } );
+            document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
+            document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the phone default
+            document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
+            document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
+
+            const marginInput = document.getElementById( 'marginInput' );
+            marginInput.value = String( marginCols );
+            // 'input' (not 'change'): the line follows the arrows as they are clicked.
+            // The caret is NOT sent back to the text here - a spinner gets clicked
+            // several times in a row, unlike the selects above.
+            marginInput.addEventListener( 'input',   function( e ) { setMargin( e.target.value ); } );
+            marginInput.addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) editor.focus(); } );
+            // min / max only bound the arrows; a typed 5 or 600 has to be put right in
+            // the box too, or it would disagree with the line. 'change' = on blur/Enter.
+            marginInput.addEventListener( 'change',  function( e ) { e.target.value = String( marginCols ); } );
+        }
+
+        //------------------------------------------------------------------------//
+        // EDITOR
+
+        // Syntax theme follows the shared colour scheme: dracula on dark, CodeMirror's
+        // built-in light 'default' on light. The editor chrome is token-driven in CSS.
+        function cmThemeName()
+        {
+            return document.documentElement.dataset.theme === 'light' ? 'default' : 'dracula';
+        }
+
+        function initEditor()
+        {
+            editor = CodeMirror.fromTextArea( document.getElementById( 'editor' ),
+            {
+                theme            : cmThemeName(),
+                mode              : null,
+                lineNumbers       : true,
+                lineWrapping      : lineWrap,
+                indentUnit        : 4,
+                tabSize            : 4,
+                indentWithTabs    : false,
+                smartIndent        : true,
+                matchBrackets      : true,
+                autoCloseBrackets  : true,
+                autoCloseTags      : true,
+                matchTags          : { bothTags: true },
+                styleActiveLine    : true,
+                showTrailingSpace  : true,
+                foldGutter         : true,
+                gutters            : [ 'CodeMirror-linenumbers', 'CodeMirror-foldgutter' ],
+                placeholder        : T( 'text.emptyDoc' ),
+                extraKeys          :
+                {
+                    'Ctrl-S'      : function() { saveNow(); },
+                    'Cmd-S'       : function() { saveNow(); },
+                    'Ctrl-/'      : 'toggleComment',
+                    'Cmd-/'       : 'toggleComment',
+                    'Ctrl-Q'      : function( cm ) { cm.foldCode( cm.getCursor() ); },
+                    'Ctrl-=' : function() { bumpFontSize(  1 ); },
+                    'Cmd-='  : function() { bumpFontSize(  1 ); },
+                    'Ctrl--' : function() { bumpFontSize( -1 ); },
+                    'Cmd--'  : function() { bumpFontSize( -1 ); },
+                    'Shift-Tab'   : 'indentLess',
+                    'Tab'         : function( cm )
+                    {
+                        if( cm.somethingSelected() ) cm.indentSelection( 'add' );
+                        else                          cm.execCommand( cm.getOption( 'indentWithTabs' ) ? 'insertTab' : 'insertSoftTab' );
+                    }
+                }
+            });
+
+            editor.on( 'change', scheduleAutosave );
+            // Every redraw that can move the text grid - a zoom, a resize, the first
+            // paint, a theme swap - ends in a refresh, so the guide line is redrawn
+            // from one place instead of from each of them.
+            editor.on( 'refresh', updateRuler );
+            editor.setSize( '100%', '100%' );
+            applyFontSize();
+            updateRuler();
+        }
+
+        // Editor-only zoom: overrides the .CodeMirror font-size and persists the choice.
+        function applyFontSize()
+        {
+            editor.getWrapperElement().style.fontSize = fontSize + 'px';
+            editor.refresh();
+
+            try { localStorage.setItem( FONT_KEY, String( fontSize ) ); } catch( _ ) {}
+        }
+
+        function bumpFontSize( delta )
+        {
+            const next = Math.max( FONT_MIN, Math.min( FONT_MAX, fontSize + delta ) );
+
+            if( next === fontSize ) return;
+
+            fontSize = next;
+            applyFontSize();
+            editor.focus();
+        }
+
+        // RIGHT MARGIN
+        //
+        // The guide line at column `marginCols`. CodeMirror's own rulers add-on is not
+        // vendored, so this is its logic in miniature: one absolutely-positioned strip
+        // inside the line space, its left edge at the first column's x plus N character
+        // widths - which is exact, the editor font being monospace.
+        function updateRuler()
+        {
+            if( ! editor ) return;
+
+            const d = editor.display;
+            let   box = d.lineSpace.querySelector( ':scope > .CodeMirror-rulers' );
+
+            if( ! box )
+            {
+                box = document.createElement( 'div' );
+                box.className = 'CodeMirror-rulers';
+                box.appendChild( document.createElement( 'div' ) ).className = 'CodeMirror-ruler';
+                d.lineSpace.insertBefore( box, d.cursorDiv );
+            }
+
+            const left = editor.charCoords( CodeMirror.Pos( editor.firstLine(), 0 ), 'div' ).left;
+
+            box.style.minHeight       = ( d.scroller.offsetHeight + 30 ) + 'px';
+            box.firstChild.style.left = ( left + marginCols * editor.defaultCharWidth() ) + 'px';
+        }
+
+        function setMargin( value )
+        {
+            const n = parseInt( value, 10 );
+
+            if( ! n ) return;   // mid-typing the box can be empty - keep the last good line
+
+            marginCols = Math.max( MARGIN_MIN, Math.min( MARGIN_MAX, n ) );
+            updateRuler();
+
+            try { localStorage.setItem( MARGIN_KEY, String( marginCols ) ); } catch( _ ) {}
+        }
+
+        function setEditorText( text )
+        {
+            suppressChange = true;
+            editor.setValue( text || '' );
+            editor.clearHistory();
+            suppressChange = false;
+            editor.refresh();
+        }
+
+        function getEditorText()
+        {
+            return editor.getValue();
+        }
+
+        // The MIMEs the language <select> offers — also the only values setLanguage()
+        // ever puts on the editor, so the toolbar and the highlighting never disagree.
+        const SELECT_MIMES = Array.from( document.getElementById( 'langSelect' ).options ).map( function( o ) { return o.value; } );
+
+        // File extension → one of SELECT_MIMES. Kept explicit (rather than leaning on
+        // meta.js alone) so the mapping stays predictable and web-file focused; meta.js
+        // is only consulted as a fallback for the long tail. Unknown types stay plain text.
+        const EXT_MIME =
+        {
+            html: 'text/html', htm: 'text/html', xhtml: 'text/html',
+            css: 'text/css',
+            js: 'text/javascript', mjs: 'text/javascript', cjs: 'text/javascript', jsx: 'text/javascript',
+            json: 'application/json', map: 'application/json', webmanifest: 'application/json',
+            xml: 'application/xml', xsl: 'application/xml', xsd: 'application/xml', svg: 'application/xml', rss: 'application/xml',
+            md: 'text/x-markdown', markdown: 'text/x-markdown', mkd: 'text/x-markdown',
+            yaml: 'text/x-yaml', yml: 'text/x-yaml',
+            sh: 'text/x-sh', bash: 'text/x-sh', zsh: 'text/x-sh', ksh: 'text/x-sh',
+            sql: 'text/x-sql',
+            py: 'text/x-python', pyw: 'text/x-python',
+            c: 'text/x-csrc', h: 'text/x-csrc', cpp: 'text/x-csrc', cc: 'text/x-csrc', cxx: 'text/x-csrc',
+            hpp: 'text/x-csrc', hh: 'text/x-csrc', java: 'text/x-csrc', cs: 'text/x-csrc',
+            ini: 'text/x-properties', conf: 'text/x-properties', cfg: 'text/x-properties',
+            properties: 'text/x-properties', toml: 'text/x-properties', env: 'text/x-properties'
+        };
+
+        function detectMime( fileName )
+        {
+            const name = O.baseName( fileName );
+            const ext  = O.extOf( name );
+
+            if( EXT_MIME[ ext ] ) return EXT_MIME[ ext ];
+
+            const info = CodeMirror.findModeByFileName( name );
+            const mime = info && ( info.mime || ( info.mimes && info.mimes[0] ) );
+
+            return SELECT_MIMES.includes( mime ) ? mime : 'text/plain';
+        }
+
+        function setLanguage( mime )
+        {
+            const m = SELECT_MIMES.includes( mime ) ? mime : 'text/plain';
+            editor.setOption( 'mode', m === 'text/plain' ? null : m );   // null = plain, avoids CM's "no mode" warning
+            document.getElementById( 'langSelect' ).value = m;
+        }
+
+        function autoDetectLanguage()
+        {
+            setLanguage( detectMime( currentPath || pendingName || '' ) );
+        }
+
+        function setIndent( value )
+        {
+            if( value === 'tab' )
+            {
+                editor.setOption( 'indentWithTabs', true );
+                editor.setOption( 'indentUnit', 4 );
+                editor.setOption( 'tabSize', 4 );
+            }
+            else
+            {
+                const n = parseInt( value, 10 ) || 4;
+                editor.setOption( 'indentWithTabs', false );
+                editor.setOption( 'indentUnit', n );
+                editor.setOption( 'tabSize', n );
+            }
+        }
+
+        function toggleWrap()
+        {
+            lineWrap = ! lineWrap;
+            editor.setOption( 'lineWrapping', lineWrap );
+            document.getElementById( 'wrapBtn' ).classList.toggle( 'active', lineWrap );
+            editor.focus();
+        }
+
+        //------------------------------------------------------------------------//
+        // AUTOSAVE
+
+        function scheduleAutosave()
+        {
+            if( suppressChange ) return;   // programmatic load, not a user edit
+            if( readOnly ) return;         // someone else's file - never write over it
+            if( ! currentPath ) return;    // untitled docs must be named via "Guardar como" first
+
+            setSyncStatus( 'saving' );
+            clearTimeout( autosaveTimer );
+            autosaveTimer = setTimeout( function() { autosaveTimer = null; writeCurrent( currentPath ); }, AUTOSAVE_DELAY_MS );
+        }
+
+        // Flushes an unsaved edit immediately — used when the tab is closed/hidden or the
+        // user hits Ctrl-S, since the debounced autosave timer would otherwise be lost.
+        function flushPendingSave()
+        {
+            if( ! autosaveTimer || ! currentPath ) return Promise.resolve();
+
+            clearTimeout( autosaveTimer );
+            autosaveTimer = null;
+            return writeCurrent( currentPath );
+        }
+
+        function saveNow()
+        {
+            if( readOnly )
+            {
+                NayiveUI.toast( T( 'text.notYours' ) );
+                openSaveAs();
+                return;
+            }
+            if( ! currentPath ) { openSaveAs(); return; }
+
+            clearTimeout( autosaveTimer );
+            autosaveTimer = null;
+            writeCurrent( currentPath );
+        }
+
+        document.addEventListener( 'visibilitychange', function() { if( document.visibilityState === 'hidden' ) flushPendingSave(); } );
+        window.addEventListener( 'pagehide', flushPendingSave );
+
+        //------------------------------------------------------------------------//
+        // IMPORT (local file from this device) and inline filename rename
+
+        async function handleImportFile( file )
+        {
+            if( ! file ) return;
+
+            try
+            {
+                const text = await file.text();
+
+                currentPath = null;
+                readOnly    = false;
+                pendingName = file.name;
+                fileLabel.set( file.name );
+                setEditorText( text );
+                autoDetectLanguage();
+            }
+            catch( _ )
+            {
+                NayiveUI.toast( T( 'text.importFailed' ) );
+            }
+        }
+
+        // Same as handleImportFile, but the source is a file already stored on the
+        // server (any folder). Opened as a new untitled document — Drive uses this
+        // to hand a text file over to this editor with its import action pre-triggered.
+        async function importServerFile( path )
+        {
+            try
+            {
+                const text = await GumApi.readFile( path );
+                const name = O.baseName( path );
+
+                currentPath = null;
+                readOnly    = false;
+                pendingName = name;
+                fileLabel.set( name );
+                setEditorText( text );
+                autoDetectLanguage();
+            }
+            catch( _ )
+            {
+                NayiveUI.toast( T( 'text.importFailed' ) );
+            }
+        }
+
+        // The file label was edited. Untitled: the first name IS the first save,
+        // like "Guardar como" (just remembering it would never reach the disk).
+        // Named: rename in place — a file opened via the browser may live anywhere
+        // in Drive, not under APP_DIR.
+        async function commitRename( raw )
+        {
+            const name = O.safeName( raw );
+            if( ! name ) return;
+
+            if( ! currentPath )
+            {
+                // The first name IS the first save - and a first save has to ask
+                // where the file goes, so hand it to "Guardar como" pre-filled
+                // instead of writing straight into APP_DIR.
+                pendingName = name;
+                fileLabel.set( name );
+                autoDetectLanguage();
+                openSaveAs();
+                return;
+            }
+
+            const newPath = ( O.dirName( currentPath ) || APP_DIR ) + '/' + name;
+            if( newPath === currentPath ) return;
+
+            setSyncStatus( 'saving' );
+
+            try
+            {
+                await flushPendingSave();            // the latest text under the OLD name first
+                await store.flush();                 // get any queued write onto the OLD path
+                await GumApi.rename( currentPath, newPath );
+                await store.forget( currentPath );   // only now is the old cache entry stale
+
+                currentPath = newPath;
+                fileLabel.set( O.relLabel( newPath, APP_DIR, OPEN_ROOT ) );
+                autoDetectLanguage();
+                setSyncStatus( 'synced' );
+            }
+            catch( _ )
+            {
+                setSyncStatus( 'error' );
+                NayiveUI.toast( T( 'text.renameFailed' ) );
+            }
+        }
+
+        //------------------------------------------------------------------------//
+        // DOCUMENT ACTIONS
+
+        function newDocument()
+        {
+            currentPath = null;
+            readOnly    = false;
+            pendingName = null;
+            fileLabel.set( T( 'ui.untitled' ) );
+            setEditorText( '' );
+            setLanguage( 'text/plain' );
+            setSyncStatus( 'synced' );
+            editor.focus();
+        }
+
+        async function openDocument( path )
+        {
+            await flushPendingSave();   // don't lose a debounced autosave for the doc we're leaving
+
+            const res = await O.readViaStore( store, path );   // the store drives the sync dot; toasts on trouble
+            if( res.body === null ) return;
+
+            currentPath = path;
+            readOnly    = NayiveUI.isShared( path );
+            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) + ( readOnly ? T( 'text.readOnlySuffix' ) : '' ) );
+            setEditorText( res.body );
+            autoDetectLanguage();
+        }
+
+        // The extensions the format <select> offers, in its own order. It is a
+        // shortcut for the languages Text highlights, NOT the limit of what it
+        // can write - the "" (other) entry keeps whatever the name already has,
+        // and textCanOpen() below is the real rule.
+        const SAVE_EXTS = Array.from( document.getElementById( 'saveFormat' ).options )
+                               .map( function( o ) { return o.value; } )
+                               .filter( Boolean );
+
+        function openSaveAs()
+        {
+            const name = currentPath ? O.baseName( currentPath ) : ( pendingName || 'nuevo.txt' );
+            const ext  = O.extOf( name );
+
+            document.getElementById( 'saveName'   ).value = name;
+            document.getElementById( 'saveFormat' ).value = SAVE_EXTS.indexOf( ext ) !== -1 ? ext : '';
+
+            // Someone else's file: our copy goes to a folder of ours, never back
+            // to the folder of theirs it was read from.
+            dirField.set( ( ! readOnly && currentPath && O.dirName( currentPath ) ) || APP_DIR );
+
+            NayiveUI.open( 'saveAsBackdrop' );
+            document.getElementById( 'saveName' ).focus();
+            document.getElementById( 'saveName' ).select();
+        }
+
+        async function confirmSaveAs()
+        {
+            let   name = O.safeName( document.getElementById( 'saveName' ).value );
+            const fmt  = document.getElementById( 'saveFormat' ).value;
+
+            if( ! name ) return;
+
+            if( fmt && ! new RegExp( '\\.' + fmt + '$', 'i' ).test( name ) )
+                name += '.' + fmt;
+
+            // Text is the catch-all editor, but not every extension is its to
+            // write: one another app owns (.docx) or a binary one would make a
+            // file Text could never reopen. Same test the Open browser uses, so
+            // "saveable" and "openable" can never drift apart.
+            if( ! textCanOpen( name ) )
+            {
+                NayiveUI.toast( TF( 'text.badExt', { ext: O.extOf( name ) } ) );
+                return;
+            }
+
+            NayiveUI.close( 'saveAsBackdrop' );
+            await saveAs( dirField.get() + '/' + name );
+            editor.focus();
+        }
+
+        // Write the editor's text to `path` and make that the open document.
+        async function saveAs( path )
+        {
+            await flushPendingSave();   // finish any autosave to the old name before we change identity
+
+            await writeCurrent( path );
+
+            currentPath = path;
+            readOnly    = false;
+            pendingName = null;
+            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) );
+            autoDetectLanguage();
+        }
+
+        async function writeCurrent( path )
+        {
+            // store.write caches the text and queues the PUT before it even tries
+            // the network, then drives the sync dot through the store's state. It
+            // does not throw: a dead session or a lost connection just leaves the
+            // write in the outbox, which is exactly what saves the user's work.
+            await store.write( path, getEditorText() );
+        }
+
+    </script>
+</body>
+</html>

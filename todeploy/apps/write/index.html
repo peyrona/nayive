@@ -1,0 +1,1304 @@
+<!-- index.html - Personal single-user word processor. SuperDoc 2 (vendored in lib/superdoc/),
+     .docx is the native format, backed by Gum's file-manager API. No build step: the bundle
+     under lib/superdoc/ is produced by tools/build-superdoc.sh and committed as-is. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Write</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%2316A085'%3E%3Cg transform='translate(45 465) rotate(-48)'%3E%3Cpath d='M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z'/%3E%3Crect x='132' y='-26' width='350' height='52'/%3E%3Cpath d='M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z'/%3E%3C/g%3E%3Crect x='262' y='220' width='176' height='50' rx='12'/%3E%3Cpath fill='none' stroke='%2316A085' stroke-width='18' stroke-linecap='round' stroke-linejoin='round' d='M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270'/%3E%3Cpath d='M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z'/%3E%3C/svg%3E">
+
+    <!-- SuperDoc's DOCX engine spawns a Web Worker. It looks for it relative to the bundle
+         URL, but the resolved path can drift under some hosts, so we pin it explicitly.
+         This MUST run before write.js (a deferred module) imports the bundle.
+         NOTE: the filename carries a content hash — if tools/build-superdoc.sh changes it,
+         update the name here (see lib/superdoc/BUILD.md). tools/check-superdoc-worker.py
+         compares this line against the file on disk and aborts the deploy if they differ,
+         so a stale hash can no longer reach a user as an editor that never opens. -->
+    <script>
+        globalThis.__SUPERDOC_V2_BROWSER_WORKER_URL__ =
+            new URL( 'lib/superdoc/assets/browser-worker-entry-Jt3Z1Jtz.js', document.baseURI ).href;
+    </script>
+
+    <!-- Vendored SuperDoc styles (pinned, no build step). -->
+    <link rel="stylesheet" href="lib/superdoc/superdoc.css">
+    <link rel="stylesheet" href="lib/superdoc/engine.css">
+
+    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Small shared UI helpers: backdrop open/close, toast. -->
+    <script src="../shared/ui.js" defer></script>
+
+    <!-- The pull-down menu bar (Archivo, Edición, Ver…) and the switch that
+         remembers whether the user wants it or the icon toolbar. Shared with Calc. -->
+    <script src="../shared/menubar.js" defer></script>
+    <!-- Write still carries its own copies of most of the office plumbing; what
+         it does take from here is the save-as folder row (NayiveOffice.folderField). -->
+    <script src="../shared/office.js" defer></script>
+    <!-- Image shrinking on insert (NayivePhoto.prepare) — SuperDoc stores images
+         inline in the .docx, so a phone photo would otherwise be carried whole. -->
+    <script src="../shared/photo.js" defer></script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'write',
+            title: 'Write',
+            lead:  NayiveUI.t( 'write.introLead' ),
+            buttons: [
+                { sel: '#chromeMenusBtn',  text: NayiveUI.t( 'write.chromeNote' ) },
+                { sel: '#fmtBtn',          text: NayiveUI.t( 'write.introFormatBar' ) },
+                { sel: '#moreToolsBtn',    text: NayiveUI.t( 'write.introMoreBar' ) },
+                { sel: '#moreBtn',         text: NayiveUI.t( 'write.introFileMenu' ) },
+                { sel: '#newBtn',          text: NayiveUI.t( 'write.introNew' ) },
+                { sel: '#openBtn',         text: NayiveUI.t( 'write.introOpen' ) },
+                { sel: '#importBtn',       text: NayiveUI.t( 'write.introImport' ) },
+                { sel: '#saveAsBtn',       text: NayiveUI.t( 'write.introSaveAs' ) },
+                { sel: '#printBtn',        text: NayiveUI.t( 'write.introPrint' ) },
+                { sel: '#pageSetupBtn',    text: NayiveUI.t( 'write.introPage' ) },
+                { sel: '#headerBtn',       text: NayiveUI.t( 'write.introHeader' ) },
+                { sel: '#pageNumBtn',      text: NayiveUI.t( 'write.introPageNum' ) },
+                { sel: '#settingsBtn',     text: NayiveUI.t( 'write.introSettings' ) },
+                { sel: '#commentsBtn',     text: NayiveUI.t( 'write.introComments' ) },
+                { sel: '#tplBtn',          text: NayiveUI.t( 'write.introTemplates' ) },
+                { sel: '#restoreBtn',      text: NayiveUI.t( 'write.introRestore' ) },
+                { sel: '#paraBtn',         text: NayiveUI.t( 'write.introPara' ) },
+                { sel: '#statsBtn',        text: NayiveUI.t( 'write.introStats' ) },
+                { sel: '#scBtn',           text: NayiveUI.t( 'write.introShortcuts' ) }
+            ]
+        } );
+    } );
+    </script>
+    <!-- Offline-capable persistence: last-known-good copy + write outbox in IndexedDB.
+         { binary: true } — bodies are .docx bytes, not text. -->
+    <script src="../shared/store.js" defer></script>
+
+    <!-- Shared colour scheme (dark default, opt-in light). The toggle lives in Drive / the
+         launcher; this page just follows the saved choice. SuperDoc's page canvas stays a
+         fixed warm beige in both themes (like Word's off-white); only the app chrome
+         follows the scheme. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <style>
+        /* Base reset, .app shell, .topbar, .sheet, .field and the input look all
+           come from ../shared/app.css. Write overrides the page scroll and adds
+           the SuperDoc theming + its toolbar / editor chrome. */
+        html, body { height: 100%; overflow: hidden; }
+
+        /* SuperDoc ships no dark theme — its toolbar, menus, dropdowns and
+           dialogs are hard-coded light. Point its semantic UI variables (the
+           "5-variable theme" the component vars cascade from) at Nayive's own
+           theme tokens, so the whole editor chrome follows the dark/light
+           scheme like the rest of the app. The tokens flip in theme.css, so
+           this one block covers both. */
+        :root
+        {
+            --sd-ui-text:                    var(--text);
+            --sd-ui-text-muted:              var(--text-dim);
+            --sd-ui-text-disabled:           var(--text-faint);
+            --sd-ui-bg:                      var(--card);
+            --sd-ui-hover-bg:                color-mix(in srgb, var(--text) 12%, transparent);
+            --sd-ui-active-bg:               color-mix(in srgb, var(--accent) 26%, transparent);
+            --sd-ui-disabled-bg:             transparent;
+            --sd-ui-border:                  var(--line);
+            --sd-ui-action:                  var(--accent);
+            --sd-ui-action-hover:            var(--accent);
+            --sd-ui-action-text:             var(--on-accent);
+            --sd-ui-shadow:                  0 6px 20px var(--shadow);
+
+            --sd-ui-toolbar-button-text:     var(--text-dim);   /* icons + labels, a touch softer */
+            --sd-ui-menu-header-bg:          var(--card);
+            --sd-ui-menu-text-muted:         var(--text-dim);
+            --sd-ui-menu-shadow:             0 8px 24px var(--shadow);
+            --sd-ui-dropdown-shadow:         0 8px 24px var(--shadow);
+            --sd-ui-surface-shadow:          0 12px 32px var(--shadow);
+            --sd-ui-tools-item-bg:           color-mix(in srgb, var(--text) 10%, transparent);
+            --sd-ui-tooltip-bg:              var(--text);
+            --sd-ui-tooltip-text:            var(--bg);
+        }
+
+
+        /* .file-label / .file-label-input are the shared OFFICE CHROME (shared/app.css),
+           the same header shape Calc and Text use. Nothing local. */
+
+        /* Write's own controls share SuperDoc's dense toolbar row, so they use a
+           smaller square icon button than the app.css header default. */
+        #writeTools .icon-btn
+        {
+            flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border: none; border-radius: var(--radius-s); cursor: pointer;
+            background: transparent; color: var(--text-dim);
+        }
+
+        #syncIndicator { margin-left: 4px; }
+
+        /* ---- Phone-only header controls ------------------------------------
+           Both live in the .topbar-actions group and only ever show at <=640px
+           (see the phone block further down).
+             "Aa"  #fmtBtn   - folds the formatting row away while you type.
+             "⋮"   #moreBtn  - the app's own buttons, which leave the row.
+           #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
+           glance and needs no glyph. .is-active (shared app.css) marks it while
+           the row is showing. */
+        #fmtBtn, #moreBtn, #fitBtn { display: none; }
+
+        /* The "⋮" that opens the rest of the toolbar in place. Phone only, and
+           always last in the row - #toolbar sizes to its content, so the button
+           sits right after the visible items and stays put when the row opens. */
+        #moreToolsBtn
+        {
+            display: none; order: 99;
+            flex: 0 0 auto; align-items: center; justify-content: center;
+            width: 36px; height: 36px; margin: 1px 0;
+            border: none; border-radius: var(--radius-s); cursor: pointer;
+            background: transparent; color: var(--text-dim);
+        }
+        #moreToolsBtn:hover        { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+        #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+        #fmtBtn
+        {
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: 0.5px;
+        }
+
+        /* The "⋮" menu itself - same look as Contacts' and Calendar's, but
+           position: fixed and anchored in JS like this app's own #tbPopup,
+           because .topbar carries overflow-x and would clip an absolute child. */
+        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
+           anchored under its button by NayiveUI.wireMenu (via shared/office.js). */
+
+        /* ---- Toolbar strip ------------------------------------------------- */
+
+        /* The whole strip: SuperDoc's toolbar + the app's own file/page/proofing
+           controls, in one wrapping flex flow so everything packs tighter and
+           then flows onto more lines as the window narrows. */
+        #toolbarRow
+        {
+            flex: 0 0 auto;
+            display: flex; flex-wrap: wrap; align-items: center;
+            row-gap: 2px;
+            border-bottom: 1px solid var(--line); background: var(--card);
+        }
+
+        /* SuperDoc renders its controls in here; size it to its content so the
+           app controls flow right after it (and wrap when there's no room). */
+        #toolbar { flex: 0 1 auto; min-width: 0; }
+        #toolbar:empty { display: none; }
+
+        /* Let SuperDoc's toolbar wrap to more lines instead of hiding items in
+           an overflow menu, packed left (overriding SuperDoc's inline styles).
+           Its three button-groups are collapsed to `display: contents` so every
+           item becomes one flex child of .superdoc-toolbar — which lets `order`
+           (below) re-sequence items across group boundaries; SuperDoc's own
+           item order is hard-coded and not configurable. */
+        #toolbar .superdoc-toolbar { flex-wrap: wrap; width: auto !important; justify-content: flex-start !important; }
+        #toolbar .superdoc-toolbar > .button-group { display: contents; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn { order: 0; }
+
+        /* Requested order: linked-styles first; the "table borders" custom button
+           (renders at the toolbar end) pulled up next to table options; undo/redo
+           moved down by clear-formatting; zoom last. Everything at `order: 0`
+           keeps its source order; the bands below jump items past it. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-linkedStyles"]) { order: -20; }
+
+        /* Custom toolbar items always render LAST in SuperDoc's source order, so
+           the only way to slot the new buttons (x2, page break, footnote, index)
+           into the middle of the row is to give the built-ins they belong next to
+           an explicit order too. Same-order items keep source order. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-fontFamily"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-fontSize"])    { order: -15; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-bold"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-italic"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-underline"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-strike"])      { order: -10; }
+
+        /* the two new ones join the B / I / U / S group */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-superScript"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-subScript"])   { order: -9; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-color"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-highlight"])   { order: -8; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-link"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-image"])       { order: -6; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-table"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-tableActions"]){ order: -5; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-tableBorders"]){ order: -4; }
+
+        /* insert group: page break, footnote, table of contents */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-pageBreak"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-footNote"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-insertToc"])   { order: -3; }
+
+        /* a view control, so it sits with search / zoom at the end */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-showMarks"])   { order: 5; }
+
+        /* Suggesting mode only: accept / reject. They are BUILT every time now
+           (excludeItems is read once, at construction) and hidden here, so the
+           "Sugerir" mode offered in Settings has a way to finish a review. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-acceptTrackedChangeBySelection"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-rejectTrackedChangeOnSelection"]) { display: none; }
+        #toolbarRow.is-suggesting #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-acceptTrackedChangeBySelection"]),
+        #toolbarRow.is-suggesting #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-rejectTrackedChangeOnSelection"]) { display: block; order: 6; }
+
+        /* linked-styles ("Format text"): show only the paint-brush icon — drop
+           the style-name label and let it shrink to an icon button like the rest
+           of the row (SuperDoc pins it 140px wide with the label showing). */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-linkedStyles"]) .sd-button-label { display: none; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-linkedStyles"]) .sd-toolbar-item { width: auto !important; min-width: 0 !important; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-textAlign"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-list"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-numberedlist"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-indentleft"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-indentright"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-lineHeight"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-copyFormat"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-clearFormatting"]),
+        /* the separator SuperDoc puts after table-options: float it past the
+           custom "table borders" button so it closes the whole table group. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-tableActions"]) + .narrow { order: 1; }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-undo"])            { order: 2; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-redo"])            { order: 3; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-search"])          { order: 4; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-zoom"])            { order: 9; }
+
+        /* SuperDoc's separators are plain siblings with no `order` of their own,
+           so every re-ordering above leaves one stranded: they all fall through
+           to order 0 and pile up in ONE place — four brown hairlines in a row
+           after the Ω. Only the separator after table-options earns its keep
+           (it is the boundary between the insert group and the paragraph
+           group, and carries order:1 below); the other five are hidden. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-linkedStyles"]) + .narrow,
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-lineHeight"])   + .narrow,
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-fontFamily"])   + .narrow,
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-fontSize"])     + .narrow,
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-highlight"])    + .narrow { display: none; }
+
+        /* SuperDoc gives custom toolbar items an oversized inline width — pin the
+           "table borders" button to the same square as the other icon buttons. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:is(
+            :has([data-item="btn-tableBorders"]), :has([data-item="btn-superScript"]),
+            :has([data-item="btn-subScript"]),    :has([data-item="btn-pageBreak"]),
+            :has([data-item="btn-footNote"]),     :has([data-item="btn-insertToc"]),
+            :has([data-item="btn-showMarks"]) ) .sd-toolbar-item { width: 32px !important; }
+
+        #toolbar .superdoc-toolbar [data-item="btn-tableBorders"] svg,
+        #toolbar .superdoc-toolbar [data-item="btn-pageBreak"] svg,
+        #toolbar .superdoc-toolbar [data-item="btn-insertToc"] svg { fill: none; stroke: currentColor; }
+
+        /* x2 / x-sub / paragraph-mark / footnote icons are letterforms, so they
+           paint with fill and must NOT inherit the stroke rule above. */
+        #toolbar .superdoc-toolbar [data-item="btn-superScript"] svg text,
+        #toolbar .superdoc-toolbar [data-item="btn-subScript"] svg text,
+        #toolbar .superdoc-toolbar [data-item="btn-showMarks"] svg text,
+        #toolbar .superdoc-toolbar [data-item="btn-footNote"] svg text { fill: currentColor; stroke: none; }
+        #toolbar .superdoc-toolbar [data-item="btn-footNote"] svg { fill: none; stroke: currentColor; }
+
+        /* Like "table options", the borders button only does anything with the
+           caret inside a table — so grey it out exactly when SuperDoc greys out
+           its own table-options button. */
+        #toolbar .superdoc-toolbar:has( [data-item="btn-tableActions"].sd-disabled )
+        .sd-toolbar-item-ctn:has([data-item="btn-tableBorders"])
+        { opacity: 0.4; pointer-events: none; }
+
+        /* Extra vertical rules the user asked for: after image, after search. */
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-image"]),
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-search"])
+        { margin-right: 8px; padding-right: 8px; border-right: 1px solid color-mix(in srgb, var(--text) 22%, transparent); }
+
+        /* The new "Bordes de tabla" button replaces it — drop "Remove borders"
+           (the 8th item) from SuperDoc's table-options menu. */
+        .toolbar-table-actions .toolbar-table-actions__item:nth-child(8) { display: none; }
+
+        /* ---- Pull-down menus (the other of Write's two menu modes) ---------- */
+
+        /* Write has TWO chromes and Settings picks between them: the icon
+           TOOLBAR (the default, everything in one wrapping strip) and classic
+           PULL-DOWN MENUS — Archivo · Edición · Ver · Insertar · Formato ·
+           Herramientas · Tabla · Ayuda, the way Word laid them out before the
+           ribbon. Two header buttons switch between them (.chrome-btn, the same
+           shape as Calendar's day / week / month).
+           Both drive exactly the same code: a menu entry either clicks
+           the real (hidden) button in #writeTools or calls the same SuperDoc
+           command the toolbar item calls. Nothing is exclusive to one chrome.
+
+           The bar itself is one row of text buttons; the panels are the shared
+           .top-menu / .menu-item vocabulary from shared/app.css, so a drop-down
+           looks like every other menu in the suite. */
+        /* #menuBar, .menu-top, .menu-panel and the .mi-* parts of a row are
+           styled once in shared/app.css - Calc's bar is the same one. What is
+           left here is only what belongs to Write. */
+
+        /* MENU MODE. The formatting strip collapses to nothing — but NOT with
+           display:none: SuperDoc watches #toolbar's width and re-measures on
+           every change, and its find bar, link popover and dropdowns are still
+           opened by clicking the (now invisible) items, which a display:none
+           element would not deliver. Same four declarations the phone fold uses.
+           #fmtBtn folds a row that is already folded and #moreBtn repeats the
+           Archivo menu, so both come off the header here. */
+        #app.is-menus #toolbarRow
+        {
+            height: 0; min-height: 0; overflow: hidden;
+            border-bottom-width: 0; visibility: hidden;
+        }
+        #app.is-menus #fmtBtn,
+        #app.is-menus #moreBtn { display: none; }
+
+        /* Hiding item 8 also took the separator it carried (it sat after
+           "Delete table") — redraw the same thin line under "Delete table"
+           (item 7) so the delete group stays closed off, matching the one
+           SuperDoc draws after the four "Insert …" items. */
+        .toolbar-table-actions .toolbar-table-actions__item:nth-child(7)::after
+        {
+            content: ''; display: block; position: absolute;
+            bottom: -3px; left: -10px; right: 0; height: 1px;
+            width: calc(100% + 20px);
+            background: var(--sd-ui-border, #dbdbdb);
+        }
+
+        /* The app's own controls — `display: contents` so each button and the
+           rule join the same wrap flow as SuperDoc's toolbar. */
+        #writeTools { display: contents; }
+        .vsep
+        {
+            align-self: stretch; width: 1px; flex: 0 0 auto;
+            margin: 6px 8px; background: var(--line);
+        }
+        #writeTools .icon-btn { margin: 2px 0; }
+        #writeTools .icon-btn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+
+        /* Phone (see TWO LAYOUT MODES in shared/app.css): the strip is ONE row,
+           and that row folds away while you type.
+             - the row keeps the NINE controls a phone actually reaches for
+               (listed below). Everything else waits behind "⋮" (#moreToolsBtn),
+               which opens the WHOLE toolbar in place - the real buttons, wrapped
+               over a few rows - and closes again. The choice is by how often a
+               thing is used, not by where SuperDoc happens to put it: its own
+               overflow menu can only cut the TAIL of its fixed item order
+               (`te = ["search"]` is the only thing it will pin), so it is turned
+               off and the split is done here, where it can be edited.
+             - the app's own buttons (#writeTools) leave the row and come back in
+               the header's "⋮" menu (#topMenu). The "?" is MOVED into the
+               header by write.js, so help stays reachable while the row is
+               folded (and so there is still only one [data-intro-open] on the
+               page - a second copy would misdirect the coach marks).
+             - #fmtBtn ("Aa") in the header folds / unfolds the row.
+           Zoom is one of the ones behind "⋮": write.js fits the page to the
+           screen (~46 %, small type) and the viewport blocks pinch-zoom, so the
+           zoom menu is still the only way to read closer - just a tap further. */
+        @media (max-width: 640px)
+        {
+            #writeTools       { display: none; }
+            #fmtBtn, #moreBtn, #fitBtn { display: flex; }
+            #moreToolsBtn     { display: inline-flex; }
+
+            /* Collapsed the row must NOT wrap, or the "⋮" drops to a second
+               line of its own; opened, wrapping is the whole point. SuperDoc's
+               own 10px side padding is trimmed so the nine buttons and the "⋮"
+               fit a 390px screen together. */
+            #toolbarRow                { row-gap: 0; }
+            #toolbarRow:not(.is-open)  { flex-wrap: nowrap; }
+            #toolbar                   { flex: 0 1 auto; min-width: 0; }
+            #toolbar .superdoc-toolbar { padding-left: 2px; padding-right: 2px; }
+
+            /* Opened, #toolbar would take the whole width and push the "⋮" onto
+               a line of its own - 44px of nothing. Leave it room beside the
+               toolbar instead, at the top so it reads as the way back. */
+            #toolbarRow.is-open #toolbar      { max-width: calc(100% - 40px); }
+            #toolbarRow.is-open #moreToolsBtn { align-self: flex-start; }
+
+            /* Collapsed: hide every toolbar item (SuperDoc's separators are
+               .sd-toolbar-item-ctn too, so they go with them) ... */
+            #toolbarRow:not(.is-open) #toolbar .superdoc-toolbar .sd-toolbar-item-ctn { display: none; }
+
+            /* ... then put back the nine that earn their place on a 390px
+               screen. Edit THIS list to change what the phone shows. */
+            #toolbarRow:not(.is-open) #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:is(
+                :has([data-item="btn-undo"]),
+                :has([data-item="btn-fontSize"]),
+                :has([data-item="btn-bold"]),
+                :has([data-item="btn-italic"]),
+                :has([data-item="btn-underline"]),
+                :has([data-item="btn-color"]),
+                :has([data-item="btn-textAlign"]),
+                :has([data-item="btn-list"]),
+                :has([data-item="btn-numberedlist"]) ) { display: block; }
+
+            /* undo first - the `order` band above would otherwise bury it at
+               the end of the nine. */
+            #toolbarRow:not(.is-open) #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-undo"]) { order: -99; }
+
+            /* The two extra vertical rules are decoration; at 390px they cost
+               most of a button. */
+            #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-image"]),
+            #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-search"])
+            { margin-right: 0; padding-right: 0; border-right: none; }
+
+            /* Folded. NOT display:none on purpose - SuperDoc watches #toolbar's
+               width and re-measures on every change; height:0 keeps the width
+               steady. visibility:hidden takes the buttons out of the tab order. */
+            #toolbarRow.is-folded
+            {
+                height: 0; min-height: 0; overflow: hidden;
+                border-bottom-width: 0; visibility: hidden;
+            }
+        }
+
+        /* "Abriendo el documento…" — stands in for SuperDoc's own overlay, which
+           cannot be translated. Fades out once the editor is ready. */
+        .editor-loading
+        {
+            position: absolute; inset: 0; z-index: 5;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg); color: var(--text-dim); font-size: 0.9rem;
+            transition: opacity var(--tr-move) ease;
+        }
+        #editor.is-ready .editor-loading { opacity: 0; pointer-events: none; }
+
+        /* "Sección 2 de 3" under the page-setup fields. */
+        .ps-section { font-size: 0.78rem; color: var(--text-dim); margin: 2px 0 4px; }
+
+        /* Editor + comments side by side. #editor keeps its own height rules;
+           the row is what splits the width. */
+        #editorRow { flex: 1 1 auto; min-height: 0; display: flex; }
+        #editorRow > #editor { flex: 1 1 auto; min-width: 0; }
+
+        #commentsPanel
+        {
+            flex: 0 0 300px; max-width: 40vw; min-width: 0;
+            display: flex; flex-direction: column;
+            background: var(--card); border-left: 1px solid var(--line);
+        }
+        .cm-head
+        {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line);
+            font-size: 0.85rem; color: var(--text-dim);
+        }
+        .cm-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px; }
+
+        @media (max-width: 640px) { #commentsPanel { flex-basis: 100%; max-width: none; } }
+
+        /* The proofing-language checkboxes, one per vendored dictionary. */
+        .proof-langs { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0; }
+        .proof-langs label { display: flex; align-items: center; gap: 5px; font-size: 0.85rem; }
+
+        /* Símbolos popup — same shell as the table-borders one (.tb-popup). */
+        .sym-popup { width: 320px; max-width: calc(100vw - 16px); }
+        .sym-tabs  { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+        .sym-tab
+        {
+            font: inherit; font-size: 0.74rem; padding: 3px 8px; cursor: pointer;
+            color: var(--text-dim); background: transparent;
+            border: 1px solid var(--line); border-radius: var(--radius-pill);
+        }
+        .sym-tab.is-active { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+        .sym-grid  { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; max-height: 230px; overflow-y: auto; }
+        .sym-cell
+        {
+            font: inherit; font-size: 1rem; line-height: 1; cursor: pointer;
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            color: var(--text); background: transparent; border: 0; border-radius: var(--radius-s);
+        }
+        .sym-cell:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-symbols"]) { order: -3; }
+        #toolbar .superdoc-toolbar .sd-toolbar-item-ctn:has([data-item="btn-symbols"]) .sd-toolbar-item { width: 32px !important; }
+        #toolbar .superdoc-toolbar [data-item="btn-symbols"] svg text { fill: currentColor; stroke: none; }
+
+        /* Estadísticas: label left, number right, same rhythm as the shortcut sheet. */
+        .st-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
+        .st-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; padding: 5px 0; }
+        .st-row + .st-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+        .st-row b { font-variant-numeric: tabular-nums; }
+        .st-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 4px; }
+
+        /* Keyboard-shortcut sheet: one row per shortcut, key on the right. */
+        .sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+        .sc-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 5px 0; }
+        .sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+        .sc-row kbd
+        {
+            font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap;
+            color: var(--text-dim); border: 1px solid var(--line);
+            border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
+        }
+
+        /* "Guardado 12:04" — a quiet readout, not a control. Hidden on a phone,
+           where the top bar has no room to spare. */
+        .saved-at { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; margin-left: 6px; }
+        @media (max-width: 640px) { .saved-at { display: none; } }
+
+        /* SuperDoc editor mount — fills the rest of the column. In `contained`
+           mode (set in write.js) SuperDoc runs its own scroll container inside
+           this box, so it needs a real bounded height and must clip its own
+           overflow; the child rule makes the mounted .superdoc fill that height. */
+        #editor { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+        #editor > * { flex: 1 1 auto; min-height: 0; min-width: 0; }
+
+        /* The document surface is always a warm-beige paper (both themes — pure
+           white was visually harsh), so force a light colour context inside it:
+           keeps SuperDoc's overlay UI — the text caret (drawn with
+           `currentColor`), selection, system colours — dark and visible even
+           while the surrounding app chrome is in dark mode. And reset the
+           --sd-ui-* vars that the :root block above themed dark, so SuperDoc's
+           in-document surfaces (header/footer overlay, link popover, context
+           menu) stay on a light palette over the page. */
+        #editor
+        {
+            color-scheme: light; color: #1a1a1a;
+
+            --sd-ui-bg:                  #ffffff;
+            --sd-layout-page-bg:         #f2ecdf;   /* the paper sheet — light theme's --card2 (text-field bg), both modes */
+            --sd-ui-text:                #1c1c1e;
+            --sd-ui-text-muted:          #5f6368;
+            --sd-ui-text-disabled:       #9aa0a6;
+            --sd-ui-border:              #d7d7d7;
+            --sd-ui-hover-bg:            rgba(0, 0, 0, 0.06);
+            --sd-ui-active-bg:           #d2e3fc;
+            --sd-ui-disabled-bg:         #f1f3f4;
+            --sd-ui-toolbar-button-text: #3c4043;
+            --sd-ui-menu-header-bg:      #fafafa;
+            --sd-ui-menu-text-muted:     #888888;
+            --sd-ui-tooltip-bg:          #262626;
+            --sd-ui-tooltip-text:        #ffffff;
+            --sd-ui-shadow:              0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* SuperDoc's v2 caret doesn't blink — give it the usual blink. */
+        @keyframes write-caret-blink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
+        #editor .sd-v2-local-selection-caret { animation: write-caret-blink 1.06s step-end infinite; }
+
+        /* In print layout SuperDoc's layer stack shrink-wraps to the page width
+           and sits at the left edge of the flex container. Let it grow to the
+           full width so SuperDoc's own `margin: 0 auto` on the page centres it. */
+        #editor .superdoc__layers { flex: 1 1 auto; min-width: 0; width: 100%; }
+
+        /* Dialogs (open / save-as): .sheet-backdrop / .sheet / .field / inputs from app.css. */
+        /* Open = a plain folder-and-file browser: breadcrumb + one level at a time. */
+        /* .open-crumb / .open-list are the shared OFFICE CHROME block in shared/app.css
+           (Calc and Text get the same list from shared/office.js). Nothing local. */
+
+        /* Settings dialog: the ruler row is a checkbox, not a full-width control
+           (shared app.css only styles block labels). */
+        #settingsBackdrop .field label.check { display: flex; align-items: center; gap: 8px; margin-bottom: 0; font-size: 0.9rem; color: var(--text); cursor: pointer; }
+        #settingsBackdrop .field label.check input { width: auto; }
+
+        /* Table-borders popup (#tbPopup) — the toolbar button opens this inline,
+           chrome-free picker anchored under it. Sections, top to bottom: the ten
+           presets, five weights (thin to thick), four line styles (drawn as the
+           line itself), then a row split in two — the line colour (click opens
+           the native picker) and the standard round accent ✓ button. The whole
+           picked set is staged and applied only when that ✓ is clicked. Hover /
+           active tint matches the rest of the app (#writeTools .icon-btn:hover,
+           .open-list li:hover). */
+        .tb-popup
+        {
+            position: fixed; z-index: 150; display: none;
+            width: 220px; padding: 8px;
+            background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
+            box-shadow: 0 12px 32px var(--shadow);
+        }
+        .tb-popup.open      { display: block; }
+        .tb-popup .tb-sep   { height: 1px; margin: 8px 3px; background: var(--line); }
+
+        /* The icon controls (presets, weights, styles). The colour swatch and the
+           apply button below carry their own look — the apply button is the
+           shared round .btn .btn-primary (shared/ui.js, data-act="primary"). */
+        .tb-popup .tb-grid button,
+        .tb-popup .tb-lines button
+        {
+            border: none; background: transparent; color: var(--text);
+            padding: 0; cursor: pointer; border-radius: 7px;
+            transition: background-color 0.12s ease;
+        }
+        .tb-popup .tb-grid button:hover,
+        .tb-popup .tb-lines button:hover                { background: color-mix(in srgb, var(--text) 10%, transparent); }
+        .tb-popup .tb-grid button[aria-pressed="true"],
+        .tb-popup .tb-lines button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+        .tb-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+        .tb-grid button     { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; padding: 5px; }
+        .tb-grid button svg { width: 100%; height: 100%; }
+
+        .tb-lines { display: flex; gap: 2px; }
+        .tb-lines button        { flex: 1 1 0; display: flex; align-items: center; justify-content: center; height: 30px; padding: 0 6px; }
+        .tb-lines.tb-weight i   { display: block; width: 100%; background: var(--text); border-radius: 1px; }
+        .tb-lines.tb-style  i   { display: block; width: 100%; }
+
+        /* Last row, two columns: the line-colour swatch and the standard round
+           accent apply button (the ✓). Nothing in the popup touches the table
+           until that button is clicked. */
+        .tb-popup .tb-last-row { display: grid; grid-template-columns: auto auto; justify-content: center; gap: 28px; align-items: center; }
+        .tb-popup .tb-color-swatch
+        {
+            display: block; width: 76px; height: 22px; cursor: pointer;
+            border: 1px solid var(--line); border-radius: 7px;
+            transition: border-color 0.12s ease;
+        }
+        .tb-popup .tb-color-swatch:hover { border-color: var(--text-dim); }
+        .tb-popup #tbApplyBtn     { width: 22px; height: 22px; }
+        .tb-popup #tbApplyBtn svg { width: 12px; height: 12px; }
+        .tb-popup input[type=color]
+        {
+            position: absolute; left: 12px; bottom: 10px;
+            width: 1px; height: 1px; opacity: 0; pointer-events: none;
+        }
+
+        /* .sheet-actions / .btn / .btn-* live in ../shared/theme.css */
+
+        /* ------------------------------------------------------------------ *
+         * PRINT  (and "Guardar como PDF", which is the same browser dialog)
+         *
+         * SuperDoc has no print API at all, so this is entirely ours. The good
+         * news from measuring the live DOM: the pages are real, in normal flow
+         * (position: relative, no transform, all of them in the DOM even for a
+         * long document), so a page break per .superdoc-page is enough — there
+         * is nothing to force-render first.
+         *
+         * The work is undoing the app shell: #editor is a fixed-height flex
+         * child with overflow:hidden and SuperDoc scrolls inside it, which on
+         * paper would print exactly one screenful.
+         * ------------------------------------------------------------------ */
+        /* Only the margin is static. The SHEET SIZE is written at print time by
+           write.js (#printPageSize), from the document's own page box — printing
+           an A4 document on the printer's default Letter sheet spills every page
+           onto two. */
+        @page { margin: 0; }
+
+        @media print
+        {
+            /* app chrome — none of it belongs on paper */
+            .topbar, #toolbarRow, #menuBar, .menu-panel, #topMenu, #tbPopup, #symPopup, .toast,
+            .sheet-backdrop, .editor-loading, .session-bar, .nayive-home-link,
+            #commentsPanel { display: none !important; }
+
+            html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+
+            #app, #editorRow
+            { display: block !important; height: auto !important; overflow: visible !important; flex: none !important; }
+
+            /* let the document out of its box */
+            #editor
+            {
+                position: static !important; flex: none !important;
+                height: auto !important; min-height: 0 !important;
+                max-height: none !important; overflow: visible !important;
+                display: block !important; background: #fff !important;
+            }
+            #editor * { overflow: visible !important; }
+
+            /* SuperDoc's own scroll / zoom wrappers */
+            #editor .superdoc, #editor .superdoc__layers, #editor .superdoc__document,
+            #editor .v2-super-editor__visuals, #editor .v2-super-editor__stage,
+            #editor .superdoc-layout
+            {
+                height: auto !important; max-height: none !important; transform: none !important;
+
+                /* On screen the pages are separated by a 24px gap so they read as
+                   separate sheets. On paper that gap is real height: three A4
+                   pages plus two gaps is 48px more than three sheets, which is
+                   exactly one extra blank sheet at the end of the PDF. */
+                gap: 0 !important; row-gap: 0 !important; column-gap: 0 !important;
+                padding: 0 !important;
+            }
+
+            /* one sheet of paper per page, and white paper — the on-screen
+               beige is a reading comfort, not part of the document */
+            #editor .superdoc-page
+            {
+                break-inside: avoid; page-break-inside: avoid;
+                margin: 0 !important; box-shadow: none !important; border: 0 !important;
+                background: #fff !important; overflow: hidden !important;
+            }
+
+            /* break BEFORE each page after the first, never AFTER: a trailing
+               break-after emits one extra blank sheet at the end of the PDF
+               (caught in testing — a 4-page document printed as 5). */
+            /* SuperDoc already puts `break-after: page` on every .superdoc-page —
+               INCLUDING the last one, which costs a blank sheet at the end of
+               every print (a 1-page document came out as a 2-page PDF). The rule
+               is not in document.styleSheets (adopted stylesheet), so plain
+               specificity cannot reach it: !important is what cancels it. */
+            #editor .superdoc-page:last-child
+            { break-after: auto !important; page-break-after: auto !important; }
+
+            /* editing furniture */
+            #editor .sd-v2-local-selection-caret,
+            #editor [data-sd-hf-exit],
+            #editor [class*="selection"], #editor [class*="cursor"] { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <div class="topbar">
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
+            <h1>Write</h1>
+            <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
+            <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
+
+            <!-- Phone only (see the phone block in the CSS above): "Aa" folds the
+                 formatting row away, "⋮" holds the app's own buttons. write.js
+                 moves the toolbar's "?" in here too while the phone layout is on. -->
+            <div id="topActions" class="topbar-actions">
+                <button id="fmtBtn" class="icon-btn" type="button" aria-expanded="true" data-i18n-attr="title:write.formatBar, aria-label:write.formatBar">Aa</button>
+                <!-- Phone only: fit the TEXT column instead of the whole sheet, so
+                     the words are readable. Pinch-zoom is off suite-wide. -->
+                <button id="fitBtn" class="icon-btn" type="button" aria-pressed="true" data-i18n-attr="title:write.fitText, aria-label:write.fitText">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 8 3 12 7 16"></polyline><polyline points="17 8 21 12 17 16"></polyline><line x1="3" y1="12" x2="21" y2="12"></line></svg>
+                </button>
+                <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                </button>
+            </div>
+
+            <!-- Write's two menu chromes, the way Calendar switches day / week /
+                 month: two icon buttons in the header, the current one filled
+                 with the accent. Tooltips only - a label here would push the
+                 file name off a phone. -->
+            <button id="chromeToolbarBtn" class="icon-btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="title:ui.chromeToolbar, aria-label:ui.chromeToolbar">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
+            </button>
+            <button id="chromeMenusBtn" class="icon-btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="title:ui.chromeMenus, aria-label:ui.chromeMenus">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
+            </button>
+
+            <!-- "Guardado 12:04". Its own element, not the plug's title: shared/ui.js
+                 rewrites that title on every store state change. -->
+            <span id="savedAt" class="saved-at"></span>
+
+            <div id="syncIndicator" class="sync-indicator" data-i18n-attr="title:ui.sync.synced"></div>
+        </div>
+
+        <!-- Phone "⋮" menu. Built by write.js from the real buttons in
+             #writeTools (glyph + title cloned), and each entry just clicks the
+             button it came from - so there is still ONE set of handlers. -->
+        <div id="topMenu" class="top-menu" hidden></div>
+
+        <!-- Pull-down menu bar. Empty in the source: write.js builds it from
+             the MENUS table, and it stays hidden while the toolbar chrome is
+             the chosen one (Ajustes ▸ Menús). -->
+        <div id="menuBar" role="menubar" hidden></div>
+
+        <!-- Toolbar strip: SuperDoc renders its editing controls into #toolbar;
+             #writeTools carries the app's own file/page/proofing controls, split
+             off by a vertical rule. The whole strip wraps to more lines as it
+             gets narrower. -->
+        <div id="toolbarRow">
+            <div id="toolbar"></div>
+
+            <!-- Phone only: opens the rest of the toolbar in place (see the phone
+                 block in the CSS above). -->
+            <button id="moreToolsBtn" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreTools, aria-label:ui.moreTools">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+            </button>
+
+            <div id="writeTools">
+                <input id="importInput" type="file" accept=".docx" style="display:none">
+                <span class="vsep" aria-hidden="true"></span>
+
+                <button id="newBtn" class="icon-btn" data-i18n-attr="title:write.newDoc, aria-label:write.newDoc">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button id="openBtn" class="icon-btn" data-i18n-attr="title:ui.openDoc, aria-label:ui.openDoc">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>
+                </button>
+                <button id="importBtn" class="icon-btn" data-i18n-attr="title:ui.importDevice, aria-label:ui.importDevice">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </button>
+                <button id="saveAsBtn" class="icon-btn" data-i18n-attr="title:ui.saveAs, aria-label:ui.saveAs">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+                </button>
+                <button id="commentsBtn" class="icon-btn" type="button" aria-expanded="false" data-i18n-attr="title:write.comments, aria-label:write.comments">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </button>
+                <button id="tplBtn" class="icon-btn" data-i18n-attr="title:write.templates, aria-label:write.templates">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="8" x2="21" y2="8"></line><line x1="9" y1="8" x2="9" y2="21"></line></svg>
+                </button>
+                <button id="restoreBtn" class="icon-btn" data-i18n-attr="title:write.restore, aria-label:write.restore">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                </button>
+                <button id="printBtn" class="icon-btn" data-i18n-attr="title:write.print, aria-label:write.print">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                </button>
+                <button id="pdfBtn" class="icon-btn" data-i18n-attr="title:write.savePdf, aria-label:write.savePdf">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="19" font-size="7" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>
+                </button>
+                <button id="pageSetupBtn" class="icon-btn" data-i18n-attr="title:write.pageSetup, aria-label:write.pageSetup">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line></svg>
+                </button>
+                <button id="headerBtn" class="icon-btn" data-i18n-attr="title:write.header, aria-label:write.header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="6.5" x2="17" y2="6.5" stroke-width="2.6"></line><line x1="8" y1="12" x2="16" y2="12" stroke-dasharray="1 3"></line><line x1="8" y1="15" x2="14" y2="15" stroke-dasharray="1 3"></line></svg>
+                </button>
+                <button id="footerBtn" class="icon-btn" data-i18n-attr="title:write.footer, aria-label:write.footer">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="17.5" x2="17" y2="17.5" stroke-width="2.6"></line><line x1="8" y1="9" x2="16" y2="9" stroke-dasharray="1 3"></line><line x1="8" y1="12" x2="14" y2="12" stroke-dasharray="1 3"></line></svg>
+                </button>
+                <button id="pageNumBtn" class="icon-btn" disabled data-i18n-attr="title:write.pageNumber, aria-label:write.pageNumber">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="7" y1="7" x2="17" y2="7" stroke-dasharray="1 3"></line><line x1="7" y1="10" x2="15" y2="10" stroke-dasharray="1 3"></line><text x="12" y="20" font-size="8" font-family="sans-serif" text-anchor="middle" fill="currentColor" stroke="none">1</text></svg>
+                </button>
+
+                <button id="paraBtn" class="icon-btn" data-i18n-attr="title:write.paragraph, aria-label:write.paragraph">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="5" x2="20" y2="5"></line><line x1="8" y1="10" x2="20" y2="10"></line><line x1="8" y1="14" x2="20" y2="14"></line><line x1="4" y1="19" x2="20" y2="19"></line><line x1="4" y1="9" x2="4" y2="15" stroke-width="2.6"></line></svg>
+                </button>
+                <button id="statsBtn" class="icon-btn" data-i18n-attr="title:write.stats, aria-label:write.stats">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
+                </button>
+                <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+
+                <button id="scBtn" class="icon-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+                </button>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="editorRow">
+        <div id="editor">
+            <!-- Our own "opening…" overlay. SuperDoc has one, but its normalizer
+                 ignores any texts passed in, so it is permanently English; it is
+                 turned off in write.js (ui.loading: false) and this stands in.
+                 write.js removes the class once the editor is ready. -->
+            <div id="editorLoading" class="editor-loading"><span data-i18n="write.loadingDoc"></span></div>
+        </div>
+
+            <!-- SuperDoc mounts its comment list into #commentsList; the panel is
+                 hidden until the button asks for it (addCommentsList / remove). -->
+            <aside id="commentsPanel" hidden>
+                <div class="cm-head">
+                    <span data-i18n="write.comments"></span>
+                    <button id="commentsCloseBtn" class="icon-btn sm" type="button" data-i18n-attr="title:ui.close, aria-label:ui.close">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div id="commentsList" class="cm-list"></div>
+            </aside>
+        </div>
+
+    </div>
+
+    <!-- Open dialog -->
+    <div id="openBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="ui.openDoc"></h2>
+            <!-- The last ten documents opened, above the folder listing. -->
+            <div id="openRecent" hidden></div>
+            <div id="openCrumb" class="open-crumb"></div>
+            <ul id="openList" class="open-list"></ul>
+            <div class="sheet-actions">
+                <button id="openCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page-setup dialog -->
+    <div id="pageSetupBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="write.pageSetup"></h2>
+            <div class="field">
+                <label for="psSize" data-i18n="write.size"></label>
+                <select id="psSize">
+                    <option value="A4" data-i18n="write.paperA4"></option>
+                    <option value="Letter" data-i18n="write.paperLetter"></option>
+                    <option value="Legal" data-i18n="write.paperLegal"></option>
+                    <option value="A3" data-i18n="write.paperA3"></option>
+                    <option value="A5" data-i18n="write.paperA5"></option>
+                    <option value="B5" data-i18n="write.paperB5"></option>
+                    <option value="custom" data-i18n="write.paperCustom"></option>
+                </select>
+            </div>
+            <div class="field-row" id="psCustomRow" hidden>
+                <div class="field"><label for="psWidth" data-i18n="write.paperWidth"></label><input type="text" id="psWidth" inputmode="decimal"></div>
+                <div class="field"><label for="psHeight" data-i18n="write.paperHeight"></label><input type="text" id="psHeight" inputmode="decimal"></div>
+            </div>
+            <div class="field">
+                <label for="psOrient" data-i18n="write.orientation"></label>
+                <select id="psOrient">
+                    <option value="portrait" data-i18n="write.portrait"></option>
+                    <option value="landscape" data-i18n="write.landscape"></option>
+                </select>
+            </div>
+            <div class="field-row">
+                <div class="field"><label for="psTop" data-i18n="write.marginTop"></label><input type="text" id="psTop" inputmode="decimal"></div>
+                <div class="field"><label for="psBottom" data-i18n="write.marginBottom"></label><input type="text" id="psBottom" inputmode="decimal"></div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label for="psLeft" data-i18n="write.marginLeft"></label><input type="text" id="psLeft" inputmode="decimal"></div>
+                <div class="field"><label for="psRight" data-i18n="write.marginRight"></label><input type="text" id="psRight" inputmode="decimal"></div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label for="psColumns" data-i18n="write.columns"></label>
+                    <select id="psColumns">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                    </select>
+                </div>
+                <div class="field"><label class="check"><input type="checkbox" id="psLineNumbers"> <span data-i18n="write.lineNumbers"></span></label></div>
+            </div>
+
+            <!-- Only shown when the document has more than one section. -->
+            <p id="psSection" class="dialog-text ps-section" hidden></p>
+            <div class="sheet-actions">
+                <button id="pageSetupCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="pageSetupConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
+         document goes instead of dropping it in the folder Write was opened in. -->
+    <div id="saveAsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="ui.saveAs"></h2>
+            <div class="field">
+                <label for="saveName" data-i18n="ui.fileName"></label>
+                <input type="text" id="saveName" placeholder="documento.docx" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="saveDirBtn" data-i18n="ui.folder"></label>
+                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
+                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
+                </button>
+            </div>
+            <div class="sheet-actions">
+                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Párrafo. Each group is applied only when something in it was touched:
+         paragraph properties cannot be read back, so applying the whole form
+         would reset whatever the user did not look at. -->
+    <div id="paraBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--wide">
+            <h2 data-i18n="write.paragraph"></h2>
+
+            <div class="section-label" data-i18n="write.paSpacingLabel"></div>
+            <div class="field-row">
+                <div class="field"><label for="paBefore" data-i18n="write.paBefore"></label><input type="text" id="paBefore" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paAfter" data-i18n="write.paAfter"></label><input type="text" id="paAfter" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paLine" data-i18n="write.paLine"></label>
+                    <select id="paLine">
+                        <option value="1">1</option>
+                        <option value="1.15">1,15</option>
+                        <option value="1.5">1,5</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section-label" data-i18n="write.paIndentLabel"></div>
+            <div class="field-row">
+                <div class="field"><label for="paLeft" data-i18n="write.paLeft"></label><input type="text" id="paLeft" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paRight" data-i18n="write.paRight"></label><input type="text" id="paRight" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paSpecial" data-i18n="write.paSpecial"></label>
+                    <select id="paSpecial">
+                        <option value="none" data-i18n="write.paSpecialNone"></option>
+                        <option value="first" data-i18n="write.paSpecialFirst"></option>
+                        <option value="hanging" data-i18n="write.paSpecialHanging"></option>
+                    </select>
+                </div>
+                <div class="field" id="paSpecialByField" hidden><label for="paSpecialBy" data-i18n="write.paSpecialBy"></label><input type="text" id="paSpecialBy" inputmode="decimal" value="1,25"></div>
+            </div>
+
+            <div class="section-label" data-i18n="write.paFlowLabel"></div>
+            <div class="field"><label class="check"><input type="checkbox" id="paKeepNext"> <span data-i18n="write.paKeepNext"></span></label></div>
+            <div class="field"><label class="check"><input type="checkbox" id="paKeepLines"> <span data-i18n="write.paKeepLines"></span></label></div>
+
+            <div class="section-label" data-i18n="write.paLookLabel"></div>
+            <div class="field-row">
+                <div class="field"><label for="paShade" data-i18n="write.paShade"></label><input type="color" id="paShade" value="#ffffff"></div>
+                <div class="field"><label for="paBorderSide" data-i18n="write.paBorderSide"></label>
+                    <select id="paBorderSide">
+                        <option value="none" data-i18n="write.bNone"></option>
+                        <option value="all" data-i18n="write.bAll"></option>
+                        <option value="top" data-i18n="write.bTop"></option>
+                        <option value="bottom" data-i18n="write.bBottom"></option>
+                        <option value="left" data-i18n="write.bLeft"></option>
+                        <option value="right" data-i18n="write.bRight"></option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row" id="paBorderHow" hidden>
+                <div class="field"><label for="paBorderStyle" data-i18n="write.paBorderStyle"></label>
+                    <select id="paBorderStyle">
+                        <option value="single" data-i18n="write.lineSolid"></option>
+                        <option value="dashed" data-i18n="write.lineDashed"></option>
+                        <option value="dotted" data-i18n="write.lineDotted"></option>
+                        <option value="double" data-i18n="write.lineDouble"></option>
+                    </select>
+                </div>
+                <div class="field"><label for="paBorderSize" data-i18n="write.paBorderSize"></label>
+                    <select id="paBorderSize">
+                        <option value="0.5">0,5 pt</option>
+                        <option value="1" selected>1 pt</option>
+                        <option value="1.5">1,5 pt</option>
+                        <option value="2.25">2,25 pt</option>
+                        <option value="3">3 pt</option>
+                    </select>
+                </div>
+                <div class="field"><label for="paBorderColor" data-i18n="write.lineColor"></label><input type="color" id="paBorderColor" value="#444444"></div>
+            </div>
+
+            <div class="section-label" data-i18n="write.paListLabel"></div>
+            <div class="field-row">
+                <div class="field"><label for="paListLevel" data-i18n="write.paListLevel"></label>
+                    <select id="paListLevel"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                </div>
+                <div class="field"><label for="paListFormat" data-i18n="write.paListFormat"></label>
+                    <select id="paListFormat">
+                        <option value="decimal">1, 2, 3</option>
+                        <option value="lowerLetter">a, b, c</option>
+                        <option value="upperLetter">A, B, C</option>
+                        <option value="lowerRoman">i, ii, iii</option>
+                        <option value="upperRoman">I, II, III</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section-label" data-i18n="write.paTabsLabel"></div>
+            <div class="field-row">
+                <div class="field"><label for="paTabPos" data-i18n="write.paTabPos"></label><input type="text" id="paTabPos" inputmode="decimal" value="0"></div>
+                <div class="field"><label for="paTabAlign" data-i18n="write.paTabAlign"></label>
+                    <select id="paTabAlign">
+                        <option value="left" data-i18n="write.sc.alignLeft"></option>
+                        <option value="center" data-i18n="write.sc.alignCenter"></option>
+                        <option value="right" data-i18n="write.sc.alignRight"></option>
+                        <option value="decimal" data-i18n="write.paTabDecimal"></option>
+                    </select>
+                </div>
+            </div>
+            <p class="dialog-text st-note" data-i18n="write.paTouchNote"></p>
+            <p class="dialog-text st-note" data-i18n="write.paRenderNote"></p>
+
+            <div class="sheet-actions">
+                <button id="paraCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="paraConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plantillas: every .docx in the folder you pick. -->
+    <div id="tplBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="write.templates"></h2>
+            <div id="tplCrumb" class="open-crumb"></div>
+            <ul id="tplList" class="open-list"></ul>
+            <div class="sheet-actions">
+                <button id="tplCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+                <div class="sheet-actions-left">
+                    <button id="tplChangeBtn" class="btn btn-secondary" data-i18n="write.changeTemplatesDir"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Símbolos: an anchored popup off the toolbar's Ω button. -->
+    <div id="symPopup" class="tb-popup sym-popup" role="menu" data-i18n-attr="aria-label:write.symbols">
+        <div id="symTabs" class="sym-tabs"></div>
+        <div id="symGrid" class="sym-grid"></div>
+    </div>
+
+    <!-- Estadísticas. Read on open, not live — see openStats() in write.js. -->
+    <div id="statsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.stats"></h2>
+            <div class="st-list">
+                <div class="st-row"><span data-i18n="write.statWords"></span>       <b id="stWords">0</b></div>
+                <div class="st-row"><span data-i18n="write.statChars"></span>       <b id="stChars">0</b></div>
+                <div class="st-row"><span data-i18n="write.statCharsNoSp"></span>   <b id="stCharsNs">0</b></div>
+                <div class="st-row"><span data-i18n="write.statParagraphs"></span>  <b id="stParas">0</b></div>
+                <div class="st-row"><span data-i18n="write.statPages"></span>       <b id="stPages">1</b></div>
+            </div>
+            <p class="dialog-text st-note" data-i18n="write.statNote"></p>
+            <div class="sheet-actions">
+                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard shortcuts. The rows are built by write.js from the same
+         SHORTCUTS table the keys themselves come from, so the two cannot drift. -->
+    <div id="scBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.shortcuts"></h2>
+            <div id="scList" class="sc-list"></div>
+            <div class="sheet-actions">
+                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings dialog — the gear button. Holds what used to be four separate
+         toolbar controls: SuperDoc's own document-mode / ruler / measurement-unit
+         widgets and the app's proofing-language <select>. -->
+    <div id="settingsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="ui.settings"></h2>
+            <div class="field">
+                <label for="setMode" data-i18n="write.mode"></label>
+                <select id="setMode">
+                    <option value="editing" data-i18n="write.modeEdit"></option>
+                    <option value="suggesting" data-i18n="write.modeSuggest"></option>
+                    <option value="viewing" data-i18n="write.modeRead"></option>
+                </select>
+            </div>
+            <div class="field">
+                <label class="check"><input type="checkbox" id="setRuler"> <span data-i18n="write.showRuler"></span></label>
+            </div>
+            <div class="field">
+                <label for="setUnit" data-i18n="write.unit"></label>
+                <select id="setUnit">
+                    <option value="cm" data-i18n="write.unitCm"></option>
+                    <option value="in" data-i18n="write.unitIn"></option>
+                </select>
+            </div>
+            <div class="field">
+                <label data-i18n="write.proofLang"></label>
+<div id="proofLangs" class="proof-langs"></div>
+            </div>
+            <div class="field">
+                <label class="check"><input type="checkbox" id="setAutocorrect"> <span data-i18n="write.autocorrect"></span></label>
+                <p class="dialog-text st-note" data-i18n="write.autocorrectNote"></p>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="settingsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="settingsConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- The two drop-down panels: one for a menu, one for its submenu. Both are
+         built fresh on every open (an entry's tick and its greying are read from
+         SuperDoc at that moment), and both live at body level so .topbar's
+         overflow cannot clip them. -->
+    <div id="menuPanel" class="top-menu menu-panel" role="menu" hidden></div>
+    <div id="menuSub"   class="top-menu menu-panel" role="menu" hidden></div>
+
+    <!-- Insertar ▸ Imagen. SuperDoc's own toolbar button is not reachable with
+         the strip collapsed, so the menu picks the file itself and hands the
+         engine a data URL (shrunk to 1600 px by fileToDataUrl, as on paste). -->
+    <input id="imgInput" type="file" accept="image/*" style="display:none">
+
+    <!-- Insertar ▸ Hipervínculo. The `link` command takes { href } and wraps the
+         selection; SuperDoc's own link popover hangs off its toolbar button. -->
+    <div id="linkBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.sc.link"></h2>
+            <div class="field">
+                <label for="linkHref" data-i18n="write.linkAddress"></label>
+                <input id="linkHref" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+            </div>
+            <div class="sheet-actions">
+                <button id="linkCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
+                <button id="linkConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table-borders popup — opened by the toolbar's "Bordes de tabla" button,
+         anchored just under it. Pick a preset plus weight / line style / colour,
+         then click the ✓ — nothing touches the table until then. The picked
+         weight / style / colour are sticky (remembered after a successful apply). -->
+    <div id="tbPopup" class="tb-popup" role="menu" data-i18n-attr="aria-label:write.tableBorders">
+        <div class="tb-grid">
+            <button type="button" data-tb="all" data-i18n-attr="title:write.bAll, aria-label:write.bAll">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+            </button>
+            <button type="button" data-tb="box" data-i18n-attr="title:write.bOutline, aria-label:write.bOutline">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="2.4"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="1.4" stroke-opacity=".3"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="1.4" stroke-opacity=".3"></line></svg>
+            </button>
+            <button type="button" data-tb="inside" data-i18n-attr="title:write.bInner, aria-label:write.bInner">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" stroke-width="1.4" stroke-opacity=".3"></rect><line x1="4" y1="12" x2="20" y2="12" stroke-width="2.4"></line><line x1="12" y1="4" x2="12" y2="20" stroke-width="2.4"></line></svg>
+            </button>
+            <button type="button" data-tb="none" data-i18n-attr="title:write.bNone, aria-label:write.bNone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2" stroke-opacity=".55"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+            </button>
+            <button type="button" data-tb="top" data-i18n-attr="title:write.bTop, aria-label:write.bTop">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="4" x2="20" y2="4" stroke-width="2.8"></line></svg>
+            </button>
+            <button type="button" data-tb="bottom" data-i18n-attr="title:write.bBottom, aria-label:write.bBottom">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="20" x2="20" y2="20" stroke-width="2.8"></line></svg>
+            </button>
+            <button type="button" data-tb="left" data-i18n-attr="title:write.bLeft, aria-label:write.bLeft">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="4" x2="4" y2="20" stroke-width="2.8"></line></svg>
+            </button>
+            <button type="button" data-tb="right" data-i18n-attr="title:write.bRight, aria-label:write.bRight">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="20" y1="4" x2="20" y2="20" stroke-width="2.8"></line></svg>
+            </button>
+            <button type="button" data-tb="insideH" data-i18n-attr="title:write.bInnerH, aria-label:write.bInnerH">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="12" y1="4" x2="12" y2="20"></line></g><line x1="4" y1="12" x2="20" y2="12" stroke-width="2.8"></line></svg>
+            </button>
+            <button type="button" data-tb="insideV" data-i18n-attr="title:write.bInnerV, aria-label:write.bInnerV">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="1.4" stroke-opacity=".28"><rect x="4" y="4" width="16" height="16"></rect><line x1="4" y1="12" x2="20" y2="12"></line></g><line x1="12" y1="4" x2="12" y2="20" stroke-width="2.8"></line></svg>
+            </button>
+        </div>
+
+        <div class="tb-sep"></div>
+
+        <div class="tb-lines tb-weight">
+            <button type="button" data-tbw="0.5"  data-i18n-attr="title:write.pt05, aria-label:write.pt05"><i style="height:1px"></i></button>
+            <button type="button" data-tbw="1"    data-i18n-attr="title:write.pt1, aria-label:write.pt1"><i style="height:2px"></i></button>
+            <button type="button" data-tbw="1.5"  data-i18n-attr="title:write.pt15, aria-label:write.pt15"><i style="height:3px"></i></button>
+            <button type="button" data-tbw="2.25" data-i18n-attr="title:write.pt225, aria-label:write.pt225"><i style="height:4px"></i></button>
+            <button type="button" data-tbw="3"    data-i18n-attr="title:write.pt3, aria-label:write.pt3"><i style="height:6px"></i></button>
+        </div>
+
+        <div class="tb-sep"></div>
+
+        <div class="tb-lines tb-style">
+            <button type="button" data-tbs="single" data-i18n-attr="title:write.lineSolid, aria-label:write.lineSolid"><i style="border-top:2px solid var(--text)"></i></button>
+            <button type="button" data-tbs="dashed" data-i18n-attr="title:write.lineDashed, aria-label:write.lineDashed"><i style="border-top:2px dashed var(--text)"></i></button>
+            <button type="button" data-tbs="dotted" data-i18n-attr="title:write.lineDotted, aria-label:write.lineDotted"><i style="border-top:2px dotted var(--text)"></i></button>
+            <button type="button" data-tbs="double" data-i18n-attr="title:write.lineDouble, aria-label:write.lineDouble"><i style="border-top:3px double var(--text)"></i></button>
+        </div>
+
+        <div class="tb-sep"></div>
+
+        <div class="tb-last-row">
+            <button type="button" id="tbColorSwatch" class="tb-color-swatch" data-i18n-attr="title:write.lineColor, aria-label:write.lineColor"></button>
+            <button type="button" id="tbApplyBtn" data-act="primary" data-i18n-attr="title:write.applyBorders"></button>
+        </div>
+        <input type="color" id="tbColorInput" value="#000000" tabindex="-1" aria-hidden="true">
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module" src="write.js"></script>
+</body>
+</html>

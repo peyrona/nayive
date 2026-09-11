@@ -1,0 +1,1037 @@
+<!-- index.html - Habits: daily routines, one tap a day. Everything on screen
+     lives here; the day / streak arithmetic lives in habits.js. One file per
+     user: data/habits/habits.json (see docs/habits-app.md). -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in, and every inline script below may call it. -->
+    <script src="../shared/i18n.js"></script>
+    <title>Habits</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22V10'/%3E%3Cpath d='M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z'/%3E%3Cpath d='M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <style>
+        /* Base reset, card shell (.page/.page-inner/.card), .header, .icon-btn,
+           .pill, .tag, .card-row, .sheet and inputs all come from ../shared/app.css.
+           Only what is unique to Habits lives here. */
+
+
+        /* HABIT COLOURS. The same eight identity hues Split gives its people
+           (split/index.html), so the suite has ONE palette. Identity colours,
+           not theme colours: the same in light and dark, white reads on all. */
+        [data-c="0"] { --h-color: hsl(170 40% 38%); }
+        [data-c="1"] { --h-color: hsl(215 45% 50%); }
+        [data-c="2"] { --h-color: hsl(345 45% 52%); }
+        [data-c="3"] { --h-color: hsl(35 55% 46%); }
+        [data-c="4"] { --h-color: hsl(275 35% 52%); }
+        [data-c="5"] { --h-color: hsl(95 35% 40%); }
+        [data-c="6"] { --h-color: hsl(15 50% 52%); }
+        [data-c="7"] { --h-color: hsl(200 25% 45%); }
+
+        /* THE TWO VIEWS: Hoy | Mes. They ride IN the header row (inside
+           .header-actions, before the [+]) so they cost no vertical space -
+           Habits shares a Planner pane with Tasks. The base .tabs rule is
+           still used by #daysPresets inside the sheet. */
+        .tabs                { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+
+        /* In the header the two pills hug the LEFT edge and the buttons the RIGHT
+           one: `margin-right: auto` on the pills eats all the slack between them.
+           For that to work the <h1> must stop growing (the shared rule makes it
+           flex: 1 1 auto), or it would swallow the slack first. */
+        .header h1           { flex: 0 1 auto; }
+        .header .tabs        { margin: 0 auto 0 0; flex-wrap: nowrap; }
+
+        /* Habits is the narrowest pane in Planner (25% of the window, and less
+           if the splitter is pushed). Let the button group fold instead of
+           spilling out of the card. */
+        .header-actions      { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+        .today-date          { margin: -4px 0 10px; font-size: 0.8rem; color: var(--text-dim); }
+
+        /* LISTS. A row is a .card-row (shared) holding the hue icon, the name +
+           meta (a click target that opens the sheet) and the big check button. */
+        .list                { display: flex; flex-direction: column; gap: 6px; }
+        .habit-row           { padding: 8px 10px 8px 12px; }
+        .h-icon
+        {
+            display: inline-flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+            color: var(--h-color); background: color-mix(in srgb, var(--h-color) 16%, transparent);
+        }
+        .h-icon svg          { width: 20px; height: 20px; }
+        .row-main            { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+        .row-main:focus      { outline: none; }
+        .row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-s); }
+        .row-title
+        {
+            font-size: 0.93rem; font-weight: 600; line-height: 1.3;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .row-meta
+        {
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+            margin-top: 4px; font-size: 0.74rem; color: var(--text-dim);
+        }
+        .habit-row.off .h-icon,
+        .habit-row.off .row-title,
+        .habit-row.archived .h-icon,
+        .habit-row.archived .row-title { opacity: 0.55; }     /* not due today / archived: quieter, still there */
+
+        /* "Ayer ✗": yesterday was due and is not marked. A tap fixes it. */
+        .fix-chip
+        {
+            padding: 3px 9px; border-radius: var(--radius-pill);
+            border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+            background: color-mix(in srgb, var(--danger) 10%, transparent);
+            color: var(--danger); font: inherit; font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        }
+        .fix-chip:hover      { background: color-mix(in srgb, var(--danger) 18%, transparent); }
+
+        /* THE CHECK BUTTON: 48px so a thumb cannot miss it. Hollow in the
+           habit's colour; filled when the day is done. A counted habit shows "2/3". */
+        .check-btn
+        {
+            display: inline-flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 48px; height: 48px; padding: 0; border-radius: 50%;
+            border: 2px solid var(--h-color); background: transparent; color: var(--h-color);
+            font: inherit; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+            cursor: pointer; transition: background-color var(--tr-fast), color var(--tr-fast), transform var(--tr-fast);
+        }
+        .check-btn svg       { width: 24px; height: 24px; }
+        .check-btn:active    { transform: scale(0.92); }
+        .check-btn.done      { background: var(--h-color); color: white; }
+        .check-btn:focus     { outline: none; }
+        .check-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .home-block          { margin-top: 18px; }
+        .archived-toggle     { margin-top: 18px; }
+
+        /* MONTH GRID: habits down, days across. Wider than a phone, so it
+           scrolls sideways inside its own box while the name column stays put.
+           On PC / tablet the card itself widens for this view (override of the
+           460px card shell): a whole month of 31 columns fits without scrolling. */
+        @media (min-width: 641px) { .page-inner.month { max-width: 1040px; } }
+        .month-nav           { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 10px; }
+        .month-nav strong    { min-width: 6em; text-align: center; font-variant-numeric: tabular-nums; }
+        .grid-wrap           { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+        .mgrid               { border-collapse: separate; border-spacing: 0; }
+        .mgrid th,
+        .mgrid td            { padding: 0; }
+        .mgrid th.name
+        {
+            position: sticky; left: 0; z-index: 1; background: var(--card);
+            text-align: left; min-width: 120px; max-width: 150px; padding-right: 8px;
+        }
+        .mgrid th.day
+        {
+            width: 28px; min-width: 28px; height: 26px; text-align: center;
+            font-size: 0.68rem; font-weight: 600; color: var(--text-dim);
+        }
+        .mgrid th.day.we     { color: var(--text-faint); }
+        .mgrid td.cell       { width: 28px; min-width: 28px; height: 34px; text-align: center; vertical-align: middle; }
+        .mgrid .today        { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+        .mgrid th.day.today  { color: var(--accent); border-radius: 6px 6px 0 0; }
+        .mgrid tr:last-child td.today { border-radius: 0 0 6px 6px; }
+        .dot                 { display: inline-block; width: 13px; height: 13px; border-radius: 50%; }
+        .dot.on              { background: var(--h-color); }
+        .dot.miss            { border: 1.5px solid color-mix(in srgb, var(--h-color) 55%, transparent); }
+        .name-btn
+        {
+            display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+            padding: 4px 0; border: none; background: none; font: inherit; color: inherit;
+            text-align: left; cursor: pointer;
+        }
+        .name-btn .h-icon    { width: 26px; height: 26px; }
+        .name-btn .h-icon svg { width: 15px; height: 15px; }
+        .name-btn .nm        { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 600; }
+        .hint                { margin: 6px 0 0; font-size: 0.78rem; color: var(--text-dim); }
+
+        /* EMPTY STATES */
+        .empty
+        {
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            padding: 36px 10px 18px; color: var(--text-faint);
+        }
+        .empty svg           { margin-bottom: 10px; opacity: 0.6; }
+        .empty p             { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
+        .empty p + p         { margin-top: 4px; font-size: 0.8rem; font-weight: 400; color: var(--text-faint); }
+
+        /* THE HABIT SHEET: the figures first (an existing habit), then the few settings. */
+        .stats               { display: flex; gap: 8px; margin: -4px 0 14px; }
+        .stat
+        {
+            flex: 1 1 0; text-align: center; padding: 8px 4px;
+            background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+        }
+        .stat b              { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+        .stat span           { font-size: 0.7rem; color: var(--text-dim); }
+        .icon-grid           { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+        .icon-opt
+        {
+            display: flex; align-items: center; justify-content: center; height: 44px; padding: 0;
+            border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--card2);
+            color: var(--text-dim); cursor: pointer;
+        }
+        .icon-opt svg        { width: 20px; height: 20px; }
+        .icon-opt:hover      { color: var(--text); }
+        .icon-opt.is-active  { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+        .swatches            { display: flex; gap: 10px; flex-wrap: wrap; padding: 3px 0; }
+        .swatch              { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%; background: var(--h-color); cursor: pointer; }
+        .swatch.is-active    { outline: 3px solid var(--text); outline-offset: 2px; }
+        .dow                 { display: flex; gap: 4px; margin-top: 8px; }
+        .dow .pill           { flex: 1 1 0; padding: 7px 0; text-align: center; }
+        .left-group          { display: flex; align-items: center; gap: 6px; }
+        .text-btn.small      { padding: 8px 12px; font-size: 0.82rem; }
+
+        /* A toast with an "Undo" button (Split and Contacts have the same pattern). */
+
+        /* PHONE (<= 640px, the shared rule). The card shell already goes edge to
+           edge; the icon picker just needs finger-sized cells. */
+        @media (max-width: 640px)
+        {
+            .row-meta            { white-space: normal; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" style="display: none;">
+        <div class="page">
+            <div class="page-inner">
+
+                <div class="card">
+
+                    <!-- Header: [sprout] Habits [Hoy][Mes] ... [+] [v] [?] [•] -->
+                    <div class="header">
+                        <svg class="app-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path>
+                        </svg>
+                        <h1 id="appTitle">Habits</h1>
+
+                        <div class="tabs" role="tablist">
+                            <button class="pill is-active" type="button" data-view="today" data-i18n="habits.tabToday"></button>
+                            <button class="pill" type="button" data-view="month" data-i18n="habits.tabMonth"></button>
+                        </div>
+
+                        <div class="header-actions">
+                            <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:habits.newHabit, aria-label:habits.newHabit">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                            <!-- Only inside Planner (see the script at the foot): folds this pane
+                                 away, leaving Planner's own chevron strip to bring it back. -->
+                            <button id="collapseBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:habits.collapse, aria-label:habits.collapse">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </button>
+                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                        </div>
+                    </div>
+
+                    <!-- HOY: the habits due today, the rest, the archived ones -->
+                    <section id="todayView">
+                        <div id="todayDate" class="today-date"></div>
+                        <div id="dueList" class="list"></div>
+
+                        <div id="offBlock" class="home-block" hidden>
+                            <div class="section-label" data-i18n="habits.notToday"></div>
+                            <div id="offList" class="list"></div>
+                        </div>
+
+                        <div id="archivedBlock" hidden>
+                            <button id="archivedToggle" class="pill archived-toggle" type="button"></button>
+                            <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
+                        </div>
+
+                        <div id="homeEmpty" class="empty" hidden>
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path>
+                            </svg>
+                            <p data-i18n="habits.noHabits"></p>
+                            <p data-i18n="habits.noHabitsHint"></p>
+                        </div>
+                    </section>
+
+                    <!-- MES: the grid -->
+                    <section id="monthView" hidden>
+                        <div class="month-nav">
+                            <button id="prevMonth" class="icon-btn sm" type="button" data-i18n-attr="title:habits.prevMonth, aria-label:habits.prevMonth">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <strong id="monthLabel"></strong>
+                            <button id="nextMonth" class="icon-btn sm" type="button" data-i18n-attr="title:habits.nextMonth, aria-label:habits.nextMonth">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+                        <div id="gridWrap" class="grid-wrap"></div>
+                        <p id="gridHint" class="hint" data-i18n="habits.gridHint"></p>
+                        <div id="monthEmpty" class="empty" hidden>
+                            <p data-i18n="habits.noMonth"></p>
+                        </div>
+                    </section>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW / EDIT HABIT (its figures on top when it already exists) -->
+    <div class="sheet-backdrop" id="habitSheetBackdrop" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 id="habitSheetTitle" data-i18n="habits.newHabit"></h2>
+
+            <div id="statsStrip" class="stats" hidden>
+                <div class="stat"><b id="statStreak">0</b><span data-i18n="habits.statStreak"></span></div>
+                <div class="stat"><b id="statBest">0</b><span data-i18n="habits.statBest"></span></div>
+                <div class="stat"><b id="statMonth">—</b><span id="statMonthLabel"></span></div>
+            </div>
+
+            <div class="field">
+                <label for="nameInput" data-i18n="habits.name"></label>
+                <input id="nameInput" type="text" data-i18n-attr="placeholder:habits.namePh" autocomplete="off">
+            </div>
+            <div class="field">
+                <label data-i18n="habits.icon"></label>
+                <div id="iconGrid" class="icon-grid"></div>
+            </div>
+            <div class="field">
+                <label data-i18n="habits.color"></label>
+                <div id="swatches" class="swatches"></div>
+            </div>
+            <div class="field">
+                <label data-i18n="habits.days"></label>
+                <div class="tabs" id="daysPresets" style="margin-bottom: 0;">
+                    <button class="pill" type="button" data-preset="all" data-i18n="habits.daysAll"></button>
+                    <button class="pill" type="button" data-preset="weekdays" data-i18n="habits.daysWeekdays"></button>
+                    <button class="pill" type="button" data-preset="weekend" data-i18n="habits.daysWeekend"></button>
+                    <button class="pill" type="button" data-preset="custom" data-i18n="habits.daysCustom"></button>
+                </div>
+                <!-- Day initials + names come from Intl (see shared/i18n.js), never from a dictionary. -->
+                <div id="dowRow" class="dow" hidden></div>
+            </div>
+            <div class="field">
+                <label for="targetInput"><span data-i18n="habits.target"></span>
+                    <button class="info-dot" type="button" data-i18n-attr="data-info:habits.targetInfo"></button>
+                </label>
+                <input id="targetInput" type="number" min="2" max="99" inputmode="numeric" data-i18n-attr="placeholder:habits.targetPh">
+            </div>
+
+            <div class="sheet-actions">
+                <div class="sheet-actions-left left-group">
+                    <button id="archiveBtn" class="text-btn ghost small" type="button" hidden data-i18n="habits.archive"></button>
+                    <button id="deleteBtn" type="button" data-act="danger" hidden data-i18n-attr="title:ui.delete"></button>
+                </div>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="saveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <!-- File-API client (access probe, retrying fetch, file ops). -->
+    <script src="../shared/gum-api.js" defer></script>
+    <!-- Shared UI helpers: sheets, toast, dialogs, i18n. -->
+    <script src="../shared/ui.js" defer></script>
+    <!-- COLLAPSE INSIDE PLANNER
+         Habits shares Planner's right column with Tasks. This button folds the
+         whole pane away; Planner draws a chevron strip in its place to reopen
+         it. Standalone (and on a phone, where Planner shows one pane at a time
+         anyway) there is nothing to fold, so the button stays hidden. Planner
+         is same-origin, hence the plain window.parent read. -->
+    <script>
+    NayiveI18n.ready.then( function () {
+        var btn = document.getElementById( 'collapseBtn' );
+
+        function usable()
+        {
+            if( ! document.documentElement.classList.contains( 'is-embedded' ) ) return false;
+            try { return window.parent.innerWidth > 640; } catch ( e ) { return false; }
+        }
+
+        function sync() { btn.hidden = ! usable(); }
+
+        sync();
+        window.addEventListener( 'resize', sync );
+
+        btn.addEventListener( 'click', function ()
+        {
+            try { window.parent.postMessage( { nayive: 'pane-collapse' }, location.origin ); } catch ( e ) {}
+        } );
+    } );
+    </script>
+    <script>
+    NayiveI18n.ready.then( function () {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'habits',
+            title: 'Habits',
+            lead:  NayiveUI.t( 'habits.introLead' ),
+            buttons: [
+                { sel: '#addBtn', text: NayiveUI.t( 'habits.introAdd' ) },
+                { icon: 'check', name: NayiveUI.t( 'habits.introMarkName' ), text: NayiveUI.t( 'habits.introMark' ) },
+                { icon: 'undo', name: NayiveUI.t( 'habits.introYesterdayName' ), text: NayiveUI.t( 'habits.introYesterday' ) },
+                { icon: 'edit', name: NayiveUI.t( 'ui.settings' ), text: NayiveUI.t( 'habits.introEdit' ) },
+                { icon: 'grid', name: NayiveUI.t( 'habits.introMonthName' ), text: NayiveUI.t( 'habits.introMonth' ) }
+            ].concat( document.getElementById( 'collapseBtn' ).hidden
+                      ? []
+                      : [ { sel: '#collapseBtn', text: NayiveUI.t( 'habits.introCollapse' ) } ] )
+            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
+            // so its row would document a control that is not on screen.
+            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
+                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
+                  text: NayiveUI.t( 'habits.introSync' ) } ] )
+        } );
+    } );
+    </script>
+    <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
+    <script src="../shared/store.js" defer></script>
+    <!-- Days, streaks and month figures. -->
+    <script src="habits.js" defer></script>
+
+    <script type="module">
+        // Nothing is drawn from JS before the dictionary is in: without an
+        // in-source fallback, an early render would paint the bare keys.
+        await NayiveI18n.ready;
+
+        //------------------------------------------------------------------------//
+        // STATE
+
+        const API_FILES = GumApi.API_FILES;
+        const FILE      = 'data/habits/habits.json';   // the whole app, one file per user
+        const H         = HabitsCore;
+        const store     = NayiveStore.createStore( { apiBase: API_FILES } );
+
+        // Interface strings: Spanish here, translatable through shared/i18n/*.json.
+        const T  = k           => NayiveUI.t( k );
+        const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+
+        // The seven day buttons: initial on the face, full name in the tooltip,
+        // both from the browser in the interface language.
+        ( function buildDowRow()
+        {
+            const row = document.getElementById( 'dowRow' );
+            for( let d = 1; d <= 7; d++ )
+            {
+                const b = document.createElement( 'button' );
+                b.className   = 'pill';
+                b.type        = 'button';
+                b.dataset.dow = String( d );
+                b.textContent = NayiveUI.weekday( d, 'narrow' );
+                b.title       = NayiveUI.weekday( d );
+                row.appendChild( b );
+            }
+        } )();
+
+        let habits = [];        // every habit, archived ones included
+        let loaded = false;     // true once the file (or a real "no file yet") has been read;
+                                // until then nothing may be written, or an offline first
+                                // load would upload an empty list over the real file
+        let view   = 'today';
+        let month  = H.monthOf( H.todayIso() );   // the month the grid shows, "yyyy-mm"
+        let hs     = null;      // the habit sheet's working state (see openSheet)
+        let midnightTimer = null;
+
+        //------------------------------------------------------------------------//
+        // SMALL HELPERS
+
+        const $ = id => document.getElementById( id );
+
+        function el( tag, cls, text )
+        {
+            const e = document.createElement( tag );
+            if( cls ) e.className = cls;
+            if( text != null ) e.textContent = text;
+            return e;
+        }
+
+        function dowName( iso )
+        {
+            const names = [ T( 'habits.dow1' ), T( 'habits.dow2' ), T( 'habits.dow3' ), T( 'habits.dow4' ),
+                            T( 'habits.dow5' ), T( 'habits.dow6' ), T( 'habits.dow7' ) ];
+            return names[ H.isoWeekday( iso ) - 1 ];
+        }
+
+        function iconLabel( name )
+        {
+            const L = {
+                water: T( 'habits.icWater' ),        walk: T( 'habits.icWalk' ),        run: T( 'habits.icRun' ),
+                book: T( 'habits.icBook' ),          nosugar: T( 'habits.icNosugar' ), sleep: T( 'habits.icSleep' ),
+                pill: T( 'habits.icPill' ),      meditate: T( 'habits.icMeditate' ), write: T( 'habits.icWrite' ),
+                music: T( 'habits.icMusic' ),      globe: T( 'habits.icGlobe' ),      weights: T( 'habits.icWeights' ),
+                bike: T( 'habits.icBike' ),          fruit: T( 'habits.icFruit' ),        nophone: T( 'habits.icNophone' ),
+                star: T( 'habits.icStar' )
+            };
+            return L[ name ] || name;
+        }
+
+        function streakText( n )
+        {
+            return n === 1 ? T( 'habits.day1' ) : TF( 'habits.daysN', { n } );
+        }
+
+        // Which preset a days list is: [] = all, Mon-Fri, Sat-Sun, anything else = custom.
+        function presetOf( days )
+        {
+            const s = days.join( ',' );
+            if( ! days.length ) return 'all';
+            if( s === '1,2,3,4,5' ) return 'weekdays';
+            if( s === '6,7' ) return 'weekend';
+            return 'custom';
+        }
+
+        // Editing is only allowed once the file has really been read (see `loaded`).
+        function canEdit()
+        {
+            if( loaded ) return true;
+            toast( T( 'habits.noData' ) );
+            return false;
+        }
+
+        //------------------------------------------------------------------------//
+        // INITIALIZATION
+
+        NayiveI18n.ready.then( function()
+        {
+            $( 'addBtn' ).addEventListener( 'click', function() { if( canEdit() ) openSheet( null ); } );
+            document.querySelectorAll( '[data-view]' ).forEach( function( b )
+            {
+                b.addEventListener( 'click', function() { view = b.dataset.view; render(); } );
+            } );
+            $( 'prevMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, -1 ); render(); } );
+            $( 'nextMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, 1 );  render(); } );
+            $( 'archivedToggle' ).addEventListener( 'click', function()
+            {
+                const list = $( 'archivedList' );
+                list.hidden = ! list.hidden;
+                this.classList.toggle( 'is-active', ! list.hidden );
+            } );
+
+            // The habit sheet
+            $( 'saveBtn' ).addEventListener( 'click', saveHabit );
+            $( 'nameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveHabit(); } );
+            $( 'iconGrid' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-icon]' );
+                if( b && hs ) { hs.icon = b.dataset.icon; renderIconGrid(); }
+            } );
+            $( 'swatches' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-c]' );
+                if( b && hs ) { hs.color = +b.dataset.c; renderSwatches(); }
+            } );
+            $( 'daysPresets' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-preset]' );
+                if( ! b || ! hs ) return;
+                if( b.dataset.preset === 'custom' ) hs.custom = true;
+                else { hs.custom = false; hs.days = H.DAY_PRESETS[ b.dataset.preset ].slice(); }
+                renderDays();
+            } );
+            $( 'dowRow' ).addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( '[data-dow]' );
+                if( ! b || ! hs ) return;
+                const d = +b.dataset.dow, i = hs.days.indexOf( d );
+                if( i === -1 ) hs.days.push( d ); else hs.days.splice( i, 1 );
+                hs.days.sort( ( a, b ) => a - b );
+                renderDays();
+            } );
+            $( 'archiveBtn' ).addEventListener( 'click', toggleArchive );
+            $( 'deleteBtn' ).addEventListener( 'click', deleteHabit );
+
+            // The × of our sheet (shared/ui.js styles a data-act="close" button and
+            // flags it _nayiveClose; closing it is the app's job). The shared
+            // confirm / alert dialogs handle their own and carry no id.
+            document.addEventListener( 'click', function( e )
+            {
+                const b = e.target.closest( 'button' );
+                if( ! b || ! b._nayiveClose ) return;
+                const back = b.closest( '.sheet-backdrop' );
+                if( back && back.id ) closeSheet( back.id );
+            } );
+
+            // Escape closes the topmost of our sheets.
+            document.addEventListener( 'keydown', function( e )
+            {
+                if( e.key !== 'Escape' ) return;
+                const open = Array.from( document.querySelectorAll( '.sheet-backdrop.open' ) ).pop();
+                if( open && open.id ) { closeSheet( open.id ); e.preventDefault(); }
+            } );
+
+            // The store's state machine drives the header plug for every read and write.
+            store.onState( NayiveUI.syncIndicator() );
+
+            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+            // path (shared/ui.js). Every save PUTs the whole file (last write wins), so a tab
+            // left open all day would upload a stale list over a habit ticked on the phone.
+            // load() ends in render(), which also picks up a day change: phones restore a
+            // backgrounded tab from the bfcache, so this is where "it is tomorrow now" gets
+            // noticed. The default guard keeps the read out of an open sheet, where
+            // re-rendering would throw away what is being typed.
+            NayiveUI.wireRefresh( { store: store, read: load } );
+
+            // Probe the API, then load. On a failed probe the shared helper bounces to the
+            // sign-in page only when we are really online with nothing cached; otherwise it
+            // opens on the local cache and the store syncs once the connection is back.
+            NayiveUI.bootWithStore( store, load );
+            armMidnight();
+        } );
+
+        // A tab left open across midnight rolls over to the new day on its own.
+        // Timers are throttled in background tabs; the visibility handler above
+        // covers that case.
+        function armMidnight()
+        {
+            clearTimeout( midnightTimer );
+            midnightTimer = setTimeout( function() { render(); armMidnight(); }, H.msToMidnight() + 1000 );
+        }
+
+        //------------------------------------------------------------------------//
+        // PERSISTENCE - the whole list in one file, like Tasks.
+
+        async function load()
+        {
+            const res = await store.read( FILE );
+
+            if( res.source === 'empty' )
+            {
+                habits = [];          // no habits.json on the server yet - a safe first run
+                loaded = true;
+            }
+            else if( res.body !== null )
+            {
+                try
+                {
+                    const parsed = JSON.parse( res.body );
+                    habits = ( Array.isArray( parsed ) ? parsed : [] ).map( H.normalise ).filter( Boolean );
+                    loaded = true;
+                }
+                catch( _ )
+                {
+                    // A damaged file is shown as empty but is never written over.
+                    habits = [];
+                    loaded = false;
+                    toast( T( 'habits.corrupt' ) );
+                }
+            }
+            // else: the server was unreachable AND nothing is cached (res.source
+            // === 'unknown'). Leave `habits` untouched and `loaded` false - treating
+            // that as an empty list is exactly what would let the next save
+            // overwrite the real file. The store drives the indicator.
+
+            render();
+        }
+
+        // Writes the local cache now and queues the upload; the store flushes it
+        // immediately, on reconnect, or on tab focus. Fire-and-forget.
+        function save()
+        {
+            store.write( FILE, JSON.stringify( habits, null, 2 ) );
+        }
+
+        // Called by the store on every sync-state change (same mapping as Tasks).
+        //------------------------------------------------------------------------//
+        // RENDER - today or the month. "Today" is read afresh every time, never
+        // remembered, so a render after midnight is already tomorrow's.
+
+        function render()
+        {
+            const today = H.todayIso();
+            if( month > H.monthOf( today ) ) month = H.monthOf( today );
+
+            document.querySelectorAll( '[data-view]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.view === view ) );
+            $( 'todayView' ).hidden = view !== 'today';
+            $( 'monthView' ).hidden = view !== 'month';
+            document.querySelector( '.page-inner' ).classList.toggle( 'month', view === 'month' );
+
+            if( view === 'today' ) renderToday( today ); else renderMonth( today );
+        }
+
+        function renderToday( today )
+        {
+            const active = habits.filter( h => ! h.archived );
+            const due    = active.filter( h =>   H.dueOn( h, today ) );
+            const off    = active.filter( h => ! H.dueOn( h, today ) );
+            const arch   = habits.filter( h => h.archived );
+
+            $( 'todayDate' ).textContent = today + ' · ' + dowName( today );
+            $( 'todayDate' ).hidden = ! habits.length;
+
+            const list = $( 'dueList' );
+            list.innerHTML = '';
+            due.forEach( h => list.appendChild( habitRow( h, today, true ) ) );
+
+            $( 'offBlock' ).hidden = ! off.length;
+            const ol = $( 'offList' );
+            ol.innerHTML = '';
+            off.forEach( h => ol.appendChild( habitRow( h, today, false ) ) );
+
+            $( 'archivedBlock' ).hidden = ! arch.length;
+            $( 'archivedToggle' ).textContent = TF( 'habits.archivedN', { n: arch.length } );
+            const al = $( 'archivedList' );
+            al.innerHTML = '';
+            arch.forEach( h => al.appendChild( archivedRow( h ) ) );
+            if( ! arch.length ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+
+            $( 'homeEmpty' ).hidden = habits.length > 0;
+        }
+
+        // The name + meta block: a click target (a <div>, because the "Ayer ✗"
+        // chip inside it is a button of its own) that opens the sheet.
+        function mainBlock( h, onOpen )
+        {
+            const main = el( 'div', 'row-main' );
+            main.setAttribute( 'role', 'button' );
+            main.tabIndex = 0;
+            main.title = T( 'habits.editHabit' );
+            main.appendChild( el( 'div', 'row-title', h.name ) );
+            main.addEventListener( 'click', onOpen );
+            main.addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' || e.key === ' ' ) { e.preventDefault(); onOpen(); } } );
+            return main;
+        }
+
+        function habitRow( h, today, isDue )
+        {
+            const row = el( 'div', 'card-row habit-row' + ( isDue ? '' : ' off' ) );
+            row.setAttribute( 'data-c', String( h.color ) );
+
+            const ic = el( 'span', 'h-icon' );
+            ic.innerHTML = H.glyph( h.icon );
+            row.appendChild( ic );
+
+            const main = mainBlock( h, function() { openSheet( h ); } );
+            const meta = el( 'div', 'row-meta' );
+            meta.appendChild( el( 'span', 'tag', streakText( H.streak( h, today ) ) ) );
+            if( H.missedYesterday( h, today ) )
+            {
+                const chip = el( 'button', 'fix-chip', T( 'habits.missedYesterday' ) );
+                chip.type  = 'button';
+                chip.title = T( 'habits.fixYesterday' );
+                chip.addEventListener( 'click', function( e ) { e.stopPropagation(); fixYesterday( h ); } );
+                meta.appendChild( chip );
+            }
+            main.appendChild( meta );
+            row.appendChild( main );
+
+            row.appendChild( checkButton( h, today ) );
+            return row;
+        }
+
+        function checkButton( h, today )
+        {
+            const b    = el( 'button', 'check-btn' );
+            const done = H.isDone( h, today );
+            b.type = 'button';
+            if( done ) b.classList.add( 'done' );
+            if( h.target ) b.textContent = H.count( h, today ) + '/' + h.target;
+            else b.innerHTML = NayiveUI.icon( 'check' );
+            b.title = done ? T( 'habits.undoToday' )
+                    : h.target ? T( 'habits.addOne' ) : T( 'habits.markToday' );
+            b.setAttribute( 'aria-label', h.name + ': ' + b.title );
+            b.setAttribute( 'aria-pressed', String( done ) );
+            b.addEventListener( 'click', function() { tapHabit( h ); } );
+            return b;
+        }
+
+        function archivedRow( h )
+        {
+            const row = el( 'div', 'card-row habit-row archived' );
+            row.setAttribute( 'data-c', String( h.color ) );
+            const ic = el( 'span', 'h-icon' );
+            ic.innerHTML = H.glyph( h.icon );
+            row.appendChild( ic );
+            const main = mainBlock( h, function() { openSheet( h ); } );
+            const meta = el( 'div', 'row-meta' );
+            meta.appendChild( el( 'span', 'tag', T( 'habits.archivedWord' ) + ' ' + h.archived ) );
+            main.appendChild( meta );
+            row.appendChild( main );
+            return row;
+        }
+
+        function tapHabit( h )
+        {
+            if( ! canEdit() ) return;
+            H.tap( h, H.todayIso() );
+            save();
+            render();
+        }
+
+        function fixYesterday( h )
+        {
+            if( ! canEdit() ) return;
+            const y = H.isoAdd( H.todayIso(), -1 );
+            H.setDone( h, y, true );
+            save();
+            render();
+            showUndo( T( 'habits.yesterdayFixed' ), function()
+            {
+                H.setDone( h, y, false );
+                save();
+                render();
+            } );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE MONTH GRID
+
+        function renderMonth( today )
+        {
+            const cur   = H.monthOf( today );
+            const first = month + '-01';
+            $( 'monthLabel' ).textContent = month;
+            $( 'nextMonth' ).disabled = month >= cur;
+
+            // Habits alive at some point of that month. A restored habit's `created` is
+            // its restore day, so its first month is the earlier of `created` and its first done day.
+            const firstDay = h => ( h.done.length && h.done[ 0 ] < h.created ) ? h.done[ 0 ] : h.created;
+            const rows = habits.filter( h => H.monthOf( firstDay( h ) ) <= month && ( ! h.archived || h.archived > first ) );
+            $( 'monthEmpty' ).hidden = rows.length > 0;
+            $( 'gridWrap' ).hidden   = ! rows.length;
+            $( 'gridHint' ).hidden   = ! rows.length;
+
+            const days  = H.daysOfMonth( month );
+            const table = el( 'table', 'mgrid' );
+            const thead = el( 'thead' ), hr = el( 'tr' );
+            hr.appendChild( el( 'th', 'name' ) );
+            days.forEach( iso =>
+            {
+                const th = el( 'th', 'day', String( +iso.slice( 8 ) ) );
+                if( H.isoWeekday( iso ) >= 6 ) th.classList.add( 'we' );
+                if( iso === today ) th.classList.add( 'today' );
+                th.title = iso;
+                hr.appendChild( th );
+            } );
+            thead.appendChild( hr );
+            table.appendChild( thead );
+
+            const tbody = el( 'tbody' );
+            rows.forEach( h =>
+            {
+                const tr = el( 'tr' );
+                tr.setAttribute( 'data-c', String( h.color ) );
+
+                const th = el( 'th', 'name' );
+                const nb = el( 'button', 'name-btn' );
+                nb.type  = 'button';
+                nb.title = T( 'habits.seeStats' );
+                const ic = el( 'span', 'h-icon' );
+                ic.innerHTML = H.glyph( h.icon );
+                nb.appendChild( ic );
+                nb.appendChild( el( 'span', 'nm', h.name ) );
+                nb.addEventListener( 'click', function() { openSheet( h ); } );
+                th.appendChild( nb );
+                tr.appendChild( th );
+
+                days.forEach( iso =>
+                {
+                    const td = el( 'td', 'cell' );
+                    if( iso === today ) td.classList.add( 'today' );
+                    if( iso <= today )
+                    {
+                        if( H.isDone( h, iso ) )      td.appendChild( el( 'span', 'dot on' ) );
+                        else if( H.dueOn( h, iso ) )  td.appendChild( el( 'span', 'dot miss' ) );
+                    }
+                    td.title = iso;
+                    tr.appendChild( td );
+                } );
+                tbody.appendChild( tr );
+            } );
+            table.appendChild( tbody );
+
+            const wrap = $( 'gridWrap' );
+            wrap.innerHTML = '';
+            wrap.appendChild( table );
+
+            // Land on today's column, not on day 1.
+            if( month === cur )
+                requestAnimationFrame( function()
+                {
+                    const th = wrap.querySelector( 'th.day.today' );
+                    if( th ) wrap.scrollLeft = Math.max( 0, th.offsetLeft - wrap.clientWidth * 0.6 );
+                } );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE HABIT SHEET - new or existing; figures on top for an existing one.
+
+        function closeSheet( id )
+        {
+            NayiveUI.close( id );
+            if( id === 'habitSheetBackdrop' ) hs = null;
+        }
+
+        function openSheet( h )
+        {
+            if( ! h && ! canEdit() ) return;
+            const today = H.todayIso();
+
+            hs = { h: h || null, icon: h ? h.icon : 'star', color: h ? h.color : habits.length % 8, days: h ? h.days.slice() : [], custom: false };
+            hs.custom = presetOf( hs.days ) === 'custom';
+
+            $( 'habitSheetTitle' ).textContent = h ? h.name : T( 'habits.newHabit' );
+
+            $( 'statsStrip' ).hidden = ! h;
+            if( h )
+            {
+                const ym = view === 'month' ? month : H.monthOf( today );
+                const ms = H.monthStats( h, ym, today );
+                $( 'statStreak' ).textContent = String( H.streak( h, today ) );
+                $( 'statBest'   ).textContent = String( H.longestStreak( h, today ) );
+                $( 'statMonth'  ).textContent = ms.pct === null ? '—' : ms.pct + ' %';
+                $( 'statMonthLabel' ).textContent = ym + ( ms.due ? ' · ' + ms.done + '/' + ms.due : '' );
+            }
+
+            $( 'nameInput' ).value   = h ? h.name : '';
+            $( 'targetInput' ).value = h && h.target ? String( h.target ) : '';
+            renderIconGrid();
+            renderSwatches();
+            renderDays();
+
+            $( 'archiveBtn' ).hidden = ! h;
+            $( 'archiveBtn' ).textContent = h && h.archived ? T( 'habits.restore' ) : T( 'habits.archive' );
+            $( 'deleteBtn' ).hidden = ! ( h && h.archived );
+
+            NayiveUI.open( 'habitSheetBackdrop' );
+            if( ! h ) setTimeout( function() { $( 'nameInput' ).focus(); }, 60 );
+        }
+
+        function renderIconGrid()
+        {
+            const grid = $( 'iconGrid' );
+            grid.innerHTML = '';
+            Object.keys( H.ICONS ).forEach( name =>
+            {
+                const b = el( 'button', 'icon-opt' + ( name === hs.icon ? ' is-active' : '' ) );
+                b.type = 'button';
+                b.dataset.icon = name;
+                b.title = iconLabel( name );
+                b.setAttribute( 'aria-label', b.title );
+                b.setAttribute( 'aria-pressed', String( name === hs.icon ) );
+                b.innerHTML = H.glyph( name );
+                grid.appendChild( b );
+            } );
+        }
+
+        function renderSwatches()
+        {
+            const box = $( 'swatches' );
+            box.innerHTML = '';
+            for( let i = 0; i < 8; i++ )
+            {
+                const b = el( 'button', 'swatch' + ( i === hs.color ? ' is-active' : '' ) );
+                b.type = 'button';
+                b.setAttribute( 'data-c', String( i ) );
+                b.title = TF( 'habits.colorN', { n: i + 1 } );
+                b.setAttribute( 'aria-label', b.title );
+                b.setAttribute( 'aria-pressed', String( i === hs.color ) );
+                box.appendChild( b );
+            }
+        }
+
+        function renderDays()
+        {
+            const preset = hs.custom ? 'custom' : presetOf( hs.days );
+            document.querySelectorAll( '[data-preset]' ).forEach( b => b.classList.toggle( 'is-active', b.dataset.preset === preset ) );
+            $( 'dowRow' ).hidden = ! hs.custom;
+            document.querySelectorAll( '[data-dow]' ).forEach( b => b.classList.toggle( 'is-active', hs.days.indexOf( +b.dataset.dow ) !== -1 ) );
+        }
+
+        function saveHabit()
+        {
+            if( ! hs || ! canEdit() ) return;
+            const name = $( 'nameInput' ).value.trim();
+            if( ! name ) { $( 'nameInput' ).focus(); return; }
+            const t      = parseInt( $( 'targetInput' ).value, 10 );
+            const target = t >= 2 ? t : null;
+            const days   = hs.days.slice();          // "Personalizado" with nothing ticked = every day
+            const editing = !! hs.h;
+
+            if( editing )
+            {
+                const i = habits.indexOf( hs.h );
+                const upd = H.normalise( Object.assign( {}, hs.h, { name, icon: hs.icon, color: hs.color, days, target } ) );
+                if( i !== -1 ) habits[ i ] = upd; else habits.push( upd );
+            }
+            else
+            {
+                habits.push( H.normalise( { id: H.newId(), name, icon: hs.icon, color: hs.color, days, target,
+                                            created: H.todayIso(), archived: null, done: [], counts: {} } ) );
+            }
+
+            save();
+            closeSheet( 'habitSheetBackdrop' );
+            render();
+            toast( editing ? T( 'habits.saved' ) : T( 'habits.created' ) );
+        }
+
+        // Archive keeps the history; restoring starts the count afresh from today
+        // (the months in between are not "missed").
+        function toggleArchive()
+        {
+            if( ! hs || ! hs.h || ! canEdit() ) return;
+            const h = hs.h;
+            if( h.archived ) { h.archived = null; h.created = H.todayIso(); }
+            else h.archived = H.todayIso();
+            save();
+            closeSheet( 'habitSheetBackdrop' );
+            render();
+            toast( h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ) );
+        }
+
+        async function deleteHabit()
+        {
+            if( ! hs || ! hs.h || ! canEdit() ) return;
+            const h  = hs.h;
+            const ok = await NayiveUI.confirm( {
+                title:  T( 'habits.deleteHabit' ),
+                body:   TF( 'habits.deleteHabitBody', { name: h.name } ),
+                danger: true
+            } );
+            if( ! ok ) return;
+
+            habits = habits.filter( x => x !== h );
+            save();
+            closeSheet( 'habitSheetBackdrop' );
+            render();
+            toast( T( 'habits.deleted' ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // TOASTS
+
+        // Both toasts are the shared ones (shared/ui.js + the .toast rules in
+        // shared/theme.css); these two names are kept only because the app calls them a lot.
+        // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
+        // does not exist yet while this script is parsed.
+        function toast( msg )         { NayiveUI.toast( msg ); }
+        function showUndo( msg, fn )  { NayiveUI.undoToast( msg, fn ); }
+    </script>
+</body>
+</html>

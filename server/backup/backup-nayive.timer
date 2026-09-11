@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Nayive backup daily at 01:30
+
+[Timer]
+OnCalendar=01:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target
