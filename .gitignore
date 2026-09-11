@@ -21,9 +21,6 @@ deploy.local.sh
 # Design notes - kept local only.
 /docs/
 
-# Old name of client/, kept locally as a link to it.
-/todeploy
-
 # Generated on every deploy / pack by tools/build-gzip - not source.
 *.gz
 
