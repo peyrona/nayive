@@ -242,6 +242,22 @@
            still selects and edits the cell, which is what a spreadsheet must do. */
         #gridHost td.has-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
+        /* The cells a formula being typed points at (POINTING in the script).
+           Inset shadows, because the renderer owns the inline background and
+           borders - a shadow sits on top of both without touching either. */
+        #gridHost td.pt
+        {
+            box-shadow: inset 0 var(--pt-t, 0px) 0 var(--accent),
+                        inset calc(-1 * var(--pt-r, 0px)) 0 0 var(--accent),
+                        inset 0 calc(-1 * var(--pt-b, 0px)) 0 var(--accent),
+                        inset var(--pt-l, 0px) 0 0 var(--accent),
+                        inset 0 0 0 999px color-mix(in srgb, var(--accent) 12%, transparent);
+        }
+        #gridHost td.pt-t { --pt-t: 2px; }
+        #gridHost td.pt-b { --pt-b: 2px; }
+        #gridHost td.pt-l { --pt-l: 2px; }
+        #gridHost td.pt-r { --pt-r: 2px; }
+
         /* Grid host */
         #gridHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }   /* Handsontable virtualizes its own scroll */
 
@@ -1777,6 +1793,7 @@
             el.className = htThemeName();
 
             lastSelection = null;
+            point         = null;
 
             table = new Handsontable( el,
             {
@@ -1852,7 +1869,12 @@
                 // arriving — give the grid the toolbar's 159px back. Selecting
                 // a cell does NOT fold it, so formatting a selection stays one
                 // tap. "Aa" in the header brings it back.
-                afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); },
+                afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); pointEditorOpened(); },
+                // A formula being typed takes clicks, drags and arrow keys as
+                // references to other cells (see POINTING below).
+                beforeOnCellMouseDown : pointMouseDown,
+                beforeOnCellMouseOver : pointMouseOver,
+                beforeKeyDown         : pointKeyDown,
                 // `source` matters here exactly as it does in afterChange above.
                 // Handsontable pads a freshly loaded sheet up to minRows/minCols and
                 // reports those as real row/col insertions with source 'auto' — so an
@@ -1972,6 +1994,15 @@
             td.classList.toggle( 'has-link', !! ( link && link.target ) );
             if( link && link.target ) td.title = ( link.tooltip || link.target ) + ' — ' + T( 'calc.linkHint' );
             else if( td.title ) td.title = '';
+
+            // The cells a formula being typed points at (see POINTING below).
+            const pb = pointedBounds();
+            const pt = !! pb && row >= pb.r1 && row <= pb.r2 && col >= pb.c1 && col <= pb.c2;
+            td.classList.toggle( 'pt',   pt );
+            td.classList.toggle( 'pt-t', pt && row === pb.r1 );
+            td.classList.toggle( 'pt-b', pt && row === pb.r2 );
+            td.classList.toggle( 'pt-l', pt && col === pb.c1 );
+            td.classList.toggle( 'pt-r', pt && col === pb.c2 );
         }
 
         // Ctrl/Cmd-click on a linked cell follows the link. Plain click is left
@@ -1994,6 +2025,216 @@
             if( ! /^(https?:|mailto:)/i.test( link.target ) ) { NayiveUI.toast( T( 'calc.linkBlocked' ) ); return; }
 
             window.open( link.target, '_blank', 'noopener,noreferrer' );
+        }
+
+        //------------------------------------------------------------------------//
+        // POINTING WHILE A FORMULA IS TYPED
+        //
+        // What every spreadsheet does: while a cell's "=…" is being typed, a click
+        // on another cell puts its address into the formula instead of moving
+        // there. A drag puts a range (A1:C4), a column or row header the whole
+        // column or row (A:A, 3:3), and Shift+click stretches the range from where
+        // it started. The arrow keys do the same while the formula is being typed
+        // (Shift+arrow stretches) - but not after F2 or a double-click, where they
+        // move the caret, as in Excel.
+        //
+        // Only where a reference can go: right after "=", "(", ",", ";", ":" or an
+        // operator. Anywhere else a click commits the cell and moves on, as it
+        // always did. A click right after a reference just put in REPLACES it, so
+        // a wrong click is fixed by clicking the right cell.
+        //
+        // Handsontable is kept out of those clicks and keys with its own
+        // stopImmediatePropagation (the flag its handlers check), and the
+        // mousedown's default is prevented so the editor keeps focus and caret.
+
+        const POINT_AFTER = /[=(,;:+\-*\/^&<>]\s*$/;
+        const POINT_KEYS  = { ArrowUp: [ -1, 0 ], ArrowDown: [ 1, 0 ], ArrowLeft: [ 0, -1 ], ArrowRight: [ 0, 1 ] };
+
+        let point        = null;    // { from, to, value, anchor, head, bounds } - the reference last put in
+        let pointDrag    = false;   // the mouse button is down on a pointing click
+        let pointWriting = false;   // the 'input' event is ours, not the user typing
+
+        // The release is NOT kept from Handsontable: its own document-level
+        // mouseup is what clears its "button is down" flag, and left set, the
+        // next plain mouse move drag-selects and closes the editor.
+        document.addEventListener( 'mouseup', function() { pointDrag = false; } );
+
+        // The open cell editor, when what it holds is a formula.
+        function formulaEditor()
+        {
+            const ed = table && table.getActiveEditor();
+            if( ! ed || ! ed.isOpened() || ! ed.TEXTAREA ) return null;
+            return ed.TEXTAREA.value.charAt( 0 ) === '=' ? ed : null;
+        }
+
+        // The reference last put in stays "live" while nothing was typed after it:
+        // the same text, and the caret still at its end.
+        function livePoint( ta )
+        {
+            return point && point.value === ta.value &&
+                   ta.selectionStart === point.to && ta.selectionEnd === point.to ? point : null;
+        }
+
+        function canPoint( ta )
+        {
+            return !! livePoint( ta ) || POINT_AFTER.test( ta.value.slice( 0, ta.selectionStart ) );
+        }
+
+        // r = -1 is a column header, c = -1 a row header.
+        function kindOf( p ) { return p.r < 0 ? 'col' : p.c < 0 ? 'row' : 'cell'; }
+
+        function pointBounds( a, b )
+        {
+            const kind = kindOf( a );
+            const b2   = {
+                r1: Math.min( a.r, b.r ), r2: Math.max( a.r, b.r ),
+                c1: Math.min( a.c, b.c ), c2: Math.max( a.c, b.c ), kind: kind };
+
+            if( kind === 'col' ) { b2.r1 = 0; b2.r2 = table.countRows() - 1; }
+            if( kind === 'row' ) { b2.c1 = 0; b2.c2 = table.countCols() - 1; }
+
+            return b2;
+        }
+
+        function colLetters( c ) { return encodeCell( { r: 0, c: c } ).replace( /\d+$/, '' ); }
+
+        // "B3", "B3:D7", "B:D" or "3:5".
+        function pointText( k )
+        {
+            if( k.kind === 'col' ) return colLetters( k.c1 ) + ':' + colLetters( k.c2 );
+            if( k.kind === 'row' ) return ( k.r1 + 1 ) + ':' + ( k.r2 + 1 );
+
+            const a = encodeCell( { r: k.r1, c: k.c1 } );
+            const b = encodeCell( { r: k.r2, c: k.c2 } );
+            return a === b ? a : a + ':' + b;
+        }
+
+        // Put the reference at the caret - or in place of the live one.
+        function putPoint( ed, anchor, head )
+        {
+            const ta   = ed.TEXTAREA;
+            const live = livePoint( ta );
+            const from = live ? live.from : ta.selectionStart;
+            const to   = live ? live.to   : ta.selectionEnd;
+            const k    = pointBounds( anchor, head );
+            const ref  = pointText( k );
+
+            ta.value = ta.value.slice( 0, from ) + ref + ta.value.slice( to );
+
+            const end = from + ref.length;
+            if( document.activeElement !== ta ) ta.focus();
+            ta.setSelectionRange( end, end );
+
+            // The editor grows to fit, exactly as when the text is typed.
+            pointWriting = true;
+            ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+            pointWriting = false;
+
+            point = { from: from, to: end, value: ta.value, anchor: anchor, head: head, bounds: k };
+            table.render();                                  // styledRenderer outlines the cells
+        }
+
+        function clearPoint()
+        {
+            pointDrag = false;
+            if( ! point ) return;
+
+            point = null;
+            if( table ) table.render();
+        }
+
+        // What styledRenderer outlines: the live reference, while its editor is open.
+        function pointedBounds()
+        {
+            if( ! point ) return null;
+
+            const ed = table.getActiveEditor();
+            return ed && ed.isOpened() ? point.bounds : null;
+        }
+
+        // Typing anything after the reference (or moving the caret off it) ends
+        // it: the next click adds a new one instead of replacing it.
+        function pointEditorOpened()
+        {
+            clearPoint();
+
+            const ed = table.getActiveEditor();
+            const ta = ed && ed.TEXTAREA;
+            if( ! ta || ta.dataset.pointWired ) return;
+
+            ta.dataset.pointWired = '1';
+            for( const type of [ 'input', 'keyup', 'mouseup' ] )
+                ta.addEventListener( type, function() { if( point && ! pointWriting && ! livePoint( ta ) ) clearPoint(); } );
+        }
+
+        function pointMouseDown( e, coords )
+        {
+            pointDrag = false;
+            if( coords.row < 0 && coords.col < 0 ) return;       // the corner stays "select all"
+
+            const ed = formulaEditor();
+            if( ! ed || ! canPoint( ed.TEXTAREA ) ) return;
+
+            Handsontable.dom.stopImmediatePropagation( e );
+            e.preventDefault();
+
+            const at   = { r: coords.row, c: coords.col };
+            const live = livePoint( ed.TEXTAREA );
+            const from = e.shiftKey && live && kindOf( live.anchor ) === kindOf( at ) ? live.anchor : at;
+
+            putPoint( ed, from, at );
+            pointDrag = true;
+        }
+
+        function pointMouseOver( e, coords )
+        {
+            if( ! pointDrag ) return;
+
+            Handsontable.dom.stopImmediatePropagation( e );
+
+            const ed   = formulaEditor();
+            const live = ed && livePoint( ed.TEXTAREA );
+            if( ! live ) { pointDrag = false; return; }
+
+            // A column drag follows the columns, a row drag the rows; a cell drag
+            // ignores the headers.
+            const kind = kindOf( live.anchor );
+            if( kind === 'col'  && coords.col < 0 ) return;
+            if( kind === 'row'  && coords.row < 0 ) return;
+            if( kind === 'cell' && ( coords.row < 0 || coords.col < 0 ) ) return;
+
+            if( live.head.r === coords.row && live.head.c === coords.col ) return;
+
+            putPoint( ed, live.anchor, { r: coords.row, c: coords.col } );
+        }
+
+        function pointKeyDown( e )
+        {
+            if( e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab' )
+            {
+                if( point ) setTimeout( clearPoint, 0 );       // once the editor has closed
+                return;
+            }
+
+            const d = POINT_KEYS[ e.key ];
+            if( ! d || e.ctrlKey || e.metaKey || e.altKey ) return;
+
+            const ed = formulaEditor();
+            if( ! ed || ed.isInFullEditMode() || ! canPoint( ed.TEXTAREA ) ) return;
+
+            Handsontable.dom.stopImmediatePropagation( e );
+            e.preventDefault();
+
+            // The first arrow starts from the cell being typed into, the next
+            // ones from wherever the reference got to.
+            const live = livePoint( ed.TEXTAREA );
+            const from = live && kindOf( live.head ) === 'cell' ? live.head : { r: ed.row, c: ed.col };
+            const head = { r: Math.min( Math.max( from.r + d[ 0 ], 0 ), table.countRows() - 1 ),
+                           c: Math.min( Math.max( from.c + d[ 1 ], 0 ), table.countCols() - 1 ) };
+            const anch = e.shiftKey && live && kindOf( live.anchor ) === 'cell' ? live.anchor : head;
+
+            putPoint( ed, anch, head );
+            table.scrollViewportTo( { row: head.r, col: head.c } );
         }
 
         //------------------------------------------------------------------------//
@@ -3563,7 +3804,7 @@
                 { key: 'ui.importDevice', el: 'importBtn' },
                 { key: 'ui.openDoc',      el: 'openBtn'   },
                 { sep: true },
-                { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save' },
+                { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
                 { key: 'ui.saveAs', el:  'saveAsBtn' }
             ]
         },
@@ -3574,9 +3815,9 @@
                 { key: 'ui.undo', el: 'undoBtn', sc: 'undo' },
                 { key: 'ui.redo', el: 'redoBtn', sc: 'redo' },
                 { sep: true },
-                { key: 'ui.cut',   run: clipCut,   sc: 'cut',   enabled: haveSelection },
-                { key: 'ui.copy',  run: clipCopy,  sc: 'copy',  enabled: haveSelection },
-                { key: 'ui.paste', run: clipPaste, sc: 'paste', enabled: haveSelection },
+                { key: 'ui.cut',   run: clipCut,   sc: 'cut',   enabled: haveSelection, icon: 'cut'   },
+                { key: 'ui.copy',  run: clipCopy,  sc: 'copy',  enabled: haveSelection, icon: 'copy'  },
+                { key: 'ui.paste', run: clipPaste, sc: 'paste', enabled: haveSelection, icon: 'paste' },
                 { sep: true },
                 { key: 'calc.selectAll', run: function() { table.selectAll(); } },
                 { sep: true },
@@ -3588,9 +3829,9 @@
             items:
             [
                 { key: 'ui.chrome', sub:
-                    [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); },
+                    [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); }, iconOf: '#chromeToolbarBtn',
                         checked: function() { return ! CHROME.on(); } },
-                      { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); },
+                      { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); }, iconOf: '#chromeMenusBtn',
                         checked: function() { return CHROME.on(); } } ] },
                 { sep: true },
                 { key: 'calc.freezeRows', el: 'fmtFreezeRowBtn',
@@ -3610,7 +3851,7 @@
                 { key: 'calc.delCol', el: 'delColBtn' },
                 { sep: true },
                 { key: 'calc.insertFx', el: 'fxBtn' },
-                { key: 'calc.ht.addComment', run: addComment, enabled: haveSelection }
+                { key: 'calc.ht.addComment', run: addComment, enabled: haveSelection, icon: CM_ICONS.commentsAddEdit }
             ]
         },
         {
@@ -3624,10 +3865,10 @@
                 { key: 'calc.fontFamily', sub: selectItems( 'fmtFontFamily' ) },
                 { key: 'calc.fontSize',   sub: selectItems( 'fmtFontSize'   ) },
                 { sep: true },
-                { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', MENU_COLORS ) },
-                { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS  ) },
+                { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', MENU_COLORS ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
+                { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS  ), iconOf: '.fmt-color-btn:has(#fmtFillColor) svg' },
                 { sep: true },
-                { key: 'calc.alignment', sub:
+                { key: 'calc.alignment', iconOf: '#fmtAlignLeftBtn', sub:
                     [ { key: 'calc.alignLeft',    el: 'fmtAlignLeftBtn',    checked: styleOn( 'align',  'left'   ) },
                       { key: 'calc.alignCenter',  el: 'fmtAlignCenterBtn',  checked: styleOn( 'align',  'center' ) },
                       { key: 'calc.alignRight',   el: 'fmtAlignRightBtn',   checked: styleOn( 'align',  'right'  ) },
@@ -3655,7 +3896,7 @@
             key: 'ui.menu.help',
             items:
             [
-                { key: 'ui.help', run: function() { NayiveUI.showIntro(); } }
+                { key: 'ui.help', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
             ]
         }
         ];

@@ -528,7 +528,12 @@
         fullscr:  [ 2, '<path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path>' ],
         bolt:     [ 2, '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon>' ],
         // "Solo lectura" - a closed padlock. Drawn blue in .ro-badge (see app.css).
-        lock:     [ 2, '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>' ]
+        lock:     [ 2, '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>' ],
+        // Cortar / Copiar / Pegar - the same three glyphs Drive's context menu
+        // draws. Write's and Calc's Edición menus use them (shared/menubar.js).
+        cut:      [ 2, '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>' ],
+        copy:     [ 2, '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' ],
+        paste:    [ 2, '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path>' ]
     };
 
     // App logos that don't fit the 24 stroke grid the ICONS table above uses:

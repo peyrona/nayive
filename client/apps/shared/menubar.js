@@ -41,6 +41,12 @@
  *   { enabled: fn }           grey out when fn() says no
  *   { sc:'ui.openDoc' }       show that shortcut's key combo on the right
  *   { swatch:'#c00' }         a colour chip before the label
+ *   { iconOf:'#x svg' }       a glyph before the label: that element's <svg>,
+ *                             cloned - the toolbar's own icon, so the two never
+ *                             drift. An `el` entry does this for its button by
+ *                             itself, unless it names an `icon` instead.
+ *   { icon:'cut' }            ... or a NayiveUI.icon() name, or SVG markup -
+ *                             for entries the toolbar has no button for
  *
  * Anything else on an item (check, radio, arg …) is the app's business and
  * reaches it untouched through cfg.checked / cfg.enabled / cfg.exec.
@@ -122,7 +128,48 @@ const NayiveMenus = ( function ()
             return false;
         }
 
-        function menuItemNode( it, idx )
+        // The glyph before the label (an <svg>, or a character), or null. Read at open time like everything
+        // else on a row, so an icon a toolbar draws late (SuperDoc's) still
+        // shows up, and a bad selector costs the glyph - never the menu.
+        function iconNode( it )
+        {
+            const src = it.iconOf || ( it.el && ! it.icon ? '#' + it.el : null );
+            let   svg = null;
+
+            if( src )
+            {
+                let n = null;
+                try { n = document.querySelector( src ); } catch ( _ ) {}
+
+                if( n ) svg = n instanceof SVGSVGElement ? n : n.querySelector( 'svg' );
+                if( svg ) svg = svg.cloneNode( true );
+
+                // A button whose glyph is a character (Calc's "∑") lends that
+                // instead - the same rule the help sheet's list follows.
+                const txt = ! svg && n && ( n.textContent || '' ).trim();
+                if( txt && txt.length <= 2 ) return document.createTextNode( txt );
+            }
+
+            if( ! svg && it.icon )
+            {
+                const t = document.createElement( 'template' );
+                t.innerHTML = it.icon.charAt( 0 ) === '<' ? it.icon : NayiveUI.icon( it.icon );
+                svg = t.content.querySelector( 'svg' );
+            }
+
+            if( ! svg ) return null;
+
+            svg.removeAttribute( 'width' );          // CSS sizes it
+            svg.removeAttribute( 'height' );
+            svg.removeAttribute( 'id' );
+            svg.setAttribute( 'aria-hidden', 'true' );
+
+            return svg;
+        }
+
+        // `glyph` undefined: the panel has no icons, so no slot at all.
+        // null: an empty slot, so this label lines up with its neighbours'.
+        function menuItemNode( it, idx, glyph )
         {
             if( it.sep )
             {
@@ -141,6 +188,14 @@ const NayiveMenus = ( function ()
             chk.className   = 'mi-check';
             chk.textContent = '✓';
             b.appendChild( chk );
+
+            if( glyph !== undefined )
+            {
+                const ic = document.createElement( 'span' );
+                ic.className = 'mi-icon';
+                if( glyph ) ic.appendChild( glyph );
+                b.appendChild( ic );
+            }
 
             if( it.swatch )
             {
@@ -176,10 +231,16 @@ const NayiveMenus = ( function ()
             return b;
         }
 
+        // Icons are all or nothing per panel: once one row has a glyph, every row
+        // keeps the slot. A panel with none (fonts, sizes, colours) stays tight.
         function fillPanel( panel, items )
         {
             panel.innerHTML = '';
-            items.forEach( function ( it, i ) { panel.appendChild( menuItemNode( it, i ) ); } );
+
+            const glyphs = items.map( function ( it ) { return it.sep ? null : iconNode( it ); } );
+            const slot   = glyphs.some( Boolean );
+
+            items.forEach( function ( it, i ) { panel.appendChild( menuItemNode( it, i, slot ? glyphs[ i ] : undefined ) ); } );
         }
 
         //---- placing ---------------------------------------------------------

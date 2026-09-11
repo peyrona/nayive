@@ -354,6 +354,11 @@
            styled once in shared/app.css - Calc's bar is the same one. What is
            left here is only what belongs to Write. */
 
+        /* SuperDoc's glyphs, cloned into a menu row (sdIcon() in write.js),
+           leave behind the rule its toolbar paints them with
+           (.superdoc-toolbar svg path) - without it "Interlineado" stays black. */
+        .menu-panel .mi-icon svg path { stroke: currentColor; }
+
         /* MENU MODE. The formatting strip collapses to nothing — but NOT with
            display:none: SuperDoc watches #toolbar's width and re-measures on
            every change, and its find bar, link popover and dropdowns are still

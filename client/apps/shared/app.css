@@ -1653,6 +1653,19 @@ button { -webkit-touch-callout: none; }
 .menu-panel .mi-swatch
 { width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 3px; }
 
+/* The glyph before the label - the toolbar button's own icon, cloned (see
+   `iconOf` / `icon` in shared/menubar.js). A row with none keeps the empty
+   slot, so the labels of one panel still line up. A glyph that brings no fill
+   of its own (an icon-font path) takes the row's colour, as in its toolbar. */
+.menu-panel .mi-icon
+{
+    width: 18px; height: 18px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+}
+.menu-panel .mi-icon svg              { width: 16px; height: 16px; }
+.menu-panel .mi-icon svg:not([fill])  { fill: currentColor; }
+
 
 /* -----------------------------------------------------------------------------
  * DATE / TIME FIELD  (.dt-field)

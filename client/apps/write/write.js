@@ -2486,6 +2486,9 @@ function applyModeChrome( mode )
 //   { enabled: fn }           grey out when fn() says no
 //   { sc:'write.sc.save' }    show that SHORTCUTS entry's key combo on the right
 //   { swatch:'#c00' }         a colour chip before the label
+//   { iconOf: sdIcon('bold') } the glyph before the label, cloned from the
+//                             toolbar (an `el` entry gets its button's by itself)
+//   { icon:'cut' }            ... or a NayiveUI.icon() name, for no-button entries
 
 const MENU_FONTS  = [ 'Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia',
                       'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana' ];
@@ -2576,7 +2579,7 @@ const MENUS = [
         { key: 'ui.openDoc',    el: 'openBtn', sc: 'ui.openDoc' },
         { key: 'write.recent',  sub: recentItems },
         { sep: true },
-        { key: 'ui.save',       run: saveNow, sc: 'write.sc.save' },
+        { key: 'ui.save',       run: saveNow, sc: 'write.sc.save', icon: 'check' },
         { key: 'ui.saveAs',     el: 'saveAsBtn' },
         { key: 'ui.importDevice', el: 'importBtn' },
         { key: 'write.templates', el: 'tplBtn' },
@@ -2591,15 +2594,15 @@ const MENUS = [
     key: 'ui.menu.edit',
     items:
     [
-        { key: 'ui.undo', cmd: 'undo' },
-        { key: 'ui.redo', cmd: 'redo' },
+        { key: 'ui.undo', cmd: 'undo', iconOf: sdIcon( 'undo' ) },
+        { key: 'ui.redo', cmd: 'redo', iconOf: sdIcon( 'redo' ) },
         { sep: true },
-        { key: 'ui.cut',   run: clipCut   },
-        { key: 'ui.copy',  run: clipCopy  },
-        { key: 'ui.paste', run: clipPaste },
+        { key: 'ui.cut',   run: clipCut,   icon: 'cut'   },
+        { key: 'ui.copy',  run: clipCopy,  icon: 'copy'  },
+        { key: 'ui.paste', run: clipPaste, icon: 'paste' },
         { sep: true },
-        { key: 'write.sc.find',    run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.find'    },
-        { key: 'write.sc.replace', run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.replace' }
+        { key: 'write.sc.find',    run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.find',    iconOf: sdIcon( 'search' ) },
+        { key: 'write.sc.replace', run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.replace', iconOf: sdIcon( 'search' ) }
     ]
 },
 {
@@ -2607,13 +2610,13 @@ const MENUS = [
     items:
     [
         { key: 'ui.chrome', sub:
-            [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); },
+            [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); }, iconOf: '#chromeToolbarBtn',
                 checked: function() { return ! menusOn(); } },
-              { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); },
+              { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); }, iconOf: '#chromeMenusBtn',
                 checked: menusOn } ] },
         { sep: true },
         { key: 'write.showRuler',       cmd: 'ruler',            check: 'value' },
-        { key: 'write.formattingMarks', cmd: 'formatting-marks', check: 'value' },
+        { key: 'write.formattingMarks', cmd: 'formatting-marks', check: 'value', iconOf: sdIcon( 'showMarks' ) },
         { key: 'write.comments',        el:  'commentsBtn',      checked: function() { return commentsOn; } },
         { sep: true },
         { key: 'write.header', el: 'headerBtn' },
@@ -2630,63 +2633,63 @@ const MENUS = [
     key: 'ui.menu.insert',
     items:
     [
-        { key: 'write.pageBreak',  run: insertPageBreak },
+        { key: 'write.pageBreak',  run: insertPageBreak, iconOf: sdIcon( 'pageBreak' ) },
         { key: 'write.pageNumber', el:  'pageNumBtn' },
         { sep: true },
-        { key: 'write.tb.image', run: pickImage },
-        { key: 'write.tb.table', sub: gridItems },
-        { key: 'write.sc.link',  run: openLinkDialog, sc: 'write.sc.link' },
+        { key: 'write.tb.image', run: pickImage,  iconOf: sdIcon( 'image' ) },
+        { key: 'write.tb.table', sub: gridItems,  iconOf: sdIcon( 'table' ) },
+        { key: 'write.sc.link',  run: openLinkDialog, sc: 'write.sc.link', iconOf: sdIcon( 'link' ) },
         { sep: true },
-        { key: 'write.footnote', run: insertFootnote },
-        { key: 'write.toc',      cmd: 'table-of-contents-insert' },
-        { key: 'write.symbols',  run: openSymbols }
+        { key: 'write.footnote', run: insertFootnote,                  iconOf: sdIcon( 'footNote' )  },
+        { key: 'write.toc',      cmd: 'table-of-contents-insert',      iconOf: sdIcon( 'insertToc' ) },
+        { key: 'write.symbols',  run: openSymbols,                     iconOf: sdIcon( 'symbols' )   }
     ]
 },
 {
     key: 'ui.menu.format',
     items:
     [
-        { key: 'write.tb.bold',          cmd: 'bold',          check: 'active' },
-        { key: 'write.tb.italic',        cmd: 'italic',        check: 'active' },
-        { key: 'write.tb.underline',     cmd: 'underline',     check: 'active' },
-        { key: 'write.tb.strikethrough', cmd: 'strikethrough', check: 'active' },
-        { key: 'write.superscript', run: function() { setVertAlign( 'superscript' ); } },
-        { key: 'write.subscript',   run: function() { setVertAlign( 'subscript'   ); } },
+        { key: 'write.tb.bold',          cmd: 'bold',          check: 'active', iconOf: sdIcon( 'bold' )      },
+        { key: 'write.tb.italic',        cmd: 'italic',        check: 'active', iconOf: sdIcon( 'italic' )    },
+        { key: 'write.tb.underline',     cmd: 'underline',     check: 'active', iconOf: sdIcon( 'underline' ) },
+        { key: 'write.tb.strikethrough', cmd: 'strikethrough', check: 'active', iconOf: sdIcon( 'strike' )    },
+        { key: 'write.superscript', run: function() { setVertAlign( 'superscript' ); }, iconOf: sdIcon( 'superScript' ) },
+        { key: 'write.subscript',   run: function() { setVertAlign( 'subscript'   ); }, iconOf: sdIcon( 'subScript' )   },
         { sep: true },
         { key: 'write.tb.fontFamily', sub: fontItems },
         { key: 'write.tb.fontSize',   sub: sizeItems },
-        { key: 'write.tb.color',      sub: function() { return colorItems( 'text-color', MENU_COLORS, null ); } },
-        { key: 'write.tb.highlight',  sub: function() { return colorItems( 'highlight-color', MENU_MARKS, 'write.noHighlight' ); } },
+        { key: 'write.tb.color',      sub: function() { return colorItems( 'text-color', MENU_COLORS, null ); },                     iconOf: sdIcon( 'color' )     },
+        { key: 'write.tb.highlight',  sub: function() { return colorItems( 'highlight-color', MENU_MARKS, 'write.noHighlight' ); }, iconOf: sdIcon( 'highlight' ) },
         { sep: true },
-        { key: 'write.tb.linkedStyles', sub:
+        { key: 'write.tb.linkedStyles', iconOf: sdIcon( 'linkedStyles' ), sub:
             [ { key: 'write.sc.normal',   cmd: 'linked-style', arg: 'Normal',   radio: 'Normal',   sc: 'write.sc.normal'   },
               { key: 'write.sc.heading1', cmd: 'linked-style', arg: 'Heading1', radio: 'Heading1', sc: 'write.sc.heading1' },
               { key: 'write.sc.heading2', cmd: 'linked-style', arg: 'Heading2', radio: 'Heading2', sc: 'write.sc.heading2' },
               { key: 'write.sc.heading3', cmd: 'linked-style', arg: 'Heading3', radio: 'Heading3', sc: 'write.sc.heading3' } ] },
-        { key: 'write.tb.textAlign', sub:
+        { key: 'write.tb.textAlign', iconOf: sdIcon( 'textAlign' ), sub:
             [ { key: 'write.sc.alignLeft',    cmd: 'text-align', arg: 'left',    radio: 'left',    sc: 'write.sc.alignLeft'    },
               { key: 'write.sc.alignCenter',  cmd: 'text-align', arg: 'center',  radio: 'center',  sc: 'write.sc.alignCenter'  },
               { key: 'write.sc.alignRight',   cmd: 'text-align', arg: 'right',   radio: 'right',   sc: 'write.sc.alignRight'   },
               { key: 'write.sc.alignJustify', cmd: 'text-align', arg: 'justify', radio: 'justify', sc: 'write.sc.alignJustify' } ] },
         // line-height wants a NUMBER; the string form comes back NO_OP.
-        { key: 'write.tb.lineHeight', sub: MENU_LINES.map( function( n )
+        { key: 'write.tb.lineHeight', iconOf: sdIcon( 'lineHeight' ), sub: MENU_LINES.map( function( n )
             { return { text: String( n ).replace( '.', ',' ), cmd: 'line-height', arg: n }; } ) },
         { sep: true },
-        { key: 'write.tb.bulletList',   cmd: 'bullet-list',   check: 'active' },
-        { key: 'write.tb.numberedList', cmd: 'numbered-list', check: 'active' },
-        { key: 'write.tb.indentRight',  cmd: 'indent-increase' },
-        { key: 'write.tb.indentLeft',   cmd: 'indent-decrease' },
+        { key: 'write.tb.bulletList',   cmd: 'bullet-list',   check: 'active', iconOf: sdIcon( 'list' )         },
+        { key: 'write.tb.numberedList', cmd: 'numbered-list', check: 'active', iconOf: sdIcon( 'numberedlist' ) },
+        { key: 'write.tb.indentRight',  cmd: 'indent-increase',                iconOf: sdIcon( 'indentright' )  },
+        { key: 'write.tb.indentLeft',   cmd: 'indent-decrease',                iconOf: sdIcon( 'indentleft' )   },
         { sep: true },
         { key: 'write.paragraph',        el:  'paraBtn' },
-        { key: 'write.tb.copyFormat',    cmd: 'copy-format', check: 'active' },
-        { key: 'write.tb.clearFormatting', cmd: 'clear-formatting' }
+        { key: 'write.tb.copyFormat',    cmd: 'copy-format', check: 'active', iconOf: sdIcon( 'copyFormat' )      },
+        { key: 'write.tb.clearFormatting', cmd: 'clear-formatting',          iconOf: sdIcon( 'clearFormatting' ) }
     ]
 },
 {
     key: 'ui.menu.table',
     items:
     [
-        { key: 'write.cm.insertTable', sub: gridItems },
+        { key: 'write.cm.insertTable', sub: gridItems, iconOf: sdIcon( 'table' ) },
         { sep: true },
         { key: 'write.tb.addRowBefore',    cmd: 'table-add-row-before'    },
         { key: 'write.tb.addRowAfter',     cmd: 'table-add-row-after'     },
@@ -2699,7 +2702,7 @@ const MENUS = [
         { key: 'write.tb.mergeCells', cmd: 'table-merge-cells' },
         { key: 'write.tb.splitCell',  cmd: 'table-split-cell'  },
         { sep: true },
-        { key: 'write.tableBorders',   run: openTableBorders },
+        { key: 'write.tableBorders',   run: openTableBorders, iconOf: sdIcon( 'tableBorders' ) },
         { key: 'write.tb.deleteTable', cmd: 'table-delete' }
     ]
 },
@@ -2712,10 +2715,10 @@ const MENUS = [
         { key: 'write.autocorrect', run: function() { setAutocorrect( ! autocorrectOn ); },
           checked: function() { return autocorrectOn; } },
         { sep: true },
-        { key: 'write.tb.trackChangesAccept', cmd: 'track-changes-accept-selection' },
-        { key: 'write.tb.trackChangesReject', cmd: 'track-changes-reject-selection' },
-        { key: 'write.acceptAll', cmd: 'acceptAllChanges' },
-        { key: 'write.rejectAll', cmd: 'rejectAllChanges' },
+        { key: 'write.tb.trackChangesAccept', cmd: 'track-changes-accept-selection', iconOf: sdIcon( 'acceptTrackedChangeBySelection' ) },
+        { key: 'write.tb.trackChangesReject', cmd: 'track-changes-reject-selection', iconOf: sdIcon( 'rejectTrackedChangeOnSelection' ) },
+        { key: 'write.acceptAll', cmd: 'acceptAllChanges', iconOf: sdIcon( 'acceptTrackedChangeBySelection' ) },
+        { key: 'write.rejectAll', cmd: 'rejectAllChanges', iconOf: sdIcon( 'rejectTrackedChangeOnSelection' ) },
         { sep: true },
         { key: 'ui.settings', el: 'settingsBtn', sc: 'ui.settings' }
     ]
@@ -2725,9 +2728,14 @@ const MENUS = [
     items:
     [
         { key: 'write.shortcuts', el: 'scBtn' },
-        { key: 'ui.help', run: function() { NayiveUI.showIntro(); } }
+        { key: 'ui.help', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
     ]
 } ];
+
+// The glyph SuperDoc draws for one of its toolbar items - its icon only, never
+// the dropdown caret beside it. shared/menubar.js clones it when a panel opens,
+// so a menu row shows the very icon its toolbar button shows.
+function sdIcon( name ) { return '#toolbar .sd-toolbar-icon__icon--' + name + ' svg'; }
 
 //---- reading SuperDoc's state --------------------------------------------//
 
