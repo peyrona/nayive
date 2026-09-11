@@ -3,8 +3,7 @@
 Nothing in this folder is ever deployed or run from where it sits.
 
     server/
-    ├── go/       the server (Go; see docs/go-port.md)
-    └── backup/   the systemd unit + script that back the VPS up nightly
+    └── go/       the server (Go; see docs/go-port.md)
 
 The distinction this folder exists to make:
 

@@ -21,6 +21,9 @@ deploy.local.sh
 # Design notes - kept local only.
 /docs/
 
+# VPS backup script + systemd units - kept local only.
+/server/backup/
+
 # Generated on every deploy / pack by tools/build-gzip - not source.
 *.gz
 
