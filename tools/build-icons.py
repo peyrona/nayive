@@ -45,7 +45,7 @@ import sys
 import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-APPS = REPO / "todeploy" / "apps"
+APPS = REPO / "client" / "apps"
 
 LAUNCHER_MASTER = REPO / "tools" / "launcher-logo-512.png"
 

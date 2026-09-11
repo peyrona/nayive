@@ -28,7 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 OUT="${1:-nayive.zip}"
-SRC="todeploy"                       # the server run-root inside the repo
+SRC="client"                       # the server run-root inside the repo
 GOSRC="server/go"                    # the Go server's source
 
 if [ -x "$HOME/sdk/go1.27.1/bin/go" ]; then

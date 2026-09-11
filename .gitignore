@@ -1,22 +1,28 @@
 # What must never reach GitHub. Nayive keeps secrets and personal data inside
-# the run-root (todeploy/), so most of this file is about that folder.
+# the run-root (client/), so most of this file is about that folder.
 
 # Live server settings and secrets - only the example is versioned.
 #   server.json  admin name + password     vapid.json  Web Push private key
 #   shares.json  live public-share links   *.pem       TLS material
-todeploy/config/*
-!todeploy/config/server.example.json
+client/config/*
+!client/config/server.example.json
 
 # Every user's data and documents (config.json there holds their password).
-todeploy/homes/
+client/homes/
 
 # Runtime state written by the server.
-todeploy/data/
-todeploy/.thumbs/
-todeploy/.trash/
+client/data/
+client/.thumbs/
+client/.trash/
 
 # The private VPS address deploy.sh reads (user, host, SSH port).
 deploy.local.sh
+
+# Design notes - kept local only.
+/docs/
+
+# Old name of client/, kept locally as a link to it.
+/todeploy
 
 # Generated on every deploy / pack by tools/build-gzip - not source.
 *.gz

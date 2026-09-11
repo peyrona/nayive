@@ -31,8 +31,8 @@ var pin = regexp.MustCompile(`(?s)__SUPERDOC_V2_BROWSER_WORKER_URL__.*?'([^']+)'
 func main() {
 	flag.Parse()
 	root := repo.MustRoot("check-superdoc-worker")
-	index := filepath.Join(root, "todeploy", "apps", "write", "index.html")
-	assets := filepath.Join(root, "todeploy", "apps", "write", "lib", "superdoc", "assets")
+	index := filepath.Join(root, "client", "apps", "write", "index.html")
+	assets := filepath.Join(root, "client", "apps", "write", "lib", "superdoc", "assets")
 	os.Exit(run(index, assets))
 }
 

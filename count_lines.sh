@@ -16,10 +16,10 @@ PRUNE=(
     -name .git
     -o -name __pycache__
     -o -name node_modules
-    -o -path './todeploy/apps/*/lib'      # vendored front-end libs (TinyMCE, FullCalendar, ...)
-    -o -path './todeploy/homes'           # per-user data and files
-    -o -path './todeploy/files'           # runtime file storage
-    -o -path './todeploy/config'          # runtime config
+    -o -path './client/apps/*/lib'      # vendored front-end libs (TinyMCE, FullCalendar, ...)
+    -o -path './client/homes'           # per-user data and files
+    -o -path './client/files'           # runtime file storage
+    -o -path './client/config'          # runtime config
     -o -path './server/go/vendor'         # vendored Go module (x/text), not ours
 )
 

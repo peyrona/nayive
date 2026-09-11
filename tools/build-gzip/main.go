@@ -1,5 +1,5 @@
 // build-gzip - write a `<file>.gz` sidecar beside every text asset under
-// todeploy/apps/ so the server never compresses anything at request time.
+// client/apps/ so the server never compresses anything at request time.
 //
 // The nayive server (server/go/static.go) sends `foo.js.gz` with
 // `Content-Encoding: gzip` whenever the browser accepts gzip and the sidecar is
@@ -51,7 +51,7 @@ const minBytes = 1400 // below ~one packet, gzip is a net loss
 func main() {
 	clean := flag.Bool("clean", false, "delete every sidecar instead")
 	flag.Parse()
-	apps := filepath.Join(repo.MustRoot("build-gzip"), "todeploy", "apps")
+	apps := filepath.Join(repo.MustRoot("build-gzip"), "client", "apps")
 
 	var err error
 	if *clean {

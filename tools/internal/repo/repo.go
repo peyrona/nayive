@@ -2,7 +2,7 @@
 //
 // The Python tools found it from their own location (the parent of tools/). A
 // `go run` binary lives in a temp folder, so the Go tools find it from the
-// working directory instead: walk up until a folder holds todeploy/apps. That
+// working directory instead: walk up until a folder holds client/apps. That
 // is why they are run as `go -C tools run ./<tool>` - any folder inside the
 // repo works.
 //
@@ -32,12 +32,12 @@ func Root() (string, error) {
 		return "", err
 	}
 	for {
-		if st, err := os.Stat(filepath.Join(dir, "todeploy", "apps")); err == nil && st.IsDir() {
+		if st, err := os.Stat(filepath.Join(dir, "client", "apps")); err == nil && st.IsDir() {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("todeploy/apps not found above the working directory (use -root)")
+			return "", errors.New("client/apps not found above the working directory (use -root)")
 		}
 		dir = parent
 	}

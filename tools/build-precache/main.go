@@ -61,7 +61,7 @@ var rootFiles = []string{"index.html", "login.html", "manifest.json", "icons/*"}
 
 func main() {
 	flag.Parse()
-	apps := filepath.Join(repo.MustRoot("build-precache"), "todeploy", "apps")
+	apps := filepath.Join(repo.MustRoot("build-precache"), "client", "apps")
 	sw := filepath.Join(apps, "sw.js")
 
 	rels := collect(apps)

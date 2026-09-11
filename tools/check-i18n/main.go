@@ -51,7 +51,7 @@ var placeholder = regexp.MustCompile(`\{([\p{L}\p{N}_]+)\}`)
 
 func main() {
 	flag.Parse()
-	dir := filepath.Join(repo.MustRoot("check-i18n"), "todeploy", "apps", "shared", "i18n")
+	dir := filepath.Join(repo.MustRoot("check-i18n"), "client", "apps", "shared", "i18n")
 	os.Exit(run(dir))
 }
 

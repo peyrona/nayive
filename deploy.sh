@@ -8,7 +8,7 @@
 #                         -> ${REMOTE_BASE}/nayive
 #      (no Python, no apt packages: `go build` needs no network, the only
 #       dependency is vendored - see docs/go-port.md)
-#   2. the apps           todeploy/apps/  -> ${REMOTE_BASE}/apps/
+#   2. the apps           client/apps/  -> ${REMOTE_BASE}/apps/
 #      (calc, calendar, contact, drive, habits, planner, tasks, text, trips, write,
 #       index.html launcher, login.html, admin.html and the shared/ code every
 #       app loads — theme, store, gum-api, ui, ical; see docs/shared-modules.md)
@@ -95,7 +95,7 @@ REMOTE_APPS_DIR="$REMOTE_BASE/apps"
 REMOTE_BIN="$REMOTE_BASE/nayive"          # the Go binary on the VPS
 SERVICE="nayive.service"
 
-SRC_ROOT="$SCRIPT_DIR/todeploy"             # the server run-root in the repo
+SRC_ROOT="$SCRIPT_DIR/client"             # the server run-root in the repo
 APPSSRC="$SRC_ROOT/apps"
 GOSRC="$SCRIPT_DIR/server/go"               # the Go server's source
 
@@ -188,7 +188,7 @@ fi
 [ -n "$BIN_CHANGES" ] && printf '%s\n' "$BIN_CHANGES"
 
 # ------------------------------------------------------------------------------
-# 2. Apps — todeploy/apps/ -> $REMOTE_APPS_DIR/  (recursive, additive)
+# 2. Apps — client/apps/ -> $REMOTE_APPS_DIR/  (recursive, additive)
 # -rltz: recurse, keep symlinks + mtimes, compress; no owner/group/perms.
 # ------------------------------------------------------------------------------
 echo "==> Deploying apps  $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"

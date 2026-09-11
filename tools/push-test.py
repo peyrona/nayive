@@ -29,7 +29,7 @@ Reading the result:
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "todeploy"
+ROOT = Path(__file__).resolve().parent.parent / "client"
 sys.path.insert(0, str(ROOT))
 
 from lib import users, webpush            # noqa: E402
