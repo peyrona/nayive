@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T) (*Server, *httptest.Server, *http.Client) {
@@ -322,6 +323,52 @@ func TestFileRoundTrip(t *testing.T) {
 	resp.Body.Close()
 	if len(listing.Items) != 1 || listing.Items[0].Name != "movido.txt" {
 		t.Errorf("trash listing = %+v", listing.Items)
+	}
+}
+
+// TestPutIfUnmodifiedSince - the office editors' "changed on another device"
+// guard. A PUT carrying an older If-Unmodified-Since is refused with 412 and
+// leaves the file alone; the file's own Last-Modified (which every PUT now
+// answers with) passes; no header, or a garbled one, is no check at all.
+func TestPutIfUnmodifiedSince(t *testing.T) {
+	_, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	url := ts.URL + "/api/files?file=files/carta.txt"
+
+	put := func(body string, headers map[string]string) *http.Response {
+		t.Helper()
+		resp := do(t, client, "PUT", url, strings.NewReader(body), headers)
+		resp.Body.Close()
+		return resp
+	}
+
+	resp := put("v1", nil)
+	lm := resp.Header.Get("Last-Modified")
+	if resp.StatusCode != http.StatusOK || lm == "" {
+		t.Fatalf("first PUT = %d, Last-Modified %q", resp.StatusCode, lm)
+	}
+
+	// Saved elsewhere since "we" read it: an hour-old base must be refused.
+	old := time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat)
+	if resp = put("stale", map[string]string{"If-Unmodified-Since": old}); resp.StatusCode != http.StatusPreconditionFailed {
+		t.Errorf("stale PUT = %d, want 412", resp.StatusCode)
+	}
+	resp = do(t, client, "GET", url, nil, nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "v1" {
+		t.Errorf("a refused PUT changed the file: %q", body)
+	}
+
+	// Our own last save's time passes.
+	if resp = put("v2", map[string]string{"If-Unmodified-Since": lm}); resp.StatusCode != http.StatusOK {
+		t.Errorf("PUT with the current Last-Modified = %d, want 200", resp.StatusCode)
+	}
+	if resp = put("v3", map[string]string{"If-Unmodified-Since": "no es una fecha"}); resp.StatusCode != http.StatusOK {
+		t.Errorf("PUT with a garbled header = %d, want 200 (no check)", resp.StatusCode)
+	}
+	if resp = put("v4", nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("PUT with no header = %d, want 200", resp.StatusCode)
 	}
 }
 

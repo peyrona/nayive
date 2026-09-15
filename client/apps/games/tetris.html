@@ -1,0 +1,1096 @@
+<!-- tetris.html - Tetris, one of the six games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the six games
+     share through window.NayiveGames. -->
+    <style>
+        /* ---- Tetris --------------------------------------------------------
+           The third canvas game, and the pane is Asteroids' - the shared
+           .view-bar, the play area, the touch keys, the hint. Two differences,
+           both from the well being a fixed 10 x 20 shape rather than whatever
+           room it is given:
+
+           the stage is a 1:2 BOX sized off one --board, the way Invaders' 3:4
+           one is, so a cell is exactly a tenth of the width and the canvas
+           never has half a square along an edge; and the height cap is the one
+           that binds nearly everywhere, since the box is twice as tall as it is
+           wide and the pane also carries the keys and the hint. */
+        /* The floor is only a "never vanish" guard, and it is deliberately
+           LOW: a phone turned sideways has room for about an 8px cell, and a
+           well that fits at 8px beats one you have to scroll at 10 - which is
+           what the old 30vh rule gave. Nothing above a landscape phone ever
+           reaches it. */
+        .tetris          { --board: max( 80px, min( 100cqw, 50cqh ) );
+                           height: 100%; display: flex; flex-direction: column; }
+
+        /* The piece that is coming, in the bar's left slot. Eight squares in a
+           fixed 4 x 2 grid - every piece fits that, and only the classes on it
+           change - and they take their colour from the same seven tokens the
+           canvas reads, which is why those live on .tetris and not on the
+           canvas: DOM follows the theme by itself and needs no repaint. */
+        .tet-next        { display: grid; grid-template-columns: repeat( 4, 11px );
+                           grid-auto-rows: 11px; gap: 1px; flex: 0 0 auto; }
+        .tet-next i      { border-radius: 2px; background: transparent; }
+        .tet-next i[data-p="I"] { background: var(--tt-i); }
+        .tet-next i[data-p="J"] { background: var(--tt-j); }
+        .tet-next i[data-p="L"] { background: var(--tt-l); }
+        .tet-next i[data-p="O"] { background: var(--tt-o); }
+        .tet-next i[data-p="S"] { background: var(--tt-s); }
+        .tet-next i[data-p="T"] { background: var(--tt-t); }
+        .tet-next i[data-p="Z"] { background: var(--tt-z); }
+
+        /* .tet-area is a SIZE CONTAINER and holds only the stage - the keys and
+           the hint were already outside it - so 100cqw / 100cqh above are the
+           room the well really has, with no vh figure standing in for the
+           header, the keys and the hint. */
+        .tet-area        { flex: 1 1 auto; min-height: 0; overflow: auto;
+                           display: flex; padding: var(--space-3);
+                           container-type: size; }
+        .tet-fit         { margin: auto; }
+        .tet-stage       { position: relative; width: var(--board); aspect-ratio: 1 / 2; }
+
+        /* The canvas is a real tab stop, for the reason written up over
+           Invaders': after a click on "new game" or on the overlay's own button
+           the focus sits on that button, and the next space - here the hard
+           drop - would press it again. Every path that starts or resumes a game
+           ends with canvasEl.focus(). */
+        .tet-canvas      { display: block; width: 100%; height: 100%;
+                           border-radius: var(--radius-m); background: var(--card2);
+                           touch-action: none; -webkit-user-select: none; user-select: none; }
+        .tet-canvas:focus         { outline: none; }
+        .tet-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* THE PALETTE. A canvas cannot read var(--x) - fillStyle takes a
+           colour, not a link to one - so these are read out of the stylesheet
+           once, in palette(), and re-read when the scheme changes. Minesweeper's
+           arrangement a third time: one fixed set for the dark scheme...
+
+           The seven are the colours the game has had since 1989 (cyan, blue,
+           orange, yellow, green, purple, red) pulled towards this app's
+           muted range. They must stay seven things told apart at a glance in a
+           24px square, which is why they are fixed hexes and not theme tokens.
+
+           --tt-ghost is where the piece would land, --tt-flash the row on its
+           way out, --tt-grid the ruled well behind everything.
+
+           They sit on :root and not on .tetris because the next-piece square
+           wears four of them and it is NOT inside .tetris any more - the
+           toolbar it lives in was moved into the header. palette() reads them
+           off .tetris all the same: a custom property inherits. */
+        :root            { --tt-i: #38BDD0; --tt-j: #4A7BD8; --tt-l: #D98A2B;
+                           --tt-o: #D2B62E; --tt-s: #4FB06A; --tt-t: #9B6FD4;
+                           --tt-z: #D9636F;
+                           --tt-grid: rgba( 255, 255, 255, 0.07 );
+                           --tt-ghost: rgba( 233, 230, 225, 0.30 );
+                           --tt-flash: rgba( 255, 255, 255, 0.80 ); }
+        /* ...and one for the beige one (an attribute, not a media query - see
+           theme-system.md). The seven pastels of the dark scheme are seven
+           washes of nothing on beige, so the light set is the same seven hues
+           taken down to where they hold a white numeral's worth of contrast. */
+        :root[data-theme="light"]
+                         { --tt-i: #147A8C; --tt-j: #23509E; --tt-l: #A55B0C;
+                           --tt-o: #8A7008; --tt-s: #1F7A42; --tt-t: #6B3FA8;
+                           --tt-z: #A8323F;
+                           --tt-grid: rgba( 36, 39, 50, 0.10 );
+                           --tt-ghost: rgba( 36, 39, 50, 0.34 );
+                           --tt-flash: rgba( 36, 39, 50, 0.55 ); }
+
+
+        /* Asteroids' key row, five wide instead of four. .is-down is set from
+           the module and not by :active, because a key is also lit while the
+           KEYBOARD holds it. */
+        .tet-pad         { display: flex; justify-content: center; gap: var(--space-2);
+                           flex: 0 0 auto; padding: var(--space-3) var(--space-4) 0; }
+        .tet-key         { flex: 0 1 76px; height: 44px;
+                           display: flex; align-items: center; justify-content: center;
+                           border: 1px solid var(--line); border-radius: var(--radius-m);
+                           background: var(--card2); color: var(--text-dim); cursor: pointer;
+                           touch-action: none; -webkit-user-select: none; user-select: none;
+                           -webkit-touch-callout: none;
+                           transition: background-color var(--tr-fast), color var(--tr-fast); }
+        .tet-key svg     { width: 21px; height: 21px; pointer-events: none; }
+        .tet-key.turn    { color: var(--accent); }
+        .tet-key.drop    { flex-basis: 96px; color: var(--accent); }
+        .tet-key:hover   { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
+        .tet-key.is-down { background: color-mix( in srgb, var(--accent) 24%, var(--card2) );
+                           border-color: var(--accent); color: var(--text); }
+        .tet-key:focus   { outline: none; }
+
+        .tet-hint        { margin: var(--space-2) 0 0; padding: 0 var(--space-4) var(--space-3);
+                           text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+
+        /* PHONE: the width is what limits the well there, so the height cap can
+           loosen; the keys spread to fill the row and the hint comes off, the
+           same three moves Asteroids makes. */
+        @media (max-width: 640px)
+        {
+            .tet-area  { padding: var(--space-2); }
+            .tet-pad   { padding: var(--space-2) var(--space-2) 0; gap: 6px; }
+            .tet-key   { flex: 1 1 0; height: 50px; }
+            .tet-hint  { display: none; }
+        }
+
+        /* A SHORT window - a laptop in landscape, or a phone turned sideways -
+           is the one shape where the well's height is the whole problem: it is
+           twice --board on its own, and the keys and the hint under it are what
+           tip the pane into scrolling. The hint goes (it says what the keys
+           already show) and the keys lose a few pixels. */
+        @media (max-height: 620px)
+        {
+            /* No --board line here any more: the base rule measures what is
+               left rather than guessing at it, so taking the hint away and
+               shortening the keys is enough - the well grows into exactly the
+               room those two moves free. */
+            .tet-hint { display: none; }
+            .tet-key  { height: 38px; }
+        }
+
+
+        /* The HEADER is two rows on every phone now - the game's toolbar takes
+           one of its own under 640px - and the pane paid for exactly that by
+           handing the toolbar over, so the two cancel and the well keeps the
+           height it had. Under 377px there is no third row to fear any more,
+           which is why this block only ever makes the board BIGGER: a width
+           breakpoint standing in for a height one, because the thing that costs
+           the height here is the width. */
+    </style>
+
+            <!-- Tetris. The third canvas game and the odd one of the three: a
+                 grid, like the first three games, that moves on its own like
+                 the other two. The pane is Asteroids' shape - the shared
+                 .view-bar across the top, the play area, the keys that are the
+                 only way to play on a phone, and the hint.
+
+                 The LEFT slot of the bar, where Mines and Sudoku put their
+                 .tb-modes and the two space games put their lives, holds the
+                 piece that is coming next. It is the same argument: Tetris has
+                 no difficulty to switch (the level is its difficulty, and it is
+                 in the centre with the figures), and the next piece is the one
+                 thing here that reads better as a picture than as a word. -->
+            <section class="game-pane" data-pane="tetris">
+                <div class="tetris">
+                    <div class="view-bar" data-options="tetris">
+                        <div class="tet-next" id="tetNext" data-i18n-attr="title:games.tetrisNext"></div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.tetrisLines">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="7" x2="21" y2="7"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="17" x2="21" y2="17"></line></svg>
+                                <b id="tetLines">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.tetrisLevel">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="14"></line><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="5"></line></svg>
+                                <b id="tetLevel">1</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.score">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3.2 14.6 9.1 21 9.8 16.2 14.1 17.6 20.4 12 17.2 6.4 20.4 7.8 14.1 3 9.8 9.4 9.1"></polygon></svg>
+                                <b id="tetScore">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.best">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0z"></path><path d="M8 4.5H5.5V7a3 3 0 0 0 3 3"></path><path d="M16 4.5h2.5V7a3 3 0 0 1-3 3"></path><line x1="12" y1="12" x2="12" y2="17"></line><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line><path d="M9.5 20.5c0-2 1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"></path></svg>
+                                <b id="tetBest">0</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="tetPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="tetNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="tet-area">
+                        <div class="tet-fit">
+                            <div class="tet-stage">
+                                <canvas class="tet-canvas" id="tetCanvas" tabindex="0" data-i18n-attr="aria-label:games.tetris"></canvas>
+                                <div class="game-cover tappable tet-over" id="tetOver" hidden>
+                                    <p class="game-cover-t" id="tetOverTitle"></p>
+                                    <p class="game-cover-s" id="tetOverSub"></p>
+                                    <button class="text-btn" id="tetOverBtn" type="button"></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- The five keys, held down rather than tapped and out of
+                         the tab order: they stand for the keyboard keys, and
+                         each one's tooltip names the key it stands for. The
+                         anticlockwise turn is the one key that is NOT here - it
+                         is `z` on a keyboard, and a sixth key would take the row
+                         past what a thumb can reach on a 390px phone. -->
+                    <div class="tet-pad">
+                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="left" data-i18n-attr="title:games.tetrisLeft, aria-label:games.tetrisLeft">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                        </button>
+                        <button class="tet-key turn" type="button" tabindex="-1" data-tet-key="cw" data-i18n-attr="title:games.tetrisRotate, aria-label:games.tetrisRotate">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        </button>
+                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="right" data-i18n-attr="title:games.tetrisRight, aria-label:games.tetrisRight">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </button>
+                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="down" data-i18n-attr="title:games.tetrisDown, aria-label:games.tetrisDown">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="19"></line><polyline points="5 12 12 19 19 12"></polyline></svg>
+                        </button>
+                        <button class="tet-key drop" type="button" tabindex="-1" data-tet-key="drop" data-i18n-attr="title:games.tetrisDrop, aria-label:games.tetrisDrop">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="15"></line><polyline points="6 9 12 15 18 9"></polyline><line x1="5" y1="20" x2="19" y2="20"></line></svg>
+                        </button>
+                    </div>
+
+                    <p class="tet-hint" data-i18n="games.hintTetris"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // in every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime;
+
+        //------------------------------------------------------------------------//
+        // TETRIS
+        //
+        // The third canvas game, and the odd one of the three: it is a GRID like
+        // the first three games and a real-time game like the other two. So it
+        // takes gameLoop() and the ready / playing / paused / over shape from
+        // Space Invaders and Asteroids, and nothing at all from the DOM grids -
+        // a <canvas> is what draws 200 squares sixty times a second without
+        // touching the DOM.
+        //
+        // What is new here, and what the module is mostly about:
+        //
+        //   - the piece is the only thing that moves, and it moves on a GRID.
+        //     There is no velocity anywhere: every constant below is a number of
+        //     SECONDS, and everything that happens is one square at a time;
+        //   - ROTATION is not "turn the matrix". A piece against a wall or in a
+        //     well has to be nudged out of the way to turn at all, which is what
+        //     the SRS kick tables are (see KICKS);
+        //   - a piece does not lock the moment it lands. It gets LOCK seconds to
+        //     be slid or turned, and moving it buys that time again - up to
+        //     MOVES times, so a piece cannot be held off the floor for ever.
+        //
+        // The well is 10 x 20 and the canvas is exactly 2:1, so one cell is
+        // canvas width / 10 with nothing left over. That is the whole sizing
+        // rule; there is no world unit as in Invaders because there is no sprite
+        // finer than a cell.
+
+        var Tetris = ( function ()
+        {
+            var TICK = STEP / 1000;            // one step in seconds - every constant here is in seconds
+            var COLS = 10, ROWS = 20;
+
+            var DAS   = 0.17;                  // seconds a left/right key is held before it repeats
+            var ARR   = 0.045;                 // ...and seconds between repeats after that
+            var SOFT  = 0.035;                 // seconds per square while the soft drop is held
+            var LOCK  = 0.5;                   // seconds a landed piece may still be slid or turned
+            var MOVES = 15;                    // ...and how many times that clock may be wound back
+            var FLASH = 0.16;                  // seconds a full row is shown before it goes
+            var LINES = [ 0, 100, 300, 500, 800 ];   // points for 1..4 rows, multiplied by the level
+
+            // The seven pieces, written out as they look. Each is its SPAWN
+            // shape; the other three rotations are turned out of it once, in
+            // build(), so there is one place a shape can be got wrong instead of
+            // four. The box matters: I turns inside a 4x4 and O inside a 2x2,
+            // which is why they are the two pieces that behave differently.
+            var SHAPES = {
+                I: [ '....',
+                     'XXXX',
+                     '....',
+                     '....' ],
+                J: [ 'X..',
+                     'XXX',
+                     '...' ],
+                L: [ '..X',
+                     'XXX',
+                     '...' ],
+                O: [ 'XX',
+                     'XX' ],
+                S: [ '.XX',
+                     'XX.',
+                     '...' ],
+                T: [ '.X.',
+                     'XXX',
+                     '...' ],
+                Z: [ 'XX.',
+                     '.XX',
+                     '...' ]
+            };
+
+            var NAMES = [ 'I', 'J', 'L', 'O', 'S', 'T', 'Z' ];   // the index a square on the board holds, + 1
+
+            // SUPER ROTATION SYSTEM wall kicks. A rotation is tried at the
+            // piece's own position first and then at four offsets; the first one
+            // that fits is the turn. This is what lets a piece be twisted into a
+            // gap it could never be slid into, and it is the difference between
+            // this feeling like Tetris and feeling like a matrix rotation.
+            //
+            // The published tables count y UPWARDS. These are the same numbers
+            // with every y negated, because a canvas counts it downwards.
+            // Keyed by "<from><to>" over the four states 0 1 2 3 (spawn, right,
+            // upside down, left); only +-1 turns exist, so there are eight.
+            var KICKS = {
+                '01': [ [ 0, 0 ], [ -1, 0 ], [ -1, -1 ], [ 0,  2 ], [ -1,  2 ] ],
+                '10': [ [ 0, 0 ], [  1, 0 ], [  1,  1 ], [ 0, -2 ], [  1, -2 ] ],
+                '12': [ [ 0, 0 ], [  1, 0 ], [  1,  1 ], [ 0, -2 ], [  1, -2 ] ],
+                '21': [ [ 0, 0 ], [ -1, 0 ], [ -1, -1 ], [ 0,  2 ], [ -1,  2 ] ],
+                '23': [ [ 0, 0 ], [  1, 0 ], [  1, -1 ], [ 0,  2 ], [  1,  2 ] ],
+                '32': [ [ 0, 0 ], [ -1, 0 ], [ -1,  1 ], [ 0, -2 ], [ -1, -2 ] ],
+                '30': [ [ 0, 0 ], [ -1, 0 ], [ -1,  1 ], [ 0, -2 ], [ -1, -2 ] ],
+                '03': [ [ 0, 0 ], [  1, 0 ], [  1, -1 ], [ 0,  2 ], [  1,  2 ] ]
+            };
+
+            // I has a table of its own: it turns inside a 4x4 box, so the same
+            // nudges would leave it a square out.
+            var KICKS_I = {
+                '01': [ [ 0, 0 ], [ -2, 0 ], [  1, 0 ], [ -2,  1 ], [  1, -2 ] ],
+                '10': [ [ 0, 0 ], [  2, 0 ], [ -1, 0 ], [  2, -1 ], [ -1,  2 ] ],
+                '12': [ [ 0, 0 ], [ -1, 0 ], [  2, 0 ], [ -1, -2 ], [  2,  1 ] ],
+                '21': [ [ 0, 0 ], [  1, 0 ], [ -2, 0 ], [  1,  2 ], [ -2, -1 ] ],
+                '23': [ [ 0, 0 ], [  2, 0 ], [ -1, 0 ], [  2, -1 ], [ -1,  2 ] ],
+                '32': [ [ 0, 0 ], [ -2, 0 ], [  1, 0 ], [ -2,  1 ], [  1, -2 ] ],
+                '30': [ [ 0, 0 ], [  1, 0 ], [ -2, 0 ], [  1,  2 ], [ -2, -1 ] ],
+                '03': [ [ 0, 0 ], [ -1, 0 ], [  2, 0 ], [ -1, -2 ], [  2,  1 ] ]
+            };
+
+            var PIECES = null;                 // built once: PIECES[ name ] = { box, cells: [ 4 rotations ] }
+
+            var board = [];                    // ROWS * COLS, 0 is empty and 1..7 is NAMES[ n - 1 ]
+            var piece = null;                  // { name, n, rot, x, y } - the one falling
+            var bag   = [];                    // what is left of the current seven (see nextPiece)
+            var queue = '';                    // the piece after this one
+
+            var score = 0, best = 0, lines = 0, level = 1;
+            var fall = 0, lock = 0, moves = 0, das = 0, rep = 0, soft = 0;
+            var clearing = null;               // { rows: [ y ], t } while full rows are shown before they go
+
+            var state = 'ready';               // ready | playing | paused | over
+            var dirty = false;                 // the record has moved and is not written yet
+            var keys  = { left: false, right: false, down: false };
+            var pads  = {};                    // the five touch keys, by name
+
+            var C = {};                        // the palette, copied out of the stylesheet (see palette)
+            var cell = 16, w = 160, h = 320;
+
+            var rootEl, canvasEl, ctx, overEl, overTitleEl, overSubEl, overBtnEl;
+            var scoreEl, bestEl, linesEl, levelEl, nextEl, nextCells, pauseBtn;
+            var A;                             // the arcade shell (see above): the loop and the four still states
+
+            //---- the pieces --------------------------------------------------
+
+            // Every rotation of every piece, worked out once from the seven
+            // drawings above. A rotation is the usual quarter turn of the box -
+            // out[ y ][ x ] = src[ n - 1 - x ][ y ] - and what is kept is the
+            // list of filled squares, since that is all any of the rules ask
+            // for.
+            function build()
+            {
+                PIECES = {};
+
+                NAMES.forEach( function ( name )
+                {
+                    var rows = SHAPES[ name ], n = rows.length, r, i, y, x, next, cells;
+
+                    PIECES[ name ] = { box: n, cells: [] };
+
+                    for( r = 0; r < 4; r++ )
+                    {
+                        cells = [];
+                        for( y = 0; y < n; y++ )
+                            for( x = 0; x < n; x++ )
+                                if( rows[ y ].charAt( x ) === 'X' ) cells.push( [ x, y ] );
+
+                        PIECES[ name ].cells.push( cells );
+
+                        next = [];
+                        for( y = 0; y < n; y++ )
+                        {
+                            next[ y ] = '';
+                            for( x = 0; x < n; x++ ) next[ y ] += rows[ n - 1 - x ].charAt( y );
+                        }
+                        rows = next;
+                    }
+                } );
+            }
+
+            // A SEVEN-BAG: the seven pieces are dealt in a shuffled set of seven and
+            // the set is refilled when it runs out. It is the modern rule and it
+            // is there for one reason - pure chance can hold the I piece back
+            // fifteen turns, and a well four deep with no I in sight is a game
+            // lost to the dice rather than to the player.
+            function nextPiece()
+            {
+                var i, j, t;
+
+                if( ! bag.length )
+                {
+                    bag = NAMES.slice();
+                    for( i = bag.length - 1; i > 0; i-- )
+                    {
+                        j = Math.floor( Math.random() * ( i + 1 ) );
+                        t = bag[ i ]; bag[ i ] = bag[ j ]; bag[ j ] = t;
+                    }
+                }
+                return bag.pop();
+            }
+
+            function cellsOf( name, rot )
+            {
+                return PIECES[ name ].cells[ ( rot % 4 + 4 ) % 4 ];
+            }
+
+            //---- the well ----------------------------------------------------
+
+            function at( x, y )
+            {
+                return board[ y * COLS + x ];
+            }
+
+            // Does this piece fit here? Off the sides or the floor is a no, and
+            // so is a square that is already taken - but ABOVE the well is a
+            // yes, because a piece is dealt half in and half out and has to be
+            // allowed to sit there while it comes down.
+            function fits( name, rot, px, py )
+            {
+                var c = cellsOf( name, rot ), i, x, y;
+
+                for( i = 0; i < c.length; i++ )
+                {
+                    x = px + c[ i ][ 0 ];
+                    y = py + c[ i ][ 1 ];
+
+                    if( x < 0 || x >= COLS || y >= ROWS ) return false;
+                    if( y >= 0 && at( x, y ) ) return false;
+                }
+                return true;
+            }
+
+            // Dealt centred, and one row ABOVE the well: the classic opening,
+            // and what gives a fast level the room to be reacted to. The game is
+            // over when the piece cannot be put there at all.
+            function spawn()
+            {
+                var name = queue, box;
+
+                queue = nextPiece();
+                paintNext();
+
+                box   = PIECES[ name ].box;
+                piece = { name: name, n: NAMES.indexOf( name ) + 1, rot: 0,
+                          x: Math.floor( ( COLS - box ) / 2 ), y: -1 };
+
+                fall = 0; lock = 0; moves = 0; soft = 0;
+
+                // The one way to lose. Every other rule in this game is about
+                // putting it off.
+                if( ! fits( piece.name, 0, piece.x, piece.y ) ) over();
+            }
+
+            function moveX( dx )
+            {
+                if( ! piece || ! fits( piece.name, piece.rot, piece.x + dx, piece.y ) ) return false;
+
+                piece.x += dx;
+                touched();
+                return true;
+            }
+
+            function moveDown()
+            {
+                if( ! piece || ! fits( piece.name, piece.rot, piece.x, piece.y + 1 ) ) return false;
+
+                piece.y++;
+                lock  = 0;                     // it is falling again: the lock clock starts over
+                moves = 0;
+                return true;
+            }
+
+            // The kicks are what make this a rotation and not a matrix turn:
+            // five positions are tried in order and the first that fits wins. A
+            // piece with nowhere to go simply does not turn.
+            function rotate( dir )
+            {
+                var from, to, table, kicks, i, kx, ky;
+
+                if( ! piece || piece.name === 'O' ) return;     // O is the same square four times over
+
+                from  = piece.rot;
+                to    = ( from + dir + 4 ) % 4;
+                table = piece.name === 'I' ? KICKS_I : KICKS;
+                kicks = table[ String( from ) + String( to ) ];
+
+                for( i = 0; i < kicks.length; i++ )
+                {
+                    kx = piece.x + kicks[ i ][ 0 ];
+                    ky = piece.y + kicks[ i ][ 1 ];
+
+                    if( fits( piece.name, to, kx, ky ) )
+                    {
+                        piece.rot = to;
+                        piece.x   = kx;
+                        piece.y   = ky;
+                        touched();
+                        return;
+                    }
+                }
+            }
+
+            // A piece that was moved or turned while it is resting on something
+            // gets its half second back - which is what lets a piece be slid
+            // under an overhang at the last moment. MOVES caps it, or a player
+            // spinning a piece in place could hold it up for ever.
+            function touched()
+            {
+                if( piece && ! fits( piece.name, piece.rot, piece.x, piece.y + 1 ) && moves < MOVES )
+                {
+                    lock = 0;
+                    moves++;
+                }
+            }
+
+            function hardDrop()
+            {
+                var n = 0;
+
+                if( ! piece ) return;
+
+                while( moveDown() ) n++;
+
+                score += n * 2;                // the arcade rate: two a square for dropping it yourself
+                paint();
+                settle();
+            }
+
+            // The piece becomes part of the well - and if any of it came to rest
+            // ABOVE the well, that is the second way to lose. What is inside is
+            // written first, so the piece that ended it is still on the screen;
+            // what is outside is what ends it. Playing on instead would make
+            // those squares simply vanish, and the well would go on taking
+            // pieces it has no room for.
+            function settle()
+            {
+                var c = cellsOf( piece.name, piece.rot ), i, x, y, out = false, full = [];
+
+                for( i = 0; i < c.length; i++ )
+                {
+                    x = piece.x + c[ i ][ 0 ];
+                    y = piece.y + c[ i ][ 1 ];
+                    if( y >= 0 ) board[ y * COLS + x ] = piece.n; else out = true;
+                }
+
+                piece = null;
+
+                if( out ) { over(); return; }
+
+                for( y = 0; y < ROWS; y++ )
+                {
+                    for( x = 0; x < COLS && at( x, y ); x++ ) {}
+                    if( x === COLS ) full.push( y );
+                }
+
+                if( full.length ) clearing = { rows: full, t: FLASH };
+                else spawn();
+            }
+
+            // The rows go, everything above them comes down, and the score is
+            // paid. Four at once is worth more than four ones by a long way -
+            // 800 against 400 - which is the whole reason anyone digs a well
+            // instead of clearing every row as it fills.
+            function collapse()
+            {
+                var rows = clearing.rows, i, y, x, cleared = rows.length;
+
+                clearing = null;
+
+                for( i = 0; i < rows.length; i++ )
+                {
+                    y = rows[ i ];
+                    for( ; y > 0; y-- )
+                        for( x = 0; x < COLS; x++ ) board[ y * COLS + x ] = at( x, y - 1 );
+                    for( x = 0; x < COLS; x++ ) board[ x ] = 0;
+                }
+
+                score += LINES[ cleared ] * level;
+                lines += cleared;
+                level  = 1 + Math.floor( lines / 10 );
+
+                paint();
+                spawn();
+            }
+
+            // The guideline curve, and the only thing the level does: 0.8s a
+            // square at level 1, a fifth of that by level 10, and under a frame
+            // by level 20 - past which it is held, because a piece that cannot
+            // be seen before it lands is not a harder game, it is a broken one.
+            function fallEvery()
+            {
+                var n = Math.min( level, 20 ) - 1;
+
+                return Math.pow( 0.8 - n * 0.007, n );
+            }
+
+            //---- a step ------------------------------------------------------
+
+            function step()
+            {
+                // Any dialog over the app pauses it, the same rule the other two
+                // canvas games have: the help sheet, the install prompt and
+                // "session expired" all cover the pane and swallow the keys, and
+                // a piece that cannot be steered is a piece landing where the
+                // player did not put it.
+                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
+
+                if( state !== 'playing' ) return;
+
+                if( clearing )
+                {
+                    clearing.t -= TICK;
+                    if( clearing.t <= 0 ) collapse();
+                    return;
+                }
+
+                if( ! piece ) return;
+
+                // Left and right REPEAT while held: one square, then a pause of
+                // DAS, then one every ARR. Without the pause a tap crosses the
+                // well; without the repeat the well cannot be crossed at all.
+                if( keys.left || keys.right )
+                {
+                    das += TICK;
+                    if( das >= DAS )
+                    {
+                        rep += TICK;
+                        while( rep >= ARR ) { rep -= ARR; moveX( keys.left ? -1 : 1 ); }
+                    }
+                }
+
+                // The soft drop is a repeat too, but a plain one - it is a
+                // faster gravity, not a separate move, so it pays a point a
+                // square and it never delays the lock.
+                if( keys.down )
+                {
+                    soft += TICK;
+                    while( soft >= SOFT )
+                    {
+                        soft -= SOFT;
+                        if( moveDown() ) score++; else break;
+                    }
+                    paint();
+                }
+
+                fall += TICK;
+                if( fall >= fallEvery() ) { fall = 0; moveDown(); }
+
+                // Resting on something. The clock only runs while it is - one
+                // square of daylight and it is falling again (see moveDown).
+                if( ! fits( piece.name, piece.rot, piece.x, piece.y + 1 ) )
+                {
+                    lock += TICK;
+                    if( lock >= LOCK ) settle();
+                }
+            }
+
+            //---- painting ----------------------------------------------------
+
+            // The canvas takes the size of its box in device pixels so the edges
+            // stay sharp on a phone, and one setTransform puts every coordinate
+            // below back into CSS pixels. The box is exactly 1:2 (see the CSS),
+            // so one cell is a tenth of the width with nothing left over.
+            //
+            // The pane is display:none while init() runs, which makes the box 0
+            // wide - hence the guard, and the second call from enter().
+            function fit()
+            {
+                var box = canvasEl.getBoundingClientRect();
+                var dpr = Math.min( window.devicePixelRatio || 1, 2 );
+
+                if( box.width < 2 || box.height < 2 ) return;
+
+                w    = Math.round( box.width );
+                h    = Math.round( box.height );
+                cell = w / COLS;
+
+                canvasEl.width  = Math.round( w * dpr );
+                canvasEl.height = Math.round( h * dpr );
+                ctx.setTransform( dpr, 0, 0, dpr, 0, 0 );
+
+                draw();
+            }
+
+            // A canvas cannot follow a CSS variable, so the colours it draws
+            // with are COPIES of the tokens - read here and not per frame, since
+            // getComputedStyle is a layout read and draw() runs sixty times a
+            // second. They are read off .tetris and not off the canvas because
+            // the next-piece square in the toolbar is DOM and wants the same
+            // seven.
+            function palette()
+            {
+                var cs = getComputedStyle( rootEl );
+                var v  = function ( n ) { return cs.getPropertyValue( n ).trim(); };
+
+                C = { grid: v( '--tt-grid' ), ghost: v( '--tt-ghost' ), flash: v( '--tt-flash' ),
+                      piece: NAMES.map( function ( n ) { return v( '--tt-' + n.toLowerCase() ); } ) };
+            }
+
+            // One square of the well. The inset is what makes a wall of the same
+            // colour read as separate squares, and the lighter top-left corner
+            // is the whole of the 3-D look - two lines, and no second colour to
+            // keep per piece.
+            function block( x, y, colour )
+            {
+                var px = x * cell, py = y * cell, i = Math.max( 1, cell * 0.06 );
+
+                ctx.fillStyle = colour;
+                ctx.fillRect( px + i, py + i, cell - i * 2, cell - i * 2 );
+
+                ctx.fillStyle = 'rgba( 255, 255, 255, 0.22 )';
+                ctx.fillRect( px + i, py + i, cell - i * 2, Math.max( 1, cell * 0.11 ) );
+                ctx.fillRect( px + i, py + i, Math.max( 1, cell * 0.11 ), cell - i * 2 );
+            }
+
+            function draw()
+            {
+                var x, y, n, c, i, gy;
+
+                ctx.clearRect( 0, 0, w, h );
+
+                // The grid is drawn first and faintly. It is not decoration: a
+                // piece three squares above a flat floor cannot be lined up
+                // without it.
+                ctx.strokeStyle = C.grid;
+                ctx.lineWidth   = 1;
+                ctx.beginPath();
+                for( x = 1; x < COLS; x++ ) { ctx.moveTo( Math.round( x * cell ) + 0.5, 0 ); ctx.lineTo( Math.round( x * cell ) + 0.5, h ); }
+                for( y = 1; y < ROWS; y++ ) { ctx.moveTo( 0, Math.round( y * cell ) + 0.5 ); ctx.lineTo( w, Math.round( y * cell ) + 0.5 ); }
+                ctx.stroke();
+
+                for( y = 0; y < ROWS; y++ )
+                    for( x = 0; x < COLS; x++ )
+                    {
+                        n = at( x, y );
+                        if( n ) block( x, y, C.piece[ n - 1 ] );
+                    }
+
+                if( clearing )
+                {
+                    // The rows that are going, flashed for a sixth of a second.
+                    // Four rows leaving in silence is the best thing that
+                    // happens in this game and it should be seen happening.
+                    ctx.fillStyle = C.flash;
+                    for( i = 0; i < clearing.rows.length; i++ )
+                        ctx.fillRect( 0, clearing.rows[ i ] * cell, w, cell );
+                }
+
+                if( piece )
+                {
+                    c = cellsOf( piece.name, piece.rot );
+
+                    // The GHOST: where the piece would land if it were dropped
+                    // now. On a phone, where the well is 24px wide a column,
+                    // it is the difference between placing a piece and guessing.
+                    gy = piece.y;
+                    while( fits( piece.name, piece.rot, piece.x, gy + 1 ) ) gy++;
+
+                    ctx.strokeStyle = C.ghost;
+                    ctx.lineWidth   = Math.max( 1, cell * 0.09 );
+                    for( i = 0; i < c.length; i++ )
+                        if( gy + c[ i ][ 1 ] >= 0 )
+                            ctx.strokeRect( ( piece.x + c[ i ][ 0 ] ) * cell + cell * 0.18,
+                                            ( gy      + c[ i ][ 1 ] ) * cell + cell * 0.18,
+                                            cell * 0.64, cell * 0.64 );
+
+                    for( i = 0; i < c.length; i++ )
+                        if( piece.y + c[ i ][ 1 ] >= 0 )
+                            block( piece.x + c[ i ][ 0 ], piece.y + c[ i ][ 1 ], C.piece[ piece.n - 1 ] );
+                }
+            }
+
+            //---- the toolbar and the three still states ----------------------
+
+            function paint()
+            {
+                // The record is taken HERE and not where the score moves. The
+                // score moves in four places - a row cleared, a hard drop, a
+                // soft drop held, one square of soft drop pressed - and every
+                // one of them ends in a repaint, so this is the one place that
+                // cannot be forgotten. A game whose last points were a drop,
+                // which is every game since the last piece always lands, would
+                // otherwise save a record short of what is on the screen.
+                if( score > best ) { best = score; dirty = true; }
+
+                scoreEl.textContent = String( score );
+                bestEl.textContent  = String( best );
+                linesEl.textContent = String( lines );
+                levelEl.textContent = String( level );
+            }
+
+            // The piece after this one, in the bar's left slot - where the other
+            // two canvas games keep their lives. It is DOM and not a second
+            // canvas: eight squares that follow the theme by themselves are
+            // worth more than eight the module would have to repaint and
+            // recolour. Every piece fits in four columns by two rows, so the
+            // grid is a fixed eight and only the classes on it change.
+            function paintNext()
+            {
+                var c = cellsOf( queue, 0 ), i, minx = 9, maxx = -9, miny = 9, maxy = -9, ox, oy, on = {};
+
+                for( i = 0; i < c.length; i++ )
+                {
+                    minx = Math.min( minx, c[ i ][ 0 ] ); maxx = Math.max( maxx, c[ i ][ 0 ] );
+                    miny = Math.min( miny, c[ i ][ 1 ] ); maxy = Math.max( maxy, c[ i ][ 1 ] );
+                }
+
+                ox = Math.floor( ( 4 - ( maxx - minx + 1 ) ) / 2 );
+                oy = Math.floor( ( 2 - ( maxy - miny + 1 ) ) / 2 );
+
+                for( i = 0; i < c.length; i++ )
+                    on[ ( c[ i ][ 1 ] - miny + oy ) * 4 + ( c[ i ][ 0 ] - minx + ox ) ] = true;
+
+                for( i = 0; i < nextCells.length; i++ )
+                    if( on[ i ] ) nextCells[ i ].dataset.p = queue;
+                    else          nextCells[ i ].removeAttribute( 'data-p' );
+
+                nextEl.setAttribute( 'aria-label', T( 'games.tetrisNext' ) + ': ' + queue );
+            }
+
+            // Everything let go at once. A pane switch, a hidden tab or a window
+            // that lost focus all arrive while a key is down, and its keyup is
+            // then delivered somewhere else - so the piece would go on sliding
+            // for ever.
+            function clearKeys()
+            {
+                Object.keys( keys ).forEach( function ( k ) { keys[ k ] = false; } );
+                Object.keys( pads ).forEach( function ( k ) { pads[ k ].classList.remove( 'is-down' ); } );
+                das = 0; rep = 0; soft = 0;
+            }
+
+            // A fresh well, sitting at "ready" behind its overlay. Nothing runs
+            // until the player asks for it.
+            function reset()
+            {
+                var i;
+
+                board = [];
+                for( i = 0; i < ROWS * COLS; i++ ) board.push( 0 );
+
+                score = 0; lines = 0; level = 1;
+                piece = null; clearing = null; bag = [];
+                dirty = false;
+                state = 'ready';
+
+                A.loop.halt();
+                clearKeys();
+                fit();                         // the box may have changed size behind another pane
+
+                queue = nextPiece();
+                spawn();
+
+                paint();
+                A.overlay();
+                draw();
+            }
+
+            function over()
+            {
+                piece = null;
+                state = 'over';
+                A.loop.halt();
+                flush();
+                A.overlay();
+                draw();
+            }
+
+            // The record is put up at every PAUSE in the game and not the moment
+            // it is beaten: saveBest() rewrites the whole file and queues an
+            // upload, and four rows go at once. Every way out of a game passes
+            // through here - the last piece, the pause button, another pane, a
+            // hidden tab - so nothing is ever left unwritten.
+            function flush()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                saveBest( 'tetris', best );
+            }
+
+            //---- input -------------------------------------------------------
+
+            // The three held keys and the two that are single presses. Left and
+            // right repeat on their own clock (see step), so they are held;
+            // rotate and the hard drop happen once and only once, however long
+            // the key is down.
+            var KEYS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down',
+                         ArrowUp: 'cw', x: 'cw', X: 'cw', z: 'ccw', Z: 'ccw',
+                         ' ': 'drop', Spacebar: 'drop' };
+
+            // One place for what a key DOES the moment it goes down, so the five
+            // touch keys are the same five keys and not a second set of rules.
+            function press( k )
+            {
+                if( state !== 'playing' || clearing ) return;
+
+                if     ( k === 'left'  ) { moveX( -1 ); das = 0; rep = 0; }
+                else if( k === 'right' ) { moveX(  1 ); das = 0; rep = 0; }
+                else if( k === 'down'  ) { if( moveDown() ) score++; soft = 0; }
+                else if( k === 'cw'    ) rotate(  1 );
+                else if( k === 'ccw'   ) rotate( -1 );
+                else if( k === 'drop'  ) hardDrop();
+
+                paint();
+                draw();
+            }
+
+            function onKey( e )
+            {
+                var k = KEYS[ e.key ], el = e.target;
+
+                if( ! A.isLive() || e.ctrlKey || e.altKey || e.metaKey ) return;
+                if( keyBusy( e ) ) return;
+
+                if( e.key === 'p' || e.key === 'P' )
+                {
+                    if( state === 'paused' ) A.resume(); else A.pause();
+                    e.preventDefault();
+                    return;
+                }
+
+                if( ! k ) return;
+
+                // Space belongs to whatever button has the focus - the overlay's
+                // own, or "new game" in the toolbar. Taking it here as well
+                // would start the game and drop a piece on one press.
+                if( el && el.tagName === 'BUTTON' && e.key === ' ' ) return;
+
+                e.preventDefault();            // the arrows and space would scroll the page
+
+                // Asked FIRST: a still game is started by its first key, and
+                // starting one clears the keys - so taking this one before that
+                // happens would lose it again.
+                if( state === 'ready' || state === 'over' ) { A.play(); return; }
+
+                // The OS repeats a held key by sending more keydowns. Left,
+                // right and down do their own repeating on the game's clock (and
+                // at its speed), and a rotation must happen once however long
+                // the key is held - so every one of them is dropped here.
+                if( e.repeat ) return;
+
+                if( keys[ k ] !== undefined ) keys[ k ] = true;
+                if( pads[ k ] ) pads[ k ].classList.add( 'is-down' );
+
+                press( k );
+            }
+
+            // The other half is answered whatever the state, and with none of
+            // the guards above: they are there to stop a key being TAKEN, never
+            // released, and one that is not let go stays held for the rest of
+            // the game.
+            function onKeyUp( e )
+            {
+                var k = KEYS[ e.key ];
+
+                if( ! k ) return;
+                if( keys[ k ] !== undefined ) keys[ k ] = false;
+                if( pads[ k ] ) pads[ k ].classList.remove( 'is-down' );
+            }
+
+            function onPad( e )
+            {
+                var btn = e.currentTarget, k = btn.dataset.tetKey, down = e.type === 'pointerdown';
+
+                if( down )
+                {
+                    // The finger keeps the key it started on even when it slides
+                    // off, so the pointerup always comes back here and the key
+                    // is always let go.
+                    if( btn.setPointerCapture ) try { btn.setPointerCapture( e.pointerId ); } catch ( err ) {}
+                    e.preventDefault();        // no focus ring and no click behind it
+                }
+
+                if( keys[ k ] !== undefined ) keys[ k ] = down;
+                btn.classList.toggle( 'is-down', down );
+
+                if( ! down ) return;
+
+                // ...the five keys start a still game too, and then do nothing
+                // else: the first tap is "play", not a piece moved.
+                if( state === 'ready' || state === 'over' ) { A.play(); return; }
+                press( k );
+            }
+
+            //---- mounting ----------------------------------------------------
+
+            // The same max-merge every scored game here uses, and for the same
+            // reason: the plug re-reads the file on focus and on a tap, and that
+            // answer can be older than the game being played right now.
+            function adoptBest( n )
+            {
+                best = keepBest( best, n, bestEl );
+                return best;
+            }
+
+            function init()
+            {
+                rootEl      = document.querySelector( '.tetris' );
+                canvasEl    = document.getElementById( 'tetCanvas' );
+                ctx         = canvasEl.getContext( '2d' );
+                overEl      = document.getElementById( 'tetOver' );
+                overTitleEl = document.getElementById( 'tetOverTitle' );
+                overSubEl   = document.getElementById( 'tetOverSub' );
+                overBtnEl   = document.getElementById( 'tetOverBtn' );
+                scoreEl     = document.getElementById( 'tetScore' );
+                bestEl      = document.getElementById( 'tetBest' );
+                linesEl     = document.getElementById( 'tetLines' );
+                levelEl     = document.getElementById( 'tetLevel' );
+                nextEl      = document.getElementById( 'tetNext' );
+                pauseBtn    = document.getElementById( 'tetPause' );
+
+                nextEl.innerHTML = '<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>';
+                nextCells = Array.prototype.slice.call( nextEl.children );
+
+                build();
+
+                A = arcade( {
+                    readyKey: 'games.tetris',
+                    els: { canvas: canvasEl, over: overEl, overTitle: overTitleEl,
+                           overSub: overSubEl, overBtn: overBtnEl, pause: pauseBtn,
+                           newGame: document.getElementById( 'tetNew' ) },
+                    getState: function () { return state; },
+                    setState: function ( v ) { state = v; },
+                    score:    function () { return score; },
+                    step: step, draw: draw, reset: reset, clearKeys: clearKeys,
+                    flush: flush, palette: palette, fit: fit,
+                    onKey: onKey, onKeyUp: onKeyUp
+                } );
+
+                // focusOnTap: the well takes the focus before the game starts,
+                // or the space that follows re-clicks the button behind it.
+                A.wire( { focusOnTap: true,
+                          pads: { sel: '[data-tet-key]', on: onPad,
+                                  keep: function ( b ) { pads[ b.dataset.tetKey ] = b; } } } );
+
+                palette();
+                reset();
+
+                return { enter: A.enter, leave: A.leave };
+            }
+
+            return { init: init, adoptBest: adoptBest };
+        } )();
+
+        NayiveGames.add( 'tetris', Tetris );
+    } )();
+    </script>

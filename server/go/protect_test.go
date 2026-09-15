@@ -15,9 +15,55 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
+
+// TestSweepOrphansByTimeInTheBin - an item in the papelera whose index.json row
+// was lost is still swept, and by how long it has been IN THE BIN: the entryId's
+// epoch, never the file's own timestamp (a move into .trash keeps that intact,
+// so a file written today can have been deleted years ago, and the other way
+// round).
+func TestSweepOrphansByTimeInTheBin(t *testing.T) {
+	users, cfg, _ := newTestUsers(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	trash := NewTrash(cfg.BaseDir, cfg.HomesDir, users, log)
+
+	can := filepath.Join(cfg.HomesDir, "ana", ".trash")
+	os.MkdirAll(can, 0o755)
+	entryID := func(daysAgo int) string {
+		when := time.Now().AddDate(0, 0, -daysAgo).Unix()
+		return strconv.FormatInt(when, 10) + "-deadbeef"
+	}
+
+	// Every one of these is written NOW, so the file timestamps are all today:
+	// only the id can tell them apart.
+	old := filepath.Join(can, entryID(40))  // 40 days in the bin
+	fresh := filepath.Join(can, entryID(3)) // 3 days in the bin
+	junk := filepath.Join(can, "notas.txt") // not a trash entry at all
+	index := filepath.Join(can, "index.json")
+	for _, p := range []string{old, fresh, junk} {
+		os.WriteFile(p, []byte("x"), 0o644)
+	}
+	os.WriteFile(index, []byte("{}"), 0o644) // an index that lost its rows
+
+	trash.SweepExpired(30)
+
+	if pathExists(old) {
+		t.Error("an orphan 40 days in the bin was kept")
+	}
+	if !pathExists(fresh) {
+		t.Error("an orphan only 3 days in the bin was deleted")
+	}
+	if !pathExists(junk) {
+		t.Error("the sweep deleted a file that is not a trash entry")
+	}
+	if !pathExists(index) {
+		t.Error("the sweep deleted index.json")
+	}
+}
 
 // TestSweepSparesUserFiles - the startup sweep deletes for good, so it must
 // take the server's own leftovers and nothing that merely LOOKS like one.
@@ -48,7 +94,7 @@ func TestSweepSparesUserFiles(t *testing.T) {
 		write(p, mode)
 	}
 
-	NewFileTree(cfg.BaseDir, cfg.HomesDir, nil).SweepStaleTemp()
+	NewFileTree(cfg.BaseDir, cfg.HomesDir, cfg.ConfigDir, nil).SweepStaleTemp()
 
 	for p := range gone {
 		if pathExists(p) {
@@ -124,28 +170,17 @@ func TestAccountFileProtected(t *testing.T) {
 	signIn(t, client, ts.URL, "ana", "abc") // the account still works
 }
 
-// TestAdminCannotTrashServerCode - the admin's Drive is rooted at the base
-// directory, so the server's own code is one click away. It is refused; an
-// ordinary file next to it is not. And no account file, for the admin either.
-func TestAdminCannotTrashServerCode(t *testing.T) {
+// TestAdminCannotTrashAccountFile - the admin's Drive is rooted at the base
+// directory, so every account file is one click away. It is refused; an
+// ordinary file of the admin's is not.
+func TestAdminCannotTrashAccountFile(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	base := srv.cfg.BaseDir
-	os.WriteFile(filepath.Join(base, "server.py"), []byte("#"), 0o644)
-	os.MkdirAll(filepath.Join(base, "lib"), 0o755)
-	os.WriteFile(filepath.Join(base, "lib", "handler.py"), []byte("#"), 0o644)
 	os.MkdirAll(filepath.Join(base, "files"), 0o755)
 	os.WriteFile(filepath.Join(base, "files", "nota.txt"), []byte("hola"), 0o644)
 
-	for _, rel := range []string{"server.py", "lib", "lib/handler.py",
-		"homes/ana/data/config.json"} {
-		if !srv.isStructuralDir("admin", "", filepath.Join(base, rel)) {
-			t.Errorf("the admin may move or trash %s", rel)
-		}
-	}
-	for _, rel := range []string{"server.py", "lib/handler.py"} {
-		if !srv.isProtectedFile("admin", filepath.Join(base, rel)) {
-			t.Errorf("the admin may overwrite %s", rel)
-		}
+	if !srv.isStructuralDir("admin", "", filepath.Join(base, "homes", "ana", "data", "config.json")) {
+		t.Errorf("the admin may move or trash homes/ana/data/config.json")
 	}
 	if srv.isStructuralDir("admin", "", filepath.Join(base, "files", "nota.txt")) {
 		t.Errorf("an ordinary file of the admin's is refused")

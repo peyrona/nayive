@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // maxGzipOut caps what ONE gzipped PUT may expand to. Content-Length sizes the
@@ -61,6 +62,19 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	// CHANGED SINCE YOU OPENED IT. The office editors (Write, Calc, Text) send
+	// If-Unmodified-Since = the Last-Modified their copy came with; a file saved
+	// from another device since then answers 412 and is NOT overwritten - the
+	// editor then offers "save yours as a copy". HTTP dates are whole seconds, so
+	// the file's time is cut to the second too. No header (every other client)
+	// or an unreadable one = no check, exactly as before.
+	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
+		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
+			sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
+			return
+		}
+	}
+
 	var already int64
 	if info, err := target.Stat(); err == nil && info.Mode().IsRegular() {
 		already = info.Size()
@@ -97,9 +111,15 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		return // streamToFile already answered
 	}
 
-	// Keep the cached usage figure current without a re-walk.
+	// Keep the cached usage figure current without a re-walk. The new time also
+	// goes back as Last-Modified: it is what the editor's NEXT save sends as
+	// If-Unmodified-Since (see above).
+	info, statErr := target.Stat()
+	if statErr == nil {
+		w.Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
+	}
 	if owner := s.users.HomeOwner(target.Abs); owner != "" {
-		if info, err := target.Stat(); err == nil {
+		if statErr == nil {
 			s.users.AdjustUsage(owner, info.Size()-already)
 		} else {
 			s.users.ForgetUsage(owner)
@@ -118,6 +138,13 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		answer["convert"] = "queued"
 	}
 	sendJSON(w, r, http.StatusOK, answer)
+
+	// A photo that knows where it was taken can place its owner on a trip with a
+	// public link (photo_position.go). After the answer, on its own goroutine:
+	// best effort, never in the way of the upload.
+	if role == "user" && !IsSharedPath(fileRel) && isJPEGName(target.Abs) {
+		go s.photoUploaded(user, strings.Join(splitPath(unquotePath(fileRel)), "/"), target)
+	}
 }
 
 // streamToFile is the write itself. It answers the request on every failure and

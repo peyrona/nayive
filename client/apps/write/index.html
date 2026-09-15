@@ -335,6 +335,67 @@
            (the 8th item) from SuperDoc's table-options menu. */
         .toolbar-table-actions .toolbar-table-actions__item:nth-child(8) { display: none; }
 
+        /* ---- Find bar ------------------------------------------------------ */
+
+        /* SuperDoc pads its floating panels 16px 20px 20px; a Nayive dialog
+           (.sheet) is 16px all round. */
+        .sd-surface-floating:has(.sd-find-replace) { --sd-ui-surface-content-padding: 16px; }
+
+        /* Our labels are full words ("Match case", "Regular expression" -
+           SuperDoc's own are "Aa" / ".*"), and inside the search box they left
+           the query almost no room. So they drop to a line of their own UNDER
+           the box: the field wraps, its border moves to a ::before that covers
+           only the first line, and ::after (order 1) is the line break.
+           :has() leaves the replace field - also a .sd-find-replace__field - alone. */
+        .sd-find-replace > .sd-find-replace__row:first-child { align-items: flex-start; }
+
+        /* The chevron before the field is an .icon-btn.sm (write.js): 30px, 36px
+           on a phone. The replace row's indent follows it, it is centred on the
+           32px field, and it turns while Replace is open, like .more-chevron. */
+        .sd-find-replace { --sd-ui-find-replace-expander-size: 30px; }
+        .sd-find-replace > .sd-find-replace__row:first-child > .icon-btn { margin-top: 1px; }
+        .sd-find-replace .icon-btn[aria-expanded] svg { transition: transform var(--tr-move); }
+        .sd-find-replace .icon-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
+        @media (max-width: 640px)
+        {
+            .sd-find-replace { --sd-ui-find-replace-expander-size: 36px; }
+            .sd-find-replace > .sd-find-replace__row:first-child > .icon-btn { margin-top: -2px; }
+        }
+        .sd-find-replace > .sd-find-replace__row:first-child > .sd-find-replace__nav { height: var(--sd-ui-find-replace-input-height, 32px); }
+
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field:has(.sd-find-replace__btn--toggle)
+        {
+            position: relative; isolation: isolate;
+            flex-wrap: wrap; height: auto;
+            border-color: transparent; background: transparent; box-shadow: none;
+        }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field:has(.sd-find-replace__btn--toggle)::before
+        {
+            content: ''; position: absolute; z-index: -1;
+            top: -1px; left: -1px; right: -1px;
+            height: var(--sd-ui-find-replace-input-height, 32px);
+            box-sizing: border-box;
+            background: var(--sd-ui-find-replace-input-bg, #fff);
+            border: 1px solid var(--sd-ui-find-replace-input-border, var(--sd-ui-border));
+            border-radius: var(--sd-ui-find-replace-input-radius, 6px);
+            transition: border-color 0.12s ease-out, box-shadow 0.12s ease-out;
+        }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field:has(.sd-find-replace__btn--toggle):focus-within::before
+        {
+            border-color: var(--sd-ui-find-replace-input-focus-border, var(--sd-ui-action));
+            box-shadow: 0 0 0 3px var(--sd-ui-find-replace-input-focus-ring, color-mix(in srgb, var(--sd-ui-action) 15%, transparent));
+        }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field--error:has(.sd-find-replace__btn--toggle)::before
+        { border-color: var(--sd-ui-find-replace-error-color, #b3261e); }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field--error:has(.sd-find-replace__btn--toggle):focus-within::before
+        { box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-ui-find-replace-error-color, #b3261e) 12%, transparent); }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__field:has(.sd-find-replace__btn--toggle)::after
+        { content: ''; order: 1; flex-basis: 100%; height: 0; }
+
+        /* was height: 100% of the fixed 32px box, which is now auto */
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__input--search { height: 30px; }
+        .sd-find-replace > .sd-find-replace__row .sd-find-replace__btn--toggle { order: 2; margin-top: 6px; }
+
         /* ---- Pull-down menus (the other of Write's two menu modes) ---------- */
 
         /* Write has TWO chromes and Settings picks between them: the icon
@@ -543,21 +604,7 @@
         .st-row b { font-variant-numeric: tabular-nums; }
         .st-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 4px; }
 
-        /* Keyboard-shortcut sheet: one row per shortcut, key on the right. */
-        .sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
-        .sc-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 5px 0; }
-        .sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
-        .sc-row kbd
-        {
-            font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap;
-            color: var(--text-dim); border: 1px solid var(--line);
-            border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
-        }
-
-        /* "Guardado 12:04" — a quiet readout, not a control. Hidden on a phone,
-           where the top bar has no room to spare. */
-        .saved-at { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; margin-left: 6px; }
-        @media (max-width: 640px) { .saved-at { display: none; } }
+        /* Keyboard-shortcut sheet: .sc-list / .sc-row in the OFFICE CHROME block of app.css. */
 
         /* SuperDoc editor mount — fills the rest of the column. In `contained`
            mode (set in write.js) SuperDoc runs its own scroll container inside
@@ -999,6 +1046,7 @@
                 </button>
             </div>
             <div class="sheet-actions">
+                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
                 <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>

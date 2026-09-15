@@ -16,7 +16,7 @@ Contacts, Write, Calc, Text, Photos, Music, Movies, Trips, Split and Games.
 ./pack.sh                 # builds nayive.zip (needs Go 1.24+ and zip)
 unzip nayive.zip -d nayive
 cd nayive
-./install.sh              # writes config/server.json and a systemd unit
+./install.sh              # writes store/config/server.json and a systemd unit
 ```
 
 Then open `http://localhost:4343/nayive/admin.html` and create the admin account.
@@ -24,10 +24,10 @@ Then open `http://localhost:4343/nayive/admin.html` and create the admin account
 ## Run from source
 
 ```sh
-cp client/config/server.example.json client/config/server.json
-mkdir -p client/homes
+mkdir -p store/config store/homes
+cp store/config/server.example.json store/config/server.json
 cd server/go
-go run . -config ../../client/config/server.json   # http://localhost:4343/nayive/
+go run . -config ../../store/config/server.json   # http://localhost:4343/nayive/
 ```
 
 ## Deploy to your own server
@@ -42,7 +42,8 @@ cp deploy.local.sh.example deploy.local.sh   # your VPS user, host and SSH port
 | Folder | What it holds |
 |---|---|
 | `server/go/` | the server (Go) |
-| `client/` | the run-root: `apps/` is what the browser loads |
+| `client/` | `apps/`: what the browser loads |
+| `store/` | the run-root: settings and every user's data (git-ignored) |
 | `tools/` | build and check helpers (Go) |
 
 ## License

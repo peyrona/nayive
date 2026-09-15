@@ -44,12 +44,13 @@ var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "
 
 // Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js catches
 // an app's own top-level module (write.js); the other apps keep theirs inline.
-var appGlobs = []string{"index.html", "manifest.json", "*.js", "lib/**/*", "icons/*"}
+// *.html is index.html plus any page it fetches (games has one per game).
+var appGlobs = []string{"*.html", "manifest.json", "*.js", "lib/**/*", "icons/*"}
 
 var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/menubar.js",
 	"shared/ical.js", "shared/media.js",
-	"shared/photo.js", "shared/office.js",
+	"shared/photo.js", "shared/office.js", "shared/basemap.js",
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",

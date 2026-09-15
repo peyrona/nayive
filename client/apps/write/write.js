@@ -27,13 +27,10 @@ const DOC_DIR = ( function() {
     const dir = raw ? raw.replace( /^\/+|\/+$/g, '' ) : '';
     return dir || 'files';
 } )();
-// One previous version per document, in a .bak/ beside the document itself —
-// a doc can live in any Drive folder now ("Guardar como" asks for one), so a
-// single DOC_DIR/.bak would scatter backups away from what they back up.
-function bakDirFor( path ) { return ( dirName( path ) || DOC_DIR ) + '/.bak'; }
+// The Open browser never walks above the user's files/ root (the first path
+// segment of DOC_DIR — "files" when Write is opened from the launcher).
+const OPEN_ROOT = DOC_DIR.split( '/' )[ 0 ] || 'files';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-const AUTOSAVE_DELAY_MS = 2500;
 
 // SuperDoc's sections API takes inches. Page sizes here are portrait, inches.
 const PAGE_SIZES = {
@@ -61,30 +58,12 @@ function sizeNameFor( w, h )
 
 // Offline-capable persistence (../shared/store.js): every write is cached in
 // IndexedDB first and the PUT is queued, so a crash or a dropped connection
-// never loses the document. binary — bodies are .docx bytes.
-const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true } );
-
-// The header plug. shared/ui.js owns the whole mapping (store state -> classes
-// + title); this only overrides the two states Write words differently:
-//   offline / pending  "sin conexion - a salvo en este dispositivo"
-//   unsaved            an edit in a document that has never been named, so
-//                      there is nothing to save TO yet - needs "Guardar como".
-//                      Not a store state: Write raises it itself, and it falls
-//                      through to the shared red / unplugged look.
-//
-// 'needs-auth' does NOT redirect to the sign-in page: store.js raises the shared
-// "tu sesion ha caducado" bar (with its own sign-in button) and the bytes are
-// already safe in the local cache, so yanking the page out from under someone
-// who is mid-paragraph buys nothing. The boot-time redirects (probeAccess,
-// readViaStore's 'unauth') stay - there is nothing to lose before the document
-// is open.
-const setSyncStatus = NayiveUI.syncIndicator( { titles: {
-    offline:   'write.offlineSafe',
-    pending:   'write.offlineSafe',
-    unsaved:   'write.unsavedUseSaveAs'
-} } );
+// never loses the document. binary — bodies are .docx bytes. conflicts — a save
+// over a file changed on another device since it was opened is refused.
+const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true, conflicts: true } );
 
 let sd            = null;    // the SuperDoc instance
+let bootSource    = null;    // the File boot() builds SuperDoc on (see loadBody)
 
 // Phone (see TWO LAYOUT MODES in shared/app.css): the A4 page is 794px wide at
 // 100 %, twice a phone screen, so the zoom is set to make it fit the editor box
@@ -346,17 +325,30 @@ function applyPhoneChrome()
     setMoreTools( false );
     if( ! PHONE.matches ) setToolbarOpen( true );
 }
-let currentPath   = null;    // path under Gum's root, or null = untitled
-let pendingName   = null;    // name typed/imported before the first save
 let ready         = false;   // SuperDoc mounted; edits after this are the user's
-let dirty         = false;   // unsaved change since the last successful write
-let autosaveTimer = null;
-let saveSeq       = 0;       // guards against an older write finishing last
 
-let dirsReady      = Promise.resolve();   // resolves once docs/ and docs/.bak/ exist
-let backedUpPath   = null;   // doc whose pre-session server copy is already snapshotted to .bak/
-let dirField       = null;   // the save-as folder row (shared/office.js), wired in wireStaticUI
-let pristineImport = null;   // bytes of a just-imported file, kept until its first save snapshots them
+// The open document - its path, whether it is someone else's, its name, the
+// top-bar label, New / Import / "Guardar como" / rename / Restore, start-up,
+// the header plug and the autosave - is the one Calc and Text use
+// (shared/office.js, THE OPEN DOCUMENT). Write only says how a .docx gets into
+// and out of SuperDoc, and that its files are always .docx.
+const session = NayiveOffice.session( {
+    app        : 'write',
+    store      : store,
+    appDir     : DOC_DIR,
+    openRoot   : OPEN_ROOT,
+    defaultName: 'documento.docx',
+    encode     : function() { return exportBytes(); },
+    load       : loadBody,
+    blank      : loadBlank,
+    finishName : docxName,
+    renameName : docxName,
+    canOpen    : isOpenable,                                 // what the Open dialog lists
+    onPick     : function( path ) { openPickedFile( path ); },   // a foreign format is converted first
+    emptyKey   : 'write.noDocs',
+    ready      : function() { return ready; },
+    focus      : function() { try { sd && sd.focus(); } catch( _ ) {} }   // the caret stays where it was
+} );
 
 // Page setup for this session. A new blank document is created with these
 // margins; the dialog also pre-fills from here. SuperDoc's browser build can't
@@ -417,99 +409,32 @@ async function boot( who )
     whoAmI = who;
 
     loadPersonalWords();          // best effort; the provider reads it live
-    dirsReady = ensureDirs();   // best-effort: create the document folder and its .bak/ if missing (writeCurrent awaits this)
 
     // Toolbar or pull-down menus, from the account. Awaited here, before
     // anything is drawn into #toolbar, so a correction cannot flash.
     await CHROME.sync();
 
-    // The store's state machine drives the sync dot for every read/write it does
-    // — subscribe before the first read so the opening GET is reflected too.
-    store.onState( setSyncStatus );
+    // ?file= / ?import= / the untitled document kept on this device - or a
+    // blank one (shared/office.js). SuperDoc is not up yet, so loadBody() only
+    // puts the file aside for initEditor below.
+    await session.boot();
 
-    const params     = new URLSearchParams( window.location.search );
-    const openPath   = params.get( 'file' );
-    const importPath = params.get( 'import' );
-
-    let source = BlankDOCX;
-
-    if( openPath )
-    {
-        const bytes = await readViaStore( openPath );   // network, else last-known-good cache
-
-        if( bytes )
-        {
-            source      = new File( [ bytes ], baseName( openPath ), { type: DOCX_MIME } );
-            currentPath = openPath;
-            setFileLabel( baseName( openPath ) );
-            rememberRecent( openPath );   // ?file= from Drive counts as opening it too
-        }
-    }
-    else if( importPath )
-    {
-        try
-        {
-            source         = await fetchAsFile( importPath );   // opened as a new untitled doc
-            pristineImport = new Uint8Array( await source.arrayBuffer() );   // keep the original for the first .bak snapshot
-            pendingName    = baseName( importPath );
-            dirty          = true;
-            setFileLabel( pendingName );
-            setSyncStatus( 'unsaved' );
-        }
-        catch( _ )
-        {
-            NayiveUI.toast( NayiveUI.t( 'ui.openFailed' ) );
-        }
-    }
-
-    await initEditor( source );
+    await initEditor( bootSource || BlankDOCX );
 
     // A brand-new document opens with Nayive's default page setup. Opened /
     // imported files keep their own.
-    if( source === BlankDOCX && ready )
-    {
-        applyingDefaults = true;
-        try { await applyPageSetup( pageSetup ); } catch( _ ) {}
-        applyingDefaults = false;
-    }
-}
-
-// Read a document through the offline store. Returns bytes, or null when there
-// is genuinely nothing to show (deleted, or unreachable with no local copy).
-// Also drops a hint when what we got is an unsynced local copy.
-async function readViaStore( path )
-{
-    let res;
-
-    try { res = await store.read( path ); }
-    catch( _ ) { res = { body: null, source: 'unknown' }; }
-
-    if( res.source === 'unauth' ) { GumApi.loginRedirect(); return null; }
-
-    if( res.source === 'cache' )
-        NayiveUI.toast( navigator.onLine ? NayiveUI.t( 'ui.recovered' ) : NayiveUI.t( 'ui.localCopy' ) );
-    else if( res.source === 'empty' )
-        NayiveUI.toast( NayiveUI.t( 'write.fileGone' ) );
-    else if( res.source === 'unknown' )
-        NayiveUI.toast( NayiveUI.t( 'write.openNoCopy' ) );
-
-    return res.body || null;
+    if( ! bootSource && ready ) await applyDefaultPageSetup();
 }
 
 function wireStaticUI()
 {
-    // "Guardar como" asks where the document goes: a first save must never guess
-    // the folder. The row itself is the shared widget from shared/office.js.
-    dirField = NayiveOffice.folderField();
-
-    document.getElementById( 'newBtn'           ).addEventListener( 'click', newDocument );
+    // New, Import, "Guardar como" and Restore are wired by the session (shared/office.js).
     document.getElementById( 'printBtn'         ).addEventListener( 'click', function() { printDocument( false ); } );
     document.getElementById( 'commentsBtn'      ).addEventListener( 'click', toggleComments );
     document.getElementById( 'commentsCloseBtn' ).addEventListener( 'click', function() { setComments( false ); } );
     document.getElementById( 'tplBtn'           ).addEventListener( 'click', openTemplates );
     document.getElementById( 'tplCloseBtn'      ).addEventListener( 'click', function() { setBackdrop( 'tplBackdrop', false ); } );
     document.getElementById( 'tplChangeBtn'     ).addEventListener( 'click', changeTemplatesDir );
-    document.getElementById( 'restoreBtn'       ).addEventListener( 'click', restorePrevious );
     document.getElementById( 'paraBtn'          ).addEventListener( 'click', openParagraph );
     document.getElementById( 'paraCancelBtn'    ).addEventListener( 'click', function() { setBackdrop( 'paraBackdrop', false ); } );
     document.getElementById( 'paraConfirmBtn'   ).addEventListener( 'click', confirmParagraph );
@@ -530,14 +455,7 @@ function wireStaticUI()
     document.getElementById( 'scCloseBtn'       ).addEventListener( 'click', function() { setBackdrop( 'scBackdrop', false ); } );
     document.getElementById( 'pdfBtn'           ).addEventListener( 'click', function() { printDocument( true ); } );
     window.addEventListener( 'afterprint', restoreZoom );
-    document.getElementById( 'openBtn'          ).addEventListener( 'click', openOpenDialog );
-    document.getElementById( 'openCancelBtn'    ).addEventListener( 'click', function() { setBackdrop( 'openBackdrop', false ); } );
-    document.getElementById( 'importBtn'        ).addEventListener( 'click', function() { document.getElementById( 'importInput' ).click(); } );
-    document.getElementById( 'importInput'      ).addEventListener( 'change', function( e ) { handleImportFile( e.target.files[0] ); e.target.value = ''; } );
-    document.getElementById( 'saveAsBtn'        ).addEventListener( 'click', openSaveAs );
     document.getElementById( 'saveAsCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'saveAsBackdrop', false ); } );
-    document.getElementById( 'saveAsConfirmBtn' ).addEventListener( 'click', confirmSaveAs );
-    document.getElementById( 'saveName'         ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmSaveAs(); } );
     document.getElementById( 'pageSetupBtn'        ).addEventListener( 'click', openPageSetup );
     document.getElementById( 'headerBtn'           ).addEventListener( 'click', function() { toggleHeaderFooter( 'header' ); } );
     document.getElementById( 'footerBtn'           ).addEventListener( 'click', function() { toggleHeaderFooter( 'footer' ); } );
@@ -550,6 +468,53 @@ function wireStaticUI()
         updatePageNumBtn();
         if( ! hfExitButton() ) hfOpenKind = null;
     } ).observe( document.getElementById( 'editor' ), { childList: true, subtree: true } );
+
+    // SuperDoc's find bar is a Vue render, rebuilt on every open inside a
+    // .sd-surface-host it adds to <body> the first time. Its ‹ › × are local
+    // look-alikes (28px rounded squares), so each mount swaps them for the shared
+    // .icon-btn.sm - the chevrons are Calendar's pager glyphs, the × the shared
+    // one. Vue only ever patches their disabled / title / aria-label, so the new
+    // class and icons stay put.
+    const surfaceHosts = new WeakSet();
+    function chevron( points )
+    {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+               '<polyline points="' + points + '"></polyline></svg>';
+    }
+    const FIND_NAV_ICONS = [ chevron( '15 18 9 12 15 6' ), chevron( '9 18 15 12 9 6' ), NayiveUI.icon( 'x' ) ];   // prev, next, close
+    function standardFindNav()
+    {
+        // The chevron before the field (show / hide Replace) too. ITS class is
+        // bound to the open state, so Vue writes it back on every toggle - the
+        // host observer watches class, and this puts .icon-btn.sm back each
+        // time. The open state still shows through aria-expanded (index.html).
+        const x = document.querySelector( '.sd-find-replace__btn--expander' );
+        if( x )
+        {
+            x.className = 'icon-btn sm';
+            if( ! x.querySelector( 'polyline' ) ) x.innerHTML = chevron( '9 18 15 12 9 6' );
+        }
+
+        const nav = document.querySelector( '.sd-find-replace__nav:not(.sd-find-replace__nav--actions)' );
+        if( ! nav || nav.querySelector( '.icon-btn' ) ) return;
+
+        nav.querySelectorAll( ':scope > button' ).forEach( function( b, i )
+        {
+            if( ! FIND_NAV_ICONS[ i ] ) return;
+
+            b.className = 'icon-btn sm';
+            b.innerHTML = FIND_NAV_ICONS[ i ];
+        } );
+    }
+    new MutationObserver( function()
+    {
+        const host = document.querySelector( 'body > .sd-surface-host' );
+        if( ! host || surfaceHosts.has( host ) ) return;
+
+        surfaceHosts.add( host );
+        new MutationObserver( standardFindNav ).observe( host, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'class' ] } );
+        standardFindNav();
+    } ).observe( document.body, { childList: true } );
 
     wireTableBorders();
     restoreTbStyle();
@@ -612,34 +577,9 @@ function wireStaticUI()
             if( open ) setBackdrop( open.id, false );
         }
     });
-
-    const label = document.getElementById( 'fileLabel' );
-    const input = document.getElementById( 'fileNameInput' );
-
-    label.addEventListener( 'click', startEditFileLabel );
-    input.addEventListener( 'blur', commitEditFileLabel );
-    input.addEventListener( 'keydown', function( e )
-    {
-        if( e.key === 'Enter'  ) { e.preventDefault(); input.blur(); }
-        if( e.key === 'Escape' ) { e.preventDefault(); cancelEditFileLabel(); }
-    });
-
-    document.addEventListener( 'visibilitychange', function() { if( document.visibilityState === 'hidden' ) flushPendingSave(); } );
-    window.addEventListener( 'pagehide', flushPendingSave );
-    window.addEventListener( 'beforeunload', function( e )
-    {
-        if( dirty ) { e.preventDefault(); e.returnValue = ''; }
-    });
 }
 
 function setBackdrop( id, open ) { NayiveUI.setOpen( id, open ); }   // impl in shared/ui.js
-
-// Create files/.bak/ if it isn't there yet. Harmless no-op once it exists; a
-// failure here just means the .bak copy is skipped on the first save.
-async function ensureDirs()
-{
-    try { await GumApi.makeDir( DOC_DIR, '.bak' ); } catch( _ ) {}
-}
 
 //----------------------------------------------------------------------------//
 // EDITOR
@@ -851,17 +791,7 @@ function onEdit()
 {
     if( ! ready || applyingDefaults ) return;
 
-    dirty = true;
-
-    if( ! currentPath )
-    {
-        setSyncStatus( 'unsaved' );
-        return;
-    }
-
-    setSyncStatus( navigator.onLine ? 'saving' : 'offline' );
-    clearTimeout( autosaveTimer );
-    autosaveTimer = setTimeout( function() { autosaveTimer = null; writeCurrent( currentPath ); }, AUTOSAVE_DELAY_MS );
+    session.edited();
 }
 
 //----------------------------------------------------------------------------//
@@ -948,12 +878,12 @@ async function changeProofLangs( raw )
 
     if( ! ready ) return;
 
-    await flushPendingSave();   // land any debounced autosave before we tear the doc down and reload it
+    await session.flush();      // land any waiting autosave before we tear the doc down and reload it
 
     try
     {
         const bytes = await exportBytes();
-        await loadIntoEditor( new File( [ bytes ], baseName( currentPath || pendingName || 'documento.docx' ), { type: DOCX_MIME } ) );
+        await loadIntoEditor( new File( [ bytes ], baseName( session.path() || session.name() || 'documento.docx' ), { type: DOCX_MIME } ) );
     }
     catch( _ ) { /* leave the editor as is; the new language applies on the next edit */ }
 }
@@ -1479,19 +1409,12 @@ async function useTemplate( path )
 
     try
     {
-        await flushPendingSave();
+        await session.flush();
 
         const file = await fetchAsFile( path );
         await loadIntoEditor( file );
 
-        currentPath    = null;
-        pendingName    = baseName( path );
-        pristineImport = null;
-        backedUpPath   = null;
-        dirty          = true;
-
-        setFileLabel( pendingName );
-        setSyncStatus( 'unsaved' );
+        session.untitled( baseName( path ), { dirty: true } );
     }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
 }
@@ -1505,114 +1428,6 @@ async function changeTemplatesDir()
 
     await writeWriteCfg( { templatesDir: dir } );
     renderTemplates( dir );
-}
-
-//----------------------------------------------------------------------------//
-// RESTAURAR LA COPIA ANTERIOR
-//
-// There is exactly ONE .bak per document, taken once per session before the
-// first save. So the order below matters: read the backup FIRST, then write what
-// is open over it, and only then load. Snapshotting first would destroy the very
-// copy being restored.
-
-async function restorePrevious()
-{
-    if( ! currentPath ) { NayiveUI.toast( NayiveUI.t( 'write.noBackupYet' ) ); return; }
-
-    const bak = bakDirFor( currentPath ) + '/' + baseName( currentPath );
-
-    let prev = null;
-    try { prev = await GumApi.readFileBytes( bak ); }
-    catch( _ ) { prev = null; }
-
-    if( ! prev || ! prev.length ) { NayiveUI.toast( NayiveUI.t( 'write.noBackupYet' ) ); return; }
-
-    const ok = await NayiveUI.confirm( { title  : NayiveUI.t( 'write.restore' ),
-                                         body   : NayiveUI.tf( 'write.restoreBody', { size: NayiveUI.fmtBytes( prev.length ) } ),
-                                         confirm: NayiveUI.t( 'write.restore' ) } );
-    if( ! ok ) return;
-
-    try
-    {
-        // Swap: what is open now becomes the backup, so restoring is itself undoable.
-        const current = await exportBytes();
-        await GumApi.writeFileBytes( bak, current );
-
-        await loadIntoEditor( new File( [ prev ], baseName( currentPath ), { type: DOCX_MIME } ) );
-
-        dirty = true;
-        onEdit();   // the restored text still has to be saved over the document
-        NayiveUI.toast( NayiveUI.t( 'write.restored' ) );
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-//----------------------------------------------------------------------------//
-// RECIENTES
-
-const RECENT_KEY = 'nayive-write-recent';
-const RECENT_MAX = 10;
-
-function readRecent()
-{
-    try { return JSON.parse( localStorage.getItem( RECENT_KEY ) || '[]' ); }
-    catch( _ ) { return []; }
-}
-
-function rememberRecent( path )
-{
-    if( ! path ) return;
-
-    try
-    {
-        const list = readRecent().filter( function( p ) { return p !== path; } );
-        list.unshift( path );
-        localStorage.setItem( RECENT_KEY, JSON.stringify( list.slice( 0, RECENT_MAX ) ) );
-    }
-    catch( _ ) {}
-}
-
-// Rows above the folder listing in the Open dialog. Only paths that still exist
-// are worth showing, but checking each one would be a request per row - so a
-// dead one is dropped when opening it fails, which readViaStore already reports.
-function renderRecent()
-{
-    const box = document.getElementById( 'openRecent' );
-    const list = readRecent();
-
-    box.innerHTML = '';
-    box.hidden = ! list.length;
-
-    if( ! list.length ) return;
-
-    const label = document.createElement( 'div' );
-    label.className = 'section-label';
-    label.textContent = NayiveUI.t( 'write.recent' );
-    box.appendChild( label );
-
-    const ul = document.createElement( 'ul' );
-    ul.className = 'open-list';
-
-    for( const path of list )
-    {
-        const li = document.createElement( 'li' );
-        li.innerHTML = '<span class="open-ic"></span>';
-
-        const nm = document.createElement( 'span' );
-        nm.className   = 'open-nm';
-        nm.textContent = baseName( path );
-        nm.title       = path;
-        li.appendChild( nm );
-
-        li.addEventListener( 'click', function()
-        {
-            setBackdrop( 'openBackdrop', false );
-            openDocument( path );
-        } );
-        ul.appendChild( li );
-    }
-
-    box.appendChild( ul );
 }
 
 //----------------------------------------------------------------------------//
@@ -2125,29 +1940,10 @@ function applyKeyHints()
     }
 }
 
-// The help sheet: the same table, rendered.
+// The help sheet: the same table, rendered (the sheet is Calc's too).
 function openShortcuts()
 {
-    const list = document.getElementById( 'scList' );
-    list.innerHTML = '';
-
-    for( const s of SHORTCUTS )
-    {
-        const row = document.createElement( 'div' );
-        row.className = 'sc-row';
-
-        const what = document.createElement( 'span' );
-        what.textContent = NayiveUI.t( s.key );
-
-        const keys = document.createElement( 'kbd' );
-        keys.textContent = s.label();
-
-        row.appendChild( what );
-        row.appendChild( keys );
-        list.appendChild( row );
-    }
-
-    setBackdrop( 'scBackdrop', true );
+    NayiveOffice.showShortcuts( SHORTCUTS.map( function( s ) { return { text: NayiveUI.t( s.key ), keys: s.label() }; } ) );
 }
 
 //----------------------------------------------------------------------------//
@@ -2555,18 +2351,19 @@ function gridItems()
     } );
 }
 
-// "Recientes": the same ten paths the Open dialog lists, so the menu never
-// drifts from it. An empty list still shows one (greyed) row - a menu that
-// silently has no submenu is worse than one that says why.
+// "Recientes": the same ten paths the Open dialog lists (shared/office.js keeps
+// them), so the menu never drifts from it. An empty list still shows one
+// (greyed) row - a menu that silently has no submenu is worse than one that
+// says why.
 function recentItems()
 {
-    const list = readRecent();
+    const list = session.recent();
 
-    if( ! list.length ) return [ { key: 'write.noRecent', enabled: function() { return false; } } ];
+    if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
 
     return list.map( function( p )
     {
-        return { text: baseName( p ), run: function() { openDocument( p ); } };
+        return { text: baseName( p ), run: function() { openPickedFile( p ); } };
     } );
 }
 
@@ -2577,7 +2374,7 @@ const MENUS = [
     [
         { key: 'write.newDoc',  el: 'newBtn'  },
         { key: 'ui.openDoc',    el: 'openBtn', sc: 'ui.openDoc' },
-        { key: 'write.recent',  sub: recentItems },
+        { key: 'ui.recent',     sub: recentItems },
         { sep: true },
         { key: 'ui.save',       run: saveNow, sc: 'write.sc.save', icon: 'check' },
         { key: 'ui.saveAs',     el: 'saveAsBtn' },
@@ -2728,7 +2525,7 @@ const MENUS = [
     items:
     [
         { key: 'write.shortcuts', el: 'scBtn' },
-        { key: 'ui.help', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
+        { key: 'ui.quickGuide', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
     ]
 } ];
 
@@ -3597,139 +3394,22 @@ async function exportBytes()
     return new Uint8Array( await blob.arrayBuffer() );
 }
 
-// Snapshot the document's pre-session content to <its folder>/.bak/<name> so a bad
-// export never leaves you with no way back. Done ONCE per document per session
-// (keyed on `backedUpPath`) — not on every autosave, or .bak would just track
-// the live doc and be worthless as a "previous version". Best effort: skipped
-// offline, and a missing .bak folder is not an error. When there is no server
-// copy yet (first save of an imported file) the pristine import bytes are used.
-async function backupExisting( path )
-{
-    if( backedUpPath === path || ! navigator.onLine ) return;
-
-    try
-    {
-        let prev = null;
-
-        try { prev = await GumApi.readFileBytes( path ); }
-        catch( _ ) { prev = pristineImport; }   // no server copy — fall back to an imported original, if any
-
-        if( prev && prev.length )
-        {
-            // The document may sit in a folder ensureDirs() never saw ("Guardar
-            // como" can put it anywhere), so make its .bak/ before writing into it.
-            try { await GumApi.makeDir( dirName( path ) || DOC_DIR, '.bak' ); } catch( _ ) {}
-            await GumApi.writeFileBytes( bakDirFor( path ) + '/' + baseName( path ), prev );
-        }
-
-        backedUpPath   = path;   // snapshot taken (or nothing to snapshot) — don't repeat this session
-        pristineImport = null;
-    }
-    catch( _ ) { /* .bak folder missing or the copy failed — retry on the next save */ }
-}
-
-async function writeCurrent( path )
-{
-    const mySeq = ++saveSeq;
-
-    setSyncStatus( 'saving' );
-
-    let bytes;
-
-    try
-    {
-        bytes = await exportBytes();
-    }
-    catch( _ )
-    {
-        if( mySeq === saveSeq ) setSyncStatus( 'error' );
-        return;
-    }
-
-    if( mySeq !== saveSeq ) return;   // a newer save started while we were exporting — it wins
-
-    await dirsReady;                  // make sure docs/ and docs/.bak/ exist before the first PUT
-
-    // Server-side previous-version copy — best effort, once per session.
-    await backupExisting( path );
-
-    if( mySeq !== saveSeq ) return;   // superseded during the (networked) backup
-
-    // store.write caches the bytes immediately, queues the PUT, and drives the
-    // sync dot through store.onState. It does not throw on a network problem.
-    const res = await store.write( path, bytes );
-
-    if( mySeq !== saveSeq ) return;
-
-    // Offline / queued / needs-auth all keep the bytes safe (IndexedDB + outbox),
-    // so the doc is "saved" from the user's side. Only a hard server rejection
-    // leaves us genuinely unsaved — keep `dirty` so the exit guard still warns.
-    dirty = !! ( res && res.ok === false && ! res.offline && ! res.needsAuth );
-
-    if( ! dirty ) showSavedAt();
-}
-
-// "Guardado 12:04" beside the sync plug. It gets its own element on purpose:
-// NayiveUI.applySyncState rewrites the plug's `title` on every state change,
-// so anything appended there would be wiped by the next store event.
-function showSavedAt()
-{
-    const el = document.getElementById( 'savedAt' );
-    if( ! el ) return;
-
-    const now = new Date();
-    el.textContent = NayiveUI.tf( 'write.savedAt',
-                                  { time: NayiveUI.pad2( now.getHours() ) + ':' + NayiveUI.pad2( now.getMinutes() ) } );
-}
-
-// Ctrl-S / the toolbar: flush now. An untitled document goes to "Guardar como".
-function saveNow()
-{
-    if( ! currentPath ) { openSaveAs(); return; }
-
-    clearTimeout( autosaveTimer );
-    autosaveTimer = null;
-    writeCurrent( currentPath );
-}
-
-// Run a pending debounced autosave right now instead of waiting for its timer —
-// used before the tab closes and before anything that swaps or renames the doc,
-// so those edits are never dropped. Returns the write promise so callers that
-// need the bytes on the server first (rename) can await it.
-function flushPendingSave()
-{
-    if( ! autosaveTimer || ! currentPath ) return Promise.resolve();
-
-    clearTimeout( autosaveTimer );
-    autosaveTimer = null;
-    return writeCurrent( currentPath );
-}
+// Ctrl-S / the menu: save now. An untitled or someone else's document goes to
+// "Guardar como" (shared/office.js).
+function saveNow() { session.saveNow(); }
 
 //----------------------------------------------------------------------------//
-// OPEN  (a plain "open file" browser over the user's Drive: folders you can
-// walk into, plus the files Write can open — see OPEN_EXTS / CONVERT_EXTS)
+// OPEN  (the dialog itself is the shared one: shared/office.js, openBrowser -
+// recent documents over a folder browser. Write only says which files it lists
+// and what to do with the one picked.)
 
 // Extensions the Open dialog shows. A `.docx` loads straight away; a file in
-// CONVERT_EXTS (LibreOffice Writer, …) is converted to .docx on the server
+// CONVERT_EXTS (LibreOffice Writer, ...) is converted to .docx on the server
 // first (see convertToDocx). That conversion isn't wired up yet, so
 // CONVERT_EXTS is empty for now and only .docx appears.
 const OPEN_EXTS     = [ '.docx' ];
 const CONVERT_EXTS  = [];
 const OPENABLE_EXTS = OPEN_EXTS.concat( CONVERT_EXTS );
-
-// The browser never walks above the user's files/ root (the first path segment
-// of DOC_DIR — "files" when Write is opened from the launcher).
-const OPEN_ROOT = DOC_DIR.split( '/' )[ 0 ] || 'files';
-
-let openCwd = DOC_DIR;   // the folder the Open browser is currently showing
-
-function openOpenDialog()
-{
-    renderRecent();
-    openCwd = DOC_DIR;
-    setBackdrop( 'openBackdrop', true );
-    renderOpenBrowser();
-}
 
 function extOf( path )
 {
@@ -3739,147 +3419,10 @@ function extOf( path )
 
 function isOpenable( path ) { return OPENABLE_EXTS.indexOf( extOf( path ) ) !== -1; }
 
-// Straight through to shared/office.js — this was an identical copy. Kept as a
+// Straight through to shared/office.js - this was an identical copy. Kept as a
 // function declaration, not a const: the old ones were hoisted, and half of
 // write.js calls them from code that runs before this line.
 function byBaseName( a, b ) { return NayiveOffice.byBaseName( a, b ); }
-
-// The "nothing here" line, same shape as shared/office.js's own Open browser.
-function openNote( text )
-{
-    const li = document.createElement( 'li' );
-    li.className   = 'is-empty';
-    li.textContent = text;
-    return li;
-}
-
-// One list row: an icon + a name. `folder` rows get the chevron via CSS.
-function openRow( iconName, label, isFolder )
-{
-    const li = document.createElement( 'li' );
-    if( isFolder ) li.className = 'is-folder';
-
-    const ic = document.createElement( 'span' );
-    ic.className = 'open-ic';
-    ic.innerHTML = NayiveUI.icon( iconName );
-
-    const nm = document.createElement( 'span' );
-    nm.className   = 'open-nm';
-    nm.textContent = label;
-
-    li.appendChild( ic );
-    li.appendChild( nm );
-    return li;
-}
-
-async function renderOpenBrowser()
-{
-    const crumb = document.getElementById( 'openCrumb' );
-    const list  = document.getElementById( 'openList' );
-
-    crumb.className = 'open-crumb';
-    crumb.innerHTML = '';
-
-    // Breadcrumb: "Archivos › Cartas", every segment a button that jumps there.
-    const parts = openCwd.split( '/' );
-    parts.forEach( function( seg, i )
-    {
-        const path = parts.slice( 0, i + 1 ).join( '/' );
-
-        const b = document.createElement( 'button' );
-        b.type        = 'button';
-        b.className   = 'crumb-seg';
-        b.textContent = i === 0 ? NayiveUI.t( 'ui.filesRoot' ) : seg;
-        b.disabled    = ( path === openCwd );
-        b.addEventListener( 'click', function() { openCwd = path; renderOpenBrowser(); } );
-        crumb.appendChild( b );
-
-        if( i < parts.length - 1 )
-        {
-            const sep = document.createElement( 'span' );
-            sep.className   = 'crumb-sep';
-            sep.textContent = '›';
-            crumb.appendChild( sep );
-        }
-    } );
-
-    list.innerHTML = '<li class="is-loading" data-i18n="ui.loading"></li>';
-
-    let entries;
-
-    try
-    {
-        if( ! navigator.onLine ) throw new Error( 'offline' );
-        const res = await GumApi.listDir( openCwd );
-        entries = ( res && res.nodes ) || [];
-    }
-    catch( _ )
-    {
-        return renderOpenOffline();
-    }
-
-    const folders = entries
-        .filter( function( n ) { return Array.isArray( n.nodes ) && baseName( n.path ).charAt( 0 ) !== '.'; } )
-        .sort( byBaseName );
-
-    const files = entries
-        .filter( function( n ) { return n.nodes === null && isOpenable( n.path ); } )
-        .sort( byBaseName );
-
-    list.innerHTML = '';
-
-    folders.forEach( function( n )
-    {
-        const li = openRow( 'folder', baseName( n.path ), true );
-        li.addEventListener( 'click', function() { openCwd = n.path; renderOpenBrowser(); } );
-        list.appendChild( li );
-    } );
-
-    files.forEach( function( n )
-    {
-        const li = openRow( 'doc', baseName( n.path ), false );
-        li.addEventListener( 'click', function() { setBackdrop( 'openBackdrop', false ); openPickedFile( n.path ); } );
-        list.appendChild( li );
-    } );
-
-    if( ! list.children.length )
-        list.appendChild( openNote( NayiveUI.t( 'write.noDocs' ) ) );
-}
-
-// No network: the folder tree can't be walked, so just list whatever .docx the
-// offline store has cached (flat, by path relative to the files/ root).
-async function renderOpenOffline()
-{
-    const crumb = document.getElementById( 'openCrumb' );
-    const list  = document.getElementById( 'openList' );
-
-    crumb.className   = 'open-crumb is-note';
-    crumb.textContent = NayiveUI.t( 'write.offlineLocalOnly' );
-
-    let paths = [];
-
-    try
-    {
-        const cached = await store.listCached( OPEN_ROOT + '/' );
-        paths = cached
-            .filter( function( p ) { return isOpenable( p ) && p.indexOf( '/.bak/' ) === -1; } )
-            .sort( function( a, b ) { return a.localeCompare( b, NayiveUI.lang() ); } );
-    }
-    catch( _ ) {}
-
-    list.innerHTML = '';
-
-    paths.forEach( function( p )
-    {
-        const rel = p.indexOf( OPEN_ROOT + '/' ) === 0 ? p.slice( OPEN_ROOT.length + 1 ) : p;
-        const li  = openRow( 'doc', rel, false );
-        li.addEventListener( 'click', function() { setBackdrop( 'openBackdrop', false ); openPickedFile( p ); } );
-        list.appendChild( li );
-    } );
-
-    if( ! list.children.length )
-        list.appendChild( openNote( NayiveUI.t( 'write.noDocs' ) ) );
-}
 
 // Open a file the user picked in the browser: a .docx directly, anything else
 // via a server-side conversion to .docx first.
@@ -3887,12 +3430,12 @@ async function openPickedFile( path )
 {
     if( OPEN_EXTS.indexOf( extOf( path ) ) !== -1 )
     {
-        await openDocument( path );
+        await session.open( path );
         return;
     }
 
     const docxPath = await convertToDocx( path );
-    if( docxPath ) await openDocument( docxPath );
+    if( docxPath ) await session.open( docxPath );
 }
 
 // Convert a non-.docx word-processor file (LibreOffice Writer .odt, legacy
@@ -3905,242 +3448,52 @@ async function convertToDocx( path )
     return null;
 }
 
-// A blank document without reloading the app. Until now the only way to one was
-// to open Write with no ?file= — so "new" meant "go back to the launcher".
-// Same shape as openDocument(): flush what is open, swap the file, reset the
-// identity so the FIRST save asks for a folder again.
-async function newDocument()
-{
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
-
-    if( dirty && ! currentPath &&
-        ! ( await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ),
-                                      body : NayiveUI.t( 'write.newDropsDraft' ),
-                                      confirm: NayiveUI.t( 'write.newDoc' ) } ) ) ) return;
-
-    await flushPendingSave();   // a named document keeps its debounced autosave
-
-    try
-    {
-        // BlankDOCX is a data: URL, not bytes — hand it to SuperDoc as it is,
-        // exactly as boot() does for the document it starts on.
-        await loadIntoEditor( BlankDOCX );
-
-        currentPath    = null;
-        pendingName    = null;
-        pristineImport = null;
-        backedUpPath   = null;
-        dirty          = false;
-        lastVert       = { sig: null, value: null };
-
-        setFileLabel( NayiveUI.t( 'ui.untitled' ) );
-
-        const at = document.getElementById( 'savedAt' );
-        if( at ) at.textContent = '';
-
-        store.resting();   // nothing was read or written, so settle the plug by hand
-
-        // A brand-new document opens with Nayive's default page setup, exactly
-        // as boot() does for the blank document it starts on.
-        applyingDefaults = true;
-        try { await applyPageSetup( pageSetup ); } catch( _ ) {}
-        applyingDefaults = false;
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
-}
-
-async function openDocument( path )
-{
-    await flushPendingSave();   // don't lose a debounced autosave for the doc we're leaving
-
-    const bytes = await readViaStore( path );   // drives the sync dot; toasts on trouble
-    if( ! bytes ) return;
-
-    try
-    {
-        await loadIntoEditor( new File( [ bytes ], baseName( path ), { type: DOCX_MIME } ) );
-
-        currentPath    = path;
-        pendingName    = null;
-        pristineImport = null;
-        dirty          = false;
-        setFileLabel( baseName( path ) );
-        rememberRecent( path );
-    }
-    catch( _ )
-    {
-        NayiveUI.toast( NayiveUI.t( 'ui.openFailed' ) );
-    }
-}
-
 //----------------------------------------------------------------------------//
-// IMPORT  (a .docx from this device, or handed over by Drive) — opens untitled
+// THE DOCUMENT IN SUPERDOC  (what the session in shared/office.js needs from Write)
 
-async function handleImportFile( file )
+// A .docx body on screen: opened, imported, the device draft or the .bak copy.
+// At start-up SuperDoc does not exist yet - boot() builds it on this file.
+async function loadBody( body, name )
 {
-    if( ! file ) return;
+    const file = new File( [ body ], baseName( name || 'documento.docx' ), { type: DOCX_MIME } );
 
-    await flushPendingSave();   // land any pending autosave for the doc we're replacing
-
-    try
-    {
-        const bytes = new Uint8Array( await file.arrayBuffer() );
-
-        await loadIntoEditor( file );
-
-        currentPath    = null;
-        pendingName    = file.name;
-        pristineImport = bytes;   // keep the original for the first .bak snapshot
-        dirty          = true;
-        setFileLabel( file.name );
-        setSyncStatus( 'unsaved' );
-    }
-    catch( _ )
-    {
-        NayiveUI.toast( NayiveUI.t( 'write.importFailed' ) );
-    }
+    if( ! sd ) { bootSource = file; return; }
+    await loadIntoEditor( file );
 }
 
-//----------------------------------------------------------------------------//
-// SAVE AS
-
-function openSaveAs()
+// A blank document. BlankDOCX is a data: URL, not bytes - SuperDoc takes it as
+// it is. At start-up there is nothing to do: boot() starts on BlankDOCX.
+async function loadBlank()
 {
-    const name = currentPath ? baseName( currentPath ) : ( pendingName || 'documento.docx' );
+    if( ! sd ) return;
 
-    document.getElementById( 'saveName' ).value = name;
-    dirField.set( ( currentPath && dirName( currentPath ) ) || DOC_DIR );
-    setBackdrop( 'saveAsBackdrop', true );
-    document.getElementById( 'saveName' ).focus();
-    document.getElementById( 'saveName' ).select();
+    // As a File, like any other document: replaceFile() given the data: URL
+    // itself resolves but keeps the old text once a File was loaded (a draft
+    // reopened at start-up), so New and "Guardar como"'s bin did nothing.
+    const blob = await ( await fetch( BlankDOCX ) ).blob();
+    await loadIntoEditor( new File( [ blob ], 'documento.docx', { type: DOCX_MIME } ) );
+    lastVert = { sig: null, value: null };
+    await applyDefaultPageSetup();
 }
 
-async function confirmSaveAs()
+// A brand-new document gets Nayive's default page setup; opened files keep their own.
+async function applyDefaultPageSetup()
 {
-    const name = safeDocName( document.getElementById( 'saveName' ).value );
-
-    if( ! name ) return;
-
-    setBackdrop( 'saveAsBackdrop', false );
-
-    await flushPendingSave();   // finish any autosave to the old name before we change identity
-
-    const path = dirField.get() + '/' + name;
-
-    if( path !== currentPath ) backedUpPath = null;   // new destination — snapshot it once too
-
-    await writeCurrent( path );
-
-    currentPath = path;
-    pendingName = null;
-    setFileLabel( name );
-}
-
-//----------------------------------------------------------------------------//
-// FILENAME RENAME  (inline, top bar)
-
-function startEditFileLabel()
-{
-    const label = document.getElementById( 'fileLabel' );
-    const input = document.getElementById( 'fileNameInput' );
-
-    input.value = ( label.textContent === NayiveUI.t( 'ui.untitled' ) ) ? '' : label.textContent;
-
-    label.style.display = 'none';
-    input.style.display = '';
-    input.focus();
-    input.select();
-}
-
-function cancelEditFileLabel()
-{
-    const label = document.getElementById( 'fileLabel' );
-    const input = document.getElementById( 'fileNameInput' );
-
-    input.value = label.textContent;
-    input.style.display = 'none';
-    label.style.display = '';
-}
-
-async function commitEditFileLabel()
-{
-    const label = document.getElementById( 'fileLabel' );
-    const input = document.getElementById( 'fileNameInput' );
-    const raw   = input.value.trim();
-
-    input.style.display = 'none';
-    label.style.display = '';
-
-    if( ! raw || raw === label.textContent ) return;   // Escape / no change
-
-    const name = safeDocName( raw );
-    if( ! name || name === label.textContent ) return;
-
-    if( ! currentPath )
-    {
-        // First name for an untitled doc: the name IS the first save, and a first
-        // save has to ask where the file goes — so hand it to "Guardar como"
-        // pre-filled instead of writing straight into DOC_DIR.
-        pendingName = name;
-        setFileLabel( name );
-        openSaveAs();
-        return;
-    }
-
-    // Rename in place — keep the doc in its own folder, which may not be DOC_DIR
-    // (it was opened from elsewhere in Drive via the Open browser).
-    const newPath = ( dirName( currentPath ) || DOC_DIR ) + '/' + name;
-    if( newPath === currentPath ) return;
-
-    setSyncStatus( 'saving' );
-
-    try
-    {
-        // Land the latest bytes under the OLD name and drain the outbox first —
-        // a queued PUT flushing after the move would recreate the old file.
-        await flushPendingSave();
-        try { await store.flush(); } catch( _ ) {}
-
-        await GumApi.rename( currentPath, newPath );
-
-        try { await store.forget( currentPath ); } catch( _ ) {}   // drop the now-stale cache entry for the old path
-
-        if( backedUpPath === currentPath ) backedUpPath = newPath;
-        currentPath = newPath;
-        setFileLabel( name );
-        setSyncStatus( 'synced' );
-    }
-    catch( _ )
-    {
-        setSyncStatus( 'error' );
-        NayiveUI.toast( NayiveUI.t( 'write.renameFailed' ) );
-    }
+    applyingDefaults = true;
+    try { await applyPageSetup( pageSetup ); } catch( _ ) {}
+    applyingDefaults = false;
 }
 
 //----------------------------------------------------------------------------//
 // HELPERS
 
 // Straight through to shared/office.js — these were identical copies. Function
-// declarations on purpose: they are hoisted, and bakDirFor() above uses them.
+// declarations on purpose: they are hoisted, and the session above uses them.
 function baseName( path ) { return NayiveOffice.baseName( path ); }
 function dirName( path )  { return NayiveOffice.dirName( path ); }
 
-// A user-typed name reduced to a safe single filename under DOC_DIR: no path
-// separators, no leading dots (would escape the folder or make a hidden file),
-// always ending in .docx. Returns null when nothing usable is left.
-function safeDocName( raw )
-{
-    // The cleaning is shared/office.js's safeName; only the ".docx or nothing"
-    // rule below is Write's own.
-    let n = NayiveOffice.safeName( raw );
-
-    if( ! n ) return null;
-    if( ! /\.docx$/i.test( n ) ) n += '.docx';
-
-    return n;
-}
-
-function setFileLabel( t ) { document.getElementById( 'fileLabel' ).textContent = t; }
+// Write's file-name rule, for "Guardar como" and a rename: always .docx.
+function docxName( name ) { return /\.docx$/i.test( name ) ? name : name + '.docx'; }
 
 async function fetchAsFile( path )
 {

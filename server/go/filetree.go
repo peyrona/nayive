@@ -83,13 +83,14 @@ func isTempName(name string) bool {
 
 // FileTree owns the paths the listings are rooted at.
 type FileTree struct {
-	baseDir  string
-	homesDir string
-	shares   *Shares
+	baseDir   string
+	homesDir  string
+	configDir string
+	shares    *Shares
 }
 
-func NewFileTree(baseDir, homesDir string, shares *Shares) *FileTree {
-	return &FileTree{baseDir: baseDir, homesDir: homesDir, shares: shares}
+func NewFileTree(baseDir, homesDir, configDir string, shares *Shares) *FileTree {
+	return &FileTree{baseDir: baseDir, homesDir: homesDir, configDir: configDir, shares: shares}
 }
 
 // SweepStaleTemp deletes orphaned temp files. A `kill -9` during a write can
@@ -123,7 +124,7 @@ func (t *FileTree) SweepStaleTemp() int {
 		}
 	}
 
-	jsonDirs := []string{filepath.Join(t.baseDir, "config"), filepath.Join(t.baseDir, ".trash")}
+	jsonDirs := []string{t.configDir, filepath.Join(t.baseDir, ".trash")}
 	if homes, err := os.ReadDir(t.homesDir); err == nil {
 		for _, h := range homes {
 			if h.IsDir() {
@@ -144,7 +145,7 @@ func (t *FileTree) SweepStaleTemp() int {
 		}
 	}
 
-	for _, root := range []string{t.homesDir, filepath.Join(t.baseDir, "config")} {
+	for _, root := range []string{t.homesDir, t.configDir} {
 		if info, err := os.Stat(root); err != nil || !info.IsDir() {
 			continue
 		}

@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -594,6 +595,34 @@ func (t *Trash) SweepExpired(defaultDays int) {
 		for _, id := range index.keys() {
 			if _, err := os.Lstat(filepath.Join(c.dir, id)); err != nil {
 				index.remove(id)
+			}
+		}
+
+		// And the mirror of that case: an item ON DISK with no row in
+		// index.json - a can whose index was lost, truncated or hand-edited.
+		// Nothing lists it, nothing restores it, and until now nothing removed
+		// it either: it sat there forever, holding disk against the quota.
+		//
+		// No row is needed to judge it. The entryId IS the deletion time
+		// ("<epoch>-<8 hex>"), so the same cutoff applies - and that is the
+		// right clock: how long the item has been in the bin, never the file's
+		// own timestamp, which a move into .trash leaves untouched.
+		if entries, err := os.ReadDir(c.dir); err == nil {
+			for _, e := range entries {
+				id := e.Name()
+				if !entryRE.MatchString(id) {
+					continue // index.json, or something that was never ours
+				}
+				if _, found := index.get(id); found {
+					continue
+				}
+				stamp, _, _ := strings.Cut(id, "-")
+				// An id whose epoch will not parse is left alone: a stuck file
+				// is better than a wrong deletion.
+				if epoch, err := strconv.ParseInt(stamp, 10, 64); err == nil && epoch < cutoff {
+					os.RemoveAll(filepath.Join(c.dir, id))
+					gone++
+				}
 			}
 		}
 		saveIndex(c.dir, index)

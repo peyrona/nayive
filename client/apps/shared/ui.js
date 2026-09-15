@@ -2557,7 +2557,13 @@
 
     function shareApi( method, body, id )
     {
-        var url  = window.location.origin + "/api/shares" + ( id ? "?id=" + encodeURIComponent( id ) : "" );
+        return jsonApi( "/api/shares" + ( id ? "?id=" + encodeURIComponent( id ) : "" ), method, body );
+    }
+
+    // One JSON call to this server: the parsed answer, or an Error with its message.
+    function jsonApi( path, method, body )
+    {
+        var url  = window.location.origin + path;
         var opts = { method: method };
         if( body ) { opts.body = JSON.stringify( body ); opts.headers = { "Content-Type": "application/json" }; }
 
@@ -2591,6 +2597,8 @@
 
             var users = [], mine = [], chosen = [];   // chosen = every person ticked right now
             var mayAdd = false;                      // "pueden añadir archivos" ticked?
+            var link   = null;                       // a trip's public link, when it has one
+            var tracker = null;                      // this account's OwnTracks URL ({url, created}), when on
 
             function close()
             {
@@ -2734,6 +2742,9 @@
                     sheet.appendChild( addLab );
                 }
 
+                // --- anyone with the link (a trip only - server/go/api_public.go) ---
+                if( opts.app === "trips" ) sheet.appendChild( linkSection() );
+
                 // --- buttons ---
                 var row2 = document.createElement( "div" );
                 row2.className = "sheet-actions";
@@ -2788,16 +2799,182 @@
                 applySheetButtons( sheet );
             }
 
+            // "Cualquiera con el enlace": the trip's public link - make it, send it,
+            // copy it, take it away - and whether THIS device reports its location
+            // to it. The row is the same .share-row / .share-drop as a person's.
+            function linkSection()
+            {
+                var box = document.createElement( "div" );
+                box.className = "share-link";
+
+                var head = document.createElement( "p" );
+                head.className   = "share-link-head";
+                head.textContent = t( "share.link.head" );
+                box.appendChild( head );
+
+                var note = document.createElement( "p" );
+                note.className   = "share-link-note";
+                note.textContent = t( "share.link.warn" );
+                box.appendChild( note );
+
+                var row = document.createElement( "div" );
+                row.className = "share-row";
+
+                var text = document.createElement( "span" );
+                text.className   = "share-link-url";
+                text.textContent = link ? linkUrl( link ) : t( "share.link.none" );
+                row.appendChild( text );
+
+                if( ! link )
+                {
+                    row.appendChild( rowButton( "plus", t( "share.link.create" ), function ()
+                    {
+                        return shareApi( "POST", { link: true, root: path, title: opts.title || "" } ).then( load );
+                    } ) );
+                }
+                else
+                {
+                    var url = linkUrl( link );
+                    if( navigator.share )
+                        row.appendChild( rowButton( "share", t( "share.link.send" ), function ()
+                        {
+                            return navigator.share( { title: opts.title || "", url: url } )
+                                            .catch( function () { /* the person closed the share sheet */ } );
+                        } ) );
+                    row.appendChild( rowButton( "copy", t( "share.link.copy" ), function ()
+                    {
+                        return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
+                                                     function () { toast( url ); } );
+                    } ) );
+                    row.appendChild( rowButton( "x", t( "share.link.stop" ), function ()
+                    {
+                        return shareApi( "DELETE", null, link.id ).then( load );
+                    } ) );
+                }
+                box.appendChild( row );
+
+                if( link && navigator.geolocation )
+                {
+                    var locLab = document.createElement( "label" );
+                    locLab.className = "share-add";
+
+                    var locBox = document.createElement( "input" );
+                    locBox.type    = "checkbox";
+                    locBox.checked = locationOn();
+                    locBox.addEventListener( "change", function ()
+                    {
+                        if( ! locBox.checked ) { setLocationOn( false ); return; }
+
+                        // The tick is a real tap: the one moment the browser may ask
+                        // for permission. Background checks never prompt.
+                        locBox.disabled = true;
+                        navigator.geolocation.getCurrentPosition( function ()
+                        {
+                            locBox.disabled = false;
+                            setLocationOn( true );
+                            sendLocationIfDue( true );
+                        }, function ()
+                        {
+                            locBox.disabled = false;
+                            locBox.checked  = false;
+                            toast( t( "share.link.locDenied" ) );
+                        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 2 * 60 * 1000 } );
+                    } );
+
+                    locLab.appendChild( locBox );
+                    locLab.appendChild( document.createTextNode( t( "share.link.loc" ) ) );
+                    box.appendChild( locLab );
+                }
+
+                // The OwnTracks app reports from the background, with Nayive closed.
+                // One URL per account (server/go/owntracks.go), for every linked trip.
+                if( link )
+                {
+                    var appRow = document.createElement( "div" );
+                    appRow.className = "share-row share-link-app";
+
+                    var appText = document.createElement( "span" );
+                    appText.className   = "share-link-url";
+                    appText.textContent = tracker ? linkUrl( tracker ) : t( "share.link.ot" );
+                    appRow.appendChild( appText );
+
+                    if( ! tracker )
+                    {
+                        appRow.appendChild( rowButton( "plus", t( "share.link.otCreate" ), function ()
+                        {
+                            return jsonApi( "/api/owntracks", "POST" ).then( load );
+                        } ) );
+                    }
+                    else
+                    {
+                        var appUrl = linkUrl( tracker );
+                        appRow.appendChild( rowButton( "copy", t( "share.link.otCopy" ), function ()
+                        {
+                            return copyText( appUrl ).then( function () { toast( t( "share.link.copied" ) ); },
+                                                            function () { toast( appUrl ); } );
+                        } ) );
+                        appRow.appendChild( rowButton( "x", t( "share.link.otStop" ), function ()
+                        {
+                            return jsonApi( "/api/owntracks", "DELETE" ).then( load );
+                        } ) );
+                    }
+                    box.appendChild( appRow );
+
+                    if( tracker )
+                    {
+                        var how = document.createElement( "p" );
+                        how.className   = "share-link-note share-link-how";
+                        how.textContent = t( "share.link.otHow" );
+                        box.appendChild( how );
+                    }
+                }
+                return box;
+            }
+
+            function linkUrl( g ) { return window.location.origin + g.url; }
+
+            // A round icon button that disables itself while its action runs.
+            function rowButton( name, title, action )
+            {
+                var b = document.createElement( "button" );
+                b.type      = "button";
+                b.className = "share-drop";
+                b.title     = title;
+                b.setAttribute( "aria-label", title );
+                b.innerHTML = icon( name );
+                b.addEventListener( "click", function ()
+                {
+                    b.disabled = true;
+                    Promise.resolve().then( action )
+                        .catch( function ( e ) { toast( e.message ); } )
+                        .then( function () { b.disabled = false; } );
+                } );
+                return b;
+            }
+
+            function copyText( value )
+            {
+                if( navigator.clipboard && navigator.clipboard.writeText )
+                    return navigator.clipboard.writeText( value );
+                return Promise.reject( new Error( "no clipboard" ) );
+            }
+
             function load()
             {
                 return Promise.all( [
                     fetch( window.location.origin + "/api/users" ).then( function ( r ) { return r.json(); } ),
-                    shareApi( "GET" )
+                    shareApi( "GET" ),
+                    opts.app === "trips" ? jsonApi( "/api/owntracks", "GET" ).catch( function () { return null; } )
+                                         : null
                 ] ).then( function ( res )
                 {
                     users = ( res[ 0 ] && res[ 0 ].users ) || [];
-                    mine  = ( ( res[ 1 ] && res[ 1 ].mine ) || [] )
+                    var here = ( ( res[ 1 ] && res[ 1 ].mine ) || [] )
                                 .filter( function ( g ) { return g.root === path; } );
+                    // A public link is not a person: it has its own section.
+                    mine = here.filter( function ( g ) { return ! g.token; } );
+                    link = here.filter( function ( g ) { return !! g.token; } )[ 0 ] || null;
+                    tracker = res[ 2 ] && res[ 2 ].url ? res[ 2 ] : null;
                     render();
                 } ).catch( function ( e )
                 {
@@ -2816,6 +2993,101 @@
                 if( e.key === "Escape" ) close();
             } );
         } );
+    }
+
+    //------------------------------------------------------------------------//
+    // "SEND MY LOCATION" - for a trip's public link (server/go/api_location.go)
+    //
+    // A web page cannot read GPS in the background, so the device where the owner
+    // ticked the box in a trip's Share sheet reports while any Nayive page is
+    // open: one probe every quarter of an hour at most, the GPS read - at high
+    // accuracy - only when the server answers "due" (a linked trip is on and its
+    // position is an hour old, or rough and 15 minutes old), and never a
+    // permission prompt from here: only the tick itself may ask. With Nayive
+    // closed, the OwnTracks app does this job.
+    //
+    // The position is rounded to ~100 m BEFORE it leaves the device, so the town
+    // lookup (OpenStreetMap's Nominatim) never sees the exact spot either. The
+    // server rounds it again whatever arrives, and keeps its accuracy.
+
+    var LOC_KEY   = "nayive-share-location";         // "1" = this device reports
+    var LOC_PROBE = "nayive-share-location-probe";   // ms of the last probe
+    var LOC_EVERY = 15 * 60 * 1000;
+
+    function locationOn()
+    {
+        try { return localStorage.getItem( LOC_KEY ) === "1"; } catch ( e ) { return false; }
+    }
+
+    function setLocationOn( on )
+    {
+        try
+        {
+            if( on ) localStorage.setItem( LOC_KEY, "1" );
+            else { localStorage.removeItem( LOC_KEY ); localStorage.removeItem( LOC_PROBE ); }
+        }
+        catch ( e ) {}
+    }
+
+    // `now` = right after the tick: skip the hourly throttle.
+    function sendLocationIfDue( now )
+    {
+        if( ! locationOn() || ! navigator.geolocation ) return;
+        // The sign-in pages have no session; a public link page is a stranger's view.
+        if( /\/(login|admin)\.html$/.test( location.pathname ) || location.pathname.indexOf( "/s/" ) === 0 ) return;
+
+        var started = Date.now(), last = 0;
+        try { last = +localStorage.getItem( LOC_PROBE ) || 0; } catch ( e ) {}
+        if( ! now && started - last < LOC_EVERY ) return;
+        try { localStorage.setItem( LOC_PROBE, String( started ) ); } catch ( e ) {}
+
+        // Without the Permissions API there is no way to know a read will not
+        // prompt, so such a browser reports only right after the tick.
+        var granted = ( navigator.permissions && navigator.permissions.query )
+            ? navigator.permissions.query( { name: "geolocation" } )
+                  .then( function ( st ) { return st.state === "granted"; } )
+            : Promise.resolve( !! now );
+
+        granted.then( function ( ok )
+        {
+            if( ! ok ) return null;
+            return fetch( window.location.origin + "/api/location" )
+                .then( function ( r ) { return r.ok ? r.json() : null; } );
+        } ).then( function ( answer )
+        {
+            if( ! answer || ! answer.due ) return;
+
+            navigator.geolocation.getCurrentPosition( function ( pos )
+            {
+                var lat = Math.round( pos.coords.latitude  * 1000 ) / 1000;
+                var lon = Math.round( pos.coords.longitude * 1000 ) / 1000;
+                var acc = Math.ceil( pos.coords.accuracy || 0 );   // metres; 0 = the browser did not say
+                townName( lat, lon ).then( function ( place )
+                {
+                    return fetch( window.location.origin + "/api/location", {
+                        method:  "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body:    JSON.stringify( { lat: lat, lon: lon, acc: acc, place: place } )
+                    } );
+                } ).catch( function () {} );
+            }, function () { /* refused or unknown: try again at the next probe */ },
+            { enableHighAccuracy: true, timeout: 30000, maximumAge: 2 * 60 * 1000 } );
+        } ).catch( function () {} );
+    }
+
+    // The town at a (rounded) position, in the owner's language; "" when unknown.
+    function townName( lat, lon )
+    {
+        var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=" +
+                  encodeURIComponent( I18N ? I18N.locale() : "es" ) + "&lat=" + lat + "&lon=" + lon;
+        return fetch( url, { headers: { Accept: "application/json" } } )
+            .then( function ( r ) { return r.ok ? r.json() : {}; } )
+            .then( function ( j )
+            {
+                var a = ( j && j.address ) || {};
+                return a.city || a.town || a.village || a.municipality || a.county || a.state || "";
+            } )
+            .catch( function () { return ""; } );
     }
 
     //------------------------------------------------------------------------//
@@ -3014,7 +3286,8 @@
     // hint appended. opts.titles overrides a state's key (the office apps say
     // "not uploaded yet" rather than "changes queued").
     var SYNC_KEYS = { synced: "synced", loading: "loading", saving: "saving",
-                      offline: "offline", pending: "pending", "needs-auth": "needsAuth" };
+                      offline: "offline", pending: "pending", "needs-auth": "needsAuth",
+                      conflict: "conflict" };
 
     function applySyncState( el, state, opts )
     {
@@ -3303,9 +3576,13 @@
         i18nReady.then( function () { applyI18n(); } );
 
         pingSwUpdate();
+        // A few seconds in, so it never competes with the app's own first load.
+        setTimeout( function () { sendLocationIfDue( false ); }, 5000 );
         document.addEventListener( "visibilitychange", function ()
         {
-            if( document.visibilityState === "visible" ) pingSwUpdate();
+            if( document.visibilityState !== "visible" ) return;
+            pingSwUpdate();
+            sendLocationIfDue( false );
         } );
     }
 
@@ -3323,6 +3600,7 @@
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         viewerTz: viewerTz,
         escapeHtml: escapeHtml,
+        townName:   townName,      // the town at a position, "" when unknown (trips/public.html)
         pad2:       pad2,
         todayIso:   todayIso,
         applySyncState: applySyncState,   // store state -> the header plug (classes + title)

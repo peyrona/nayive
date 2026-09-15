@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <!--
+    ===========================================================================
+     trips/public.html - the page behind a trip's public link, /s/<token>.
+
+     Anyone holding the link sees it, with no account: the trip's title and
+     dates, "where I am now", the route so far on a map, the stages so far, and
+     the photos of the trip's photo folder with the owner's comments. Read only:
+     nothing on this page writes anything.
+
+     The Go server sends this file for /s/<token> (server/go/api_public.go), so
+     the page's own URL is /s/... and NOT /nayive/trips/ - every asset below is
+     an absolute /nayive/ URL. All the data comes from /api/public/<token>,
+     already trimmed there: no future stages, positions rounded to ~100 m, no
+     documents or notes, full photos without their GPS. No service worker, no
+     session, no GumApi.
+    ===========================================================================
+    -->
+    <script src="/nayive/shared/i18n.js"></script>
+    <title>Nayive</title>
+    <link rel="icon" type="image/png" href="/nayive/icons/icon-192.png">
+    <link rel="stylesheet" href="/nayive/shared/theme.css">
+    <link rel="stylesheet" href="/nayive/shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="/nayive/shared/theme.js" defer></script>
+
+    <!-- The map: Leaflet (after app.css, see LEAFLET CHROME there), then the
+         vector base map exactly as Trips loads it. -->
+    <link rel="stylesheet" href="/nayive/trips/lib/leaflet_v1.9.4/leaflet.css">
+    <script src="/nayive/trips/lib/leaflet_v1.9.4/leaflet.js"></script>
+    <link rel="stylesheet" href="/nayive/trips/lib/maplibre-gl_v5.24.0/maplibre-gl.css">
+    <script src="/nayive/trips/lib/maplibre-gl_v5.24.0/maplibre-gl.js" defer></script>
+    <script src="/nayive/trips/lib/maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" defer></script>
+    <script src="/nayive/shared/basemap.js" defer></script>
+    <!-- NayiveUI: translations, icons - and basemap.js reads NayiveUI.lang(). -->
+    <script src="/nayive/shared/ui.js" defer></script>
+
+    <style>
+    /* Layout only; every control is a shared class (.icon-btn, .editor-btn). */
+    [hidden] { display: none !important; }
+
+    body { margin: 0; background: var(--bg); color: var(--text); }
+
+    /* No .app-icon here on purpose: shared/ui.js turns the app icon and title
+       into a link to the launcher, which is a sign-in page for a visitor. */
+    .pub-icon  { flex: 0 0 auto; margin-right: 8px; color: var(--accent); }
+    .pub-dates { flex: 1 0 100%; padding-left: 28px; font-size: 0.82rem; color: var(--text-dim); }
+
+    .pub       { max-width: 980px; margin: 0 auto; padding: 0 12px calc(40px + env(safe-area-inset-bottom)); }
+
+    .pub-now   { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; font-size: 0.95rem; }
+    .pub-now svg { flex: 0 0 auto; width: 18px; height: 18px; color: var(--danger); }
+
+    /* isolation: Leaflet stacks its panes and controls up to z-index 1000; kept
+       inside the map, they cannot show through the photo viewer. */
+    .pub-map   { height: 340px; border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; isolation: isolate; }
+    @media (max-width: 640px) { .pub-map { height: 260px; } }
+
+    .pub-head  { margin: 22px 0 8px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em;
+                 text-transform: uppercase; color: var(--text-dim); }
+
+    .pub-stages    { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+    .pub-stages li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px;
+                     border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--card); font-size: 0.9rem; }
+    .pub-stages .when { flex: 0 0 auto; font-size: 0.82rem; color: var(--text-dim); }
+
+    .pub-empty { margin: 0; font-size: 0.86rem; color: var(--text-faint); }
+
+    .pub-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px; }
+    .pub-tile  { position: relative; aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px;
+                 overflow: hidden; background: var(--card); cursor: pointer; }
+    .pub-tile img  { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .pub-tile .note { position: absolute; right: 5px; bottom: 5px; display: flex; align-items: center; justify-content: center;
+                      width: 22px; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); color: #fff; }
+    .pub-tile .note svg { width: 13px; height: 13px; }
+
+    /* The full view: a fixed dark ground, like every Nayive photo viewer. */
+    .pub-viewer       { position: fixed; inset: 0; z-index: 500; display: flex; flex-direction: column; background: #111; color: #fff; }
+    .pub-viewer-bar   { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+                        padding: calc(8px + env(safe-area-inset-top)) 10px 8px; }
+    .pub-viewer-count { font-size: 0.85rem; color: rgba(255, 255, 255, 0.72); }
+    .pub-viewer-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+    .pub-viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .pub-nav          { position: absolute; top: 50%; transform: translateY(-50%); }
+    .pub-nav.prev     { left: 10px; }
+    .pub-nav.next     { right: 10px; }
+    .pub-viewer-note  { flex: 0 0 auto; margin: 0; padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+                        font-size: 0.92rem; line-height: 1.45; white-space: pre-wrap; color: rgba(255, 255, 255, 0.9); }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <svg class="pub-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"/><ellipse cx="12" cy="6" rx="2.1" ry="2.6"/><ellipse cx="18.5" cy="9" rx="2" ry="2.5"/><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"/></svg>
+        <h1 id="title">Nayive</h1>
+        <span class="pub-dates" id="dates"></span>
+    </header>
+
+    <div class="empty-state" id="msg" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 4 8"/><line x1="8" y1="12" x2="12" y2="12"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+        <p class="empty-title" id="msgText"></p>
+    </div>
+
+    <main class="pub" id="content" hidden>
+        <p class="pub-now" id="now" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>
+            <span id="nowText"></span>
+        </p>
+        <div class="pub-map" id="map" role="region" data-i18n-attr="aria-label:trips.pub.map" hidden></div>
+
+        <h2 class="pub-head" id="stagesHead" data-i18n="trips.pub.stages" hidden></h2>
+        <ol class="pub-stages" id="stages" hidden></ol>
+
+        <h2 class="pub-head" data-i18n="trips.photos"></h2>
+        <p class="pub-empty" id="noPhotos" data-i18n="trips.pub.noPhotos" hidden></p>
+        <div class="pub-grid" id="grid"></div>
+    </main>
+
+    <div class="pub-viewer" id="viewer" role="dialog" aria-modal="true" hidden>
+        <div class="pub-viewer-bar">
+            <button class="editor-btn over-media" id="viewerBack" type="button" data-i18n-attr="title:trips.pub.back, aria-label:trips.pub.back"></button>
+            <span class="pub-viewer-count" id="viewerCount"></span>
+        </div>
+        <div class="pub-viewer-stage" id="viewerStage">
+            <img id="viewerImg" alt="">
+            <button class="editor-btn over-media pub-nav prev" id="viewerPrev" type="button" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="editor-btn over-media pub-nav next" id="viewerNext" type="button" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
+        <p class="pub-viewer-note" id="viewerNote" hidden></p>
+    </div>
+
+<script>
+( function ()
+{
+    "use strict";
+
+    // /s/<token> - the token is base64url, already safe inside a URL path.
+    const match = location.pathname.match( /^\/s\/([A-Za-z0-9_-]+)$/ );
+    const TOKEN = match ? match[ 1 ] : "";
+    const API   = "/api/public/" + TOKEN;
+
+    const NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+
+    const $  = function ( sel ) { return document.querySelector( sel ); };
+    const T  = function ( key ) { return NayiveUI.t( key ); };
+    const TF = function ( key, vars ) { return NayiveUI.tf( key, vars ); };
+
+    let TRIP   = null;     // the /api/public answer
+    let PHOTOS = [];       // TRIP.photos, in the order they were taken
+    let at     = -1;       // the photo open in the full view
+    let nowMarker = null;  // the map's "where I am now" circle
+
+    /* -------- boot -------- */
+
+    async function boot()
+    {
+        if( ! TOKEN ) { showMessage( "trips.pub.gone" ); return; }
+
+        let res;
+        try { res = await fetch( API, { headers: { Accept: "application/json" } } ); }
+        catch( _ ) { showMessage( "trips.pub.failed" ); return; }
+
+        if( res.status === 404 ) { showMessage( "trips.pub.gone" ); return; }
+        try
+        {
+            if( ! res.ok ) throw new Error( "HTTP " + res.status );
+            TRIP = await res.json();
+        }
+        catch( _ ) { showMessage( "trips.pub.failed" ); return; }
+
+        render();
+    }
+
+    function showMessage( key )
+    {
+        $( "#msgText" ).textContent = T( key );
+        $( "#msg" ).hidden     = false;
+        $( "#content" ).hidden = true;
+    }
+
+    function render()
+    {
+        document.title = TRIP.title + " · Nayive";
+        $( "#title" ).textContent = TRIP.title;
+        $( "#dates" ).textContent = dayRange( TRIP.startDate, TRIP.endDate, true );
+
+        renderNow();
+        renderStages();
+        renderPhotos();
+        $( "#content" ).hidden = false;
+        renderMap();                     // after the box is on screen: Leaflet measures it
+        nameTheNow();
+    }
+
+    /* -------- dates and times -------- */
+
+    function parseDay( s )
+    {
+        const p = String( s || "" ).split( "-" ).map( Number );
+        return p.length === 3 && p[ 0 ] ? new Date( p[ 0 ], p[ 1 ] - 1, p[ 2 ] ) : null;
+    }
+
+    function dayRange( a, b, withYear )
+    {
+        const from = parseDay( a ), to = parseDay( b ) || from;
+        if( ! from ) return "";
+        const opts = { day: "numeric", month: "short" };
+        if( withYear ) opts.year = "numeric";
+        const fmt = new Intl.DateTimeFormat( NayiveUI.locale(), opts );
+        return fmt.formatRange ? fmt.formatRange( from, to < from ? from : to ) : fmt.format( from );
+    }
+
+    function agoText( epoch )
+    {
+        const secs = Math.max( 0, Date.now() / 1000 - epoch );
+        const rtf  = new Intl.RelativeTimeFormat( NayiveUI.locale(), { numeric: "auto" } );
+        if( secs < 3600 )  return rtf.format( -Math.max( 1, Math.round( secs / 60 ) ), "minute" );
+        if( secs < 86400 ) return rtf.format( -Math.round( secs / 3600 ), "hour" );
+        return rtf.format( -Math.round( secs / 86400 ), "day" );
+    }
+
+    /* -------- where I am, the stages -------- */
+
+    // source: "phone" | "owntracks" (said the same way), "photo", or "plan".
+    function nowText()
+    {
+        const now = TRIP.now;
+        if( ! now ) return "";
+        if( now.source === "plan" ) return TF( "trips.pub.nowPlan", { place: now.place || "" } );
+
+        const ago = agoText( now.at );
+        if( now.source === "photo" )
+            return now.place ? TF( "trips.pub.nowPhoto", { place: now.place, ago: ago } )
+                             : TF( "trips.pub.nowPhotoNoPlace", { ago: ago } );
+        return now.place ? TF( "trips.pub.nowPhone", { place: now.place, ago: ago } )
+                         : TF( "trips.pub.nowPhoneNoPlace", { ago: ago } );
+    }
+
+    // A position from a photo or the OwnTracks app comes with no place name: look
+    // the town up once, for the one position the page names.
+    function nameTheNow()
+    {
+        const now = TRIP.now;
+        if( ! now || now.place || now.source === "plan" || ! NayiveUI.townName ) return;
+        NayiveUI.townName( now.lat, now.lon ).then( function ( place )
+        {
+            if( ! place ) return;
+            now.place = place;
+            renderNow();
+            if( nowMarker ) nowMarker.setTooltipContent( NayiveUI.escapeHtml( nowText() ) );
+        } );
+    }
+
+    function renderNow()
+    {
+        $( "#nowText" ).textContent = nowText();
+        $( "#now" ).hidden = ! TRIP.now;
+    }
+
+    function renderStages()
+    {
+        const list = $( "#stages" );
+        list.textContent = "";
+        TRIP.stages.forEach( function ( st, i )
+        {
+            const li   = document.createElement( "li" );
+            const name = document.createElement( "span" );
+            const when = document.createElement( "span" );
+            name.textContent = ( i + 1 ) + ". " + st.location;
+            when.className   = "when";
+            when.textContent = dayRange( st.startDate, st.endDate, false );
+            li.append( name, when );
+            list.appendChild( li );
+        } );
+        list.hidden = $( "#stagesHead" ).hidden = ! TRIP.stages.length;
+    }
+
+    /* -------- photos -------- */
+
+    // `kind` = "photo" | "thumb". The mtime makes a changed photo a new URL.
+    function photoUrl( p, kind )
+    {
+        return API + "/" + kind + "/" + encodeURIComponent( p.name ) + "?v=" + p.mtime;
+    }
+
+    function renderPhotos()
+    {
+        PHOTOS = TRIP.photos.slice().sort( function ( a, b )
+        {
+            return ( ( a.ts || Infinity ) - ( b.ts || Infinity ) ) || a.name.localeCompare( b.name );
+        } );
+
+        const grid = $( "#grid" );
+        grid.textContent = "";
+        PHOTOS.forEach( function ( p, i )
+        {
+            const tile = document.createElement( "button" );
+            tile.type      = "button";
+            tile.className = "pub-tile";
+            tile.title     = p.comment || p.name;
+
+            const img = document.createElement( "img" );
+            img.loading  = "lazy";
+            img.decoding = "async";
+            img.alt      = p.comment || "";
+            img.src      = photoUrl( p, p.thumb ? "thumb" : "photo" );
+            if( p.thumb ) img.onerror = function () { img.onerror = null; img.src = photoUrl( p, "photo" ); };
+            tile.appendChild( img );
+
+            if( p.comment )
+            {
+                const note = document.createElement( "span" );
+                note.className = "note";
+                note.innerHTML = NOTE_SVG;
+                tile.appendChild( note );
+            }
+            tile.addEventListener( "click", function () { openViewer( i ); } );
+            grid.appendChild( tile );
+        } );
+        $( "#noPhotos" ).hidden = PHOTOS.length > 0;
+    }
+
+    /* -------- the map -------- */
+
+    function cssVar( name, fallback )
+    {
+        return getComputedStyle( document.documentElement ).getPropertyValue( name ).trim() || fallback;
+    }
+
+    function renderMap()
+    {
+        const box    = $( "#map" );
+        const bounds = [];
+
+        TRIP.route.forEach( function ( p ) { bounds.push( [ p.lat, p.lon ] ); } );
+
+        // Photos taken at the same (rounded) spot share one pin.
+        const spots = new Map();
+        PHOTOS.forEach( function ( p, i )
+        {
+            if( p.lat == null || p.lon == null ) return;
+            const key = p.lat + "," + p.lon;
+            if( ! spots.has( key ) ) spots.set( key, { lat: p.lat, lon: p.lon, first: i, n: 0 } );
+            spots.get( key ).n++;
+        } );
+        spots.forEach( function ( s ) { bounds.push( [ s.lat, s.lon ] ); } );
+        if( TRIP.now ) bounds.push( [ TRIP.now.lat, TRIP.now.lon ] );
+
+        if( ! bounds.length || ! window.L ) { box.hidden = true; return; }
+        box.hidden = false;
+
+        const map = L.map( box, { zoomControl: true, attributionControl: true, scrollWheelZoom: false } );
+        if( window.NayiveBaseMap ) NayiveBaseMap.add( map );
+
+        const accent = cssVar( "--accent", "#16A085" );
+        const blue   = cssVar( "--link",   "#5B9DF9" );
+        const gold   = cssVar( "--warn",   "#E0A21E" );
+        const red    = cssVar( "--danger", "#D9707D" );
+
+        if( TRIP.route.length > 1 )
+            L.polyline( TRIP.route.map( function ( p ) { return [ p.lat, p.lon ]; } ),
+                        { color: accent, weight: 3, opacity: 0.85, lineJoin: "round" } ).addTo( map );
+
+        TRIP.route.forEach( function ( p )
+        {
+            const stage  = p.kind === "stage";
+            const colour = stage ? accent : blue;
+            const mark   = L.circleMarker( [ p.lat, p.lon ], { radius: stage ? 7 : 4, color: colour, weight: 2,
+                                                             fillColor: colour, fillOpacity: stage ? 0.9 : 0.7 } );
+            // A tooltip string is HTML to Leaflet, and a place name is someone's text.
+            if( p.place ) mark.bindTooltip( NayiveUI.escapeHtml( p.place ), { direction: "top" } );
+            mark.addTo( map );
+        } );
+
+        spots.forEach( function ( s )
+        {
+            L.circleMarker( [ s.lat, s.lon ], { radius: 6, color: gold, weight: 2, fillColor: gold, fillOpacity: 0.55 } )
+                .bindTooltip( TF( "trips.pub.photoCount", { n: s.n } ), { direction: "top" } )
+                .on( "click", function () { openViewer( s.first ); } )
+                .addTo( map );
+        } );
+
+        if( TRIP.now )
+            nowMarker = L.circleMarker( [ TRIP.now.lat, TRIP.now.lon ], { radius: 11, color: red, weight: 3, fillColor: red, fillOpacity: 0.3 } )
+                .bindTooltip( NayiveUI.escapeHtml( nowText() ), { direction: "top" } )
+                .addTo( map );
+
+        if( bounds.length === 1 ) map.setView( bounds[ 0 ], 11 );
+        else map.fitBounds( bounds, { padding: [ 30, 30 ], maxZoom: 12 } );
+    }
+
+    /* -------- the full view -------- */
+
+    function openViewer( i )
+    {
+        if( ! PHOTOS.length ) return;
+        const viewer = $( "#viewer" );
+        if( viewer.hidden )
+        {
+            viewer.hidden = false;
+            document.body.style.overflow = "hidden";
+            // The phone's own Back closes the view instead of leaving the page.
+            try { history.pushState( { viewer: true }, "" ); } catch( _ ) {}
+        }
+
+        at = ( i + PHOTOS.length ) % PHOTOS.length;
+        const p   = PHOTOS[ at ];
+        const img = $( "#viewerImg" );
+        const shown = at;
+
+        // The thumbnail at once, the full photo as soon as it has arrived.
+        img.alt = p.comment || p.name;
+        img.src = photoUrl( p, p.thumb ? "thumb" : "photo" );
+        if( p.thumb )
+        {
+            const full = new Image();
+            full.onload = function () { if( at === shown && ! viewer.hidden ) img.src = full.src; };
+            full.src = photoUrl( p, "photo" );
+        }
+
+        $( "#viewerCount" ).textContent = TF( "trips.pub.photoN", { n: at + 1, total: PHOTOS.length } );
+        const note = $( "#viewerNote" );
+        note.textContent = p.comment || "";
+        note.hidden = ! p.comment;
+        $( "#viewerPrev" ).hidden = $( "#viewerNext" ).hidden = PHOTOS.length < 2;
+    }
+
+    function closeViewer( fromHistory )
+    {
+        const viewer = $( "#viewer" );
+        if( viewer.hidden ) return;
+        viewer.hidden = true;
+        document.body.style.overflow = "";
+        $( "#viewerImg" ).removeAttribute( "src" );
+        if( ! fromHistory ) try { history.back(); } catch( _ ) {}
+    }
+
+    function wireViewer()
+    {
+        $( "#viewerBack" ).innerHTML = NayiveUI.icon( "back" );
+        $( "#viewerBack" ).addEventListener( "click", function () { closeViewer( false ); } );
+        $( "#viewerPrev" ).addEventListener( "click", function () { openViewer( at - 1 ); } );
+        $( "#viewerNext" ).addEventListener( "click", function () { openViewer( at + 1 ); } );
+        window.addEventListener( "popstate", function () { closeViewer( true ); } );
+
+        document.addEventListener( "keydown", function ( e )
+        {
+            if( $( "#viewer" ).hidden ) return;
+            if( e.key === "Escape" )     closeViewer( false );
+            if( e.key === "ArrowLeft" )  openViewer( at - 1 );
+            if( e.key === "ArrowRight" ) openViewer( at + 1 );
+        } );
+
+        // A swipe steps through the photos.
+        let startX = null;
+        const stage = $( "#viewerStage" );
+        stage.addEventListener( "touchstart", function ( e )
+        {
+            startX = e.touches.length === 1 ? e.touches[ 0 ].clientX : null;
+        }, { passive: true } );
+        stage.addEventListener( "touchend", function ( e )
+        {
+            if( startX === null ) return;
+            const dx = e.changedTouches[ 0 ].clientX - startX;
+            startX = null;
+            if( Math.abs( dx ) > 50 ) openViewer( at + ( dx < 0 ? 1 : -1 ) );
+        } );
+    }
+
+    // The deferred scripts (ui.js, basemap.js) have all run by DOMContentLoaded;
+    // the dictionary may land before or after it.
+    document.addEventListener( "DOMContentLoaded", function ()
+    {
+        NayiveI18n.ready.then( function () { wireViewer(); boot(); } );
+    } );
+} )();
+</script>
+</body>
+</html>

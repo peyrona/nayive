@@ -41,8 +41,10 @@
     var LIGHT = "light";
     var DARK  = "dark";
 
-    // The four neutral tokens a custom scheme can override (see theme.css).
-    var SCHEME_KEYS = [ "--bg", "--card", "--card2", "--line" ];
+    // The tokens a custom scheme can override (see theme.css): the four neutrals,
+    // the highlight colour and the ink on it. A key the scheme lacks falls back
+    // to theme.css.
+    var SCHEME_KEYS = [ "--bg", "--card", "--card2", "--line", "--accent", "--on-accent" ];
 
 
     // Sun shown while dark is active (click for light); moon while light is active.

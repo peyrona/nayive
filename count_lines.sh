@@ -17,9 +17,7 @@ PRUNE=(
     -o -name __pycache__
     -o -name node_modules
     -o -path './client/apps/*/lib'      # vendored front-end libs (TinyMCE, FullCalendar, ...)
-    -o -path './client/homes'           # per-user data and files
-    -o -path './client/files'           # runtime file storage
-    -o -path './client/config'          # runtime config
+    -o -path './store'                  # the run-root: per-user data, config, runtime state
     -o -path './server/go/vendor'         # vendored Go module (x/text), not ours
 )
 

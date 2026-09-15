@@ -51,13 +51,14 @@
                 { sel: '#newFolderBtn',    text: NayiveUI.t( 'drive.introNewFolder' ) },
                 { sel: '#uploadBtn',       text: NayiveUI.t( 'drive.introUpload' ) },
                 { sel: '#downloadBtn',     text: NayiveUI.t( 'drive.introDownload' ) },
-                { sel: '#moreBtn',         text: NayiveUI.t( 'drive.introMore' ) },
                 { sel: '#renameBtn',       text: NayiveUI.t( 'drive.introRename' ) },
                 { sel: '#moveToBtn',       text: NayiveUI.t( 'drive.introMove' ) },
                 { sel: '#copyToBtn',       text: NayiveUI.t( 'drive.introCopy' ) },
                 { sel: '#copyLinkBtn',     text: NayiveUI.t( 'drive.introLink' ) },
+                { sel: '#shareBtn',        text: NayiveUI.t( 'drive.introShare' ) },
                 { sel: '#deleteBtn',       text: NayiveUI.t( 'drive.introTrash' ) },
                 { sel: '#trashViewBtn',    text: NayiveUI.t( 'drive.introOpenTrash' ) },
+                { sel: '#moreBtn',         text: NayiveUI.t( 'drive.introMore' ) },
                 { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
                   text: NayiveUI.t( 'drive.introSync' ) }
             ]
@@ -125,15 +126,11 @@
         .tree-node .tree-name { flex: 0 0 auto; white-space: nowrap; }
         .tree-children { margin-left: 16px; display: none; }
         .tree-children.open { display: block; }
-        /* ⋮ actions button on a folder row — shown on touch (see the phone @media). */
-        .tree-node .tree-row .row-menu
-        {
-            flex: 0 0 auto; display: none; align-items: center; justify-content: center;
-            width: 30px; height: 30px; margin-left: auto; padding: 0; border: none; border-radius: 50%;
-            background: transparent; color: var(--text-dim); cursor: pointer;
-        }
+        /* ⋮ actions button on a folder row — a shared .icon-btn.sm, shown on touch
+           only (see the phone @media). The selected row is accent-filled, so there
+           its glyph takes --on-accent. */
+        .tree-node .tree-row .row-menu { display: none; margin-left: auto; }
         .tree-node .tree-row.selected .row-menu { color: var(--on-accent); }
-        .tree-node .tree-row .row-menu:active { background: color-mix(in srgb, var(--text) 14%, transparent); }
 
         /* Right pane */
         .list-pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -158,13 +155,7 @@
         }
         .row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
         .row.selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-        .row .row-menu
-        {
-            flex: 0 0 auto; display: none; align-items: center; justify-content: center;
-            width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%;
-            background: transparent; color: var(--text-dim); cursor: pointer;
-        }
-        .row .row-menu:active { background: color-mix(in srgb, var(--text) 12%, transparent); }
+        .row .row-menu { display: none; }   /* a shared .icon-btn.sm, shown on touch only (phone @media) */
         .row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
         /* File-type icon colours. The dark set is pastel for the dark ground; the
            light set is deepened so it stays legible on the grey light background. */
@@ -315,13 +306,7 @@
             margin-top: 14px; max-width: 100%; font-size: 0.85rem; color: rgba(255, 255, 255, 0.7);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .viewer-close
-        {
-            position: absolute; top: 14px; right: 16px; width: 40px; height: 40px;
-            border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.12);
-            color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer;
-        }
-        .viewer-close:hover { background: rgba(255, 255, 255, 0.22); }
+        .viewer-close { position: absolute; top: 14px; right: 16px; }   /* the look is the shared .editor-btn */
 
         /* Built-in audio / video viewer (same dark overlay as the image lightbox).
            The media element keeps the browser's own controls; clicking the dark
@@ -380,28 +365,13 @@
             100% { left: 100%; }
         }
 
-        /* Context menu on a listing row (desktop right-click; touch: the row's ⋮ button) */
-        .ctx-menu
-        {
-            position: fixed; z-index: 150; display: none;
-            min-width: 210px; padding: 5px;
-            background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
-            box-shadow: var(--elev-dialog);
-        }
-        .ctx-menu.open { display: block; }
-        .ctx-menu button
-        {
-            display: flex; align-items: center; gap: 11px; width: 100%;
-            padding: 9px 10px; border: none; border-radius: 7px;
-            background: transparent; color: var(--text);
-            font-size: 0.9rem; font-family: inherit; text-align: left; cursor: pointer;
-        }
-        .ctx-menu button[hidden] { display: none; }   /* the class rule above would otherwise beat [hidden]'s UA style */
-        .ctx-menu button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-        .ctx-menu button:disabled { opacity: 0.34; cursor: default; }
-        .ctx-menu button svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--text-dim); }
-        .ctx-menu button.danger, .ctx-menu button.danger svg { color: var(--danger); }
-        .ctx-menu .ctx-sep { height: 1px; margin: 5px 8px; background: var(--line); }
+        /* Context menu on a listing row (desktop right-click; touch: the row's ⋮ button).
+           The look is the shared .top-menu / .menu-item; .ctx-menu only adds the
+           closed state (openCtxMenu adds .open) and the greyed-out rows. */
+        .ctx-menu { display: none; }
+        .ctx-menu.open { display: flex; }
+        .ctx-menu .menu-item[hidden] { display: none; }   /* .menu-item's display would otherwise beat [hidden]'s UA style */
+        .ctx-menu .menu-item:disabled { opacity: 0.34; cursor: default; background: none; }
 
         /* Folder chooser (Mover a… / Copiar a…) */
         .tree-picker
@@ -412,9 +382,23 @@
         .tree-picker .tree-row.bad { opacity: 0.32; cursor: default; }
         .tree-picker .tree-row.bad:hover { background: none; }
 
+        /* Properties dialog: a label / value grid. The dimmed label reads like a
+           .field label (app.css); the exact byte count goes under its own value
+           in small type, the way every file manager writes it. */
+        .props
+        {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 16px;
+            margin: 0 0 14px;
+            font-size: 0.9rem;
+        }
+        .props dt { color: var(--text-dim); }
+        .props dd { margin: 0; overflow-wrap: anywhere; }
+        .props dd .props-sub { display: block; font-size: 0.8rem; color: var(--text-dim); }
+
         /* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
            toolbar buttons are hidden while it is open. */
-        #trashViewBtn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
         #moreBtn { display: none; }   /* phone only — see B6b in the phone block */
         body.trash-mode .topbar-search,
         body.trash-mode #searchToggleBtn,
@@ -431,34 +415,12 @@
         /* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
            all but one digit, so "30" read as "3" */
         .trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
-        .trash-bar button
-        {
-            border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px;
-            background: var(--card2); color: var(--text); font: inherit; cursor: pointer;
-        }
-        .trash-bar button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
-        .trash-bar button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-        .trash-bar button.icon-only { padding: 6px; display: inline-flex; }
-        .trash-bar button svg { width: 16px; height: 16px; display: block; }
-        .trash-bar button.back-btn { border: 0; background: none; padding: 5px; display: inline-flex; }
-        .trash-bar button.back-btn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
-        .trash-bar button.back-btn svg { width: 18px; height: 18px; }
-        /* the "Eliminar tras N días" info dot must keep the shared bare look,
-           not pick up the .trash-bar button chrome */
-        .trash-bar .info-dot,
-        .trash-bar .info-dot:hover { border: 0; background: none; padding: 0; }
+        /* Every button in the bar is a shared one: "←" an .icon-btn, "Vaciar
+           papelera" a .text-btn.ghost.danger, the days hint an .info-dot. */
         .trash-bar .info-dot svg { width: 19px; height: 19px; }
 
+        /* Restore / delete-forever: two shared .icon-btn.sm (the second .danger) */
         .row .row-trash-actions { display: flex; gap: 6px; flex: 0 0 auto; }
-        .row .row-trash-actions button
-        {
-            border: 1px solid var(--line); border-radius: 6px; padding: 5px;
-            background: var(--card2); color: var(--text); font: inherit; cursor: pointer;
-            display: inline-flex;
-        }
-        .row .row-trash-actions button svg { width: 16px; height: 16px; display: block; }
-        .row .row-trash-actions button.danger { color: var(--danger); }
-        .row .row-trash-actions button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
         /* --- Responsive: phone layout (≤640px). New elements below are hidden here
                and only revealed inside the @media block, so desktop is untouched. --- */
@@ -620,27 +582,28 @@
     <!-- Per-item menu: desktop right-click, or the row's ⋮ button (touch). Acts on the selection. -->
     <!-- The header's "⋮" (phone). Same component as the row menus below; its
          entries are built in JS from the toolbar buttons they stand for. -->
-    <div id="topMenu" class="ctx-menu"></div>
+    <div id="topMenu" class="ctx-menu top-menu"></div>
 
-    <div id="ctxMenu" class="ctx-menu">
-        <button id="ctxOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg><span data-i18n="drive.open"></span></button>
-        <button id="ctxDownload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span data-i18n="ui.download"></span></button>
-        <div class="ctx-sep"></div>
-        <button id="ctxCut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg><span data-i18n="ui.cut"></span></button>
-        <button id="ctxClip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg><span data-i18n="ui.copy"></span></button>
-        <button id="ctxMove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg><span data-i18n="drive.moveToDots"></span></button>
-        <button id="ctxCopy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span data-i18n="drive.copyToDots"></span></button>
-        <div class="ctx-sep"></div>
-        <button id="ctxRename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg><span data-i18n="ui.rename"></span></button>
-        <button id="ctxLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg><span data-i18n="drive.copyLink"></span></button>
-        <div class="ctx-sep"></div>
-        <button id="ctxDelete" class="danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg><span data-i18n="ui.toTrash"></span></button>
+    <div id="ctxMenu" class="ctx-menu top-menu">
+        <button class="menu-item" id="ctxOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg><span data-i18n="drive.open"></span></button>
+        <button class="menu-item" id="ctxDownload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span data-i18n="ui.download"></span></button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" id="ctxCut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg><span data-i18n="ui.cut"></span></button>
+        <button class="menu-item" id="ctxClip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg><span data-i18n="ui.copy"></span></button>
+        <button class="menu-item" id="ctxMove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg><span data-i18n="drive.moveToDots"></span></button>
+        <button class="menu-item" id="ctxCopy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span data-i18n="drive.copyToDots"></span></button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" id="ctxRename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg><span data-i18n="ui.rename"></span></button>
+        <button class="menu-item" id="ctxLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg><span data-i18n="drive.copyLink"></span></button>
+        <button class="menu-item" id="ctxProps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span data-i18n="drive.properties"></span></button>
+        <div class="menu-sep"></div>
+        <button class="menu-item danger" id="ctxDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg><span data-i18n="ui.toTrash"></span></button>
     </div>
 
     <!-- Desktop right-click on empty space in the listing -->
-    <div id="ctxAreaMenu" class="ctx-menu">
-        <button id="ctxAreaNewFolder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg><span data-i18n="ui.newFolder"></span></button>
-        <button id="ctxAreaPaste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg><span data-i18n="ui.paste"></span></button>
+    <div id="ctxAreaMenu" class="ctx-menu top-menu">
+        <button class="menu-item" id="ctxAreaNewFolder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg><span data-i18n="ui.newFolder"></span></button>
+        <button class="menu-item" id="ctxAreaPaste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg><span data-i18n="ui.paste"></span></button>
     </div>
 
     <!-- Folder chooser: destination for "Mover a…" / "Copiar a…" -->
@@ -710,6 +673,17 @@
         </div>
     </div>
 
+    <!-- Properties dialog (right-click -> "Propiedades"). Read-only: one close button. -->
+    <div id="propsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="drive.properties"></h2>
+            <dl id="propsBody" class="props"></dl>
+            <div class="sheet-actions">
+                <button id="propsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Move-to-trash confirm dialog -->
     <div id="deleteBackdrop" class="sheet-backdrop">
         <div class="sheet">
@@ -769,14 +743,14 @@
 
     <!-- Built-in image viewer (lightbox) -->
     <div id="viewerBackdrop" class="viewer-backdrop">
-        <button id="viewerCloseBtn" class="viewer-close" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
+        <button id="viewerCloseBtn" class="editor-btn viewer-close" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
         <img id="viewerImg" alt="">
         <span id="viewerName" class="viewer-name"></span>
     </div>
 
     <!-- Built-in audio / video player -->
     <div id="mediaBackdrop" class="media-backdrop">
-        <button id="mediaCloseBtn" class="viewer-close" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
+        <button id="mediaCloseBtn" class="editor-btn viewer-close" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
         <video id="mediaVideo" controls playsinline hidden></video>
         <div id="mediaAudioBox" class="media-audio-box" hidden>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
@@ -1084,6 +1058,8 @@
             document.getElementById( 'newFolderConfirmBtn' ).addEventListener( 'click', confirmNewFolder );
             document.getElementById( 'newFolderName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmNewFolder(); } );
 
+            document.getElementById( 'propsCloseBtn' ).addEventListener( 'click', function() { setBackdrop( 'propsBackdrop', false ); } );
+
             document.getElementById( 'renameCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'renameBackdrop', false ); } );
             document.getElementById( 'renameConfirmBtn' ).addEventListener( 'click', confirmRename );
             document.getElementById( 'renameName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmRename(); } );
@@ -1264,6 +1240,7 @@
             document.getElementById( 'ctxRename'   ).addEventListener( 'click', function() { closeCtxMenus(); openRename(); } );
             document.getElementById( 'ctxLink'     ).addEventListener( 'click', function() { closeCtxMenus(); copySelectionLink(); } );
             document.getElementById( 'ctxDelete'   ).addEventListener( 'click', function() { closeCtxMenus(); openDeleteConfirm(); } );
+            document.getElementById( 'ctxProps'    ).addEventListener( 'click', function() { closeCtxMenus(); openProperties(); } );
 
             document.getElementById( 'ctxAreaNewFolder' ).addEventListener( 'click', function() { closeCtxMenus(); openNewFolder(); } );
             document.getElementById( 'ctxAreaPaste'     ).addEventListener( 'click', function() { closeCtxMenus(); doPaste(); } );
@@ -1416,6 +1393,7 @@
                 if( ! svg ) continue;
 
                 const item = document.createElement( 'button' );
+                item.className    = 'menu-item';
                 item.dataset.menu = id;
                 item.appendChild( svg.cloneNode( true ) );
 
@@ -1666,7 +1644,7 @@
         function render()
         {
             document.body.classList.toggle( 'trash-mode', trashMode );
-            document.getElementById( 'trashViewBtn' ).classList.toggle( 'active', trashMode );
+            document.getElementById( 'trashViewBtn' ).classList.toggle( 'is-active', trashMode );
 
             if( trashMode )
             {
@@ -1726,7 +1704,7 @@
 
             // "Back to Drive" - the left arrow every Nayive app uses to leave a screen.
             const back = document.createElement( 'button' );
-            back.className = 'back-btn';
+            back.className = 'icon-btn';
             back.title     = T( 'drive.backToDrive' );
             back.setAttribute( 'aria-label', T( 'drive.backToDrive' ) );
             back.innerHTML = NayiveUI.icon( 'back' );
@@ -1776,8 +1754,10 @@
             }
 
             const empty = document.createElement( 'button' );
-            empty.className   = 'danger';
-            empty.textContent = T( 'drive.emptyTrash' );
+            empty.className   = 'icon-btn danger';
+            empty.title       = T( 'drive.emptyTrash' );
+            empty.setAttribute( 'aria-label', T( 'drive.emptyTrash' ) );
+            empty.innerHTML   = SVG_TRASH;
             empty.disabled    = ! trashItems.length;
             empty.addEventListener( 'click', emptyTrash );
             bar.appendChild( empty );
@@ -1822,13 +1802,14 @@
                 actions.className = 'row-trash-actions';
 
                 const restoreBtn = document.createElement( 'button' );
+                restoreBtn.className = 'icon-btn sm';
                 restoreBtn.title     = T( 'drive.restore' );
                 restoreBtn.setAttribute( 'aria-label', T( 'drive.restore' ) );
                 restoreBtn.innerHTML = SVG_RESTORE;
                 restoreBtn.addEventListener( 'click', function() { restoreTrash( [ item.id ] ); } );
 
                 const delBtn = document.createElement( 'button' );
-                delBtn.className   = 'danger';
+                delBtn.className   = 'icon-btn sm danger';
                 delBtn.title       = T( 'drive.deleteForever' );
                 delBtn.setAttribute( 'aria-label', T( 'drive.deleteForever' ) );
                 delBtn.innerHTML   = SVG_TRASH;
@@ -1954,7 +1935,7 @@
             if( depth > 0 )
             {
                 const menuBtn = document.createElement( 'button' );
-                menuBtn.className = 'row-menu';
+                menuBtn.className = 'icon-btn sm row-menu';
                 menuBtn.title     = T( 'ui.actions' );
                 menuBtn.setAttribute( 'aria-label', T( 'ui.actions' ) );
                 menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
@@ -2636,7 +2617,7 @@
 
             // Phone: a visible ⋮ that opens the same per-item menu as a long-press.
             const menuBtn = document.createElement( 'button' );
-            menuBtn.className = 'row-menu';
+            menuBtn.className = 'icon-btn sm row-menu';
             menuBtn.title     = T( 'ui.actions' );
             menuBtn.setAttribute( 'aria-label', T( 'ui.actions' ) );
             menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
@@ -4238,6 +4219,204 @@
             {
                 NayiveUI.toast( TF( 'drive.renameFailed', { err: err.message } ) );
                 setStatus( '' );
+            }
+        }
+
+        //------------------------------------------------------------------------//
+        // ACTIONS: PROPIEDADES
+        //
+        // What the server knows about what is selected: name, kind, where it
+        // lives, how big it is and when it last changed. A folder carries no
+        // size of its own, so its total (and its item count) are walked with
+        // listDirRecursive() AFTER the dialog is on screen — a deep folder takes
+        // a moment and the other rows should not wait for it.
+
+        let propsToken = 0;   // bumped on each open; a walk that lands late and no longer matches is dropped
+
+        function openProperties()
+        {
+            const nodes = actionTargets().map( propsNode ).filter( Boolean );
+            if( ! nodes.length ) return;
+
+            const token = ++propsToken;
+            const dl    = document.getElementById( 'propsBody' );
+            const files = nodes.filter( function( n ) { return ! isDir( n ); } );
+            const dirs  = nodes.filter( isDir );
+
+            let sizeDd  = null;   // the <dd>s the folder walk fills in later
+            let countDd = null;
+
+            dl.textContent = '';
+
+            if( nodes.length === 1 )
+            {
+                const node = nodes[0];
+                const dir  = isDir( node );
+
+                propRow( dl, T( 'drive.propName'     ), displayName( node ) );
+                propRow( dl, T( 'drive.propType'     ), dir ? T( 'drive.folder' ) : fileKind( node ) );
+                propRow( dl, T( 'drive.propLocation' ), parentLabel( node.path ) );
+
+                if( dir )
+                {
+                    countDd = propRow( dl, T( 'drive.propContents' ), T( 'drive.propCalculating' ) );
+                    sizeDd  = propRow( dl, T( 'drive.propSize'     ), T( 'drive.propCalculating' ) );
+                }
+                else if( node.size != null )
+                {
+                    propRow( dl, T( 'drive.propSize' ), fmtSize( node.size ),
+                             TF( 'drive.propBytes', { n: node.size.toLocaleString() } ) );
+                }
+
+                if( node.mtime )                    propRow( dl, T( 'drive.propModified' ), fmtDateTime( node.mtime ) );
+                if( node.shared && node.shared.by ) propRow( dl, T( 'drive.propShared'   ), node.shared.by );
+            }
+            else
+            {
+                propRow( dl, T( 'drive.propSelection' ), TF( 'drive.nItems', { n: nodes.length } ) );
+                propRow( dl, T( 'drive.propContents'  ), countLabel( files.length, dirs.length ) );
+
+                // A search result can hold items from several folders: only say
+                // where they are when there is one answer.
+                const where = commonParent( nodes );
+                if( where !== null ) propRow( dl, T( 'drive.propLocation' ), where );
+
+                if( dirs.length )
+                {
+                    sizeDd = propRow( dl, T( 'drive.propSize' ), T( 'drive.propCalculating' ) );
+                }
+                else
+                {
+                    const total = files.reduce( function( sum, n ) { return sum + ( n.size || 0 ); }, 0 );
+                    propRow( dl, T( 'drive.propSize' ), fmtSize( total ),
+                             TF( 'drive.propBytes', { n: total.toLocaleString() } ) );
+                }
+            }
+
+            setBackdrop( 'propsBackdrop', true );
+            document.getElementById( 'propsCloseBtn' ).focus();
+
+            if( sizeDd ) fillFolderTotals( token, nodes, files, sizeDd, countDd );
+        }
+
+        // Walks every selected folder once and writes the total in. A walk that
+        // fails (a share whose grant has gone) leaves an em dash rather than a
+        // number that would be wrong.
+        async function fillFolderTotals( token, nodes, files, sizeDd, countDd )
+        {
+            let bytes = files.reduce( function( sum, n ) { return sum + ( n.size || 0 ); }, 0 );
+            let nFile = 0, nDir = 0;
+
+            try
+            {
+                for( const dir of nodes.filter( isDir ) )
+                {
+                    const sub = await withBusy( GumApi.listDirRecursive( dir.path ) );
+
+                    walkTotals( sub.nodes || [], function( n )
+                    {
+                        if( isDir( n ) ) nDir++;
+                        else             { nFile++; bytes += n.size || 0; }
+                    } );
+                }
+            }
+            catch( _ )
+            {
+                if( ! propsShowing( token ) ) return;
+                setPropValue( sizeDd, '—' );
+                if( countDd ) setPropValue( countDd, '—' );
+                return;
+            }
+
+            if( ! propsShowing( token ) ) return;
+
+            setPropValue( sizeDd, fmtSize( bytes ), TF( 'drive.propBytes', { n: bytes.toLocaleString() } ) );
+            if( countDd ) setPropValue( countDd, countLabel( nFile, nDir ) );
+        }
+
+        function walkTotals( nodes, fn )
+        {
+            for( const n of nodes )
+            {
+                fn( n );
+                if( isDir( n ) ) walkTotals( n.nodes || [], fn );
+            }
+        }
+
+        // Still the same open dialog the walk was started for: an Escape (or a
+        // second Propiedades on something else) discards what is on its way.
+        function propsShowing( token )
+        {
+            return token === propsToken &&
+                   document.getElementById( 'propsBackdrop' ).classList.contains( 'open' );
+        }
+
+        // The node a row describes: the one-level listing FIRST — only there does
+        // a folder carry its mtime (BuildTree leaves it out of the tree) — then
+        // the folder tree or the search results.
+        function propsNode( path )
+        {
+            return ( curListing.nodes || [] ).find( function( n ) { return n.path === path; } ) || rowNode( path );
+        }
+
+        // "Tipo" for a file: its extension in capitals (PDF, JPG), or the plain
+        // word when it has none. typeExt() and not extOf(): a shared item's name
+        // is a slug with the dot gone ("SEPE.txt" -> "sepe-txt"), so its type has
+        // to come from the grant's own title.
+        function fileKind( node )
+        {
+            const ext = typeExt( node );
+            return ext ? ext.toUpperCase() : T( 'drive.propFile' );
+        }
+
+        function parentLabel( path )
+        {
+            const parent = path.indexOf( '/' ) !== -1 ? path.slice( 0, path.lastIndexOf( '/' ) ) : '';
+            return fsRel( parent ) || 'Drive';
+        }
+
+        // Where a multi-selection lives, or null when it is spread over several folders.
+        function commonParent( nodes )
+        {
+            const first = parentLabel( nodes[0].path );
+            return nodes.every( function( n ) { return parentLabel( n.path ) === first; } ) ? first : null;
+        }
+
+        function countLabel( nFiles, nDirs )
+        {
+            const bits = [];
+            if( nFiles ) bits.push( nFiles === 1 ? T( 'drive.propOneFile'   ) : TF( 'drive.propNFiles',   { n: nFiles } ) );
+            if( nDirs  ) bits.push( nDirs  === 1 ? T( 'drive.propOneFolder' ) : TF( 'drive.propNFolders', { n: nDirs  } ) );
+
+            return bits.length ? bits.join( ', ' ) : TF( 'drive.nItems', { n: 0 } );
+        }
+
+        // One <dt>label</dt><dd>value</dd> pair. Returns the <dd> so a total that
+        // is still being walked can be written into it when it arrives.
+        function propRow( dl, label, value, sub )
+        {
+            const dt = document.createElement( 'dt' );
+            dt.textContent = label;
+
+            const dd = document.createElement( 'dd' );
+
+            dl.appendChild( dt );
+            dl.appendChild( dd );
+            setPropValue( dd, value, sub );
+
+            return dd;
+        }
+
+        function setPropValue( dd, value, sub )
+        {
+            dd.textContent = value;
+
+            if( sub )
+            {
+                const small = document.createElement( 'span' );
+                small.className   = 'props-sub';
+                small.textContent = sub;
+                dd.appendChild( small );
             }
         }
 

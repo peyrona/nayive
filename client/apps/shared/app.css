@@ -539,6 +539,8 @@ html.is-embedded .page > .page-inner > .card
  * instead (see DIALOG BUTTONS below).
  *
  *   .text-btn.ghost   quiet version: no fill, --line border, --text-dim text.
+ *   .text-btn.ghost.danger  the quiet version of a destructive action ("Vaciar
+ *                     papelera"): --danger text and a --danger-tinted border.
  *   .text-btn.dashed  an "add another" affordance: dashed accent border on a
  *                     faint accent wash (trip's "Añadir etapa").
  * ---------------------------------------------------------------------------*/
@@ -562,6 +564,7 @@ html.is-embedded .page > .page-inner > .card
 .text-btn:hover     { filter: brightness(1.08); }
 .text-btn:active    { filter: brightness(0.94); }
 .text-btn:disabled  { opacity: 0.45; cursor: default; filter: none; }
+.text-btn svg       { width: 16px; height: 16px; flex: 0 0 auto; }
 
 .text-btn.ghost
 {
@@ -570,6 +573,8 @@ html.is-embedded .page > .page-inner > .card
     border: 1px solid var(--line);
 }
 .text-btn.ghost:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); filter: none; }
+.text-btn.ghost.danger,
+.text-btn.ghost.danger:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
 
 .text-btn.dashed
 {
@@ -746,14 +751,16 @@ html.is-embedded .page > .page-inner > .card
  * cell field are all the same --field-fs / 7px 10px box. If you find an app
  * setting its own padding, font-size or height on a field, delete it.
  *
- * There are exactly TWO exceptions, and both are shared classes below - an app
- * still never rolls its own:
+ * There are exactly THREE exceptions, and all three are shared classes below -
+ * an app still never rolls its own:
  *   .field-edit  (EDIT IN PLACE)   a click-to-rename box that has to sit exactly
  *                                  where a line of text was, so it runs a
  *                                  tighter 3px 7px.
  *   .tb-select   (TOOLBAR SELECT)  a drop-down that lives in a toolbar row, so
  *                                  it is button-height and transparent, not a
  *                                  filled field.
+ *   .tb-input    (TOOLBAR INPUT)   the same, for a text box that lives in a
+ *                                  toolbar row (Calc's name box and formula bar).
  * ---------------------------------------------------------------------------*/
 .field             { margin-bottom: 14px; }
 
@@ -930,6 +937,38 @@ input[type="range"]
     outline: none;
 }
 .tb-select:hover   { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+
+/* -----------------------------------------------------------------------------
+ * TOOLBAR INPUT  (.tb-input)  -  Calc's name box and formula bar
+ *
+ *     <input class="tb-input" type="text">
+ *
+ * The third exception to the one field look, and the twin of .tb-select: a text
+ * box that sits in a toolbar row instead of in a form. Same 30px button height,
+ * same 1px --line outline, same 0.82rem type.
+ *
+ * Unlike the drop-down it stays a FILLED box - it is written into, and a
+ * transparent one reads as a label rather than something you can type in - and
+ * its focus shows in the accent, as every field in Nayive does.
+ *
+ * Give it a width from the app (Calc's name box is 88px, its formula bar takes
+ * the rest of the row): how wide the box has to be is the app's business.
+ * ---------------------------------------------------------------------------*/
+.tb-input
+{
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0 8px;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--text);
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    outline: none;
+}
+.tb-input:focus    { border-color: var(--accent); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1529,6 +1568,17 @@ button { -webkit-touch-callout: none; }
 .share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .share-user input { flex: 0 0 auto; width: auto; margin: 0; }
 
+/* "Cualquiera con el enlace" - a trip's public link, under the people. Its row
+   is a plain .share-row with .share-drop buttons; only the long URL has to give
+   way, and the section gets a divider and a heading of its own. */
+.share-link      { margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.share-link-head { margin: 0 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.share-link-note { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
+.share-link-url  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; }
+.share-link .share-row { gap: 2px; }
+.share-link-app  { margin-top: 12px; }
+.share-link-how  { margin: 6px 0 0; }
+
 
 /* -----------------------------------------------------------------------------
  * EMPTY STATE  (.empty-state)
@@ -1740,7 +1790,7 @@ button { -webkit-touch-callout: none; }
 
 
 /* -----------------------------------------------------------------------------
- * OFFICE CHROME  (.file-label, .open-list, .folder-pick)  -  Calc, Text, Write
+ * OFFICE CHROME  (.file-label, .open-list, .folder-pick, .sc-list)  -  Calc, Text, Write
  *
  * The three document editors share one header shape: after the app name, the
  * open document's name (.file-label - click it to rename in place, which swaps
@@ -1763,6 +1813,13 @@ button { -webkit-touch-callout: none; }
     white-space: nowrap;
 }
 .file-label-input        { flex: 1 1 auto; min-width: 0; }
+
+/* "Guardado 12:04" / "Borrador 12:04" before the sync plug (NayiveOffice.autosave)
+ * - a quiet readout, not a control. Its own element: the plug's title is
+ * rewritten on every store state change. Hidden on a phone, where the top bar
+ * has no room to spare. */
+.saved-at                { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; margin-left: 6px; }
+@media (max-width: 640px) { .saved-at { display: none; } }
 
 .open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
                            font-size: 0.85rem; color: var(--text-dim); }
@@ -1814,6 +1871,18 @@ button { -webkit-touch-callout: none; }
 .folder-pick .fp-btn-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
 .folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
 .folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Help ▸ "Keyboard shortcuts" (Calc, Write): one row per shortcut, its keys on
+   the right. NayiveOffice.showShortcuts fills #scList. */
+.sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.sc-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 5px 0; }
+.sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.sc-row kbd
+{
+    font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap;
+    color: var(--text-dim); border: 1px solid var(--line);
+    border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
+}
 
 
 /* -----------------------------------------------------------------------------
@@ -2052,6 +2121,11 @@ input[type=range]:disabled           { opacity: 0.5; }
 }
 .editor-btn:hover  { background: rgba(255, 255, 255, 0.22); }
 .editor-btn svg    { width: 18px; height: 18px; }
+/* The same button laid ON a photo or a playing video (a lightbox's ×, a
+   slideshow's exit, the film's fullscreen / collapse). A white wash vanishes
+   on a bright frame, so this one is a dark glass disc instead. */
+.editor-btn.over-media        { background: rgba(0, 0, 0, 0.42); }
+.editor-btn.over-media:hover  { background: rgba(0, 0, 0, 0.6); }
 .editor-canvas     { flex: 1 1 auto; min-height: 0; position: relative; }
 
 /* A free-text note for the picture, saved into the comments sidecar together

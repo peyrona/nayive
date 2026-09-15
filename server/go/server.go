@@ -34,6 +34,7 @@ type Server struct {
 	sessions *SessionStore
 	users    *Users
 	shares   *Shares
+	trackers *Trackers
 	tree     *FileTree
 	trash    *Trash
 	push     *VapidStore
@@ -58,7 +59,7 @@ const authFailDelay = 400 * time.Millisecond
 func NewServer(cfg *Config, log Logger) (*Server, error) {
 	shares := NewShares(cfg.ConfigDir, cfg.HomesDir, log)
 	users := NewUsers(cfg, shares, log)
-	tree := NewFileTree(cfg.BaseDir, cfg.HomesDir, shares)
+	tree := NewFileTree(cfg.BaseDir, cfg.HomesDir, cfg.ConfigDir, shares)
 	trash := NewTrash(cfg.BaseDir, cfg.HomesDir, users, log)
 
 	var contact string
@@ -76,6 +77,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		sessions: NewSessionStore(cfg.SessionTTL),
 		users:    users,
 		shares:   shares,
+		trackers: NewTrackers(cfg.ConfigDir, log),
 		tree:     tree,
 		trash:    trash,
 		push:     push,
@@ -221,6 +223,14 @@ func (s *Server) routes() http.Handler {
 	// --- sharing -----------------------------------------------------------
 	mux.HandleFunc("/api/shares", s.apiShares)
 	mux.HandleFunc("/api/users", s.apiUsers)
+
+	// --- public trip links: NO session (see api_public.go) -----------------
+	mux.HandleFunc("/s/{token}", s.publicPage)
+	mux.HandleFunc("/api/public/{token}", s.apiPublic)
+	mux.HandleFunc("/api/public/{token}/{kind}/{name}", s.apiPublicFile)
+	mux.HandleFunc("/api/location", s.apiLocation)               // a Nayive page reports where it is
+	mux.HandleFunc("/api/owntracks", s.apiOwnTracks)             // the owner's OwnTracks URL
+	mux.HandleFunc("/api/owntracks/{key}", s.apiOwnTracksReport) // the app itself: no session
 
 	// --- the file API ------------------------------------------------------
 	mux.HandleFunc("/api/files", s.apiFiles)

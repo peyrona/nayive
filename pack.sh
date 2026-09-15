@@ -2,15 +2,20 @@
 #
 # pack.sh - build nayive.zip, the thing a person downloads to install nayive.
 #
-# The zip has  install.sh ,  nayive  (the server: one static Linux binary built
-# from server/go/) and  apps/  at its top level (no wrapper folder). To install:
+# The zip mirrors the repo (no wrapper folder):
+#
+#     install.sh
+#     client/apps/         what the browser loads
+#     server/go/nayive     the server: one static Linux binary built from server/go/
+#
+# To install:
 #
 #     unzip nayive.zip -d nayive
 #     cd nayive
 #     ./install.sh
 #
-# The zip deliberately leaves OUT  config/  and  homes/  - install.sh makes
-# those fresh, with an empty admin account.
+# The zip deliberately leaves OUT  store/  (config/ and homes/) - install.sh
+# makes it fresh, with an empty admin account.
 #
 # Usage:
 #   ./pack.sh [output.zip]        default: ./nayive.zip
@@ -51,30 +56,20 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Same build as deploy.sh: static (no libc), reproducible, no network.
 echo "==> building the server (linux/${GOARCH:-amd64})"
+mkdir -p "$STAGE/$GOSRC" "$STAGE/$SRC"
 ( cd "$GOSRC" && CGO_ENABLED=0 GOOS=linux GOARCH="${GOARCH:-amd64}" GOPROXY=off \
-    go build -trimpath -ldflags='-s -w' -o "$STAGE/nayive" . )
+    go build -trimpath -ldflags='-s -w' -o "$STAGE/$GOSRC/nayive" . )
 
 cp    install.sh       "$STAGE/install.sh"
-cp -r "$SRC/apps"      "$STAGE/apps"
-chmod +x "$STAGE/install.sh" "$STAGE/nayive"
-
-# Stamp the launcher's build date into the staged copy, as deploy.sh does on
-# the server: the repo's apps/index.html always holds the literal
-# "ver.yy-mm-dd". Fail loudly if it is missing - a silent miss once froze the
-# date for weeks. Its .gz sidecar was built before the stamp: rebuild it.
-STAMP="ver.$(date +%y-%m-%d)"
-sed -i "s/ver\.yy-mm-dd/$STAMP/" "$STAGE/apps/index.html"
-grep -q "$STAMP" "$STAGE/apps/index.html" \
-    || { echo "error: \"ver.yy-mm-dd\" not found in $SRC/apps/index.html" >&2; exit 1; }
-gzip -kf9 "$STAGE/apps/index.html"
-echo "==> launcher version: $STAMP"
+cp -r "$SRC/apps"      "$STAGE/$SRC/apps"
+chmod +x "$STAGE/install.sh" "$STAGE/$GOSRC/nayive"
 
 # Drop things that must not ship:
 #  - editor / OS cruft
 #  - per-user data written live on a running server (never in a fresh install)
 #  - .bak snapshot folders
 find "$STAGE" \( -name '*~' -o -name '*.swp' -o -name '*.swo' -o -name '.DS_Store' \) -delete
-find "$STAGE/apps" \( -name 'calendar.ics' -o -name 'contacts.vcf' \
+find "$STAGE/$SRC/apps" \( -name 'calendar.ics' -o -name 'contacts.vcf' \
         -o -name 'contacts-meta.json' -o -name 'tasks.json' \) -delete
 find "$STAGE" -type d -name '.bak' -exec rm -rf {} + 2>/dev/null || true
 
@@ -84,5 +79,5 @@ rm -f "$OUT_ABS"
 
 echo "wrote $OUT_ABS  ($(du -h "$OUT_ABS" | cut -f1))"
 echo
-echo "contents (top level):"
-( cd "$STAGE" && find . -maxdepth 1 -mindepth 1 | sed 's|^\./|  |' | sort )
+echo "contents:"
+( cd "$STAGE" && find . -maxdepth 3 -mindepth 1 ! -path "./$SRC/apps/*" | sed 's|^\./|  |' | sort )

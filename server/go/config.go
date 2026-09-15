@@ -81,6 +81,7 @@ type ServerConfig struct {
 	Port             int              `json:"port"`
 	LogLevel         string           `json:"log_level"`
 	BaseDir          string           `json:"base_dir"`
+	AppsDir          string           `json:"apps_dir"`
 	TLS              TLSConfig        `json:"tls"`
 	Admin            *AdminAccount    `json:"admin"`
 	AdminLang        *string          `json:"admin_lang"`
@@ -178,6 +179,7 @@ func LoadConfig(path string) (*Config, error) {
 		readField(cfg.raw.Fields(), "host", &cfg.Server.Host)
 		readField(cfg.raw.Fields(), "log_level", &cfg.Server.LogLevel)
 		readField(cfg.raw.Fields(), "base_dir", &cfg.Server.BaseDir)
+		readField(cfg.raw.Fields(), "apps_dir", &cfg.Server.AppsDir)
 		readField(cfg.raw.Fields(), "push_contact", &cfg.Server.PushContact)
 		readField(cfg.raw.Fields(), "tls", &cfg.Server.TLS)
 		if port := readNumber[int](cfg.raw.Fields(), "port"); port != nil {
@@ -201,8 +203,18 @@ func LoadConfig(path string) (*Config, error) {
 		base = filepath.Join(here, base)
 	}
 	cfg.BaseDir = filepath.Clean(base)
-	cfg.AppsDir = filepath.Join(cfg.BaseDir, "apps")
 	cfg.HomesDir = filepath.Join(cfg.BaseDir, "homes")
+
+	// apps_dir keeps the code apart from the data: an install runs inside
+	// store/ and says "../client/apps". Unset, the apps sit inside the base dir.
+	switch apps := cfg.Server.AppsDir; {
+	case apps == "":
+		cfg.AppsDir = filepath.Join(cfg.BaseDir, "apps")
+	case filepath.IsAbs(apps):
+		cfg.AppsDir = filepath.Clean(apps)
+	default:
+		cfg.AppsDir = filepath.Join(here, apps)
+	}
 
 	cfg.LogLevelName = strings.ToLower(strings.TrimSpace(cfg.Server.LogLevel))
 	cfg.LogLevel = parseLevel(cfg.LogLevelName)
@@ -274,6 +286,9 @@ func (c *Config) merged() *orderedJSON {
 	put("port", s.Port)
 	put("log_level", s.LogLevel)
 	put("base_dir", s.BaseDir)
+	if s.AppsDir != "" {
+		put("apps_dir", s.AppsDir)
+	}
 	put("tls", s.TLS)
 	if s.Admin != nil {
 		put("admin", s.Admin)

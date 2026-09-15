@@ -98,16 +98,13 @@
         }
         .search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
         /* Look from app.css (FORM FIELD) like every other text field; only the
-           right padding is local, to clear the magnifier / clear button. */
-        .search-input { padding-right: 38px; }
-        .search-clear
-        {
-            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-            width: 28px; height: 28px; border: none; background: transparent; color: var(--text-dim);
-            border-radius: 50%; cursor: pointer; display: none; align-items: center; justify-content: center;
-        }
+           right padding is local, to clear the magnifier / clear button (44px:
+           the clear button is an .icon-btn.sm, 36px on a phone). */
+        .search-input { padding-right: 44px; }
+        /* The clear × is a shared .icon-btn.sm; only its place inside the field
+           and its hidden-until-you-type state are local. */
+        .search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; }
         .search-clear.show { display: flex; }
-        .search-clear:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
 
 
         /* Contact list */
@@ -197,7 +194,6 @@
         }
         .select-bar[hidden] { display: none; }   /* class selector would otherwise beat [hidden]'s UA style */
         .select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); }
-        .btn-pill:disabled { opacity: 0.45; cursor: default; filter: none; }
 
         /* The tick is the same native checkbox the merge preview uses. */
         .contact-row .pick
@@ -230,12 +226,6 @@
         .multi-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
         .multi-row select { flex: 0 0 96px; }
         .multi-row .multi-fields { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-        .multi-row .remove-btn
-        {
-            flex: 0 0 auto; width: 38px; height: 40px; border: 1px solid var(--line); background: var(--card2);
-            color: var(--text-dim); border-radius: var(--radius-s); cursor: pointer; display: flex; align-items: center; justify-content: center;
-        }
-        .multi-row .remove-btn:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 
         /* Section title with an inline "+" that adds a row (phones, emails, addresses, sites) */
         .section-head
@@ -307,30 +297,8 @@
         .dup-contact { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-radius: var(--radius-s); cursor: pointer; }
         .dup-contact:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 
-        /* Per-row "this one doesn't belong" — drops the contact from the group so the rest can be merged. */
-        .dup-remove
-        {
-            flex: 0 0 auto; width: 30px; height: 30px; padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            border: none; border-radius: 50%; background: transparent;
-            color: var(--text-dim); cursor: pointer;
-        }
-        .dup-remove:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
-
+        /* "Not duplicates" / "Merge": the shared .text-btn.ghost / .text-btn. */
         .dup-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
-        .btn-text
-        {
-            background: none; border: none; color: var(--text-dim);
-            font-family: inherit; font-size: 0.85rem; cursor: pointer; padding: 8px 6px;
-        }
-        .btn-text:hover { color: var(--text); }
-        .btn-pill
-        {
-            padding: 8px 18px; border-radius: var(--radius-pill); border: none;
-            background: var(--accent); color: var(--on-accent);
-            font-family: inherit; font-size: 0.85rem; cursor: pointer;
-        }
-        .btn-pill:active { filter: brightness(0.92); }
 
         /* Merge preview */
         .merge-section { margin-top: 10px; }
@@ -397,7 +365,7 @@
                     <div class="search-box">
                         <svg id="searchIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0">
-                        <button id="searchClear" class="search-clear" data-i18n-attr="title:contact.clear">
+                        <button id="searchClear" class="icon-btn sm search-clear" data-i18n-attr="title:contact.clear">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
@@ -411,7 +379,7 @@
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                     <span id="selectCount" class="select-count"></span>
-                    <button id="selectMergeBtn" class="btn-pill" disabled></button>
+                    <button id="selectMergeBtn" class="text-btn" disabled></button>
                 </div>
 
                 <div id="contactList"></div>
@@ -1985,7 +1953,7 @@
 
             const rm = document.createElement( 'button' );
             rm.type = 'button';
-            rm.className = 'remove-btn';
+            rm.className = 'icon-btn danger';
             rm.title = T( 'contact.remove' );
             rm.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
             rm.addEventListener( 'click', () => row.remove() );
@@ -2275,7 +2243,7 @@
                 {
                     const rm = document.createElement( 'button' );
                     rm.type = 'button';
-                    rm.className = 'dup-remove';
+                    rm.className = 'icon-btn sm danger';
                     rm.title = T( 'contact.removeFromGroup' );
                     rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>';
                     rm.addEventListener( 'click', e =>
@@ -2294,14 +2262,14 @@
 
             const dismiss = document.createElement( 'button' );
             dismiss.type = 'button';
-            dismiss.className = 'btn-text';
+            dismiss.className = 'text-btn ghost';
             dismiss.textContent = T( 'contact.notDupes' );
             dismiss.addEventListener( 'click', () => dismissDupGroup( gi ) );
             actions.appendChild( dismiss );
 
             const merge = document.createElement( 'button' );
             merge.type = 'button';
-            merge.className = 'btn-pill';
+            merge.className = 'text-btn';
             merge.textContent = T( 'contact.merge' );
             merge.addEventListener( 'click', () => openMergeSheet( gi ) );
             actions.appendChild( merge );

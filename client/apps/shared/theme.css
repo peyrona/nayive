@@ -41,7 +41,7 @@
     --bg:          #1E1F23;               /* page background */
     --card:        #25272B;               /* raised surface: dialogs, page cards */
     --card2:       #2F3034;               /* input fields, inner cards, chips */
-    --line:        rgba(255, 255, 255, 0.10); /* every border and divider */
+    --line:        #424349;               /* every border and divider */
 
     --text:        #E7E7E9;               /* primary text */
     --text-dim:    #93959F;               /* secondary text, icon buttons at rest, field labels */
@@ -63,9 +63,9 @@
     color-scheme: light;
 
     --bg:          #D8D0C0;
-    --card:        #E0D9CB;
+    --card:        #E3DCCC;
     --card2:       #F2ECDF;
-    --line:        #735C2E;
+    --line:        #86714B;
 
     --text:        #242732;
     --text-dim:    #484C5B;

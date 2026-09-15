@@ -56,7 +56,7 @@
         if( _d && _d.schemes ){
             var _id = _r.getAttribute( 'data-theme' ) === 'light' ? _d.activeLight : _d.activeDark, _s = null;
             for( var _i = 0; _i < _d.schemes.length; _i++ ) if( _d.schemes[ _i ].id === _id ) _s = _d.schemes[ _i ];
-            if( _s && _s.tokens ) [ '--bg', '--card', '--card2', '--line' ].forEach( function ( k ){ if( _s.tokens[ k ] ) _r.style.setProperty( k, _s.tokens[ k ] ); } );
+            if( _s && _s.tokens ) [ '--bg', '--card', '--card2', '--line', '--accent', '--on-accent' ].forEach( function ( k ){ if( _s.tokens[ k ] ) _r.style.setProperty( k, _s.tokens[ k ] ); } );
         }
     }catch( e ){}</script>
     <script src="shared/theme.js" defer></script>
@@ -279,20 +279,6 @@
 
         .tool-extra svg { width: 20px; height: 20px; }
 
-        /* Build date: deploy.sh and pack.sh replace the placeholder in the .version div.
-           Sits in the panel's own bottom-right corner (panel is position:relative). */
-        .version
-        {
-            position: absolute;
-            right: 10px;
-            bottom: 6px;
-            font-size: 0.7rem;
-            line-height: 1;
-            color: var(--text-faint);
-            letter-spacing: 0.02em;
-            pointer-events: none;
-            user-select: none;
-        }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
            width - 30px padding + 24px column gaps + 27vw tiles made it 426px wide
@@ -381,6 +367,11 @@
         }
         .scm-seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 
+        /* Name field and the Dark / Light switch share one row; both take the row's height. */
+        .scm-name-row { display: flex; align-items: stretch; gap: 8px; margin: 10px 0; }
+        .scm-name-row .scm-input { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; }
+        .scm-name-row .scm-seg { flex: 0 0 auto; }
+
         .scm-tok { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
         .scm-tok input[type="color"]
         {
@@ -408,6 +399,10 @@
             font: inherit; font-size: 0.85rem; padding: 7px 9px; border-radius: var(--radius-s);
             border: 1px solid var(--line); background: var(--card2); color: var(--text); max-width: 190px;
         }
+        /* Colour schemes: the dark and light pickers share one row, half each. */
+        .scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
+        .scm-assign-row .scm-assign { margin: 0; min-width: 0; }
+        .scm-assign-row .scm-assign select { flex: 1 1 auto; min-width: 0; max-width: none; }
         /* The zone list is the widest select in the dialog, and on a narrow phone
            it left too little for its own label ("Fuseau horaire" wrapped). Cap it
            at a share of the row instead, so the label always gets one line. */
@@ -523,8 +518,6 @@
 
         </div>
 
-        <div class="version">ver.yy-mm-dd</div>
-
       </div>
 
     </div>
@@ -538,17 +531,21 @@
             <div class="scm-list" id="scmList"></div>
 
             <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-dot" data-i18n-attr="data-info:scm.info"></button></p>
-            <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
-            <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
-                <button type="button" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
-                <button type="button" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
+            <div class="scm-name-row">
+                <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
+                <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
+                    <button type="button" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
+                    <button type="button" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
+                </div>
             </div>
             <div id="scmTokens">
                 <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
                 <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
                 <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
                 <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
             </div>
+            <p class="scm-msg" id="scmAccentMsg" hidden></p>
             <div class="sheet-actions">
                 <button id="scmDelete"  class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:scm.deleteThis"></button>
                 <button id="scmSaveNew" type="button" data-act="secondary:saveas" data-i18n-attr="title:scm.saveAsNew"></button>
@@ -557,8 +554,10 @@
             <p class="scm-msg" id="scmMsg" hidden></p>
 
             <p class="scm-h" data-i18n="scm.assignHead"></p>
-            <label class="scm-assign"><span data-i18n="scm.darkMode"></span><select id="scmActiveDark"></select></label>
-            <label class="scm-assign"><span data-i18n="scm.lightMode"></span><select id="scmActiveLight"></select></label>
+            <div class="scm-assign-row">
+                <label class="scm-assign"><span data-i18n="scm.dark"></span><select id="scmActiveDark"></select></label>
+                <label class="scm-assign"><span data-i18n="scm.light"></span><select id="scmActiveLight"></select></label>
+            </div>
 
             <div class="sheet-actions">
                 <button id="scmCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
@@ -722,18 +721,36 @@
 
             /* ---- "Esquemas de color" ---------------------------------- */
             var KEY   = 'balata-schemes';
-            var NKEYS = [ '--bg', '--card', '--card2', '--line' ];
+            var NKEYS = [ '--bg', '--card', '--card2', '--line', '--accent' ];   // what the dialog edits
+            // The highlight colour: theme.css's green per mode, used when a scheme has
+            // none of its own. Its text colour (--on-accent) is never typed - onAccent()
+            // picks theme.css's dark or light ink, whichever reads better on it.
+            var ACCENT     = { dark: '#16a085', light: '#0a6151' };
+            var INK        = { dark: '#0D0F17', light: '#F9F9FB' };
+            var LOW_ACCENT = 3;   // accent contrast on page / cards / fields below this -> warn
             var HEX   = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-            // The two built-in schemes' names are DATA, not interface text: they are
+            // The built-in schemes' names are DATA, not interface text: they are
             // written into localStorage (and the user can rename them), so they stay
             // literal in every language - like "Beige" beside them.
+            // Bump SEED_VERSION whenever a built-in changes or is added: load() then
+            // brings stored data up to date (see upgrade()).
+            var SEED_VERSION = 2;
             var SEED  = {
                 schemes: [
-                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' } },
-                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' } }
+                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#16A085', '--on-accent': '#0D0F17' } },
+                    { id: 'dark-noche',    name: 'Noche',  kind: 'dark',  tokens: { '--bg': '#101722', '--card': '#18202C', '--card2': '#212B38', '--line': '#353F4E', '--accent': '#16A085', '--on-accent': '#0D0F17' } },
+                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#0A6151', '--on-accent': '#F9F9FB' } },
+                    { id: 'light-niebla',  name: 'Niebla', kind: 'light', tokens: { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A6151', '--on-accent': '#F9F9FB' } }
                 ],
                 activeDark: 'dark-default',
-                activeLight: 'light-default'
+                activeLight: 'light-default',
+                seedVersion: SEED_VERSION
+            };
+            // The built-ins as version 1 shipped them: a stored copy still equal to
+            // these was never edited, so upgrade() may refresh it.
+            var SEED_V1 = {
+                'dark-default':  { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' },
+                'light-default': { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' }
             };
 
             var root     = document.documentElement;
@@ -751,6 +768,7 @@
             var selDark  = document.getElementById( 'scmActiveDark' );
             var selLite  = document.getElementById( 'scmActiveLight' );
             var closeBtn = document.getElementById( 'scmCloseBtn' );
+            var accentMsg = document.getElementById( 'scmAccentMsg' );
 
             var col = {}, hex = {};
             scmBack.querySelectorAll( '.scm-tok input[type="color"]' ).forEach( function ( el ){ col[ el.dataset.k ] = el; } );
@@ -765,11 +783,52 @@
                 try
                 {
                     var d = JSON.parse( localStorage.getItem( KEY ) || 'null' );
-                    if( d && d.schemes && d.schemes.some( isDark ) && d.schemes.some( isLight ) ) return d;
+                    if( d && d.schemes && d.schemes.some( isDark ) && d.schemes.some( isLight ) ) return upgrade( d );
                 }
                 catch ( e ) { /* ignore */ }
                 return JSON.parse( JSON.stringify( SEED ) );
             }
+            // Stored data from an older SEED_VERSION: add the built-ins it lacks
+            // (only NEW ones - an old built-in the user deleted stays deleted) and
+            // refresh an old built-in the user never edited. Saved at once, so every
+            // other app picks the new tones up through theme.js.
+            function upgrade( d )
+            {
+                if( ( d.seedVersion || 1 ) >= SEED_VERSION ) return d;
+                SEED.schemes.forEach( function ( s )
+                {
+                    var have = null, last = -1;
+                    for( var i = 0; i < d.schemes.length; i++ )
+                    {
+                        if( d.schemes[ i ].id === s.id )     have = d.schemes[ i ];
+                        if( d.schemes[ i ].kind === s.kind ) last = i;
+                    }
+                    if( have )
+                    {
+                        if( SEED_V1[ s.id ] && sameTokens( have.tokens, SEED_V1[ s.id ] ) ) have.tokens = JSON.parse( JSON.stringify( s.tokens ) );
+                    }
+                    else if( ! SEED_V1[ s.id ] ) d.schemes.splice( last + 1, 0, JSON.parse( JSON.stringify( s ) ) );
+                } );
+                d.seedVersion = SEED_VERSION;
+                try { localStorage.setItem( KEY, JSON.stringify( d ) ); } catch ( e ) {}
+                return d;
+            }
+            function sameTokens( a, b ){ return Object.keys( b ).every( function ( k ){ return String( ( a && a[ k ] ) || '' ).toLowerCase() === b[ k ].toLowerCase(); } ); }
+            // A scheme's editable tokens, with the mode's green when it has no accent yet.
+            function tokensOf( s ){ var t = {}; NKEYS.forEach( function ( k ){ t[ k ] = ( s.tokens && s.tokens[ k ] ) || ( k === '--accent' ? ACCENT[ s.kind ] : '' ); } ); return t; }
+            // What gets stored: the edited tokens plus the derived --on-accent.
+            function toStore( t ){ var o = {}; NKEYS.forEach( function ( k ){ o[ k ] = t[ k ]; } ); o[ '--on-accent' ] = onAccent( t[ '--accent' ] ); return o; }
+            function lum( h )
+            {
+                var n = parseInt( h.slice( 1 ), 16 ), w = [ 0.2126, 0.7152, 0.0722 ];
+                return [ n >> 16 & 255, n >> 8 & 255, n & 255 ].reduce( function ( sum, v, i )
+                {
+                    v /= 255;
+                    return sum + w[ i ] * ( v <= 0.03928 ? v / 12.92 : Math.pow( ( v + 0.055 ) / 1.055, 2.4 ) );
+                }, 0 );
+            }
+            function contrast( a, b ){ var x = lum( a ), y = lum( b ); return ( Math.max( x, y ) + 0.05 ) / ( Math.min( x, y ) + 0.05 ); }
+            function onAccent( a ){ return contrast( a, INK.dark ) >= contrast( a, INK.light ) ? INK.dark : INK.light; }
             function isDark( s ){ return s.kind === 'dark'; }
             function isLight( s ){ return s.kind === 'light'; }
             function persist(){ try { localStorage.setItem( KEY, JSON.stringify( data ) ); } catch ( e ) {} }
@@ -785,7 +844,7 @@
             {
                 var s = find( editingId ) || firstOfKind( 'dark' );
                 editingId = s.id;
-                draft = { name: s.name, kind: s.kind, tokens: { '--bg': s.tokens[ '--bg' ], '--card': s.tokens[ '--card' ], '--card2': s.tokens[ '--card2' ], '--line': s.tokens[ '--line' ] } };
+                draft = { name: s.name, kind: s.kind, tokens: tokensOf( s ) };
             }
             function norm( h )
             {
@@ -804,6 +863,7 @@
                 if( draft.kind === 'light' ) root.setAttribute( 'data-theme', 'light' );
                 else                         root.removeAttribute( 'data-theme' );
                 NKEYS.forEach( function ( k ){ root.style.setProperty( k, draft.tokens[ k ] ); } );
+                root.style.setProperty( '--on-accent', onAccent( draft.tokens[ '--accent' ] ) );
             }
 
             function render()
@@ -817,8 +877,9 @@
                     b.className = 'scm-row' + ( s.id === editingId ? ' sel' : '' );
                     b.dataset.id = s.id;
                     var isActive = s.id === data.activeDark || s.id === data.activeLight;
+                    var st = tokensOf( s );
                     b.innerHTML =
-                        '<span class="scm-sw">' + NKEYS.map( function ( k ){ return '<i style="background:' + s.tokens[ k ] + '"></i>'; } ).join( '' ) + '</span>' +
+                        '<span class="scm-sw">' + NKEYS.map( function ( k ){ return '<i style="background:' + st[ k ] + '"></i>'; } ).join( '' ) + '</span>' +
                         '<span class="scm-name"></span>' +
                         '<span class="scm-kind">' + ( s.kind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) ) + '</span>' +
                         ( isActive ? '<span class="scm-badge" data-i18n="scm.activeBadge"></span>' : '' );
@@ -838,6 +899,13 @@
                 } );
 
                 delBtn.disabled = countKind( find( editingId ).kind, editingId ) === 0;
+
+                // Warn (never block) when the highlight is hard to see on the scheme's tones.
+                var worst = Math.min( contrast( draft.tokens[ '--accent' ], draft.tokens[ '--bg' ] ),
+                                      contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card' ] ),
+                                      contrast( draft.tokens[ '--accent' ], draft.tokens[ '--card2' ] ) );
+                accentMsg.hidden = worst >= LOW_ACCENT;
+                if( ! accentMsg.hidden ) accentMsg.textContent = NayiveUI.tf( 'scm.accentLow', { ratio: worst.toFixed( 1 ) } );
 
                 fillSelect( selDark, 'dark', data.activeDark );
                 fillSelect( selLite, 'light', data.activeLight );
@@ -869,6 +937,7 @@
             {
                 scmBack.hidden = true;
                 NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
+                root.style.removeProperty( '--on-accent' );
                 if( window.BalataTheme ) window.BalataTheme.refresh();
             }
 
@@ -900,6 +969,8 @@
                         showMsg( NayiveUI.tf( 'scm.needOne', { kind: savedKind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) } ) );
                         return;
                     }
+                    // Keep the default green right for the new mode; a chosen colour stays.
+                    if( draft.tokens[ '--accent' ].toLowerCase() === ACCENT[ draft.kind ] ) draft.tokens[ '--accent' ] = ACCENT[ k ];
                     draft.kind = k;
                     clearMsg();
                     render();
@@ -923,7 +994,7 @@
                 var s = find( editingId );
                 s.name   = draft.name.trim() || s.name;
                 s.kind   = draft.kind;
-                s.tokens = { '--bg': draft.tokens[ '--bg' ], '--card': draft.tokens[ '--card' ], '--card2': draft.tokens[ '--card2' ], '--line': draft.tokens[ '--line' ] };
+                s.tokens = toStore( draft.tokens );
                 reconcile();
                 loadDraft();
                 persist(); clearMsg(); flash( NayiveUI.t( 'ui.saved' ) ); render();
@@ -936,7 +1007,7 @@
                     id: id,
                     name: draft.name.trim() || NayiveUI.t( 'scm.newScheme' ),
                     kind: draft.kind,
-                    tokens: { '--bg': draft.tokens[ '--bg' ], '--card': draft.tokens[ '--card' ], '--card2': draft.tokens[ '--card2' ], '--line': draft.tokens[ '--line' ] }
+                    tokens: toStore( draft.tokens )
                 } );
                 editingId = id;
                 loadDraft();

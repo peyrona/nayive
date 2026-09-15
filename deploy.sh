@@ -5,24 +5,30 @@
 # Pushes two things to the VPS:
 #
 #   1. the server         server/go/  -> built here into ONE static Linux binary
-#                         -> ${REMOTE_BASE}/nayive
+#                         -> ${REMOTE_BASE}/server/go/nayive
 #      (no Python, no apt packages: `go build` needs no network, the only
 #       dependency is vendored - see docs/go-port.md)
-#   2. the apps           client/apps/  -> ${REMOTE_BASE}/apps/
+#   2. the apps           client/apps/  -> ${REMOTE_BASE}/client/apps/
 #      (calc, calendar, contact, drive, habits, planner, tasks, text, trips, write,
 #       index.html launcher, login.html, admin.html and the shared/ code every
 #       app loads — theme, store, gum-api, ui, ical; see docs/shared-modules.md)
 #
+# The VPS tree mirrors the repo (since 2026-09-15): ~/nayive/store/ is the
+# run-root (config/, homes/), ~/nayive/client/apps/ the apps, ~/nayive/server/go/nayive
+# the binary (where a local `go build` puts it) and ~/nayive/server/backup/
+# the backup script.
+#
 # The Python server was removed from this repo and from the VPS on 2026-09-11;
 # there is no Python rollback any more.
 #
-# config/ and homes/ are NEVER touched — those hold live server settings and the
-# per-user data written by the running server.
+# store/ is NEVER touched — it holds the live server settings and the per-user
+# data written by the running server.
 #
 # THE SERVICE MUST ALREADY RUN THE BINARY. /etc/systemd/system/nayive.service
 # (the same unit install.sh writes) has, in [Service]:
 #
-#   ExecStart=/home/<user>/nayive/nayive -config /home/<user>/nayive/config/server.json
+#   WorkingDirectory=/home/<user>/nayive/store
+#   ExecStart=/home/<user>/nayive/server/go/nayive -config /home/<user>/nayive/store/config/server.json
 #   AmbientCapabilities=CAP_NET_BIND_SERVICE
 #
 # Changing the unit needs sudo, so it is never done here.
@@ -90,9 +96,10 @@ LOCAL_CFG="$SCRIPT_DIR/deploy.local.sh"
 # shellcheck source=/dev/null
 . "$LOCAL_CFG"
 : "${REMOTE_USER:?set it in deploy.local.sh}" "${REMOTE_HOST:?set it in deploy.local.sh}" "${REMOTE_PORT:?set it in deploy.local.sh}"
-REMOTE_BASE="/home/${REMOTE_USER}/nayive" # the server run-root on the VPS
-REMOTE_APPS_DIR="$REMOTE_BASE/apps"
-REMOTE_BIN="$REMOTE_BASE/nayive"          # the Go binary on the VPS
+REMOTE_BASE="/home/${REMOTE_USER}/nayive" # mirrors the repo: client/ + store/ + server/
+REMOTE_RUNROOT="$REMOTE_BASE/store"       # the server run-root on the VPS
+REMOTE_APPS_DIR="$REMOTE_BASE/client/apps"
+REMOTE_BIN="$REMOTE_BASE/server/go/nayive" # the Go binary on the VPS
 SERVICE="nayive.service"
 
 SRC_ROOT="$SCRIPT_DIR/client"             # the server run-root in the repo
@@ -162,9 +169,9 @@ echo "==> Building the Go server (linux/amd64)"
 echo "==> Built $(du -h "$BUILD_DIR/nayive" | cut -f1) binary"
 
 # Fail fast with a helpful hint if SSH auth / the remote dirs aren't ready.
-ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "test -d '$REMOTE_BASE' && test -d '$REMOTE_APPS_DIR'" \
-    || { echo "ERROR: remote run-root not found or SSH auth failed: $REMOTE_BASE"                  >&2
-         echo "       Install nayive there first (unzip nayive.zip -d nayive && ./install.sh),"      >&2
+ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "test -d '$REMOTE_APPS_DIR' && test -d '$(dirname "$REMOTE_BIN")'" \
+    || { echo "ERROR: $REMOTE_APPS_DIR or $(dirname "$REMOTE_BIN") not found, or SSH auth failed" >&2
+         echo "       Install nayive there first (unzip nayive.zip -d nayive && cd nayive && ./install.sh)," >&2
          echo "       and if the key isn't installed yet: ssh-copy-id -p $REMOTE_PORT $REMOTE_USER@$REMOTE_HOST" >&2
          exit 1; }
 
@@ -201,18 +208,6 @@ if ! rsync -rltz --itemize-changes \
     exit 1
 fi
 
-# Stamp the launcher's build date: the local apps/index.html always ships the
-# literal "ver.yy-mm-dd" (bottom-right corner); replace it with today's date on
-# the server so the local file stays a clean template.
-STAMP="ver.$(date +%y-%m-%d)"
-echo "==> Stamping launcher version: $STAMP"
-# The stamp rewrites index.html, so its .gz sidecar (built locally, before the
-# stamp) is now older than the file and the server would ignore it: rebuild it
-# on the VPS. `gzip -k` keeps the original; -f overwrites the old sidecar.
-ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
-    "sed -i 's/ver\\.yy-mm-dd/$STAMP/' '$REMOTE_APPS_DIR/index.html' && gzip -kf9 '$REMOTE_APPS_DIR/index.html'" \
-    || { echo "ERROR: could not stamp the launcher version on the server." >&2; exit 1; }
-
 # ------------------------------------------------------------------------------
 # Restart the service only if the binary actually changed (apps/ alone is
 # static and needs no restart) - and only if the service really runs it.
@@ -223,7 +218,8 @@ elif ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
         "systemctl show -p ExecStart '$SERVICE' | grep -qF '$REMOTE_BIN '"; then
     echo "==> NOT restarted: $SERVICE does not run $REMOTE_BIN."                  >&2
     echo "    The binary is in place. On the VPS, set in /etc/systemd/system/$SERVICE:" >&2
-    echo "      ExecStart=$REMOTE_BIN -config $REMOTE_BASE/config/server.json"      >&2
+    echo "      WorkingDirectory=$REMOTE_RUNROOT"                                   >&2
+    echo "      ExecStart=$REMOTE_BIN -config $REMOTE_RUNROOT/config/server.json"   >&2
     echo "      AmbientCapabilities=CAP_NET_BIND_SERVICE"                           >&2
     echo "    then: sudo systemctl daemon-reload && sudo systemctl restart $SERVICE" >&2
 else

@@ -617,6 +617,8 @@ func (s *Server) daysSetting(w http.ResponseWriter, r *http.Request, role, user 
 //	apps/**              arrives only by deploy.sh rsync; no app ever writes
 //	                     there. Trashing apps/shared/ui.js breaks all the apps
 //	                     at once, Drive included - so nothing could undo it.
+//	                     (Only when apps_dir is unset: an install puts the
+//	                     apps outside the base dir, out of the Drive.)
 //	config/*             server.json holds the admin account; without it the
 //	                     admin panel opens with NO login at all. shares.json
 //	                     holds every grant.
@@ -625,12 +627,9 @@ func (s *Server) daysSetting(w http.ResponseWriter, r *http.Request, role, user 
 //	homes/<u>/data/config.json
 //	                     IS the account: its password and quota. Gone, the
 //	                     user cannot sign in - not even to restore it.
-//	server.py, lib/, the running binary
-//	                     the server's own code. Trashed, the server keeps
-//	                     running and then fails to start at the next restart.
 //
-// The last two are FILES, and are also refused on a plain overwrite - see
-// isProtectedFile. Both are deliberate differences from the Python.
+// The last one is a FILE, and a user is also refused a plain overwrite of it -
+// see isProtectedFile. A deliberate difference from the Python.
 func (s *Server) isStructuralDir(role, user, target string) bool {
 	if target == "" {
 		return false
@@ -661,9 +660,6 @@ func (s *Server) isStructuralDir(role, user, target string) bool {
 	if t == base || t == apps || t == homes || t == config {
 		return true
 	}
-	if s.isServerCode(t) {
-		return true
-	}
 	if apps != "" && isInside(apps, t) {
 		return true // anywhere inside apps/, at any depth
 	}
@@ -692,41 +688,11 @@ func (s *Server) isAccountFile(t string) bool {
 		filepath.Dir(filepath.Dir(data)) == homes
 }
 
-// serverCode is what the server runs from, at the top of the base directory:
-// the Python today, and the unit file install.sh writes. The Go binary is
-// found by asking the OS where it runs from, whatever its name.
-var serverCode = []string{"server.py", "lib", "nayive.service", "install.sh"}
-
-// isServerCode reports the server's own code. Trashed through the admin's
-// Drive it would not stop the running server - and then the server would not
-// start again. `t` must already be resolved.
-func (s *Server) isServerCode(t string) bool {
-	base, err := resolveExisting(s.cfg.BaseDir)
-	if err != nil {
-		return false
-	}
-	for _, name := range serverCode {
-		if p := filepath.Join(base, name); isInside(p, t) {
-			return true
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		if real, err := filepath.EvalSymlinks(exe); err == nil && real == t {
-			return true
-		}
-	}
-	return false
-}
-
-// isProtectedFile is a file the file API must not even REPLACE: for a user,
-// their own config.json (a user who could write it could lift their own
-// quota); for the admin, the server's code. The admin panel and deploy.sh are
-// the ways to change those. `t` must already be resolved.
+// isProtectedFile is a file the file API must not even REPLACE: a user's own
+// config.json (a user who could write it could lift their own quota). The
+// admin panel is the way to change it. `t` must already be resolved.
 func (s *Server) isProtectedFile(role, t string) bool {
-	if role == "admin" {
-		return s.isServerCode(t)
-	}
-	return s.isAccountFile(t)
+	return role != "admin" && s.isAccountFile(t)
 }
 
 // purgeable is the one folder whose files may be deleted for good, skipping

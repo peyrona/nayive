@@ -20,6 +20,7 @@ package main
 // on every single file request and must never touch the disk for this.
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -66,7 +67,16 @@ type Grant struct {
 	Mode    string `json:"mode"`
 	Title   string `json:"title"`
 	Created int64  `json:"created"`
+
+	// Token is set on a PUBLIC LINK only (api_public.go): a trip anyone with
+	// /s/<token> may see, no account needed. Such a grant has no recipient
+	// (To is "") and never resolves through Find / shared/<slug>.
+	Token string `json:"token,omitempty"`
 }
+
+// tripPositionsFile is where a linked trip keeps the owner's phone positions
+// (api_location.go). Stopping the link deletes it.
+const tripPositionsFile = "positions.json"
 
 // Shares is the in-memory grant table, loaded from disk on first use.
 type Shares struct {
@@ -259,7 +269,7 @@ func (s *Shares) Find(user, slug string) *Grant {
 	defer s.mu.Unlock()
 	s.ensureLoaded()
 	for i := range s.grants {
-		if s.grants[i].To == user && s.grants[i].Slug == slug {
+		if s.grants[i].Token == "" && s.grants[i].To == user && s.grants[i].Slug == slug {
 			g := s.grants[i]
 			return &g
 		}
@@ -269,7 +279,30 @@ func (s *Shares) Find(user, slug string) *Grant {
 
 // ForUser is everything shared WITH `user`, newest first.
 func (s *Shares) ForUser(user string) []Grant {
-	return s.filter(func(g *Grant) bool { return g.To == user })
+	return s.filter(func(g *Grant) bool { return g.Token == "" && g.To == user })
+}
+
+// FindToken is the public link with this token, or nil.
+func (s *Shares) FindToken(token string) *Grant {
+	if len(token) < 32 {
+		return nil // newToken() makes 43 characters; anything short is a guess
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureLoaded()
+	for i := range s.grants {
+		t := s.grants[i].Token
+		if t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(token)) == 1 {
+			g := s.grants[i]
+			return &g
+		}
+	}
+	return nil
+}
+
+// LinksByOwner is every public link `user` has made.
+func (s *Shares) LinksByOwner(user string) []Grant {
+	return s.filter(func(g *Grant) bool { return g.Token != "" && g.Owner == user })
 }
 
 // ByOwner is everything `user` has shared OUT, newest first.
@@ -351,23 +384,78 @@ func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 	return &grant
 }
 
+// CreateLink makes the public link for one trip folder, or hands back the one
+// it already has - one link per trip. The caller has already checked `root`.
+// `created` is false when the link existed.
+func (s *Shares) CreateLink(owner, root, title string) (grant *Grant, created bool) {
+	if title == "" {
+		title = lastSegment(root)
+	}
+
+	s.mu.Lock()
+	s.ensureLoaded()
+	for i := range s.grants {
+		if s.grants[i].Token != "" && s.grants[i].Owner == owner && s.grants[i].Root == root {
+			g := s.grants[i]
+			s.mu.Unlock()
+			return &g, false
+		}
+	}
+	id := newShareID()
+	g := Grant{
+		ID:      id,
+		Owner:   owner,
+		Slug:    "link-" + id, // never empty: ensureLoaded drops a grant without one
+		Root:    root,
+		App:     "trips",
+		Mode:    "ro",
+		Title:   title,
+		Created: time.Now().Unix(),
+		Token:   newToken(),
+	}
+	s.grants = append(s.grants, g)
+	s.save()
+	s.mu.Unlock()
+
+	s.log.Info("public link created", "owner", owner, "root", root)
+	return &g, true
+}
+
 // Revoke drops one grant. Only its owner may. True when something was removed.
+//
+// Stopping a PUBLIC LINK also deletes the phone positions stored for that trip:
+// they were kept only so the link could show them.
 func (s *Shares) Revoke(shareID, owner string) bool {
 	s.mu.Lock()
 	s.ensureLoaded()
 	kept := s.grants[:0:0] // a fresh slice; never alias the one we are filtering
+	var gone []Grant
 	for _, g := range s.grants {
-		if !(g.ID == shareID && g.Owner == owner) {
+		if g.ID == shareID && g.Owner == owner {
+			gone = append(gone, g)
+		} else {
 			kept = append(kept, g)
 		}
 	}
-	if len(kept) == len(s.grants) {
+	if len(gone) == 0 {
 		s.mu.Unlock()
 		return false
 	}
 	s.grants = kept
 	s.save()
 	s.mu.Unlock()
+
+	for i := range gone {
+		if gone[i].Token == "" {
+			continue
+		}
+		if root := s.RootPath(&gone[i]); root != "" {
+			err := os.Remove(filepath.Join(root, tripPositionsFile))
+			if err != nil && !os.IsNotExist(err) {
+				s.log.Error("cannot delete the positions of a stopped link", "err", err)
+			}
+		}
+	}
 
 	s.log.Info("share revoked", "id", shareID, "by", owner)
 	return true

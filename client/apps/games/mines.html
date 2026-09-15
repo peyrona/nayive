@@ -1,0 +1,760 @@
+<!-- mines.html - Minesweeper, one of the six games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the six games
+     share through window.NayiveGames. -->
+    <style>
+        /* ---- Minesweeper ---------------------------------------------------
+           The pane is a little screen of its own: the shared .view-bar row at
+           the TOP - the three difficulties on the left, the counters in the
+           middle, "new game" on the right - and the board under it.
+
+           The difficulty switch is a mode switch, so it is the same shape as
+           the five game buttons above it: .icon-btn, icon only, the level's
+           name in the title, .is-active on the current one. It is NOT in the
+           header, where the build plan first put it: that row has less than
+           10px to spare at 390px (see the header block in index.html), so
+           three more buttons wrap it onto a second line on every phone - and
+           they would sit there while the other four games are on screen, which
+           is worse than a second row inside the one pane that owns them. */
+        .mines            { position: relative; height: 100%; display: flex; flex-direction: column; }
+
+        /* The board scrolls INSIDE the pane, so the toolbar above it never
+           leaves the screen: hard is 30 columns - around 900px - and no phone
+           shows that whole. inline-grid + text-align is what centres it; a flex
+           `justify-content: center` cuts the left edge off, and out of reach,
+           as soon as the board is wider than the box. */
+        /* A small board sits in the middle of the pane the way 2048's does.
+           The centring is `margin: auto` ON THE CHILD and not a
+           `justify-content: center` on the box: an auto margin collapses to 0
+           when the free space runs out, so a board wider or taller than the
+           pane still scrolls to its far edge instead of being cut off. */
+        .mines-area       { flex: 1 1 auto; min-height: 0; overflow: auto;
+                            display: flex; padding: var(--space-4);
+                            container-type: size; }
+        .mines-fit        { margin: auto; text-align: center; }
+
+        /* Minesweeper is the odd one out of the five that scale: it has no
+           --board, because the board is not one shape - it is 9x9, 16x16 or
+           30x16, and what has to be sized is the CELL. So the same idea comes
+           in through a different door. .mines-area is the size container (the
+           hint sits outside it, as in the other four), --cols and --rows are
+           written on the board by newGame(), and --fit is the biggest square
+           that fits both ways at once.
+
+           The floor is what the whole level is about: a cell is something a
+           FINGER has to hit, so it never goes under the sizes below - hard
+           would be an 11px square on a phone if it were made to fit. Under the
+           floor the board scrolls inside the pane, exactly as it always has.
+           Above it - which is every desktop - it now grows: hard on a 1080p
+           screen is a 60px cell instead of 28. */
+        .mines-board      { display: inline-grid; gap: 2px;
+                            --fit: min( calc( ( 100cqw - ( var(--cols) - 1 ) * 2px ) / var(--cols) ),
+                                        calc( ( 100cqh - ( var(--rows) - 1 ) * 2px ) / var(--rows) ) );
+                            --cell: max( 34px, var(--fit) );
+                            grid-template-columns: repeat( var(--cols), var(--cell) ); }
+        .mines-board.lv-medium { --cell: max( 32px, var(--fit) ); }
+        .mines-board.lv-hard   { --cell: max( 28px, var(--fit) ); }
+
+        /* Game over: the board stops answering. One rule, instead of an
+           "is-over" variant of every hover and cursor line below. */
+        .mines-board.is-over   { pointer-events: none; }
+
+        /* A cell is a real <button>: the focus ring, Enter / Space and the "no
+           iOS callout on a long press" rule in app.css all come with it. */
+        .mcell
+        {
+            width: var(--cell); height: var(--cell); padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--line); border-radius: 4px;
+            background: var(--card2); color: var(--text);
+            /* the raised look of a square still to be opened: one highlight
+               along its top edge. In the dark scheme --card2 and the opened
+               tint below sit close together, and this is what tells them
+               apart at a glance. */
+            box-shadow: inset 0 1px 0 color-mix( in srgb, var(--text) 12%, transparent );
+            font: 600 calc( var(--cell) * 0.52 ) / 1 var(--font-sans);
+            cursor: pointer;
+            /* the board pans with a finger on a phone and a double tap must not
+               zoom it - a long press here is ours, it plants the flag */
+            touch-action: manipulation; -webkit-user-select: none; user-select: none;
+        }
+        .mcell svg           { width: calc( var(--cell) * 0.62 ); height: calc( var(--cell) * 0.62 ); }
+        .mcell:hover         { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
+        .mcell:focus         { outline: none; }
+        .mcell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        /* An opened square is FLAT, but not invisible: a bare var(--bg) is the
+           page itself and the cleared area then has no edges at all. The faint
+           tint is the one 2048's empty squares use, a step below the raised
+           var(--card2) of a square still to be opened. */
+        .mcell.is-open       { background: color-mix( in srgb, var(--text) 6%, transparent );
+                               border-color: transparent; box-shadow: none; cursor: default; }
+        .mcell.is-open:hover { border-color: transparent; }
+        .mcell.is-flag       { color: var(--accent); }
+        .mcell.is-mine       { color: var(--text-dim); }
+        .mcell.is-boom       { background: var(--danger); color: var(--on-accent);
+                               border-color: transparent; box-shadow: none; }
+        .mcell.is-wrong      { color: var(--danger); }
+
+        /* The eight numbers. Minesweeper's classic palette (blue, green, red,
+           navy, maroon...) is unreadable on a dark background, so there are two
+           of them: these on the dark scheme... */
+        .mines-board  { --m1: #5B9DF9; --m2: #6FBF73; --m3: #E9727F; --m4: #B58BF0;
+                        --m5: #E0A21E; --m6: #4FC7C7; --m7: #E7E7E9; --m8: #93959F; }
+        /* ...and these on the beige one (the light scheme is a data-theme
+           attribute, not a media query - see theme.css). */
+        :root[data-theme="light"] .mines-board
+                      { --m1: #1A4F9E; --m2: #1F6B3A; --m3: #9C2F3A; --m4: #5B2E9E;
+                        --m5: #8A5A0B; --m6: #0F6E6E; --m7: #242732; --m8: #5E6472; }
+        .mcell[data-n="1"] { color: var(--m1); }
+        .mcell[data-n="2"] { color: var(--m2); }
+        .mcell[data-n="3"] { color: var(--m3); }
+        .mcell[data-n="4"] { color: var(--m4); }
+        .mcell[data-n="5"] { color: var(--m5); }
+        .mcell[data-n="6"] { color: var(--m6); }
+        .mcell[data-n="7"] { color: var(--m7); }
+        .mcell[data-n="8"] { color: var(--m8); }
+
+        /* Outside .mines-area, the way Sudoku's and Invaders' are: a size
+           container may hold nothing but the thing it is measuring. */
+        .mines-hint   { margin: var(--space-2) 0 0;
+                        padding: 0 var(--space-4) var(--space-3); text-align: center;
+                        font-size: 0.78rem; color: var(--text-faint); }
+
+        /* PHONE: less padding round the board, and a lower FLOOR - 32px and
+           28px rather than the 34 / 32 / 28 above. The floor is all that
+           changes: --fit still measures the pane, so easy grows on a phone
+           too (about 40px on a 390px screen, where the width is what limits
+           it). Medium and hard fall under the floor there - they would be 21px
+           and 11px squares if they were made to fit, which no finger can hit -
+           so they keep 28 and the board scrolls, as it always has. */
+        @media (max-width: 640px)
+        {
+            .mines-area            { padding: var(--space-2); }
+            .mines-board           { --cell: max( 32px, var(--fit) ); }
+            .mines-board.lv-medium,
+            .mines-board.lv-hard   { --cell: max( 28px, var(--fit) ); }
+        }
+    </style>
+
+            <!-- Minesweeper. The cells are built in JS (there are up to 480 of
+                 them and they are all the same), so the board opens empty here.
+                 The toolbar is the shared .view-bar: the three difficulties as
+                 a mode switch, the counters, and "new game". -->
+            <section class="game-pane" data-pane="mines">
+                <div class="mines">
+                    <div class="view-bar" data-options="mines">
+                        <div class="tb-modes">
+                            <button class="icon-btn sm is-active" data-mines-level="easy" type="button" data-i18n-attr="title:games.minesEasy, aria-label:games.minesEasy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="15" cy="9" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="9" cy="15" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="15" cy="15" r="1.5" fill="currentColor" stroke="none"></circle></svg>
+                            </button>
+                            <button class="icon-btn sm" data-mines-level="medium" type="button" data-i18n-attr="title:games.minesMedium, aria-label:games.minesMedium">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="16.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="7.5" cy="12" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="16.5" cy="12" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="7.5" cy="16.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="16.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="16.5" cy="16.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>
+                            </button>
+                            <button class="icon-btn sm" data-mines-level="hard" type="button" data-i18n-attr="title:games.minesHard, aria-label:games.minesHard">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="6.6" cy="6.6" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="10.4" cy="6.6" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="14.2" cy="6.6" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="18" cy="6.6" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="6.6" cy="10.4" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="10.4" cy="10.4" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="14.2" cy="10.4" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="18" cy="10.4" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="6.6" cy="14.2" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="10.4" cy="14.2" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="14.2" cy="14.2" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="18" cy="14.2" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="6.6" cy="18" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="10.4" cy="18" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="14.2" cy="18" r="0.95" fill="currentColor" stroke="none"></circle><circle cx="18" cy="18" r="0.95" fill="currentColor" stroke="none"></circle></svg>
+                            </button>
+                        </div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.minesLeft">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5.4" fill="currentColor" stroke="none"></circle><line x1="12" y1="2.6" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="21.4"></line><line x1="2.6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="21.4" y2="12"></line><line x1="5.4" y1="5.4" x2="7.8" y2="7.8"></line><line x1="16.2" y1="16.2" x2="18.6" y2="18.6"></line><line x1="18.6" y1="5.4" x2="16.2" y2="7.8"></line><line x1="7.8" y1="16.2" x2="5.4" y2="18.6"></line></svg>
+                                <b id="minesLeft">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.minesTime">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15.5 14"></polyline></svg>
+                                <b id="minesTime">0:00</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.minesBest">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0z"></path><path d="M8 4.5H5.5V7a3 3 0 0 0 3 3"></path><path d="M16 4.5h2.5V7a3 3 0 0 1-3 3"></path><line x1="12" y1="12" x2="12" y2="17"></line><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line><path d="M9.5 20.5c0-2 1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"></path></svg>
+                                <b id="minesBest">--</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="minesPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="minesNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Paused. The clock is stopped and the board is COVERED:
+                         a stopped clock over a board you can still read is not a
+                         pause, it is free thinking time. Over the play area only
+                         - the header keeps the game's name and its toolbar, so
+                         a paused game is left the way any other pane is. -->
+                    <div class="game-cover solid mines-pause" id="minesPaused" hidden>
+                        <p class="game-cover-t" data-i18n="games.paused"></p>
+                        <button class="text-btn" id="minesResume" type="button" data-i18n="games.resume"></button>
+                    </div>
+
+                    <div class="mines-area">
+                        <div class="mines-fit">
+                            <div class="mines-board" id="minesBoard"></div>
+                        </div>
+                    </div>
+                    <p class="mines-hint" data-i18n="games.hintMines"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // in every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime;
+
+        //------------------------------------------------------------------------//
+        // MINESWEEPER
+        //
+        // A grid again, and still turn-based: reveal a square, flood-fill the
+        // empty ones next to it, count the ones that touch a mine. What is new
+        // here is the input - a flag needs a second gesture, and a phone has
+        // only one - and the first difficulty control in the app.
+
+        var Mines = ( function ()
+        {
+            var LEVELS = {
+                easy:   { cols:  9, rows:  9, mines: 10 },
+                medium: { cols: 16, rows: 16, mines: 40 },
+                hard:   { cols: 30, rows: 16, mines: 99 }
+            };
+            var ORDER = [ 'easy', 'medium', 'hard' ];
+
+            // How long a finger has to stay down to plant a flag. 400ms is
+            // under the ~500ms at which a mobile browser fires its own
+            // contextmenu, so the flag is ours and theirs is swallowed below.
+            var HOLD  = 400;
+            var DRAG  = 10;                    // px of movement that cancels the press: the board pans
+
+            var MINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5.4" fill="currentColor" stroke="none"></circle><line x1="12" y1="2.6" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="21.4"></line><line x1="2.6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="21.4" y2="12"></line><line x1="5.4" y1="5.4" x2="7.8" y2="7.8"></line><line x1="16.2" y1="16.2" x2="18.6" y2="18.6"></line><line x1="18.6" y1="5.4" x2="16.2" y2="7.8"></line><line x1="7.8" y1="16.2" x2="5.4" y2="18.6"></line></svg>';
+            var FLAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="21" x2="6" y2="3.5"></line><polygon points="7 4.6 18.4 8 7 11.4" fill="currentColor" stroke="none"></polygon><line x1="3.2" y1="21" x2="10.8" y2="21"></line></svg>';
+            var WRONG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+            var level = 'easy';
+            var cols = 0, rows = 0, count = 0, total = 0;
+
+            // Four arrays, one entry per square. state: 0 hidden, 1 open, 2 flagged.
+            var mine = [], near = [], state = [], cells = [];
+
+            var flags = 0, opened = 0, laid = false, over = false;
+            var startedAt = 0, endedAt = 0, ticker = 0;
+            // A pause SHIFTS startedAt on the way out rather than counting the
+            // seconds itself: the clock is read from two timestamps and never
+            // added up, so the only way to take time off it is to move the
+            // start. pausedAt is where it stopped.
+            var paused = false, pausedAt = 0;
+            var times = {};                    // best time per level, in seconds
+            var live  = false;                 // is this the pane on screen?
+            var cursor = 0;                    // the square the keyboard is on (roving tabindex)
+
+            var boardEl, leftEl, timeEl, bestEl, pauseBtn, coverEl, levelBtns = [];
+            var hold = 0, holdAt = -1, holdX = 0, holdY = 0, skipClick = false, flaggedAt = 0;
+
+            //---- the board ---------------------------------------------------
+
+            // The eight squares around `at`, minus the ones off the edges. Every
+            // rule in the game is written in terms of this.
+            function each( at, fn )
+            {
+                var c = at % cols, r = ( at - c ) / cols, dc, dr, nc, nr;
+
+                for( dr = -1; dr <= 1; dr++ )
+                    for( dc = -1; dc <= 1; dc++ )
+                    {
+                        if( dc === 0 && dr === 0 ) continue;
+                        nc = c + dc; nr = r + dr;
+                        if( nc < 0 || nc >= cols || nr < 0 || nr >= rows ) continue;
+                        fn( nr * cols + nc );
+                    }
+            }
+
+            // The mines go down AFTER the first click, never on it and never on
+            // its eight neighbours - so the first square is always a 0 and the
+            // game always opens with a flood instead of a lone digit. There is
+            // room for that on every level: hard is 99 mines in 480 - 9 squares.
+            function lay( safe )
+            {
+                var free = [], skip = {}, i, j, t;
+
+                skip[ safe ] = true;
+                each( safe, function ( n ) { skip[ n ] = true; } );
+                for( i = 0; i < total; i++ ) if( ! skip[ i ] ) free.push( i );
+
+                // Partial Fisher-Yates: only the first `count` places are drawn.
+                for( i = 0; i < count && i < free.length; i++ )
+                {
+                    j = i + Math.floor( Math.random() * ( free.length - i ) );
+                    t = free[ i ]; free[ i ] = free[ j ]; free[ j ] = t;
+                    mine[ free[ i ] ] = true;
+                }
+
+                for( i = 0; i < total; i++ )
+                    if( ! mine[ i ] )
+                        each( i, ( function ( at ) { return function ( n ) { if( mine[ n ] ) near[ at ]++; }; } )( i ) );
+
+                laid = true;
+            }
+
+            function newGame()
+            {
+                var L = LEVELS[ level ], frag = document.createDocumentFragment(), i, el;
+
+                cols = L.cols; rows = L.rows; count = L.mines; total = cols * rows;
+                mine = []; near = []; state = []; cells = [];
+                for( i = 0; i < total; i++ ) { mine.push( false ); near.push( 0 ); state.push( 0 ); }
+
+                flags = 0; opened = 0; laid = false; over = false;
+                startedAt = 0; endedAt = 0; cursor = 0;
+                stopClock();
+                unpause();
+
+                for( i = 0; i < total; i++ )
+                {
+                    el = document.createElement( 'button' );
+                    el.type      = 'button';
+                    el.className = 'mcell';
+                    el.dataset.i = String( i );
+                    // Roving tabindex: ONE stop for the whole board, or Tab
+                    // would walk through 480 of them to leave the pane.
+                    el.tabIndex  = i === 0 ? 0 : -1;
+                    cells.push( el );
+                    frag.appendChild( el );
+                }
+
+                boardEl.className = 'mines-board lv-' + level;
+                // Both of them: the CSS needs the row count as well as the
+                // column count to work out the biggest cell that fits (see
+                // .mines-board).
+                boardEl.style.setProperty( '--cols', String( cols ) );
+                boardEl.style.setProperty( '--rows', String( rows ) );
+                boardEl.textContent = '';
+                boardEl.appendChild( frag );
+
+                levelBtns.forEach( function ( b ) { b.classList.toggle( 'is-active', b.dataset.minesLevel === level ); } );
+                paint();
+            }
+
+            //---- the screen --------------------------------------------------
+
+            function paintCell( i )
+            {
+                var el = cells[ i ], s = state[ i ];
+
+                el.className = 'mcell';
+                el.removeAttribute( 'data-n' );
+
+                if( s === 2 )   { el.classList.add( 'is-flag' ); el.innerHTML = FLAG; return; }
+                if( s !== 1 )   { el.innerHTML = ''; return; }
+
+                el.classList.add( 'is-open' );
+                if( mine[ i ] ) { el.classList.add( 'is-mine' ); el.innerHTML = MINE; return; }
+
+                el.innerHTML = near[ i ] ? String( near[ i ] ) : '';
+                if( near[ i ] ) el.setAttribute( 'data-n', String( near[ i ] ) );
+            }
+
+            // The counter is mines MINUS flags, so it goes negative when the
+            // player over-flags - that is the signal that one of them is wrong.
+            function paint()
+            {
+                leftEl.textContent = String( count - flags );
+                timeEl.textContent = clock( seconds() );
+                bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
+            }
+
+            //---- the clock ---------------------------------------------------
+
+            // The elapsed time is READ from two timestamps, never counted by the
+            // interval: stopping the interval while the pane is off screen (or
+            // the tab is in the background) then only stops the repaint, and the
+            // clock is still right when the player comes back.
+            function seconds()
+            {
+                if( ! startedAt ) return 0;
+
+                // Three readings, in this order: a finished game is frozen at
+                // endedAt, a PAUSED one at pausedAt, and a running one is now.
+                // The paused case matters because startedAt is not shifted until
+                // the resume - without it, coming back to a paused board would
+                // print the seconds it spent waiting and then take them off
+                // again a moment later.
+                return Math.floor( ( ( endedAt || ( paused ? pausedAt : Date.now() ) ) - startedAt ) / 1000 );
+            }
+
+            // A level either HAS a record or it does not; 0 is a perfectly good
+            // one. It used to double as "none", and a 0:00 board - which is
+            // what a scripted win produces - was then dropped on the next read.
+            function has( k ) { return typeof times[ k ] === 'number'; }
+
+            function runClock()
+            {
+                if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
+                ticker = setInterval( function () { timeEl.textContent = clock( seconds() ); }, 250 );
+            }
+
+            function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
+
+            //---- pausing -----------------------------------------------------
+            //
+            // There is nothing to pause until the first square is opened (that
+            // is when the clock starts) and nothing to pause once the game is
+            // finished, so the button is disabled at both ends - the same rule
+            // the canvas games' "ready" and "over" states follow.
+
+            function paintPause()
+            {
+                pauseButton( pauseBtn, paused, ! startedAt || over );
+            }
+
+            function pause()
+            {
+                if( paused || over || ! startedAt ) return;
+
+                paused   = true;
+                pausedAt = Date.now();
+                stopClock();
+                coverEl.hidden = false;
+                paintPause();
+            }
+
+            function resume()
+            {
+                if( ! paused ) return;
+
+                startedAt += Date.now() - pausedAt;   // the pause never happened, as far as the clock is concerned
+                paused = false;
+                coverEl.hidden = true;
+                timeEl.textContent = clock( seconds() );
+                runClock();
+                paintPause();
+                if( cells[ cursor ] ) cells[ cursor ].focus();
+            }
+
+            function unpause()                        // a new game: no pause to come back from
+            {
+                paused = false;
+                coverEl.hidden = true;
+                paintPause();
+            }
+
+            //---- the rules ---------------------------------------------------
+
+            function open( i )
+            {
+                if( over || paused || state[ i ] !== 0 ) return;
+
+                if( ! laid ) { lay( i ); startedAt = Date.now(); runClock(); paintPause(); }
+
+                if( mine[ i ] ) { state[ i ] = 1; paintCell( i ); finish( false, i ); return; }
+
+                flood( i );
+                paint();
+                if( opened === total - count ) finish( true, -1 );
+            }
+
+            // Iterative on purpose: the opening move on hard clears 300+ squares
+            // in one go, and that is a recursion depth nothing should rely on.
+            // A flagged neighbour is state 2, so it is never swept up by this.
+            function flood( from )
+            {
+                var stack = [ from ], i;
+                var push  = function ( n ) { if( state[ n ] === 0 ) stack.push( n ); };
+
+                while( stack.length )
+                {
+                    i = stack.pop();
+                    if( state[ i ] !== 0 ) continue;
+
+                    state[ i ] = 1; opened++;
+                    paintCell( i );
+                    if( near[ i ] === 0 ) each( i, push );
+                }
+            }
+
+            // Answers whether it changed anything: the long press below has to
+            // know, so that a hold on a square there is nothing to flag does
+            // not go on to swallow the tap that ends it.
+            function flag( i )
+            {
+                if( over || paused || state[ i ] === 1 ) return false;
+
+                if( state[ i ] === 2 ) { state[ i ] = 0; flags--; }
+                else                   { state[ i ] = 2; flags++; }
+
+                paintCell( i );
+                paint();
+                return true;
+            }
+
+            // Pressing an open number whose count is already met opens the rest
+            // of its neighbours. It is the standard shortcut and the only thing
+            // that makes 30x16 playable - and, just as standard, a flag in the
+            // wrong place loses the game here exactly as clicking it would have.
+            function chord( i )
+            {
+                var marked = 0, hidden = [];
+
+                if( over || paused || state[ i ] !== 1 || near[ i ] === 0 ) return;
+
+                each( i, function ( n )
+                {
+                    if( state[ n ] === 2 ) marked++;
+                    else if( state[ n ] === 0 ) hidden.push( n );
+                } );
+
+                if( marked !== near[ i ] ) return;
+                hidden.forEach( function ( n ) { open( n ); } );   // open() stops itself once one of them is a mine
+            }
+
+            function finish( won, boom )
+            {
+                var i, secs;
+
+                over = true;
+                endedAt = Date.now();
+                stopClock();
+                paintPause();
+                boardEl.classList.add( 'is-over' );
+
+                for( i = 0; i < total; i++ )
+                {
+                    if( won )
+                    {
+                        // Every mine ends up flagged: it is the tidy board the
+                        // player earned, and it leaves the counter reading 0.
+                        if( mine[ i ] && state[ i ] !== 2 ) { state[ i ] = 2; flags++; paintCell( i ); }
+                    }
+                    else if( mine[ i ] && state[ i ] !== 2 )       // where they were
+                    {
+                        state[ i ] = 1;
+                        paintCell( i );
+                    }
+                    else if( ! mine[ i ] && state[ i ] === 2 )     // and where they were not
+                    {
+                        cells[ i ].classList.add( 'is-wrong' );
+                        cells[ i ].innerHTML = WRONG;
+                    }
+                }
+                if( ! won && boom >= 0 ) cells[ boom ].classList.add( 'is-boom' );
+
+                paint();
+
+                if( ! won ) { NayiveUI.toast( T( 'games.minesLost' ) ); return; }
+
+                secs = seconds();
+                var record = ! has( level ) || secs < times[ level ];
+                if( record ) { times[ level ] = secs; saveTime( level, secs ); bestEl.textContent = clock( secs ); }
+
+                NayiveUI.toast( TF( record ? 'games.minesRecord' : 'games.minesWon', { time: clock( secs ) } ) );
+            }
+
+            //---- input -------------------------------------------------------
+
+            function indexOf( e )
+            {
+                var el = e.target && e.target.closest ? e.target.closest( '.mcell' ) : null;
+                return el ? Number( el.dataset.i ) : -1;
+            }
+
+            function onClick( e )
+            {
+                var i = indexOf( e );
+
+                if( i < 0 ) return;
+                if( skipClick ) { skipClick = false; return; }   // the long press has already acted
+                if( state[ i ] === 2 ) return;                   // a flag is not a door
+                if( state[ i ] === 1 ) chord( i );
+                else open( i );
+            }
+
+            // The mouse's own gesture for a flag. preventDefault always, or the
+            // browser menu covers the board.
+            function onMenu( e )
+            {
+                var i = indexOf( e );
+
+                if( i < 0 ) return;
+                e.preventDefault();
+                if( Date.now() - flaggedAt < 700 ) return;   // a phone fires this right after OUR long press
+                flag( i );
+            }
+
+            function endHold() { if( hold ) clearTimeout( hold ); hold = 0; }
+
+            function onDown( e )
+            {
+                var i = indexOf( e );
+
+                endHold();
+                skipClick = false;
+                if( i < 0 || e.pointerType === 'mouse' ) return;   // the mouse has a right button
+
+                holdAt = i; holdX = e.clientX; holdY = e.clientY;
+                hold = setTimeout( function ()
+                {
+                    hold = 0;
+                    if( ! flag( holdAt ) ) return;    // an open square: this was never a gesture
+
+                    skipClick = true;                 // ...and the tap that ends it is not a reveal
+                    flaggedAt = Date.now();
+                    if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch ( err ) {}
+                }, HOLD );
+            }
+
+            // A finger that moves is panning the board (hard is wider than any
+            // phone), not holding a square - and the browser only sends
+            // pointercancel once it has decided that, which is too late.
+            function onMove( e )
+            {
+                if( ! hold ) return;
+                if( Math.abs( e.clientX - holdX ) > DRAG || Math.abs( e.clientY - holdY ) > DRAG ) endHold();
+            }
+
+            // Arrow keys move a cursor over the board, Enter / Space is the
+            // <button>'s own click, "f" plants the flag. Only while the focus is
+            // INSIDE the board: outside it the arrows still scroll the pane,
+            // which on hard is how the far end is reached.
+            function focusCell( i )
+            {
+                if( i < 0 || i >= total ) return;
+                cells[ cursor ].tabIndex = -1;
+                cursor = i;
+                cells[ cursor ].tabIndex = 0;
+                cells[ cursor ].focus();
+            }
+
+            function onKey( e )
+            {
+                var c, r;
+
+                if( e.ctrlKey || e.altKey || e.metaKey || paused ) return;
+                if( ! boardEl.contains( document.activeElement ) ) return;
+
+                c = cursor % cols; r = ( cursor - c ) / cols;
+
+                if     ( e.key === 'ArrowLeft'  ) focusCell( r * cols + Math.max( 0, c - 1 ) );
+                else if( e.key === 'ArrowRight' ) focusCell( r * cols + Math.min( cols - 1, c + 1 ) );
+                else if( e.key === 'ArrowUp'    ) focusCell( Math.max( 0, r - 1 ) * cols + c );
+                else if( e.key === 'ArrowDown'  ) focusCell( Math.min( rows - 1, r + 1 ) * cols + c );
+                else if( e.key === 'f' || e.key === 'F' ) flag( cursor );
+                else return;
+
+                e.preventDefault();
+            }
+
+            //---- mounting ----------------------------------------------------
+
+            function enter()
+            {
+                live = true;
+                timeEl.textContent = clock( seconds() );
+                paintPause();
+                runClock();
+            }
+
+            // Leaving PAUSES rather than only stopping the repaint. The clock is
+            // two timestamps, so a game left running goes on being timed while
+            // the Games screen is up - and now that Escape leaves in one press,
+            // that is a trap rather than a rule. Coming back asks for the resume,
+            // the way the canvas games have always done.
+            function leave()
+            {
+                live = false;
+                pause();
+                stopClock();
+            }
+
+            // Records come in as { easy: 47, ... } and go back the same way,
+            // merged by MINIMUM - the mirror of 2048's maximum, and for the same
+            // reason: the plug re-reads the file whenever the tab is focused,
+            // and that answer can be older than the game just won here.
+            function adoptTimes( saved )
+            {
+                ORDER.forEach( function ( k )
+                {
+                    var n = Number( saved[ k ] );
+
+                    if( ! isFinite( n ) || n < 0 ) return;          // absent, or not a number
+                    if( ! has( k ) || n < times[ k ] ) times[ k ] = n;
+                } );
+
+                bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
+                return times;
+            }
+
+            function init()
+            {
+                boardEl  = document.getElementById( 'minesBoard' );
+                leftEl   = document.getElementById( 'minesLeft' );
+                timeEl   = document.getElementById( 'minesTime' );
+                bestEl   = document.getElementById( 'minesBest' );
+                pauseBtn = document.getElementById( 'minesPause' );
+                coverEl  = document.getElementById( 'minesPaused' );
+
+                levelBtns = Array.prototype.slice.call( document.querySelectorAll( '[data-mines-level]' ) );
+                levelBtns.forEach( function ( b )
+                {
+                    b.addEventListener( 'click', function ()
+                    {
+                        if( b.dataset.minesLevel === level ) return;   // it is already this one
+                        level = b.dataset.minesLevel;
+                        newGame();
+                    } );
+                } );
+
+                boardEl.addEventListener( 'click',         onClick );
+                boardEl.addEventListener( 'contextmenu',   onMenu );
+                boardEl.addEventListener( 'pointerdown',   onDown );
+                boardEl.addEventListener( 'pointermove',   onMove );
+                boardEl.addEventListener( 'pointerup',     endHold );
+                boardEl.addEventListener( 'pointercancel', endHold );
+                boardEl.addEventListener( 'pointerleave',  endHold );
+                boardEl.addEventListener( 'keydown',       onKey );
+
+                document.getElementById( 'minesNew' ).addEventListener( 'click', newGame );
+
+                pauseBtn.addEventListener( 'click', function () { if( paused ) resume(); else pause(); } );
+                // The whole cover, not just its button: it is one card and the
+                // card is what the eye and the thumb both aim at.
+                coverEl.addEventListener( 'click', resume );
+
+                // A hidden tab PAUSES the game, and coming back does not resume
+                // it - the same rule the three canvas games follow, and the same
+                // one leave() follows. Stopping only the repaint was right while
+                // there was nothing else to stop: the clock is two timestamps,
+                // so a phone locking mid-game went on being timed and the player
+                // came back to the seconds it had spent in his pocket.
+                document.addEventListener( 'visibilitychange', function ()
+                {
+                    if( document.hidden ) pause();
+                    else if( live ) { timeEl.textContent = clock( seconds() ); runClock(); }
+                } );
+
+                newGame();
+                return { enter: enter, leave: leave };
+            }
+
+            return { init: init, adoptTimes: adoptTimes };
+        } )();
+
+        NayiveGames.add( 'mines', Mines );
+    } )();
+    </script>

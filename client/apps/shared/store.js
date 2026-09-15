@@ -18,9 +18,21 @@
  *                  short timer.
  *
  * Single user, one file per app: the outbox holds at most one pending write per
- * path and newer replaces older (last-write-wins). No conflict resolution - if
- * the same file is edited on another device while this one is offline, the
- * offline device wins on reconnect. A mtime guard is a possible follow-up.
+ * path and newer replaces older (last-write-wins). By default there is no
+ * conflict resolution - if the same file is edited on another device while this
+ * one is offline, the offline device wins on reconnect.
+ *
+ * CONFLICTS  (opt-in: createStore( { conflicts: true } ) - the office editors)
+ * The store remembers the server's own time for each file (`srv`, taken ONLY
+ * from a GET's or a PUT's Last-Modified - never this device's clock) and sends
+ * it as If-Unmodified-Since. A file saved from another device since answers 412:
+ * the outbox entry is flagged `conflict`, is never sent again (so no flush can
+ * overwrite theirs), and onConflict listeners hear about it. The app resolves it
+ * by saving elsewhere and forget()-ing the old path.
+ *
+ * A 403 / 409 on a PUT (a read-only share, a protected file) can never succeed:
+ * the entry is dropped and the write reports `forbidden`, instead of sitting in
+ * the outbox forever looking like an expired session.
  *
  * Auth: /api/files is authenticated by the nayive_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
@@ -161,6 +173,35 @@
         catch ( e ) { return Promise.resolve(); }
     }
 
+    // Read-modify-write of one record in ONE readwrite transaction, so it cannot
+    // interleave with another one on the same store (a save arriving while the
+    // previous PUT's answer is being recorded). fn( current ) returns the record
+    // to put, null to delete it, or undefined to leave it alone.
+    function idbUpdate( db, storeName, key, fn )
+    {
+        if( ! db ) return Promise.resolve();
+
+        return new Promise( function ( resolve )
+        {
+            try
+            {
+                var tx = db.transaction( storeName, "readwrite" );
+                var os = tx.objectStore( storeName );
+                var rq = os.get( key );
+
+                rq.onsuccess = function ()
+                {
+                    var next = fn( rq.result );
+                    if( next === null )    os.delete( key );
+                    else if( next )        os.put( next );
+                };
+                tx.oncomplete = function () { resolve(); };
+                tx.onerror = tx.onabort = function () { resolve(); };
+            }
+            catch ( e ) { resolve(); }
+        } );
+    }
+
     function idbDelete( db, storeName, key )
     {
         if( ! db ) return Promise.resolve();
@@ -181,7 +222,9 @@
 
         var api       = opts.apiBase || ( window.location.origin + "/api/files" );
         var binary    = !! opts.binary;   // body is raw bytes (Uint8Array), not text
+        var conflicts = !! opts.conflicts; // send If-Unmodified-Since (see CONFLICTS above)
         var listeners = [];
+        var conflictFns = [];
         var state     = "init";
         var flushTimer = null;
         var flushing   = false;
@@ -221,6 +264,7 @@
         //   pending     online but one or more queued writes have not gone through
         //   error       a write failed for a reason other than being offline
         //   needs-auth  the session expired - re-login needed, buffer kept
+        //   conflict    a queued write was refused: saved from another device since
 
         function emit( s )
         {
@@ -252,8 +296,9 @@
             var db      = await dbPromise;
             var pending = await idbGetAll( db, OUTBOX );
 
-            if( pending.length === 0 ) emit( navigator.onLine ? "synced"  : "offline" );
-            else                       emit( navigator.onLine ? "pending" : "offline" );
+            if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
+            else if( pending.length === 0 ) emit( navigator.onLine ? "synced"  : "offline" );
+            else                            emit( navigator.onLine ? "pending" : "offline" );
         }
 
         //--------------------------------------------------------------------//
@@ -301,9 +346,10 @@
                 if( r.ok )
                 {
                     var body  = binary ? new Uint8Array( await r.arrayBuffer() ) : await r.text();
-                    var mtime = Date.parse( r.headers.get( "Last-Modified" ) ) || Date.now();
+                    var srv   = Date.parse( r.headers.get( "Last-Modified" ) ) || null;
+                    var mtime = srv || Date.now();
 
-                    return { ok: true, status: r.status, body: body, mtime: mtime };
+                    return { ok: true, status: r.status, body: body, mtime: mtime, srv: srv };
                 }
 
                 var errBody = await r.text().catch( function () { return ""; } );
@@ -358,22 +404,35 @@
             }
         }
 
-        async function netPut( path, body )
+        // `since` (ms, the server's own time for this file) becomes
+        // If-Unmodified-Since - see CONFLICTS above. The answer's Last-Modified
+        // comes back as `srv`, the base for the next save.
+        async function netPut( path, body, since )
         {
             try
             {
-                var packed = await gzipBody( body );
+                var packed  = await gzipBody( body );
+                var headers = {};
+
+                if( packed ) headers[ "Content-Encoding" ] = "gzip";
+                if( since )  headers[ "If-Unmodified-Since" ] = new Date( since ).toUTCString();
 
                 var r = await netFetch( api + "?file=" + encodeURIComponent( path ),
-                                        { method: "PUT",
-                                          headers: packed ? { "Content-Encoding": "gzip" } : undefined,
-                                          body: packed || body } );
+                                        { method: "PUT", headers: headers, body: packed || body } );
 
                 if( r.ok )
-                    return { ok: true, status: r.status };
+                    return { ok: true, status: r.status, srv: Date.parse( r.headers.get( "Last-Modified" ) ) || null };
+
+                if( r.status === 412 )
+                    return { ok: false, status: 412, conflict: true };
+
+                // Not this user's to write (a read-only share, a protected file) or
+                // a shared folder that only takes NEW names. Retrying never helps.
+                if( r.status === 403 || r.status === 409 )
+                    return { ok: false, status: r.status, forbidden: true };
 
                 authLost( r.status );
-                return { ok: false, status: r.status, needsAuth: ( r.status === 401 || r.status === 403 ) };
+                return { ok: false, status: r.status, needsAuth: r.status === 401 };
             }
             catch ( e )
             {
@@ -420,7 +479,8 @@
                 if( res.ok )
                 {
                     await idbPut( db, DOCS,
-                                  { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false } );
+                                  { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false,
+                                    srv: res.srv } );
                     scheduleFlush();               // other paths may still be queued
                     emit( "synced" );
                     return { body: res.body, source: "network", mtime: res.mtime };
@@ -471,15 +531,34 @@
         // WRITE
 
         // Caches the body, queues the PUT, tries to flush now. Resolves after the
-        // attempt with { ok, offline?, needsAuth? }. The caller does not need to
-        // await it - the local copy is already safe once this returns or not.
+        // attempt with { ok, offline?, needsAuth?, forbidden?, conflict? }. The
+        // caller does not need to await it - the local copy is already safe once
+        // this returns or not.
+        //
+        // The server time (`srv`) and a conflict flag survive the rewrite: a
+        // conflicted file keeps collecting the user's edits locally, and none of
+        // them goes up until the app has resolved it.
         async function write( path, body )
         {
             var db  = await dbPromise;
             var now = Date.now();
+            var conflicted = false;
 
-            await idbPut( db, DOCS,   { path: path, body: body, mtime: now, cachedAt: now, dirty: true } );
-            await idbPut( db, OUTBOX, { path: path, body: body, queuedAt: now } );
+            await idbUpdate( db, DOCS, path, function ( old )
+            {
+                return { path: path, body: body, mtime: now, cachedAt: now, dirty: true, srv: old ? old.srv : null };
+            } );
+            await idbUpdate( db, OUTBOX, path, function ( old )
+            {
+                conflicted = !! ( old && old.conflict );
+                return { path: path, body: body, queuedAt: now, conflict: conflicted };
+            } );
+
+            if( conflicted )
+            {
+                emit( "conflict" );
+                return { ok: false, conflict: true };
+            }
 
             emit( "saving" );
             return flushPath( path );
@@ -494,6 +573,7 @@
             var entry = await idbGet( db, OUTBOX, path );
 
             if( ! entry ) return { ok: true };
+            if( entry.conflict ) return { ok: false, conflict: true };   // waits for the app, never re-sent
 
             if( ! navigator.onLine )
             {
@@ -501,25 +581,55 @@
                 return { ok: false, offline: true };
             }
 
+            var known = conflicts ? await idbGet( db, DOCS, path ) : null;
+
             emit( "saving" );                      // a PUT is in flight - sending data
-            var res = await netPut( path, entry.body );
+            var res = await netPut( path, entry.body, known && known.srv );
+
+            // Only the entry that was sent is settled: a newer one queued while
+            // the PUT was in flight stays for the next flush.
+            function sameEntry( cur ) { return cur && cur.queuedAt === entry.queuedAt; }
 
             if( res.ok )
             {
-                // Clear the queue entry only if nothing newer was queued while
-                // the PUT was in flight.
-                var current = await idbGet( db, OUTBOX, path );
+                var cleared = false;
 
-                if( current && current.queuedAt === entry.queuedAt )
+                await idbUpdate( db, OUTBOX, path, function ( cur )
                 {
-                    await idbDelete( db, OUTBOX, path );
-
-                    var doc = await idbGet( db, DOCS, path );
-                    if( doc ) { doc.dirty = false; await idbPut( db, DOCS, doc ); }
-                }
+                    if( ! sameEntry( cur ) ) return undefined;
+                    cleared = true;
+                    return null;
+                } );
+                await idbUpdate( db, DOCS, path, function ( doc )
+                {
+                    if( ! doc ) return undefined;
+                    if( res.srv ) doc.srv   = res.srv;   // the base for the next save
+                    if( cleared ) doc.dirty = false;
+                    return doc;
+                } );
 
                 await settle();
                 return { ok: true };
+            }
+
+            if( res.conflict )
+            {
+                await idbUpdate( db, OUTBOX, path, function ( cur )
+                {
+                    if( ! cur ) return undefined;
+                    cur.conflict = true;
+                    return cur;
+                } );
+                emit( "conflict" );
+                conflictFns.forEach( function ( fn ) { try { fn( path ); } catch ( e ) {} } );
+                return { ok: false, conflict: true };
+            }
+
+            if( res.forbidden )
+            {
+                await idbUpdate( db, OUTBOX, path, function ( cur ) { return sameEntry( cur ) ? null : undefined; } );
+                emit( "error" );
+                return { ok: false, forbidden: true };
             }
 
             if( res.needsAuth )
@@ -611,6 +721,17 @@
             return ( await idbGetAll( db, OUTBOX ) ).length;
         }
 
+        // A write to `path` is held back as a conflict (see CONFLICTS above).
+        async function conflicted( path )
+        {
+            var db    = await dbPromise;
+            var entry = await idbGet( db, OUTBOX, path );
+            return !! ( entry && entry.conflict );
+        }
+
+        // fn( path ) - a flush found `path` saved from another device since.
+        function onConflict( fn ) { conflictFns.push( fn ); }
+
         //--------------------------------------------------------------------//
 
         return {
@@ -622,6 +743,8 @@
             listCached:   listCached,
             forget:       forget,
             pendingCount: pendingCount,
+            conflicted:   conflicted,
+            onConflict:   onConflict,
             onState:      onState,
             resting:      settle,
             get state() { return state; }

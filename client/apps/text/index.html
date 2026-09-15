@@ -73,9 +73,11 @@
             title: 'Text',
             lead:  NayiveUI.t( 'text.introLead' ),
             buttons: [
-                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
+                { sel: '#newBtn',       text: NayiveUI.t( 'write.introNew' ) },
                 { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ) },
+                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
                 { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
+                { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
                 { sel: '#indentSelect', text: NayiveUI.t( 'text.introIndent' ) },
@@ -200,6 +202,9 @@
             <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
             <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
 
+            <!-- "Guardado 12:04" (shared/office.js, AUTOSAVE). -->
+            <span id="savedAt" class="saved-at"></span>
+
             <div id="syncIndicator" class="sync-indicator" data-i18n-attr="title:ui.sync.synced"></div>
         </div>
 
@@ -244,15 +249,21 @@
 
             <div class="tb-sep"></div>
 
+            <button id="newBtn" class="tb-btn" data-i18n-attr="title:write.newDoc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            </button>
+            <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            </button>
             <button id="importBtn" class="tb-btn" data-i18n-attr="title:ui.importDevice">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
             <input id="importInput" type="file" style="display:none">
-            <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-            </button>
             <button id="saveAsBtn" class="tb-btn" data-i18n-attr="title:ui.saveAs">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+            </button>
+            <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
             </button>
 
             <div class="tb-sep"></div>
@@ -302,6 +313,7 @@
                 </button>
             </div>
             <div class="sheet-actions">
+                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
                 <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>
@@ -312,6 +324,8 @@
     <div id="openBackdrop" class="sheet-backdrop">
         <div class="sheet">
             <h2 data-i18n="ui.openDoc"></h2>
+            <!-- The last ten documents opened, above the folder listing. -->
+            <div id="openRecent" hidden></div>
             <div id="openCrumb" class="open-crumb"></div>
             <ul id="openList" class="open-list"></ul>
             <div class="sheet-actions">
@@ -335,8 +349,6 @@
 
         // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
         const APP_DIR = O.appDirFromUrl();
-
-        const AUTOSAVE_DELAY_MS = 2500;
 
         // Text is the catch-all editor: its "Abrir documento" browser lists every
         // file EXCEPT (a) formats another app owns and (b) known-binary types it
@@ -378,14 +390,7 @@
         // segment of APP_DIR — "files" when Text is opened from the launcher).
         const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
 
-        let currentPath   = null;   // path relative to the file-manager root, or null = untitled
-        // True when the open file belongs to another user (a "shared/..." path):
-        // we can read it, never write it, so autosave is off and "Guardar" turns
-        // into "Guardar como" - into a file of our own.
-        let readOnly      = false;
-        let pendingName   = null;   // name typed/imported before the first save (no currentPath yet)
         let editor         = null;   // CodeMirror instance
-        let autosaveTimer  = null;
 
         // Offline-capable persistence (../shared/store.js), same as Write. Every
         // save lands in a local IndexedDB cache and a write outbox BEFORE the PUT
@@ -398,7 +403,9 @@
         const T  = k           => NayiveUI.t( k );
         const TF = ( k, vars ) => NayiveUI.tf( k, vars );
 
-        const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES } );
+        // conflicts: a save over a file changed on another device since it was
+        // opened is refused (shared/store.js, CONFLICTS).
+        const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true } );
         let lineWrap        = window.matchMedia( '(max-width: 640px)' ).matches;   // phone: wrap by default - scrolling code sideways on a phone is miserable; the button still toggles it
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
@@ -414,28 +421,33 @@
         const MARGIN_MAX = 500;
         let   marginCols = ( parseInt( localStorage.getItem( MARGIN_KEY ), 10 ) || 132 );
 
-        // The name in the top bar (click to rename) and the Open browser: shared
-        // widgets, this app only supplies the policy (see commitRename / openDocument).
-        const fileLabel = O.fileLabel( { onCommit: commitRename } );
-        const browser   = O.openBrowser( { root: OPEN_ROOT, canOpen: textCanOpen, onOpen: openDocument,
-                                           emptyKey: 'text.noTextFiles' } );
-
-        // "Guardar como" asks where the document goes: a first save must never
-        // guess the folder. Shared widget, this app only supplies the default.
-        const dirField  = O.folderField();
-
-        // The header plug: store states straight from store.onState, plus the
-        // app's own 'saving' / 'error' moments (a rename in flight, a failed one).
-        const setSyncStatus = NayiveUI.syncIndicator();
+        // The Open browser: a shared widget, this app only says what it lists.
+        // The open document - its path, whether it is someone else's, its name,
+        // the top-bar label, New / Open / Import / "Guardar como" / rename /
+        // Restore, start-up, the header plug and the autosave - is the one Write
+        // and Calc use (shared/office.js, THE OPEN DOCUMENT). Text only says how
+        // text gets into and out of CodeMirror, which files it can open, and
+        // which names it may write.
+        const session = O.session( {
+            app        : 'text',
+            store      : store,
+            appDir     : APP_DIR,
+            openRoot   : OPEN_ROOT,
+            defaultName: 'nuevo.txt',
+            canOpen    : textCanOpen,              // what the Open dialog lists
+            emptyKey   : 'text.noTextFiles',
+            encode     : function() { return getEditorText(); },
+            load       : loadText,
+            blank      : blankText,
+            finishName : textSaveName,
+            onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
+            focus      : function() { if( editor ) editor.focus(); }
+        } );
 
         //------------------------------------------------------------------------//
         // INITIALIZATION
 
         wireStaticUI();
-
-        // The store's state machine drives the sync dot for every read and write
-        // it does - subscribe before the first read.
-        store.onState( setSyncStatus );
 
         NayiveUI.bootWithStore( store, async function()
         {
@@ -447,26 +459,17 @@
                 if( editor ) editor.setOption( 'theme', cmThemeName() );
             } );
 
-            const params     = new URLSearchParams( window.location.search );
-            const openPath   = params.get( 'file' );
-            const importPath = params.get( 'import' );
-
-            if(      openPath   ) await openDocument( openPath );
-            else if( importPath ) await importServerFile( importPath );
-            else                  newDocument();
+            // ?file= / ?import= / the untitled document kept on this device - or a blank one.
+            await session.boot();
 
             editor.focus();   // caret in the text area on every startup path
         } );
 
         function wireStaticUI()
         {
-            document.getElementById( 'importBtn'        ).addEventListener( 'click', function() { document.getElementById( 'importInput' ).click(); } );
-            document.getElementById( 'importInput'      ).addEventListener( 'change', function( e ) { handleImportFile( e.target.files[0] ); e.target.value = ''; } );
-            document.getElementById( 'openBtn'          ).addEventListener( 'click', function() { browser.open( APP_DIR ); } );
-            document.getElementById( 'saveAsBtn'        ).addEventListener( 'click', openSaveAs );
-            document.getElementById( 'saveAsConfirmBtn' ).addEventListener( 'click', confirmSaveAs );
-            document.getElementById( 'saveName'         ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmSaveAs(); } );
-            // The dialogs' × buttons and Escape are wired once for every app by shared/ui.js.
+            // New, Open, Import, "Guardar como" and Restore are wired by the session
+            // (shared/office.js); the dialogs' × buttons and Escape once for every
+            // app by shared/ui.js.
 
             document.getElementById( 'langSelect'   ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); editor.focus(); } );
             document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); editor.focus(); } );
@@ -668,7 +671,7 @@
 
         function autoDetectLanguage()
         {
-            setLanguage( detectMime( currentPath || pendingName || '' ) );
+            setLanguage( detectMime( session.path() || session.name() || '' ) );
         }
 
         function setIndent( value )
@@ -699,238 +702,44 @@
         //------------------------------------------------------------------------//
         // AUTOSAVE
 
+        // Every edit lands here. Someone else's file and an untitled one (the
+        // device draft) are the session's business.
         function scheduleAutosave()
         {
             if( suppressChange ) return;   // programmatic load, not a user edit
-            if( readOnly ) return;         // someone else's file - never write over it
-            if( ! currentPath ) return;    // untitled docs must be named via "Guardar como" first
-
-            setSyncStatus( 'saving' );
-            clearTimeout( autosaveTimer );
-            autosaveTimer = setTimeout( function() { autosaveTimer = null; writeCurrent( currentPath ); }, AUTOSAVE_DELAY_MS );
+            session.edited();
         }
 
-        // Flushes an unsaved edit immediately — used when the tab is closed/hidden or the
-        // user hits Ctrl-S, since the debounced autosave timer would otherwise be lost.
-        function flushPendingSave()
-        {
-            if( ! autosaveTimer || ! currentPath ) return Promise.resolve();
-
-            clearTimeout( autosaveTimer );
-            autosaveTimer = null;
-            return writeCurrent( currentPath );
-        }
-
-        function saveNow()
-        {
-            if( readOnly )
-            {
-                NayiveUI.toast( T( 'text.notYours' ) );
-                openSaveAs();
-                return;
-            }
-            if( ! currentPath ) { openSaveAs(); return; }
-
-            clearTimeout( autosaveTimer );
-            autosaveTimer = null;
-            writeCurrent( currentPath );
-        }
-
-        document.addEventListener( 'visibilitychange', function() { if( document.visibilityState === 'hidden' ) flushPendingSave(); } );
-        window.addEventListener( 'pagehide', flushPendingSave );
+        // Ctrl-S. A shared (read-only) or untitled document goes to "Guardar como".
+        function saveNow() { session.saveNow(); }
 
         //------------------------------------------------------------------------//
-        // IMPORT (local file from this device) and inline filename rename
+        // THE TEXT AS A FILE  (what the session in shared/office.js needs from Text)
 
-        async function handleImportFile( file )
+        // A body on screen: text from the store or the device draft, bytes from
+        // an import or the .bak copy.
+        function loadText( body )
         {
-            if( ! file ) return;
-
-            try
-            {
-                const text = await file.text();
-
-                currentPath = null;
-                readOnly    = false;
-                pendingName = file.name;
-                fileLabel.set( file.name );
-                setEditorText( text );
-                autoDetectLanguage();
-            }
-            catch( _ )
-            {
-                NayiveUI.toast( T( 'text.importFailed' ) );
-            }
+            setEditorText( typeof body === 'string' ? body : new TextDecoder().decode( body ) );
         }
 
-        // Same as handleImportFile, but the source is a file already stored on the
-        // server (any folder). Opened as a new untitled document — Drive uses this
-        // to hand a text file over to this editor with its import action pre-triggered.
-        async function importServerFile( path )
+        function blankText()
         {
-            try
-            {
-                const text = await GumApi.readFile( path );
-                const name = O.baseName( path );
-
-                currentPath = null;
-                readOnly    = false;
-                pendingName = name;
-                fileLabel.set( name );
-                setEditorText( text );
-                autoDetectLanguage();
-            }
-            catch( _ )
-            {
-                NayiveUI.toast( T( 'text.importFailed' ) );
-            }
-        }
-
-        // The file label was edited. Untitled: the first name IS the first save,
-        // like "Guardar como" (just remembering it would never reach the disk).
-        // Named: rename in place — a file opened via the browser may live anywhere
-        // in Drive, not under APP_DIR.
-        async function commitRename( raw )
-        {
-            const name = O.safeName( raw );
-            if( ! name ) return;
-
-            if( ! currentPath )
-            {
-                // The first name IS the first save - and a first save has to ask
-                // where the file goes, so hand it to "Guardar como" pre-filled
-                // instead of writing straight into APP_DIR.
-                pendingName = name;
-                fileLabel.set( name );
-                autoDetectLanguage();
-                openSaveAs();
-                return;
-            }
-
-            const newPath = ( O.dirName( currentPath ) || APP_DIR ) + '/' + name;
-            if( newPath === currentPath ) return;
-
-            setSyncStatus( 'saving' );
-
-            try
-            {
-                await flushPendingSave();            // the latest text under the OLD name first
-                await store.flush();                 // get any queued write onto the OLD path
-                await GumApi.rename( currentPath, newPath );
-                await store.forget( currentPath );   // only now is the old cache entry stale
-
-                currentPath = newPath;
-                fileLabel.set( O.relLabel( newPath, APP_DIR, OPEN_ROOT ) );
-                autoDetectLanguage();
-                setSyncStatus( 'synced' );
-            }
-            catch( _ )
-            {
-                setSyncStatus( 'error' );
-                NayiveUI.toast( T( 'text.renameFailed' ) );
-            }
-        }
-
-        //------------------------------------------------------------------------//
-        // DOCUMENT ACTIONS
-
-        function newDocument()
-        {
-            currentPath = null;
-            readOnly    = false;
-            pendingName = null;
-            fileLabel.set( T( 'ui.untitled' ) );
             setEditorText( '' );
             setLanguage( 'text/plain' );
-            setSyncStatus( 'synced' );
-            editor.focus();
         }
 
-        async function openDocument( path )
+        // "Guardar como": the chosen format's extension - and never one another
+        // app owns (.docx) or a binary one, which Text could never reopen. The
+        // same test the Open browser uses, so "saveable" and "openable" cannot
+        // drift apart. null keeps the dialog open.
+        function textSaveName( name, fmt )
         {
-            await flushPendingSave();   // don't lose a debounced autosave for the doc we're leaving
+            name = O.withExt( name, fmt );
+            if( textCanOpen( name ) ) return name;
 
-            const res = await O.readViaStore( store, path );   // the store drives the sync dot; toasts on trouble
-            if( res.body === null ) return;
-
-            currentPath = path;
-            readOnly    = NayiveUI.isShared( path );
-            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) + ( readOnly ? T( 'text.readOnlySuffix' ) : '' ) );
-            setEditorText( res.body );
-            autoDetectLanguage();
-        }
-
-        // The extensions the format <select> offers, in its own order. It is a
-        // shortcut for the languages Text highlights, NOT the limit of what it
-        // can write - the "" (other) entry keeps whatever the name already has,
-        // and textCanOpen() below is the real rule.
-        const SAVE_EXTS = Array.from( document.getElementById( 'saveFormat' ).options )
-                               .map( function( o ) { return o.value; } )
-                               .filter( Boolean );
-
-        function openSaveAs()
-        {
-            const name = currentPath ? O.baseName( currentPath ) : ( pendingName || 'nuevo.txt' );
-            const ext  = O.extOf( name );
-
-            document.getElementById( 'saveName'   ).value = name;
-            document.getElementById( 'saveFormat' ).value = SAVE_EXTS.indexOf( ext ) !== -1 ? ext : '';
-
-            // Someone else's file: our copy goes to a folder of ours, never back
-            // to the folder of theirs it was read from.
-            dirField.set( ( ! readOnly && currentPath && O.dirName( currentPath ) ) || APP_DIR );
-
-            NayiveUI.open( 'saveAsBackdrop' );
-            document.getElementById( 'saveName' ).focus();
-            document.getElementById( 'saveName' ).select();
-        }
-
-        async function confirmSaveAs()
-        {
-            let   name = O.safeName( document.getElementById( 'saveName' ).value );
-            const fmt  = document.getElementById( 'saveFormat' ).value;
-
-            if( ! name ) return;
-
-            if( fmt && ! new RegExp( '\\.' + fmt + '$', 'i' ).test( name ) )
-                name += '.' + fmt;
-
-            // Text is the catch-all editor, but not every extension is its to
-            // write: one another app owns (.docx) or a binary one would make a
-            // file Text could never reopen. Same test the Open browser uses, so
-            // "saveable" and "openable" can never drift apart.
-            if( ! textCanOpen( name ) )
-            {
-                NayiveUI.toast( TF( 'text.badExt', { ext: O.extOf( name ) } ) );
-                return;
-            }
-
-            NayiveUI.close( 'saveAsBackdrop' );
-            await saveAs( dirField.get() + '/' + name );
-            editor.focus();
-        }
-
-        // Write the editor's text to `path` and make that the open document.
-        async function saveAs( path )
-        {
-            await flushPendingSave();   // finish any autosave to the old name before we change identity
-
-            await writeCurrent( path );
-
-            currentPath = path;
-            readOnly    = false;
-            pendingName = null;
-            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) );
-            autoDetectLanguage();
-        }
-
-        async function writeCurrent( path )
-        {
-            // store.write caches the text and queues the PUT before it even tries
-            // the network, then drives the sync dot through the store's state. It
-            // does not throw: a dead session or a lost connection just leaves the
-            // write in the outbox, which is exactly what saves the user's work.
-            await store.write( path, getEditorText() );
+            NayiveUI.toast( TF( 'text.badExt', { ext: O.extOf( name ) } ) );
+            return null;
         }
 
     </script>

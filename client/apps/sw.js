@@ -27,7 +27,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-45c64a9f0ade";
+var CACHE_VERSION = "nayive-085db91e6911";
 /* @end */
 
 /* @generated:precache */
@@ -40,10 +40,16 @@ var PRECACHE_SHELL = [
     "contact/icons/icon-512.png",
     "contact/index.html",
     "contact/manifest.json",
+    "games/asteroids.html",
+    "games/g2048.html",
     "games/icons/icon-192.png",
     "games/icons/icon-512.png",
     "games/index.html",
+    "games/invaders.html",
     "games/manifest.json",
+    "games/mines.html",
+    "games/sudoku.html",
+    "games/tetris.html",
     "habits/habits.js",
     "habits/icons/icon-192.png",
     "habits/icons/icon-512.png",
@@ -59,6 +65,7 @@ var PRECACHE_SHELL = [
     "planner/index.html",
     "planner/manifest.json",
     "shared/app.css",
+    "shared/basemap.js",
     "shared/gum-api.js",
     "shared/i18n.js",
     "shared/i18n/de.json",
@@ -90,6 +97,7 @@ var PRECACHE_SHELL = [
     "trips/icons/icon-512.png",
     "trips/index.html",
     "trips/manifest.json",
+    "trips/public.html",
     "write/icons/icon-192.png",
     "write/icons/icon-512.png",
     "write/icons/logo.svg",
@@ -121,6 +129,11 @@ var PRECACHE_REST = [
     "trips/lib/leaflet_v1.9.4/images/marker-shadow.png",
     "trips/lib/leaflet_v1.9.4/leaflet.css",
     "trips/lib/leaflet_v1.9.4/leaflet.js",
+    "trips/lib/maplibre-gl-leaflet_v0.1.4/LICENSE.txt",
+    "trips/lib/maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js",
+    "trips/lib/maplibre-gl_v5.24.0/LICENSE.txt",
+    "trips/lib/maplibre-gl_v5.24.0/maplibre-gl.css",
+    "trips/lib/maplibre-gl_v5.24.0/maplibre-gl.js",
     "write/lib/proofing/de.aff",
     "write/lib/proofing/de.dic",
     "write/lib/proofing/en.aff",
@@ -304,7 +317,9 @@ self.addEventListener( "fetch", function ( event )
     // Trips documents: answered from the trips-managed cache (active trip only).
     if( url.pathname.indexOf( SCOPE_PATH + "trips/" ) === 0 && /\.pdf$/i.test( url.pathname ) )
         event.respondWith( tripDocStrategy( req ) );
-    else if( req.mode === "navigate" || req.destination === "document" )
+    // ...and a page's own fetch() of an .html file: Games loads its six games that
+    // way, and cache-first would keep serving an edited game's OLD file.
+    else if( req.mode === "navigate" || req.destination === "document" || /\.html$/i.test( url.pathname ) )
         event.respondWith( htmlStrategy( req, url ) );
     else
         event.respondWith( assetStrategy( req ) );

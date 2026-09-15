@@ -28,10 +28,17 @@
     </script>
 
     <!-- Leaflet - vendored so the page loads with no connection. The map itself needs
-         live OpenStreetMap tiles, so it is replaced by a placeholder when offline. -->
+         live map tiles, so it is replaced by a placeholder when offline. -->
     <link rel="stylesheet" href="lib/leaflet_v1.9.4/leaflet.css">
     <script src="lib/leaflet_v1.9.4/leaflet.js"></script>
     <script>if( window.L ) L.Icon.Default.imagePath = 'lib/leaflet_v1.9.4/images/';</script>
+    <!-- MapLibre GL + its Leaflet bridge draw the base map from vector tiles, so place
+         names can follow the UI language (see shared/basemap.js). Deferred, and BEFORE the
+         other deferred scripts, so all three exist by the time the app boots. -->
+    <link rel="stylesheet" href="lib/maplibre-gl_v5.24.0/maplibre-gl.css">
+    <script src="lib/maplibre-gl_v5.24.0/maplibre-gl.js" defer></script>
+    <script src="lib/maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" defer></script>
+    <script src="../shared/basemap.js" defer></script>
 
     <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
@@ -40,25 +47,41 @@
     <script>
     NayiveI18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
-        NayiveUI.firstRun( {
+        var T = function ( k ) { return NayiveUI.t( k ); };
+
+        // TWO help cards, like Split: the trip list and one open trip (its stages).
+        // renderHeader() calls NayiveUI.setIntro with the card for the screen you
+        // are on. The stage rows use named icons (not `sel`): a trip with no stages
+        // yet has no stage buttons on screen.
+        var stages = {
+            app:   'trips',
+            title: T( 'trips.itinerary' ),
+            buttons: [
+                { icon: 'plus',   name: T( 'trips.addStage' ),      text: T( 'trips.introStage' ) },
+                { icon: 'edit',   name: T( 'trips.editStage' ),     text: T( 'trips.introEditStage' ) },
+                { icon: 'eyeoff', name: T( 'trips.toggleStage' ),   text: T( 'trips.introToggleStage' ) },
+                { icon: 'trash',  name: T( 'trips.deleteStage' ),   text: T( 'trips.introDeleteStage' ) },
+                { icon: 'grip',   name: T( 'trips.introDragName' ), text: T( 'trips.introDrag' ) }
+            ],
+            tip: T( 'trips.introMap' )
+        };
+
+        var home = {
             app:   'trips',
             title: 'Trips',
             lead:  NayiveUI.t( 'trips.introLead' ),
             buttons: [
                 { sel: '.trip-header-actions #addTripBtn', text: NayiveUI.t( 'trips.introAdd' ) },
+                // Export and Share are on each trip card, so they show once the list has a trip.
+                { sel: '.trip-card-actions .trip-pdf-btn',   text: NayiveUI.t( 'trips.introExport' ) },
+                { sel: '.trip-card-actions .trip-share-btn', text: NayiveUI.t( 'trips.introShare' ) },
                 { sel: '.trip-header-actions .sync-indicator', name: NayiveUI.t( 'ui.syncName' ),
-                  text: NayiveUI.t( 'trips.introSync' ) },
-                // Las etapas sólo existen dentro de un viaje, así que estas filas se describen
-                // con un icono con nombre (no con `sel`): así salen también en la lista de viajes,
-                // donde esos botones todavía no están en pantalla.
-                { icon: 'plus', name: NayiveUI.t( 'trips.addStage' ), text: NayiveUI.t( 'trips.introStage' ) },
-                { icon: 'edit', name: NayiveUI.t( 'trips.editStage' ), text: NayiveUI.t( 'trips.introEditStage' ) },
-                { icon: 'eyeoff', name: NayiveUI.t( 'trips.toggleStage' ), text: NayiveUI.t( 'trips.introToggleStage' ) },
-                { icon: 'trash', name: NayiveUI.t( 'trips.deleteStage' ), text: NayiveUI.t( 'trips.introDeleteStage' ) },
-                { icon: 'grip', name: NayiveUI.t( 'trips.introDragName' ), text: NayiveUI.t( 'trips.introDrag' ) }
-            ],
-            tip: NayiveUI.t( 'trips.introMap' )
-        } );
+                  text: NayiveUI.t( 'trips.introSync' ) }
+            ]
+        };
+
+        window.TRIPS_INTRO = { home: home, stages: stages };
+        NayiveUI.firstRun( home );
     } );
     </script>
 
@@ -155,9 +178,7 @@
         .file-row { display: flex; align-items: center; gap: 10px; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; color: var(--text); }
         .file-row:hover { border-color: color-mix(in srgb, var(--text) 24%, transparent); }
         .file-icon { color: var(--accent); flex: 0 0 auto; display: flex; }
-        .file-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-        .file-name { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .file-path { font-size: 0.70rem; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-name { font-size: 0.85rem; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* A deletable row (stage card): the row is a plain box, the link fills it and
            the trash button sits at the right end - a button can't live inside an <a>. */
         .file-open { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; color: inherit; text-decoration: none; }
@@ -278,8 +299,7 @@
         .loc-row .icon-btn { flex: 0 0 auto; }
         .loc-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
         .loc-input-wrap input[type=text] { width: 100%; padding-right: 40px; }
-        .loc-map-btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-dim); cursor: pointer; }
-        .loc-map-btn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 9%, transparent); }
+        .loc-map-btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }   /* look: the shared .icon-btn.sm */
         /* Below the route-panel breakpoint the map isn't shown, so hide the in-field button. */
         @media (max-width: 919.98px)
         {
@@ -1786,6 +1806,10 @@
                 persistTrip( updated );   // cached now, uploaded now or on reconnect
                 trips = trips.map( function( t ) { return t.id === updated.id ? updated : t; } );
 
+                const oldIds = ( original ? original.documents : [] ).map( function( d ) { return d.id; } );
+                if( updated.documents.some( function( d ) { return oldIds.indexOf( d.id ) === -1; } ) )
+                    expandSection( 'docs' );
+
                 closeTripSheet();
                 renderAll();
                 syncActiveTripDocs();
@@ -1802,6 +1826,7 @@
                 await persistTrip( created );
 
                 trips = [ ...trips, created ];
+                if( created.documents.length ) expandSection( 'docs' );
                 closeTripSheet();
                 renderAll();
                 syncActiveTripDocs();
@@ -2012,6 +2037,30 @@
             {
                 return { ...t, stages: t.stages.map( function( st ) { return st.id === stageId ? { ...st, documents: newDocs } : st; } ) };
             });
+        }
+
+        // The trash button on a trip-level document row (trip detail -> "Documentos").
+        // Same rules as deleteStageDoc.
+        async function deleteTripDoc( doc )
+        {
+            const trip = findTrip( selectedTripId );
+            if( ! trip ) return;
+
+            const oldDocs = trip.documents;
+            const newDocs = oldDocs.filter( function( x ) { return x !== doc; } );   // by identity: names can repeat
+
+            if( docFilesDirty( newDocs, oldDocs ) )
+            {
+                if( ! navigator.onLine )
+                {
+                    NayiveUI.toast( T( 'trips.filesNeedNet' ) );
+                    return;
+                }
+
+                await syncDocFiles( trip.dirName, newDocs, oldDocs );
+            }
+
+            mutateTrip( trip.id, function( t ) { return { ...t, documents: newDocs }; } );
         }
 
         function deleteStageFromSheet()
@@ -2739,14 +2788,9 @@
                                              dragging: false, scrollWheelZoom: false, doubleClickZoom: false } );
                 printMapInstance = map;
 
-                const tiles = L.tileLayer( 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    { maxZoom: 19,
-                      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' } );
-
                 let fired = false;
                 const ready = function() { if( fired ) return; fired = true; onReady(); };
-                tiles.on( 'load', function() { setTimeout( ready, 150 ); } );
-                tiles.addTo( map );
+                NayiveBaseMap.add( map, { print: true, onReady: ready } );
 
                 if( pts.length )
                 {
@@ -2813,16 +2857,7 @@
                 addBtn.appendChild( svgIcon( ICON_PLUS, 18 ) );
                 addBtn.addEventListener( 'click', openAddTrip );
                 actions.appendChild( addBtn );
-
-                const helpBtn = document.createElement( 'button' );
-                helpBtn.className = 'icon-btn';
-                helpBtn.type = 'button';
-                helpBtn.title = NayiveUI.t( 'ui.help' );
-                helpBtn.setAttribute( 'aria-label', NayiveUI.t( 'ui.help' ) );
-                helpBtn.setAttribute( 'data-intro-open', '' );
-                helpBtn.appendChild( svgIcon( ICON_HELP, 18 ) );
-                actions.appendChild( helpBtn );
-
+                actions.appendChild( buildHelpBtn() );
                 actions.appendChild( buildSyncIndicator() );
                 header.appendChild( actions );
             }
@@ -2925,11 +2960,31 @@
                         openConfirm( T( 'trips.deleteTrip' ), TF( 'trips.deleteTripBody', { name: trip.destination } ), NayiveUI.t( 'ui.delete' ), deleteTrip );
                     });
                     actions.appendChild( delBtn );
+
+                    // The stages help: a shared trip has none of the buttons it explains.
+                    actions.appendChild( buildHelpBtn() );
                 }
 
                 actions.appendChild( buildSyncIndicator() );
                 header.appendChild( actions );
             }
+
+            // The "?" answers about the screen you are on (see TRIPS_INTRO).
+            if( window.TRIPS_INTRO && NayiveUI.setIntro )
+                NayiveUI.setIntro( view === 'detail' ? TRIPS_INTRO.stages : TRIPS_INTRO.home );
+        }
+
+        // The toolbar "?" - opens whichever card NayiveUI.setIntro last picked.
+        function buildHelpBtn()
+        {
+            const b = document.createElement( 'button' );
+            b.className = 'icon-btn';
+            b.type = 'button';
+            b.title = NayiveUI.t( 'ui.help' );
+            b.setAttribute( 'aria-label', NayiveUI.t( 'ui.help' ) );
+            b.setAttribute( 'data-intro-open', '' );
+            b.appendChild( svgIcon( ICON_HELP, 18 ) );
+            return b;
         }
 
         //------------------------------------------------------------------------//
@@ -3055,7 +3110,7 @@
             actions.className = 'trip-card-actions';
 
             const pdfBtn = document.createElement( 'button' );
-            pdfBtn.className = 'icon-btn sm';
+            pdfBtn.className = 'icon-btn sm trip-pdf-btn';     // the help dialog points at it
             pdfBtn.title = T( 'trips.exportPdf' );
             pdfBtn.appendChild( svgIcon( ICON_EXPORT, 17 ) );
             pdfBtn.addEventListener( 'click', function() { exportTripPdf( t ); } );
@@ -3066,7 +3121,7 @@
             if( ! tripIsRO( t ) )
             {
                 const shareBtn = document.createElement( 'button' );
-                shareBtn.className = 'icon-btn sm';
+                shareBtn.className = 'icon-btn sm trip-share-btn';   // the help dialog points at it
                 shareBtn.title = T( 'trips.shareTrip' );
                 shareBtn.appendChild( svgIcon( ICON_SHARE, 17 ) );
                 shareBtn.addEventListener( 'click', function()
@@ -3127,7 +3182,7 @@
 
             const docsSec = collapsibleSection( T( 'trips.documents' ), true, 'docs', docsCtls );
             if( trip.documents.length )
-                docsSec.body.appendChild( buildFileList( trip, trip.documents ) );
+                docsSec.body.appendChild( buildFileList( trip, trip.documents, deleteTripDoc ) );
             else
                 docsSec.body.appendChild( emptyNote( T( 'trips.noDocsYet' ) ) );
             wrap.appendChild( docsSec.el );
@@ -3243,6 +3298,21 @@
             catch( e ) { return {}; }
         })();
 
+        function saveCollapsedSections()
+        {
+            try { localStorage.setItem( 'trip-collapsed', JSON.stringify( collapsedSections ) ); }
+            catch( e ) {}
+        }
+
+        // Unfold a section (e.g. "Documentos" after a document was added, so the user
+        // sees it there). Call before the redraw.
+        function expandSection( sKey )
+        {
+            if( ! collapsedSections[ sKey ] ) return;
+            collapsedSections[ sKey ] = false;
+            saveCollapsedSections();
+        }
+
         // A "Documentos" / "Itinerario" block: a heading that folds the body away, and -
         // like the "Fotos" row above them - room for one or two controls after the label.
         // `aControls` are appended NEXT TO the heading, not inside it: the heading is
@@ -3280,8 +3350,7 @@
             {
                 bCollapsed = ! bCollapsed;
                 collapsedSections[ sKey ] = bCollapsed;
-                try { localStorage.setItem( 'trip-collapsed', JSON.stringify( collapsedSections ) ); }
-                catch( e ) {}
+                saveCollapsedSections();
                 apply();
             });
 
@@ -3346,23 +3415,17 @@
                 iconWrap.appendChild( svgIcon( docIsLink( d ) ? ICON_LINK : DOC_ICONS[ docTypeBucket( d.type ) ], 16 ) );
                 link.appendChild( iconWrap );
 
-                const meta = document.createElement( 'span' );
-                meta.className = 'file-meta';
+                // One line: the file itself (with its extension), or "no attachment".
                 const name = document.createElement( 'span' );
                 name.className = 'file-name';
-                name.textContent = (d.name && d.name.trim()) || T( 'trips.docUntitled' );
-                const path = document.createElement( 'span' );
-                path.className = 'file-path';
-                path.textContent = ! has            ? T( 'trips.noAttachment' )
-                                 : docIsLink( d )   ? d.path
+                name.textContent = ! has          ? T( 'trips.noAttachment' )
+                                 : docIsLink( d ) ? d.path
                                  : ( d.file || docPath( tripBase( trip ), d ) );
                 if( docIsLink( d ) )
                     link.title = tripIsRO( trip )
                                ? TF( 'trips.linkedFromOwner', { who: sharedBy( trip ) || T( 'trips.whoShares' ) } )
                                : T( 'trips.linkedFromFiles' );
-                meta.appendChild( name );
-                meta.appendChild( path );
-                link.appendChild( meta );
+                link.appendChild( name );
 
                 if( canDelete )
                 {
@@ -4019,7 +4082,7 @@
 
             const mapBtn = document.createElement( 'button' );
             mapBtn.type = 'button';
-            mapBtn.className = 'loc-map-btn';
+            mapBtn.className = 'icon-btn sm loc-map-btn';
             mapBtn.title = T( 'trips.seeOnMap' );
             mapBtn.appendChild( svgIcon( ICON_MAP, 15 ) );
             mapBtn.addEventListener( 'click', function()
@@ -4445,7 +4508,7 @@
 
         //------------------------------------------------------------------------//
         // RENDERING - MAP (side panel on wide screens, sheet on narrow ones) - a real Leaflet
-        // tile map (raw OpenStreetMap tiles - free, no API key), plotting the
+        // map (OpenStreetMap data, free, no API key - see shared/basemap.js), plotting the
         // trip's stages by their geocoded coordinates. Coordinates are never guessed: a stage
         // that hasn't been geocoded yet, or couldn't be resolved, is simply left off the map and
         // disclosed via the warning note below it - same honesty rule as timezone/currency.
@@ -4519,20 +4582,13 @@
 
             const map = L.map( container, { zoomControl: true, attributionControl: true } );
 
-            // Standard OpenStreetMap tiles (no API key, works with the offline cache).
-            // They are visually busy, so `.route-map` desaturates them in CSS to a calm
-            // grey backdrop - the trip route stays the only colour on the map.
-            const tiles = L.tileLayer( 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            {
-                maxZoom: 19,
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            });
-
+            // The base map is visually busy, so `.route-map` desaturates it in CSS to a
+            // calm grey backdrop - the trip route stays the only colour on the map.
             // Connected to Wi-Fi but no real internet -> navigator.onLine is still
-            // true, so the tiles just fail. Swap the whole block for the offline
-            // note the first time a tile can't load.
+            // true, so the map just fails. Swap the whole block for the offline
+            // note the first time it can't load.
             let swapped = false;
-            tiles.on( 'tileerror', function()
+            NayiveBaseMap.add( map, { onFail: function()
             {
                 if( swapped ) return;
                 swapped = true;
@@ -4548,9 +4604,7 @@
                     off.textContent = T( 'trips.mapNeedsNet' );
                     block.appendChild( off );
                 }
-            });
-
-            tiles.addTo( map );
+            } } );
 
             const points = trip.stages
                 .filter( function( st ) { return stageEnabled( st ) && typeof st.lat === 'number' && typeof st.lon === 'number'; } )
@@ -4620,7 +4674,7 @@
         {
             const wrap = document.createElement( 'div' );
 
-            // The map needs live OpenStreetMap tiles. Offline, skip Leaflet entirely
+            // The map needs live map tiles. Offline, skip Leaflet entirely
             // and show a note — the stages are still listed in the detail view.
             if( ! navigator.onLine )
             {

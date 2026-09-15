@@ -361,6 +361,7 @@ func (s *Server) adminRenameUser(w http.ResponseWriter, r *http.Request, body *a
 		sendError(w, r, http.StatusInternalServerError,
 			"no se pudo renombrar la carpeta del usuario")
 	default:
+		s.trackers.RenameUser(oldName, newName) // their OwnTracks URL keeps working
 		s.log.Info("user renamed", "from", oldName, "to", newName)
 		sendJSON(w, r, http.StatusOK,
 			map[string]string{"message": "usuario renombrado", "name": newName})
@@ -387,7 +388,8 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 	os.RemoveAll(home)
 	s.sessions.DropUser(name)
 	s.users.ForgetUsage(name)
-	s.shares.DropUser(name) // anything they shared, or was shared with them
+	s.shares.DropUser(name)   // anything they shared, or was shared with them
+	s.trackers.DropUser(name) // their OwnTracks URL
 
 	s.log.Info("user deleted", "name", name)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "usuario eliminado"})

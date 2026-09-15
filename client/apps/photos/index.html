@@ -240,7 +240,7 @@
     /* ---------- map (real Leaflet map, library lazy-loaded on first use) ---------- */
     #map { background: var(--bg); }
     .lmap { position: absolute; inset: 0; background: var(--card); }
-    /* OSM tiles are visually busy - calm them to a grey backdrop so the photo
+    /* The base map is visually busy - calm it to a grey backdrop so the photo
        pins are the only colour (same treatment as the Trips map). */
     .lmap .leaflet-tile-pane { filter: grayscale(0.92) contrast(0.9) brightness(1.05); }
 
@@ -350,13 +350,7 @@
     .pase-tick { position: absolute; top: 0; width: 2px; height: 3px; background: rgba(255, 255, 255, 0.5); }
 
     .pase-count { position: absolute; right: 16px; top: 16px; z-index: 3; font-size: 0.76rem; font-weight: 700; color: rgba(255, 255, 255, 0.82); font-variant-numeric: tabular-nums; }
-    .pase-x
-    {
-        position: absolute; left: 14px; top: 12px; z-index: 4;
-        width: 36px; height: 36px; border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.35);
-        color: #fff; cursor: pointer; font-size: 15px;
-    }
+    .pase-x { position: absolute; left: 14px; top: 12px; z-index: 4; }   /* look: the shared .editor-btn.over-media */
     .pase-cap { position: absolute; left: 22px; bottom: 74px; z-index: 3; max-width: min(72%, 560px); color: #fff; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6); }
     .pase-cap .t { font-size: 1.3rem; font-weight: 700; line-height: 1.2; margin-bottom: 4px; text-wrap: balance; }
     .pase-cap .m { font-size: 0.82rem; color: rgba(255, 255, 255, 0.86); font-variant-numeric: tabular-nums; }
@@ -377,13 +371,7 @@
     .lb.open { display: flex; }
     .lb-photo { flex: 1; position: relative; margin: 14px; }
     .lb-photo .scene { position: absolute; inset: 0; border-radius: var(--radius-m); overflow: hidden; }
-    .lb-x
-    {
-        position: absolute; right: 14px; top: 12px; z-index: 3;
-        width: 38px; height: 38px; border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.4);
-        color: #fff; cursor: pointer; font-size: 16px;
-    }
+    .lb-x { position: absolute; right: 14px; top: 12px; z-index: 3; }   /* look: the shared .editor-btn.over-media */
     .lb-nav
     {
         position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
@@ -610,7 +598,7 @@
                     <div class="pase-photo" id="paseB"></div>
                 </div>
                 <div class="pase-top"><div class="pase-prog" id="paseProg"></div><div id="paseTicks"></div></div>
-                <button class="pase-x" id="paseX" data-i18n-attr="title:photos.exitSlideshow, aria-label:photos.exitSlideshow">&times;</button>
+                <button class="editor-btn over-media pase-x" id="paseX" data-i18n-attr="title:photos.exitSlideshow, aria-label:photos.exitSlideshow">&times;</button>
                 <div class="pase-count" id="paseCount"></div>
                 <div class="pase-cap"><div class="t" id="paseTitle"></div><div class="m" id="paseMeta"></div><div class="c" id="paseNote" hidden></div></div>
                 <div class="pase-ctrl">
@@ -626,7 +614,7 @@
     <div class="lb" id="lb" aria-modal="true" role="dialog" data-i18n-attr="aria-label:photos.lightbox">
         <div class="lb-photo">
             <div class="scene" id="lbScene"></div>
-            <button class="lb-x" id="lbX" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
+            <button class="editor-btn over-media lb-x" id="lbX" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
             <button class="lb-nav prev" id="lbPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
             <button class="lb-nav next" id="lbNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
         </div>
@@ -1669,23 +1657,38 @@ function renderGrid()
 /* ---------------------------------------------------------------------------
  * MAP (real Leaflet map)
  * -------------------------------------------------------------------------*/
+// Leaflet plus the base map (shared/basemap.js and MapLibre GL, vendored with
+// Leaflet in trips/lib/), loaded on first use. Only Leaflet and basemap.js are
+// required: without MapLibre the base map falls back to the OSM pictures.
 let leafletPromise = null;
 function ensureLeaflet()
 {
-    if( window.L ) return Promise.resolve();
     if( leafletPromise ) return leafletPromise;
-    const base = "../trips/lib/leaflet_v1.9.4/";
-    const css = document.createElement( "link" );
-    css.rel = "stylesheet"; css.href = base + "leaflet.css";
-    document.head.appendChild( css );
-    leafletPromise = new Promise( ( resolve, reject ) =>
+    const lib = "../trips/lib/";
+    const css = href =>
+    {
+        const l = document.createElement( "link" );
+        l.rel = "stylesheet"; l.href = href;
+        document.head.appendChild( l );
+    };
+    const js = src => new Promise( ( resolve, reject ) =>
     {
         const s = document.createElement( "script" );
-        s.src = base + "leaflet.js";
-        s.onload  = () => { try { window.L.Icon.Default.imagePath = base + "images/"; } catch( _ ) {} resolve(); };
-        s.onerror = () => { leafletPromise = null; reject( new Error( "leaflet" ) ); };
+        s.src = src; s.onload = resolve; s.onerror = () => reject( new Error( src ) );
         document.head.appendChild( s );
     } );
+    css( lib + "leaflet_v1.9.4/leaflet.css" );
+    css( lib + "maplibre-gl_v5.24.0/maplibre-gl.css" );
+    leafletPromise = js( lib + "leaflet_v1.9.4/leaflet.js" )
+        .then( () =>
+        {
+            try { window.L.Icon.Default.imagePath = lib + "leaflet_v1.9.4/images/"; } catch( _ ) {}
+            const gl = js( lib + "maplibre-gl_v5.24.0/maplibre-gl.js" )
+                .then( () => js( lib + "maplibre-gl-leaflet_v0.1.4/leaflet-maplibre-gl.js" ) )
+                .catch( () => {} );
+            return Promise.all( [ js( "../shared/basemap.js" ), gl ] );
+        } )
+        .catch( e => { leafletPromise = null; throw e; } );
     return leafletPromise;
 }
 
@@ -1713,8 +1716,7 @@ async function drawMap()
     if( ! st.map )
     {
         st.map = L.map( "lmap", { zoomControl: true, attributionControl: true } );
-        L.tileLayer( "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } ).addTo( st.map );
+        NayiveBaseMap.add( st.map );
     }
 
     st.markers.forEach( m => m.remove() );

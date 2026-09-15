@@ -47,14 +47,17 @@
                 { sel: '#fmtBtn',       text: NayiveUI.t( 'calc.introToolbar' ) },
                 { sel: '#moreBtn',      text: NayiveUI.t( 'calc.introFileMenu' ) },
                 { sel: '#moreToolsBtn', text: NayiveUI.t( 'calc.introMoreBar' ) },
-                { sel: '#importBtn', text: NayiveUI.t( 'calc.introImport' ) },
-                { sel: '#openBtn',   text: NayiveUI.t( 'calc.introOpen' ) },
-                { sel: '#saveAsBtn', text: NayiveUI.t( 'calc.introSaveAs' ) },
+                { sel: '#fmtBoldBtn', name: NayiveUI.t( 'calc.introFormatName' ), text: NayiveUI.t( 'calc.introFormat' ) },
+                { sel: '#insRowBtn', name: NayiveUI.t( 'calc.introRowsColsName' ), text: NayiveUI.t( 'calc.introRowsCols' ) },
+                { sel: '#fxBtn',     text: NayiveUI.t( 'calc.introFx' ) },
                 { sel: '#undoBtn',   text: NayiveUI.t( 'calc.introUndo' ) },
                 { sel: '#redoBtn',   text: NayiveUI.t( 'calc.introRedo' ) },
-                { sel: '#fxBtn',     text: NayiveUI.t( 'calc.introFx' ) },
-                { sel: '#insRowBtn', name: NayiveUI.t( 'calc.introRowsColsName' ), text: NayiveUI.t( 'calc.introRowsCols' ) },
-                { sel: '#fmtBoldBtn', name: NayiveUI.t( 'calc.introFormatName' ), text: NayiveUI.t( 'calc.introFormat' ) }
+                { sel: '#newBtn',     text: NayiveUI.t( 'write.introNew' ) },
+                { sel: '#openBtn',    text: NayiveUI.t( 'calc.introOpen' ) },
+                { sel: '#importBtn',  text: NayiveUI.t( 'calc.introImport' ) },
+                { sel: '#saveAsBtn',  text: NayiveUI.t( 'calc.introSaveAs' ) },
+                { sel: '#restoreBtn', text: NayiveUI.t( 'write.introRestore' ) },
+                { sel: '#scBtn',      text: NayiveUI.t( 'write.introShortcuts' ) }
             ]
         } );
     } );
@@ -157,7 +160,7 @@
             border-bottom: 1px solid var(--line); flex: 0 0 auto;
             overflow-x: visible;
         }
-        #fmtToolbar .fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
+        .fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
         /* Toolbar buttons: a distinct component from the header .icon-btn - 30px
            rounded squares with an accent-tinted hover (they act on the cells). */
         .fmt-btn, .fmt-color-btn
@@ -226,16 +229,34 @@
             box-shadow: inset 0 2px 0 var(--accent);
         }
 
-        /* Name box — the "A1" at the head of the toolbar. Types a reference and
-           jumps to it, so a big sheet does not have to be scrolled by hand. */
-        #nameBox
+        /* ---- THE FORMULA ROW ------------------------------------------------
+           One row of its own, right under the chrome, where LibreOffice Calc and
+           Excel have always put it:
+             #nameBox     the "A1". Type a reference and it jumps there, so a big
+                          sheet does not have to be scrolled by hand.
+             #formulaBar  what the current cell really HOLDS - the formula, not
+                          the number it shows - and a second place to edit it
+                          (see THE FORMULA BAR in the script).
+
+           It is NOT part of #fmtToolbar, on purpose: the toolbar folds away on a
+           phone and collapses to nothing in menu mode, and where you are - plus
+           what is in the cell - has to stay on screen in both.
+
+           Both boxes are .tb-input (TOOLBAR INPUT in app.css); only their widths
+           belong to Calc. */
+        #formulaRow
         {
-            width: 88px; flex: 0 0 auto; height: 30px;
-            padding: 0 8px; border-radius: var(--radius-s);
-            border: 1px solid var(--line); background: var(--calc-paper); color: var(--text);
-            font-family: inherit; font-size: 0.85rem; text-align: center;
+            display: flex; align-items: center; gap: 2px;
+            padding: 4px 10px; background: var(--calc-chrome);
+            border-bottom: 1px solid var(--line); flex: 0 0 auto;
         }
-        #nameBox:focus { outline: none; border-color: var(--accent); }
+        #nameBox    { width: 88px; text-align: center; }
+        #formulaBar { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); }
+
+        /* A phone only. Anywhere wider the formula editor (FORMULA EDITOR in the
+           script) takes over while a formula is typed, and the row goes; a phone
+           has no room for that panel and keeps the row. */
+        @media (min-width: 641px) { #formulaRow { display: none; } }
 
         /* A linked cell. The underline says "link"; the colour is the accent so it
            reads as one in either scheme. Ctrl/Cmd-click follows it — a plain click
@@ -310,15 +331,14 @@
         #app.is-menus #fmtBtn,
         #app.is-menus #moreBtn { display: none; }
 
-        /* The name box is the one control with no menu entry - you type a cell
-           into it. In menu mode it rides at the right end of the menu bar, where
-           Excel's own name box has always been within reach. */
-        #menuBar #nameBox { margin-left: auto; visibility: visible; }
+        /* Nothing of the formula row disappears here: the name box and the formula
+           bar are not in the toolbar at all, they have their own row below the
+           chrome (see THE FORMULA ROW above) and both chromes keep it. */
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar was FOUR
            rows - 159px, a fifth of the screen before the keyboard is even up.
            Now it is ONE row that folds away.
-             - the row keeps the seven controls a phone actually reaches for
+             - the row keeps the six controls a phone actually reaches for
                (the .fmt-keep ones, listed in the markup); everything else waits
                behind "⋮" (#moreToolsBtn), which opens the WHOLE toolbar in place
                and closes again. Chosen by how often a thing is used, not by
@@ -339,6 +359,9 @@
 
             #fmtToolbar { padding: 4px 2px; }
             #fmtToolbar .fmt-sep { margin: 4px 2px; }
+            /* The formula row stays (it never folds), just tighter. */
+            #formulaRow { padding: 4px 4px; }
+            #formulaRow .fmt-sep { margin: 4px 3px; }
             .fmt-btn, .fmt-color-btn { width: 36px; height: 36px; }
 
             /* Collapsed: only the favourites (the .fmt-keep ones). They wrap like
@@ -347,6 +370,11 @@
                page clips, it does not scroll). Two short rows, and the whole
                strip still folds away the moment you type. */
             #fmtToolbar:not(.is-open) > :not(.fmt-keep) { display: none; }
+
+            /* Undo / redo lead the collapsed row, as undo does in Write's; opened,
+               the row keeps the markup order above. */
+            #fmtToolbar:not(.is-open) #undoBtn,
+            #fmtToolbar:not(.is-open) #redoBtn { order: -1; }
 
             /* Folded away while you type. */
             #fmtToolbar.is-folded
@@ -419,6 +447,35 @@
             border: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0);
         }
         .pop-color-bar { fill: var(--border-bar, var(--text-dim)); }
+
+        /* ---- FORMULA EDITOR (see FORMULA EDITOR in the script) -------------
+           The .popup card, fixed over the top-right of the cells while a cell's
+           "=…" is typed. Only layout lives here: the pieces are the shared .pill,
+           .icon-btn and dialog buttons, and this sheet's .pop-btn, .fx-item and
+           .nf-preview. z-index 300: over the grid's clones (up to 210) and its
+           open cell editor (200), under the menus (400) and the dialogs (500). */
+        #fePanel               { z-index: 300; width: 292px; max-width: calc(100vw - 32px); padding: 0; flex-direction: column; overflow: hidden; }
+        #fePanel.open          { display: flex; }
+        .fe-head               { display: flex; align-items: center; gap: 4px; padding: 3px 12px 3px 3px; cursor: pointer; user-select: none; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+        .fe-chev svg           { transition: transform var(--tr-fast); }
+        #fePanel.is-folded .fe-chev svg { transform: rotate(-90deg); }
+        .fe-body               { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
+        #fePanel.is-folded .fe-body { display: none; }
+        /* The result, beside Range: a .tb-input box that may grow to a second
+           line for an error said in words. Its placeholder is data-placeholder. */
+        .fe-result             { flex: 1 1 0; min-width: 0; height: auto; min-height: 30px; padding: 5px 8px; line-height: 1.3; overflow-wrap: anywhere; }
+        .fe-result:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
+        .fe-result.is-error    { color: var(--danger); }
+        .fe-help               { font-size: 0.78rem; line-height: 1.35; color: var(--text-dim); }
+        .fe-help b             { color: var(--accent); }
+        .fe-row                { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+        /* .pill has no disabled look of its own (only this panel needs one): Range
+           is off while a tap on the sheet could not put a reference in. */
+        #feRangeBtn:disabled   { opacity: 0.45; cursor: default; }
+        .fe-list               { max-height: 168px; overflow-y: auto; margin: 0 -10px; border-block: 1px solid var(--line); }
+        .fe-key                { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; }
+        .fe-actions            { display: flex; justify-content: flex-end; gap: 8px; }
+        @media (max-width: 640px) { #fePanel.open { display: none; } }
 
         /* Checkbox rows in the number-format dialog */
         .field label.check
@@ -493,6 +550,9 @@
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
             </button>
 
+            <!-- "Guardado 12:04" (shared/office.js, AUTOSAVE). -->
+            <span id="savedAt" class="saved-at"></span>
+
             <div id="syncIndicator" class="sync-indicator" data-i18n-attr="title:ui.sync.synced"></div>
         </div>
 
@@ -507,57 +567,10 @@
              one toolbar control that has no menu entry, because you type into it. -->
         <div id="menuBar" role="menubar" hidden></div>
 
+        <!-- Same left-to-right order as Write's toolbar, so a button shared by the
+             two apps sits in the same place: font, letters, colours, table, insert,
+             alignment + clear, undo / redo, view (freeze), file, help. -->
         <div id="fmtToolbar">
-            <input id="nameBox" class="fmt-keep" type="text" autocomplete="off" spellcheck="false"
-                   data-i18n-attr="title:calc.nameBoxHint, placeholder:calc.nameBoxPh">
-            <div class="fmt-sep"></div>
-            <button id="importBtn" class="fmt-btn" data-i18n-attr="title:ui.importDevice">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
-            <input id="importInput" type="file" accept=".xlsx,.csv" style="display:none">
-            <button id="openBtn" class="fmt-btn" data-i18n-attr="title:ui.openDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-            </button>
-            <button id="saveAsBtn" class="fmt-btn" data-i18n-attr="title:ui.saveAs">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
-            </button>
-            <div class="fmt-sep"></div>
-            <button id="undoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.undo">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6.4 8H12c3.7 0 6.2 2 6.8 5.1.6 2.7-.4 5.6-2.3 6.8a1 1 0 0 1-1-1.8c1.1-.6 1.8-2.7 1.4-4.6-.5-2.1-2.1-3.5-4.9-3.5H6.4l3.3 3.3a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 1.4L6.4 8Z" fill-rule="nonzero"/></svg>
-            </button>
-            <button id="redoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.redo">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 10H12c-2.8 0-4.4 1.4-4.9 3.5-.4 2 .3 4 1.4 4.6a1 1 0 1 1-1 1.8c-2-1.2-2.9-4.1-2.3-6.8.6-3 3-5.1 6.8-5.1h5.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3Z" fill-rule="nonzero"/></svg>
-            </button>
-            <button id="fxBtn" class="fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="title:calc.insertFx">&sum;</button>
-            <div class="fmt-sep"></div>
-            <button id="insRowBtn" class="fmt-btn" data-i18n-attr="title:calc.insRow">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
-            </button>
-            <button id="delRowBtn" class="fmt-btn" data-i18n-attr="title:calc.delRow">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm0 2H5v3h2.5v2H5v2h2.5v2H5v3h14v-3h-2.5v-2H19v-2h-2.5V9H19V6Zm-4.7 1.8 1.2 1L13 12l2.6 3.3-1.2 1-2.3-3-2.3 3-1.2-1L11 12 8.5 8.7l1.2-1 2.3 3 2.3-3Z"/></svg>
-            </button>
-            <button id="insColBtn" class="fmt-btn" data-i18n-attr="title:calc.insCol">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M20 4c.6 0 1 .4 1 1v2a1 1 0 0 1-2 0V6h-8v12h8v-1a1 1 0 0 1 2 0v2c0 .5-.4 1-.9 1H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h15ZM9 13H5v5h4v-5Zm7-5c.5 0 1 .4 1 .9V11h2a1 1 0 0 1 .1 2H17v2a1 1 0 0 1-2 .1V13h-2a1 1 0 0 1-.1-2H15V9c0-.6.4-1 1-1ZM9 6H5v5h4V6Z"/></svg>
-            </button>
-            <button id="delColBtn" class="fmt-btn" data-i18n-attr="title:calc.delCol">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm-4 4h-2V6h-2v2H9V6H5v12h4v-2h2v2h2v-2h2v2h4V6h-4v2Zm.3.5 1 1.2-3 2.3 3 2.3-1 1.2L12 13l-3.3 2.6-1-1.2 3-2.3-3-2.3 1-1.2L12 11l3.3-2.5Z"/></svg>
-            </button>
-            <button id="sortAscBtn" class="fmt-btn" data-i18n-attr="title:calc.sortAsc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
-            </button>
-            <button id="sortDescBtn" class="fmt-btn" data-i18n-attr="title:calc.sortDesc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="9" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="13" y2="18"></line><polyline points="17 16 20 19 20 5"></polyline><polyline points="17 16 20 19 23 16"></polyline></svg>
-            </button>
-            <button id="fmtMergeBtn" class="fmt-btn" data-i18n-attr="title:calc.mergeCells">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
-            </button>
-            <button id="fmtFreezeBtn" class="fmt-btn" data-i18n-attr="title:calc.freezeCols">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
-            </button>
-            <button id="fmtFreezeRowBtn" class="fmt-btn" data-i18n-attr="title:calc.freezeRows">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="3" y1="9" x2="21" y2="9" stroke-width="3"></line></svg>
-            </button>
-            <div class="fmt-sep"></div>
             <select id="fmtFontFamily" class="tb-select fmt-select-font" data-i18n-attr="title:calc.fontFamily">
                 <option value="">Calibri</option>
                 <option value="Arial">Arial</option>
@@ -598,13 +611,34 @@
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><g fill-rule="evenodd"><path class="fmt-color-bar" d="M3 18h18v3H3z"/><path fill-rule="nonzero" d="M7.7 16.7H3l3.3-3.3-.7-.8L10.2 8l4 4.1-4 4.2c-.2.2-.6.2-.8 0l-.6-.7-1.1 1.1zm5-7.5L11 7.4l3-2.9a2 2 0 0 1 2.6 0L18 6c.7.7.7 2 0 2.7l-2.9 2.9-1.8-1.8-.5-.6"/></g></svg>
                 <input id="fmtFillColor" type="color" value="#202124">
             </label>
-            <button id="fmtClearBtn" class="fmt-btn" data-i18n-attr="title:calc.clearFormat">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path><line x1="5" y1="19" x2="19" y2="5"></line></svg>
-            </button>
             <div class="fmt-sep"></div>
+            <button id="insRowBtn" class="fmt-btn" data-i18n-attr="title:calc.insRow">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
+            </button>
+            <button id="delRowBtn" class="fmt-btn" data-i18n-attr="title:calc.delRow">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm0 2H5v3h2.5v2H5v2h2.5v2H5v3h14v-3h-2.5v-2H19v-2h-2.5V9H19V6Zm-4.7 1.8 1.2 1L13 12l2.6 3.3-1.2 1-2.3-3-2.3 3-1.2-1L11 12 8.5 8.7l1.2-1 2.3 3 2.3-3Z"/></svg>
+            </button>
+            <button id="insColBtn" class="fmt-btn" data-i18n-attr="title:calc.insCol">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M20 4c.6 0 1 .4 1 1v2a1 1 0 0 1-2 0V6h-8v12h8v-1a1 1 0 0 1 2 0v2c0 .5-.4 1-.9 1H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h15ZM9 13H5v5h4v-5Zm7-5c.5 0 1 .4 1 .9V11h2a1 1 0 0 1 .1 2H17v2a1 1 0 0 1-2 .1V13h-2a1 1 0 0 1-.1-2H15V9c0-.6.4-1 1-1ZM9 6H5v5h4V6Z"/></svg>
+            </button>
+            <button id="delColBtn" class="fmt-btn" data-i18n-attr="title:calc.delCol">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M19 4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h14Zm-4 4h-2V6h-2v2H9V6H5v12h4v-2h2v2h2v-2h2v2h4V6h-4v2Zm.3.5 1 1.2-3 2.3 3 2.3-1 1.2L12 13l-3.3 2.6-1-1.2 3-2.3-3-2.3 1-1.2L12 11l3.3-2.5Z"/></svg>
+            </button>
+            <button id="fmtMergeBtn" class="fmt-btn" data-i18n-attr="title:calc.mergeCells">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
+            </button>
             <button id="fmtBorderBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:calc.borders">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
             </button>
+            <div class="fmt-sep"></div>
+            <button id="fxBtn" class="fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="title:calc.insertFx">&sum;</button>
+            <button id="sortAscBtn" class="fmt-btn" data-i18n-attr="title:calc.sortAsc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
+            </button>
+            <button id="sortDescBtn" class="fmt-btn" data-i18n-attr="title:calc.sortDesc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="9" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="13" y2="18"></line><polyline points="17 16 20 19 20 5"></polyline><polyline points="17 16 20 19 23 16"></polyline></svg>
+            </button>
+            <div class="fmt-sep"></div>
             <button id="fmtAlignLeftBtn" class="fmt-btn" data-i18n-attr="title:calc.alignLeft">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
             </button>
@@ -626,7 +660,6 @@
             <button id="fmtWrapBtn" class="fmt-btn" data-i18n-attr="title:calc.wrapText">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
-            <div class="fmt-sep"></div>
             <select id="fmtNumFormat" class="tb-select fmt-select-numfmt fmt-keep" data-i18n-attr="title:calc.numFormat">
                 <option value="general" data-i18n="calc.nfGeneral"></option>
                 <option value="numero" data-i18n="calc.nfNumber"></option>
@@ -634,8 +667,44 @@
                 <option value="porcentaje" data-i18n="calc.nfPercent"></option>
                 <option value="fecha" data-i18n="calc.nfDate"></option>
             </select>
-
+            <button id="fmtClearBtn" class="fmt-btn" data-i18n-attr="title:calc.clearFormat">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path><line x1="5" y1="19" x2="19" y2="5"></line></svg>
+            </button>
             <div class="fmt-sep"></div>
+            <button id="undoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.undo">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6.4 8H12c3.7 0 6.2 2 6.8 5.1.6 2.7-.4 5.6-2.3 6.8a1 1 0 0 1-1-1.8c1.1-.6 1.8-2.7 1.4-4.6-.5-2.1-2.1-3.5-4.9-3.5H6.4l3.3 3.3a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 1.4L6.4 8Z" fill-rule="nonzero"/></svg>
+            </button>
+            <button id="redoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.redo">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 10H12c-2.8 0-4.4 1.4-4.9 3.5-.4 2 .3 4 1.4 4.6a1 1 0 1 1-1 1.8c-2-1.2-2.9-4.1-2.3-6.8.6-3 3-5.1 6.8-5.1h5.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3Z" fill-rule="nonzero"/></svg>
+            </button>
+            <div class="fmt-sep"></div>
+            <button id="fmtFreezeBtn" class="fmt-btn" data-i18n-attr="title:calc.freezeCols">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
+            </button>
+            <button id="fmtFreezeRowBtn" class="fmt-btn" data-i18n-attr="title:calc.freezeRows">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="3" y1="9" x2="21" y2="9" stroke-width="3"></line></svg>
+            </button>
+            <div class="fmt-sep"></div>
+            <button id="newBtn" class="fmt-btn" data-i18n-attr="title:write.newDoc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            </button>
+            <button id="openBtn" class="fmt-btn" data-i18n-attr="title:ui.openDoc">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            </button>
+            <button id="importBtn" class="fmt-btn" data-i18n-attr="title:ui.importDevice">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </button>
+            <input id="importInput" type="file" accept=".xlsx,.csv" style="display:none">
+            <button id="saveAsBtn" class="fmt-btn" data-i18n-attr="title:ui.saveAs">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+            </button>
+            <button id="restoreBtn" class="fmt-btn" data-i18n-attr="title:write.restore">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+            </button>
+            <div class="fmt-sep"></div>
+            <button id="scBtn" class="fmt-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+            </button>
             <button class="fmt-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
@@ -645,6 +714,17 @@
             <button id="moreToolsBtn" class="fmt-btn fmt-keep" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreTools, aria-label:ui.moreTools">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
             </button>
+        </div>
+
+        <!-- The formula row: where you are, and what the cell really holds. Its
+             own row under the chrome, as in LibreOffice Calc and Excel - see THE
+             FORMULA ROW in the CSS above and THE FORMULA BAR in the script. -->
+        <div id="formulaRow">
+            <input id="nameBox" class="tb-input" type="text" autocomplete="off" spellcheck="false"
+                   data-i18n-attr="title:calc.nameBoxHint, placeholder:calc.nameBoxPh">
+            <div class="fmt-sep"></div>
+            <input id="formulaBar" class="tb-input" type="text" autocomplete="off" spellcheck="false"
+                   data-i18n-attr="title:calc.formulaBarHint">
         </div>
 
         <div id="gridHost"></div>
@@ -660,6 +740,17 @@
 
     <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
          sheet goes instead of dropping it in the folder Calc was opened in. -->
+    <!-- Keyboard shortcuts - the same sheet as Write's; calc openShortcuts() fills it. -->
+    <div id="scBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.shortcuts"></h2>
+            <div id="scList" class="sc-list"></div>
+            <div class="sheet-actions">
+                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
     <div id="saveAsBackdrop" class="sheet-backdrop">
         <div class="sheet">
             <h2 data-i18n="ui.saveAs"></h2>
@@ -681,6 +772,7 @@
                 </button>
             </div>
             <div class="sheet-actions">
+                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
                 <button id="saveAsCloseBtn"   data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>
@@ -691,6 +783,8 @@
     <div id="openBackdrop" class="sheet-backdrop">
         <div class="sheet">
             <h2 data-i18n="ui.openDoc"></h2>
+            <!-- The last ten documents opened, above the folder listing. -->
+            <div id="openRecent" hidden></div>
             <div id="openCrumb" class="open-crumb"></div>
             <ul id="openList" class="open-list"></ul>
             <div class="sheet-actions">
@@ -727,6 +821,35 @@
                 <button id="lossyCancelBtn" data-act="close"             data-i18n-attr="title:calc.lossyCancel"></button>
                 <button id="lossyAnywayBtn" data-act="secondary:forward" data-i18n-attr="title:calc.lossyAnyway"></button>
                 <button id="lossyCopyBtn"   data-act="primary:saveas"    data-i18n-attr="title:calc.lossyCopy"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formula editor - over the top-right of the cells while a cell's "=…" is
+         typed (FORMULA EDITOR in the script). It takes no typing of its own: the
+         keys, the functions and Range write into the cell. The function pills
+         and the keys are built from FE_QUICK and FE_KEYS. -->
+    <div id="fePanel" class="popup" role="group" data-i18n-attr="aria-label:calc.fe.title">
+        <div id="feHead" class="fe-head" data-i18n-attr="title:calc.fe.foldTip">
+            <button id="feFoldBtn" type="button" class="icon-btn sm fe-chev" aria-expanded="true" data-i18n-attr="aria-label:calc.fe.foldTip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <span data-i18n="calc.fe.title"></span>
+        </div>
+        <div class="fe-body">
+            <div class="fe-row">
+                <div id="feResult" class="tb-input fe-result" role="status" aria-live="polite" data-i18n-attr="aria-label:calc.fe.result"></div>
+                <button id="feRangeBtn" type="button" class="pill" aria-pressed="false" data-i18n="calc.fe.range" data-i18n-attr="title:calc.fe.rangeTip"></button>
+            </div>
+            <div id="feFnHelp" class="fe-help" hidden></div>
+            <div id="feFns" class="fe-row">
+                <button id="feAllBtn" type="button" class="pill" aria-expanded="false" data-i18n="calc.fe.all"></button>
+            </div>
+            <div id="feList" class="fe-list" hidden></div>
+            <div id="feKeys"></div>
+            <div class="fe-actions">
+                <button id="feCancelBtn" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="feOkBtn" type="button" data-act="primary" data-i18n-attr="title:ui.accept"></button>
             </div>
         </div>
     </div>
@@ -884,17 +1007,9 @@
         // segment of APP_DIR — "files" when Calc is opened from the launcher).
         const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
 
-        const AUTOSAVE_DELAY_MS = 2500;
-
         // Sample serial (2026-12-31 14:30) for the number-format dialog's live preview.
         const NF_SAMPLE_DATE = Math.round( ( Date.UTC( 2026, 11, 31 ) - Date.UTC( 1899, 11, 30 ) ) / 86400000 ) + 14.5 / 24;
 
-        let currentPath   = null;   // path relative to the file-manager root, or null = untitled
-        // True when the open sheet belongs to another user (a "shared/..." path):
-        // read it, never write it. Autosave is off and "Guardar" becomes
-        // "Guardar como", into a file of our own.
-        let readOnly      = false;
-        let pendingName   = null;   // name typed/imported before the first save (no currentPath yet)
         let table          = null;  // Handsontable instance
 
         //--------------------------------------------------------------------//
@@ -967,7 +1082,6 @@
         let nfCategory     = null;   // number-format category the numFmt dialog is currently editing
         let borderWeight     = 'thin';   // sticky border-popup choices
         let borderColorValue = '8B8E93';
-        let autosaveTimer  = null;
 
         // Offline-capable persistence (../shared/store.js), same as Write. Every
         // save lands in a local IndexedDB cache and a write outbox BEFORE the PUT
@@ -979,21 +1093,42 @@
         const T  = k           => NayiveUI.t( k );
         const TF = ( k, vars ) => NayiveUI.tf( k, vars );
 
-        const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true } );
+        // conflicts: a save over a sheet changed on another device since it was
+        // opened is refused (shared/store.js, CONFLICTS).
+        const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true, conflicts: true } );
 
-        // The name in the top bar (click to rename) and the Open browser: shared
-        // widgets, this app only supplies the policy (see commitRename / openPickedFile).
-        const fileLabel = O.fileLabel( { onCommit: commitRename } );
-        const browser   = O.openBrowser( { root: OPEN_ROOT, canOpen: isOpenable, onOpen: openPickedFile,
-                                           emptyKey: 'calc.noSheets' } );
-
-        // "Guardar como" asks where the sheet goes: a first save must never
-        // guess the folder. Shared widget, this app only supplies the default.
-        const dirField  = O.folderField();
-
-        // The header plug: store states straight from store.onState, plus the
-        // app's own 'saving' / 'error' moments (a rename in flight, a bad encode).
-        const setSyncStatus = NayiveUI.syncIndicator();
+        // The Open browser: a shared widget, this app only says what it lists.
+        // The open sheet - its path, whether it is someone else's, its name, the
+        // top-bar label, New / Open / Import / "Guardar como" / rename / Restore,
+        // start-up, the header plug and the autosave - is the one Write and Text
+        // use (shared/office.js, THE OPEN DOCUMENT). Calc only says how a sheet
+        // becomes bytes and back, which files it can open, and keeps an
+        // extension on a rename.
+        const session = O.session( {
+            app        : 'calc',
+            store      : store,
+            appDir     : APP_DIR,
+            openRoot   : OPEN_ROOT,
+            defaultName: 'hoja.xlsx',
+            canOpen    : isOpenable,                                    // what the Open dialog lists
+            onPick     : function( p ) { openPickedFile( p ); },        // a foreign format is converted first
+            emptyKey   : 'calc.noSheets',
+            // A draft is always .xlsx: a .csv would lose the formatting.
+            encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
+            load       : loadSheet,
+            blank      : function() { initGrid( null ); },
+            renameName : keepExt,
+            // THE LOSS GATE's hard stop, checked on every edit AND every write -
+            // Ctrl+S and the pagehide flush never pass through an edit. Writing
+            // somewhere NEW is always let through: that is the "save a copy" way
+            // out of the dialog.
+            blocked    : function( path ) { return path === session.path() && lossyBlocked(); },
+            onSavedAs  : sheetSavedAs,
+            // a cell half typed (maybe a formula picked with the mouse): the name can wait
+            busy       : function() { const ed = table && table.getActiveEditor(); return !! ( ed && ed.isOpened() ); },
+            // listen() alone leaves the keys on <body>: the grid needs DOM focus back
+            focus      : function() { if( table ) { table.listen(); table.getFocusManager().focusOnHighlightedCell(); } }
+        } );
 
         //--------------------------------------------------------------------//
         // PHONE CHROME  (see the phone block in the CSS above)
@@ -1006,7 +1141,7 @@
 
         const PHONE = window.matchMedia( '(max-width: 640px)' );
 
-        const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: [ 'importBtn', 'openBtn', 'saveAsBtn' ] } );
+        const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn' ] } );
 
         // Folding sets height:0 rather than display:none - Handsontable sizes
         // itself to the space left over and re-renders on resize either way.
@@ -1024,7 +1159,7 @@
             // hiding it costs nothing - shared/ui.js, coachTargets.)
             const headerHelp = PHONE.matches && ! CHROME.on();
 
-            O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'syncIndicator' );
+            O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'savedAt' );
             fileMenu.close();
             fold.setMore( false );
             if( ! PHONE.matches ) fold.setOpen( true );
@@ -1038,13 +1173,9 @@
             applyPhoneChrome();
             PHONE.addEventListener( 'change', applyPhoneChrome );
 
-            document.getElementById( 'importBtn'        ).addEventListener( 'click', function() { document.getElementById( 'importInput' ).click(); } );
-            document.getElementById( 'importInput'      ).addEventListener( 'change', function( e ) { handleImportFile( e.target.files[0] ); e.target.value = ''; } );
-            document.getElementById( 'openBtn'          ).addEventListener( 'click', function() { browser.open( APP_DIR ); } );
-            document.getElementById( 'saveAsBtn'        ).addEventListener( 'click', openSaveAs );
-            document.getElementById( 'saveAsConfirmBtn' ).addEventListener( 'click', confirmSaveAs );
-            document.getElementById( 'saveName'         ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmSaveAs(); } );
-            // The dialogs' × buttons and Escape are wired once for every app by shared/ui.js.
+            // New, Open, Import, "Guardar como" and Restore are wired by the session
+            // (shared/office.js); the dialogs' × buttons and Escape once for every
+            // app by shared/ui.js.
 
             // Border popup: position buttons are actions; weight/colour are sticky mode choices.
             document.getElementById( 'borderPopup' ).addEventListener( 'mousedown', function( e )
@@ -1094,11 +1225,12 @@
                 // "Is a text field focused?" is the wrong test here: Handsontable
                 // keeps focus in a hidden <textarea> whenever the grid is active, so
                 // a plain input/textarea check never lets these through at all. What
-                // actually matters is whether the CELL EDITOR is open, plus the name
-                // box, which is a real input of ours outside the grid.
+                // actually matters is whether the CELL EDITOR is open, plus the two
+                // boxes of the formula row, which are real inputs of ours outside
+                // the grid.
                 if( ( e.ctrlKey || e.metaKey ) && ! e.altKey && 'biu'.indexOf( e.key.toLowerCase() ) !== -1 )
                 {
-                    if( e.target && e.target.id === 'nameBox' ) return;
+                    if( e.target && ( e.target.id === 'nameBox' || e.target.id === 'formulaBar' ) ) return;
                     if( ! table || ! lastSelection ) return;
 
                     const editor = table.getActiveEditor && table.getActiveEditor();
@@ -1121,6 +1253,7 @@
 
             document.getElementById( 'fxBtn'        ).addEventListener( 'click', openFxPicker );
             document.getElementById( 'fxSearch'     ).addEventListener( 'input', function( e ) { renderFxList( e.target.value ); } );
+            wireFormulaPanel();
 
             // The loss gate's three ways out. The "x" (and Escape) are wired by
             // shared/ui.js and mean "do not write" — the edit stays in the grid,
@@ -1135,7 +1268,7 @@
             document.getElementById( 'lossyCopyBtn' ).addEventListener( 'click', function()
             {
                 NayiveUI.close( 'lossyBackdrop' );
-                openSaveAs();                        // a copy Calc CAN write, original intact
+                session.openSaveAs();                // a copy Calc CAN write, original intact
             } );
             document.getElementById( 'fxList'       ).addEventListener( 'click', function( e )
             {
@@ -1185,8 +1318,36 @@
             } );
             document.getElementById( 'nameBox' ).addEventListener( 'blur', refreshNameBox );
 
+            // The formula bar (see THE FORMULA BAR below). Enter writes it into the
+            // cell and moves down, as every spreadsheet does; Escape gives up and
+            // hands the keyboard back to the grid. Leaving the bar with something
+            // typed in it writes it too — clicking a toolbar button must not throw
+            // the edit away — and that is why a commit always goes to the cell the
+            // bar was FILLED FROM, never to whatever is selected by then.
+            const fBar = document.getElementById( 'formulaBar' );
+
+            fBar.addEventListener( 'input', function() { barDirty = true; } );
+            fBar.addEventListener( 'blur',  function() { commitFormulaBar( false ); refreshFormulaBar(); } );
+            fBar.addEventListener( 'keydown', function( e )
+            {
+                if( e.key === 'Enter' )
+                {
+                    e.preventDefault();
+                    commitFormulaBar( true );
+                }
+                if( e.key === 'Escape' )
+                {
+                    e.preventDefault();
+                    barDirty = false;
+                    e.target.blur();          // the refresh only fills a box nobody is typing in
+                    refreshFormulaBar();
+                    table.listen();
+                }
+            } );
+
             document.getElementById( 'sortAscBtn'      ).addEventListener( 'click', function() { sortByColumn( false ); } );
             document.getElementById( 'sortDescBtn'     ).addEventListener( 'click', function() { sortByColumn( true  ); } );
+            document.getElementById( 'scBtn'           ).addEventListener( 'click', openShortcuts );
 
             document.getElementById( 'fmtFreezeBtn'    ).addEventListener( 'click', toggleFreezeColumns );
             document.getElementById( 'fmtFreezeRowBtn' ).addEventListener( 'click', toggleFreezeRows );
@@ -1262,98 +1423,30 @@
         }
 
         //------------------------------------------------------------------------//
-        // IMPORT (local file from this device — distinct from Open, which browses
-        // documents already saved on the server) and the inline filename rename
+        // THE SHEET AS A FILE  (what the session in shared/office.js needs from Calc)
 
-        async function handleImportFile( file )
+        // A body on screen: opened, imported, the device draft (always .xlsx) or
+        // the .bak copy. A file Calc cannot read throws, and the session says so.
+        async function loadSheet( body, name, how )
         {
-            if( ! file ) return;
-
-            try
-            {
-                const buf  = new Uint8Array( await file.arrayBuffer() );
-                const d    = await decodeToDoc( buf, O.extOf( file.name ) );
-
-                currentPath = null;
-                readOnly    = false;
-                pendingName = file.name;
-                fileLabel.set( file.name );
-                initGrid( d );
-            }
-            catch( _ )
-            {
-                NayiveUI.toast( T( 'text.importFailed' ) );
-            }
+            initGrid( await decodeToDoc( body, how === 'draft' ? 'xlsx' : O.extOf( name ) ) );
         }
 
-        // Same as handleImportFile, but the source is a file already on the server
-        // (any folder). Opened as a new untitled sheet — Drive uses this to hand a
-        // .xlsx / .csv over to Calc with its import action pre-triggered.
-        async function importServerFile( path )
+        // A rename keeps the file's own extension whatever was typed, so a stray
+        // or wrong one can't make the sheet look like another format.
+        function keepExt( typed, path )
         {
-            try
-            {
-                const buf  = await GumApi.readFileBytes( path );
-                const name = O.baseName( path );
-                const d    = await decodeToDoc( buf, O.extOf( name ) );
-
-                currentPath = null;
-                readOnly    = false;
-                pendingName = name;
-                fileLabel.set( name );
-                initGrid( d );
-            }
-            catch( _ )
-            {
-                NayiveUI.toast( T( 'text.importFailed' ) );
-            }
+            const ext  = O.extOf( path );
+            const base = typed.replace( /\.[a-z0-9]+$/i, '' );
+            return ext ? base + '.' + ext : base;
         }
 
-        // The file label was edited. Untitled: the first name IS the first save,
-        // so it goes through "Guardar como" - a first save has to ask for a
-        // folder, and a sheet always gets a spreadsheet extension. Named:
-        // rename in place,
-        // keeping the current extension whatever was typed, so a stray or wrong
-        // one can't make the file look like another format.
-        async function commitRename( raw )
+        // What "Guardar como" just wrote came out of Calc's own model, so it holds
+        // nothing the next save could destroy. The original keeps its charts.
+        function sheetSavedAs()
         {
-            const name = O.safeName( raw );
-            if( ! name ) return;
-
-            if( ! currentPath )
-            {
-                const ext = OPEN_EXTS.indexOf( O.extOf( name ) ) !== -1 ? '' : '.xlsx';
-                pendingName = name + ext;
-                fileLabel.set( pendingName );
-                openSaveAs();
-                return;
-            }
-
-            const ext     = O.extOf( currentPath );
-            const base    = name.replace( /\.[a-z0-9]+$/i, '' );
-            const newName = ext ? base + '.' + ext : base;
-            const newPath = ( O.dirName( currentPath ) || APP_DIR ) + '/' + newName;
-
-            if( newPath === currentPath ) return;
-
-            setSyncStatus( 'saving' );
-
-            try
-            {
-                await flushPendingSave();            // the latest cells under the OLD name first
-                await store.flush();                 // get any queued write onto the OLD path
-                await GumApi.rename( currentPath, newPath );
-                await store.forget( currentPath );   // only now is the old cache entry stale
-
-                currentPath = newPath;
-                fileLabel.set( O.relLabel( newPath, APP_DIR, OPEN_ROOT ) );
-                setSyncStatus( 'synced' );
-            }
-            catch( _ )
-            {
-                setSyncStatus( 'error' );
-                NayiveUI.toast( T( 'text.renameFailed' ) );
-            }
+            doc.lossy    = [];
+            doc.lossyAck = false;
         }
 
         //------------------------------------------------------------------------//
@@ -1662,10 +1755,12 @@
         }
 
         //------------------------------------------------------------------------//
-        // NAME BOX AND SELECTION TOTALS
+        // NAME BOX, FORMULA BAR AND SELECTION TOTALS
         //
-        // Both hang off one thing: whatever is selected. afterSelectionEnd already
-        // fires for every way a selection can change, so both are refreshed there.
+        // All three hang off one thing: whatever is selected. afterSelectionEnd
+        // already fires for every way a selection can change, so all three are
+        // refreshed there — the formula bar from afterChange as well, since undo,
+        // paste and fx change the cell under the cursor without moving it.
 
         function refreshNameBox()
         {
@@ -1720,6 +1815,78 @@
 
             table.selectCell( r1, c1, r2, c2 );
             table.listen();
+        }
+
+        //---- THE FORMULA BAR ---------------------------------------------------
+        //
+        // The second way to edit a cell, the one LibreOffice Calc and Excel have:
+        // the bar shows what the cell HOLDS — the formula, not the number it shows
+        // — and typing there and pressing Enter writes it exactly as typing in the
+        // cell does (table.setDataAtCell, the very call the fx picker uses).
+        // Editing IN PLACE is untouched; while that is going on the bar MIRRORS
+        // the open editor, so the two never disagree.
+        //
+        // Pointing at cells with the mouse (POINTING below) belongs to the cell
+        // editor only: with the bar focused, a click on the grid just goes there.
+
+        let barDirty = false;   // something was typed in the bar since it was last filled
+        let barCell  = null;    // the cell it was filled from — the only cell a commit writes to
+
+        // What the cell HOLDS. getSourceDataAtCell reads the very store the file is
+        // saved from (see stashActiveSheet), so the bar and the file always agree;
+        // getDataAtCell would hand back HyperFormula's answer instead.
+        function cellSourceText( r, c )
+        {
+            const v = table ? table.getSourceDataAtCell( r, c ) : null;
+            return ( v === null || v === undefined ) ? '' : String( v );
+        }
+
+        function refreshFormulaBar()
+        {
+            const bar = document.getElementById( 'formulaBar' );
+            if( ! bar || bar === document.activeElement ) return;   // don't fight what is being typed
+
+            barDirty  = false;
+            barCell   = lastSelection ? { r: lastSelection.r1, c: lastSelection.c1 } : null;
+            bar.value = barCell ? cellSourceText( barCell.r, barCell.c ) : '';
+        }
+
+        // Write the bar into ITS cell — the one it was filled from. Enter then moves
+        // on to the row below and gives the grid the keyboard back; a plain blur
+        // (a toolbar button, another window) only writes and leaves the grid alone.
+        function commitFormulaBar( move )
+        {
+            const bar = document.getElementById( 'formulaBar' );
+            const at  = barCell;
+            if( ! table || ! at ) return;
+
+            if( barDirty )
+            {
+                barDirty = false;               // cleared FIRST: the write refreshes the bar
+                table.setDataAtCell( at.r, at.c, bar.value );
+            }
+
+            if( ! move ) return;
+
+            bar.blur();                         // so the refreshes below are not fought off
+            table.selectCell( Math.min( at.r + 1, table.countRows() - 1 ), at.c );
+            table.listen();
+        }
+
+        // While a cell is edited IN PLACE the bar shows the same text, live —
+        // including a reference just pointed at, which changes the formula as much
+        // as a keystroke does. A mirror only: what is typed goes on going into the
+        // cell editor, and the bar is filled from the cell again when it closes.
+        function mirrorEditorToBar()
+        {
+            const bar = document.getElementById( 'formulaBar' );
+            const ed  = table && table.getActiveEditor();
+
+            if( ! bar || bar === document.activeElement ) return;
+            if( ! ed || ! ed.isOpened() || ! ed.TEXTAREA ) return;
+
+            barDirty  = false;                  // the cell's text, not something typed here
+            bar.value = ed.TEXTAREA.value;
         }
 
         // Sum, average and count of the selection, off the COMPUTED values — a
@@ -1781,6 +1948,7 @@
         // this with a different `active` and nothing else changes.
         function initGrid( d )
         {
+            hideFormulaPanel();          // the cell editor it follows goes with the old grid
             if( table ) table.destroy();
 
             gridBooting = true;
@@ -1864,12 +2032,19 @@
                 formulas    : { engine: HyperFormula, sheetName: activeSheet.name || 'Hoja1' },
                 width       : '100%',
                 height      : '100%',
-                afterChange       : function( changes, source ) { if( source !== 'loadData' && source !== 'updateData' ) scheduleAutosave(); },
+                // The formula bar follows the cell under the cursor even when the
+                // cursor does not move: undo, redo, paste, fill and fx all change
+                // it in place.
+                afterChange       : function( changes, source )
+                                    {
+                                        refreshFormulaBar();
+                                        if( source !== 'loadData' && source !== 'updateData' ) scheduleAutosave();
+                                    },
                 // Phone: the cell editor opening is the on-screen keyboard
                 // arriving — give the grid the toolbar's 159px back. Selecting
                 // a cell does NOT fold it, so formatting a selection stays one
                 // tap. "Aa" in the header brings it back.
-                afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); pointEditorOpened(); },
+                afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); pointEditorOpened(); mirrorEditorToBar(); syncFormulaPanel(); },
                 // A formula being typed takes clicks, drags and arrow keys as
                 // references to other cells (see POINTING below).
                 beforeOnCellMouseDown : pointMouseDown,
@@ -1910,6 +2085,7 @@
                     lastSelection = { r1: Math.min( row, row2 ), c1: Math.min( col, col2 ), r2: Math.max( row, row2 ), c2: Math.max( col, col2 ) };
                     updateToolbarActiveState();
                     refreshNameBox();
+                    refreshFormulaBar();
                     refreshSelStats();
                 }
             });
@@ -1992,8 +2168,17 @@
             // set AND cleared on every render like every other style above.
             const link = activeSheet.links[ encodeCell( { r: row, c: col } ) ];
             td.classList.toggle( 'has-link', !! ( link && link.target ) );
-            if( link && link.target ) td.title = ( link.tooltip || link.target ) + ' — ' + T( 'calc.linkHint' );
-            else if( td.title ) td.title = '';
+
+            // The tooltip: a formula cell shows its answer, so hovering it shows
+            // the formula; a link adds where it goes. Set AND cleared, as above.
+            // `instance`, never `table`: while a new grid is being built, `table` is
+            // still the old, destroyed one, and reading it throws (New / open broke).
+            const src  = instance.getSourceDataAtCell( row, col );
+            const tips = [];
+            if( typeof src === 'string' && src.charAt( 0 ) === '=' ) tips.push( src );
+            if( link && link.target )     tips.push( ( link.tooltip || link.target ) + ' — ' + T( 'calc.linkHint' ) );
+            const tip = tips.join( '\n' );
+            if( td.title !== tip ) td.title = tip;
 
             // The cells a formula being typed points at (see POINTING below).
             const pb = pointedBounds();
@@ -2058,6 +2243,7 @@
         // mouseup is what clears its "button is down" flag, and left set, the
         // next plain mouse move drag-selects and closes the editor.
         document.addEventListener( 'mouseup', function() { pointDrag = false; } );
+        document.addEventListener( 'touchend', function() { pointDrag = false; } );
 
         // The open cell editor, when what it holds is a formula.
         function formulaEditor()
@@ -2125,12 +2311,15 @@
             if( document.activeElement !== ta ) ta.focus();
             ta.setSelectionRange( end, end );
 
+            // Live BEFORE the 'input' below: what that event runs (the formula
+            // editor asks canPoint) has to see the reference already there.
+            point = { from: from, to: end, value: ta.value, anchor: anchor, head: head, bounds: k };
+
             // The editor grows to fit, exactly as when the text is typed.
             pointWriting = true;
             ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
             pointWriting = false;
 
-            point = { from: from, to: end, value: ta.value, anchor: anchor, head: head, bounds: k };
             table.render();                                  // styledRenderer outlines the cells
         }
 
@@ -2165,6 +2354,20 @@
             ta.dataset.pointWired = '1';
             for( const type of [ 'input', 'keyup', 'mouseup' ] )
                 ta.addEventListener( type, function() { if( point && ! pointWriting && ! livePoint( ta ) ) clearPoint(); } );
+
+            // The formula bar follows the editor keystroke by keystroke (see THE
+            // FORMULA BAR above). The synthetic 'input' a pointed reference fires
+            // counts as one: the formula did change.
+            ta.addEventListener( 'input', mirrorEditorToBar );
+
+            // So does the formula editor (see FORMULA EDITOR below): what is
+            // typed, where the caret goes, and the editor closing - its holder
+            // swaps ht_editor_visible for ht_editor_hidden, whatever closed it.
+            // Typing turns Range off; a reference pointed in (pointWriting) does not.
+            for( const type of [ 'input', 'keyup', 'mouseup' ] )
+                ta.addEventListener( type, function() { if( type === 'input' && ! pointWriting ) rangeArmed = 0; syncFormulaPanel(); } );
+            if( ed.TEXTAREA_PARENT )
+                new MutationObserver( syncFormulaPanel ).observe( ed.TEXTAREA_PARENT, { attributes: true, attributeFilter: [ 'class' ] } );
         }
 
         function pointMouseDown( e, coords )
@@ -2180,8 +2383,9 @@
 
             const at   = { r: coords.row, c: coords.col };
             const live = livePoint( ed.TEXTAREA );
-            const from = e.shiftKey && live && kindOf( live.anchor ) === kindOf( at ) ? live.anchor : at;
+            const from = ( e.shiftKey || rangeArmed === 2 ) && live && kindOf( live.anchor ) === kindOf( at ) ? live.anchor : at;
 
+            if( rangeArmed ) rangeArmed = rangeArmed === 1 ? 2 : 0;   // Range: this tap was the first cell, or the last
             putPoint( ed, from, at );
             pointDrag = true;
         }
@@ -2213,6 +2417,7 @@
             if( e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab' )
             {
                 if( point ) setTimeout( clearPoint, 0 );       // once the editor has closed
+                setTimeout( refreshFormulaBar, 0 );            // Escape leaves the mirror showing text the cell never took
                 return;
             }
 
@@ -2235,6 +2440,378 @@
 
             putPoint( ed, anch, head );
             table.scrollViewportTo( { row: head.r, col: head.c } );
+        }
+
+        //------------------------------------------------------------------------//
+        // FORMULA EDITOR
+        //
+        // A panel over the top-right corner of the cells while a cell's "=…" is
+        // typed: the result so far (or what is wrong, in words), the functions,
+        // the operator keys a tablet keyboard hides, a Range button and ✓ / ✗.
+        // The chevron in its title folds it down to that row, and it stays folded.
+        //
+        // It has NO text field of its own. The typing stays in the cell, and every
+        // button writes into the cell editor's textarea (putText), so there is one
+        // formula, never two copies to keep in step. Searching a function is
+        // typing its name in the cell: "=SU" lists SUM and SUMIF.
+        //
+        // What keeps the cell editor open, with its caret where it was:
+        //   - a press on the panel goes no further. Handsontable's document handler
+        //     takes any mousedown outside the grid as "done" and closes the editor
+        //     (outsideClickDeselects is false -> destroyEditor), and its document
+        //     click stops the grid listening to the keyboard;
+        //   - the mousedown's default is prevented, so the textarea keeps the
+        //     focus - and a tablet keeps its keyboard up;
+        //   - it lives outside #gridHost, which initGrid empties on every open.
+        //
+        // Range is Shift for a finger: on a tablet a drag scrolls the sheet, so
+        // with Range on the next two taps make A1:C4 (pointMouseDown reads it).
+        // Hidden on a phone, where the keyboard leaves no room for it.
+
+        const FE_FOLD_KEY = 'nayive-calc-fe-folded';
+        const FE_QUICK    = [ 'SUM', 'AVERAGE', 'COUNT', 'MAX', 'MIN', 'IF' ];
+        const FE_ERRORS   = [ 'DIV_BY_ZERO', 'NAME', 'VALUE', 'NUM', 'NA', 'REF', 'CYCLE' ];
+
+        // [ what the key shows, what it types ]. '' types the engine's argument separator.
+        const FE_KEYS =
+        [
+            [ '+', '+' ], [ '−', '-' ], [ '×', '*' ], [ '÷', '/' ], [ '^', '^' ], [ '%', '%' ], [ '&', '&' ], [ '=', '=' ],
+            [ '(', '(' ], [ ')', ')' ], [ ':', ':' ], [ ',', ''  ], [ '<', '<' ], [ '>', '>' ], [ '<>', '<>' ], [ '"', '"' ]
+        ];
+
+        let rangeArmed = 0;       // Range: 0 off, 1 waiting for the first cell, 2 for the last
+        let feAll      = false;   // "All functions" is unfolded
+        let feTimer    = null;    // the result waits for a pause in the typing
+        let feListKey  = null;    // what the function list shows, so a keystroke does not rebuild it
+
+        function fePanel() { return document.getElementById( 'fePanel' ); }
+
+        function hideFormulaPanel()
+        {
+            const panel = fePanel();
+            if( ! panel || ! panel.classList.contains( 'open' ) ) return;
+
+            panel.classList.remove( 'open' );
+            clearTimeout( feTimer );
+            rangeArmed = 0;
+            feAll      = false;
+        }
+
+        // Open while the cell editor holds a formula, closed the moment it does
+        // not. Runs on every keystroke, caret move and editor close.
+        function syncFormulaPanel()
+        {
+            const ed = PHONE.matches ? null : formulaEditor();
+            if( ! ed ) { hideFormulaPanel(); return; }
+
+            const panel = fePanel();
+            if( ! panel.classList.contains( 'open' ) )
+            {
+                panel.classList.add( 'open' );
+                placeFormulaPanel();
+            }
+            refreshFormulaPanel( ed );
+        }
+
+        // Top-right of the CELLS: under the column letters, clear of the vertical
+        // scrollbar. Again whenever the grid changes size (the toolbar folding,
+        // the menus chrome, the window).
+        function placeFormulaPanel()
+        {
+            const panel = fePanel();
+            const host  = document.getElementById( 'gridHost' );
+            if( ! panel || ! host || ! panel.classList.contains( 'open' ) ) return;
+
+            const box    = host.getBoundingClientRect();
+            const head   = host.querySelector( '.ht_clone_top thead' );
+            const holder = host.querySelector( '.ht_master .wtHolder' );
+            const top    = box.top + ( head ? head.offsetHeight : 0 ) + 8;
+            const bar    = holder ? holder.offsetWidth - holder.clientWidth : 0;
+
+            panel.style.top       = Math.round( top ) + 'px';
+            panel.style.right     = Math.round( window.innerWidth - box.right + bar + 8 ) + 'px';
+            panel.style.maxHeight = Math.max( 120, Math.round( box.bottom - top - 8 ) ) + 'px';
+        }
+
+        // Type `text` at the cell editor's caret, over whatever is selected in
+        // it - exactly as if it had been typed there.
+        function putText( ed, text )
+        {
+            const ta   = ed.TEXTAREA;
+            const from = ta.selectionStart;
+            const to   = ta.selectionEnd;
+
+            ta.value = ta.value.slice( 0, from ) + text + ta.value.slice( to );
+
+            const end = from + text.length;
+            if( document.activeElement !== ta ) ta.focus();
+            ta.setSelectionRange( end, end );
+
+            clearPoint();                     // the next tap adds a reference, it replaces none
+            ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+        }
+
+        function argSeparator()
+        {
+            const hf = formulaEngine();
+            return ( hf && hf.getConfig().functionArgSeparator ) || ',';
+        }
+
+        // The function name being typed right before the caret ("=SU" -> "SU"):
+        // letters only, straight after "=", a bracket, a separator or an operator.
+        function feWord( ta )
+        {
+            const m = /(?:^=|[=(,;:+\-*\/^&<>\s])([A-Za-z]+)$/.exec( ta.value.slice( 0, ta.selectionStart ) );
+            return m ? m[ 1 ].toUpperCase() : null;
+        }
+
+        // The function whose brackets the caret is in: "=ROUND(SUM(A1:A3" -> SUM.
+        function feOpenFunction( ta )
+        {
+            const text  = ta.value.slice( 0, ta.selectionStart );
+            const stack = [];
+            let   quote = false;
+
+            for( let i = 0; i < text.length; i++ )
+            {
+                const ch = text.charAt( i );
+                if( ch === '"' ) quote = ! quote;
+                if( quote ) continue;
+
+                if( ch === '(' )
+                {
+                    const m = /([A-Za-z][A-Za-z0-9.]*)$/.exec( text.slice( 0, i ) );
+                    stack.push( m ? m[ 1 ].toUpperCase() : '' );
+                }
+                if( ch === ')' ) stack.pop();
+            }
+
+            return stack.length ? stack[ stack.length - 1 ] : null;
+        }
+
+        // "SUM(" at the caret - in place of the part of its name already typed.
+        function feInsertFunction( ed, name )
+        {
+            const ta   = ed.TEXTAREA;
+            const word = feWord( ta );
+
+            if( word && name.indexOf( word ) === 0 )
+                ta.setSelectionRange( ta.selectionStart - word.length, ta.selectionEnd );
+
+            putText( ed, name + '(' );
+        }
+
+        // Range on: a reference just put in becomes its first cell, so the next
+        // tap is the last; with none, the next two taps are both.
+        function toggleRange( ed )
+        {
+            const live = livePoint( ed.TEXTAREA );
+
+            rangeArmed = rangeArmed ? 0 : ( live && kindOf( live.anchor ) === 'cell' ? 2 : 1 );
+            refreshFormulaPanel( ed );
+        }
+
+        function setFolded( folded, keep )
+        {
+            fePanel().classList.toggle( 'is-folded', folded );
+            document.getElementById( 'feFoldBtn' ).setAttribute( 'aria-expanded', folded ? 'false' : 'true' );
+
+            if( keep ) try { localStorage.setItem( FE_FOLD_KEY, folded ? '1' : '' ); } catch( _ ) {}
+        }
+
+        function refreshFormulaPanel( ed )
+        {
+            const ta  = ed.TEXTAREA;
+            const can = canPoint( ta );
+
+            // Range only while a tap on the sheet can put a reference in.
+            if( ! can ) rangeArmed = 0;
+
+            const range = document.getElementById( 'feRangeBtn' );
+            range.disabled = ! can;
+            range.classList.toggle( 'is-active', !! rangeArmed );
+            range.setAttribute( 'aria-pressed', rangeArmed ? 'true' : 'false' );
+
+            // The function the caret is inside, and what it does.
+            const open = feOpenFunction( ta );
+            const fn   = open && FUNCTIONS.find( function( f ) { return f.name === open; } );
+            const help = document.getElementById( 'feFnHelp' );
+
+            help.hidden = ! fn;
+            if( fn )
+            {
+                const b = document.createElement( 'b' );
+                b.textContent = fn.name;
+                help.replaceChildren( b, ' — ' + fn.desc );
+            }
+
+            // The list: what the name typed so far can become, or all of them.
+            const word = feWord( ta );
+            const rows = word ? FUNCTIONS.filter( function( f ) { return f.name.indexOf( word ) === 0; } )
+                              : ( feAll ? FUNCTIONS : [] );
+            const key  = rows.map( function( f ) { return f.name; } ).join( ',' );
+            const list = document.getElementById( 'feList' );
+
+            if( key !== feListKey ) { feListKey = key; list.innerHTML = fxRowsHtml( rows ); list.scrollTop = 0; }
+            list.hidden = ! rows.length;
+
+            const all = document.getElementById( 'feAllBtn' );
+            all.classList.toggle( 'is-active', feAll );
+            all.setAttribute( 'aria-expanded', feAll ? 'true' : 'false' );
+
+            clearTimeout( feTimer );
+            feTimer = setTimeout( function() { showFormulaResult( ed ); }, 80 );
+        }
+
+        // The formula's answer as it stands, from the grid's own engine. Nothing
+        // is written: the cell only takes it on ✓ or Enter.
+        function showFormulaResult( ed )
+        {
+            const box = document.getElementById( 'feResult' );
+            if( ! box || ! ed.isOpened() ) return;
+
+            const text = ed.TEXTAREA.value;
+            const hf   = formulaEngine();
+            let   main = '', hint = '', bad = false;
+
+            // Range's two steps take the box over while it is on.
+            if( rangeArmed )                         hint = T( rangeArmed === 1 ? 'calc.fe.rangeFirst' : 'calc.fe.rangeLast' );
+            else if( ! hf || /^=\s*$/.test( text ) ) hint = T( 'calc.fe.start' );
+            else
+            {
+                let v;
+                try
+                {
+                    const id = hf.getSheetId( activeSheet.name || 'Hoja1' );
+                    v = hf.calculateFormula( text, id === undefined ? 0 : id );
+                }
+                catch( _ ) { v = undefined; }           // not a formula yet: "=SUM(" or "=A1+"
+
+                if( Array.isArray( v ) ) v = ( v[ 0 ] && v[ 0 ].length ) ? v[ 0 ][ 0 ] : null;
+
+                if( v === undefined ) hint = T( 'calc.fe.incomplete' );
+                else if( v && typeof v === 'object' && 'type' in v )
+                {
+                    // A name half typed is not a mistake yet: the list shows what it can become.
+                    if( v.type === 'NAME' && ! document.getElementById( 'feList' ).hidden && feWord( ed.TEXTAREA ) )
+                        hint = T( 'calc.fe.incomplete' );
+                    else
+                    {
+                        bad  = true;
+                        main = ( v.value || '#ERROR!' ) + ' ' + T( 'calc.fe.err.' + ( FE_ERRORS.indexOf( v.type ) !== -1 ? v.type : 'other' ) );
+                    }
+                }
+                else main = '= ' + feShow( v, ed );
+            }
+
+            box.classList.toggle( 'is-error', bad );
+            box.dataset.placeholder = hint;
+            box.textContent         = main;
+        }
+
+        // A value the way the cell will show it: its number format if it has one.
+        function feShow( v, ed )
+        {
+            if( v === null || v === '' ) return '';
+            if( typeof v === 'boolean' ) return v ? 'TRUE' : 'FALSE';
+
+            if( typeof v === 'number' )
+            {
+                const style = activeSheet.cellStyles[ encodeCell( { r: ed.row, c: ed.col } ) ];
+                if( style && style.numFmt ) try { return formatNumber( style.numFmt, v ); } catch( _ ) {}
+                return v.toLocaleString( NayiveI18n.locale(), { maximumFractionDigits: 10 } );
+            }
+
+            return '"' + v + '"';
+        }
+
+        // ✓ is Enter (writes, moves down), ✗ is Escape (the cell keeps what it had).
+        function feFinish( ed, cancel )
+        {
+            const r = ed.row, c = ed.col;
+
+            ed.finishEditing( cancel );
+            clearPoint();
+            hideFormulaPanel();
+
+            setTimeout( function()
+            {
+                if( ! cancel && ! ed.isOpened() ) table.selectCell( Math.min( r + 1, table.countRows() - 1 ), c );
+                refreshFormulaBar();
+                table.listen();
+            }, 0 );
+        }
+
+        function wireFormulaPanel()
+        {
+            const panel = fePanel();
+
+            // The quick functions go before "All functions"; the keys in two rows of eight.
+            const all = document.getElementById( 'feAllBtn' );
+            for( const name of FE_QUICK )
+            {
+                const b = document.createElement( 'button' );
+                b.type        = 'button';
+                b.className   = 'pill';
+                b.dataset.fn  = name;
+                b.textContent = name;
+                all.parentNode.insertBefore( b, all );
+            }
+
+            const keys = document.getElementById( 'feKeys' );
+            for( const row of [ FE_KEYS.slice( 0, 8 ), FE_KEYS.slice( 8 ) ] )
+            {
+                const line = document.createElement( 'div' );
+                line.className = 'popup-row';
+                for( const k of row )
+                {
+                    const b = document.createElement( 'button' );
+                    b.type        = 'button';
+                    b.className   = 'pop-btn fe-key';
+                    b.dataset.ins = k[ 1 ];
+                    b.textContent = k[ 0 ];
+                    line.appendChild( b );
+                }
+                keys.appendChild( line );
+            }
+
+            let folded = false;
+            try { folded = localStorage.getItem( FE_FOLD_KEY ) === '1'; } catch( _ ) {}
+            setFolded( folded, false );
+
+            // Nothing pressed on the panel may reach Handsontable's document
+            // handlers (they would close the cell editor), and no press may take
+            // the focus out of the cell's textarea.
+            for( const type of [ 'mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup', 'touchstart', 'touchend' ] )
+                panel.addEventListener( type, function( e ) { e.stopPropagation(); } );
+            panel.addEventListener( 'mousedown', function( e ) { e.preventDefault(); } );
+
+            panel.addEventListener( 'click', function( e )
+            {
+                if( e.target.closest( '#feHead' ) )
+                {
+                    setFolded( ! panel.classList.contains( 'is-folded' ), true );
+                    placeFormulaPanel();
+                    return;
+                }
+
+                const ed = formulaEditor();
+                if( ! ed ) return;
+
+                const key = e.target.closest( '[data-ins]' );
+                const fn  = e.target.closest( '[data-fn]' );
+
+                if( key )                                     putText( ed, key.dataset.ins || argSeparator() );
+                else if( fn )                                 feInsertFunction( ed, fn.dataset.fn );
+                else if( e.target.closest( '#feRangeBtn' ) )  toggleRange( ed );
+                else if( e.target.closest( '#feAllBtn' ) )    { feAll = ! feAll; refreshFormulaPanel( ed ); }
+                else if( e.target.closest( '#feOkBtn' ) )     feFinish( ed, false );
+                else if( e.target.closest( '#feCancelBtn' ) ) feFinish( ed, true );
+            } );
+
+            window.addEventListener( 'resize', placeFormulaPanel );
+            if( window.ResizeObserver ) new ResizeObserver( placeFormulaPanel ).observe( document.getElementById( 'gridHost' ) );
+            PHONE.addEventListener( 'change', syncFormulaPanel );
         }
 
         //------------------------------------------------------------------------//
@@ -2690,8 +3267,14 @@
             const rows = FUNCTIONS.filter( function( f ) { return ! q || f.name.indexOf( q ) !== -1; } );
 
             list.innerHTML = rows.length
-                ? rows.map( function( f ) { return '<button type="button" class="fx-item" data-fn="' + f.name + '"><b>' + f.name + '</b><span>' + f.desc + '</span></button>'; } ).join( '' )
+                ? fxRowsHtml( rows )
                 : '<div class="fx-empty" data-i18n="calc.noFxMatch"></div>';
+        }
+
+        // One row per function, name and what it does. The formula editor's list too.
+        function fxRowsHtml( rows )
+        {
+            return rows.map( function( f ) { return '<button type="button" class="fx-item" data-fn="' + f.name + '"><b>' + f.name + '</b><span>' + f.desc + '</span></button>'; } ).join( '' );
         }
 
         // Wraps the current selection as the function's argument when it spans more than
@@ -2747,46 +3330,16 @@
             return true;
         }
 
+        // Every edit lands here. Someone else's sheet, an untitled one (the
+        // device draft) and the loss gate are the session's business.
         function scheduleAutosave()
         {
             if( gridBooting ) return;     // drawing a file is not editing it — see initGrid
-            if( readOnly ) return;        // someone else's sheet - never write over it
-            if( ! currentPath ) return;   // untitled sheets must be named via "Guardar como" first
-            if( lossyBlocked() ) return;  // the dialog decides; no timer is armed meanwhile
-
-            clearTimeout( autosaveTimer );
-            autosaveTimer = setTimeout( function() { autosaveTimer = null; writeCurrent( currentPath ); }, AUTOSAVE_DELAY_MS );
-        }
-
-        // Flushes an unsaved edit immediately — used when the tab is closed/hidden,
-        // since the debounced autosave timer above would otherwise be lost with it.
-        function flushPendingSave()
-        {
-            if( ! autosaveTimer || ! currentPath ) return Promise.resolve();
-
-            clearTimeout( autosaveTimer );
-            autosaveTimer = null;
-            return writeCurrent( currentPath );
+            session.edited();
         }
 
         // Ctrl-S: save now. A shared (read-only) or untitled sheet goes to "Guardar como".
-        function saveNow()
-        {
-            if( readOnly )
-            {
-                NayiveUI.toast( T( 'text.notYours' ) );
-                openSaveAs();
-                return;
-            }
-            if( ! currentPath ) { openSaveAs(); return; }
-
-            clearTimeout( autosaveTimer );
-            autosaveTimer = null;
-            writeCurrent( currentPath );
-        }
-
-        document.addEventListener( 'visibilitychange', function() { if( document.visibilityState === 'hidden' ) flushPendingSave(); } );
-        window.addEventListener( 'pagehide', flushPendingSave );
+        function saveNow() { session.saveNow(); }
 
         // Re-skin the grid live when the shared colour scheme is toggled (from Drive / the launcher).
         window.addEventListener( 'balata:themechange', function()
@@ -2810,12 +3363,12 @@
         {
             if( OPEN_EXTS.indexOf( O.extOf( path ) ) !== -1 )
             {
-                await openDocument( path );
+                await session.open( path );
                 return;
             }
 
             const nativePath = await convertForOpen( path );
-            if( nativePath ) await openDocument( nativePath );
+            if( nativePath ) await session.open( nativePath );
         }
 
         // Convert a non-native spreadsheet (LibreOffice Calc .ods, legacy .xls,
@@ -2826,107 +3379,6 @@
         {
             NayiveUI.toast( T( 'write.formatUnsupported' ) + '.' );
             return null;
-        }
-
-        //------------------------------------------------------------------------//
-        // DOCUMENT ACTIONS
-
-        async function openDocument( path )
-        {
-            await flushPendingSave();   // don't lose a debounced autosave for the sheet we're leaving
-
-            const res = await O.readViaStore( store, path );   // the store drives the sync dot; toasts on trouble
-            if( res.body === null ) return;
-
-            let d;
-
-            try { d = await decodeToDoc( res.body, O.extOf( path ) ); }
-            catch( _ )
-            {
-                setSyncStatus( 'error' );
-                NayiveUI.toast( T( 'ui.openFailed' ) );
-                return;
-            }
-
-            currentPath = path;
-            readOnly    = NayiveUI.isShared( path );
-            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) + ( readOnly ? T( 'text.readOnlySuffix' ) : '' ) );
-            initGrid( d );
-        }
-
-        function openSaveAs()
-        {
-            const name = currentPath ? O.baseName( currentPath ) : ( pendingName || 'hoja.xlsx' );
-            const ext  = O.extOf( name );
-
-            document.getElementById( 'saveName'   ).value = name;
-            document.getElementById( 'saveFormat' ).value = OPEN_EXTS.indexOf( ext ) !== -1 ? ext : 'xlsx';
-
-            // Someone else's sheet: our copy goes to a folder of ours, never back
-            // to the folder of theirs it was read from.
-            dirField.set( ( ! readOnly && currentPath && O.dirName( currentPath ) ) || APP_DIR );
-
-            NayiveUI.open( 'saveAsBackdrop' );
-            document.getElementById( 'saveName' ).focus();
-            document.getElementById( 'saveName' ).select();
-        }
-
-        async function confirmSaveAs()
-        {
-            let   name = O.safeName( document.getElementById( 'saveName' ).value );
-            const fmt  = document.getElementById( 'saveFormat' ).value;
-
-            if( ! name ) return;
-
-            if( ! new RegExp( '\\.' + fmt + '$', 'i' ).test( name ) )
-                name += '.' + fmt;
-
-            NayiveUI.close( 'saveAsBackdrop' );
-            await saveAs( dirField.get() + '/' + name );
-        }
-
-        // Write the grid to `path` and make that the open sheet.
-        async function saveAs( path )
-        {
-            await flushPendingSave();   // finish any autosave to the old name before we change identity
-
-            await writeCurrent( path );
-
-            currentPath = path;
-            readOnly    = false;
-            pendingName = null;
-            fileLabel.set( O.relLabel( path, APP_DIR, OPEN_ROOT ) );
-
-            // What we just wrote came out of Calc's own model, so it holds nothing
-            // the next save could destroy. The original keeps its charts.
-            doc.lossy    = [];
-            doc.lossyAck = false;
-        }
-
-        async function writeCurrent( path )
-        {
-            // The hard stop. Ctrl+S and the pagehide flush both reach here without
-            // going through scheduleAutosave. Writing somewhere NEW is always let
-            // through — that is exactly the "save a copy" way out of the dialog.
-            if( path === currentPath && lossyBlocked() ) return;
-
-            let bytes;
-
-            // Only the encoding can fail here - a bad grid, an unsupported
-            // format. The write itself cannot: store.write caches the bytes and
-            // queues the PUT before it even tries the network, then drives the
-            // sync dot through store.onState. A dead session or a lost
-            // connection leaves the write in the outbox, which is exactly what
-            // saves the user's work.
-            try { bytes = await encodeFromGrid( O.extOf( path ) ); }
-            catch( _ )
-            {
-                setSyncStatus( 'error' );
-                NayiveUI.toast( T( 'calc.saveFileFailed' ) );
-                return;
-            }
-
-            await store.write( path, bytes );
         }
 
         //------------------------------------------------------------------------//
@@ -2946,8 +3398,8 @@
         // round-trip like bold — the library's original xlsx.js/SheetJS lineage only
         // ever wrote <b/>, not <i/>/<u/>.
 
-        // What a save would destroy. Each entry is an i18n key; the gate in
-        // scheduleAutosave / writeCurrent turns them into one plain-language
+        // What a save would destroy. Each entry is an i18n key; the gate
+        // (lossyBlocked, the saver's `blocked`) turns them into one plain-language
         // dialog. Two sources: the parsed workbook, for the things the codec
         // does model, and the raw zip parts, for the things it silently drops.
         function detectLossy( wb )
@@ -3648,6 +4100,29 @@
             undo: MOD + 'Z', redo: MOD + 'Y', cut: MOD + 'X', copy: MOD + 'C', paste: MOD + 'V'
         };
 
+        // Help ▸ Keyboard shortcuts: the combos above, then the grid's own keys
+        // (Handsontable's). Only keys that really work in Calc go here.
+        function openShortcuts()
+        {
+            O.showShortcuts( [
+                [ 'write.sc.save',  SC.save      ],
+                [ 'ui.undo',        SC.undo      ],
+                [ 'ui.redo',        SC.redo      ],
+                [ 'ui.cut',         SC.cut       ],
+                [ 'ui.copy',        SC.copy      ],
+                [ 'ui.paste',       SC.paste     ],
+                [ 'calc.bold',      SC.bold      ],
+                [ 'calc.italic',    SC.italic    ],
+                [ 'calc.underline', SC.underline ],
+                [ 'calc.selectAll', MOD + 'A'    ],
+                [ 'calc.sc.edit',   'F2'                  ],
+                [ 'calc.sc.down',   T( 'ui.keyEnter' )    ],
+                [ 'calc.sc.right',  'Tab'                 ],
+                [ 'calc.sc.cancel', T( 'ui.keyEsc' )      ],
+                [ 'calc.sc.clear',  T( 'ui.keyDel' )      ]
+            ].map( function( r ) { return { text: T( r[ 0 ] ), keys: r[ 1 ] }; } ) );
+        }
+
         // The style of the cell the selection is anchored on - the same one the
         // toolbar reads to light its buttons up, so a tick and a lit button can
         // never disagree.
@@ -3788,6 +4263,22 @@
             plugin.focusEditor();
         }
 
+        // "Recientes": the same ten paths the Open dialog lists (shared/office.js
+        // keeps them), so the menu never drifts from it. An empty list still
+        // shows one (greyed) row - a menu that silently has no submenu is worse
+        // than one that says why.
+        function recentItems()
+        {
+            const list = session.recent();
+
+            if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
+
+            return list.map( function( p )
+            {
+                return { text: O.baseName( p ), run: function() { openPickedFile( p ); } };
+            } );
+        }
+
         //---- the table -----------------------------------------------------//
         //
         // The grouping is the one every spreadsheet has used since Excel 5:
@@ -3801,11 +4292,14 @@
             key: 'ui.menu.file',
             items:
             [
-                { key: 'ui.importDevice', el: 'importBtn' },
-                { key: 'ui.openDoc',      el: 'openBtn'   },
+                { key: 'write.newDoc',    el: 'newBtn'     },
+                { key: 'ui.openDoc',      el: 'openBtn'    },
+                { key: 'ui.recent',       sub: recentItems },
                 { sep: true },
                 { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
-                { key: 'ui.saveAs', el:  'saveAsBtn' }
+                { key: 'ui.saveAs', el:  'saveAsBtn' },
+                { key: 'ui.importDevice', el: 'importBtn'  },
+                { key: 'write.restore',   el: 'restoreBtn' }
             ]
         },
         {
@@ -3896,7 +4390,8 @@
             key: 'ui.menu.help',
             items:
             [
-                { key: 'ui.help', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
+                { key: 'write.shortcuts', el: 'scBtn' },
+                { key: 'ui.quickGuide', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
             ]
         }
         ];
@@ -3915,18 +4410,12 @@
             load  : async function() { return ( await readCalcCfg() ).chrome; },
             save  : function( mode ) { return writeCalcCfg( { chrome: mode } ); },
 
-            // What CSS cannot do: the toolbar's height changed, so the grid has
-            // to re-measure; the "?" has to move somewhere still visible; and the
-            // name box - the one control with no menu entry - moves into the bar.
+            // What CSS cannot do: the toolbar's height changed, so the grid has to
+            // re-measure, and the "?" has to move somewhere still visible. The name
+            // box needs nothing here any more — it rides in the formula row, which
+            // neither chrome touches.
             apply : function( on )
             {
-                const box = document.getElementById( 'nameBox' );
-                const bar = document.getElementById( 'menuBar' );
-                const tb  = document.getElementById( 'fmtToolbar' );
-
-                if( on ) bar.appendChild( box );
-                else     tb.insertBefore( box, tb.firstChild );
-
                 // A fold left over from the phone must not decide anything once
                 // the strip is back: an editor opened in menu mode folds a
                 // toolbar nobody could see, and it would come back blank.
@@ -3948,10 +4437,6 @@
 
         wireStaticUI();
 
-        // The store's state machine drives the sync dot for every read and
-        // write it does - subscribe before the first read.
-        store.onState( setSyncStatus );
-
         NayiveUI.bootWithStore( store, async function()
         {
             // The ACCOUNT's copy of "toolbar or menus" wins, so a browser that has
@@ -3960,13 +4445,8 @@
             // stands. Before the grid, so the switch - if any - is invisible.
             await CHROME.sync();
 
-            const params     = new URLSearchParams( window.location.search );
-            const openPath   = params.get( 'file' );
-            const importPath = params.get( 'import' );
-
-            if(      openPath   ) await openDocument( openPath );
-            else if( importPath ) await importServerFile( importPath );
-            else                  initGrid( null );
+            // ?file= / ?import= / the untitled sheet kept on this device - or a blank one.
+            await session.boot();
         } );
 
     </script>

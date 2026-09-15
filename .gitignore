@@ -1,16 +1,20 @@
-# What must never reach GitHub. Nayive keeps secrets and personal data inside
-# the run-root (client/), so most of this file is about that folder.
+# What must never reach GitHub. Nayive keeps secrets and personal data in the
+# run-root (store/), so most of this file is about that folder.
 
-# Live server settings and secrets - only the example is versioned.
-#   server.json  admin name + password     vapid.json  Web Push private key
-#   shares.json  live public-share links   *.pem       TLS material
-client/config/*
-!client/config/server.example.json
+# EVERYTHING in store/ is private - only the example config is versioned:
+#   config/  server.json (admin name + password), vapid.json (Web Push private
+#            key), shares.json (live public-share links), *.pem (TLS)
+#   homes/   every user's data and documents (config.json holds their password)
+#   data/ .thumbs/ .trash/   runtime state written by the server
+/store/*
+!/store/config/
+/store/config/*
+!/store/config/server.example.json
 
-# Every user's data and documents (config.json there holds their password).
+# The old run-root, before store/ (2026-09-15). Kept so a stray run with the old
+# -config path can never get its secrets committed.
+client/config/
 client/homes/
-
-# Runtime state written by the server.
 client/data/
 client/.thumbs/
 client/.trash/

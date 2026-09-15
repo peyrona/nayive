@@ -47,6 +47,11 @@ var publicStatic = map[string]bool{
 	"shared/i18n/de.json": true,
 	"shared/i18n/it.json": true,
 	"shared/i18n/la.json": true,
+	// A public trip link (/s/<token>, api_public.go): the page and its map. No
+	// trip data lives in them - that comes from /api/public, token-checked.
+	// The vendored map libraries under trips/lib/ are public too (isPublicStatic).
+	"trips/public.html": true,
+	"shared/basemap.js": true,
 }
 
 // publicStaticNames are served without a session wherever they sit under apps/,
@@ -90,6 +95,17 @@ func NewStaticFiles(dir string, log Logger) (*StaticFiles, error) {
 }
 
 func (f *StaticFiles) Close() error { return f.root.Close() }
+
+// read is one whole static file, for an answer serve() cannot give (a page
+// sent with a status other than 200).
+func (f *StaticFiles) read(rel string) ([]byte, error) {
+	file, err := f.root.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(file)
+}
 
 // serveStatic answers everything under /nayive/.
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +174,9 @@ func isPublicStatic(parts []string) bool {
 	}
 	if publicStaticNames[parts[len(parts)-1]] {
 		return true
+	}
+	if len(parts) > 2 && parts[0] == "trips" && parts[1] == "lib" {
+		return true // Leaflet + MapLibre, for the public trip page
 	}
 	return parts[0] == "icons"
 }

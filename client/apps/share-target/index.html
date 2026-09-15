@@ -66,22 +66,12 @@
         .st-dest { display: flex; align-items: center; gap: 10px; }
         .st-dest .lbl { font-size: 0.8rem; color: var(--text-dim); flex: 0 0 auto; }
         .st-dest .val { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .st-dest button
-        {
-            flex: 0 0 auto; border: 1px solid var(--line); background: var(--card2); color: var(--text);
-            border-radius: var(--radius-m); padding: 6px 12px; font: inherit; cursor: pointer;
-        }
-        .st-dest button:hover { border-color: var(--accent); }
+        /* "Cambiar", "Cancelar" and "Subir" are the shared .text-btn (.ghost for
+           the first two); only their widths are local. */
+        .st-dest .text-btn { flex: 0 0 auto; }
 
         .st-actions { display: flex; gap: 10px; margin-top: 6px; }
-        .st-actions button
-        {
-            flex: 1 1 auto; border: none; border-radius: var(--radius-m); padding: 12px 14px;
-            font: inherit; font-weight: 600; cursor: pointer;
-        }
-        .st-actions .go     { background: var(--accent); color: var(--on-accent); }
-        .st-actions .cancel { background: var(--card2); color: var(--text); border: 1px solid var(--line); }
-        .st-actions button[disabled] { opacity: 0.55; cursor: default; }
+        .st-actions .text-btn { flex: 1 1 auto; }
 
         .st-bar { height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; margin-top: 14px; }
         .st-bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
@@ -110,13 +100,13 @@
             <div class="st-dest">
                 <span class="lbl" data-i18n="st.album"></span>
                 <span class="val" id="destVal">…</span>
-                <button type="button" id="changeDest" data-i18n="ui.change"></button>
+                <button type="button" class="text-btn ghost" id="changeDest" data-i18n="ui.change"></button>
             </div>
         </div>
 
         <div class="st-actions" id="actions" hidden>
-            <button type="button" class="cancel" id="cancelBtn" data-i18n="ui.cancel"></button>
-            <button type="button" class="go" id="goBtn" data-i18n="ui.upload"></button>
+            <button type="button" class="text-btn ghost" id="cancelBtn" data-i18n="ui.cancel"></button>
+            <button type="button" class="text-btn" id="goBtn" data-i18n="ui.upload"></button>
         </div>
 
         <div class="st-bar" id="bar" hidden><i id="barFill"></i></div>

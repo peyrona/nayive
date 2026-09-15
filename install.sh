@@ -2,16 +2,18 @@
 #
 # install.sh - finish setting up nayive after you unzip nayive.zip.
 #
-# nayive.zip ships this script next to  nayive  (the server: one static Linux
-# binary, nothing else to install) and  apps/ , so the whole install is:
+# nayive.zip ships this script next to  server/go/nayive  (the server: one
+# static Linux binary, nothing else to install) and  client/apps/ , so the
+# whole install is:
 #
 #     unzip nayive.zip -d nayive
 #     cd nayive
 #     ./install.sh
 #
-# It creates the two things the zip leaves out on purpose:
-#   config/server.json   server settings; admin name + password start as null
-#   homes/               one folder per user (the admin panel fills this)
+# store/ is the run-root: the server runs inside it and writes only there,
+# never into client/. It creates the two things the zip leaves out on purpose:
+#   store/config/server.json   server settings; admin name + password start as null
+#   store/homes/               one folder per user (the admin panel fills this)
 # and writes a  nayive.service  systemd unit so the server can run on boot.
 #
 # The admin account starts empty. On first run open
@@ -55,14 +57,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 # ---- sanity ---------------------------------------------------------------
-[[ -f nayive ]] || { echo "error: the nayive binary is not next to install.sh" >&2; exit 1; }
-[[ -d apps   ]] || { echo "error: apps/ not found next to install.sh"         >&2; exit 1; }
-chmod +x nayive
+BIN="server/go/nayive"             # the server binary
+APPS="client/apps"                 # what the browser loads
+RUN="store"                        # the run-root: config/, homes/
+[[ -f $BIN  ]] || { echo "error: $BIN not found next to install.sh"   >&2; exit 1; }
+[[ -d $APPS ]] || { echo "error: $APPS/ not found next to install.sh" >&2; exit 1; }
+chmod +x "$BIN"
 
-# ---- config/server.json + homes/ ----------------------------------------
-mkdir -p homes config
+# ---- store/config/server.json + store/homes/ --------------------------------
+mkdir -p "$RUN/homes" "$RUN/config"
 
-CFG="config/server.json"
+CFG="$RUN/config/server.json"
 PORT="${PORT:-4343}"
 if [[ -f "$CFG" ]]; then
     echo "keeping existing $CFG"
@@ -73,6 +78,7 @@ else
     "host": "0.0.0.0",
     "port": $PORT,
     "base_dir": ".",
+    "apps_dir": "../client/apps",
     "session_hours": 12,
     "log_level": "error",
     "tls": {
@@ -99,8 +105,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$RUN_USER
-WorkingDirectory=$ROOT
-ExecStart=$ROOT/nayive -config $ROOT/config/server.json
+WorkingDirectory=$ROOT/$RUN
+ExecStart=$ROOT/$BIN -config $ROOT/$CFG
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=on-failure
 RestartSec=3
@@ -129,7 +135,7 @@ cat <<EOF
 
 done.
 
-  run now:      cd "$ROOT" && ./nayive
+  run now:      "$ROOT/$BIN" -config "$ROOT/$CFG"
   admin panel:  http://localhost:$PORT/nayive/admin.html
                 First time: no user or password yet - type the admin user +
                 password there and press Guardar. No login is asked.
@@ -158,11 +164,11 @@ fi
 # ---- what just happened ----------------------------------------------------
 echo
 echo "----------------------------------------------------------------------"
-echo "What this script did (it did NOT touch apps/ or the nayive binary):"
-echo "  - config/server.json : server settings; admin name + password are null"
-echo "                         until you set them in the admin panel"
-echo "  - homes/             : one folder per user (the admin panel fills it)"
-echo "  - nayive.service     : systemd unit to run the nayive binary and keep it up"
+echo "What this script did (it did NOT touch client/apps/ or $BIN):"
+echo "  - $CFG : server settings; admin name + password are null"
+echo "                                until you set them in the admin panel"
+echo "  - $RUN/homes/             : one folder per user (the admin panel fills it)"
+echo "  - nayive.service            : systemd unit to run the nayive binary and keep it up"
 if [[ "$DO_SYSTEMD" == "1" ]]; then
     echo "  - installed that unit: nayive now starts on every boot"
 else

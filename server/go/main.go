@@ -125,7 +125,8 @@ func main() {
 
 	server, err := NewServer(cfg, log)
 	if err != nil {
-		fatal("start: %v (is %s a real directory?)", err, cfg.AppsDir)
+		fatal("start: %v (is %s a real directory? \"apps_dir\" in %s says where the apps are)",
+			err, cfg.AppsDir, cfg.Path)
 	}
 	defer server.Close()
 

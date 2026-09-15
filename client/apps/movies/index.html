@@ -180,19 +180,10 @@
     .movie-tag.seen{ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
     .movie-synopsis{ margin: 0 0 20px; font-size: 0.9rem; line-height: 1.55; color: var(--text); max-width: 60ch; white-space: pre-wrap; }
     .movie-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .btn-cta       { display: flex; align-items: center; gap: 8px; padding: 9px 18px; border: none; border-radius: var(--radius-pill);
-                     background: var(--accent); color: var(--on-accent); font: inherit; font-size: 0.86rem; font-weight: 600;
-                     cursor: pointer; transition: filter var(--tr-fast); }
-    .btn-cta:hover { filter: brightness(1.08); }
-    .btn-cta svg   { width: 16px; height: 16px; }
-    .btn-outline   { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1px solid var(--line);
-                     border-radius: var(--radius-pill); background: transparent; color: var(--text-dim);
-                     font: inherit; font-size: 0.86rem; cursor: pointer;
-                     transition: color var(--tr-fast), border-color var(--tr-fast), background-color var(--tr-fast); }
-    .btn-outline:hover     { color: var(--text); border-color: color-mix(in srgb, var(--text) 26%, transparent); }
-    .btn-outline.is-active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-                             background: color-mix(in srgb, var(--accent) 12%, transparent); }
-    .btn-outline svg { width: 16px; height: 16px; }
+    /* Play is the shared .text-btn, "mark watched" a .text-btn.ghost. Its on
+       state (the film is watched) has no shared form, so it is Movies' own. */
+    .movie-actions .text-btn.ghost.is-active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+                                               background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
     /* ---- video stage - covers the library while a film plays ---------- */
     .video-stage { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #0C0D10; }
@@ -204,9 +195,7 @@
     .stage-play  { width: 70px; height: 70px; border-radius: 50%; border: none; cursor: pointer; pointer-events: auto;
                    background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
     .stage-play svg { width: 30px; height: 30px; }
-    .stage-btn   { position: absolute; z-index: 2; width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
-                   background: color-mix(in srgb, #000 45%, transparent); color: #fff; display: flex; align-items: center; justify-content: center; }
-    .stage-btn svg { width: 18px; height: 18px; }
+    .stage-btn   { position: absolute; z-index: 2; }   /* look: the shared .editor-btn.over-media */
     .stage-collapse{ top: 14px; right: 14px; }
     .stage-full    { top: 14px; right: 60px; }
     .stage-badge   { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; align-items: center; gap: 7px;
@@ -315,10 +304,10 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 21h8M12 17v4"/></svg>
                         <span id="stagePath"></span>
                     </span>
-                    <button class="stage-btn stage-full" id="stageFullBtn" data-i18n-attr="title:movies.fullscreen, aria-label:movies.fullscreen">
+                    <button class="editor-btn over-media stage-btn stage-full" id="stageFullBtn" data-i18n-attr="title:movies.fullscreen, aria-label:movies.fullscreen">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                     </button>
-                    <button class="stage-btn stage-collapse" id="stageCollapseBtn" data-i18n-attr="title:movies.collapse, aria-label:movies.collapse">
+                    <button class="editor-btn over-media stage-btn stage-collapse" id="stageCollapseBtn" data-i18n-attr="title:movies.collapse, aria-label:movies.collapse">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                     </button>
                 </div>
@@ -934,8 +923,8 @@ function movieDetailHtml( mv )
                 '<div class="movie-tags">' + tags.join( "" ) + '</div>' +
                 ( mv.synopsis && typeof mv.synopsis === "string" ? '<p class="movie-synopsis">' + esc( mv.synopsis ) + '</p>' : '' ) +
                 '<div class="movie-actions">' +
-                    '<button class="btn-cta" data-play="' + esc( mv.path ) + '">' + PLAY_ICON + ' ' + playLabel + '</button>' +
-                    '<button class="btn-outline' + ( isWatched( mv ) ? ' is-active' : '' ) + '" data-watched="' + esc( mv.path ) + '">' +
+                    '<button class="text-btn" data-play="' + esc( mv.path ) + '">' + PLAY_ICON + ' ' + playLabel + '</button>' +
+                    '<button class="text-btn ghost' +( isWatched( mv ) ? ' is-active' : '' ) + '" data-watched="' + esc( mv.path ) + '">' +
                         CHECK_ICON + ' ' + esc( NayiveUI.t( isWatched( mv ) ? 'movies.watched' : 'movies.markWatched' ) ) + '</button>' +
                 '</div>' +
             '</div>' +

@@ -1264,8 +1264,10 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 			writable = true
 
 		case top == "apps":
+			// apps_dir can put the apps outside the base dir, so the path
+			// inside them is joined to AppsDir, never to BaseDir.
 			root = u.cfg.AppsDir
-			target = filepath.Join(append([]string{u.cfg.BaseDir}, parts...)...)
+			target = filepath.Join(append([]string{u.cfg.AppsDir}, parts[1:]...)...)
 			writable = false
 
 		case top == "shared":

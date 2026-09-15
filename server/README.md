@@ -5,29 +5,31 @@ Nothing in this folder is ever deployed or run from where it sits.
     server/
     └── go/       the server (Go; see docs/go-port.md)
 
-The distinction this folder exists to make:
+The distinction the top folders make:
 
 | | what it is | what lives in it |
 |---|---|---|
 | `server/` | **source** | code you edit |
-| `client/` | **the run-root** | exactly what runs, locally and on the VPS |
+| `client/` | **the apps** | `apps/`, what the browser loads - rsynced to the VPS |
+| `store/` | **the run-root** | everything the server writes: `config/`, `homes/`, and the admin's `data/`, `.trash/`, `.thumbs/` |
 
-`client/` is rsynced to the VPS as-is and the server runs *inside* it, so
-anything put there is deployed - and the admin's Drive is rooted there, so it
-also shows up as a folder in the Drive app. Source code belongs in neither.
+Code and data never share a folder: a deploy only ever writes `client/apps/`,
+and nothing the server writes lands there.
 
 The server derives its run-root from the path of `config/server.json`
 (`-config`, default `config/server.json`): the run-root is the folder above
-`config/`. So its source lives here and only the built binary ever goes near
-`client/`. (The Python server, which had to live inside `client/`, was
-removed on 2026-09-11.)
+`config/`. With `store/config/server.json` it runs *inside* `store/`, and the
+admin's Drive is rooted there. The apps are found through `"apps_dir"` in the
+same file (`"../client/apps"`; when it is unset, `apps/` inside the run-root).
+(The Python server, which had to live inside the run-root, was removed on
+2026-09-11.)
 
 ## Running it locally
 
 ```sh
 export PATH=$HOME/sdk/go1.27.1/bin:$PATH
 cd server/go
-go run . -config ../../client/config/server.json   # http://localhost:4343/nayive/
+go run . -config ../../store/config/server.json   # http://localhost:4343/nayive/
 ```
 
 ## Building the Go server

@@ -219,6 +219,8 @@
         .fc-timegrid-axis { color: var(--text-dim); }
         .alldaytz-label { font-size: 0.82rem; color: var(--text-dim); }
         .corner-tz-badge { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.02em; }
+        /* FullCalendar gives every th `vertical-align: top`, which pinned the badge above the day names' centre line. */
+        .fc-scrollgrid-section-header .fc-timegrid-axis { vertical-align: middle; }
         .fc-scrollgrid-section-header .fc-timegrid-axis-frame { display: flex; align-items: center; justify-content: center; }
         .fc-daygrid-day-number { color: var(--text); font-size: 0.86rem; padding: 6px; }
         .fc-day-today { background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }

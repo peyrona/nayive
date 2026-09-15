@@ -1,0 +1,867 @@
+<!-- asteroids.html - Asteroids, one of the six games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the six games
+     share through window.NayiveGames. -->
+    <style>
+        /* ---- Asteroids -----------------------------------------------------
+           The first game with no DOM in it: one <canvas>, one loop, and every
+           rock, bullet and ship is a line drawn on it. The pane is still
+           Minesweeper's shape - the shared .view-bar across the top, the play
+           area under it - plus the row of keys that is the only way to fly on a
+           phone.
+
+           The LEFT slot of the bar, where Mines and Sudoku put their .tb-modes,
+           holds the ships still to lose: Asteroids has no difficulty to switch,
+           and lives are the one figure that reads better as a picture than as a
+           number. Score and record stay in the centred .game-stats, where the
+           other two games keep their pair. */
+        .asteroids       { height: 100%; display: flex; flex-direction: column; }
+
+        .ast-lives       { display: flex; align-items: center; gap: 3px; flex: 0 0 auto;
+                           min-width: 30px; color: var(--text); }
+        .ast-lives svg   { width: 15px; height: 15px; }
+        .ast-lives b     { font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        /* The BOX is what has a size; the canvas only ever follows it (see
+           fit()). Sizing the canvas from the viewport instead would need the
+           header, the bar, the keys and the hint all measured in CSS, and every
+           one of them would have to be measured again on a phone. */
+        .ast-area        { flex: 1 1 auto; min-height: 0; position: relative;
+                           margin: var(--space-3) var(--space-4) 0;
+                           border: 1px solid var(--line); border-radius: var(--radius-m);
+                           background: var(--card2); overflow: hidden; }
+        /* The frame is on the BOX and not on the canvas: a border on the canvas
+           is inside the width the canvas is measured at, so the bitmap would be
+           two pixels wider than the surface it is stretched over and every line
+           in the game would be drawn a little blurred. */
+        /* The canvas is a real tab stop, the way Space Invaders' is and for the
+           same reason: after a click on "new game" or on the overlay's own
+           button the focus sits on that button, and the next space bar would
+           press it again instead of firing - so everything that starts or
+           resumes a game ends with canvasEl.focus(). */
+        .ast-canvas      { display: block; width: 100%; height: 100%; touch-action: none; }
+        .ast-canvas:focus         { outline: none; }
+        .ast-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+
+        /* The keys are on screen ALWAYS, the way Sudoku's number pad is, and
+           for a reason of its own: a phone has no arrow keys at all, so without
+           them the game simply cannot be played on one - and `pointer: coarse`
+           is not a test worth trusting here, because it answers wrongly on
+           every touch laptop. They are held down, not tapped, which is why they
+           carry .is-down and their own touch-action.
+
+           They are NOT in the tab order (tabindex="-1" in the markup): they say
+           the same thing as the four keys they stand for, and four more tab
+           stops between the toolbar and the hint buy nothing. */
+        .ast-pad          { display: flex; justify-content: center; gap: var(--space-2);
+                            padding: var(--space-3) var(--space-4) 0; }
+        .ast-key          { flex: 0 1 88px; height: 46px;
+                            display: inline-flex; align-items: center; justify-content: center;
+                            border: 1px solid var(--line); border-radius: var(--radius-m);
+                            background: var(--card2); color: var(--text); cursor: pointer;
+                            touch-action: none; -webkit-user-select: none; user-select: none; }
+        .ast-key svg      { width: 21px; height: 21px; pointer-events: none; }
+        .ast-key.fire     { flex-basis: 110px; color: var(--accent); }
+        .ast-key:hover    { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
+        .ast-key.is-down  { background: color-mix( in srgb, var(--accent) 24%, var(--card2) );
+                            border-color: color-mix( in srgb, var(--accent) 60%, transparent ); }
+        .ast-key:focus    { outline: none; }
+
+        .ast-hint         { margin: var(--space-2) 0 0; padding: 0 var(--space-4) var(--space-3);
+                            text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+
+        /* PHONE: the keys take the whole width and grow, because a finger is
+           what presses them there; and the hint goes, because half of it is
+           about a keyboard the phone does not have and the four keys under it
+           say the other half themselves. */
+        @media (max-width: 640px)
+        {
+            .ast-area { margin: var(--space-2) var(--space-2) 0; }
+            .ast-pad  { padding: var(--space-2) var(--space-2) 0; gap: 6px; }
+            .ast-key      { flex: 1 1 0; height: 54px; }
+            .ast-key.fire { flex-basis: 0; flex-grow: 1.4; }
+            .ast-hint { display: none; }
+        }
+    </style>
+
+            <!-- Asteroids. Nothing in here is the game: it is one <canvas> that
+                 the loop draws on, and the frame around it - the shared
+                 .view-bar (the ships left, the two figures centred, pause and
+                 "new game" right), the play area, and the four keys that are
+                 the only way to fly on a phone. The keys are held down rather than tapped,
+                 and are out of the tab order: they stand for the four keyboard
+                 keys, and each one's tooltip names the key it stands for. -->
+            <section class="game-pane" data-pane="asteroids">
+                <div class="asteroids">
+                    <div class="view-bar" data-options="asteroids">
+                        <div class="ast-lives" id="astLives" data-i18n-attr="title:games.asteroidsLives, aria-label:games.asteroidsLives"></div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.score">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3.2 14.6 9.1 21 9.8 16.2 14.1 17.6 20.4 12 17.2 6.4 20.4 7.8 14.1 3 9.8 9.4 9.1"></polygon></svg>
+                                <b id="astScore">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.best">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0z"></path><path d="M8 4.5H5.5V7a3 3 0 0 0 3 3"></path><path d="M16 4.5h2.5V7a3 3 0 0 1-3 3"></path><line x1="12" y1="12" x2="12" y2="17"></line><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line><path d="M9.5 20.5c0-2 1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"></path></svg>
+                                <b id="astBest">0</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="astPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="astNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ast-area">
+                        <canvas class="ast-canvas" id="astCanvas" tabindex="0" data-i18n-attr="aria-label:games.asteroids"></canvas>
+                        <div class="game-cover tappable ast-over" id="astOver" hidden>
+                            <p class="game-cover-t" id="astOverTitle"></p>
+                            <p class="game-cover-s" id="astOverSub"></p>
+                            <button class="text-btn" id="astOverBtn" type="button"></button>
+                        </div>
+                    </div>
+
+                    <div class="ast-pad">
+                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="left" data-i18n-attr="title:games.asteroidsLeft, aria-label:games.asteroidsLeft">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                        </button>
+                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="thrust" data-i18n-attr="title:games.asteroidsThrust, aria-label:games.asteroidsThrust">
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2.8 19.2 21 12 16.9 4.8 21"></polygon></svg>
+                        </button>
+                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="right" data-i18n-attr="title:games.asteroidsRight, aria-label:games.asteroidsRight">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        </button>
+                        <button class="ast-key fire" type="button" tabindex="-1" data-ast-key="fire" data-i18n-attr="title:games.asteroidsFire, aria-label:games.asteroidsFire">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"></circle><line x1="12" y1="2.6" x2="12" y2="6.2"></line><line x1="12" y1="17.8" x2="12" y2="21.4"></line><line x1="2.6" y1="12" x2="6.2" y2="12"></line><line x1="17.8" y1="12" x2="21.4" y2="12"></line></svg>
+                        </button>
+                    </div>
+
+                    <p class="ast-hint" data-i18n="games.hintAsteroids"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // in every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime;
+
+        //------------------------------------------------------------------------//
+        // ASTEROIDS
+        //
+        // The second canvas game, and the one gameLoop() was lifted out for: the
+        // loop, the pause rules and the three still states are Space Invaders'
+        // and are not re-argued here. What is new is what the plan said would be
+        // new, and all three of it is in step():
+        //
+        //   - the ship TURNS and THRUSTS. It never strafes and it never stops by
+        //     itself, so where it is going is something the player has to undo
+        //     as deliberately as he asked for it;
+        //   - everything WRAPS. There are no walls at all: the edges of the
+        //     canvas are joined, which is why one rock can be drawn four times
+        //     (see around()) and why two things a screen apart can be touching
+        //     (see near());
+        //   - a rock BREAKS instead of dying. Shooting the biggest one leaves
+        //     two of the next size where it was, so the screen gets busier
+        //     before it gets emptier.
+        //
+        // Unlike Invaders the world is in REAL PIXELS and not in a fixed field
+        // scaled to the box: a wrapping game has no formation to keep together
+        // and no shape it has to be, so it simply takes the room it is given -
+        // a wide window is a wider sky. The sizes below are therefore constants
+        // rather than fractions of the canvas: a rock that grew with the window
+        // would be a different game on a phone and on a laptop, and would change
+        // under the player's hands the moment the window is resized.
+
+        var Asteroids = ( function ()
+        {
+            var TICK   = STEP / 1000;          // one step in seconds - the unit every constant here is in
+            var SIZES  = [ 34, 19, 10 ];       // the radius of a big / medium / small rock
+            var POINTS = [ 20, 50, 100 ];      // and what breaking one is worth: the smaller, the more
+            var FACES  = 11;                   // corners a rock is drawn with
+
+            var SHIP   = 13;                   // the ship, nose to centre
+            var HULL   = 9;                    // ...and what actually collides: a shade less, so a near miss is one
+            var TURN   = 3.4;                  // rad/s
+            var PUSH   = 300;                  // px/s2 under thrust
+            var MAXV   = 340;                  // px/s: the ship's own top speed
+            var DRAG   = 0.4;                  // the share of its speed the ship loses each second
+
+            var SHOT   = 430;                  // px/s, on TOP of the ship's own velocity
+            var SHOTS  = 4;                    // bullets in the air at once
+            var RANGE  = 1.05;                 // seconds one lives: a little over half a screen
+            var COOL   = 0.17;                 // seconds between two of them
+
+            var SAFE   = 2.2;                  // seconds a fresh ship cannot be hit
+            var ROOM   = 110;                  // px round the middle that must be clear to put one there
+            var WAIT   = 0.9;                  // seconds between losing a ship and the next one
+            var LIVES  = 3;
+            var EXTRA  = 10000;                // points per spare ship
+            var ROCKS  = 4;                    // big rocks in the first wave, one more in each after it
+            var MOST   = 10;                   // ...up to here: past that the screen is a wall, not a game
+
+            // Filled, not outlined: the notch in the ship's tail reads as the
+            // crossbar of a letter A at 15px when it is only a line.
+            var LIFE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2.8 19.2 21 12 16.9 4.8 21"></polygon></svg>';
+
+            // The world. It has a size before it has ever been drawn, because
+            // init() runs while the pane is display:none and a first game is
+            // dealt in it there; fit() moves everything into the real box the
+            // first time the pane is shown (see rescale).
+            var w = 640, h = 420;
+
+            var ship = null, rocks = [], shots = [], dust = [];
+            var score = 0, best = 0, lives = 0, wave = 0, nextLife = 0;
+            var cool = 0, safe = 0, respawn = 0, flame = 0;
+
+            var state = 'ready';               // ready | playing | paused | over
+            var dirty = false;                 // the record has moved and is not written yet
+            var keys  = { left: false, right: false, thrust: false, fire: false };
+            var pads  = {};                    // the four touch keys, by name
+
+            var ink = '#fff', hot = '#fff';    // the two theme colours, copied (see palette)
+            var canvasEl, ctx, overEl, overTitleEl, overSubEl, overBtnEl;
+            var scoreEl, bestEl, livesEl, pauseBtn;
+            var A;                             // the arcade shell (see above): the loop and the four still states
+
+            //---- the world ---------------------------------------------------
+
+            // A rock is a circle with a jagged edge: FACES radii between 0.7 and
+            // 1.25 of its own, drawn once when it is made and then kept, so a
+            // rock holds its shape while it drifts and turns.
+            function rock( x, y, gen )
+            {
+                var i, shape = [], a = Math.random() * Math.PI * 2;
+                var speed = 22 + Math.random() * 34 + gen * 22;      // the smaller pieces are the quicker ones
+
+                for( i = 0; i < FACES; i++ ) shape.push( 0.7 + Math.random() * 0.55 );
+
+                return { x: x, y: y, r: SIZES[ gen ], gen: gen, shape: shape,
+                         vx: Math.cos( a ) * speed, vy: Math.sin( a ) * speed,
+                         ang: Math.random() * Math.PI * 2,
+                         spin: ( Math.random() - 0.5 ) * 1.3 };
+            }
+
+            // One more rock in each wave, up to MOST. They are dealt away from
+            // the middle: a rock that appears on top of the ship is a life lost
+            // to nothing the player could have done.
+            function deal()
+            {
+                var n = Math.min( ROCKS + wave, MOST ), i, x, y, tries;
+
+                wave++;
+
+                for( i = 0; i < n; i++ )
+                {
+                    tries = 0;
+                    do
+                    {
+                        x = Math.random() * w;
+                        y = Math.random() * h;
+                        tries++;
+                    }
+                    while( tries < 40 && near( { x: x, y: y, r: SIZES[ 0 ] }, { x: w / 2, y: h / 2, r: ROOM } ) );
+
+                    rocks.push( rock( x, y, 0 ) );
+                }
+            }
+
+            // Off one edge and back in at the other. It is the only rule the
+            // edges have: there is nothing to bounce off and nothing to leave.
+            function move( o )
+            {
+                o.x += o.vx * TICK;
+                o.y += o.vy * TICK;
+
+                if( o.x < 0 ) o.x += w; else if( o.x >= w ) o.x -= w;
+                if( o.y < 0 ) o.y += h; else if( o.y >= h ) o.y -= h;
+            }
+
+            // The shortest distance on a screen whose edges are joined: half a
+            // screen is as far apart as two things can get, so a rock at the
+            // left edge really is touching a ship at the right one.
+            function near( a, b )
+            {
+                var dx = Math.abs( a.x - b.x ), dy = Math.abs( a.y - b.y ), r = a.r + b.r;
+
+                if( dx > w / 2 ) dx = w - dx;
+                if( dy > h / 2 ) dy = h - dy;
+
+                return dx * dx + dy * dy < r * r;
+            }
+
+            // A short burst of dust where a rock broke or a ship went. It is not
+            // a rule - nothing ever collides with it - it is what tells the eye
+            // that the thing which was there is gone.
+            function burst( x, y, n, warm )
+            {
+                var i, a, s;
+
+                for( i = 0; i < n; i++ )
+                {
+                    a = Math.random() * Math.PI * 2;
+                    s = 40 + Math.random() * 130;
+                    dust.push( { x: x, y: y, vx: Math.cos( a ) * s, vy: Math.sin( a ) * s,
+                                 t: 0.35 + Math.random() * 0.4, warm: !! warm } );
+                }
+            }
+
+            //---- a step ------------------------------------------------------
+
+            function step()
+            {
+                var i;
+
+                for( i = dust.length - 1; i >= 0; i-- )
+                {
+                    dust[ i ].x += dust[ i ].vx * TICK;
+                    dust[ i ].y += dust[ i ].vy * TICK;
+                    dust[ i ].t -= TICK;
+                    if( dust[ i ].t <= 0 ) dust.splice( i, 1 );
+                }
+
+                if( state === 'over' )
+                {
+                    // The last of the dust settles and then the loop stops
+                    // itself, rather than repainting a picture that cannot
+                    // change 60 times a second behind the overlay.
+                    if( ! dust.length ) A.loop.halt();
+                    return;
+                }
+
+                // Any dialog over the app pauses it, the same rule Space
+                // Invaders has: the help sheet, the install prompt and "session
+                // expired" all cover the pane and swallow the keys (see onKey),
+                // and a ship that cannot be steered is a ship drifting into a
+                // rock.
+                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
+
+                if( ship ) fly();
+                else
+                {
+                    // A beat, and then the next ship - but only once the middle
+                    // is clear, or it is broken the instant it appears.
+                    respawn -= TICK;
+                    if( respawn <= 0 && clearMiddle() ) launch();
+                }
+
+                for( i = 0; i < rocks.length; i++ ) { move( rocks[ i ] ); rocks[ i ].ang += rocks[ i ].spin * TICK; }
+
+                for( i = shots.length - 1; i >= 0; i-- )
+                {
+                    move( shots[ i ] );
+                    shots[ i ].t -= TICK;
+                    if( shots[ i ].t <= 0 ) shots.splice( i, 1 );
+                }
+
+                hits();
+
+                if( ! rocks.length ) deal();
+            }
+
+            function fly()
+            {
+                var sp;
+
+                if( keys.left  ) ship.ang -= TURN * TICK;
+                if( keys.right ) ship.ang += TURN * TICK;
+
+                if( keys.thrust )
+                {
+                    ship.vx += Math.cos( ship.ang ) * PUSH * TICK;
+                    ship.vy += Math.sin( ship.ang ) * PUSH * TICK;
+
+                    sp = Math.sqrt( ship.vx * ship.vx + ship.vy * ship.vy );
+                    if( sp > MAXV ) { ship.vx = ship.vx / sp * MAXV; ship.vy = ship.vy / sp * MAXV; }
+
+                    flame += TICK;
+                }
+
+                // Space is not quite empty here. Without a little drag the only
+                // brake is turning round and thrusting back, which is a
+                // manoeuvre four buttons on a phone cannot really ask for -
+                // and DRAG is small enough that the ship still coasts.
+                ship.vx -= ship.vx * DRAG * TICK;
+                ship.vy -= ship.vy * DRAG * TICK;
+
+                move( ship );
+
+                if( safe > 0 ) safe -= TICK;
+                cool -= TICK;
+
+                if( keys.fire && cool <= 0 && shots.length < SHOTS ) shoot();
+            }
+
+            // The bullet leaves the nose carrying the ship's own velocity, so
+            // flying into your own line of fire is possible and running away
+            // from it is what makes a bullet die short.
+            function shoot()
+            {
+                cool = COOL;
+                shots.push( { x: ship.x + Math.cos( ship.ang ) * SHIP,
+                              y: ship.y + Math.sin( ship.ang ) * SHIP,
+                              vx: ship.vx + Math.cos( ship.ang ) * SHOT,
+                              vy: ship.vy + Math.sin( ship.ang ) * SHOT,
+                              r: 2, t: RANGE } );
+            }
+
+            function hits()
+            {
+                var i, j;
+
+                // Bullets first, so a rock broken this step cannot also take the
+                // ship with it on the same one.
+                for( i = shots.length - 1; i >= 0; i-- )
+                    for( j = rocks.length - 1; j >= 0; j-- )
+                        if( near( shots[ i ], rocks[ j ] ) )
+                        {
+                            shots.splice( i, 1 );
+                            split( j );
+                            break;
+                        }
+
+                if( ! ship || safe > 0 ) return;
+
+                for( j = rocks.length - 1; j >= 0; j-- )
+                    if( near( { x: ship.x, y: ship.y, r: HULL }, rocks[ j ] ) )
+                    {
+                        // The rock the ship ran into breaks like any other, and
+                        // is scored like any other: one rule instead of two, and
+                        // it is also what clears the space that just killed you.
+                        split( j );
+                        die();
+                        return;
+                    }
+            }
+
+            function split( at )
+            {
+                var r = rocks[ at ], i, piece;
+
+                score += POINTS[ r.gen ];
+                rocks.splice( at, 1 );
+                burst( r.x, r.y, 5 + r.gen * 2 );
+
+                if( r.gen < SIZES.length - 1 )
+                    for( i = 0; i < 2; i++ )
+                    {
+                        piece = rock( r.x, r.y, r.gen + 1 );
+
+                        // The pieces carry half of what the rock was doing, so
+                        // one broken on its way across the screen keeps going
+                        // that way instead of starting again from nothing.
+                        piece.vx += r.vx * 0.5;
+                        piece.vy += r.vy * 0.5;
+                        rocks.push( piece );
+                    }
+
+                while( score >= nextLife ) { nextLife += EXTRA; lives++; paintLives(); }
+                if( score > best ) { best = score; dirty = true; }
+
+                paint();
+            }
+
+            function die()
+            {
+                burst( ship.x, ship.y, 18, true );
+
+                ship    = null;
+                respawn = WAIT;
+                lives--;
+                paintLives();
+                flush();                       // a life lost is a pause: a good moment to put the record up
+
+                if( lives <= 0 ) { state = 'over'; A.overlay(); }
+            }
+
+            function launch()
+            {
+                ship = { x: w / 2, y: h / 2, vx: 0, vy: 0, ang: -Math.PI / 2 };
+                safe = SAFE;
+                cool = 0;
+            }
+
+            function clearMiddle()
+            {
+                var mid = { x: w / 2, y: h / 2, r: ROOM }, i;
+
+                for( i = 0; i < rocks.length; i++ ) if( near( mid, rocks[ i ] ) ) return false;
+                return true;
+            }
+
+            //---- painting ----------------------------------------------------
+
+            // The canvas takes the size of its box, in device pixels so the
+            // lines stay sharp on a phone, and one setTransform puts every
+            // coordinate in this module back into CSS pixels. Setting .width is
+            // also what clears the context, so the pen is picked up again after
+            // it and not once in init().
+            //
+            // The pane is display:none while init() runs, which makes the box 0
+            // wide - hence the guard, and the second call from enter().
+            function fit()
+            {
+                var box = canvasEl.getBoundingClientRect();
+                var dpr = Math.min( window.devicePixelRatio || 1, 2 );
+                var ow  = w, oh = h;
+
+                if( box.width < 2 || box.height < 2 ) return;
+
+                w = Math.round( box.width );
+                h = Math.round( box.height );
+
+                canvasEl.width  = Math.round( w * dpr );
+                canvasEl.height = Math.round( h * dpr );
+                ctx.setTransform( dpr, 0, 0, dpr, 0, 0 );
+                ctx.lineWidth = 1.6;
+                ctx.lineJoin  = 'round';
+                ctx.lineCap   = 'round';
+
+                if( ow !== w || oh !== h ) rescale( ow, oh );
+                draw();
+            }
+
+            // Everything moves into the new sky in proportion. Left where it
+            // was, a rock outside the new edges would wrap into a corner and
+            // never come out, and the ship could sit where it cannot be seen.
+            function rescale( ow, oh )
+            {
+                var kx = w / ow, ky = h / oh;
+
+                [ rocks, shots, dust ].forEach( function ( list )
+                {
+                    list.forEach( function ( o ) { o.x *= kx; o.y *= ky; } );
+                } );
+
+                if( ship ) { ship.x *= kx; ship.y *= ky; }
+            }
+
+            // A canvas cannot follow a CSS variable, so the two colours it draws
+            // with are COPIES of the tokens - read here and not per frame, since
+            // getComputedStyle is a layout read and draw() runs 60 times a
+            // second. init(), enter() and balata:themechange all come through.
+            function palette()
+            {
+                var cs = getComputedStyle( document.documentElement );
+
+                ink = cs.getPropertyValue( '--text' ).trim()   || '#e9e6e1';
+                hot = cs.getPropertyValue( '--accent' ).trim() || '#16A085';
+            }
+
+            // Everything is drawn once for each edge it straddles - up to four
+            // times - which is what makes a rock leaving on the right already
+            // visible on the left. The offsets are only tried when the thing is
+            // within its own radius of an edge, so the ordinary case draws once.
+            function around( o, fn )
+            {
+                var xs = [ 0 ], ys = [ 0 ], i, j;
+
+                if( o.x < o.r ) xs.push( w ); else if( o.x > w - o.r ) xs.push( -w );
+                if( o.y < o.r ) ys.push( h ); else if( o.y > h - o.r ) ys.push( -h );
+
+                for( i = 0; i < xs.length; i++ )
+                    for( j = 0; j < ys.length; j++ )
+                    {
+                        ctx.save();
+                        ctx.translate( o.x + xs[ i ], o.y + ys[ j ] );
+                        fn();
+                        ctx.restore();
+                    }
+            }
+
+            function draw()
+            {
+                var i;
+
+                ctx.clearRect( 0, 0, w, h );
+
+                ctx.strokeStyle = ink;
+                for( i = 0; i < rocks.length; i++ ) drawRock( rocks[ i ] );
+                if( ship ) drawShip();
+
+                ctx.fillStyle = hot;
+                for( i = 0; i < shots.length; i++ ) drawShot( shots[ i ] );
+
+                for( i = 0; i < dust.length; i++ ) drawDust( dust[ i ] );
+                ctx.globalAlpha = 1;
+            }
+
+            function drawRock( r )
+            {
+                around( r, function ()
+                {
+                    var i, a, rad;
+
+                    ctx.beginPath();
+                    for( i = 0; i < FACES; i++ )
+                    {
+                        a   = r.ang + i / FACES * Math.PI * 2;
+                        rad = r.r * r.shape[ i ];
+                        ctx[ i ? 'lineTo' : 'moveTo' ]( Math.cos( a ) * rad, Math.sin( a ) * rad );
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                } );
+            }
+
+            function drawShip()
+            {
+                // A ship that cannot be hit blinks, so the two seconds it is
+                // safe for are something the player can see rather than
+                // something he has to remember.
+                if( safe > 0 && Math.floor( safe * 9 ) % 2 ) return;
+
+                around( { x: ship.x, y: ship.y, r: SHIP }, function ()
+                {
+                    ctx.rotate( ship.ang );
+
+                    ctx.beginPath();
+                    ctx.moveTo(  SHIP, 0 );
+                    ctx.lineTo( -SHIP * 0.72,  SHIP * 0.62 );
+                    ctx.lineTo( -SHIP * 0.40,  0 );
+                    ctx.lineTo( -SHIP * 0.72, -SHIP * 0.62 );
+                    ctx.closePath();
+                    ctx.stroke();
+
+                    // The flame is on for two ticks and off for two, which is
+                    // what makes it read as burning instead of as a third fin.
+                    if( keys.thrust && Math.floor( flame * 30 ) % 2 )
+                    {
+                        ctx.strokeStyle = hot;
+                        ctx.beginPath();
+                        ctx.moveTo( -SHIP * 0.55,  SHIP * 0.32 );
+                        ctx.lineTo( -SHIP * 1.25,  0 );
+                        ctx.lineTo( -SHIP * 0.55, -SHIP * 0.32 );
+                        ctx.stroke();
+                        ctx.strokeStyle = ink;
+                    }
+                } );
+            }
+
+            function drawShot( s )
+            {
+                around( s, function ()
+                {
+                    ctx.beginPath();
+                    ctx.arc( 0, 0, 2, 0, Math.PI * 2 );
+                    ctx.fill();
+                } );
+            }
+
+            function drawDust( d )
+            {
+                ctx.globalAlpha = Math.min( 1, d.t * 2.6 );
+                ctx.fillStyle   = d.warm ? hot : ink;
+                ctx.fillRect( d.x - 1, d.y - 1, 2, 2 );
+            }
+
+            //---- the toolbar and the three still states ----------------------
+
+            function paint()
+            {
+                scoreEl.textContent = String( score );
+                bestEl.textContent  = String( best );
+            }
+
+            // Kept apart from paint() because it is the expensive half and the
+            // rare one: the score moves several times a second and the ships
+            // only when one is lost or earned.
+            //
+            // Up to five are drawn and past that it is one and a number: a
+            // spare every 10 000 points would otherwise fill the toolbar and
+            // push the figures off the line.
+            function paintLives()
+            {
+                var i, html = '';
+
+                if( lives > 5 ) html = LIFE_SVG + '<b>&times;' + lives + '</b>';
+                else for( i = 0; i < lives; i++ ) html += LIFE_SVG;
+
+                livesEl.innerHTML = html;
+            }
+
+            // Everything let go at once. A pane switch, a hidden tab or a window
+            // that lost focus all arrive while a key is down, and its keyup is
+            // then delivered somewhere else - so the ship would go on turning
+            // for ever.
+            function clearKeys()
+            {
+                Object.keys( keys ).forEach( function ( k )
+                {
+                    keys[ k ] = false;
+                    if( pads[ k ] ) pads[ k ].classList.remove( 'is-down' );
+                } );
+            }
+
+            // A fresh game, sitting at "ready" behind its overlay. Nothing runs
+            // until the player asks for it.
+            function reset()
+            {
+                score    = 0;
+                lives    = LIVES;
+                wave     = 0;
+                nextLife = EXTRA;
+                dirty    = false;
+                state    = 'ready';
+
+                rocks = []; shots = []; dust = [];
+                respawn = 0;
+
+                A.loop.halt();
+                clearKeys();
+                fit();                         // the box may have changed size behind another pane
+                deal();
+                launch();
+                paint();
+                paintLives();
+                A.overlay();
+                draw();
+            }
+
+            // The record is put up at every PAUSE in the game and not the moment
+            // it is beaten: saveBest() rewrites the whole file and queues an
+            // upload, and rocks break in bursts of three or four inside the same
+            // second. Every way out of a game passes through here - a life lost,
+            // the last of them, the pause button, another pane, a hidden tab -
+            // so nothing is ever left unwritten.
+            function flush()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                saveBest( 'asteroids', best );
+            }
+
+            //---- input -------------------------------------------------------
+
+            var KEYS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'thrust',
+                         ' ': 'fire', Spacebar: 'fire' };
+
+            function onKey( e )
+            {
+                var k = KEYS[ e.key ], el = e.target;
+
+                if( ! A.isLive() || ! k || e.ctrlKey || e.altKey || e.metaKey ) return;
+                if( keyBusy( e ) ) return;
+
+                // Space belongs to whatever button has the focus - the overlay's
+                // own, or "new game" in the toolbar. Taking it here as well
+                // would start the game twice on one press.
+                if( el && el.tagName === 'BUTTON' && e.key === ' ' ) return;
+
+                // Asked FIRST: a still game is started by its first key, and
+                // starting one clears the keys - so taking this one before that
+                // happens would lose it again.
+                A.play();
+
+                keys[ k ] = true;
+                if( pads[ k ] ) pads[ k ].classList.add( 'is-down' );
+
+                e.preventDefault();            // the arrows and space would scroll the page
+            }
+
+            // The other half is answered whatever the state, and with none of
+            // the guards above: they are there to stop a key being TAKEN, never
+            // released, and one that is not let go stays held for the rest of
+            // the game.
+            function onKeyUp( e )
+            {
+                var k = KEYS[ e.key ];
+
+                if( ! k ) return;
+                keys[ k ] = false;
+                if( pads[ k ] ) pads[ k ].classList.remove( 'is-down' );
+            }
+
+            function onPad( e )
+            {
+                var btn = e.currentTarget, k = btn.dataset.astKey, down = e.type === 'pointerdown';
+
+                if( down )
+                {
+                    // The finger keeps the key it started on even when it slides
+                    // off, so the pointerup always comes back here and the key
+                    // is always let go.
+                    if( btn.setPointerCapture ) try { btn.setPointerCapture( e.pointerId ); } catch ( err ) {}
+                    e.preventDefault();        // no focus ring and no click behind it
+                    A.play();                  // ...the four keys start a still game too
+                }
+
+                keys[ k ] = down;
+                btn.classList.toggle( 'is-down', down );
+            }
+
+            //---- mounting ----------------------------------------------------
+
+            // The same max-merge 2048 and Space Invaders use, and for the same
+            // reason: the plug re-reads the file on focus and on a tap, and that
+            // answer can be older than the game being played right now.
+            function adoptBest( n )
+            {
+                best = keepBest( best, n, bestEl );
+                return best;
+            }
+
+            function init()
+            {
+                canvasEl    = document.getElementById( 'astCanvas' );
+                ctx         = canvasEl.getContext( '2d' );
+                overEl      = document.getElementById( 'astOver' );
+                overTitleEl = document.getElementById( 'astOverTitle' );
+                overSubEl   = document.getElementById( 'astOverSub' );
+                overBtnEl   = document.getElementById( 'astOverBtn' );
+                scoreEl     = document.getElementById( 'astScore' );
+                bestEl      = document.getElementById( 'astBest' );
+                livesEl     = document.getElementById( 'astLives' );
+                pauseBtn    = document.getElementById( 'astPause' );
+
+                A = arcade( {
+                    readyKey: 'games.asteroids',
+                    els: { canvas: canvasEl, over: overEl, overTitle: overTitleEl,
+                           overSub: overSubEl, overBtn: overBtnEl, pause: pauseBtn,
+                           newGame: document.getElementById( 'astNew' ) },
+                    getState: function () { return state; },
+                    setState: function ( v ) { state = v; },
+                    score:    function () { return score; },
+                    step: step, draw: draw, reset: reset, clearKeys: clearKeys,
+                    flush: flush, palette: palette, fit: fit,
+                    onKey: onKey, onKeyUp: onKeyUp
+                } );
+
+                A.wire( { pads: { sel: '[data-ast-key]', on: onPad,
+                                  keep: function ( b ) { pads[ b.dataset.astKey ] = b; } } } );
+
+                palette();
+                fit();                         // a no-op behind the hidden pane, but it means
+                reset();                       // reset() never deals a game into a stale sky
+
+                return { enter: A.enter, leave: A.leave };
+            }
+
+            return { init: init, adoptBest: adoptBest };
+        } )();
+
+        NayiveGames.add( 'asteroids', Asteroids );
+    } )();
+    </script>

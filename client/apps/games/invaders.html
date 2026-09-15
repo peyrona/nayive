@@ -1,0 +1,1077 @@
+<!-- invaders.html - Space Invaders, one of the six games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the six games
+     share through window.NayiveGames. -->
+    <style>
+        /* ---- Space Invaders ------------------------------------------------
+           The first game that moves on its own, and so the first <canvas>: the
+           three above it are DOM grids that repaint one square at a time, and
+           this one repaints the whole field sixty times a second, which no
+           amount of <div>s does well.
+
+           The pane is Minesweeper's shape once more - the shared .view-bar
+           across the top, the game under it - with the one part that has no
+           equivalent in the other three: the LIVES. They go in the bar's left
+           slot, where Minesweeper and Sudoku put their difficulty switch,
+           because Space Invaders has no difficulty to switch (the waves are
+           its difficulty) and .game-stats alone in the row reads visibly
+           off-centre. Three little cannons there balance the bar and say what
+           is left at a glance, which is what the cabinet did.
+
+           The field is sized off one length the way 2048 and Sudoku are, but
+           what --board fixes here is the WIDTH of a 3:4 box: the canvas is a
+           216 x 288 world scaled to it (see the module), so one number moves
+           the game, the sprites and the aliens' step together. 46vh rather
+           than Sudoku's 52 because the box is 4/3 as tall as it is wide. */
+        .invaders         { --board: max( 200px, min( 100cqw, 75cqh ) );
+                            height: 100%; display: flex; flex-direction: column; }
+
+        /* 5px rather than Asteroids' 3: the cannons now fill their 17px box
+           edge to edge, and at 3px the three of them read as one block. */
+        .inv-lives        { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; color: var(--accent); }
+        /* 17px is the app's own toolbar glyph - .icon-btn.sm svg in app.css -
+           and the viewBox is cropped to the drawing (x 4-20, y 5-18 of the 24
+           square) so the cannon really is that wide. At 15px on the full box it
+           was drawn about 10px, two thirds of every other icon in the row. */
+        .inv-lives svg    { width: 17px; height: 14px; }
+        /* A life spent stays in place rather than disappearing: the row keeps
+           its width, so nothing beside it shifts three times a game. */
+        .inv-lives svg.is-gone { color: var(--text-faint); opacity: 0.35; }
+
+        /* .inv-area is a SIZE CONTAINER and the stage is the only thing in it,
+           so 100cqw / 100cqh above are the real room the pane has left - which
+           is what the old `min( 380px, 92vw, 46vh )` was estimating, and why
+           the 380px cap won on every PC and left the game small. */
+        .inv-area         { flex: 1 1 auto; min-height: 0; overflow: auto;
+                            display: flex; padding: var(--space-3);
+                            container-type: size; }
+        .inv-fit          { margin: auto; }
+        .inv-stage        { position: relative; width: var(--board); aspect-ratio: 3 / 4; }
+
+        /* The canvas is a real tab stop. It has to be: after a click on "new
+           game" or on the overlay's own button the focus sits on that button,
+           and the next space - the fire key - would press it again. Every path
+           that starts or resumes a game ends with canvasEl.focus().
+
+           touch-action: none is what stops the browser scrolling or zooming
+           with the finger that is steering, exactly as on 2048's board. */
+        .inv-canvas       { display: block; width: 100%; height: 100%;
+                            border-radius: var(--radius-m); background: var(--card2);
+                            touch-action: none; -webkit-user-select: none; user-select: none; }
+        .inv-canvas:focus         { outline: none; }
+        .inv-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* THE CANVAS PALETTE. A canvas cannot read var(--x) - fillStyle takes a
+           colour, not a link to one - so these are read out of the stylesheet
+           once, in palette(), and re-read when the scheme changes. It is
+           Minesweeper's arrangement, down to the same eight hexes: one fixed
+           set for the dark scheme... */
+        .inv-canvas       { --iv-ship: #16A085; --iv-shot: #E7E7E9; --iv-ufo: #E0A21E;
+                            --iv-bomb: #D9707D; --iv-shield: #7BA88F; --iv-ground: #93959F;
+                            --iv-a1: #6FBF73; --iv-a2: #5B9DF9; --iv-a3: #B58BF0; }
+        /* ...and one for the beige one (an attribute, not a media query - see
+           theme-system.md). Near-white aliens on a dark field become invisible
+           ink on beige, which is the whole reason there are two sets. */
+        :root[data-theme="light"] .inv-canvas
+                          { --iv-ship: #0A6151; --iv-shot: #242732; --iv-ufo: #8A5A0B;
+                            --iv-bomb: #9C4150; --iv-shield: #2E6B4E; --iv-ground: #5E6472;
+                            --iv-a1: #1F6B3A; --iv-a2: #1A4F9E; --iv-a3: #5B2E9E; }
+
+
+        /* Outside .inv-area, for the reason written over Sudoku's: a size
+           container may hold nothing but the thing it is measuring. */
+        .inv-hint   { margin: var(--space-2) 0 0;
+                      padding: 0 var(--space-4) var(--space-3); text-align: center;
+                      font-size: 0.78rem; color: var(--text-faint); }
+
+        /* PHONE: the width is what limits the field there (92vw of 390px is
+           359px, well under 46vh of any phone), so the height cap can loosen
+           and the padding round it comes off. */
+        @media (max-width: 640px)
+        {
+            .inv-area { padding: var(--space-2); }
+            .invaders { --board: min( 400px, 94vw, 54vh ); }
+        }
+
+    </style>
+
+            <!-- Space Invaders. The whole game is one <canvas> - a 216 x 288
+                 world scaled to the box - so the pane only holds the toolbar
+                 above it and the overlay over it. The toolbar is the shared
+                 .view-bar: the lives on the left (this game has no difficulty
+                 switch to put there), the wave / score / record in the middle,
+                 pause and "new game" on the right. -->
+            <section class="game-pane" data-pane="invaders">
+                <div class="invaders">
+                    <div class="view-bar" data-options="invaders">
+                        <div class="inv-lives" id="invLives" data-i18n-attr="title:games.invadersLives">
+                            <svg viewBox="4 5 16 13" fill="currentColor"><path d="M11 5h2v4h-2z"></path><path d="M4 18v-3.5a2.5 2.5 0 0 1 2.5-2.5h11a2.5 2.5 0 0 1 2.5 2.5V18z"></path></svg>
+                            <svg viewBox="4 5 16 13" fill="currentColor"><path d="M11 5h2v4h-2z"></path><path d="M4 18v-3.5a2.5 2.5 0 0 1 2.5-2.5h11a2.5 2.5 0 0 1 2.5 2.5V18z"></path></svg>
+                            <svg viewBox="4 5 16 13" fill="currentColor"><path d="M11 5h2v4h-2z"></path><path d="M4 18v-3.5a2.5 2.5 0 0 1 2.5-2.5h11a2.5 2.5 0 0 1 2.5 2.5V18z"></path></svg>
+                        </div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.invadersWave">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7.5 12 12 8 16.5 12 21 8"></polyline><polyline points="3 15 7.5 19 12 15 16.5 19 21 15"></polyline></svg>
+                                <b id="invWave">1</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.score">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="2" y1="12" x2="5" y2="12"></line><line x1="19" y1="12" x2="22" y2="12"></line></svg>
+                                <b id="invScore">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.best">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0z"></path><path d="M8 4.5H5.5V7a3 3 0 0 0 3 3"></path><path d="M16 4.5h2.5V7a3 3 0 0 1-3 3"></path><line x1="12" y1="12" x2="12" y2="17"></line><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line><path d="M9.5 20.5c0-2 1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"></path></svg>
+                                <b id="invBest">0</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="invPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="invNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="inv-area">
+                        <div class="inv-fit">
+                            <div class="inv-stage">
+                                <canvas class="inv-canvas" id="invCanvas" tabindex="0" data-i18n-attr="aria-label:games.invaders"></canvas>
+                                <div class="game-cover tappable inv-over" id="invOver" hidden>
+                                    <p class="game-cover-t" id="invOverTitle"></p>
+                                    <p class="game-cover-s" id="invOverSub"></p>
+                                    <button class="text-btn" id="invOverBtn" type="button"></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="inv-hint" data-i18n="games.hintInvaders"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // in every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime;
+
+        //------------------------------------------------------------------------//
+        // SPACE INVADERS
+        //
+        // The first game that moves on its own, and so the first <canvas> and
+        // the first LOOP. Everything above it answers one key or one tap and
+        // then sits still; this one runs at 60 steps a second whether the
+        // player touches anything or not, which brings three rules with it:
+        //
+        //   1. a FIXED TIMESTEP. requestAnimationFrame fires at whatever rate
+        //      the screen has - 60, 120, or 20 on a busy phone - and a game
+        //      whose physics read that number plays differently on each. The
+        //      frames only drive an accumulator; the game itself always moves
+        //      in 1/60 s steps, so a 120 Hz screen just draws twice as often.
+        //   2. NOTHING RUNS BEHIND ANOTHER PANE. leave() stops the loop, and so
+        //      do a hidden tab and a window that loses focus - without which
+        //      five games end up running at once behind each other's panes.
+        //   3. it never resumes BY ITSELF. Coming back to the pane, or to the
+        //      tab, leaves the game paused with its overlay up: a real-time
+        //      game that restarted the moment its pane appeared would spend
+        //      that first second being shot at by aliens the player cannot see
+        //      yet.
+        //
+        // Asteroids is the second canvas game and reuses this loop. It stays
+        // here until then and lifts out whole - the same way clock() sat inside
+        // Minesweeper until Sudoku needed it.
+
+        var Invaders = ( function ()
+        {
+            //---- the world ---------------------------------------------------
+            //
+            // ONE WORLD UNIT IS ONE PIXEL OF THE SPRITES. That is the whole
+            // trick to the numbers below: the aliens are drawn from 8-, 11- and
+            // 12-wide bitmaps, so a formation nine columns of sixteen wide is
+            // 144 units and the field is 216 - and the canvas is scaled to that
+            // once, in fit(). Nothing else in the game ever has to know how big
+            // the screen is.
+
+            var W = 216, H = 288;                  // the field, in world units (3:4, the pane's aspect-ratio)
+
+            var COLS = 9, ROWS = 5, TOTAL = COLS * ROWS;
+            var CELL_W = 16, CELL_H = 16;          // one alien's slot in the formation
+            var START_X = 36, START_Y = 32;        // where the formation is dealt
+            var MARCH_DX = 2, MARCH_DROP = 8;      // one sideways move, and the drop at a wall
+            var EDGE = 8;                          // nothing goes closer than this to a side
+
+            var SHIP_Y = 264, SHIP_SPEED = 1.7;    // the ship's line, and its keyboard speed
+            var DRAG_SPEED = 4;                    // ...and the most a dragged finger can pull it in one step
+            var SHOT_W = 1, SHOT_H = 4, SHOT_SPEED = 6;
+            var BOMB_W = 2, BOMB_H = 6;
+            var GROUND_Y = 274;                    // the ship's floor: it stops the bombs that miss
+
+            var BUNKER_X = [ 24, 72, 120, 168 ], BUNKER_Y = 232;
+            var BLOCK = 2, BCOLS = 11, BROWS = 8;  // a bunker is a grid of 2x2 blocks
+
+            var UFO_Y = 16, UFO_SPEED = 1, UFO_EVERY = 900;
+            var UFO_POINTS = [ 50, 100, 150, 300 ];
+
+            var LIVES = 3;
+            var BOOM_TICKS = 18, DIE_TICKS = 60, WAVE_TICKS = 90;
+            var POINTS = [ 30, 20, 20, 10, 10 ];   // one per formation row: the top one is worth most
+
+            //---- the sprites -------------------------------------------------
+            //
+            // The classic bitmaps, written out as they look. Each is turned ONCE
+            // into a list of horizontal runs (see sprite()), because a run is
+            // one fillRect: an alien is fourteen of them instead of fifty
+            // single pixels, and the whole screen is under 800 a frame.
+
+            var ART =
+            {
+                squid: [ [ '...XX...',
+                           '..XXXX..',
+                           '.XXXXXX.',
+                           'XX.XX.XX',
+                           'XXXXXXXX',
+                           '..X..X..',
+                           '.X.XX.X.',
+                           'X.X..X.X' ],
+                         [ '...XX...',
+                           '..XXXX..',
+                           '.XXXXXX.',
+                           'XX.XX.XX',
+                           'XXXXXXXX',
+                           '.X.XX.X.',
+                           'X......X',
+                           '.X....X.' ] ],
+
+                crab:  [ [ '..X.....X..',
+                           '...X...X...',
+                           '..XXXXXXX..',
+                           '.XX.XXX.XX.',
+                           'XXXXXXXXXXX',
+                           'X.XXXXXXX.X',
+                           'X.X.....X.X',
+                           '...XX.XX...' ],
+                         [ '..X.....X..',
+                           'X..X...X..X',
+                           'X.XXXXXXX.X',
+                           'XXX.XXX.XXX',
+                           'XXXXXXXXXXX',
+                           '.XXXXXXXXX.',
+                           '..X.....X..',
+                           '.X.......X.' ] ],
+
+                octo:  [ [ '....XXXX....',
+                           '.XXXXXXXXXX.',
+                           'XXXXXXXXXXXX',
+                           'XXX..XX..XXX',
+                           'XXXXXXXXXXXX',
+                           '...XX..XX...',
+                           '..XX.XX.XX..',
+                           'XX........XX' ],
+                         [ '....XXXX....',
+                           '.XXXXXXXXXX.',
+                           'XXXXXXXXXXXX',
+                           'XXX..XX..XXX',
+                           'XXXXXXXXXXXX',
+                           '..XXX..XXX..',
+                           '.XX..XX..XX.',
+                           '..XX....XX..' ] ],
+
+                boom:  [ '...X...X...',
+                         'X..X...X..X',
+                         '.X.......X.',
+                         '..XX...XX..',
+                         'XX..XXX..XX',
+                         '..XX...XX..',
+                         '.X.......X.',
+                         'X..X...X..X' ],
+
+                ship:  [ '......X......',
+                         '.....XXX.....',
+                         '.....XXX.....',
+                         '.XXXXXXXXXXX.',
+                         'XXXXXXXXXXXXX',
+                         'XXXXXXXXXXXXX',
+                         'XXXXXXXXXXXXX',
+                         'XXXXXXXXXXXXX' ],
+
+                wreck: [ '....X...X....',
+                         'X.....X....X.',
+                         '.X...X...X...',
+                         '..X.XXXXX.X..',
+                         '.XXXXXXXXXXX.',
+                         'XXXXXXXXXXXXX',
+                         'XXXXXXXXXXXXX',
+                         'XXX.XXXXX.XXX' ],
+
+                ufo:   [ '.....XXXXXX.....',
+                         '...XXXXXXXXXX...',
+                         '..XXXXXXXXXXXX..',
+                         '.XX.XX.XX.XX.XX.',
+                         'XXXXXXXXXXXXXXXX',
+                         '..XXX..XX..XXX..',
+                         '...X........X...' ],
+
+                // The bunkers are the same idea one size up: 2x2 blocks rather
+                // than single pixels, because they are chipped away one block
+                // at a time and a grid of 88 booleans is what a hit looks up.
+                bunker:[ '...XXXXX...',
+                         '..XXXXXXX..',
+                         '.XXXXXXXXX.',
+                         'XXXXXXXXXXX',
+                         'XXXXXXXXXXX',
+                         'XXXXXXXXXXX',
+                         'XXX.....XXX',
+                         'XX.......XX' ]
+            };
+
+            var SPR = {};                          // ART, compiled into runs
+
+            //---- state -------------------------------------------------------
+
+            // ready | playing | dying | wave | paused | over. Only "playing",
+            // "dying" and "wave" run the loop; the other three sit behind the
+            // overlay.
+            var state = 'ready';               // ready | playing | dying | wave | paused | over
+            var aliens = [], bombs = [], bunkers = [], shot = null, ufo = null;
+            var px = 0, alive = 0, dir = 1, frame = 0;
+            var score = 0, best = 0, lives = 0, wave = 1, record = false;
+            var marchTick = 0, bombTick = 0, ufoTick = 0, dieTick = 0, waveTick = 0;
+
+            var keyL = false, keyR = false, firing = false;
+            var touching = false, dragFrom = 0, dragShip = 0, targetX = 0;
+
+            var scale = 1, fitted = 0, font = 'sans-serif', C = {};
+
+            var canvasEl, ctx, overEl, overTitleEl, overSubEl, overBtnEl;
+            var scoreEl, bestEl, waveEl, pauseBtn, lifeEls = [];
+
+            //---- geometry helpers --------------------------------------------
+
+            // One bitmap -> { w, h, runs }, where a run is one horizontal strip
+            // of set pixels: { x, y, w }. Done once, at init.
+            function sprite( rows )
+            {
+                var runs = [], y, x, start;
+
+                for( y = 0; y < rows.length; y++ )
+                {
+                    x = 0;
+                    while( x < rows[ y ].length )
+                    {
+                        if( rows[ y ].charAt( x ) !== 'X' ) { x++; continue; }
+
+                        start = x;
+                        while( x < rows[ y ].length && rows[ y ].charAt( x ) === 'X' ) x++;
+                        runs.push( { x: start, y: y, w: x - start } );
+                    }
+                }
+
+                return { w: rows[ 0 ].length, h: rows.length, runs: runs };
+            }
+
+            function hits( ax, ay, aw, ah, bx, by, bw, bh )
+            {
+                return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+            }
+
+            //---- building a wave ---------------------------------------------
+
+            function buildAliens()
+            {
+                var top = START_Y + Math.min( ( wave - 1 ) * 8, 40 );   // each wave is dealt lower
+                var r, c, type, s;
+
+                aliens = [];
+                alive  = TOTAL;
+                dir    = 1;
+                frame  = 0;
+
+                for( r = 0; r < ROWS; r++ )
+                    for( c = 0; c < COLS; c++ )
+                    {
+                        type = r === 0 ? 0 : r < 3 ? 1 : 2;
+                        s    = SPR.alien[ type ][ 0 ];
+
+                        aliens.push( { type: type, row: r, col: c, alive: true, boom: 0, w: s.w,
+                                       x: START_X + c * CELL_W + Math.round( ( CELL_W - s.w ) / 2 ),
+                                       y: top + r * CELL_H } );
+                    }
+            }
+
+            function buildBunkers()
+            {
+                bunkers = BUNKER_X.map( function ( bx )
+                {
+                    return { x: bx, y: BUNKER_Y, cells: ART.bunker.map( function ( row )
+                    {
+                        return row.split( '' ).map( function ( ch ) { return ch === 'X'; } );
+                    } ) };
+                } );
+            }
+
+            // Everything a wave starts with. The bunkers are rebuilt too: the
+            // aliens chew through them on the way down (see chew()), so a wave
+            // that began with the last one's rubble would be unwinnable by
+            // about the fifth.
+            function setWave()
+            {
+                buildAliens();
+                buildBunkers();
+
+                px        = ( W - SPR.ship.w ) / 2;
+                shot      = null;
+                ufo       = null;
+                bombs     = [];
+                marchTick = marchEvery();
+                bombTick  = bombDelay();
+                ufoTick   = UFO_EVERY;
+            }
+
+            //---- the rules ---------------------------------------------------
+
+            // How many steps between two moves of the formation. The fewer are
+            // left the faster they come, which is the whole tension of the game
+            // - and each wave winds the same curve a notch tighter.
+            function marchEvery()
+            {
+                var n = ( 3 + 27 * ( alive - 1 ) / ( TOTAL - 1 ) ) * Math.pow( 0.9, wave - 1 );
+                return Math.max( 2, Math.round( n ) );
+            }
+
+            function bombDelay()
+            {
+                var lo = Math.max( 14, 70 - wave * 6 );
+                var hi = Math.max( lo + 20, 170 - wave * 14 );
+                return lo + Math.floor( Math.random() * ( hi - lo ) );
+            }
+
+            function maxBombs() { return Math.min( 4, 1 + Math.ceil( wave / 2 ) ); }
+
+            // One sideways move of the whole formation, or - when the leading
+            // edge has run out of room - a drop and a turn. The edges are the
+            // bounding box of what is still ALIVE, so clearing the left column
+            // buys the rest of them that much more room, exactly as it should.
+            function march()
+            {
+                var lo = W, hi = 0, drop = false, i, a;
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( ! a.alive ) continue;
+                    if( a.x < lo ) lo = a.x;
+                    if( a.x + a.w > hi ) hi = a.x + a.w;
+                }
+                if( lo > hi ) return;                                   // none left
+
+                if( dir > 0 && hi + MARCH_DX > W - EDGE ) drop = true;
+                if( dir < 0 && lo - MARCH_DX < EDGE )     drop = true;
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( ! a.alive ) continue;
+
+                    if( drop ) a.y += MARCH_DROP;
+                    else       a.x += dir * MARCH_DX;
+
+                    // Down at the player's line the invasion is over, however
+                    // many lives are left: that is what losing this game IS.
+                    if( a.y + 8 >= SHIP_Y ) { gameOver(); return; }
+                }
+
+                if( drop ) { dir = -dir; chew(); }
+                frame ^= 1;                                             // the legs move with the step
+            }
+
+            // A bomb comes off the LOWEST alien of a random column - the one
+            // that actually has a clear line to the ship.
+            function dropBomb()
+            {
+                var low = {}, cols = [], i, a, k;
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( ! a.alive ) continue;
+                    if( ! low[ a.col ] || a.y > low[ a.col ].y ) low[ a.col ] = a;
+                }
+                for( k in low ) if( low.hasOwnProperty( k ) ) cols.push( low[ k ] );
+                if( ! cols.length ) return;
+
+                a = cols[ Math.floor( Math.random() * cols.length ) ];
+                bombs.push( { x: a.x + Math.round( a.w / 2 ) - 1, y: a.y + 8 } );
+            }
+
+            // A bunker is a grid of blocks, so a hit is one index lookup and not
+            // a shape test. `spread` is how many blocks either side go with it:
+            // a bomb blows a wider hole than a shot does. A shot that arrives
+            // where a block has already gone passes straight through - which is
+            // what makes a bunker wear out rather than simply break.
+            function hitBunker( x, y, spread )
+            {
+                var i, b, c, r, k, gone = false;
+
+                for( i = 0; i < bunkers.length; i++ )
+                {
+                    b = bunkers[ i ];
+                    if( x < b.x || x >= b.x + BCOLS * BLOCK ) continue;
+                    if( y < b.y || y >= b.y + BROWS * BLOCK ) continue;
+
+                    c = Math.floor( ( x - b.x ) / BLOCK );
+                    r = Math.floor( ( y - b.y ) / BLOCK );
+                    if( ! b.cells[ r ][ c ] ) continue;
+
+                    for( k = c - spread; k <= c + spread; k++ )
+                        if( k >= 0 && k < BCOLS ) b.cells[ r ][ k ] = false;
+
+                    gone = true;
+                }
+
+                return gone;
+            }
+
+            // A shot covers six units in one step and a block is two, so asking
+            // only where it ENDS steps clean over a block on the way. The tip's
+            // whole path is sampled instead.
+            function sweep( x, from, to, spread )
+            {
+                var a = Math.min( from, to ), b = Math.max( from, to ), y;
+
+                for( y = a; y < b; y += BLOCK )
+                    if( hitBunker( x, y, spread ) ) return true;
+
+                return hitBunker( x, b, spread );
+            }
+
+            // Aliens low enough to be standing in a bunker take it apart. Only
+            // ever called on a drop, and only the ones that have got that far.
+            function chew()
+            {
+                var i, j, r, c, a, b;
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( ! a.alive || a.y + 8 < BUNKER_Y ) continue;
+
+                    for( j = 0; j < bunkers.length; j++ )
+                    {
+                        b = bunkers[ j ];
+                        if( ! hits( a.x, a.y, a.w, 8, b.x, b.y, BCOLS * BLOCK, BROWS * BLOCK ) ) continue;
+
+                        for( r = 0; r < BROWS; r++ )
+                            for( c = 0; c < BCOLS; c++ )
+                                if( b.cells[ r ][ c ] &&
+                                    hits( a.x, a.y, a.w, 8,
+                                          b.x + c * BLOCK, b.y + r * BLOCK, BLOCK, BLOCK ) )
+                                    b.cells[ r ][ c ] = false;
+                    }
+                }
+            }
+
+            function addScore( n )
+            {
+                score = score + n;
+                scoreEl.textContent = String( score );
+
+                // The record climbs as it is beaten, the way 2048's does, and is
+                // merged with a max - see saveBest() and adoptBest().
+                if( score > best )
+                {
+                    best   = score;
+                    record = true;
+                    bestEl.textContent = String( best );
+                    saveBest( 'invaders', best );
+                }
+            }
+
+            //---- one step of the game ----------------------------------------
+
+            function movePlayer()
+            {
+                var d;
+
+                if( keyL ) px -= SHIP_SPEED;
+                if( keyR ) px += SHIP_SPEED;
+
+                // A finger drags the ship RELATIVE to where the drag began, not
+                // to where the finger is: on a 390px screen the ship lives under
+                // the thumb otherwise. It is still capped at a speed, so a flick
+                // cannot teleport it out from under a bomb.
+                if( touching )
+                {
+                    d   = targetX - px;
+                    px += Math.max( -DRAG_SPEED, Math.min( DRAG_SPEED, d ) );
+                }
+
+                px = Math.max( EDGE, Math.min( W - EDGE - SPR.ship.w, px ) );
+
+                // ONE shot on the screen at a time - the arcade rule, and what
+                // makes the game about choosing the moment rather than holding
+                // the button. So holding it is exactly right: the next shot
+                // leaves as soon as the last one is spent.
+                if( firing && ! shot )
+                    shot = { x: px + Math.round( ( SPR.ship.w - SHOT_W ) / 2 ), y: SHIP_Y - SHOT_H };
+            }
+
+            function moveShot()
+            {
+                var top, i, a;
+
+                if( ! shot ) return;
+
+                top = shot.y - SHOT_SPEED;
+
+                if( sweep( shot.x, shot.y, top, 0 ) ) { shot = null; return; }
+
+                shot.y = top;
+                if( shot.y + SHOT_H < 0 ) { shot = null; return; }
+
+                for( i = 0; i < bombs.length; i++ )
+                    if( hits( shot.x, shot.y, SHOT_W, SHOT_H, bombs[ i ].x, bombs[ i ].y, BOMB_W, BOMB_H ) )
+                    { bombs.splice( i, 1 ); shot = null; return; }
+
+                if( ufo && hits( shot.x, shot.y, SHOT_W, SHOT_H, ufo.x, UFO_Y, SPR.ufo.w, SPR.ufo.h ) )
+                { addScore( ufo.points ); ufo = null; shot = null; return; }
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( ! a.alive ) continue;
+                    if( ! hits( shot.x, shot.y, SHOT_W, SHOT_H, a.x, a.y, a.w, 8 ) ) continue;
+
+                    a.alive = false;
+                    a.boom  = BOOM_TICKS;
+                    alive  -= 1;
+                    addScore( POINTS[ a.row ] );
+                    shot = null;
+                    return;
+                }
+            }
+
+            function moveBombs()
+            {
+                var speed = Math.min( 2.2, 1.3 + ( wave - 1 ) * 0.1 );
+                var i, b;
+
+                for( i = bombs.length - 1; i >= 0; i-- )
+                {
+                    b    = bombs[ i ];
+                    b.y += speed;
+
+                    if( sweep( b.x + 1, b.y + BOMB_H - speed, b.y + BOMB_H, 1 ) ) { bombs.splice( i, 1 ); continue; }
+                    if( b.y > GROUND_Y ) { bombs.splice( i, 1 ); continue; }
+
+                    if( hits( b.x, b.y, BOMB_W, BOMB_H, px, SHIP_Y, SPR.ship.w, SPR.ship.h ) )
+                    { bombs.splice( i, 1 ); hitShip(); return; }
+                }
+
+                if( --bombTick <= 0 )
+                {
+                    if( bombs.length < maxBombs() ) dropBomb();
+                    bombTick = bombDelay();
+                }
+            }
+
+            function moveUfo()
+            {
+                if( ufo )
+                {
+                    ufo.x += ufo.dir * UFO_SPEED;
+                    if( ufo.x < -SPR.ufo.w || ufo.x > W ) ufo = null;
+                    return;
+                }
+
+                // Only while there is still a crowd: a lone ufo crossing an
+                // empty screen is a free 300 points.
+                if( --ufoTick > 0 || alive <= 6 ) return;
+
+                ufo = { dir: Math.random() < 0.5 ? 1 : -1,
+                        points: UFO_POINTS[ Math.floor( Math.random() * UFO_POINTS.length ) ] };
+                ufo.x   = ufo.dir > 0 ? -SPR.ufo.w : W;
+                ufoTick = UFO_EVERY;
+            }
+
+            function step()
+            {
+                var i;
+
+                // Any dialog over the app pauses it: the help sheet, the install
+                // prompt, "session expired". They cover the pane and swallow the
+                // keys (see onKey), and a ship that cannot be steered is a ship
+                // standing still while it is shot at.
+                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
+
+                for( i = 0; i < aliens.length; i++ ) if( aliens[ i ].boom > 0 ) aliens[ i ].boom--;
+
+                if( state === 'dying' ) { if( --dieTick  <= 0 ) respawn();  return; }
+                if( state === 'wave'  ) { if( --waveTick <= 0 ) nextWave(); return; }
+                if( state !== 'playing' ) return;
+
+                movePlayer();
+                moveShot();
+
+                if( --marchTick <= 0 ) { march(); marchTick = marchEvery(); }
+                if( state !== 'playing' ) return;                       // march() may have ended it
+
+                moveBombs();
+                moveUfo();
+
+                if( state === 'playing' && alive === 0 ) { state = 'wave'; waveTick = WAVE_TICKS; }
+            }
+
+            //---- losing, winning, and the wave in between ---------------------
+
+            function hitShip()
+            {
+                lives  -= 1;
+                bombs   = [];
+                shot    = null;
+                state   = 'dying';
+                dieTick = DIE_TICKS;
+                paint();
+            }
+
+            function respawn()
+            {
+                if( lives <= 0 ) { gameOver(); return; }
+
+                px    = ( W - SPR.ship.w ) / 2;
+                state = 'playing';
+            }
+
+            function nextWave()
+            {
+                wave += 1;
+                setWave();
+                state = 'playing';
+                paint();
+            }
+
+            function gameOver()
+            {
+                state = 'over';
+                A.loop.halt();
+
+                // `score === best` as well as `record`: a game started before
+                // loadData() answered raises `best` off zero on the first alien,
+                // and the record adopted a moment later can be higher than this
+                // whole game - which is not a record to announce.
+                if( record && score === best ) NayiveUI.toast( TF( 'games.invadersRecord', { n: score } ) );
+                A.overlay();
+            }
+
+            //---- the loop ----------------------------------------------------
+            //
+            // The accumulator that used to live here is now gameLoop(), out in
+            // the shared scope: Asteroids became the second canvas game and
+            // wanted the same one - the move clock() made when Sudoku became the
+            // second game with a stopwatch. What stayed behind is the one rule
+            // that is this game's and not the loop's, at the top of step().
+            var A;                                 // the arcade shell (see above): the loop and the still states
+
+            //---- painting ----------------------------------------------------
+
+            // The canvas is a fixed 216 x 288 world scaled to whatever the pane
+            // gives it, so this is the only place a real pixel is mentioned.
+            // The pane is display:none when init() runs, which makes the box 0
+            // wide - hence the guard, and the second call from enter().
+            function fit()
+            {
+                var box = canvasEl.getBoundingClientRect();
+                var dpr = window.devicePixelRatio || 1;
+                var w   = Math.round( box.width * dpr );
+
+                if( ! w || w === fitted ) return;
+
+                fitted          = w;
+                canvasEl.width  = w;
+                canvasEl.height = Math.round( w * H / W );
+                scale           = w / W;
+
+                draw();                              // ...and a paused game repaints at the new size
+            }
+
+            // Canvas cannot read var(--x), so the palette is read out of the
+            // stylesheet once and kept. It is the Minesweeper arrangement - two
+            // fixed sets, one per scheme, right down to the same hexes - and
+            // for the same reason: one percentage of --accent cannot serve a
+            // dark background and a beige one.
+            function palette()
+            {
+                var cs = getComputedStyle( canvasEl );
+                var v  = function ( n ) { return cs.getPropertyValue( n ).trim(); };
+
+                C = { ship:   v( '--iv-ship'   ), shot:   v( '--iv-shot'   ),
+                      ufo:    v( '--iv-ufo'    ), bomb:   v( '--iv-bomb'   ),
+                      shield: v( '--iv-shield' ), ground: v( '--iv-ground' ),
+                      alien:  [ v( '--iv-a1' ), v( '--iv-a2' ), v( '--iv-a3' ) ],
+                      text:   cs.color };
+
+                font = cs.fontFamily;
+            }
+
+            function blit( s, x, y, colour )
+            {
+                var i, r;
+
+                ctx.fillStyle = colour;
+                for( i = 0; i < s.runs.length; i++ )
+                {
+                    r = s.runs[ i ];
+                    ctx.fillRect( x + r.x, y + r.y, r.w, 1 );
+                }
+            }
+
+            function draw()
+            {
+                var i, j, r, c, a, b, start;
+
+                ctx.setTransform( scale, 0, 0, scale, 0, 0 );
+                ctx.clearRect( 0, 0, W, H );                            // the CSS background shows through
+
+                // The floor stops short of the sides: drawn wall to wall it runs
+                // straight into the field's rounded corners and reads as the
+                // canvas being cut off rather than as the ground.
+                ctx.fillStyle = C.ground;
+                ctx.fillRect( 8, GROUND_Y, W - 16, 1 );
+
+                for( i = 0; i < aliens.length; i++ )
+                {
+                    a = aliens[ i ];
+                    if( a.boom > 0 )       blit( SPR.boom, a.x + Math.round( ( a.w - SPR.boom.w ) / 2 ), a.y, C.alien[ a.type ] );
+                    else if( a.alive )     blit( SPR.alien[ a.type ][ frame ], a.x, a.y, C.alien[ a.type ] );
+                }
+
+                if( ufo ) blit( SPR.ufo, ufo.x, UFO_Y, C.ufo );
+
+                // The bunkers are drawn as runs of surviving blocks, so a whole
+                // one is eight rectangles rather than eighty-eight.
+                ctx.fillStyle = C.shield;
+                for( i = 0; i < bunkers.length; i++ )
+                {
+                    b = bunkers[ i ];
+                    for( r = 0; r < BROWS; r++ )
+                    {
+                        c = 0;
+                        while( c < BCOLS )
+                        {
+                            if( ! b.cells[ r ][ c ] ) { c++; continue; }
+
+                            start = c;
+                            while( c < BCOLS && b.cells[ r ][ c ] ) c++;
+                            ctx.fillRect( b.x + start * BLOCK, b.y + r * BLOCK, ( c - start ) * BLOCK, BLOCK );
+                        }
+                    }
+                }
+
+                if( state !== 'dying' )      blit( SPR.ship,  px, SHIP_Y, C.ship );
+                else if( dieTick % 8 < 4 )   blit( SPR.wreck, px, SHIP_Y, C.bomb );
+
+                if( shot )
+                {
+                    ctx.fillStyle = C.shot;
+                    ctx.fillRect( shot.x, shot.y, SHOT_W, SHOT_H );
+                }
+
+                ctx.fillStyle = C.bomb;
+                for( j = 0; j < bombs.length; j++ )
+                    ctx.fillRect( bombs[ j ].x, bombs[ j ].y, BOMB_W, BOMB_H );
+
+                if( state === 'wave' )
+                {
+                    ctx.fillStyle    = C.text;
+                    ctx.font         = '700 14px ' + font;
+                    ctx.textAlign    = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText( TF( 'games.invadersWaveN', { n: wave + 1 } ), W / 2, H / 2 );
+                }
+            }
+
+            // The three figures in the toolbar. The lives are ships rather than
+            // a number, and they are the LEFT group of the .view-bar because
+            // Space Invaders has no difficulty switch to put there - the waves
+            // are its difficulty - and .game-stats alone would sit off-centre.
+            function paint()
+            {
+                scoreEl.textContent = String( score );
+                bestEl.textContent  = String( best );
+                waveEl.textContent  = String( wave );
+
+                lifeEls.forEach( function ( el, i ) { el.classList.toggle( 'is-gone', i >= lives ); } );
+            }
+
+            function clearKeys() { keyL = keyR = firing = touching = false; }
+
+            // A fresh game, sitting at "ready" behind its overlay. Nothing runs
+            // until the player asks for it (see rule 3 at the top).
+            function reset()
+            {
+                wave   = 1;
+                score  = 0;
+                lives  = LIVES;
+                record = false;
+                state  = 'ready';
+
+                A.loop.halt();
+                clearKeys();
+                setWave();
+                paint();
+                A.overlay();
+                draw();
+            }
+
+            //---- input -------------------------------------------------------
+
+            function onKey( e )
+            {
+                var k = e.key, el = e.target;
+
+                if( ! A.isLive() || e.ctrlKey || e.altKey || e.metaKey ) return;
+                if( keyBusy( e ) ) return;
+
+                // Space and Enter belong to whatever button has the focus - the
+                // overlay's own, or "new game" in the toolbar. Taking them here
+                // as well would start the game twice on one press.
+                if( el && el.tagName === 'BUTTON' && ( k === ' ' || k === 'Enter' ) ) return;
+
+                if     ( k === 'ArrowLeft'  ) keyL = true;
+                else if( k === 'ArrowRight' ) keyR = true;
+                else if( k === ' ' || k === 'Spacebar' || k === 'ArrowUp' || k === 'Enter' ) { firing = true; A.play(); }
+                else if( k === 'p' || k === 'P' ) { if( state === 'paused' ) A.resume(); else A.pause(); }
+                else return;
+
+                e.preventDefault();                  // the arrows and space would scroll the page
+            }
+
+            function onKeyUp( e )
+            {
+                if     ( e.key === 'ArrowLeft'  ) keyL = false;
+                else if( e.key === 'ArrowRight' ) keyR = false;
+                else if( e.key === ' ' || e.key === 'Spacebar' || e.key === 'ArrowUp' || e.key === 'Enter' ) firing = false;
+            }
+
+            // touch-action: none on the canvas is what stops the browser
+            // scrolling or zooming with the same finger; the pointer capture is
+            // what keeps a finger that has drifted off the canvas still
+            // steering.
+            function onDown( e )
+            {
+                canvasEl.focus();
+
+                if( state !== 'playing' && state !== 'dying' && state !== 'wave' ) { A.play(); return; }
+
+                touching = true;
+                firing   = true;
+                dragFrom = e.clientX;
+                dragShip = px;
+                targetX  = px;
+
+                if( canvasEl.setPointerCapture ) try { canvasEl.setPointerCapture( e.pointerId ); } catch ( err ) {}
+                e.preventDefault();
+            }
+
+            function onPointerMove( e )
+            {
+                if( ! touching ) return;
+
+                targetX = dragShip + ( e.clientX - dragFrom ) * W / canvasEl.clientWidth;
+                e.preventDefault();
+            }
+
+            function onUp()
+            {
+                touching = false;
+                firing   = false;
+            }
+
+            //---- mounting ----------------------------------------------------
+
+            // The same max-merge 2048 uses, and for the same reason: the plug
+            // re-reads the file on focus and on a tap, and that answer can be
+            // older than the game being played right now.
+            function adoptBest( n )
+            {
+                best = keepBest( best, n, bestEl );
+                return best;
+            }
+
+            function init()
+            {
+                canvasEl    = document.getElementById( 'invCanvas' );
+                ctx         = canvasEl.getContext( '2d' );
+                overEl      = document.getElementById( 'invOver' );
+                overTitleEl = document.getElementById( 'invOverTitle' );
+                overSubEl   = document.getElementById( 'invOverSub' );
+                overBtnEl   = document.getElementById( 'invOverBtn' );
+                scoreEl     = document.getElementById( 'invScore' );
+                bestEl      = document.getElementById( 'invBest' );
+                waveEl      = document.getElementById( 'invWave' );
+                pauseBtn    = document.getElementById( 'invPause' );
+                lifeEls     = Array.prototype.slice.call( document.querySelectorAll( '#invLives svg' ) );
+
+                SPR = { alien: [ ART.squid.map( sprite ), ART.crab.map( sprite ), ART.octo.map( sprite ) ],
+                        boom:  sprite( ART.boom  ),
+                        ship:  sprite( ART.ship  ),
+                        wreck: sprite( ART.wreck ),
+                        ufo:   sprite( ART.ufo   ) };
+
+                A = arcade( {
+                    readyKey: 'games.invaders',
+                    // This is the one game that pauses out of more than
+                    // "playing": a ship blowing up and the gap between waves are
+                    // both real states, and coming back has to land in the one
+                    // it left.
+                    runs: [ 'playing', 'dying', 'wave' ],
+                    els: { canvas: canvasEl, over: overEl, overTitle: overTitleEl,
+                           overSub: overSubEl, overBtn: overBtnEl, pause: pauseBtn,
+                           newGame: document.getElementById( 'invNew' ) },
+                    getState: function () { return state; },
+                    setState: function ( v ) { state = v; },
+                    score:    function () { return score; },
+                    step: step, draw: draw, reset: reset, clearKeys: clearKeys,
+                    palette: palette, fit: fit,
+                    onKey: onKey, onKeyUp: onKeyUp
+                } );
+
+                // The ship is dragged with the same finger that starts the game,
+                // so the canvas keeps its own press handler and the shell keeps
+                // its hands off it.
+                canvasEl.addEventListener( 'pointerdown',   onDown );
+                canvasEl.addEventListener( 'pointermove',   onPointerMove );
+                canvasEl.addEventListener( 'pointerup',     onUp );
+                canvasEl.addEventListener( 'pointercancel', onUp );
+
+                A.wire( { tap: false } );
+
+                palette();
+                reset();
+
+                return { enter: A.enter, leave: A.leave };
+            }
+
+            return { init: init, adoptBest: adoptBest };
+        } )();
+
+        NayiveGames.add( 'invaders', Invaders );
+    } )();
+    </script>
