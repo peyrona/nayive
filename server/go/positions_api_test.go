@@ -1,6 +1,6 @@
 package main
 
-// Photos and the OwnTracks app, placing the owner of a linked trip.
+// Photos and the OwnTracks app, placing the owner on their trips.
 
 import (
 	"bytes"
@@ -61,7 +61,7 @@ func TestPhotoUploadPlacesOwner(t *testing.T) {
 }
 
 func TestOwnTracks(t *testing.T) {
-	srv, base, client, _ := makeLink(t)
+	srv, base, client, link := makeLink(t)
 	tripDir := filepath.Join(srv.cfg.HomesDir, "ana", publicTripDir)
 
 	var k struct {
@@ -97,6 +97,28 @@ func TestOwnTracks(t *testing.T) {
 	got := waitLatest(t, tripDir, func(l *tripPosition) bool { return l.Source == "owntracks" })
 	if got.Lat != 41.158 || got.Lon != -8.629 || got.Acc != 8 || got.At != when {
 		t.Errorf("stored %+v", got)
+	}
+
+	// A link is not what keeps positions: with it stopped, the trip still takes them...
+	resp = do(t, client, "DELETE", base+"/api/shares?id="+link.ID, nil, nil)
+	readBody(t, resp)
+	later := when + 30
+	report(k.URL, `{"_type":"location","lat":41.15,"lon":-8.62,"acc":8,"tst":`+itoa64(later)+`}`)
+	if l := readPositionsDoc(tripDir).Latest; l == nil || l.At != later {
+		t.Errorf("a trip without a link did not take the position: %+v", l)
+	}
+
+	// ...and a trip switched off in Trips takes nothing.
+	tripJSON := filepath.Join(tripDir, "trip.json")
+	var doc map[string]any
+	raw, _ := os.ReadFile(tripJSON)
+	json.Unmarshal(raw, &doc)
+	doc["track"] = false
+	raw, _ = json.Marshal(doc)
+	os.WriteFile(tripJSON, raw, 0o644)
+	report(k.URL, `{"_type":"location","lat":41.15,"lon":-8.62,"acc":8,"tst":`+itoa64(later+20)+`}`)
+	if l := readPositionsDoc(tripDir).Latest; l == nil || l.At != later {
+		t.Errorf("a trip switched off took a position: %+v", l)
 	}
 
 	// Anything but a location is accepted and ignored - and so is junk.

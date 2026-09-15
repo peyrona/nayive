@@ -749,7 +749,7 @@
 
         infoByHover = false;                            // openInfo() alone = pinned
 
-        infoPopupEl.textContent = dot.getAttribute( "data-info" ) || "";
+        setInfoText( infoPopupEl, dot.getAttribute( "data-info" ) || "" );
         infoPopupEl.style.display    = "block";
         infoPopupEl.style.visibility = "hidden";        // measure before placing
         infoPopupEl.style.left = "0px";
@@ -784,6 +784,28 @@
         document.addEventListener( "keydown", onInfoKey, true );
         window.addEventListener( "scroll", closeInfo, true );
         window.addEventListener( "resize", closeInfo, true );
+    }
+
+    // The popup's text, with every "https://..." in it made a link (new tab).
+    // Text nodes only, never innerHTML. A tap on the link does not close the
+    // popup first: onInfoOutside ignores presses inside it.
+    function setInfoText( el, text )
+    {
+        el.textContent = "";
+        text.split( /(https:\/\/\S+)/ ).forEach( function ( part, i )
+        {
+            if( i % 2 === 0 )
+            {
+                if( part ) el.appendChild( document.createTextNode( part ) );
+                return;
+            }
+            var a = document.createElement( "a" );
+            a.href        = part;
+            a.target      = "_blank";
+            a.rel         = "noopener";
+            a.textContent = part;
+            el.appendChild( a );
+        } );
     }
 
     function onInfoClick( e )
@@ -2577,6 +2599,35 @@
         } );
     }
 
+    // The full URL of a server path the API answered with ("/s/<token>", "/api/owntracks/<key>").
+    function linkUrl( g ) { return window.location.origin + g.url; }
+
+    // A round icon button (.share-drop) that disables itself while its action runs.
+    function rowButton( name, title, action )
+    {
+        var b = document.createElement( "button" );
+        b.type      = "button";
+        b.className = "share-drop";
+        b.title     = title;
+        b.setAttribute( "aria-label", title );
+        b.innerHTML = icon( name );
+        b.addEventListener( "click", function ()
+        {
+            b.disabled = true;
+            Promise.resolve().then( action )
+                .catch( function ( e ) { toast( e.message ); } )
+                .then( function () { b.disabled = false; } );
+        } );
+        return b;
+    }
+
+    function copyText( value )
+    {
+        if( navigator.clipboard && navigator.clipboard.writeText )
+            return navigator.clipboard.writeText( value );
+        return Promise.reject( new Error( "no clipboard" ) );
+    }
+
     /* The "Compartir" dialog: tick one or more people, see who already has it, take it back.
      * opts = { path, app, title }. Resolves when the dialog closes. */
     function shareSheet( opts )
@@ -2598,7 +2649,7 @@
             var users = [], mine = [], chosen = [];   // chosen = every person ticked right now
             var mayAdd = false;                      // "pueden añadir archivos" ticked?
             var link   = null;                       // a trip's public link, when it has one
-            var tracker = null;                      // this account's OwnTracks URL ({url, created}), when on
+            var dropped = false;                     // × on the link: no new one until the sheet opens again
 
             function close()
             {
@@ -2614,24 +2665,37 @@
                 ok = null;
                 sheet.innerHTML = "";
 
-                var h = document.createElement( "h2" );
-                h.textContent = t( "share.title" );
-                sheet.appendChild( h );
-
-                var lead = document.createElement( "p" );
-                lead.className = "dialog-text";
                 var what = opts.title || path.split( "/" ).pop();
 
-                // The lead says what the share will actually allow, so it never
+                var h = document.createElement( "h2" );
+                h.textContent = tf( "share.title", { what: what } );
+                sheet.appendChild( h );
+
+                // --- anyone with the link (a trip only - server/go/api_public.go), above the people ---
+                if( opts.app === "trips" ) sheet.appendChild( linkSection() );
+
+                // --- only the people you pick: a heading and a note, like the link's ---
+                var people = document.createElement( "div" );
+                people.className = "share-sect";
+
+                var head = document.createElement( "p" );
+                head.className   = "share-head";
+                head.textContent = t( "share.people.head" );
+                people.appendChild( head );
+
+                var lead = document.createElement( "p" );
+                lead.className = "share-note";
+
+                // The note says what the share will actually allow, so it never
                 // contradicts the "pueden añadir" tick below it.
                 function setLead()
                 {
-                    lead.textContent = mayAdd
-                        ? tf( "share.leadadd", { what: what } )
-                        : tf( "share.lead", { what: what } );
+                    lead.textContent = mayAdd                ? t( "share.leadadd" )
+                                     : opts.app === "trips" ? t( "share.leadTrip" )
+                                     :                        t( "share.lead" );
                 }
                 setLead();
-                sheet.appendChild( lead );
+                people.appendChild( lead );
 
                 // --- who already has it ---
                 if( mine.length )
@@ -2664,7 +2728,7 @@
                         row.appendChild( del );
                         have.appendChild( row );
                     } );
-                    sheet.appendChild( have );
+                    people.appendChild( have );
                 }
 
                 // --- who else could have it ---
@@ -2678,7 +2742,7 @@
                     none.textContent = users.length
                         ? t( "share.everyone" )
                         : t( "share.nobody" );
-                    sheet.appendChild( none );
+                    people.appendChild( none );
                 }
                 else
                 {
@@ -2710,11 +2774,17 @@
                             if( ok ) ok.disabled = ! chosen.length;
                         } );
 
+                        // A <span>, not a bare text node: only an element can end in "..."
+                        // when the name is wider than its column. The tooltip has it whole.
+                        var nm = document.createElement( "span" );
+                        nm.textContent = name;
+                        lab.title = name;
+
                         lab.appendChild( box );
-                        lab.appendChild( document.createTextNode( name ) );
+                        lab.appendChild( nm );
                         list.appendChild( lab );
                     } );
-                    sheet.appendChild( list );
+                    people.appendChild( list );
                 }
 
                 // --- may they add files of their own? ---
@@ -2739,11 +2809,9 @@
                     addLab.appendChild( addBox );
                     addLab.appendChild( document.createTextNode(
                         t( "share.mayadd" ) ) );
-                    sheet.appendChild( addLab );
+                    people.appendChild( addLab );
                 }
-
-                // --- anyone with the link (a trip only - server/go/api_public.go) ---
-                if( opts.app === "trips" ) sheet.appendChild( linkSection() );
+                sheet.appendChild( people );
 
                 // --- buttons ---
                 var row2 = document.createElement( "div" );
@@ -2799,40 +2867,34 @@
                 applySheetButtons( sheet );
             }
 
-            // "Cualquiera con el enlace": the trip's public link - make it, send it,
-            // copy it, take it away - and whether THIS device reports its location
-            // to it. The row is the same .share-row / .share-drop as a person's.
+            // "Cualquiera con el enlace": the trip's public link - send it, copy it,
+            // take it away. Nothing to "create": load() makes it as the sheet opens.
+            // The row is the same .share-row / .share-drop as a person's.
             function linkSection()
             {
                 var box = document.createElement( "div" );
-                box.className = "share-link";
+                box.className = "share-sect share-link";
 
                 var head = document.createElement( "p" );
-                head.className   = "share-link-head";
+                head.className   = "share-head";
                 head.textContent = t( "share.link.head" );
                 box.appendChild( head );
 
                 var note = document.createElement( "p" );
-                note.className   = "share-link-note";
+                note.className   = "share-note";
                 note.textContent = t( "share.link.warn" );
                 box.appendChild( note );
 
                 var row = document.createElement( "div" );
                 row.className = "share-row";
 
+                // "..." while load() is still making it; after its ×, how to get one back.
                 var text = document.createElement( "span" );
                 text.className   = "share-link-url";
-                text.textContent = link ? linkUrl( link ) : t( "share.link.none" );
+                text.textContent = link ? linkUrl( link ) : dropped ? t( "share.link.none" ) : "…";
                 row.appendChild( text );
 
-                if( ! link )
-                {
-                    row.appendChild( rowButton( "plus", t( "share.link.create" ), function ()
-                    {
-                        return shareApi( "POST", { link: true, root: path, title: opts.title || "" } ).then( load );
-                    } ) );
-                }
-                else
+                if( link )
                 {
                     var url = linkUrl( link );
                     if( navigator.share )
@@ -2848,124 +2910,19 @@
                     } ) );
                     row.appendChild( rowButton( "x", t( "share.link.stop" ), function ()
                     {
-                        return shareApi( "DELETE", null, link.id ).then( load );
+                        return shareApi( "DELETE", null, link.id )
+                                   .then( function () { dropped = true; return load(); } );
                     } ) );
                 }
                 box.appendChild( row );
-
-                if( link && navigator.geolocation )
-                {
-                    var locLab = document.createElement( "label" );
-                    locLab.className = "share-add";
-
-                    var locBox = document.createElement( "input" );
-                    locBox.type    = "checkbox";
-                    locBox.checked = locationOn();
-                    locBox.addEventListener( "change", function ()
-                    {
-                        if( ! locBox.checked ) { setLocationOn( false ); return; }
-
-                        // The tick is a real tap: the one moment the browser may ask
-                        // for permission. Background checks never prompt.
-                        locBox.disabled = true;
-                        navigator.geolocation.getCurrentPosition( function ()
-                        {
-                            locBox.disabled = false;
-                            setLocationOn( true );
-                            sendLocationIfDue( true );
-                        }, function ()
-                        {
-                            locBox.disabled = false;
-                            locBox.checked  = false;
-                            toast( t( "share.link.locDenied" ) );
-                        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 2 * 60 * 1000 } );
-                    } );
-
-                    locLab.appendChild( locBox );
-                    locLab.appendChild( document.createTextNode( t( "share.link.loc" ) ) );
-                    box.appendChild( locLab );
-                }
-
-                // The OwnTracks app reports from the background, with Nayive closed.
-                // One URL per account (server/go/owntracks.go), for every linked trip.
-                if( link )
-                {
-                    var appRow = document.createElement( "div" );
-                    appRow.className = "share-row share-link-app";
-
-                    var appText = document.createElement( "span" );
-                    appText.className   = "share-link-url";
-                    appText.textContent = tracker ? linkUrl( tracker ) : t( "share.link.ot" );
-                    appRow.appendChild( appText );
-
-                    if( ! tracker )
-                    {
-                        appRow.appendChild( rowButton( "plus", t( "share.link.otCreate" ), function ()
-                        {
-                            return jsonApi( "/api/owntracks", "POST" ).then( load );
-                        } ) );
-                    }
-                    else
-                    {
-                        var appUrl = linkUrl( tracker );
-                        appRow.appendChild( rowButton( "copy", t( "share.link.otCopy" ), function ()
-                        {
-                            return copyText( appUrl ).then( function () { toast( t( "share.link.copied" ) ); },
-                                                            function () { toast( appUrl ); } );
-                        } ) );
-                        appRow.appendChild( rowButton( "x", t( "share.link.otStop" ), function ()
-                        {
-                            return jsonApi( "/api/owntracks", "DELETE" ).then( load );
-                        } ) );
-                    }
-                    box.appendChild( appRow );
-
-                    if( tracker )
-                    {
-                        var how = document.createElement( "p" );
-                        how.className   = "share-link-note share-link-how";
-                        how.textContent = t( "share.link.otHow" );
-                        box.appendChild( how );
-                    }
-                }
                 return box;
-            }
-
-            function linkUrl( g ) { return window.location.origin + g.url; }
-
-            // A round icon button that disables itself while its action runs.
-            function rowButton( name, title, action )
-            {
-                var b = document.createElement( "button" );
-                b.type      = "button";
-                b.className = "share-drop";
-                b.title     = title;
-                b.setAttribute( "aria-label", title );
-                b.innerHTML = icon( name );
-                b.addEventListener( "click", function ()
-                {
-                    b.disabled = true;
-                    Promise.resolve().then( action )
-                        .catch( function ( e ) { toast( e.message ); } )
-                        .then( function () { b.disabled = false; } );
-                } );
-                return b;
-            }
-
-            function copyText( value )
-            {
-                if( navigator.clipboard && navigator.clipboard.writeText )
-                    return navigator.clipboard.writeText( value );
-                return Promise.reject( new Error( "no clipboard" ) );
             }
 
             function load()
             {
                 return Promise.all( [
                     fetch( window.location.origin + "/api/users" ).then( function ( r ) { return r.json(); } ),
-                    shareApi( "GET" ),
-                    opts.app === "trips" ? jsonApi( "/api/owntracks", "GET" ).catch( function () { return null; } )
-                                         : null
+                    shareApi( "GET" )
                 ] ).then( function ( res )
                 {
                     users = ( res[ 0 ] && res[ 0 ].users ) || [];
@@ -2974,13 +2931,17 @@
                     // A public link is not a person: it has its own section.
                     mine = here.filter( function ( g ) { return ! g.token; } );
                     link = here.filter( function ( g ) { return !! g.token; } )[ 0 ] || null;
-                    tracker = res[ 2 ] && res[ 2 ].url ? res[ 2 ] : null;
-                    render();
+
+                    // One link per trip, the same for whoever gets it - so it is made
+                    // as the sheet opens, with nothing to press first. After its ×
+                    // it stays gone until the next open (his call, 2026-09-15).
+                    if( opts.app === "trips" && ! link && ! dropped )
+                        return shareApi( "POST", { link: true, root: path, title: opts.title || "" } )
+                                   .then( function ( g ) { link = g; } );
                 } ).catch( function ( e )
                 {
                     toast( e.message || t( "ui.loadFailed" ) );
-                    render();
-                } );
+                } ).then( render );
             }
 
             document.body.appendChild( back );
@@ -2995,87 +2956,88 @@
         } );
     }
 
-    //------------------------------------------------------------------------//
-    // "SEND MY LOCATION" - for a trip's public link (server/go/api_location.go)
-    //
-    // A web page cannot read GPS in the background, so the device where the owner
-    // ticked the box in a trip's Share sheet reports while any Nayive page is
-    // open: one probe every quarter of an hour at most, the GPS read - at high
-    // accuracy - only when the server answers "due" (a linked trip is on and its
-    // position is an hour old, or rough and 15 minutes old), and never a
-    // permission prompt from here: only the tick itself may ask. With Nayive
-    // closed, the OwnTracks app does this job.
-    //
-    // The position is rounded to ~100 m BEFORE it leaves the device, so the town
-    // lookup (OpenStreetMap's Nominatim) never sees the exact spot either. The
-    // server rounds it again whatever arrives, and keeps its accuracy.
-
-    var LOC_KEY   = "nayive-share-location";         // "1" = this device reports
-    var LOC_PROBE = "nayive-share-location-probe";   // ms of the last probe
-    var LOC_EVERY = 15 * 60 * 1000;
-
-    function locationOn()
+    /* OwnTracks: this account's one URL for the OwnTracks phone app, which sends
+     * where you are from the background, for every trip (server/go/owntracks.go).
+     * Returns an element that loads and redraws itself: make it, add it, done.
+     * Trips' "My location" sheet is its home. */
+    function ownTracksSection()
     {
-        try { return localStorage.getItem( LOC_KEY ) === "1"; } catch ( e ) { return false; }
-    }
+        var box = document.createElement( "div" );
+        box.className = "share-sect share-link";
 
-    function setLocationOn( on )
-    {
-        try
+        var tracker = null;      // {url, created} when on
+        var loaded  = false;
+
+        function render()
         {
-            if( on ) localStorage.setItem( LOC_KEY, "1" );
-            else { localStorage.removeItem( LOC_KEY ); localStorage.removeItem( LOC_PROBE ); }
-        }
-        catch ( e ) {}
-    }
+            box.innerHTML = "";
 
-    // `now` = right after the tick: skip the hourly throttle.
-    function sendLocationIfDue( now )
-    {
-        if( ! locationOn() || ! navigator.geolocation ) return;
-        // The sign-in pages have no session; a public link page is a stranger's view.
-        if( /\/(login|admin)\.html$/.test( location.pathname ) || location.pathname.indexOf( "/s/" ) === 0 ) return;
+            var note = document.createElement( "p" );
+            note.className   = "share-note";
+            note.textContent = t( "trips.ot.lead" );
+            box.appendChild( note );
 
-        var started = Date.now(), last = 0;
-        try { last = +localStorage.getItem( LOC_PROBE ) || 0; } catch ( e ) {}
-        if( ! now && started - last < LOC_EVERY ) return;
-        try { localStorage.setItem( LOC_PROBE, String( started ) ); } catch ( e ) {}
+            var row = document.createElement( "div" );
+            row.className = "share-row share-link-app";
 
-        // Without the Permissions API there is no way to know a read will not
-        // prompt, so such a browser reports only right after the tick.
-        var granted = ( navigator.permissions && navigator.permissions.query )
-            ? navigator.permissions.query( { name: "geolocation" } )
-                  .then( function ( st ) { return st.state === "granted"; } )
-            : Promise.resolve( !! now );
+            var text = document.createElement( "span" );
+            text.className   = "share-link-url";
+            text.textContent = ! loaded ? "…" : tracker ? linkUrl( tracker ) : t( "trips.ot.none" );
+            row.appendChild( text );
 
-        granted.then( function ( ok )
-        {
-            if( ! ok ) return null;
-            return fetch( window.location.origin + "/api/location" )
-                .then( function ( r ) { return r.ok ? r.json() : null; } );
-        } ).then( function ( answer )
-        {
-            if( ! answer || ! answer.due ) return;
+            // (i): what OwnTracks is, and its home page to read more.
+            var info = document.createElement( "button" );
+            info.className = "info-dot";
+            info.setAttribute( "data-info", t( "trips.ot.info" ) );
+            row.appendChild( info );
+            applyInfoDots( row );
 
-            navigator.geolocation.getCurrentPosition( function ( pos )
+            if( tracker )
             {
-                var lat = Math.round( pos.coords.latitude  * 1000 ) / 1000;
-                var lon = Math.round( pos.coords.longitude * 1000 ) / 1000;
-                var acc = Math.ceil( pos.coords.accuracy || 0 );   // metres; 0 = the browser did not say
-                townName( lat, lon ).then( function ( place )
+                var url = linkUrl( tracker );
+                row.appendChild( rowButton( "copy", t( "trips.ot.copy" ), function ()
                 {
-                    return fetch( window.location.origin + "/api/location", {
-                        method:  "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body:    JSON.stringify( { lat: lat, lon: lon, acc: acc, place: place } )
-                    } );
-                } ).catch( function () {} );
-            }, function () { /* refused or unknown: try again at the next probe */ },
-            { enableHighAccuracy: true, timeout: 30000, maximumAge: 2 * 60 * 1000 } );
-        } ).catch( function () {} );
+                    return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
+                                                 function () { toast( url ); } );
+                } ) );
+                row.appendChild( rowButton( "x", t( "trips.ot.stop" ), function ()
+                {
+                    return jsonApi( "/api/owntracks", "DELETE" ).then( load );
+                } ) );
+            }
+            else if( loaded )
+            {
+                row.appendChild( rowButton( "plus", t( "trips.ot.create" ), function ()
+                {
+                    return jsonApi( "/api/owntracks", "POST" ).then( load );
+                } ) );
+            }
+            box.appendChild( row );
+
+            if( tracker )
+            {
+                var how = document.createElement( "p" );
+                how.className   = "share-note share-link-how";
+                how.textContent = t( "trips.ot.how" );
+                box.appendChild( how );
+            }
+        }
+
+        function load()
+        {
+            return jsonApi( "/api/owntracks", "GET" )
+                .then( function ( j ) { tracker = j && j.url ? j : null; },
+                       function ( e ) { toast( e.message || t( "ui.loadFailed" ) ); } )
+                .then( function () { loaded = true; render(); } );
+        }
+
+        render();
+        load();
+        return box;
     }
 
-    // The town at a (rounded) position, in the owner's language; "" when unknown.
+    // The town at a (rounded) position, in the viewer's language; "" when unknown.
+    // Asks OpenStreetMap's Nominatim, so pass a position already rounded.
     function townName( lat, lon )
     {
         var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=" +
@@ -3576,13 +3538,10 @@
         i18nReady.then( function () { applyI18n(); } );
 
         pingSwUpdate();
-        // A few seconds in, so it never competes with the app's own first load.
-        setTimeout( function () { sendLocationIfDue( false ); }, 5000 );
         document.addEventListener( "visibilitychange", function ()
         {
             if( document.visibilityState !== "visible" ) return;
             pingSwUpdate();
-            sendLocationIfDue( false );
         } );
     }
 
@@ -3641,6 +3600,7 @@
         canAddTo:     canAddTo,
         sharedBadge:  sharedBadge,
         shareSheet:   shareSheet,
+        ownTracksSection: ownTracksSection,   // Trips' "My location" sheet: the OwnTracks URL
         pickFolder:           pickFolder,
         launcherFolder:       launcherFolder,
         changeLauncherFolder: changeLauncherFolder,

@@ -1116,6 +1116,7 @@ input[type="range"]
     box-shadow: var(--elev-dialog);
     white-space: pre-wrap;       /* honour "\n" in data-info */
 }
+.info-popup a { color: var(--link); }   /* an "https://..." in data-info (ui.js setInfoText) */
 
 
 /* -----------------------------------------------------------------------------
@@ -1525,13 +1526,17 @@ button { -webkit-touch-callout: none; }
 .share-drop svg    { width: 16px; height: 16px; }
 .share-drop[disabled] { opacity: 0.5; cursor: default; }
 
-/* Who else could have it: one list box, a tick-box in front of every name.
- * The tick-box is the browser's own <input type="checkbox"> (coloured by the
- * accent-color rule up in the INPUT section), so it draws the same everywhere. */
+/* Who else could have it: one list box, the names in three columns, a tick-box
+ * in front of each. A name too wide for its column ends in "..." (full name in
+ * the tooltip). The tick-box is the browser's own <input type="checkbox">
+ * (coloured by the accent-color rule up in the INPUT section), so it draws the
+ * same everywhere. */
 .share-pick
 {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 2px;
     max-height: 44vh;
     overflow-y: auto;
     margin: 12px 0 4px;
@@ -1544,12 +1549,14 @@ button { -webkit-touch-callout: none; }
 {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
     border: 1px solid transparent;
     border-radius: 8px;
     cursor: pointer;
 }
+.share-user span  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-user:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
 
 /* "Pueden añadir archivos" - one tick under the people list. Deliberately not
@@ -1568,16 +1575,23 @@ button { -webkit-touch-callout: none; }
 .share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .share-user input { flex: 0 0 auto; width: auto; margin: 0; }
 
-/* "Cualquiera con el enlace" - a trip's public link, under the people. Its row
-   is a plain .share-row with .share-drop buttons; only the long URL has to give
-   way, and the section gets a divider and a heading of its own. */
-.share-link      { margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
-.share-link-head { margin: 0 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.share-link-note { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
+/* The sheet's sections: "Cualquiera con el enlace" (a trip only, on top) and
+   the people. Each has a heading and a note; the divider goes only BETWEEN two
+   of them, so a sheet with just the people (Drive, Photos, Split) gets none. */
+.share-sect + .share-sect { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.share-head { margin: 0 0 4px; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.share-note { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
+
+/* A trip's public link: a plain .share-row with .share-drop buttons; only the
+   long URL has to give way. The row keeps its height while the link is still
+   being made and has no buttons yet. */
 .share-link-url  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; }
-.share-link .share-row { gap: 2px; }
+.share-link .share-row { gap: 2px; min-height: 46px; }
 .share-link-app  { margin-top: 12px; }
 .share-link-how  { margin: 6px 0 0; }
+/* OwnTracks row: the (i) sits right after its words, the buttons stay right. */
+.share-link-app .share-link-url { flex: 0 1 auto; }
+.share-link-app .info-dot       { margin-right: auto; }
 
 
 /* -----------------------------------------------------------------------------

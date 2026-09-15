@@ -1,19 +1,24 @@
 package main
 
 // =============================================================================
-// Trip positions: where the owner of a publicly linked trip has been.
+// Trip positions: where the owner of a trip has been.
 // =============================================================================
 //
-// Three sources feed them:
+// Two sources feed them:
 //
-//	"phone"      a Nayive page open on a device that ticked "send my location"
-//	             in the trip's Share sheet (api_location.go), about hourly
 //	"photo"      a JPEG uploaded into the trip's photo folder: the position and
 //	             time the camera wrote into it (photo_position.go)
 //	"owntracks"  the OwnTracks app, from the background (owntracks.go)
 //
-// A position goes into data/trips/<dir>/positions.json of every linked trip
-// whose days cover the moment it was TAKEN (on the owner's clock):
+// "phone" is read too, never written any more: the Share sheet's "send my
+// location from this device" tick (and its /api/location) was removed on
+// 2026-09-15, and positions.json files from before still hold its points.
+//
+// A position goes into data/trips/<dir>/positions.json of every trip of the
+// owner whose days cover the moment it was TAKEN (on the owner's clock) - unless
+// that trip was switched off in Trips ("track": false in its trip.json). No link
+// is needed: the owner's Journey map (journey.go) shows them, and stopping a
+// link keeps them.
 //
 //	{"positions": [...], "latest": {...}}
 //
@@ -32,6 +37,7 @@ package main
 
 import (
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -191,33 +197,52 @@ func readPositionsDoc(tripDir string) positionsDoc {
 // storing
 // -----------------------------------------------------------------------------
 
-// linkedTrip is one trip of a user that has a live public link.
-type linkedTrip struct {
+// trackedTrip is one trip of a user that keeps their positions.
+type trackedTrip struct {
 	root string // the trip folder, resolved
 	trip publicTripFile
 }
 
-func (s *Server) linkedTrips(user string) []linkedTrip {
-	var out []linkedTrip
-	for _, g := range s.shares.LinksByOwner(user) {
-		grant := g
-		root := s.shares.RootPath(&grant)
-		if root == "" {
+// trackedTrips are the user's own trips - every data/trips/<dir> with a
+// trip.json - except those switched off in Trips ("track": false). Every path
+// goes through ownerFile, so a symlink out of the home, or a trip in .trash, is
+// never read or written.
+func (s *Server) trackedTrips(user string) []trackedTrip {
+	var out []trackedTrip
+	base := s.ownerFile(user, []string{"data", "trips"})
+	if base == "" {
+		return out
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		root := s.ownerFile(user, []string{"data", "trips", name})
+		file := s.ownerFile(user, []string{"data", "trips", name, "trip.json"})
+		if root == "" || file == "" {
+			continue
+		}
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
 			continue
 		}
 		var trip publicTripFile
-		if loadJSONFile(filepath.Join(root, "trip.json"), &trip) {
-			out = append(out, linkedTrip{root: root, trip: trip})
+		if loadJSONFile(file, &trip) && (trip.Track == nil || *trip.Track) {
+			out = append(out, trackedTrip{root: root, trip: trip})
 		}
 	}
 	return out
 }
 
-// recordPosition stores p in every linked trip of `owner` that covers it, and
+// recordPosition stores p in every tracked trip of `owner` that covers it, and
 // answers how many took it.
 func (s *Server) recordPosition(owner string, p tripPosition) int {
 	saved := 0
-	for _, lt := range s.linkedTrips(owner) {
+	for _, lt := range s.trackedTrips(owner) {
 		if s.storePosition(owner, lt, p) {
 			saved++
 		}
@@ -225,9 +250,9 @@ func (s *Server) recordPosition(owner string, p tripPosition) int {
 	return saved
 }
 
-// storePosition cleans p and merges it into one linked trip - when the trip's
-// days cover the moment p was taken, on the owner's clock.
-func (s *Server) storePosition(owner string, lt linkedTrip, p tripPosition) bool {
+// storePosition cleans p and merges it into one trip - when the trip's days
+// cover the moment p was taken, on the owner's clock.
+func (s *Server) storePosition(owner string, lt trackedTrip, p tripPosition) bool {
 	p, ok := cleanPosition(p)
 	if !ok {
 		return false

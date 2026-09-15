@@ -417,88 +417,61 @@ func TestPublicLinkStop(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("stopped link: %d, want 404", resp.StatusCode)
 	}
-	if _, err := os.Stat(positions); !os.IsNotExist(err) {
-		t.Error("the phone positions survived stopping the link")
+	if _, err := os.Stat(positions); err != nil {
+		t.Error("stopping the link deleted the positions: they are the owner's, for their Journey map")
 	}
 }
 
 // -----------------------------------------------------------------------------
-// the phone's side
+// the owner's Journey map
 // -----------------------------------------------------------------------------
 
-func TestLocationAPI(t *testing.T) {
-	srv, base, client, _ := makeLink(t)
-	positions := filepath.Join(srv.cfg.HomesDir, "ana", publicTripDir, tripPositionsFile)
+func TestJourney(t *testing.T) {
+	_, base, client, link := makeLink(t)
 
-	due := func() bool {
+	// No link needed: the owner's own trip, with its link stopped.
+	resp := do(t, client, "DELETE", base+"/api/shares?id="+link.ID, nil, nil)
+	readBody(t, resp)
+
+	get := func(c *http.Client, query string) (int, []byte) {
 		t.Helper()
-		resp := do(t, client, "GET", base+"/api/location", nil, nil)
-		raw := readBody(t, resp)
-		var j struct{ Due bool }
-		json.Unmarshal(raw, &j)
-		return j.Due
-	}
-	post := func(body string) int {
-		t.Helper()
-		resp := do(t, client, "POST", base+"/api/location", strings.NewReader(body),
-			map[string]string{"Content-Type": "application/json"})
-		readBody(t, resp)
-		return resp.StatusCode
+		resp := do(t, c, "GET", base+"/api/journey"+query, nil, nil)
+		return resp.StatusCode, readBody(t, resp)
 	}
 
-	if !due() {
-		t.Fatal("a linked trip that is on, with no position yet, is not due")
+	code, raw := get(client, "?trip=portugal-2026")
+	var trip publicTrip
+	json.Unmarshal(raw, &trip)
+	if code != http.StatusOK || trip.Title != "Portugal" || len(trip.Stages) != 2 || len(trip.Photos) != 2 {
+		t.Fatalf("journey: %d %s", code, raw)
 	}
-	if got := post(`{"lat":200,"lon":0}`); got != http.StatusBadRequest {
-		t.Errorf("lat 200: %d, want 400", got)
+	if strings.Contains(string(raw), "SECRETO") {
+		t.Errorf("the journey gives away more than a link does: %s", raw)
 	}
-	if got := post(`{"lat":41.157944,"lon":-8.629105,"place":"  Oporto\n"}`); got != http.StatusOK {
-		t.Fatalf("post: %d", got)
-	}
-	var doc positionsDoc
-	if !loadJSONFile(positions, &doc) || len(doc.Positions) != 1 {
-		t.Fatalf("positions.json not written")
-	}
-	if p := doc.Positions[0]; p.Lat != 41.158 || p.Lon != -8.629 || p.Place != "Oporto" || p.Source != "phone" {
-		t.Errorf("stored %+v, want 41.158,-8.629 Oporto from the phone", p)
-	}
-	if due() {
-		t.Error("still due right after a position")
-	}
-	if got := post(`{"lat":41.1,"lon":-8.6}`); got != http.StatusConflict {
-		t.Errorf("second post: %d, want 409", got)
+	resp = do(t, client, "GET", base+"/api/journey/thumb/a.jpg?trip=portugal-2026", nil, nil)
+	if got := readBody(t, resp); resp.StatusCode != http.StatusOK || string(got) != "THUMB" {
+		t.Errorf("thumb: %d %q", resp.StatusCode, got)
 	}
 
-	// A rough "now" is asked for again sooner than an accurate one.
-	rough := positionsDoc{Latest: &tripPosition{Lat: 41.1, Lon: -8.6, Acc: 500,
-		At: time.Now().Add(-20 * time.Minute).Unix()}}
-	raw, _ := json.Marshal(rough)
-	os.WriteFile(positions, raw, 0o644)
-	if !due() {
-		t.Error("a rough position 20 minutes old is not due")
-	}
-	rough.Latest.Acc = 20
-	raw, _ = json.Marshal(rough)
-	os.WriteFile(positions, raw, 0o644)
-	if due() {
-		t.Error("an accurate position 20 minutes old is due")
-	}
-
-	// A trip that is over wants nothing.
-	os.Remove(positions)
-	writeTripDates(t, srv, -10, -5)
-	if due() {
-		t.Error("a finished trip is due")
+	for query, want := range map[string]int{
+		"":                          http.StatusNotFound,
+		"?trip=nada":                http.StatusNotFound,
+		"?trip=..":                  http.StatusNotFound,
+		"?trip=portugal-2026%2F..":  http.StatusNotFound,
+		"?trip=.trash":              http.StatusNotFound,
+		"?trip=portugal-2026&x=../": http.StatusOK,
+	} {
+		if code, body := get(client, query); code != want {
+			t.Errorf("journey%s: %d %s, want %d", query, code, body, want)
+		}
 	}
 
 	for name, c := range map[string]*http.Client{
 		"anonymous": anonymous(),
 		"admin":     signedInClient(t, base, "jefe", "secreto"),
 	} {
-		resp := do(t, c, "GET", base+"/api/location", nil, nil)
-		readBody(t, resp)
-		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
-			t.Errorf("%s: %d", name, resp.StatusCode)
+		if code, _ := get(c, "?trip=portugal-2026"); code != http.StatusUnauthorized && code != http.StatusForbidden {
+			t.Errorf("%s: %d", name, code)
 		}
 	}
 }

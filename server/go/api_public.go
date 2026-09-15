@@ -63,6 +63,7 @@ type publicTripFile struct {
 	EndDate     string            `json:"endDate"`
 	PhotosDir   string            `json:"photosDir"`
 	Stages      []publicTripStage `json:"stages"`
+	Track       *bool             `json:"track"` // Trips' "save where I am"; missing means on (positions.go)
 }
 
 type publicTripStage struct {
@@ -203,7 +204,7 @@ func (s *Server) apiPublic(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusNotFound, "este enlace ya no está disponible")
 		return
 	}
-	sendJSON(w, r, http.StatusOK, s.buildPublicTrip(g, root, trip, s.ownerNow(g.Owner)))
+	sendJSON(w, r, http.StatusOK, s.buildTripView(g.Owner, g.Title, root, trip, s.ownerNow(g.Owner)))
 }
 
 // apiPublicFile answers GET /api/public/<token>/{photo|thumb}/<file name>.
@@ -212,6 +213,12 @@ func (s *Server) apiPublicFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.serveTripPhoto(w, r, g.Owner, root)
+}
+
+// serveTripPhoto answers {photo|thumb}/<file name> of one trip's photo folder,
+// for a link's visitor (above) and for the owner's Journey map (journey.go).
+func (s *Server) serveTripPhoto(w http.ResponseWriter, r *http.Request, owner, root string) {
 	notFound := func() { sendError(w, r, http.StatusNotFound, "no existe esa foto") }
 
 	kind, name := r.PathValue("kind"), r.PathValue("name")
@@ -224,7 +231,7 @@ func (s *Server) apiPublicFile(w http.ResponseWriter, r *http.Request) {
 		notFound()
 		return
 	}
-	dir := s.ownerFile(g.Owner, publicPhotoDir(trip.PhotosDir))
+	dir := s.ownerFile(owner, publicPhotoDir(trip.PhotosDir))
 	if dir == "" {
 		notFound()
 		return
@@ -239,7 +246,7 @@ func (s *Server) apiPublicFile(w http.ResponseWriter, r *http.Request) {
 
 	if kind == "thumb" {
 		// The visitor never names the thumbnail: it is worked out from the photo.
-		thumbs := s.ownerFile(g.Owner, []string{"data", "photos", "thumbs"})
+		thumbs := s.ownerFile(owner, []string{"data", "photos", "thumbs"})
 		if thumbs == "" {
 			notFound()
 			return
@@ -283,11 +290,13 @@ func (s *Server) ownerNow(owner string) time.Time {
 	return now
 }
 
-func (s *Server) buildPublicTrip(g *Grant, root string, trip publicTripFile, now time.Time) publicTrip {
+// buildTripView is a trip as a link's visitor sees it - and as its owner's
+// Journey map shows it (journey.go): one code path, the same trimming.
+// `title` stands in when the trip has no destination.
+func (s *Server) buildTripView(owner, title, root string, trip publicTripFile, now time.Time) publicTrip {
 	today := now.Format("2006-01-02")
-	title := strings.TrimSpace(trip.Destination)
-	if title == "" {
-		title = g.Title
+	if dest := strings.TrimSpace(trip.Destination); dest != "" {
+		title = dest
 	}
 	out := publicTrip{
 		Title: title, StartDate: trip.StartDate, EndDate: trip.EndDate, Today: today,
@@ -316,7 +325,7 @@ func (s *Server) buildPublicTrip(g *Grant, root string, trip publicTripFile, now
 	sort.SliceStable(out.Route, func(i, j int) bool { return out.Route[i].At < out.Route[j].At })
 
 	out.Now = nowFor(trip, started, positions.Latest, now)
-	out.Photos = s.publicPhotos(g.Owner, trip.PhotosDir)
+	out.Photos = s.publicPhotos(owner, trip.PhotosDir)
 	return out
 }
 

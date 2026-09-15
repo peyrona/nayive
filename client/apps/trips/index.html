@@ -72,6 +72,7 @@
             lead:  NayiveUI.t( 'trips.introLead' ),
             buttons: [
                 { sel: '.trip-header-actions #addTripBtn', text: NayiveUI.t( 'trips.introAdd' ) },
+                { sel: '.trip-header-actions #myLocationBtn', text: NayiveUI.t( 'trips.introMyLocation' ) },
                 // Export and Share are on each trip card, so they show once the list has a trip.
                 { sel: '.trip-card-actions .trip-pdf-btn',   text: NayiveUI.t( 'trips.introExport' ) },
                 { sel: '.trip-card-actions .trip-share-btn', text: NayiveUI.t( 'trips.introShare' ) },
@@ -317,6 +318,13 @@
 
         .route-map { border: 1px solid var(--line); border-radius: var(--radius-m); width: 100%; max-width: 1600px; height: min(70vh, 1200px); background: var(--card2); }
         .map-caption { font-size: 0.76rem; color: var(--text-dim); margin: 10px 2px 0; text-align: center; }
+        /* Plan / Journey above the route map: shared .icon-btn.sm, .is-active = the one shown. */
+        .map-mode { display: flex; justify-content: flex-end; gap: 4px; margin: 0 2px 8px; }
+        /* Journey: "where I am now" over the map; a photo pin's popup holds a few thumbnails. */
+        .journey-now { margin: 0 2px 8px; font-size: 0.86rem; color: var(--text); }
+        .journey-pop-grid { display: grid; grid-template-columns: repeat(3, 64px); gap: 4px; margin-bottom: 6px; }
+        .journey-pop-grid img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 4px; }
+        .journey-pop a { color: var(--link); font-size: 0.8rem; }
 
         /* The OSM tiles are visually busy - mute them to a calm grey backdrop so the
            coloured trip route is the only thing that stands out. Applied to the tile
@@ -442,6 +450,10 @@
         <div class="sheet" id="mapSheet"></div>
     </div>
 
+    <div class="sheet-backdrop" id="locSheetBackdrop">
+        <div class="sheet" id="locSheet"></div>
+    </div>
+
     <div class="sheet-backdrop" id="currencySheetBackdrop">
         <div class="sheet" id="currencySheet"></div>
     </div>
@@ -500,6 +512,7 @@
         const ICON_CALENDAR   = '<rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>';
         const ICON_CLOCK      = '<circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>';
         const ICON_MAP        = '<path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2z"></path><line x1="9" y1="3" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="21"></line>';
+        const ICON_ROUTE      = '<circle cx="6" cy="19" r="2.5"></circle><circle cx="18" cy="5" r="2.5"></circle><path d="M8.5 19H17a3.5 3.5 0 0 0 0-7H7a3.5 3.5 0 0 1 0-7h8.5"></path>';
         const ICON_CALCULATOR = '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line>' +
             '<circle cx="8" cy="10.5" r="0.9" fill="currentColor" stroke="none"></circle><circle cx="12" cy="10.5" r="0.9" fill="currentColor" stroke="none"></circle><circle cx="16" cy="10.5" r="0.9" fill="currentColor" stroke="none"></circle>' +
             '<circle cx="8" cy="14.5" r="0.9" fill="currentColor" stroke="none"></circle><circle cx="12" cy="14.5" r="0.9" fill="currentColor" stroke="none"></circle><circle cx="16" cy="14.5" r="0.9" fill="currentColor" stroke="none"></circle>' +
@@ -1161,6 +1174,7 @@
                 else if( document.getElementById( 'stageSheetBackdrop'    ).classList.contains( 'open' ) ) closeStageSheet();
                 else if( document.getElementById( 'tripSheetBackdrop'     ).classList.contains( 'open' ) ) closeTripSheet();
                 else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'mapSheetBackdrop' );
+                else if( document.getElementById( 'locSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'locSheetBackdrop' );
                 else if( document.getElementById( 'currencySheetBackdrop' ).classList.contains( 'open' ) ) closeSheet( 'currencySheetBackdrop' );
             });
 
@@ -1293,7 +1307,7 @@
 
         function anySheetOpen()
         {
-            return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop', 'confirmSheetBackdrop']
+            return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'locSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop', 'confirmSheetBackdrop']
                 .some( function( id ) { return document.getElementById( id ).classList.contains( 'open' ); } );
         }
 
@@ -2857,6 +2871,16 @@
                 addBtn.appendChild( svgIcon( ICON_PLUS, 18 ) );
                 addBtn.addEventListener( 'click', openAddTrip );
                 actions.appendChild( addBtn );
+
+                // "My location": the OwnTracks URL that feeds every trip's Journey map.
+                const locBtn = document.createElement( 'button' );
+                locBtn.className = 'icon-btn';
+                locBtn.id    = 'myLocationBtn';       // the help dialog points at it
+                locBtn.title = T( 'trips.myLocation' );
+                locBtn.appendChild( svgIcon( ICON_PIN, 17 ) );
+                locBtn.addEventListener( 'click', openMyLocation );
+                actions.appendChild( locBtn );
+
                 actions.appendChild( buildHelpBtn() );
                 actions.appendChild( buildSyncIndicator() );
                 header.appendChild( actions );
@@ -3694,6 +3718,26 @@
             dateRow.appendChild( dateField( T( 'trips.startDate' ), tripDraft.startDate, function( v ) { tripDraft.startDate = v; refreshTripDocPaths(); } ) );
             dateRow.appendChild( dateField( T( 'trips.endDate' ), tripDraft.endDate, function( v ) { tripDraft.endDate = v; } ) );
             sheet.appendChild( dateRow );
+
+            // "Save where I am": on unless switched off. The server keeps the trip's
+            // positions (OwnTracks, photos with GPS) for its Journey map; only an OFF is
+            // written - on is the key left out (server/go/positions.go).
+            const trackLab = document.createElement( 'label' );
+            trackLab.className = 'share-add';
+            const trackBox = document.createElement( 'input' );
+            trackBox.type    = 'checkbox';
+            trackBox.checked = tripDraft.track !== false;
+            trackBox.addEventListener( 'change', function()
+            {
+                if( trackBox.checked ) delete tripDraft.track; else tripDraft.track = false;
+            });
+            const trackInfo = document.createElement( 'button' );
+            trackInfo.className = 'info-dot';
+            trackInfo.setAttribute( 'data-info', T( 'trips.trackInfo' ) );
+            trackLab.appendChild( trackBox );
+            trackLab.appendChild( document.createTextNode( T( 'trips.track' ) ) );
+            trackLab.appendChild( trackInfo );
+            sheet.appendChild( trackLab );
 
             // No "Documentos (i) [+]" heading here any more: the "+" and the info dot
             // live beside the "Documentos" heading on the trip detail screen, which is
@@ -4674,6 +4718,10 @@
         {
             const wrap = document.createElement( 'div' );
 
+            // Plan / Journey. A trip shared with us has no Journey: its positions are
+            // the owner's (server/go/journey.go answers only for our own trips).
+            if( ! tripIsRO( trip ) ) wrap.appendChild( buildMapModeSwitch() );
+
             // The map needs live map tiles. Offline, skip Leaflet entirely
             // and show a note — the stages are still listed in the detail view.
             if( ! navigator.onLine )
@@ -4684,6 +4732,13 @@
                 off.textContent = T( 'trips.mapNeedsNet' );
                 wrap.appendChild( off );
                 parentEl.appendChild( wrap );
+                return;
+            }
+
+            if( mapMode === 'journey' && ! tripIsRO( trip ) )
+            {
+                parentEl.appendChild( wrap );
+                buildJourneyBlock( trip, sWhich, wrap );
                 return;
             }
 
@@ -4738,6 +4793,242 @@
 
             parentEl.appendChild( wrap );
             buildRealMap( trip, mapDiv, sWhich );
+        }
+
+        //------------------------------------------------------------------------//
+        // JOURNEY MAP - the other map of a trip: where you really went. GET /api/journey
+        // (server/go/journey.go) answers with the very view a public link shows - the
+        // route so far (stages started + the positions kept for the trip), the photos with
+        // their spots, and "where I am now", all rounded to ~100 m - so drawing it follows
+        // trips/public.html's renderMap.
+
+        let mapMode = 'plan';          // 'plan' | 'journey': the switch above the route map
+
+        function buildMapModeSwitch()
+        {
+            const bar = document.createElement( 'div' );
+            bar.className = 'map-mode';
+
+            [ [ 'plan', ICON_MAP, 'trips.mapPlan' ], [ 'journey', ICON_ROUTE, 'trips.mapJourney' ] ].forEach( function( m )
+            {
+                const on = mapMode === m[ 0 ];
+                const b  = document.createElement( 'button' );
+                b.type      = 'button';
+                b.className = 'icon-btn sm' + ( on ? ' is-active' : '' );
+                b.title     = T( m[ 2 ] );
+                b.setAttribute( 'aria-label', T( m[ 2 ] ) );
+                b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+                b.appendChild( svgIcon( m[ 1 ], 16 ) );
+                b.addEventListener( 'click', function()
+                {
+                    if( mapMode === m[ 0 ] ) return;
+                    mapMode = m[ 0 ];
+                    renderRoutePanel();
+                    if( document.getElementById( 'mapSheetBackdrop' ).classList.contains( 'open' ) ) renderMapSheet();
+                });
+                bar.appendChild( b );
+            });
+            return bar;
+        }
+
+        // One fetch per trip a minute at most: every background save (a geocode, the
+        // weather) re-renders the whole route map, and would ask again each time.
+        const journeyCache = {};       // dirName -> { at, promise }
+
+        function loadJourney( trip )
+        {
+            const key = trip.dirName;
+            const hit = journeyCache[ key ];
+            if( hit && Date.now() - hit.at < 60000 ) return hit.promise;
+
+            const promise = fetch( window.location.origin + '/api/journey?trip=' + encodeURIComponent( key ) )
+                .then( function( r ) { if( ! r.ok ) throw new Error( 'HTTP ' + r.status ); return r.json(); } );
+            journeyCache[ key ] = { at: Date.now(), promise: promise };
+            promise.catch( function() { delete journeyCache[ key ]; } );
+            return promise;
+        }
+
+        function journeyPhotoUrl( trip, p, sKind )
+        {
+            return window.location.origin + '/api/journey/' + sKind + '/' + encodeURIComponent( p.name ) +
+                   '?trip=' + encodeURIComponent( trip.dirName ) + '&v=' + p.mtime;
+        }
+
+        function journeyAgo( epoch )
+        {
+            const secs = Math.max( 0, Date.now() / 1000 - epoch );
+            const rtf  = new Intl.RelativeTimeFormat( NayiveUI.locale(), { numeric: 'auto' } );
+            if( secs < 3600 )  return rtf.format( -Math.max( 1, Math.round( secs / 60 ) ), 'minute' );
+            if( secs < 86400 ) return rtf.format( -Math.round( secs / 3600 ), 'hour' );
+            return rtf.format( -Math.round( secs / 86400 ), 'day' );
+        }
+
+        // Same sentences as the public page: source "phone" | "owntracks", "photo" or "plan".
+        function journeyNowText( now )
+        {
+            if( now.source === 'plan' ) return TF( 'trips.pub.nowPlan', { place: now.place || '' } );
+            const ago = journeyAgo( now.at );
+            if( now.source === 'photo' )
+                return now.place ? TF( 'trips.pub.nowPhoto', { place: now.place, ago: ago } )
+                                 : TF( 'trips.pub.nowPhotoNoPlace', { ago: ago } );
+            return now.place ? TF( 'trips.pub.nowPhone', { place: now.place, ago: ago } )
+                             : TF( 'trips.pub.nowPhoneNoPlace', { ago: ago } );
+        }
+
+        function buildJourneyBlock( trip, sWhich, wrap )
+        {
+            destroyMap( sWhich );
+
+            const nowLine = document.createElement( 'p' );
+            nowLine.className = 'journey-now';
+            nowLine.hidden = true;
+            wrap.appendChild( nowLine );
+
+            const mapDiv = document.createElement( 'div' );
+            mapDiv.className = 'route-map';
+            wrap.appendChild( mapDiv );
+
+            const caption = document.createElement( 'p' );
+            caption.className = 'map-caption';
+            caption.textContent = T( 'trips.journeyCaption' );
+            wrap.appendChild( caption );
+
+            // Answered after a re-render replaced this block: leave the new one alone.
+            const stale = function() { return ! mapDiv.isConnected || mapMode !== 'journey'; };
+
+            function note( sText )
+            {
+                const off = document.createElement( 'div' );
+                off.className = 'route-offline';
+                off.textContent = sText;
+                mapDiv.replaceWith( off );
+            }
+
+            loadJourney( trip ).then( function( j )
+            {
+                if( stale() ) return;
+
+                const spots = j.photos.filter( function( p ) { return p.lat != null && p.lon != null; } );
+                if( ! j.route.length && ! j.now && ! spots.length ) { note( T( 'trips.journeyEmpty' ) ); return; }
+
+                if( j.now )
+                {
+                    nowLine.textContent = journeyNowText( j.now );
+                    nowLine.hidden = false;
+
+                    // A photo or OwnTracks position comes with no town name: look it up once.
+                    if( ! j.now.place && j.now.source !== 'plan' && NayiveUI.townName )
+                        NayiveUI.townName( j.now.lat, j.now.lon ).then( function( place )
+                        {
+                            if( ! place ) return;
+                            j.now.place = place;
+                            if( nowLine.isConnected ) nowLine.textContent = journeyNowText( j.now );
+                        });
+                }
+                buildJourneyMap( trip, j, mapDiv, sWhich );
+            }, function()
+            {
+                if( ! stale() ) note( T( 'trips.pub.failed' ) );
+            });
+        }
+
+        function buildJourneyMap( trip, j, mapDiv, sWhich )
+        {
+            destroyMap( sWhich );
+
+            const map = L.map( mapDiv, { zoomControl: true, attributionControl: true } );
+            NayiveBaseMap.add( map );
+
+            const css    = getComputedStyle( document.documentElement );
+            const cv     = function( sName, sFallback ) { return css.getPropertyValue( sName ).trim() || sFallback; };
+            const accent = cv( '--accent', '#16A085' );
+            const blue   = cv( '--link',   '#5B9DF9' );
+            const gold   = cv( '--warn',   '#E0A21E' );
+            const red    = cv( '--danger', '#D9707D' );
+            const bounds = [];
+
+            if( j.route.length > 1 )
+                L.polyline( j.route.map( function( p ) { return [ p.lat, p.lon ]; } ),
+                            { color: accent, weight: 3, opacity: 0.85, lineJoin: 'round' } ).addTo( map );
+
+            j.route.forEach( function( p )
+            {
+                const stage  = p.kind === 'stage';
+                const colour = stage ? accent : blue;
+                const mark   = L.circleMarker( [ p.lat, p.lon ], { radius: stage ? 7 : 4, color: colour, weight: 2,
+                                                                   fillColor: colour, fillOpacity: stage ? 0.9 : 0.7 } );
+                // A tooltip string is HTML to Leaflet, and a place name is someone's text.
+                if( p.place ) mark.bindTooltip( NayiveUI.escapeHtml( p.place ), { direction: 'top' } );
+                mark.addTo( map );
+                bounds.push( [ p.lat, p.lon ] );
+            });
+
+            // Photos taken at the same (rounded) spot share one pin; its popup shows them.
+            const spots = new Map();
+            j.photos.forEach( function( p )
+            {
+                if( p.lat == null || p.lon == null ) return;
+                const key = p.lat + ',' + p.lon;
+                if( ! spots.has( key ) ) spots.set( key, { lat: p.lat, lon: p.lon, photos: [] } );
+                spots.get( key ).photos.push( p );
+            });
+            spots.forEach( function( s )
+            {
+                L.circleMarker( [ s.lat, s.lon ], { radius: 6, color: gold, weight: 2, fillColor: gold, fillOpacity: 0.55 } )
+                    .bindTooltip( TF( 'trips.pub.photoCount', { n: s.photos.length } ), { direction: 'top' } )
+                    .bindPopup( function() { return journeyPhotoPopup( trip, s.photos ); } )
+                    .addTo( map );
+                bounds.push( [ s.lat, s.lon ] );
+            });
+
+            if( j.now )
+            {
+                L.circleMarker( [ j.now.lat, j.now.lon ], { radius: 11, color: red, weight: 3, fillColor: red, fillOpacity: 0.3 } )
+                    .bindTooltip( function() { return NayiveUI.escapeHtml( journeyNowText( j.now ) ); }, { direction: 'top' } )
+                    .addTo( map );
+                bounds.push( [ j.now.lat, j.now.lon ] );
+            }
+
+            if( bounds.length === 1 ) map.setView( bounds[ 0 ], 11 );
+            else map.fitBounds( bounds, { padding: [ 28, 28 ], maxZoom: 12 } );
+
+            map.nayiveLegs = {};       // no legs to light up: setLegActive() finds nothing
+            if( sWhich === 'panel' ) panelMapInstance = map; else sheetMapInstance = map;
+            requestAnimationFrame( function() { map.invalidateSize(); } );
+        }
+
+        // A photo pin's popup: up to six thumbnails (each opens the photo in a new tab)
+        // and the way to the whole folder in Photos.
+        function journeyPhotoPopup( trip, photos )
+        {
+            const box  = document.createElement( 'div' );
+            box.className = 'journey-pop';
+            const grid = document.createElement( 'div' );
+            grid.className = 'journey-pop-grid';
+
+            photos.slice( 0, 6 ).forEach( function( p )
+            {
+                const a = document.createElement( 'a' );
+                a.href   = journeyPhotoUrl( trip, p, 'photo' );
+                a.target = '_blank';
+                a.rel    = 'noopener';
+                a.title  = p.comment || p.name;
+                const img = document.createElement( 'img' );
+                img.alt     = p.comment || '';
+                img.loading = 'lazy';
+                img.src     = journeyPhotoUrl( trip, p, p.thumb ? 'thumb' : 'photo' );
+                a.appendChild( img );
+                grid.appendChild( a );
+            });
+            box.appendChild( grid );
+
+            const all = document.createElement( 'a' );
+            all.href   = '../photos/index.html?dir=' + encodeURIComponent( trip.photosDir || '' );
+            all.target = '_blank';
+            all.rel    = 'noopener';
+            all.textContent = TF( 'trips.pub.photoCount', { n: photos.length } ) + ' ' + T( 'trips.openInPhotos' );
+            box.appendChild( all );
+            return box;
         }
 
         // Geocodes anything in `trip` that has never been looked up (lat === undefined - a stage
@@ -4807,6 +5098,17 @@
 
             buildSheetHeader( T( 'trips.route' ), 'mapSheetBackdrop', sheet );
             buildRouteMapBlock( trip, 'sheet', sheet );
+        }
+
+        // "My location" (list header): what places you on the Journey maps - the
+        // OwnTracks URL, drawn and kept by NayiveUI.ownTracksSection (shared/ui.js).
+        function openMyLocation()
+        {
+            const sheet = document.getElementById( 'locSheet' );
+            sheet.innerHTML = '';
+            buildSheetHeader( T( 'trips.myLocation' ), 'locSheetBackdrop', sheet );
+            sheet.insertBefore( NayiveUI.ownTracksSection(), sheet.querySelector( '.sheet-actions' ) );
+            openSheet( 'locSheetBackdrop' );
         }
 
         // Title + lone "close" for sheets whose only control is close. The close

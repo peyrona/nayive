@@ -1,13 +1,13 @@
 package main
 
 // =============================================================================
-// OwnTracks - the owner's position from the background, for public trip links.
+// OwnTracks - the owner's position from the background, for their trips.
 // =============================================================================
 //
 // A web page cannot read GPS with the page closed. The OwnTracks app (free, for
 // Android and iPhone) can, and in its HTTP mode it sends every position to a
-// URL of our choosing. Each user may have ONE such URL, made in a trip's Share
-// sheet:
+// URL of our choosing. Each user may have ONE such URL, made in Trips' "My
+// location" sheet:
 //
 //	/api/owntracks/<key>
 //
@@ -26,8 +26,9 @@ package main
 // is always a JSON array, which is what the app expects: anything but a 2xx
 // makes it queue the message and retry.
 //
-// A position is stored only in a linked trip whose days cover it (positions.go);
-// between trips, what the app sends goes nowhere.
+// A position is stored only in a trip whose days cover it and that was not
+// switched off in Trips (positions.go); between trips, what the app sends goes
+// nowhere.
 
 import (
 	"crypto/subtle"
@@ -201,7 +202,7 @@ func trackerOut(k *trackerKey) map[string]any {
 	return map[string]any{"url": "/api/owntracks/" + k.Key, "created": k.Created}
 }
 
-// apiOwnTracks is the owner's side, for the Share sheet.
+// apiOwnTracks is the owner's side, for Trips' "My location" sheet.
 func (s *Server) apiOwnTracks(w http.ResponseWriter, r *http.Request) {
 	sess, ok := s.requireSession(w, r)
 	if !ok {

@@ -74,8 +74,8 @@ type Grant struct {
 	Token string `json:"token,omitempty"`
 }
 
-// tripPositionsFile is where a linked trip keeps the owner's phone positions
-// (api_location.go). Stopping the link deletes it.
+// tripPositionsFile is where a linked trip keeps the owner's positions
+// (positions.go). It outlives a stopped link: the owner's Journey map shows it.
 const tripPositionsFile = "positions.json"
 
 // Shares is the in-memory grant table, loaded from disk on first use.
@@ -422,9 +422,8 @@ func (s *Shares) CreateLink(owner, root, title string) (grant *Grant, created bo
 }
 
 // Revoke drops one grant. Only its owner may. True when something was removed.
-//
-// Stopping a PUBLIC LINK also deletes the phone positions stored for that trip:
-// they were kept only so the link could show them.
+// Stopping a PUBLIC LINK keeps the trip's positions (positions.go): they are the
+// owner's, and their Journey map shows them with or without a link.
 func (s *Shares) Revoke(shareID, owner string) bool {
 	s.mu.Lock()
 	s.ensureLoaded()
@@ -444,18 +443,6 @@ func (s *Shares) Revoke(shareID, owner string) bool {
 	s.grants = kept
 	s.save()
 	s.mu.Unlock()
-
-	for i := range gone {
-		if gone[i].Token == "" {
-			continue
-		}
-		if root := s.RootPath(&gone[i]); root != "" {
-			err := os.Remove(filepath.Join(root, tripPositionsFile))
-			if err != nil && !os.IsNotExist(err) {
-				s.log.Error("cannot delete the positions of a stopped link", "err", err)
-			}
-		}
-	}
 
 	s.log.Info("share revoked", "id", shareID, "by", owner)
 	return true

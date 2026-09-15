@@ -4,9 +4,9 @@ package main
 // A photo as a position: the GPS inside a JPEG places its owner on a trip.
 // =============================================================================
 //
-// When a user uploads a JPEG into the photo folder of one of their trips that
-// has a public link, the position the camera wrote into it joins that trip's
-// positions (positions.go), at the time the POSITION was taken:
+// When a user uploads a JPEG into the photo folder of one of their trips (one
+// not switched off in Trips), the position the camera wrote into it joins that
+// trip's positions (positions.go), at the time the POSITION was taken:
 //
 //  1. the GPS time stamp - UTC, and the moment of the fix itself;
 //  2. else DateTimeOriginal with its OffsetTimeOriginal;
@@ -47,9 +47,9 @@ func (s *Server) photoUploaded(user, rel string, target Resolved) {
 	if len(parts) < 3 || parts[0] != "files" {
 		return
 	}
-	// The cheap test first: is it inside a linked trip's photo folder at all?
-	var trips []linkedTrip
-	for _, lt := range s.linkedTrips(user) {
+	// The cheap test first: is it inside a tracked trip's photo folder at all?
+	var trips []trackedTrip
+	for _, lt := range s.trackedTrips(user) {
 		dir := publicPhotoDir(lt.trip.PhotosDir)
 		if dir != nil && len(parts) > len(dir) && hasPrefixSegments(parts, dir) {
 			trips = append(trips, lt)
