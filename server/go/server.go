@@ -228,10 +228,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/s/{token}", s.publicPage)
 	mux.HandleFunc("/api/public/{token}", s.apiPublic)
 	mux.HandleFunc("/api/public/{token}/{kind}/{name}", s.apiPublicFile)
-	mux.HandleFunc("/api/location", s.apiLocationKey)              // the owner's location URL
+	mux.HandleFunc("/api/location", s.apiLocationKey)                // the owner's location URL
 	mux.HandleFunc("/api/location/{key}/{app}", s.apiLocationReport) // the app itself: no session
-	mux.HandleFunc("/api/journey", s.apiJourney)                   // a trip's Journey map, for its owner
-	mux.HandleFunc("/api/journey/{kind}/{name}", s.apiJourneyFile) // ...and its photos
+	mux.HandleFunc("/api/journey", s.apiJourney)                     // a trip's Journey map, for its owner
+	mux.HandleFunc("/api/journey/{kind}/{name}", s.apiJourneyFile)   // ...and its photos
 
 	// --- the file API ------------------------------------------------------
 	mux.HandleFunc("/api/files", s.apiFiles)
