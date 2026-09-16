@@ -4,15 +4,17 @@ package main
 // Trip positions: where the owner of a trip has been.
 // =============================================================================
 //
-// Two sources feed them:
+// Three sources feed them:
 //
 //	"photo"      a JPEG uploaded into the trip's photo folder: the position and
 //	             time the camera wrote into it (photo_position.go)
-//	"owntracks"  the OwnTracks app, from the background (owntracks.go)
+//	"gpslogger"  the GPSLogger app (Android), from the background (location.go)
+//	"overland"   the Overland app (iPhone), from the background (location.go)
 //
-// "phone" is read too, never written any more: the Share sheet's "send my
-// location from this device" tick (and its /api/location) was removed on
-// 2026-09-15, and positions.json files from before still hold its points.
+// Two more are read, never written any more: "owntracks", the app Nayive asked
+// for until 2026-09-16, and "phone", the Share sheet's "send my location from
+// this device" tick, removed on 2026-09-15. Files written before still hold
+// their points, and they are shown like any other.
 //
 // A position goes into data/trips/<dir>/positions.json of every trip of the
 // owner whose days cover the moment it was TAKEN (on the owner's clock) - unless
@@ -55,13 +57,13 @@ const (
 
 	// How imprecise (metres) a position counts as when its source said nothing.
 	accPhoto   = 15.0   // a phone camera's GPS
-	accApp     = 50.0   // OwnTracks
+	accApp     = 50.0   // a location app (GPSLogger, Overland)
 	accUnknown = 1000.0 // a browser, or a position stored before accuracy was kept
 	accRough   = 100.0  // worse than this, a route point may give way to a better one
 )
 
 // positionsMu serialises every read-modify-write of a positions.json: an upload,
-// the OwnTracks app and a browser may all report in the same second.
+// a location app and a browser may all report in the same second.
 var positionsMu sync.Mutex
 
 // tripPosition is one position, as stored.
@@ -71,7 +73,7 @@ type tripPosition struct {
 	Acc    float64 `json:"acc,omitempty"` // metres; 0 = unknown
 	Place  string  `json:"place,omitempty"`
 	At     int64   `json:"at"`               // UNIX seconds: when it was TAKEN
-	Source string  `json:"source,omitempty"` // "phone" | "photo" | "owntracks"; "" is an old "phone"
+	Source string  `json:"source,omitempty"` // "photo" | "gpslogger" | "overland"; older files also hold "owntracks" and "phone"; "" is an old "phone"
 }
 
 type positionsDoc struct {
@@ -241,40 +243,62 @@ func (s *Server) trackedTrips(user string) []trackedTrip {
 // recordPosition stores p in every tracked trip of `owner` that covers it, and
 // answers how many took it.
 func (s *Server) recordPosition(owner string, p tripPosition) int {
+	return s.recordPositions(owner, []tripPosition{p})
+}
+
+// recordPositions stores a whole batch, and answers how many points were taken,
+// counting a point once per trip that took it. Overland sends 200 positions in
+// ONE request, so the file is read and written once per trip, not once per point.
+func (s *Server) recordPositions(owner string, ps []tripPosition) int {
+	if len(ps) == 0 {
+		return 0
+	}
 	saved := 0
 	for _, lt := range s.trackedTrips(owner) {
-		if s.storePosition(owner, lt, p) {
-			saved++
-		}
+		saved += s.storePositions(owner, lt, ps)
 	}
 	return saved
 }
 
-// storePosition cleans p and merges it into one trip - when the trip's days
-// cover the moment p was taken, on the owner's clock.
-func (s *Server) storePosition(owner string, lt trackedTrip, p tripPosition) bool {
-	p, ok := cleanPosition(p)
-	if !ok {
-		return false
+// storePositions cleans ps and merges into one trip the points it can take -
+// those whose day the trip covers, on the owner's clock.
+func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition) int {
+	if lt.trip.StartDate == "" || lt.trip.EndDate == "" {
+		return 0
 	}
-	taken := time.Unix(p.At, 0)
-	if loc := Location(s.users.UserTZ("user", owner)); loc != nil {
-		taken = taken.In(loc)
+	loc := Location(s.users.UserTZ("user", owner))
+
+	fit := make([]tripPosition, 0, len(ps))
+	for _, p := range ps {
+		p, ok := cleanPosition(p)
+		if !ok {
+			continue
+		}
+		taken := time.Unix(p.At, 0)
+		if loc != nil {
+			taken = taken.In(loc)
+		}
+		day := taken.Format("2006-01-02")
+		if day < lt.trip.StartDate || day > lt.trip.EndDate {
+			continue
+		}
+		fit = append(fit, p)
 	}
-	day := taken.Format("2006-01-02")
-	if lt.trip.StartDate == "" || lt.trip.EndDate == "" || day < lt.trip.StartDate || day > lt.trip.EndDate {
-		return false
+	if len(fit) == 0 {
+		return 0
 	}
 
 	positionsMu.Lock()
 	defer positionsMu.Unlock()
 	doc := readPositionsDoc(lt.root)
-	mergePosition(&doc, p)
+	for _, p := range fit {
+		mergePosition(&doc, p)
+	}
 	if err := atomicWriteJSON(filepath.Join(lt.root, tripPositionsFile), doc, 1); err != nil {
 		s.log.Error("cannot save a trip position", "err", err)
-		return false
+		return 0
 	}
-	return true
+	return len(fit)
 }
 
 // cleanPosition rounds p and tells whether it can be stored at all.

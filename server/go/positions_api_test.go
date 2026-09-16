@@ -1,6 +1,6 @@
 package main
 
-// Photos and the OwnTracks app, placing the owner on their trips.
+// Photos and the location apps, placing the owner on their trips.
 
 import (
 	"bytes"
@@ -60,7 +60,7 @@ func TestPhotoUploadPlacesOwner(t *testing.T) {
 	}
 }
 
-func TestOwnTracks(t *testing.T) {
+func TestLocationApps(t *testing.T) {
 	srv, base, client, link := makeLink(t)
 	tripDir := filepath.Join(srv.cfg.HomesDir, "ana", publicTripDir)
 
@@ -68,12 +68,12 @@ func TestOwnTracks(t *testing.T) {
 		URL     string `json:"url"`
 		Created int64  `json:"created"`
 	}
-	resp := do(t, client, "POST", base+"/api/owntracks", nil, nil)
+	resp := do(t, client, "POST", base+"/api/location", nil, nil)
 	json.Unmarshal(readBody(t, resp), &k)
-	if resp.StatusCode != http.StatusCreated || !strings.HasPrefix(k.URL, "/api/owntracks/") || len(k.URL) < 50 {
+	if resp.StatusCode != http.StatusCreated || !strings.HasPrefix(k.URL, "/api/location/") || len(k.URL) < 50 {
 		t.Fatalf("create: %d %+v", resp.StatusCode, k)
 	}
-	resp = do(t, client, "POST", base+"/api/owntracks", nil, nil)
+	resp = do(t, client, "POST", base+"/api/location", nil, nil)
 	var again struct{ URL string }
 	json.Unmarshal(readBody(t, resp), &again)
 	if resp.StatusCode != http.StatusOK || again.URL != k.URL {
@@ -88,22 +88,67 @@ func TestOwnTracks(t *testing.T) {
 		return resp.StatusCode, string(readBody(t, resp))
 	}
 
+	// GPSLogger sends exactly the body its .properties file asks for.
 	when := time.Now().Add(-time.Minute).Unix()
-	code, body := report(k.URL, `{"_type":"location","lat":41.157944,"lon":-8.629105,"acc":8,"tst":`+
-		itoa64(when)+`,"tid":"an","batt":80}`)
-	if code != http.StatusOK || body != "[]" {
-		t.Fatalf("location: %d %q, want 200 []", code, body)
+	code, body := report(k.URL+"/gpslogger", `{"lat":41.157944,"lon":-8.629105,"acc":8,"tst":`+itoa64(when)+`}`)
+	if code != http.StatusOK || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("gpslogger: %d %q", code, body)
 	}
-	got := waitLatest(t, tripDir, func(l *tripPosition) bool { return l.Source == "owntracks" })
+	got := waitLatest(t, tripDir, func(l *tripPosition) bool { return l.Source == "gpslogger" })
 	if got.Lat != 41.158 || got.Lon != -8.629 || got.Acc != 8 || got.At != when {
 		t.Errorf("stored %+v", got)
+	}
+
+	// Overland sends a BATCH, its coordinates are [lon, lat], its times are ISO
+	// 8601 written two ways, and it only drops its copy for {"result":"ok"}.
+	// The older point is far enough back to keep its own place in the route; the
+	// newer one has to be better than the GPSLogger position above to replace it,
+	// which is the accuracy rule, not this endpoint (see positions.go).
+	old := time.Now().Add(-20 * time.Minute)
+	recent := time.Now().Add(-20 * time.Second)
+	batch := `{"locations":[` +
+		`{"type":"Feature","geometry":{"type":"Point","coordinates":[-122.030581,37.331800]},` +
+		`"properties":{"timestamp":"` + old.UTC().Format(time.RFC3339) + `","horizontal_accuracy":-1}},` +
+		`{"type":"Feature","geometry":{"type":"Point","coordinates":[-122.4,37.79]},` +
+		`"properties":{"timestamp":"` + recent.Format("2006-01-02T15:04:05-0700") + `","horizontal_accuracy":5}}]}`
+	if code, body = report(k.URL+"/overland", batch); code != http.StatusOK || body != `{"result":"ok"}` {
+		t.Fatalf("overland: %d %q, want 200 and {\"result\":\"ok\"}", code, body)
+	}
+	got = waitLatest(t, tripDir, func(l *tripPosition) bool { return l.Source == "overland" })
+	if got.Lat != 37.79 || got.Lon != -122.4 || got.Acc != 5 || got.At != recent.Unix() {
+		t.Errorf("overland latest %+v", got) // lat/lon swapped, or the "-0700" time layout unread
+	}
+	inRoute, accLess := 0, false
+	for _, p := range readPositionsDoc(tripDir).Positions {
+		if p.Source != "overland" {
+			continue
+		}
+		inRoute++
+		if p.At == old.Unix() && p.Acc == accApp {
+			accLess = true // a point with no accuracy of its own counts as an app's
+		}
+	}
+	if inRoute != 2 || !accLess {
+		t.Errorf("the batch left %d overland points in the route (want 2), accuracy-less one read back: %v", inRoute, accLess)
+	}
+
+	// The GPSLogger profile: its own setting names, and the URL it must send to.
+	resp = do(t, app, "GET", base+k.URL+"/gpslogger.properties", nil, nil)
+	profile := string(readBody(t, resp))
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "text/plain") {
+		t.Fatalf("profile: %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	for _, want := range []string{"log_customurl_enabled=true", `log_customurl_body={"lat":%LAT`, k.URL + "/gpslogger\n"} {
+		if !strings.Contains(profile, want) {
+			t.Errorf("the profile has no %q:\n%s", want, profile)
+		}
 	}
 
 	// A link is not what keeps positions: with it stopped, the trip still takes them...
 	resp = do(t, client, "DELETE", base+"/api/shares?id="+link.ID, nil, nil)
 	readBody(t, resp)
-	later := when + 30
-	report(k.URL, `{"_type":"location","lat":41.15,"lon":-8.62,"acc":8,"tst":`+itoa64(later)+`}`)
+	later := time.Now().Unix()
+	report(k.URL+"/gpslogger", `{"lat":41.15,"lon":-8.62,"acc":3,"tst":`+itoa64(later)+`}`)
 	if l := readPositionsDoc(tripDir).Latest; l == nil || l.At != later {
 		t.Errorf("a trip without a link did not take the position: %+v", l)
 	}
@@ -116,42 +161,50 @@ func TestOwnTracks(t *testing.T) {
 	doc["track"] = false
 	raw, _ = json.Marshal(doc)
 	os.WriteFile(tripJSON, raw, 0o644)
-	report(k.URL, `{"_type":"location","lat":41.15,"lon":-8.62,"acc":8,"tst":`+itoa64(later+20)+`}`)
+	report(k.URL+"/gpslogger", `{"lat":41.15,"lon":-8.62,"acc":3,"tst":`+itoa64(later+20)+`}`)
 	if l := readPositionsDoc(tripDir).Latest; l == nil || l.At != later {
 		t.Errorf("a trip switched off took a position: %+v", l)
 	}
 
-	// Anything but a location is accepted and ignored - and so is junk.
-	for _, msg := range []string{`{"_type":"transition","event":"enter"}`, `{"_type":"encrypted","data":"x"}`, `not json`} {
-		if code, body := report(k.URL, msg); code != http.StatusOK || body != "[]" {
+	// Junk is accepted and ignored: refusing it would only be retried forever.
+	for _, msg := range []string{`{"lat":null,"lon":null}`, `not json`} {
+		if code, body := report(k.URL+"/gpslogger", msg); code != http.StatusOK || !strings.Contains(body, `"ok":true`) {
 			t.Errorf("%s: %d %q", msg, code, body)
 		}
 	}
+	if code, body := report(k.URL+"/overland", `not json`); code != http.StatusOK || body != `{"result":"ok"}` {
+		t.Errorf("overland junk: %d %q", code, body)
+	}
 
-	if code, _ := report("/api/owntracks/"+strings.Repeat("A", 43), `{"_type":"location","lat":1,"lon":1}`); code != http.StatusUnauthorized {
+	if code, _ := report("/api/location/"+strings.Repeat("A", 43)+"/gpslogger", `{"lat":1,"lon":1}`); code != http.StatusUnauthorized {
 		t.Errorf("wrong key: %d, want 401", code)
 	}
-	resp = do(t, app, "GET", base+k.URL, nil, nil)
+	if code, _ := report(k.URL+"/nosuchapp", `{"lat":1,"lon":1}`); code != http.StatusNotFound {
+		t.Errorf("unknown app: %d, want 404", code)
+	}
+	resp = do(t, app, "GET", base+k.URL+"/gpslogger", nil, nil)
 	readBody(t, resp)
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("GET on the app's URL: %d, want 405", resp.StatusCode)
 	}
 
-	// Turned off, the URL stops working.
-	resp = do(t, client, "DELETE", base+"/api/owntracks", nil, nil)
+	// Turned off, every ending of the URL stops working.
+	resp = do(t, client, "DELETE", base+"/api/location", nil, nil)
 	readBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("turn off: %d", resp.StatusCode)
 	}
-	if code, _ := report(k.URL, `{"_type":"location","lat":41.1,"lon":-8.6}`); code != http.StatusUnauthorized {
-		t.Errorf("after turning off: %d, want 401", code)
+	for _, target := range []string{k.URL + "/gpslogger", k.URL + "/overland"} {
+		if code, _ := report(target, `{"lat":41.1,"lon":-8.6}`); code != http.StatusUnauthorized {
+			t.Errorf("%s after turning off: %d, want 401", target, code)
+		}
 	}
 
 	for name, c := range map[string]*http.Client{
 		"anonymous": anonymous(),
 		"admin":     signedInClient(t, base, "jefe", "secreto"),
 	} {
-		resp := do(t, c, "GET", base+"/api/owntracks", nil, nil)
+		resp := do(t, c, "GET", base+"/api/location", nil, nil)
 		readBody(t, resp)
 		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
 			t.Errorf("%s: %d", name, resp.StatusCode)

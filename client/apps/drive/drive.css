@@ -1,0 +1,426 @@
+/* drive.css - Drive's own styles. */
+/* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+   input look all come from ../shared/app.css. Drive overrides the page
+   scroll (both axes hidden - the tree / list panes scroll themselves)
+   and adds its file-browser chrome. */
+html, body { height: 100%; overflow: hidden; }
+
+.topbar h1 { margin: 0; }                    /* the .brand wrapper owns the right-hand gap */
+
+/* Brand block: the icon + "Drive", with the server-HD gauge sitting under
+   both. The gauge bar is as wide as (icon + gap + name) and only shows on
+   PC / tablet - it is hidden in the ≤640px phone layout below. */
+.brand { display: inline-flex; flex-direction: column; align-items: stretch; flex: 0 0 auto; margin-right: 10px; }
+.brand-row { display: flex; align-items: center; }
+.disk-bar { height: 7px; margin-top: 3px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.disk-bar > i { display: block; height: 100%; width: 0; border-radius: 1px; background: var(--disk-fill, var(--ok)); transition: width .3s ease, background-color .3s ease; }
+/* Nearly full with something in the papelera: the bar becomes a button
+   that empties it (see offerEmptyTrash). */
+.disk-bar--offer { cursor: pointer; box-shadow: 0 0 0 2px color-mix( in srgb, var(--danger) 35%, transparent ); }
+.topbar .sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); flex: 0 0 auto; }
+.status-label { flex: 1 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
+
+/* Look from app.css (FORM FIELD); only the width is Drive's. */
+.topbar-search { flex: 0 0 auto; width: 190px; }
+
+/* Body: tree + listing */
+.body-row { flex: 1 1 auto; min-height: 0; display: flex; }
+
+.tree-pane
+{
+    width: var(--tree-w, 250px); flex: 0 0 auto; overflow: auto;
+    padding: 8px 4px;
+}
+/* The inner tree grows to its widest row so .tree-pane can scroll it sideways. */
+#treePane > .tree-node { min-width: max-content; }
+
+/* Drag handle between the tree and the file list (desktop only). */
+.pane-resizer
+{
+    flex: 0 0 auto; width: 5px; cursor: col-resize; background: var(--line);
+    touch-action: none;
+}
+.pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
+
+.tree-node .tree-row
+{
+    display: flex; align-items: center; gap: 4px; padding: 6px 6px; border-radius: 6px;
+    cursor: pointer; font-size: 0.87rem; white-space: nowrap; user-select: none;
+}
+.tree-node .tree-row:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.tree-node .tree-row.selected { background: var(--accent); color: var(--on-accent); }
+.tree-node .tree-row.selected .tree-name { color: var(--on-accent); }
+.tree-node .tree-row .twisty { width: 14px; height: 14px; flex: 0 0 auto; color: var(--text-dim); transition: transform .12s ease; }
+.tree-node .tree-row.selected .twisty { color: var(--on-accent); }
+.tree-node .tree-row .twisty.open { transform: rotate(90deg); }
+.tree-node .tree-row .twisty.leaf { visibility: hidden; }
+.tree-node .tree-row svg.folder-ic { flex: 0 0 auto; }
+.tree-node .tree-name { flex: 0 0 auto; white-space: nowrap; }
+.tree-children { margin-left: 16px; display: none; }
+.tree-children.open { display: block; }
+/* ⋮ actions button on a folder row — a shared .icon-btn.sm, shown on touch
+   only (see the phone @media). The selected row is accent-filled, so there
+   its glyph takes --on-accent. */
+.tree-node .tree-row .row-menu { display: none; margin-left: auto; }
+.tree-node .tree-row.selected .row-menu { color: var(--on-accent); }
+
+/* Right pane */
+.list-pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+
+.breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 0.85rem; flex: 0 0 auto; }
+.breadcrumb .crumb { color: var(--text-dim); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
+.breadcrumb .crumb:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.breadcrumb .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
+.breadcrumb .crumb.current:hover { background: none; }
+.breadcrumb .crumb-sep { color: var(--text-dim); padding: 0 1px; }
+
+.listing { flex: 1 1 auto; overflow: auto; padding: 4px 0; }
+/* Wrapper around the rows: as wide as the widest row, so .listing scrolls it
+   sideways while each row's border / hover still spans the full width. */
+.list-rows { min-width: 100%; width: max-content; }
+.empty-hint { padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+
+.row
+{
+    display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer;
+}
+.row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.row.selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.row .row-menu { display: none; }   /* a shared .icon-btn.sm, shown on touch only (phone @media) */
+.row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
+/* File-type icon colours. The dark set is pastel for the dark ground; the
+   light set is deepened so it stays legible on the grey light background. */
+.row .row-ic.ic-doc   { color: #5b8def; }   /* Write document (.docx, .md)  */
+.row .row-ic.ic-sheet { color: var(--accent); }  /* Calc spreadsheet (.xlsx, .csv) */
+.row .row-ic.ic-pdf   { color: #d9903c; }   /* PDF (amber — red reads as "error") */
+.row .row-ic.ic-code  { color: #b98ae6; }   /* Text editor (.html, .css, .js, .json, .txt…) */
+.row .row-ic.ic-image { color: #d16ba5; }   /* Image, opened in Drive's built-in viewer */
+.row .row-ic.ic-media { color: #4bb8a9; }   /* Audio / video, opened in Drive's built-in player */
+/* "Compartido conmigo": a shared album / trip shows its APP's glyph in
+   place of the plain folder icon, so you see what opens it. */
+.row .row-ic.ic-photos { color: #d16ba5; }  /* a shared album, opens in Photos */
+.row .row-ic.ic-trips  { color: #4bb8a9; }  /* a shared trip,  opens in Trips  */
+
+:root[data-theme="light"] .row .row-ic.ic-doc    { color: #1E4A85; }
+:root[data-theme="light"] .row .row-ic.ic-pdf    { color: #6F430F; }
+:root[data-theme="light"] .row .row-ic.ic-code   { color: #5A3A8C; }
+:root[data-theme="light"] .row .row-ic.ic-image  { color: #8A3466; }
+:root[data-theme="light"] .row .row-ic.ic-media  { color: #1F6F63; }
+:root[data-theme="light"] .row .row-ic.ic-photos { color: #8A3466; }
+:root[data-theme="light"] .row .row-ic.ic-trips  { color: #1F6F63; }
+.row .row-name { flex: 0 0 auto; white-space: nowrap; font-size: 0.92rem; }
+/* size · date sit at the right edge; margin-left:auto eats the gap so they
+   line up in a column. On a row wider than the pane (very long name) the
+   auto margin collapses and the meta just follows the name, scrolled off. */
+.row .row-meta { flex: 0 0 auto; margin-left: auto; padding-left: 16px; white-space: nowrap; font-size: 0.78rem; color: var(--text-dim); }
+
+.list-pane { position: relative; }
+
+/* Drop cover: shown over the whole listing while files are dragged in from
+   the desktop. Its own blue hue, so it never reads as a selection (--accent).
+   The label is the same blue, darkened, so it stays legible on the tint.
+   A real element, not ::after -- CSS `content` cannot hold an i18n string. */
+.list-pane
+{
+    --drop:      #7FB3E8;                                  /* dark theme: light blue, so the tint reads on a dark ground */
+    --drop-text: color-mix(in srgb, var(--drop) 25%, #000);
+}
+:root[data-theme="light"] .list-pane
+{
+    --drop:      #3B82D6;                                  /* light theme: a plain blue */
+    --drop-text: color-mix(in srgb, var(--drop) 25%, #000);
+}
+.drop-cover
+{
+    display: none; position: absolute; inset: 0; z-index: 5;
+    align-items: center; justify-content: center;
+    /* 72%: the rows still show through, but the tint carries enough of the
+       blue that the darker blue label stays legible in both themes. */
+    background: color-mix(in srgb, var(--drop) 72%, transparent);
+    border: 2px dashed var(--drop-text);
+    color: var(--drop-text); font-size: 1.05rem; font-weight: 700;
+    pointer-events: none;
+}
+.list-pane.drag-over .drop-cover { display: flex; }
+
+/* Internal drag-and-drop: move files / folders onto a folder */
+.row.dragging, .tree-row.dragging { opacity: 0.4; }
+.row.drop-target
+{
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    outline: 2px solid var(--accent); outline-offset: -2px;
+}
+.tree-row.drop-target
+{
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    outline: 2px solid var(--accent); outline-offset: -2px;
+}
+
+/* Keyboard navigation: arrow keys move a cursor, Left/Right swap panes */
+.tree-node .tree-row.kbd:not(.selected)
+{
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Dialogs: .sheet-backdrop / .sheet / .field / inputs from app.css. */
+.sheet p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14px; }
+
+/* Upload dialog: big "pick with a dialog" icon choices.
+   Desktop  -> Archivos + Carpeta.
+   Phone / tablet (no hover, coarse pointer) -> Fotos + Archivos: "Fotos" jumps
+   straight to the image gallery, and "Carpeta" (webkitdirectory) does nothing
+   on iOS Safari so it would be a dead button there. */
+.upload-choices { display: flex; flex-wrap: wrap; gap: 12px; }
+.upload-choice
+{
+    flex: 1 1 0; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 18px 10px; border-radius: var(--radius-m); border: 1px solid var(--line);
+    background: var(--card2); color: var(--text); font-size: 0.9rem; font-family: inherit; cursor: pointer;
+}
+.upload-choice:hover { background: color-mix(in srgb, var(--accent) 14%, var(--card2)); border-color: var(--accent); }
+.upload-choice:focus { outline: none; }
+.upload-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.upload-choice svg { color: var(--accent); }
+.upload-choice-photos { display: none; }                       /* desktop: no "Fotos" tile */
+@media (hover: none) and (pointer: coarse)
+{
+    .upload-choice-photos { display: flex; }                   /* phone / tablet: show it */
+    .upload-choice-dir    { display: none; }                   /* …and drop the folder picker */
+}
+.upload-note
+{
+    margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 0.82rem; color: var(--text-dim); line-height: 1.45;
+}
+.upload-note b { color: var(--text); font-weight: 600; }
+
+/* "Abrir con" dialog: six app tiles, so they may take two rows.
+   .upload-choice is display:flex, which beats the browser's own [hidden]
+   rule — the apps openWithDialog leaves out must be told again. */
+.open-with-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }  /* tiles fill the row: equal margins */
+.open-with-apps .upload-choice[hidden] { display: none; }
+
+/* "Ya existen" (overwrite warning) dialog */
+.replace-list
+{
+    margin: 0 0 14px; padding: 8px 10px; list-style: none;
+    max-height: 30vh; overflow-y: auto;
+    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
+    font-size: 0.85rem; color: var(--text-dim);
+}
+.replace-list li { padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replace-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 0.88rem; color: var(--text); cursor: pointer; margin-bottom: 4px; }
+.replace-opt input { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+.convert-nopush { font-size: 0.88rem; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--link); text-decoration: underline; cursor: pointer; }
+.row-convert { color: var(--accent); font-weight: 600; margin-right: 6px; }
+.replace-opt[hidden] { display: none; }   /* class selector would otherwise beat [hidden]'s UA style */
+
+/* Built-in image viewer (lightbox — view only, no editing).
+   Always a dark overlay, so its own colours are fixed and do not follow the theme. */
+.viewer-backdrop
+{
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.92); z-index: 200;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+}
+.viewer-backdrop.open { display: flex; }
+.viewer-backdrop img
+{
+    max-width: 100%; max-height: calc(100% - 40px); object-fit: contain;
+    border-radius: 4px; background: #202124;
+}
+.viewer-name
+{
+    margin-top: 14px; max-width: 100%; font-size: 0.85rem; color: rgba(255, 255, 255, 0.7);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.viewer-close { position: absolute; top: 14px; right: 16px; }   /* the look is the shared .editor-btn */
+
+/* Built-in audio / video viewer (same dark overlay as the image lightbox).
+   The media element keeps the browser's own controls; clicking the dark
+   area around it (not the player) or the ✕ closes. */
+.media-backdrop
+{
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.92); z-index: 200;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+}
+.media-backdrop.open { display: flex; }
+.media-backdrop video
+{
+    max-width: 100%; max-height: calc(100% - 40px);
+    border-radius: 4px; background: #000;
+}
+.media-backdrop .media-audio-box
+{
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    padding: 34px 30px; border-radius: 14px; background: #202124;
+}
+/* class selectors would otherwise beat the UA [hidden] rule */
+.media-backdrop video[hidden], .media-backdrop .media-audio-box[hidden] { display: none; }
+.media-backdrop .media-audio-box svg { color: rgba(255, 255, 255, 0.5); }
+.media-backdrop audio { width: min(78vw, 420px); }
+
+/* Built-in image editor (TOAST UI Image Editor, loaded on demand). Full-screen,
+   always dark — like the lightbox its colours are fixed and do not follow the theme.
+   Used only for the formats the library can re-encode (png / jpg / webp); every
+   other image type still opens in the plain lightbox above. */
+/* The chrome itself is the shared IMAGE EDITOR block in shared/app.css
+   (Photos opens the same editor). Only the layer it sits on is Drive's:
+   over the folder sheet (95) and UNDER the dialogs (.sheet-backdrop, 100)
+   — "Guardar copia" and the unsaved-changes question both open FROM the
+   editor, so they have to land on top of it. Nothing else can be open
+   behind it: a file is opened from a listing row, never from the tree
+   sheet, a dialog or a context menu. */
+.editor-backdrop { z-index: 99; }
+
+/* Indeterminate progress dialog (shown while Drive builds a ZIP) */
+.progress-sheet { max-width: 320px; text-align: center; }
+.progress-track
+{
+    position: relative; height: 6px; margin-top: 2px; overflow: hidden;
+    border-radius: 3px; background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.progress-track::before
+{
+    content: ''; position: absolute; top: 0; bottom: 0; width: 40%;
+    border-radius: 3px; background: var(--accent);
+    animation: progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes progress-slide
+{
+    0%   { left: -40%; }
+    100% { left: 100%; }
+}
+
+/* Context menu on a listing row (desktop right-click; touch: the row's ⋮ button).
+   The look is the shared .top-menu / .menu-item; .ctx-menu only adds the
+   closed state (openCtxMenu adds .open) and the greyed-out rows. */
+.ctx-menu { display: none; }
+.ctx-menu.open { display: flex; }
+.ctx-menu .menu-item[hidden] { display: none; }   /* .menu-item's display would otherwise beat [hidden]'s UA style */
+.ctx-menu .menu-item:disabled { opacity: 0.34; cursor: default; background: none; }
+
+/* Folder chooser (Mover a… / Copiar a…) */
+.tree-picker
+{
+    max-height: 46vh; overflow-y: auto; overflow-x: hidden;
+    border: 1px solid var(--line); border-radius: var(--radius-s); padding: 6px 4px; margin-bottom: 14px;
+}
+.tree-picker .tree-row.bad { opacity: 0.32; cursor: default; }
+.tree-picker .tree-row.bad:hover { background: none; }
+
+/* Properties dialog: a label / value grid. The dimmed label reads like a
+   .field label (app.css); the exact byte count goes under its own value
+   in small type, the way every file manager writes it. */
+.props
+{
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    margin: 0 0 14px;
+    font-size: 0.9rem;
+}
+.props dt { color: var(--text-dim); }
+.props dd { margin: 0; overflow-wrap: anywhere; }
+.props dd .props-sub { display: block; font-size: 0.8rem; color: var(--text-dim); }
+
+/* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
+   toolbar buttons are hidden while it is open. */
+#moreBtn { display: none; }   /* phone only — see B6b in the phone block */
+body.trash-mode .topbar-search,
+body.trash-mode #searchToggleBtn,
+body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
+body.trash-mode #renameBtn,  body.trash-mode #moveToBtn,
+body.trash-mode #copyToBtn,  body.trash-mode #copyLinkBtn,
+body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
+body.trash-mode .topbar .sep,
+body.trash-mode .tree-pane { display: none; }
+
+.trash-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.trash-bar .trash-title { font-weight: 600; margin-right: auto; }
+.trash-bar .trash-days { display: flex; align-items: center; gap: 6px; color: var(--muted, var(--text)); font-size: .9em; }
+/* 5em, not 3.5em: the shared 10px side padding plus the spinner arrows ate
+   all but one digit, so "30" read as "3" */
+.trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
+/* Every button in the bar is a shared one: "←" an .icon-btn, "Vaciar
+   papelera" a .text-btn.ghost.danger, the days hint an .info-dot. */
+.trash-bar .info-dot svg { width: 19px; height: 19px; }
+
+/* Restore / delete-forever: two shared .icon-btn.sm (the second .danger) */
+.row .row-trash-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+
+/* --- Responsive: phone layout (≤640px). New elements below are hidden here
+       and only revealed inside the @media block, so desktop is untouched. --- */
+#searchToggleBtn { display: none; }
+.tree-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90; display: none; }
+
+@media (max-width: 640px)
+{
+    /* B1 — keep the app name (it is how you know where you are, and
+       tapping it goes home); hide only the HD gauge and tighten the bar.
+       The name is a touch smaller here so the button row still fits. */
+    .topbar h1 { font-size: 1rem; margin-right: 6px; white-space: nowrap; }
+    .brand { margin-right: 2px; }
+    .disk-bar { display: none; }
+    .topbar .sep { display: none; }
+    .topbar { gap: 2px; padding: 6px 6px; }
+
+    /* B2 — search collapses behind a magnifier button */
+    #searchToggleBtn { display: flex; }
+    .topbar-search { display: none; }
+    .topbar.searching .topbar-search { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
+
+    /* B4 — the folder tree becomes a slide-in sheet */
+    .tree-pane
+    {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 95;
+        width: 82vw; max-width: 300px; background: var(--bg);
+        transform: translateX(-100%); transition: transform .18s ease;
+        box-shadow: 0 0 32px rgba(0,0,0,0.45); padding-top: 12px;
+    }
+    .tree-pane.open { transform: translateX(0); }
+    .tree-backdrop.open { display: block; }
+    .tree-node .tree-row { padding: 9px 8px; }
+
+    .breadcrumb .crumb-root
+    {
+        border: 1px solid var(--line); background: var(--card2);
+        border-radius: 6px; padding: 5px 9px; color: var(--text); font-weight: 600;
+    }
+    .breadcrumb .crumb-root::after { content: " ▾"; color: var(--text-dim); }
+
+    /* B6 — per-file actions come from the row's ⋮ menu; keep Download */
+    #renameBtn, #moveToBtn, #copyToBtn, #copyLinkBtn, #deleteBtn { display: none; }
+
+    /* B6b — of what is left, the ones a phone reaches for LEAST move
+       into the header's own "⋮" (#topMenu, built in wireTopMenu from
+       these very buttons). Compartir is here because it is the one
+       per-file action the row menu does not carry; la papelera is
+       once-in-a-while. What stays is what you came to Drive to do:
+       buscar, nueva carpeta, subir, descargar — six buttons, one row,
+       even with something selected. */
+    #shareBtn, #trashViewBtn { display: none; }
+    #moreBtn { display: flex; }
+
+    /* B7 — roomier rows, ⋮ action button, no size/date column */
+    .row { padding: 11px 12px 11px 6px; gap: 8px; }
+    .row .row-menu { display: flex; }
+    .tree-node .tree-row .row-menu { display: flex; }
+    .row .row-meta { display: none; }
+    .breadcrumb { padding: 8px 10px; }
+    .breadcrumb .crumb { padding: 5px 6px; }
+
+    /* B8 — no sideways scrolling on a phone: names truncate as before. */
+    .pane-resizer { display: none; }
+    .tree-pane { overflow-x: hidden; }
+    #treePane > .tree-node { min-width: 0; }
+    .tree-node .tree-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .listing { overflow-x: hidden; }
+    .list-rows { width: auto; min-width: 0; }
+    .row .row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}

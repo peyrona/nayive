@@ -1589,9 +1589,16 @@ button { -webkit-touch-callout: none; }
 .share-link .share-row { gap: 2px; min-height: 46px; }
 .share-link-app  { margin-top: 12px; }
 .share-link-how  { margin: 6px 0 0; }
-/* OwnTracks row: the (i) sits right after its words, the buttons stay right. */
-.share-link-app .share-link-url { flex: 0 1 auto; }
-.share-link-app .info-dot       { margin-right: auto; }
+/* "My location": one card per app (Overland on iPhone, GPSLogger on Android),
+   each with its own address and links. A PC shows both. */
+.loc-app + .loc-app { margin-top: 16px; }
+.loc-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+.loc-link  { display: inline-flex; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 6px 12px; font-size: 0.8rem; color: var(--link); text-decoration: none; }
+.loc-link:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.loc-off   { margin-top: 16px; }
+/* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
+.share-link-app .share-link-url.has-info { flex: 0 1 auto; }
+.share-link-app .info-dot                { margin-right: auto; }
 
 
 /* -----------------------------------------------------------------------------

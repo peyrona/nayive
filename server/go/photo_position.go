@@ -84,7 +84,7 @@ func (s *Server) photoUploaded(user, rel string, target Resolved) {
 			continue
 		}
 		p := tripPosition{Lat: meta.Lat, Lon: meta.Lon, Acc: acc, At: at, Source: "photo"}
-		if s.storePosition(user, lt, p) {
+		if s.storePositions(user, lt, []tripPosition{p}) > 0 {
 			s.log.Info("a photo placed its owner on a trip", "user", user)
 		}
 	}

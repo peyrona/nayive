@@ -1,0 +1,330 @@
+/* trips.css - what is unique to Trips (the shared look is ../shared/app.css). */
+
+/* Base reset, .icon-btn (+ .danger), .app-icon, .sheet,
+   .field, .section-label and the input look all come from
+   ../shared/app.css. Only what is unique to Trips lives here. */
+
+.route-offline { padding: 22px 16px; border: 1px dashed var(--line); border-radius: var(--radius-m); color: var(--text-dim); font-size: .9rem; text-align: center; }
+
+/* Page shell - a custom two-column layout: the trip list on the left, a
+   sticky route map on the right once the viewport is wide enough. Not
+   the plain app.css .page/.card. */
+.trip-page { min-height: 100vh; width: 100%; background: var(--bg); display: flex; justify-content: center; padding: 28px 14px; }
+.trip-layout { display: flex; gap: 24px; align-items: flex-start; width: 100%; max-width: 460px; }
+.trip-main { flex: 1 1 460px; max-width: 460px; min-width: 0; }
+.trip-panel { background: var(--card); border-radius: var(--radius-l); padding: 22px 18px 18px; border: 1px solid var(--line); box-shadow: var(--elev-card); }
+
+.route-panel { display: none; flex: 1 1 400px; max-width: 1600px; position: sticky; top: 28px; }
+.route-panel .trip-panel { padding: 18px; }
+.route-placeholder { color: var(--text-dim); font-size: 0.86rem; text-align: center; padding: 60px 20px; }
+
+@media (min-width: 920px)
+{
+    .trip-layout { max-width: 2084px; }
+    .route-panel { display: block; }
+    #mapBtn { display: none; }
+}
+
+@media (max-width: 480px)
+{
+    .trip-page { padding: 0; }
+    .trip-layout { max-width: 100%; }
+    .trip-panel { border-radius: 0; border: none; box-shadow: none; min-height: 100vh; }
+}
+
+/* Header - like the app.css .header, but the <h1> doubles as the trip
+   name when a trip is open (plain --text), and only shows --accent in
+   its "Trips" app-title state. */
+/* One row while it fits; the button bar wraps below and the trip name
+   always shows in full - matches app.css .topbar / .header. */
+.trip-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 4px; margin-bottom: 18px; }
+.trip-header h1 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.trip-header h1.app-title { color: var(--accent); }
+.trip-header-title { flex: 1 1 auto; min-width: min-content; display: flex; flex-direction: column; gap: 1px; }
+.trip-header-title h1 { white-space: normal; }
+/* Name + read-only pill on one line; the pill drops below on a narrow phone. */
+.trip-header-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.trip-header-sub { font-size: 0.8rem; color: var(--text-dim); }
+.trip-header-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; margin-left: auto; }
+
+.section-label.spaced { margin-top: 18px; }
+
+.trip-card { display: flex; flex-direction: column; gap: 10px; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
+.trip-card:hover { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.trip-card.past { opacity: 0.7; }
+.trip-card-top { display: flex; align-items: center; gap: 12px; }
+/* Just the app icon (paw), no filled circle behind it - the coloured disc read
+   like an avatar / status badge and was confusing. */
+.trip-avatar { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--accent); flex: 0 0 auto; }
+.trip-info { flex: 1 1 auto; min-width: 0; }
+.trip-name { font-size: 1rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-dates { font-size: 0.82rem; color: var(--text-dim); margin-top: 2px; }
+.trip-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.meta-pill { font-size: 0.74rem; color: var(--text-dim); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 4px 10px; }
+/* Countdown pill on the trip list card - same look, pushed to the right edge. */
+.meta-pill.meta-pill-right { margin-left: auto; }
+/* The trip's own toolbar, in the card's top row: share / export. On the card so
+   a trip can be shared or printed without opening it first - opening it is the
+   card body's job, so there is no button for it here. */
+.trip-card-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+.empty-list-note { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 60px 20px; }
+
+.detail-heading { font-size: 0.95rem; font-weight: 700; margin: 20px 2px 10px; }
+.detail-heading.first { margin-top: 2px; }
+.detail-heading.collapsible { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+/* The heading plus its own controls ("+", the info dot) on one line - the
+   heading is a <button>, so they sit beside it, not inside it. Same 30px
+   borderless buttons the "Fotos" row uses. */
+.detail-heading-row { display: flex; align-items: center; gap: 6px; margin: 20px 2px 10px; }
+.detail-heading-row.first { margin-top: 2px; }
+/* The heading sits at its own width so the "+" lands right AFTER the word,
+   the way the folder button does after "Fotos" - not out at the far edge. */
+.detail-heading-row .detail-heading { flex: 0 1 auto; width: auto; min-width: 0; margin: 0; }
+.detail-heading-row .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
+.detail-heading .sec-chevron { flex: none; transition: transform .15s ease; }
+.detail-section.collapsed .sec-chevron { transform: rotate(-90deg); }
+
+.file-list { display: flex; flex-direction: column; gap: 6px; }
+.file-row { display: flex; align-items: center; gap: 10px; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; color: var(--text); }
+.file-row:hover { border-color: color-mix(in srgb, var(--text) 24%, transparent); }
+.file-icon { color: var(--accent); flex: 0 0 auto; display: flex; }
+.file-name { font-size: 0.85rem; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A deletable row (stage card): the row is a plain box, the link fills it and
+   the trash button sits at the right end - a button can't live inside an <a>. */
+.file-open { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; color: inherit; text-decoration: none; }
+.file-row .file-del { flex: 0 0 auto; margin: -4px -5px -4px auto; }
+
+.empty-note { color: var(--text-dim); font-size: 0.84rem; padding: 2px 2px 14px; }
+
+
+/* The node gutter is widened with a negative margin + matching extra padding,
+   so the timeline circles get bigger (icon readable) WITHOUT stealing any
+   width from the stage cards - the card's left edge stays exactly where it was. */
+.timeline { position: relative; margin: 2px 0 0 -8px; padding-left: 38px; }
+.timeline::before { content: ''; position: absolute; left: 14px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+.stage-item { position: relative; margin-bottom: 14px; }
+.stage-item:last-child { margin-bottom: 0; }
+.stage-node { position: absolute; left: -38px; top: 1px; width: 30px; height: 30px; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.stage-node svg { width: 17px; height: 17px; }
+.stage-node.here { background: var(--accent); color: var(--on-accent); }
+.stage-card { background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 12px 11px; cursor: pointer; }
+.stage-card.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.stage-card.disabled { background: var(--card2); opacity: 0.75; }
+.stage-item.disabled .stage-node { opacity: 0.4; }
+.stage-card a, .stage-card button { cursor: pointer; }
+.stage-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 7px; }
+.stage-card.disabled .stage-top { margin-bottom: 0; }
+.stage-drag { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; margin: -2px -2px -2px -4px; color: var(--text-dim); cursor: grab; touch-action: none; }
+.stage-drag:active { cursor: grabbing; }
+.stage-dragging { opacity: 0.35; }
+.stage-drag-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; opacity: 0.9; box-shadow: 0 8px 24px rgba(0,0,0,0.28); border-radius: var(--radius-m); }
+.stage-drag-ghost .stage-node { display: none; }
+.stage-item.drop-before::before,
+.stage-item.drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); border-radius: 2px; }
+.stage-item.drop-before::before { top: -8px; }
+.stage-item.drop-after::after { bottom: -8px; }
+.stage-loc { font-size: 0.95rem; font-weight: 700; }
+.stage-loc.disabled { color: var(--text-dim); font-weight: 600; opacity: 0.55; }
+.stage-clock { display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; color: var(--text-dim); flex: 0 0 auto; white-space: nowrap; }
+.stage-clock svg { width: 12px; height: 12px; }
+.here-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: var(--radius-pill); padding: 3px 8px; flex: 0 0 auto; white-space: nowrap; }
+.here-badge svg { width: 11px; height: 11px; }
+.stage-actions { display: flex; gap: 2px; flex: 0 0 auto; margin-left: auto; justify-content: flex-end; }
+.stage-actions .icon-btn { width: 30px; height: 30px; }
+.stage-weather { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--text-dim); }
+.stage-weather .wx-min { color: #4a90d9; font-weight: 600; }
+.stage-weather .wx-max { color: #e07a5f; font-weight: 600; }
+.stage-weather svg { width: 18px; height: 18px; color: var(--text-dim); }
+.stage-row { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 5px; }
+.stage-row svg { flex: 0 0 auto; color: var(--text-dim); }
+.stage-daterow { flex-wrap: wrap; row-gap: 4px; }
+.stage-daterow-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.stage-daterow-right .icon-btn { width: 28px; height: 28px; }
+.stage-daterow-right .stage-weather { margin-left: 4px; }
+.stage-notes { font-size: 0.82rem; color: var(--text-dim); margin: 6px 0 8px; line-height: 1.4; white-space: pre-line; }
+.stage-docs { margin-top: 8px; }
+
+/* .sheet-backdrop / .sheet / .sheet-header / .field / inputs from app.css. */
+#mapSheet { max-width: 1600px; }
+
+/* trip form fields sit outside a .field (multi-value doc/loc rows) too - they
+   just need width. */
+.doc-row input, .loc-input-wrap input { width: 100%; }
+
+/* .dt-field is the shared DATE / TIME FIELD block (shared/app.css). */
+
+.doc-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.doc-row select { flex: 0 0 auto; width: auto; min-width: 112px; }
+.doc-row .icon-btn { width: 34px; height: 34px; flex: 0 0 auto; }
+.doc-row-path { font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono); margin: -4px 0 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The trip sheet's "Documentos" sits under the "Save where I am" tick, which has
+   no bottom margin of its own */
+.trip-docs-field { margin-top: 18px; }
+
+/* Shown when the trip or a stage has at least one document: a chevron before the
+   "Documentos" label that collapses/expands the rows */
+.doc-collapse-toggle { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: 0 0 auto; background: transparent; border: none; padding: 0; cursor: pointer; color: var(--text-dim); }
+.doc-collapse-toggle .doc-collapse-chev { transition: transform 0.15s; }
+.doc-collapse-toggle.collapsed .doc-collapse-chev { transform: rotate(-90deg); }
+
+/* One document's attachment: sits where the name field used to be, in the [type][…][x] row */
+.doc-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.doc-attach-btn { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px dashed var(--line); border-radius: var(--radius-pill); padding: 6px 11px; color: var(--text-dim); font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+.doc-attach-btn:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.doc-attach-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* "Documentos" label + a small "+" button to add a doc row (stage sheet) */
+.doc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.doc-head label { margin-bottom: 0; }
+.doc-head .doc-count { margin-left: 4px; color: var(--text-dim); font-weight: 400; }
+/* Plain --text-dim glyph, same as the trip screen's "+" and every other icon button */
+.doc-add-btn { width: 24px; height: 24px; flex: 0 0 auto; }
+.doc-add-btn svg { width: 14px; height: 14px; }
+.doc-attach-set { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; font-family: inherit; font-size: 0.78rem; text-align: left; color: var(--text); background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 6px 10px; cursor: pointer; }
+.doc-attach-set:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.doc-attach-set svg { flex: 0 0 auto; color: var(--accent); }
+.doc-attach-set .doc-attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-attach-set .doc-attach-pending { color: var(--text-dim); flex: 0 0 auto; }
+
+/* files/ tree picker (link an existing file, or pick a folder) */
+.filetree { max-height: 52vh; overflow: auto; padding: 6px; margin-top: 4px; }
+.ft-row { display: flex; align-items: center; gap: 7px; padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 0.86rem; color: var(--text); white-space: nowrap; }
+.ft-row:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.ft-row svg { flex: 0 0 auto; color: var(--text-dim); }
+.ft-row.ft-file svg { color: var(--accent); }
+.ft-caret { width: 14px; flex: 0 0 auto; display: inline-flex; justify-content: center; color: var(--text-dim); }
+.ft-empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 24px 12px; }
+
+/* Trip-level "Fotos" row, above Documentos - label, path and both buttons share one
+   row (no separate heading line). .photos-label matches the "Documentos" /
+   "Itinerario" heading type (size/weight) so it reads as the same kind of label. */
+.photos-row { display: flex; align-items: center; gap: 8px; margin: 2px 2px 14px; }
+.photos-label { font-size: 0.95rem; font-weight: 700; flex: 0 0 auto; }
+/* It's a link (opens the folder in Drive) so it gets the shared --link colour,
+   not the plain text colour - matches the app's `a { color: var(--link) }` rule. */
+.photos-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--link); font-family: var(--font-mono); font-size: 0.78rem; cursor: pointer; }
+.photos-path:hover { text-decoration: underline; opacity: 0.8; }
+.photos-path.empty { color: var(--text-dim); font-family: inherit; font-style: italic; }
+.photos-row .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
+
+
+/* "Ubicación" field: input (with an in-field "locate on map" button) + a gap + a round action button */
+.loc-row { display: flex; align-items: center; gap: 12px; }
+.loc-row .icon-btn { flex: 0 0 auto; }
+.loc-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
+.loc-input-wrap input[type=text] { width: 100%; padding-right: 40px; }
+.loc-map-btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }   /* look: the shared .icon-btn.sm */
+/* Below the route-panel breakpoint the map isn't shown, so hide the in-field button. */
+@media (max-width: 919.98px)
+{
+    .loc-map-btn { display: none; }
+    .loc-input-wrap input[type=text] { padding-right: 10px; }
+}
+
+.confirm-msg { font-size: 0.9rem; color: var(--text); line-height: 1.45; margin: 0 0 18px; }
+
+/* One row above the route map: legend (or Journey's "Now in ...") left, Plan /
+   Journey right. Empty on a
+   shared trip with nothing to show (offline, or no legs yet). */
+.map-bar { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
+.map-bar:empty { display: none; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: 1 1 auto; min-width: 0; font-size: 0.72rem; color: var(--text-dim); }
+.map-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.map-legend-swatch { width: 16px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+
+/* .sheet-actions / .sheet-actions-left / .btn / .btn-* live in ../shared/theme.css */
+
+.route-map { border: 1px solid var(--line); border-radius: var(--radius-m); width: 100%; max-width: 1600px; height: min(70vh, 1200px); background: var(--card2); }
+.map-caption { font-size: 0.76rem; color: var(--text-dim); margin: 10px 2px 0; text-align: center; }
+/* Plan / Journey above the route map: shared .icon-btn.sm, .is-active = the one shown. */
+.map-mode { display: flex; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+/* Journey: "where I am now" in the .map-bar; a photo pin's popup holds a few thumbnails. */
+.journey-now { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; color: var(--text); }
+.journey-pop-grid { display: grid; grid-template-columns: repeat(3, 64px); gap: 4px; margin-bottom: 6px; }
+.journey-pop-grid img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 4px; }
+.journey-pop a { color: var(--link); font-size: 0.8rem; }
+
+/* The OSM tiles are visually busy - mute them to a calm grey backdrop so the
+   coloured trip route is the only thing that stands out. Applied to the tile
+   layer only, so markers / route lines / popups keep their real colours. */
+.route-map .leaflet-tile-pane { filter: grayscale(0.92) contrast(0.9) brightness(1.05); }
+
+/* The route leg that leaves the stage card the pointer is over: it goes from dotted to
+   SOLID, so you can see at a glance which hop of the trip that card is. One CSS rule on
+   a class Leaflet's own <path> gets - no timer, nothing to stop when the map is rebuilt
+   or removed. (It used to blink on and off as well; dropped 2026-09-05, too noisy.)
+   `stroke-dasharray: none` beats Leaflet's dashArray because Leaflet writes it as an
+   SVG *presentation attribute*, and any CSS rule outranks those. Leaflet's own value
+   is left untouched, so dropping the class puts the dots straight back. */
+.route-map path.leg-active { stroke-dasharray: none; }
+
+/* Leaflet dark-theme overrides - its default controls/popups assume a light page */
+/* Leaflet's popup / zoom / attribution chrome is tokenised once in the shared
+   LEAFLET CHROME block (shared/app.css); Photos' map gets the same. */
+.calc-rate { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 14px; line-height: 1.4; }
+.tz-status { font-size: 0.84rem; color: var(--text-dim); line-height: 1.4; }
+.tz-inline { margin: -6px 0 13px; }
+.tz-inline-label { font-weight: 600; }
+.calc-warn { font-size: 0.8rem; color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: var(--radius-s); padding: 10px 12px; margin: 0 0 14px; line-height: 1.4; }
+.calc-sources { display: flex; flex-direction: column; gap: 4px; margin: 0 0 14px; }
+.calc-source-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: var(--text-dim); background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 7px 10px; }
+.calc-source-row span:first-child { color: var(--text); }
+input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- Trip -> PDF (print) ------------------------------------------------ */
+/* #printRoot is filled by exportTripPdf() just before window.print(), then
+   cleared on afterprint. It is display:none on screen and only shown for print. */
+#printRoot { display: none; }
+
+@media print
+{
+    @page { margin: 14mm; }
+    html, body { background: #fff !important; }
+    #app, .sheet-backdrop, #docUploadInput { display: none !important; }
+    /* On paper the sheet fills the page - undo the off-screen staging
+       styles exportTripPdf() sets inline while the route map builds. */
+    #printRoot { display: block !important; position: static !important; left: auto !important; top: auto !important; width: auto !important; }
+    .leaflet-control-attribution { font-size: 8px; }
+}
+
+#printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+#printRoot h1, #printRoot h2 { color: #111; }
+#printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 18px; }
+#printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; }
+#printRoot .pr-dates { font-size: 13px; color: #444; }
+#printRoot .pr-sec { margin-bottom: 20px; }
+#printRoot .pr-sec > h2 { font-size: 13px; margin: 0 0 8px; padding-bottom: 3px; border-bottom: 1px solid #bbb; text-transform: uppercase; letter-spacing: .05em; }
+#printRoot .pr-empty { color: #666; font-style: italic; }
+#printRoot ul.pr-doclist { margin: 0; padding-left: 18px; }
+#printRoot ul.pr-doclist li { margin-bottom: 8px; }
+#printRoot .pr-doc-name { font-weight: 600; }
+#printRoot .pr-doc-kind { color: #555; font-size: 10.5px; }
+#printRoot .pr-doc-path { color: #555; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; word-break: break-all; }
+#printRoot .pr-folder { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; color: #555; margin-top: 3px; }
+#printRoot table.pr-files { border-collapse: collapse; width: 100%; font-size: 10.5px; margin-top: 2px; }
+#printRoot table.pr-files th { text-align: left; color: #555; font-weight: 600; padding: 3px 10px 3px 0; white-space: nowrap; vertical-align: top; border-bottom: 1px solid #bbb; }
+#printRoot table.pr-files td { padding: 3px 10px 3px 0; font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all; vertical-align: top; border-bottom: 1px solid #e2e2e2; }
+#printRoot table.pr-files td:first-child { font-family: inherit; white-space: nowrap; }
+#printRoot ol.pr-stages { margin: 0; padding: 0; list-style: none; }
+#printRoot li.pr-stage { border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; }
+#printRoot .pr-stage-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+#printRoot .pr-num { font-weight: 700; background: #111; color: #fff; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex: none; }
+#printRoot .pr-loc { font-weight: 700; font-size: 14px; }
+#printRoot .pr-transport { color: #555; font-size: 11px; margin-left: auto; }
+#printRoot table.pr-kv { border-collapse: collapse; width: 100%; }
+#printRoot table.pr-kv th { text-align: left; width: 108px; vertical-align: top; color: #555; font-weight: 600; padding: 1px 8px 1px 0; white-space: nowrap; }
+#printRoot table.pr-kv td { vertical-align: top; padding: 1px 0; white-space: pre-line; }
+#printRoot .pr-stage-docs { margin-top: 6px; font-size: 11px; }
+#printRoot .pr-stage-docs .pr-doc-path { display: block; margin-left: 12px; }
+#printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
+
+/* Route map on the last page. -webkit-print-color-adjust keeps the tiles and
+   the coloured route legs from being dropped to greyscale by the print engine. */
+#printRoot .pr-map-sec { page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+#printRoot .pr-map-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10.5px; color: #555; margin: 0 0 6px; }
+#printRoot .pr-map-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+#printRoot .pr-map-legend-swatch { width: 16px; height: 3px; border-radius: 2px; flex: none; }
+#printRoot .pr-map { width: 100%; height: 340px; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; background: #e8e8e8; }
+#printRoot .pr-map .leaflet-tile-pane { filter: grayscale(0.92) contrast(0.9) brightness(1.05); }
+#printRoot .pr-map .leaflet-tooltip { font-size: 10px; padding: 1px 5px; }

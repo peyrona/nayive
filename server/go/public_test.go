@@ -274,8 +274,22 @@ func TestPublicTripManifest(t *testing.T) {
 	if trip.Now == nil || trip.Now.Source != "phone" || trip.Now.Place != "Oporto" {
 		t.Errorf("now = %+v, want the phone's Oporto", trip.Now)
 	}
-	if len(trip.Route) != 3 || trip.Route[2].Kind != "phone" {
-		t.Errorf("route %+v, want the two stages then the phone", trip.Route)
+	// The route is chronological, so WHERE the phone point lands depends on the
+	// clock: Lisboa's stage starts at 10:00 today, and before that hour a
+	// position taken a moment ago still comes first. Assert the order itself,
+	// not an index (it made this test fail every morning).
+	phones := 0
+	for i, p := range trip.Route {
+		if p.Kind == "phone" && p.Place == "Oporto" {
+			phones++
+		}
+		if i > 0 && trip.Route[i-1].At > p.At {
+			t.Errorf("route out of time order at %d: %+v", i, trip.Route)
+			break
+		}
+	}
+	if len(trip.Route) != 3 || phones != 1 {
+		t.Errorf("route %+v, want the two stages and the phone, in time order", trip.Route)
 	}
 	writePositions(13 * time.Hour)
 	trip, _ = getTrip(t, base, link.Token)

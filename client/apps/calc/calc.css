@@ -1,0 +1,455 @@
+/* calc.css - Calc's own styles. Loaded by index.html after the shared and
+   Handsontable stylesheets. */
+
+/* A spreadsheet needs the grid, its headers and the surrounding chrome to sit on
+   clearly different surfaces. The shared palette's neutral tokens (--bg / --card /
+   --card2) are only a few percent apart — fine for a card layout, too flat for a
+   dense grid, and worst in the light (beige) scheme where the whole screen ended up
+   one colour. So calc derives its own surfaces from those tokens. They are
+   color-mix()es of the shared tokens, not fixed values, so a custom colour scheme
+   still shifts them. */
+:root
+{
+    --calc-paper:      var(--bg);                                            /* cell background   */
+    --calc-chrome:     var(--card);                                          /* the two toolbars  */
+    --calc-header:     var(--card2);                                         /* row / col headers */
+    --calc-header-hi:  color-mix(in srgb, var(--accent) 22%, var(--card2));  /* selected header   */
+    --calc-grid-line:  var(--line);
+}
+:root[data-theme="light"]
+{
+    --calc-paper:      color-mix(in srgb, var(--card2) 60%, #FFFFFF);        /* near-white paper  */
+    --calc-chrome:     var(--card);
+    --calc-header:     color-mix(in srgb, var(--card) 72%, var(--line));     /* tan, frames grid  */
+    --calc-header-hi:  color-mix(in srgb, var(--accent) 18%, var(--card));
+    --calc-grid-line:  color-mix(in srgb, var(--line) 38%, var(--card2));    /* soft tan rules    */
+}
+
+/* Handsontable v18's theme is built on CSS custom properties — the semantic tokens
+   below are redeclared to calc's surfaces so the grid follows the shared colour
+   scheme. Applied to both HT theme classes: the JS swaps the class (…-main-dark /
+   …-main) on theme change so HT's own light-dark() internals resolve too. */
+.ht-theme-main-dark, .ht-theme-main
+{
+    --ht-background-color: var(--calc-paper);
+    --ht-background-secondary-color: var(--calc-chrome);
+    --ht-foreground-color: var(--text);
+    --ht-foreground-secondary-color: var(--text-dim);
+    --ht-border-color: var(--calc-grid-line);
+    --ht-accent-color: var(--accent);
+    --ht-header-background-color: var(--calc-header);
+    --ht-header-foreground-color: var(--text-dim);
+    --ht-header-highlighted-background-color: var(--calc-header-hi);
+    --ht-header-highlighted-foreground-color: var(--text);
+    /* Row headers (1, 2, 3…) carry their own token set in HT's theme; left alone
+       they keep the defaults — --calc-chrome background, full-strength text, a
+       fixed grey highlight — so the row strip looks unlike the column strip.
+       Mirror every column-header token onto its row-header twin. */
+    --ht-header-row-background-color: var(--calc-header);
+    --ht-header-row-foreground-color: var(--text-dim);
+    --ht-header-row-highlighted-background-color: var(--calc-header-hi);
+    --ht-header-row-highlighted-foreground-color: var(--text);
+    --ht-row-header-even-background-color: var(--calc-header);
+    --ht-row-header-odd-background-color: var(--calc-header);
+    --ht-cell-selection-background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+    --ht-cell-selection-border-color: var(--accent);
+    --ht-cell-editor-background-color: var(--calc-paper);
+    --ht-cell-editor-foreground-color: var(--text);
+    --ht-cell-editor-border-color: var(--accent);
+}
+
+#gridHost.ht-theme-main-dark, #gridHost.ht-theme-main { background-color: var(--calc-paper); }
+
+/* "Select all" affordance in the row-0 / col-0 corner cell. Clicking that cell
+   already selects the whole sheet (Handsontable default); this is just the visual
+   cue for it — a small lower-right triangle, the mark Sheets/Excel use. The glyph
+   is pointer-transparent so the click still lands on the <th>. */
+#gridHost .ht_clone_top_inline_start_corner thead th { position: relative; cursor: pointer; }
+#gridHost .ht_clone_top_inline_start_corner thead th::after
+{
+    content: ""; position: absolute; right: 1px; bottom: 1px;
+    width: 0; height: 0; pointer-events: none;
+    border-bottom: 8px solid var(--text-dim);
+    border-left: 8px solid transparent;
+    transition: border-bottom-color 0.12s ease;
+}
+#gridHost .ht_clone_top_inline_start_corner thead th:hover::after { border-bottom-color: var(--accent); }
+
+/* Base reset, .app shell, .topbar, .icon-btn, .sheet, .field and the
+   input look all come from ../shared/app.css. Calc overrides the page
+   scroll and adds its chrome + the hand-built formatting toolbar. */
+html, body { height: 100%; overflow: hidden; }
+
+.topbar { background: var(--calc-chrome); }
+
+.sync-indicator { margin-left: 4px; }   /* base rule + states in ../shared/theme.css */
+
+/* Formatting toolbar — Handsontable's free tier has no built-in cell-formatting UI
+   (only alignment ships free in its context menu), so bold/colors are hand-built here. */
+/* It WRAPS, at every width: a button that does not fit goes to the next
+   row. Never a horizontal scrollbar - a tool you have to scroll sideways
+   to reach is a tool you do not know is there. The grid takes whatever
+   height is left (#gridHost is the flex child that grows). */
+#fmtToolbar
+{
+    display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+    padding: 4px 10px; background: var(--calc-chrome);
+    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+    overflow-x: visible;
+}
+.fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
+/* Toolbar buttons: a distinct component from the header .icon-btn - 30px
+   rounded squares with an accent-tinted hover (they act on the cells). */
+.fmt-btn, .fmt-color-btn
+{
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; flex: 0 0 auto;
+    border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
+    cursor: pointer; padding: 0; font-weight: 700; font-size: 0.95rem; font-family: inherit;
+}
+.fmt-btn:hover, .fmt-color-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.fmt-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+.fmt-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+/* Text/fill colour buttons — the same TinyMCE 'text-color' / 'highlight-bg-color'
+   glyphs the Write app shows; the bar under each glyph tracks the current colour.
+   The real <input type=color> is visually hidden but still opened by a click
+   anywhere on the label — kept out of .fmt-btn so its mousedown isn't cancelled. */
+.fmt-color-btn { position: relative; }
+.fmt-color-btn .fmt-color-bar { fill: var(--fmt-bar, currentColor); }
+.fmt-color-btn input[type=color]
+{
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    border: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0);
+}
+/* The three format drop-downs are .tb-select (TOOLBAR SELECT in app.css),
+   the same control Text's editor bar uses. Only their widths are Calc's. */
+.fmt-select-narrow { width: 52px; }
+.fmt-select-font { width: 104px; }
+.fmt-select-numfmt { width: 92px; }
+
+/* The bottom bar: sheet tabs on the left, the selection's totals on the
+   right — the one place a spreadsheet is allowed chrome below the grid.
+   Always present; the tab strip inside it only appears with 2+ sheets. */
+#statusBar
+{
+    display: flex; align-items: stretch; gap: 8px;
+    background: var(--calc-chrome); border-top: 1px solid var(--line);
+    flex: 0 0 auto; min-height: 26px;
+}
+#sheetTabs
+{
+    display: flex; align-items: stretch; gap: 2px;
+    padding: 3px 8px; flex: 1 1 auto; overflow-x: auto; min-width: 0;
+}
+#sheetTabs[hidden] { display: none; }
+/* With no tabs the totals still sit on the right of the bar. */
+#sheetTabs[hidden] + #selStats { margin-left: auto; }
+#selStats
+{
+    display: flex; align-items: center; gap: 14px;
+    padding: 3px 12px; flex: 0 0 auto;
+    color: var(--text-dim); font-size: 0.8rem; white-space: nowrap;
+}
+#selStats b { color: var(--text); font-weight: 600; }
+#selStats:empty { display: none; }
+.sheet-tab
+{
+    flex: 0 0 auto; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 5px 12px; border: none; border-radius: var(--radius-s) var(--radius-s) 0 0;
+    background: transparent; color: var(--text-dim);
+    font-family: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.sheet-tab:hover   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); }
+.sheet-tab.is-active
+{
+    background: var(--calc-paper); color: var(--text); font-weight: 600;
+    box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ---- THE FORMULA ROW ------------------------------------------------
+   One row of its own, right under the chrome, where LibreOffice Calc and
+   Excel have always put it:
+     #nameBox     the "A1". Type a reference and it jumps there, so a big
+                  sheet does not have to be scrolled by hand.
+     #formulaBar  what the current cell really HOLDS - the formula, not
+                  the number it shows - and a second place to edit it
+                  (see THE FORMULA BAR in the script).
+
+   It is NOT part of #fmtToolbar, on purpose: the toolbar folds away on a
+   phone and collapses to nothing in menu mode, and where you are - plus
+   what is in the cell - has to stay on screen in both.
+
+   Both boxes are .tb-input (TOOLBAR INPUT in app.css); only their widths
+   belong to Calc. */
+#formulaRow
+{
+    display: flex; align-items: center; gap: 2px;
+    padding: 4px 10px; background: var(--calc-chrome);
+    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+}
+#nameBox    { width: 88px; text-align: center; }
+#formulaBar { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); }
+
+/* A phone only. Anywhere wider the formula editor (FORMULA EDITOR in the
+   script) takes over while a formula is typed, and the row goes; a phone
+   has no room for that panel and keeps the row. */
+@media (min-width: 641px) { #formulaRow { display: none; } }
+
+/* A linked cell. The underline says "link"; the colour is the accent so it
+   reads as one in either scheme. Ctrl/Cmd-click follows it — a plain click
+   still selects and edits the cell, which is what a spreadsheet must do. */
+#gridHost td.has-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* The cells a formula being typed points at (POINTING in the script).
+   Inset shadows, because the renderer owns the inline background and
+   borders - a shadow sits on top of both without touching either. */
+#gridHost td.pt
+{
+    box-shadow: inset 0 var(--pt-t, 0px) 0 var(--accent),
+                inset calc(-1 * var(--pt-r, 0px)) 0 0 var(--accent),
+                inset 0 calc(-1 * var(--pt-b, 0px)) 0 var(--accent),
+                inset var(--pt-l, 0px) 0 0 var(--accent),
+                inset 0 0 0 999px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#gridHost td.pt-t { --pt-t: 2px; }
+#gridHost td.pt-b { --pt-b: 2px; }
+#gridHost td.pt-l { --pt-l: 2px; }
+#gridHost td.pt-r { --pt-r: 2px; }
+
+/* Grid host */
+#gridHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }   /* Handsontable virtualizes its own scroll */
+
+/* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar wraps onto
+   more rows instead of scrolling sideways - a scrolling bar hides half its
+   buttons with no hint they exist - and its buttons grow to finger size. */
+/* ---- Phone-only header controls ------------------------------------
+   Both live in the .topbar-actions group and only show at <=640px.
+     "Aa"  #fmtBtn   - folds the toolbar away while you type.
+     "⋮"   #moreBtn  - the file buttons, which leave the toolbar.
+   #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
+   glance. (Note it is the HEADER toggle - not one of the .fmt-btn
+   toolbar buttons, in spite of the name.) .is-active (shared app.css)
+   marks it while the toolbar is showing. */
+#fmtBtn, #moreBtn { display: none; }
+#fmtBtn
+{
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.5px;
+}
+
+/* The "⋮" menu: .top-menu / .menu-item from app.css, anchored by shared/ui.js. */
+
+/* The toolbar's own "⋮": opens the rest of it in place. Phone only, and
+   last in the DOM so it is last in the row. */
+#moreToolsBtn { display: none; }
+#moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+
+/* ---- MENU MODE (see PULL-DOWN MENUS in the script) -------------------
+   The user picks ONE chrome: the icon toolbar, or the classic
+   "Archivo · Edición · Ver …" bar. #menuBar, .menu-top and .menu-panel
+   are styled once in shared/app.css; what belongs to Calc is only what
+   has to disappear.
+
+   The toolbar collapses to height 0 with visibility:hidden - never
+   display:none. The menu entries WORK BY CLICKING THOSE VERY BUTTONS, so
+   they have to stay in the layout; a display:none button delivers no
+   click, and the two <select>s and the colour pickers could not be set.
+
+   "Aa" folds a row that is already gone and "⋮" repeats the Archivo
+   menu, so both come off the header here. */
+#app.is-menus #fmtToolbar
+{
+    height: 0; min-height: 0; padding-top: 0; padding-bottom: 0;
+    overflow: hidden; border-bottom-width: 0; visibility: hidden;
+}
+#app.is-menus #fmtBtn,
+#app.is-menus #moreBtn { display: none; }
+
+/* Nothing of the formula row disappears here: the name box and the formula
+   bar are not in the toolbar at all, they have their own row below the
+   chrome (see THE FORMULA ROW above) and both chromes keep it. */
+
+/* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar was FOUR
+   rows - 159px, a fifth of the screen before the keyboard is even up.
+   Now it is ONE row that folds away.
+     - the row keeps the six controls a phone actually reaches for
+       (the .fmt-keep ones, listed in the markup); everything else waits
+       behind "⋮" (#moreToolsBtn), which opens the WHOLE toolbar in place
+       and closes again. Chosen by how often a thing is used, not by
+       where it sits in the bar. Rows, columns, merge and freeze are
+       safe back there: a long press on the grid opens Handsontable's
+       own menu with all of them.
+     - the file buttons (import / open / save-as) move to the header's
+       "⋮" menu, and the "?" is MOVED into the header by wireStaticUI()
+       so help stays reachable while the toolbar is folded (one single
+       [data-intro-open] on the page - a second copy would misdirect
+       the coach marks).
+     - #fmtBtn ("Aa") folds / unfolds; the toolbar also folds itself the
+       moment a cell editor opens, which is when the keyboard arrives. */
+@media (max-width: 640px)
+{
+    #fmtBtn, #moreBtn { display: flex; }
+    #moreToolsBtn     { display: inline-flex; }
+
+    #fmtToolbar { padding: 4px 2px; }
+    #fmtToolbar .fmt-sep { margin: 4px 2px; }
+    /* The formula row stays (it never folds), just tighter. */
+    #formulaRow { padding: 4px 4px; }
+    #formulaRow .fmt-sep { margin: 4px 3px; }
+    .fmt-btn, .fmt-color-btn { width: 36px; height: 36px; }
+
+    /* Collapsed: only the favourites (the .fmt-keep ones). They wrap like
+       everything else - nine controls do not fit on one 360px line, and
+       a row that cannot wrap would simply hide the last of them (the
+       page clips, it does not scroll). Two short rows, and the whole
+       strip still folds away the moment you type. */
+    #fmtToolbar:not(.is-open) > :not(.fmt-keep) { display: none; }
+
+    /* Undo / redo lead the collapsed row, as undo does in Write's; opened,
+       the row keeps the markup order above. */
+    #fmtToolbar:not(.is-open) #undoBtn,
+    #fmtToolbar:not(.is-open) #redoBtn { order: -1; }
+
+    /* Folded away while you type. */
+    #fmtToolbar.is-folded
+    {
+        height: 0; min-height: 0; padding-top: 0; padding-bottom: 0;
+        overflow: hidden; border-bottom-width: 0; visibility: hidden;
+    }
+}
+
+/* ---- WHAT FLOATS OVER THE GRID ------------------------------------
+   Handsontable paints the frozen headers as separate CLONE layers, and
+   they climb high: row numbers 120, the bottom pair 130 / 150, the
+   column letters 160, the top-left corner 180 - and its move / resize
+   guides reach 210. Every one of them beats the shared overlays
+   (menu 150, sheet 100, popup / toast 200, coach 300), so anything of
+   ours that opens over the grid has to be lifted clear of 210. Same
+   order as app.css, just moved up.
+
+     .top-menu   the "⋮" popup AND the pull-down panels (#menuPanel,
+                 #menuSub). At 150 a panel was drawn BEHIND A, B, C.
+     others      a dialog reaching the row-number column had its left
+                 edge covered on a phone. */
+.top-menu              { z-index: 400; }
+.sheet-backdrop        { z-index: 500; }
+.info-popup, .toast    { z-index: 600; }
+.coach-overlay         { z-index: 700; }
+
+.fx-list { max-height: 320px; overflow-y: auto; margin-bottom: 14px; }
+
+/* The loss gate's bullet list. Plain text, no icons — the point is that
+   the user reads every line before deciding. */
+.lossy-list { margin: 0 0 14px; padding-left: 20px; max-height: 260px; overflow-y: auto; }
+.lossy-list li { margin: 3px 0; color: var(--text); line-height: 1.45; }
+.fx-item
+{
+    display: block; width: 100%; text-align: left; padding: 8px 12px;
+    border: none; background: transparent;
+    color: var(--text); cursor: pointer; font-family: inherit; font-size: 0.88rem;
+}
+.fx-item:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.fx-item b { color: var(--accent); }
+.fx-item span { display: block; font-size: 0.76rem; color: var(--text-dim); margin-top: 2px; }
+.fx-empty { padding: 12px; font-size: 0.85rem; color: var(--text-dim); text-align: center; }
+
+/* Open dialog: .open-crumb / .open-list from app.css; the file label too. */
+
+/* Anchored popup (border picker) — floats over the grid, not a modal */
+.popup
+{
+    position: fixed; z-index: 200; display: none;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
+    padding: 6px; box-shadow: var(--elev-dialog);
+}
+.popup.open { display: block; }
+.popup-row { display: flex; gap: 2px; }
+.popup-row + .popup-row { margin-top: 2px; }
+.popup-row-sep { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
+.pop-btn
+{
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex: 0 0 auto; position: relative;
+    border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
+    cursor: pointer; padding: 0;
+}
+.pop-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.pop-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+.pop-btn input[type=color]
+{
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    border: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0);
+}
+.pop-color-bar { fill: var(--border-bar, var(--text-dim)); }
+
+/* ---- FORMULA EDITOR (see FORMULA EDITOR in the script) -------------
+   The .popup card, fixed over the top-right of the cells while a cell's
+   "=…" is typed. Only layout lives here: the pieces are the shared .pill,
+   .icon-btn and dialog buttons, and this sheet's .pop-btn, .fx-item and
+   .nf-preview. z-index 300: over the grid's clones (up to 210) and its
+   open cell editor (200), under the menus (400) and the dialogs (500). */
+#fePanel               { z-index: 300; width: 292px; max-width: calc(100vw - 32px); padding: 0; flex-direction: column; overflow: hidden; }
+#fePanel.open          { display: flex; }
+.fe-head               { display: flex; align-items: center; gap: 4px; padding: 3px 12px 3px 3px; cursor: pointer; user-select: none; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.fe-chev svg           { transition: transform var(--tr-fast); }
+#fePanel.is-folded .fe-chev svg { transform: rotate(-90deg); }
+.fe-body               { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
+#fePanel.is-folded .fe-body { display: none; }
+/* The result, beside Range: a .tb-input box that may grow to a second
+   line for an error said in words. Its placeholder is data-placeholder. */
+.fe-result             { flex: 1 1 0; min-width: 0; height: auto; min-height: 30px; padding: 5px 8px; line-height: 1.3; overflow-wrap: anywhere; }
+.fe-result:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
+.fe-result.is-error    { color: var(--danger); }
+.fe-help               { font-size: 0.78rem; line-height: 1.35; color: var(--text-dim); }
+.fe-help b             { color: var(--accent); }
+.fe-row                { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+/* .pill has no disabled look of its own (only this panel needs one): Range
+   is off while a tap on the sheet could not put a reference in. */
+#feRangeBtn:disabled   { opacity: 0.45; cursor: default; }
+.fe-list               { max-height: 168px; overflow-y: auto; margin: 0 -10px; border-block: 1px solid var(--line); }
+.fe-key                { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; }
+.fe-actions            { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 640px) { #fePanel.open { display: none; } }
+
+/* Checkbox rows in the number-format dialog */
+.field label.check
+{
+    display: flex; align-items: center; gap: 8px; margin-bottom: 0;
+    font-size: 0.9rem; color: var(--text); cursor: pointer;
+}
+.field label.check input { width: auto; }
+
+.nf-preview
+{
+    padding: 10px 11px; border: 1px dashed var(--line); border-radius: var(--radius-s);
+    background: var(--card2); color: var(--text); font-family: var(--font-mono);
+}
+
+/* Right-click context menu. HT renders it as its own themed Handsontable on <body>;
+   the .ht-theme-* token block near the top of this sheet already colours it. Each
+   row's glyph is injected by cmItem() (see the script) into .htItemWrapper. */
+.htContextMenu .cm-ico
+{
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; margin-right: 10px; vertical-align: -3px;
+    flex: 0 0 auto; color: var(--text-dim);
+}
+.htContextMenu .cm-ico svg { width: 16px; height: 16px; display: block; }
+
+/* A custom renderer makes HT tag the cell .htCustomMenuRenderer, which its own
+   stylesheet then excludes from the hover / keyboard-current / pointer styling.
+   Restore all three so an icon'd row still behaves like a normal menu item. */
+.htContextMenu .ht_master td.htCustomMenuRenderer:not(.htDisabled) { cursor: pointer; }
+.htContextMenu td.htCustomMenuRenderer:not(.htDisabled):hover
+{
+    background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+}
+.htContextMenu td.htCustomMenuRenderer:not(.htDisabled):hover .cm-ico { color: var(--text); }
+.htContextMenu td.htCustomMenuRenderer.current:not([aria-expanded="true"]):not(.htDisabled)
+{
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.htContextMenu td.htCustomMenuRenderer.htDisabled .cm-ico { opacity: 0.45; }

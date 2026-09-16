@@ -2599,7 +2599,7 @@
         } );
     }
 
-    // The full URL of a server path the API answered with ("/s/<token>", "/api/owntracks/<key>").
+    // The full URL of a server path the API answered with ("/s/<token>", "/api/location/<key>").
     function linkUrl( g ) { return window.location.origin + g.url; }
 
     // A round icon button (.share-drop) that disables itself while its action runs.
@@ -2956,11 +2956,15 @@
         } );
     }
 
-    /* OwnTracks: this account's one URL for the OwnTracks phone app, which sends
-     * where you are from the background, for every trip (server/go/owntracks.go).
+    /* This account's ONE location URL: where a phone app sends where you are,
+     * from the background, for every trip (server/go/location.go). Two apps use
+     * it, both free and open source, neither ours - Overland on iPhone,
+     * GPSLogger on Android. Each has its own ending on the same key and its own
+     * one-tap set-up link, so the phone being read on decides which card is
+     * shown; a PC, which can set up neither, shows both.
      * Returns an element that loads and redraws itself: make it, add it, done.
      * Trips' "My location" sheet is its home. */
-    function ownTracksSection()
+    function locationSection()
     {
         var box = document.createElement( "div" );
         box.className = "share-sect share-link";
@@ -2968,64 +2972,159 @@
         var tracker = null;      // {url, created} when on
         var loaded  = false;
 
-        function render()
-        {
-            box.innerHTML = "";
+        function isAndroid() { return /android/i.test( navigator.userAgent ); }
 
-            var note = document.createElement( "p" );
-            note.className   = "share-note";
-            note.textContent = t( "trips.ot.lead" );
-            box.appendChild( note );
+        var APPS = [
+            {
+                key:   "overland",
+                name:  "Overland",
+                head:  "trips.loc.overland",
+                how:   "trips.loc.overlandHow",
+                store: "https://apps.apple.com/app/id1292426766",
+                mine:  isIOS,
+                // The app reads its whole setup from this link: no typing on the phone.
+                setup: function ( url ) { return "overland://setup?url=" + encodeURIComponent( url ) + "&device_id=nayive"; }
+            },
+            {
+                key:   "gpslogger",
+                name:  "GPSLogger",
+                head:  "trips.loc.gpslogger",
+                how:   "trips.loc.gpsloggerHow",
+                store: "https://f-droid.org/packages/com.mendhak.gpslogger/",
+                mine:  isAndroid,
+                // Same idea, its own way: the server writes a .properties profile.
+                setup: function ( url ) { return "gpslogger://properties/" + url + ".properties"; }
+            }
+        ];
+
+        // (i): what the apps are, and where your location goes.
+        function infoButton()
+        {
+            var info = document.createElement( "button" );
+            info.className = "info-dot";
+            info.setAttribute( "data-info", t( "trips.loc.info" ) );
+            return info;
+        }
+
+        // A link that looks like a button. The store opens in a new tab; a set-up
+        // link hands over to the app itself, so it stays in this one.
+        function linkButton( label, href )
+        {
+            var a = document.createElement( "a" );
+            a.className   = "loc-link";
+            a.href        = href;
+            a.textContent = label;
+            if( /^https:/.test( href ) ) { a.target = "_blank"; a.rel = "noopener"; }
+            return a;
+        }
+
+        function appCard( app, url, last )
+        {
+            var card = document.createElement( "div" );
+            card.className = "loc-app";
+
+            var head = document.createElement( "p" );
+            head.className   = "share-head";
+            head.textContent = t( app.head );
+            card.appendChild( head );
 
             var row = document.createElement( "div" );
             row.className = "share-row share-link-app";
 
             var text = document.createElement( "span" );
             text.className   = "share-link-url";
-            text.textContent = ! loaded ? "…" : tracker ? linkUrl( tracker ) : t( "trips.ot.none" );
+            text.textContent = url;
             row.appendChild( text );
-
-            // (i): what OwnTracks is, and its home page to read more.
-            var info = document.createElement( "button" );
-            info.className = "info-dot";
-            info.setAttribute( "data-info", t( "trips.ot.info" ) );
-            row.appendChild( info );
-            applyInfoDots( row );
-
-            if( tracker )
+            row.appendChild( rowButton( "copy", t( "trips.loc.copy" ), function ()
             {
-                var url = linkUrl( tracker );
-                row.appendChild( rowButton( "copy", t( "trips.ot.copy" ), function ()
-                {
-                    return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
-                                                 function () { toast( url ); } );
-                } ) );
-                row.appendChild( rowButton( "x", t( "trips.ot.stop" ), function ()
-                {
-                    return jsonApi( "/api/owntracks", "DELETE" ).then( load );
-                } ) );
-            }
-            else if( loaded )
-            {
-                row.appendChild( rowButton( "plus", t( "trips.ot.create" ), function ()
-                {
-                    return jsonApi( "/api/owntracks", "POST" ).then( load );
-                } ) );
-            }
-            box.appendChild( row );
+                return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
+                                             function () { toast( url ); } );
+            } ) );
+            card.appendChild( row );
 
-            if( tracker )
+            var links = document.createElement( "p" );
+            links.className = "loc-links";
+            links.appendChild( linkButton( t( "trips.loc.get" ).replace( "{app}", app.name ), app.store ) );
+            if( app.mine() )
+                links.appendChild( linkButton( t( "trips.loc.setup" ).replace( "{app}", app.name ), app.setup( url ) ) );
+            card.appendChild( links );
+
+            // The steps - or, on a PC, where to go instead. The (i) follows the
+            // sheet's last words, which is the last card's note.
+            var how = document.createElement( "p" );
+            how.className   = "share-note share-link-how";
+            how.textContent = app.mine() ? t( app.how ) : t( "trips.loc.onPhone" );
+            if( last ) how.appendChild( infoButton() );
+            card.appendChild( how );
+
+            return card;
+        }
+
+        function render()
+        {
+            box.innerHTML = "";
+
+            var note = document.createElement( "p" );
+            note.className   = "share-note";
+            note.textContent = t( "trips.loc.lead" );
+            box.appendChild( note );
+
+            if( ! tracker )
             {
-                var how = document.createElement( "p" );
-                how.className   = "share-note share-link-how";
-                how.textContent = t( "trips.ot.how" );
-                box.appendChild( how );
+                // Nothing set up yet: one row, and the "+" that makes the URL.
+                var row = document.createElement( "div" );
+                row.className = "share-row share-link-app";
+
+                var text = document.createElement( "span" );
+                text.className   = "share-link-url";
+                text.textContent = loaded ? t( "trips.loc.none" ) : "…";
+                row.appendChild( text );
+
+                if( loaded )
+                {
+                    text.classList.add( "has-info" );
+                    row.appendChild( infoButton() );
+                    row.appendChild( rowButton( "plus", t( "trips.loc.create" ), function ()
+                    {
+                        return jsonApi( "/api/location", "POST" ).then( load );
+                    } ) );
+                }
+                box.appendChild( row );
+                applyInfoDots( box );
+                return;
             }
+
+            var base  = linkUrl( tracker );
+            var cards = APPS.filter( function ( a ) { return a.mine() || ( ! isIOS() && ! isAndroid() ); } );
+            cards.forEach( function ( a, i )
+            {
+                box.appendChild( appCard( a, base + "/" + a.key, i === cards.length - 1 ) );
+            } );
+
+            // Turning off is about the key, not the app: one button for both.
+            var off = document.createElement( "div" );
+            off.className = "share-row loc-off";
+
+            var onText = document.createElement( "span" );
+            onText.className   = "share-link-url";
+            onText.textContent = t( "trips.loc.on" );
+            off.appendChild( onText );
+
+            off.appendChild( rowButton( "x", t( "trips.loc.stop" ), function ()
+            {
+                // The phone keeps sending to this URL, which then just fails: ask first.
+                return confirmDialog( { title: t( "trips.loc.stopTitle" ), body: t( "trips.loc.stopBody" ),
+                                        confirm: t( "trips.loc.stopOk" ), danger: true } )
+                    .then( function ( yes ) { if( yes ) return jsonApi( "/api/location", "DELETE" ).then( load ); } );
+            } ) );
+            box.appendChild( off );
+
+            applyInfoDots( box );
         }
 
         function load()
         {
-            return jsonApi( "/api/owntracks", "GET" )
+            return jsonApi( "/api/location", "GET" )
                 .then( function ( j ) { tracker = j && j.url ? j : null; },
                        function ( e ) { toast( e.message || t( "ui.loadFailed" ) ); } )
                 .then( function () { loaded = true; render(); } );
@@ -3600,7 +3699,7 @@
         canAddTo:     canAddTo,
         sharedBadge:  sharedBadge,
         shareSheet:   shareSheet,
-        ownTracksSection: ownTracksSection,   // Trips' "My location" sheet: the OwnTracks URL
+        locationSection: locationSection,     // Trips' "My location" sheet: the location URL
         pickFolder:           pickFolder,
         launcherFolder:       launcherFolder,
         changeLauncherFolder: changeLauncherFolder,

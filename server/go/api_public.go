@@ -41,7 +41,7 @@ import (
 // publicPagePath is the page every link opens, under apps/.
 const publicPagePath = "trips/public.html"
 
-// positionFresh: a position (phone, photo or OwnTracks) younger than this is
+// positionFresh: a position (photo, or a location app) younger than this is
 // "where I am now"; older, and the trip plan answers instead.
 const positionFresh = 12 * time.Hour
 
@@ -99,7 +99,7 @@ type publicStage struct {
 // publicPoint is one step of the route: a stage of the plan, or a stored
 // position (positions.go).
 type publicPoint struct {
-	Kind  string  `json:"kind"` // "stage" | "phone" | "photo" | "owntracks"
+	Kind  string  `json:"kind"` // "stage" | "photo" | "gpslogger" | "overland" (older files: "owntracks", "phone")
 	Lat   float64 `json:"lat"`
 	Lon   float64 `json:"lon"`
 	Place string  `json:"place,omitempty"`
@@ -107,7 +107,7 @@ type publicPoint struct {
 }
 
 type publicNow struct {
-	Source string  `json:"source"` // "phone" | "photo" | "owntracks" | "plan"
+	Source string  `json:"source"` // "photo" | "plan" | a location app's name ("gpslogger", "overland", old "owntracks", "phone")
 	Lat    float64 `json:"lat"`
 	Lon    float64 `json:"lon"`
 	Place  string  `json:"place,omitempty"`

@@ -226,7 +226,7 @@
 
     /* -------- where I am, the stages -------- */
 
-    // source: "phone" | "owntracks" (said the same way), "photo", or "plan".
+    // source: "photo", "plan", or a location app (every app said the same way).
     function nowText()
     {
         const now = TRIP.now;
@@ -241,7 +241,7 @@
                          : TF( "trips.pub.nowPhoneNoPlace", { ago: ago } );
     }
 
-    // A position from a photo or the OwnTracks app comes with no place name: look
+    // A position from a photo or a location app comes with no place name: look
     // the town up once, for the one position the page names.
     function nameTheNow()
     {

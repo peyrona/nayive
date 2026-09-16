@@ -42,10 +42,10 @@ import (
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
 	"games"}
 
-// Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js catches
-// an app's own top-level module (write.js); the other apps keep theirs inline.
+// Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js and
+// *.css catch an app's own top-level scripts and stylesheet (write.js, calc.css).
 // *.html is index.html plus any page it fetches (games has one per game).
-var appGlobs = []string{"*.html", "manifest.json", "*.js", "lib/**/*", "icons/*"}
+var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", "icons/*"}
 
 var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/menubar.js",
@@ -121,6 +121,22 @@ func collect(apps string) []string {
 		for _, pat := range appGlobs {
 			for _, rel := range glob(apps, app+"/"+pat) {
 				rels[rel] = true
+			}
+		}
+	}
+	// Every app's own top-level scripts and stylesheet, offline app or not
+	// (drive/*.js, drive/drive.css). The service worker serves them cache-first,
+	// so they must be in the list - and so in CACHE_VERSION - or an edit never
+	// reaches a browser that already holds the old copy.
+	if entries, err := os.ReadDir(apps); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			for _, pat := range []string{"*.js", "*.css"} {
+				for _, rel := range glob(apps, e.Name()+"/"+pat) {
+					rels[rel] = true
+				}
 			}
 		}
 	}
@@ -213,9 +229,9 @@ func isShell(rel string) bool {
 	if strings.HasPrefix(rel, "shared/") && !strings.HasPrefix(rel, "shared/lib/") {
 		return true
 	}
-	// one "/" -> a file directly inside apps/<app>/, e.g. "write/write.js" - the
-	// app's own entry module, not a vendored lib.
-	if strings.Count(rel, "/") == 1 && strings.HasSuffix(rel, ".js") {
+	// one "/" -> a file directly inside apps/<app>/, e.g. "write/write.js" or
+	// "calc/calc.css" - the app's own code, not a vendored lib.
+	if strings.Count(rel, "/") == 1 && (strings.HasSuffix(rel, ".js") || strings.HasSuffix(rel, ".css")) {
 		return true
 	}
 	return false

@@ -57,6 +57,10 @@
     <script src="lib/codemirror-5.65.21/addon/search/jump-to-line.min.js"></script>
     <script src="lib/codemirror-5.65.21/addon/display/placeholder.min.js"></script>
 
+    <!-- Markdown renderer for the read-only preview (marked v15.0.12, MIT). Classic
+         UMD build: it only sets window.marked, like every other lib on this page. -->
+    <script src="lib/marked-15.0.12/marked.min.js"></script>
+
     <!-- The file API client: the access probe, retrying fetch, file ops. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Shared UI helpers: sheets, toast, sync plug, i18n. -->
@@ -79,6 +83,7 @@
                 { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
                 { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
+                { sel: '#mdViewBtn',    text: NayiveUI.t( 'text.introMdView' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
                 { sel: '#indentSelect', text: NayiveUI.t( 'text.introIndent' ) },
                 { sel: '#marginInput',  text: NayiveUI.t( 'text.introMargin' ) },
@@ -133,6 +138,68 @@
 
         /* Editor host */
         #editorHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+        /* MARKDOWN PREVIEW
+           A .md file opens rendered and read-only; #mdViewBtn swaps this pane for
+           the editor and back. The two are never up at once, so they share the slot
+           under the toolbar - hence the [hidden] rule (both are flex children, and
+           a flex child ignores the UA's own display:none for [hidden]). */
+        #editorHost[hidden],
+        #preview[hidden] { display: none; }
+
+        #preview
+        {
+            flex: 1 1 auto; min-height: 0; overflow: auto;
+            padding: 26px 22px 72px;
+            background: var(--bg); color: var(--text);
+            font-family: var(--font-sans); font-size: 15px; line-height: 1.65;
+        }
+        /* One readable column, centred - a full-width line of prose is unreadable. */
+        #preview .md-doc { max-width: 74ch; margin: 0 auto; }
+
+        #preview h1, #preview h2, #preview h3,
+        #preview h4, #preview h5, #preview h6 { line-height: 1.25; margin: 1.6em 0 0.5em; font-weight: 700; }
+        #preview > .md-doc > :first-child { margin-top: 0; }
+        #preview h1 { font-size: 1.9em; color: var(--accent); }
+        #preview h2 { font-size: 1.5em; border-bottom: 1px solid var(--line); padding-bottom: 0.2em; }
+        #preview h3 { font-size: 1.25em; }
+        #preview h4, #preview h5, #preview h6 { font-size: 1em; color: var(--text-dim); }
+        #preview p, #preview ul, #preview ol, #preview blockquote, #preview pre, #preview table { margin: 0 0 1em; }
+        #preview ul, #preview ol { padding-left: 1.6em; }
+        #preview li { margin: 0.25em 0; }
+        #preview li > input[type="checkbox"] { margin-right: 0.45em; }   /* GFM task list */
+        #preview a { color: var(--accent); }
+        #preview blockquote
+        {
+            border-left: 3px solid var(--accent); margin-left: 0;
+            padding: 0.1em 0 0.1em 1em; color: var(--text-dim);
+        }
+        #preview hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
+        #preview img { max-width: 100%; height: auto; border-radius: var(--radius-s); }
+        /* Code keeps the editor's face; the block is a raised surface like a card. */
+        #preview code
+        {
+            font-family: var(--font-mono); font-size: 0.88em;
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: var(--radius-s); padding: 0.1em 0.35em;
+        }
+        #preview pre
+        {
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: var(--radius-m); padding: 12px 14px; overflow-x: auto;
+        }
+        #preview pre code { background: none; border: none; padding: 0; font-size: 0.86em; }
+        #preview table { border-collapse: collapse; width: 100%; font-size: 0.94em; }
+        #preview th, #preview td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+        #preview th { background: var(--card); }
+
+        /* Which glyph is on show follows .active (set by syncMdUI). It is a CSS rule
+           rather than a hidden attribute on purpose: the help card clones this button's
+           first <svg> (ui.js, introGlyph), and a cloned hidden="" would leave that row
+           iconless. Out of the button the rule cannot reach the clone, so it always
+           shows the pencil - the right stand-in for "write in the document". */
+        #mdViewBtn:not(.active) .md-ic-edit,
+        #mdViewBtn.active       .md-ic-read { display: none; }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar wraps onto
            more rows instead of scrolling sideways - a scrolling bar hides half its
@@ -225,17 +292,27 @@
                 <option value="text/x-properties" data-i18n="text.iniProps"></option>
             </select>
 
-            <div class="tb-sep"></div>
+            <!-- Markdown only: swaps the rendered document for the editor. Hidden for
+                 every other language (see syncMdUI). The eye is "read it", the pencil
+                 "write it": the glyph on show is always the view it takes you to. -->
+            <button id="mdViewBtn" class="tb-btn" type="button" hidden>
+                <svg class="md-ic-edit" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+                <svg class="md-ic-read" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
 
-            <button id="wrapBtn" class="tb-btn" data-i18n-attr="title:text.wrap">
+            <!-- edit-only like the group it opens: with wrap / indent / margin away,
+                 this one would sit right against the next divider. -->
+            <div class="tb-sep edit-only"></div>
+
+            <button id="wrapBtn" class="tb-btn edit-only" data-i18n-attr="title:text.wrap">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
-            <select id="indentSelect" class="tb-select" data-i18n-attr="title:text.indent">
+            <select id="indentSelect" class="tb-select edit-only" data-i18n-attr="title:text.indent">
                 <option value="4" selected data-i18n="text.indent4"></option>
                 <option value="2" data-i18n="text.indent2"></option>
                 <option value="tab" data-i18n="text.indentTab"></option>
             </select>
-            <input id="marginInput" class="tb-num" type="number" min="20" max="500" step="1" inputmode="numeric"
+            <input id="marginInput" class="tb-num edit-only" type="number" min="20" max="500" step="1" inputmode="numeric"
                    autocomplete="off" data-i18n-attr="title:text.margin">
 
             <div class="tb-sep"></div>
@@ -274,6 +351,8 @@
         </div>
 
         <div id="editorHost"><textarea id="editor"></textarea></div>
+        <!-- The rendered Markdown. Filled by renderPreview(); empty for every other language. -->
+        <article id="preview" hidden><div class="md-doc"></div></article>
 
     </div>
 
@@ -409,6 +488,11 @@
         let lineWrap        = window.matchMedia( '(max-width: 640px)' ).matches;   // phone: wrap by default - scrolling code sideways on a phone is miserable; the button still toggles it
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
+        // MARKDOWN READER (see that section below). Declared here with the rest of
+        // the state: wireStaticUI() reads both before the section's own lines run.
+        const MD_MIME   = 'text/x-markdown';
+        let   mdReading = false;   // true = the rendered pane is up, the editor is away
+
         const FONT_KEY = 'gum_text_font_size';
         const FONT_MIN = 9;
         const FONT_MAX = 30;
@@ -441,7 +525,7 @@
             blank      : blankText,
             finishName : textSaveName,
             onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
-            focus      : function() { if( editor ) editor.focus(); }
+            focus      : function() { if( editor && ! mdReading ) editor.focus(); }
         } );
 
         //------------------------------------------------------------------------//
@@ -462,7 +546,7 @@
             // ?file= / ?import= / the untitled document kept on this device - or a blank one.
             await session.boot();
 
-            editor.focus();   // caret in the text area on every startup path
+            if( ! mdReading ) editor.focus();   // caret in the text area on every startup path that shows one
         } );
 
         function wireStaticUI()
@@ -471,10 +555,14 @@
             // (shared/office.js); the dialogs' × buttons and Escape once for every
             // app by shared/ui.js.
 
-            document.getElementById( 'langSelect'   ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); editor.focus(); } );
+            // Picking Markdown by hand always lands in the editor: it is chosen
+            // while writing, so it can never answer by hiding what was written.
+            document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); setPreview( false ); editor.focus(); } );
+            document.getElementById( 'mdViewBtn'  ).addEventListener( 'click',  function()    { setPreview( ! mdReading ); } );
             document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the phone default
+            syncMdUI();   // the button starts hidden: nothing is open yet
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
 
@@ -556,6 +644,10 @@
         {
             editor.getWrapperElement().style.fontSize = fontSize + 'px';
             editor.refresh();
+
+            // The reader shares the zoom buttons. Prose wants a little more room than
+            // code at the same setting, so it sits two points above the editor.
+            document.getElementById( 'preview' ).style.fontSize = ( fontSize + 2 ) + 'px';
 
             try { localStorage.setItem( FONT_KEY, String( fontSize ) ); } catch( _ ) {}
         }
@@ -667,6 +759,13 @@
             const m = SELECT_MIMES.includes( mime ) ? mime : 'text/plain';
             editor.setOption( 'mode', m === 'text/plain' ? null : m );   // null = plain, avoids CM's "no mode" warning
             document.getElementById( 'langSelect' ).value = m;
+
+            // Leaving Markdown behind can never leave the reader up; entering it
+            // does NOT open the reader by itself - only a file arriving does
+            // (loadText). Renaming "notas" to "notas.md" while typing comes
+            // through here, and must not snatch the text away mid-sentence.
+            if( m !== MD_MIME ) setPreview( false );
+            else                syncMdUI();
         }
 
         function autoDetectLanguage()
@@ -700,6 +799,120 @@
         }
 
         //------------------------------------------------------------------------//
+        // MARKDOWN READER
+        //
+        // Markdown is the one language Text can show the way it is meant to be read,
+        // so a .md file opens rendered and read-only and #mdViewBtn is what lets you
+        // write in it. Nothing is re-rendered while you type: the pane is only built
+        // on the way into it, which also keeps a long document from re-parsing on
+        // every keystroke.
+
+        function isMarkdown()
+        {
+            return document.getElementById( 'langSelect' ).value === MD_MIME;
+        }
+
+        // The only door between the two views. `on` is a request - it is granted
+        // only while the document really is Markdown.
+        function setPreview( on )
+        {
+            mdReading = !! on && isMarkdown();
+
+            document.getElementById( 'editorHost' ).hidden = mdReading;
+            document.getElementById( 'preview'    ).hidden = ! mdReading;
+
+            if( mdReading )
+            {
+                renderPreview();
+            }
+            else if( editor )
+            {
+                editor.refresh();   // it was display:none - CodeMirror measured nothing
+                editor.focus();
+            }
+
+            syncMdUI();
+        }
+
+        // The toolbar follows the view: the button appears for Markdown only, its
+        // glyph shows where it takes you, and the controls that act on the source
+        // (wrap, indent, right margin) step aside while the document is being read.
+        function syncMdUI()
+        {
+            const md  = isMarkdown();
+            const btn = document.getElementById( 'mdViewBtn' );
+
+            btn.hidden = ! md;
+            btn.classList.toggle( 'active', mdReading );
+            btn.title  = T( mdReading ? 'text.mdEdit' : 'text.mdRead' );
+
+            document.querySelectorAll( '#toolbar .edit-only' ).forEach( function( el ) { el.hidden = mdReading; } );
+        }
+
+        // Tags that do something (run, fetch, submit) rather than say something.
+        // marked hands raw HTML straight through, and a .md can arrive from an
+        // upload or a shared folder, so the tree is cleaned before it is shown.
+        const HTML_DROP = new Set( [ 'SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED',
+                                     'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT' ] );
+
+        function sanitize( root )
+        {
+            root.querySelectorAll( '*' ).forEach( function( el )
+            {
+                // The one <input> worth keeping: a GFM task box. marked already
+                // writes it disabled - saying so again costs nothing and is what
+                // makes it safe to let through.
+                if( el.tagName === 'INPUT' && el.type === 'checkbox' ) { el.disabled = true; return; }
+
+                if( HTML_DROP.has( el.tagName ) ) { el.remove(); return; }
+
+                Array.from( el.attributes ).forEach( function( at )
+                {
+                    const name = at.name.toLowerCase();
+                    // A URL is read the way a browser reads it: whitespace and control
+                    // characters inside "java\nscript:" mean nothing to it.
+                    const url  = at.value.replace( /[\s\u0000-\u001F]/g, '' ).toLowerCase();
+
+                    if( name.startsWith( 'on' ) )
+                    {
+                        el.removeAttribute( at.name );
+                    }
+                    else if( name === 'href' || name === 'src' || name === 'xlink:href' || name === 'srcdoc' || name === 'formaction' )
+                    {
+                        // data: is kept for images only - that is the one place it is useful.
+                        if( /^(javascript|vbscript):/.test( url ) ||
+                            ( url.startsWith( 'data:' ) && ! ( name === 'src' && url.startsWith( 'data:image/' ) ) ) )
+                            el.removeAttribute( at.name );
+                    }
+                } );
+            } );
+
+            // Links leave for a new tab: this one holds an open document.
+            root.querySelectorAll( 'a[href]' ).forEach( function( a )
+            {
+                a.target = '_blank';
+                a.rel    = 'noopener noreferrer';
+            } );
+        }
+
+        function renderPreview()
+        {
+            const pane = document.getElementById( 'preview' );
+            const doc  = pane.querySelector( '.md-doc' );
+
+            // Parsed into a <template>: its content is inert, so an <img onerror> or
+            // an <iframe src> in the source never runs or fetches - not even for the
+            // instant between building the tree and cleaning it.
+            const tpl = document.createElement( 'template' );
+
+            tpl.innerHTML = marked.parse( getEditorText() );
+            sanitize( tpl.content );
+
+            doc.replaceChildren( tpl.content );
+            pane.scrollTop = 0;
+        }
+
+        //------------------------------------------------------------------------//
         // AUTOSAVE
 
         // Every edit lands here. Someone else's file and an untitled one (the
@@ -717,10 +930,14 @@
         // THE TEXT AS A FILE  (what the session in shared/office.js needs from Text)
 
         // A body on screen: text from the store or the device draft, bytes from
-        // an import or the .bak copy.
-        function loadText( body )
+        // an import or the .bak copy. `name` is the document's path or file name -
+        // the session only sets session.path() after this returns, so the language
+        // (and with it the Markdown reader) is decided from the name it hands over.
+        function loadText( body, name )
         {
             setEditorText( typeof body === 'string' ? body : new TextDecoder().decode( body ) );
+            setLanguage( detectMime( name || '' ) );
+            setPreview( isMarkdown() );   // a .md file opens as a document, not as source
         }
 
         function blankText()

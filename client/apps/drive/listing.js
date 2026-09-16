@@ -1,0 +1,376 @@
+/*
+ * listing.js - Drive: search, the file listing rows, icons, file-type lists and
+ * size / date formats.
+ */
+"use strict";
+
+// A plain word searches as a substring; a query with * or ? is an
+// anchored wildcard — the rule the search box has always shown. Either
+// way we hand the server a shell glob and it matches basenames,
+// case-insensitive (GET /api/files?find=).
+function buildPattern( raw )
+{
+    const q = (raw || '').trim();
+    if( ! q ) return null;
+    return (q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1) ? q : ('*' + q + '*');
+}
+
+async function runSearch()
+{
+    const pattern = buildPattern( searchQuery );
+    if( ! pattern )
+    {
+        searchHits = null;
+        searchTruncated = false;
+        render();
+        return;
+    }
+
+    const seq = ++searchSeq;
+    try
+    {
+        const r = await GumApi.find( pattern );
+        if( seq !== searchSeq ) return;          // a newer query already went out
+        searchHits      = pruneNodes( r.nodes || [] );
+        searchTruncated = !! r.truncated;
+        render();
+    }
+    catch( err )
+    {
+        if( seq !== searchSeq ) return;
+        searchHits = [];
+        searchTruncated = false;
+        render();
+        NayiveUI.toast( T( 'drive.searchFailed' ) );
+    }
+}
+
+// Rows live in a .list-rows wrapper so the wrapper can grow to the widest
+// row (width: max-content) and the #listing box scrolls it horizontally,
+// while every row's hover / border still spans the full width.
+function listRowsHost()
+{
+    const host = document.getElementById( 'listing' );
+    host.innerHTML = '';
+    const rows = document.createElement( 'div' );
+    rows.className = 'list-rows';
+    host.appendChild( rows );
+    return rows;
+}
+
+function renderListing()
+{
+    const box = document.getElementById( 'listing' );
+
+    if( searchQuery.trim() )
+    {
+        if( searchHits === null )                 // still waiting on the server
+        {
+            box.innerHTML = '<div class="empty-hint" data-i18n="drive.searching"></div>';
+            return;
+        }
+
+        const hits = searchHits.slice().sort( function( a, b )
+        {
+            const da = isDir( a ), db = isDir( b );
+            if( da !== db ) return da ? -1 : 1;                 // folders first
+            return a.path.localeCompare( b.path );
+        });
+
+        if( ! hits.length )
+        {
+            box.innerHTML = '';
+            const hint = document.createElement( 'div' );
+            hint.className   = 'empty-hint';
+            hint.textContent = TF( 'drive.noResultsFor', { q: searchQuery.trim() } );
+            box.appendChild( hint );
+            return;
+        }
+
+        const host = listRowsHost();
+        if( searchTruncated )
+        {
+            const note = document.createElement( 'div' );
+            note.className   = 'empty-hint';
+            note.textContent = TF( 'drive.tooManyResults', { n: hits.length } );
+            box.insertBefore( note, host );
+        }
+        hits.forEach( function( child ) { host.appendChild( buildListRow( child, true ) ); } );
+        return;
+    }
+
+    if( listingLoading )
+    {
+        box.innerHTML = '<div class="empty-hint" data-i18n="ui.loading"></div>';
+        return;
+    }
+
+    const kids = curListing.nodes.slice().sort( function( a, b )
+    {
+        const da = isDir( a ), db = isDir( b );
+        if( da !== db ) return da ? -1 : 1;                 // folders first
+        return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base', numeric: true } );
+    });
+
+    if( ! kids.length )
+    {
+        box.innerHTML = '<div class="empty-hint" data-i18n="drive.emptyFolderHint"></div>';
+        return;
+    }
+
+    const host = listRowsHost();
+    kids.forEach( function( child )
+    {
+        host.appendChild( buildListRow( child ) );
+    });
+}
+
+// Icons shown in the listing. The document / spreadsheet / code glyphs are the
+// Write, Calc and Text app marks, so a row looks like the tool that opens it.
+const SVG_FOLDER = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+// Trash-view action glyphs: close, restore, permanent delete.
+const SVG_RESTORE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>';
+const SVG_TRASH   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+const SVG_FILE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+const SVG_DOC    = '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>';
+const SVG_SHEET  = '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>';
+const SVG_PDF    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="18.5" font-size="7" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>';
+const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>';
+const SVG_IMAGE  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+const SVG_VIDEO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><polygon points="22 7 16 11 16 13 22 17"></polygon><polygon points="7 9 11 12 7 15" fill="currentColor" stroke="none"></polygon></svg>';
+const SVG_AUDIO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
+// Only used inside "Compartido conmigo": the Photos and Trips launcher
+// glyphs, so a shared album / trip looks like the app that opens it.
+const SVG_PHOTOS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>';
+const SVG_TRIPS  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="5.5" cy="9" rx="2" ry="2.5"></ellipse><ellipse cx="12" cy="6" rx="2.1" ry="2.6"></ellipse><ellipse cx="18.5" cy="9" rx="2" ry="2.5"></ellipse><path d="M12 12c-4.5 0-7.8 2-7.8 4.4 0 2 2.55 3.3 5.4 2.9 1.35-.2 1.5-.7 2.4-.7s1.05.5 2.4.7c2.85.4 5.4-.9 5.4-2.9C19.8 14 16.5 12 12 12z"></path></svg>';
+const SVG_SPLIT  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 7A7 7 0 1 0 16.5 17"></path><line x1="3" y1="10.2" x2="13.5" y2="10.2"></line><line x1="3" y1="13.8" x2="13.5" y2="13.8"></line></svg>';
+
+// Extensions each tool can open/import (mirrors the accept="" of their import
+// inputs — see apps/write, apps/calc). Kept disjoint so a double-click routes
+// to exactly one tool.
+const WRITE_IMPORT = [ 'docx' ];
+const CALC_IMPORT  = [ 'xlsx', 'csv' ];
+// LibreOffice documents. Write and Calc cannot read them, so the server
+// makes a .docx / .xlsx twin beside the original (openOffice below; keep
+// officeTwin in server/go/office.go the same lists). The other LibreOffice
+// kinds have no app here and are refused: Impress, Draw, Math, Base.
+const OFFICE_WRITE  = [ 'odt', 'ott', 'fodt', 'sxw', 'stw' ];
+const OFFICE_CALC   = [ 'ods', 'ots', 'fods', 'sxc', 'stc' ];
+const OFFICE_REFUSE = [ 'odp', 'otp', 'fodp', 'sxi', 'sti',      // Impress
+                        'odg', 'otg', 'fodg', 'sxd', 'std',      // Draw
+                        'odf', 'sxm', 'odb' ];                   // Math, Base
+// Plain-text / code / markup files → the Text editor (see apps/text), which is
+// also the catch-all: it opens anything not owned by another tool and not a
+// known-binary type, so this list only steers the file-row ICON.
+const TEXT_IMPORT  =
+[
+    'txt', 'log', 'une', 'model', 'md', 'markdown', 'mkd',
+    'html', 'htm', 'xhtml', 'css', 'js', 'mjs', 'cjs', 'jsx', 'ts',
+    'json', 'map', 'webmanifest', 'xml', 'xsl', 'xsd', 'svg', 'rss',
+    'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env',
+    'sh', 'bash', 'zsh', 'ksh', 'ps1', 'bat', 'sql',
+    'py', 'pyw', 'r', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'java', 'cs', 'tex'
+];
+// Raster images → an image opener. '.svg' is deliberately absent: the server
+// serves it as text/plain, so it stays in TEXT_IMPORT.
+//   IMAGE_EDIT  the formats the TOAST UI Image Editor can load AND re-encode
+//               (canvas.toDataURL) → they open in Drive's built-in editor.
+//   IMAGE_VIEW  every other raster type → the plain lightbox (view only), and
+//               it also stays the superset used for the file-row icon.
+const IMAGE_EDIT = [ 'png', 'jpg', 'jpeg', 'webp' ];
+const IMAGE_VIEW = [ 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif' ];
+// Audio / video → Drive's own player (browser-native <audio>/<video> controls,
+// view only, no editing). What actually plays depends on the browser's codecs.
+const VIDEO_VIEW = [ 'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv' ];
+const AUDIO_VIEW = [ 'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'weba' ];
+
+function extOf( name )
+{
+    const m = /\.([a-z0-9]+)$/i.exec( name );
+    return m ? m[1].toLowerCase() : '';
+}
+
+// Server nodes carry `size` (bytes, files only) and `mtime` (last-modified,
+// Unix seconds). Dates always render yyyy-mm-dd (Nayive ANSI-date rule).
+function fmtSize( bytes )
+{
+    if( bytes == null ) return '';
+    if( bytes < 1024 )  return bytes + ' B';
+
+    const units = [ 'KB', 'MB', 'GB', 'TB' ];
+    let   v = bytes / 1024, i = 0;
+    while( v >= 1024 && i < units.length - 1 ) { v /= 1024; i++; }
+
+    return (v < 10 ? v.toFixed( 1 ) : Math.round( v )) + ' ' + units[i];
+}
+
+function pad2( n ) { return String( n ).padStart( 2, '0' ); }
+
+function fmtDate( unixSec )
+{
+    if( ! unixSec ) return '';
+    const d = new Date( unixSec * 1000 );
+    return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() );
+}
+
+function fmtDateTime( unixSec )
+{
+    if( ! unixSec ) return '';
+    const d = new Date( unixSec * 1000 );
+    return fmtDate( unixSec ) + ' ' + pad2( d.getHours() ) + ':' + pad2( d.getMinutes() );
+}
+
+// The app a shared item belongs to. Only the top-level rows of
+// "Compartido conmigo" carry node.shared (lib/shares.py root_nodes) —
+// 'photos' | 'trips' | 'folder' | 'file'. Anything deeper inside a share
+// is an ordinary file again.
+function sharedApp( node )
+{
+    return ( node && node.shared && node.shared.app ) || '';
+}
+
+// The extension that decides the icon and the opener. A shared item's name
+// is its slug ("SEPE.txt" -> "sepe-txt", the dot is gone), so its type comes
+// from the grant's own title instead — see lib/shares.py slugify().
+function typeExt( node )
+{
+    return extOf( node && node.shared ? ( node.shared.title || '' ) : nameOf( node ) );
+}
+
+function listIcon( node )
+{
+    // A shared album / trip shows ITS app's glyph, not a plain folder.
+    const app = sharedApp( node );
+    if( app === 'photos' ) return { cls: ' ic-photos', svg: SVG_PHOTOS };
+    if( app === 'trips'  ) return { cls: ' ic-trips',  svg: SVG_TRIPS  };
+    if( app === 'split'  ) return { cls: ' ic-trips',  svg: SVG_SPLIT  };   // a shared expenses group, opens in Split
+
+    if( isDir( node ) ) return { cls: '', svg: SVG_FOLDER };
+
+    const ext = typeExt( node );
+
+    if( WRITE_IMPORT.includes( ext ) || OFFICE_WRITE.includes( ext ) ) return { cls: ' ic-doc',   svg: SVG_DOC   };
+    if( CALC_IMPORT.includes( ext )  || OFFICE_CALC.includes( ext )  ) return { cls: ' ic-sheet', svg: SVG_SHEET };
+    if( ext === 'pdf'                ) return { cls: ' ic-pdf',   svg: SVG_PDF   };
+    if( TEXT_IMPORT.includes( ext )  ) return { cls: ' ic-code',  svg: SVG_CODE  };
+    if( IMAGE_VIEW.includes( ext )   ) return { cls: ' ic-image', svg: SVG_IMAGE };
+    if( VIDEO_VIEW.includes( ext )   ) return { cls: ' ic-media', svg: SVG_VIDEO };
+    if( AUDIO_VIEW.includes( ext )   ) return { cls: ' ic-media', svg: SVG_AUDIO };
+
+    return { cls: '', svg: SVG_FILE };
+}
+
+function buildListRow( node, showPath )
+{
+    const dir = isDir( node );
+    const name = displayName( node );
+
+    const row = document.createElement( 'div' );
+    row.className     = 'row' + (selectedPaths.has( node.path ) ? ' selected' : '');
+    row.dataset.path  = node.path;
+
+    // Phone: a visible ⋮ that opens the same per-item menu as a long-press.
+    const menuBtn = document.createElement( 'button' );
+    menuBtn.className = 'icon-btn sm row-menu';
+    menuBtn.title     = T( 'ui.actions' );
+    menuBtn.setAttribute( 'aria-label', T( 'ui.actions' ) );
+    menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
+    menuBtn.addEventListener( 'click', function( e )
+    {
+        e.stopPropagation();
+        const r = menuBtn.getBoundingClientRect();
+        openMenuFor( row, r.right, r.bottom );
+    });
+    row.appendChild( menuBtn );
+
+    // One icon, always: the app (or file type) that opens this row. Inside
+    // "Compartido conmigo" it doubles as the "who lent me this" tooltip —
+    // the whole folder already says the items are somebody else's.
+    const icon = listIcon( node );
+    const ic   = document.createElement( 'span' );
+    ic.className = 'row-ic' + icon.cls;
+    ic.innerHTML = icon.svg;
+    if( node.shared )
+        ic.title = node.shared.by ? TF( 'drive.sharedByWho', { who: node.shared.by } ) : T( 'drive.sharedWithYou' );
+
+    const label = document.createElement( 'span' );
+    label.className   = 'row-name';
+    label.textContent = name;
+
+    const meta = document.createElement( 'span' );
+    meta.className = 'row-meta';
+
+    if( showPath )
+    {
+        const parent = node.path.indexOf( '/' ) !== -1 ? node.path.slice( 0, node.path.lastIndexOf( '/' ) ) : '';
+        meta.textContent = fsRel( parent ) || 'Drive';
+        meta.title       = node.path;
+    }
+    else
+    {
+        const bits = [];
+        // A folder from the one-level listing carries no child count
+        // (its `nodes` is an empty stub) — show just its date.
+        if( dir && node.nodes && node.nodes.length ) bits.push( node.nodes.length + ' elem.' );
+        else if( ! dir && node.size != null )         bits.push( fmtSize( node.size ) );
+        if( node.mtime )                   bits.push( fmtDate( node.mtime ) );
+
+        meta.textContent = bits.join( ' · ' );
+        if( node.mtime ) meta.title = fmtDateTime( node.mtime );
+    }
+
+    row.appendChild( ic );
+    row.appendChild( label );
+    row.appendChild( meta );
+    paintConvertBadge( row );
+
+    // Plain click selects one (file or folder alike); Ctrl/⌘-click toggles
+    // the selection; double-click opens — a folder navigates in, a file
+    // routes to its viewer / editor. Selection highlight is repainted in
+    // place so a fast double-click keeps its target row.
+    //
+    // Touch has no double-click: on a phone a tap still opens folders the
+    // way it always has (a tap on a file selects it; long-press opens it).
+    row.addEventListener( 'click', function( e )
+    {
+        // Phone: a tap goes into a folder (there is no double-click). On a
+        // shared album / trip openNode() sends it to its app instead.
+        if( isPhone() && isDir( node ) && ! e.ctrlKey && ! e.metaKey ) { openNode( node ); return; }
+
+        if( e.ctrlKey || e.metaKey )
+            selectedPaths.has( node.path ) ? selectedPaths.delete( node.path ) : selectedPaths.add( node.path );
+        else
+            { selectedPaths.clear(); selectedPaths.add( node.path ); }
+
+        paintSelection();
+        updateToolbarState();
+    });
+
+    // Suppress the browser's native word-selection on the second click of
+    // a double-click before it starts.
+    row.addEventListener( 'mousedown', function( e ) { if( e.detail > 1 ) e.preventDefault(); } );
+
+    row.addEventListener( 'dblclick', function( e )
+    {
+        e.preventDefault();
+        e.stopPropagation();
+        const sel = window.getSelection();
+        if( sel ) sel.removeAllRanges();
+        openNode( node );
+    });
+
+    makeDraggable( row, node );
+    if( dir ) makeDropTarget( row, function() { return node.path; } );
+
+    return row;
+}
+
+// Sync the .selected class of every visible row to selectedPaths, without
+// rebuilding the list (keeps row elements alive across a click/dblclick).
+function paintSelection()
+{
+    document.querySelectorAll( '#listing .row' ).forEach( function( r )
+    {
+        r.classList.toggle( 'selected', selectedPaths.has( r.dataset.path ) );
+    });
+}

@@ -1,0 +1,89 @@
+/* helpers.js - date, time and text helpers. */
+
+//------------------------------------------------------------------------//
+// DATE / TIME / TEXT HELPERS
+
+// Dates are stored and shown as ANSI yyyy-mm-dd.
+function fmtDate( sIso ) { return sIso; }
+function fmtRange( sStart, sEnd ) { return sStart + ' – ' + sEnd; }
+
+// Combines a date and an optional time into one lexicographically comparable key, so
+// a stage's end can be checked against its start even when only the date differs.
+function stageDateTimeKey( sDate, sTime ) { return sDate + 'T' + (sTime || '00:00'); }
+
+function newId() { return Date.now() + Math.floor( Math.random() * 1000 ); }
+function round2( n ) { return Math.round( n * 100 ) / 100; }
+function slugify( s ) { return (s || '').toLowerCase().trim().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'item'; }
+
+// A safe, in-folder file name for an UPLOADED document: the original base name
+// slugified, its real extension kept, and a "-2", "-3"... suffix if another doc in
+// the same list already claims it (so two uploads never overwrite each other).
+function uniqueFileName( sOriginalName, aSiblingDocs )
+{
+    const dot  = sOriginalName.lastIndexOf( '.' );
+    const ext  = (dot > 0 ? sOriginalName.slice( dot + 1 ) : '').toLowerCase().replace( /[^a-z0-9]/g, '' );
+    const base = slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName );
+    const make = function( n ) { return base + (n > 1 ? '-' + n : '') + (ext ? '.' + ext : ''); };
+    const taken = new Set( (aSiblingDocs || []).map( function( d ) { return d.file; } ).filter( Boolean ) );
+
+    let n = 1;
+    while( taken.has( make( n ) ) ) n++;
+    return make( n );
+}
+
+// Base name only ("destination-year") - resolveNewTripDirName() adds a "-2", "-3"...
+// suffix on collision at creation time; an already-saved trip's real folder is
+// trip.dirName, never this recomputed straight from its (possibly since-edited) fields.
+function dirNameFor( sDestination, sStartDate ) { return slugify( sDestination ) + '-' + (sStartDate ? sStartDate.slice( 0, 4 ) : 'new'); }
+
+// Where a document's bytes live, and the URL that serves them. A document is one of:
+//   kind 'link'   -> doc.path points straight into the user's files/ tree (not copied)
+//   kind 'upload' -> doc.file sits inside this trip's own folder
+//   (legacy, no kind) -> treated as an upload at "<slug(name)>.pdf", the old scheme
+// A trip's own folder. Ours live under data/trips/<dirName>; one another
+// user shared with us is reached through its "shared/<slug>" path instead
+// (see tripBase(), set when the trip is loaded).
+function docPath( base, doc )
+{
+    if( doc && doc.kind === 'link' && doc.path ) return sharedRef( base, doc.path );
+    const file = (doc && doc.file) || ( slugify( doc && doc.name ) + '.pdf' );
+    return base + '/' + file;
+}
+
+// A trip somebody shared with us also lends the files it POINTS at outside
+// its own folder — its linked documents and its photo folder. They are ours
+// to read through "shared/<slug>/~/<the owner's path>" (lib/shares.py
+// extra_path). On one of our own trips the path is already ours: unchanged.
+function sharedRef( base, ownerPath )
+{
+    return String( base || '' ).indexOf( 'shared/' ) === 0
+         ? base + '/~/' + String( ownerPath || '' ).replace( /^\/+/, '' )
+         : ownerPath;
+}
+function tripBase( trip )  { return trip && trip._base ? trip._base : 'data/trips/' + (trip && trip.dirName); }
+function tripIsRO( trip )  { return !! ( trip && trip._ro ); }
+function docHref( trip, doc )    { return GumApi.fileUrl( docPath( tripBase( trip ), doc ) ); }
+function docIsLink( doc )   { return doc && doc.kind === 'link'; }
+function docHasFile( doc )  { return !!( (doc && doc.kind === 'link' && doc.path) || (doc && doc.file) || (doc && doc._pending) ); }
+
+function viewerTz() { return NayiveUI.viewerTz(); }   // impl in shared/ui.js
+function localTimeIn( sTz )
+{
+    try { return new Intl.DateTimeFormat( 'en-GB', { timeZone: sTz, hour: '2-digit', minute: '2-digit', hour12: false } ).format( new Date() ); }
+    catch( _ ) { return '--:--'; }
+}
+
+function findTrip( id ) { return trips.find( function( t ) { return t.id === id; } ); }
+
+function todayIso()
+{
+    const d = new Date();
+    return d.getFullYear() + '-' + String( d.getMonth() + 1 ).padStart( 2, '0' ) + '-' + String( d.getDate() ).padStart( 2, '0' );
+}
+
+function addDaysIso( sIso, n )
+{
+    const d = new Date( sIso + 'T00:00:00' );
+    d.setDate( d.getDate() + n );
+    return d.getFullYear() + '-' + String( d.getMonth() + 1 ).padStart( 2, '0' ) + '-' + String( d.getDate() ).padStart( 2, '0' );
+}
