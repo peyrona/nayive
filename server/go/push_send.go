@@ -29,12 +29,23 @@ import (
 func deliverPush(push *VapidStore, users *Users, log Logger, user string, sub PushSub,
 	payload any, ttl int) (int, error) {
 
+	return deliverPushTo(push, log, sub, payload, ttl, func() {
+		users.RemovePushSub(user, sub.Endpoint)
+		log.Info("push: dropped a dead device", "user", user)
+	})
+}
+
+// deliverPushTo is deliverPush for a device that is not in a user's push.json -
+// a Chat guest's (chat.go): `prune` forgets it when the push service says it is
+// gone. Same rules, one copy.
+func deliverPushTo(push *VapidStore, log Logger, sub PushSub, payload any, ttl int,
+	prune func()) (int, error) {
+
 	status, err := push.SendJSON(sub, payload, ttl)
 	switch {
 	case status == 404 || status == 410:
 		// Permanent: the push service says this subscription is gone.
-		users.RemovePushSub(user, sub.Endpoint)
-		log.Info("push: dropped a dead device", "user", user, "status", status)
+		prune()
 	case status == 401 || status == 403:
 		// OUR credentials are wrong, not the device's. Never prune here.
 		log.Error("push REJECTED our VAPID key - check config/vapid.json; "+

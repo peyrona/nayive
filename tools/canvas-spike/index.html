@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas-Editor · prueba</title>
+
+<!-- Nayive's own chrome, so the toolbar is the real .text-btn / .topbar and not
+     a look-alike. i18n.js is deliberately NOT loaded: it hides the page until a
+     dictionary arrives, and this spike is Spanish-only on purpose. -->
+<link rel="stylesheet" href="/client/apps/shared/theme.css">
+<link rel="stylesheet" href="/client/apps/shared/app.css">
+
+<style>
+html, body   { height: 100%; margin: 0; }
+body         { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+               font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+/* The editor paints its own pages on a canvas, so it gets a plain grey well and
+   nothing else. #host is what Canvas-Editor is handed. */
+/* Canvas-Editor lays its pages out at their real width and leaves the rest to
+   the host, so the well is what centres them - otherwise an A4 page sits
+   against the left edge with a field of grey beside it. */
+#well        { flex: 1 1 auto; min-height: 0; overflow: auto; background: #d9d9dd;
+               display: flex; justify-content: center; }
+:root[data-theme="dark"] #well { background: #2a2b30; }
+#host        { flex: 0 0 auto; min-height: 100%; }
+
+.spk-num     { font-variant-numeric: tabular-nums; }
+.spk-warn    { color: var(--danger); }
+.spk-ok      { color: var(--text-dim); }
+#find        { width: 180px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+    <h1>Canvas-Editor · prueba</h1>
+    <div class="topbar-actions">
+        <button class="text-btn ghost" id="btnOpen"  title="Abrir un .docx del disco">Abrir .docx</button>
+        <button class="text-btn ghost" id="btnSave"  title="Exportar lo que se ve a .docx">Guardar .docx</button>
+        <button class="text-btn ghost" id="btnPrint" title="Imprimir (el editor manda imágenes, no texto)">Imprimir</button>
+        <button class="text-btn ghost" id="btnNum"   title="Poner o quitar el número de página">Nº de página</button>
+        <input   class="topbar-search" id="find" type="search" placeholder="Buscar…">
+        <button class="text-btn ghost" id="btnZoomOut" title="Alejar">−</button>
+        <button class="text-btn ghost" id="btnZoomIn"  title="Acercar">+</button>
+    </div>
+</header>
+
+<div class="view-bar"><div class="bar-info" id="readout">Cargando el editor…</div></div>
+
+<div id="well"><div id="host"></div></div>
+
+<input type="file" id="file" accept=".docx" hidden>
+
+<script type="module" src="spike.js"></script>
+</body>
+</html>

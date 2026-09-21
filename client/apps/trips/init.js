@@ -18,6 +18,7 @@ NayiveI18n.ready.then( function()
         else if( document.getElementById( 'tripSheetBackdrop'     ).classList.contains( 'open' ) ) closeTripSheet();
         else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'mapSheetBackdrop' );
         else if( document.getElementById( 'locSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'locSheetBackdrop' );
+        else if( document.getElementById( 'discoverSheetBackdrop' ).classList.contains( 'open' ) ) closeDiscover();
         else if( document.getElementById( 'currencySheetBackdrop' ).classList.contains( 'open' ) ) closeSheet( 'currencySheetBackdrop' );
     });
 
@@ -150,6 +151,6 @@ function hereStageId( trip )
 
 function anySheetOpen()
 {
-    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'locSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop', 'confirmSheetBackdrop']
+    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'locSheetBackdrop', 'discoverSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop', 'confirmSheetBackdrop']
         .some( function( id ) { return document.getElementById( id ).classList.contains( 'open' ); } );
 }

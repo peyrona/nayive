@@ -50,7 +50,7 @@ var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", 
 var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/menubar.js",
 	"shared/ical.js", "shared/media.js",
-	"shared/photo.js", "shared/office.js", "shared/basemap.js",
+	"shared/photo.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js", "shared/tz-geo.json",
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",
@@ -154,19 +154,18 @@ func collect(apps string) []string {
 			delete(rels, junk)
 		}
 
-		// write/lib/: precache only the live SuperDoc bundle and the proofing
-		// dictionaries. Anything else that ever lands under write/lib/ (e.g. a
-		// superseded editor stack kept around for reference) is dead weight in
-		// the offline cache.
+		// write/lib/: the docx-editor.dev engine - only the files every open
+		// needs - and the proofing dictionaries. NOT the engine's fonts (his
+		// choice, 2026-09-18): they are fetched when a document names them, and
+		// the service worker keeps what it fetched until the next deploy. Nor
+		// its licences, lock file, or the build kept for --restore. Anything
+		// else that ever lands under write/lib/ is dead weight in the cache.
 		if strings.HasPrefix(junk, "write/lib/") &&
-			!(strings.HasPrefix(junk, "write/lib/superdoc/") || strings.HasPrefix(junk, "write/lib/proofing/")) {
+			!(isDocxEditorCore(junk) || strings.HasPrefix(junk, "write/lib/proofing/")) {
 			delete(rels, junk)
 		}
-		if strings.HasPrefix(junk, "write/lib/superdoc/") &&
-			(strings.HasSuffix(junk, "DOCX-ENGINE-LICENSE.md") || strings.Contains(junk, "/.peer-stub")) {
-			delete(rels, junk)
-		}
-		if strings.HasPrefix(junk, "write/lib/proofing/") && hasAnySuffix(junk, ".LICENSE", ".txt") {
+		if strings.HasPrefix(junk, "write/lib/proofing/") &&
+			hasAnySuffix(junk, ".LICENSE", ".txt") {
 			delete(rels, junk)
 		}
 	}
@@ -177,6 +176,14 @@ func collect(apps string) []string {
 	}
 	sort.Strings(out) // byte order = code-point order for UTF-8, like Python's sorted()
 	return out
+}
+
+// isDocxEditorCore says whether rel is one of the docx-editor.dev files an open
+// needs: the bundle, its stylesheet or the HarfBuzz wasm, directly inside
+// <app>/lib/docx-editor/ (the fonts and licences live in sub-folders).
+func isDocxEditorCore(rel string) bool {
+	_, name, ok := strings.Cut(rel, "/lib/docx-editor/")
+	return ok && !strings.Contains(name, "/") && hasAnySuffix(name, ".min.js", ".css", ".wasm")
 }
 
 // glob returns the regular files matching pat under apps, as slash paths
@@ -216,7 +223,7 @@ func glob(apps, pat string) []string {
 // to render - its HTML, the shared CSS/JS, the launcher icons, an app's own
 // top-level module. These are small and get precached in the service worker's
 // install step. Everything else - the vendored libraries under lib/, the
-// proofing dictionaries, the SuperDoc bundle - is the 'rest', warmed in the
+// proofing dictionaries, the editor bundle - is the 'rest', warmed in the
 // background after activation so a post-deploy update never starves the page
 // that triggered it.
 func isShell(rel string) bool {

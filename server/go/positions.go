@@ -253,11 +253,29 @@ func (s *Server) recordPositions(owner string, ps []tripPosition) int {
 	if len(ps) == 0 {
 		return 0
 	}
+	s.noteLast(owner, ps)
 	saved := 0
 	for _, lt := range s.trackedTrips(owner) {
 		saved += s.storePositions(owner, lt, ps)
 	}
 	return saved
+}
+
+// noteLast hands the newest of ps, unrounded, to "Buscar mi móvil"'s own store
+// (devices.go): trip or no trip. The trips below still get only their rounded,
+// covered-day points.
+func (s *Server) noteLast(owner string, ps []tripPosition) {
+	if s.devices == nil {
+		return
+	}
+	newest := ps[0]
+	for _, p := range ps[1:] {
+		if p.At > newest.At {
+			newest = p
+		}
+	}
+	s.devices.NoteLast(owner, lastPos{Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc,
+		At: newest.At, Source: newest.Source})
 }
 
 // storePositions cleans ps and merges into one trip the points it can take -

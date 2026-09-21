@@ -1,11 +1,12 @@
 <!-- index.html - Games: the small games that run entirely in the browser.
 
-     This file is the shell: the header, the Games screen (the six cards),
-     the code the six games share and the store over data/games/games.json
-     that holds each game's record. Each game is a file of its own beside
-     it - sudoku.html, g2048.html, mines.html, invaders.html, asteroids.html
-     and tetris.html - with its own style, pane and script. All six are
-     fetched and mounted at boot (see THE SIX GAMES below), so the page that
+     This file is the shell: the header, the Games screen (the nine cards),
+     the code the nine games share (their loop, their sounds...) and the store
+     over data/games/games.json that holds each game's record. Each game is a
+     file of its own beside it - sudoku.html, g2048.html, mines.html,
+     invaders.html, asteroids.html, tetris.html, solitaire.html, checkers.html
+     and chess.html - with its own style, pane and script. All nine are
+     fetched and mounted at boot (see THE NINE GAMES below), so the page that
      runs is the same one this file was when it held them all.
 
      The header is the whole navigation: on the Games screen it is only the
@@ -48,7 +49,7 @@
     <style>
         /* The shell (.app / .topbar / .icon-btn / .empty-state) is all in
            ../shared/app.css. Only what is unique to Games lives here: the
-           header, the Games screen and what the six games share. Each game's
+           header, the Games screen and what the nine games share. Each game's
            own rules are in its file. */
 
         /* TOOL SHELL (see APP SHELL in app.css): .app is height: 100%, so the
@@ -64,7 +65,7 @@
 
            On the Games screen it is only the app name; open a game and the
            NAME becomes the game's, and the game's own toolbar takes the middle.
-           There are no game buttons in the header any more - the six cards in
+           There are no game buttons in the header any more - the nine cards in
            the pane below are the way in, and the name is the way back.
 
            Centring the middle group takes two things. First the two outer
@@ -96,7 +97,7 @@
            and shared/ui.js's home handler steps aside for any button in the
            header - so the two live in one element with no flag to keep in step.
            The name is cut with an ellipsis and never by counting characters:
-           the six names are translated (Venator pyrobolorum is the long one)
+           the nine names are translated (Venator pyrobolorum is the long one)
            and a cut that is right in English is wrong in Latin. */
         .topbar h1.has-game                     { color: var(--text); cursor: default; }
         .topbar h1.has-game:hover               { text-decoration: none; }
@@ -136,6 +137,14 @@
             min-height: 100%; padding: 24px 16px; box-sizing: border-box;
         }
         .games-grid { display: grid; grid-template-columns: repeat( 3, 1fr ); gap: 14px 20px; justify-items: center; }
+        /* Seven cards in three columns leave the seventh alone at the left end
+           of its own row, which reads as a gap rather than as a row. This puts
+           a card that is BOTH the last one and the first of a row into the
+           middle column instead - so it goes on being true the next time a
+           game is added, and does nothing at all when the count comes out
+           even. At nine it does nothing either: three rows of three come
+           out square, and there is no odd card left over to move. */
+        .games-grid > .game-tile:last-child:nth-child( 3n + 1 ) { grid-column: 2; }
         .game-tile
         {
             display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -186,7 +195,7 @@
         .game-pane.is-open { display: block; }
 
         /* THE COVER - what sits over a game that is not running: "ready",
-           "paused" and "game over", and it is the same card in all six. Over the
+           "paused" and "game over", and it is the same card in all nine. Over the
            PLAY AREA and never over the header, so the game's name (the way back)
            and its toolbar stay live and an unfinished game can be left the way
            any other pane is left.
@@ -252,7 +261,7 @@
             <h1 id="appTitle">Games</h1>
 
 
-            <!-- The game's own toolbar lands here when a game is open: the six
+            <!-- The game's own toolbar lands here when a game is open: the nine
                  games' .view-bars are MOVED into the slot at boot, and only the
                  open game's is on screen. The two .tb-sep rules are what set the
                  group apart from the app name on one side and the "?" on the
@@ -266,6 +275,13 @@
             </div>
 
             <div class="topbar-actions">
+                <!-- The speaker: every game's sounds on or off (see THE SOUNDS).
+                     ONE <svg> with the waves and the cross as two groups, and not
+                     two icons: the help dialog copies a button's first <svg>, and
+                     a hidden one would copy as nothing. -->
+                <button class="icon-btn" id="gamesSound" type="button">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><g data-ic="on"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></g><g data-ic="off" hidden><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></g></svg>
+                </button>
                 <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                 </button>
@@ -275,10 +291,10 @@
 
         <!-- The Games screen, and after it one pane per game, each added at
              boot from the game's own file (see mount()) - and only one of the
-             seven is ever open. -->
+             ten is ever open. -->
         <div class="game-host" id="gameHost">
             <!-- THE GAMES SCREEN. The app opens here and every game comes
-                 back here, so it is the one pane that is not a game: six cards,
+                 back here, so it is the one pane that is not a game: nine cards,
                  the same shape as the launcher's own tiles (icon over name), and
                  the card itself opens the game - there is no ">" button on it.
                  The header carries no game buttons at all now; this grid IS the
@@ -310,6 +326,18 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h15v8h-7v8H1v-8h7z"></path></svg>
                             <span data-i18n="games.tetris"></span>
                         </button>
+                        <button class="game-tile" type="button" data-game="solitaire">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="10" height="14" rx="2" transform="rotate(-12 7.5 12.5)"></rect><rect x="11.5" y="4.5" width="10" height="14" rx="2"></rect><path d="M16.5 13.2 14.6 11a1.7 1.7 0 0 1 1.9-2.6 1.7 1.7 0 0 1 1.9 2.6z"></path></svg>
+                            <span data-i18n="games.solitaire"></span>
+                        </button>
+                        <button class="game-tile" type="button" data-game="checkers">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="2.6"></circle><circle cx="15.5" cy="15.5" r="2.6"></circle></svg>
+                            <span data-i18n="games.checkers"></span>
+                        </button>
+                        <button class="game-tile" type="button" data-game="chess">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2h2l-1.5 3.5A5 5 0 0 1 16 12l-1 1h-6l-1-1a5 5 0 0 1 1.5-3.5L8 5h2z"></path><path d="M9 13c0 2.5-.7 4.4-2 6h10c-1.3-1.6-2-3.5-2-6"></path><line x1="5" y1="21" x2="19" y2="21"></line></svg>
+                            <span data-i18n="games.chess"></span>
+                        </button>
                     </div>
                 </div>
             </section>
@@ -330,7 +358,7 @@
         var FILE  = 'data/games/games.json';   // the whole app in one file: the best score of each game
         var store = null;                      // built in boot(), once the deferred scripts have run
 
-        var tiles   = null;                    // the six cards on the Games screen
+        var tiles   = null;                    // the nine cards on the Games screen
         var panes   = null;
         var titleEl = null;                    // the <h1>: the app name, or the open game's
         var optsEl  = null;                    // the header's middle: the open game's toolbar
@@ -348,10 +376,10 @@
         // keys, so without it the hidden ones would move too. The three canvas
         // games use it to stop their LOOP as well, without which the aliens keep
         // marching, the rocks keep drifting and the pieces keep falling behind
-        // whatever pane is on screen, and six games end up running at once.
+        // whatever pane is on screen, and nine games end up running at once.
         // Every pane has an entry here now.
         //
-        // THE GAMES SCREEN IS THE SEVENTH PANE and the one that is not a game:
+        // THE GAMES SCREEN IS THE TENTH PANE and the one that is not a game:
         // it has no entry in GAMES, so leaving it costs nothing and arriving at
         // it is only a pane switch. It is also the only state in which the
         // header carries no toolbar - which is why showGame() and goHome() are
@@ -418,7 +446,7 @@
             if( GAMES[ name ] && GAMES[ name ].enter ) GAMES[ name ].enter();
         }
 
-        // Back to the six cards. leave() first, and for the same reason
+        // Back to the nine cards. leave() first, and for the same reason
         // showGame() calls it: a canvas game left running behind the Games
         // screen would still hold the arrow keys and still burn a frame budget.
         function goHome()
@@ -454,7 +482,7 @@
             return !! ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable ) );
         }
 
-        // The toolbar's play / pause button, in all six games. It is one button
+        // The toolbar's play / pause button, in all nine games. It is one button
         // wearing two glyphs, and the state it is in has to reach three places:
         // which glyph shows, what the tooltip says, and whether it can be
         // pressed at all (a game that has not started and a game that is over
@@ -633,6 +661,7 @@
                 o.setState( 'playing' );
                 overlay();
                 loop.run();
+                Sfx.play( 'start' );
                 els.canvas.focus();            // ...or the next space re-clicks the button behind it
             }
 
@@ -649,6 +678,13 @@
                 flush();
                 overlay();
                 o.draw();
+
+                // The thrust or the saucer stops with the game. The pause itself
+                // is only heard when the player can have asked for it: leave()
+                // arrives here with `live` already false, a hidden tab with
+                // document.hidden and a blur with the window no longer focused.
+                Sfx.hush();
+                if( live && ! document.hidden && document.hasFocus() ) Sfx.play( 'pause' );
             }
 
             function resume()
@@ -659,6 +695,7 @@
                 overlay();
                 loop.run();
                 els.canvas.focus();
+                Sfx.play( 'resume' );
             }
 
             function toggle() { if( o.getState() === 'paused' ) resume(); else pause(); }
@@ -752,25 +789,524 @@
         }
 
         //------------------------------------------------------------------------//
-        // THE SIX GAMES - one file each
+        // THE SOUNDS
+        //
+        // Every sound in the nine games is MADE here, with the Web Audio API, and
+        // not one of them is a recording: an oscillator or a burst of noise,
+        // shaped by an envelope and now and then a filter. So there is no file to
+        // fetch, precache or licence, the games still sound with no connection,
+        // and every sound is the suite's own.
+        //
+        // A game says WHAT happened - sfx.play( 'merge', [ 64 ] ) - and never how
+        // it sounds. The recipes are all in SOUNDS below, side by side, so they
+        // are heard as one set and kept at one loudness.
+        //
+        // Four rules come with it:
+        //
+        //   1. the AudioContext is made on the first press or key, never before.
+        //      A browser will not start sound that no gesture asked for, and a
+        //      context made at boot would only sit "suspended" and complain.
+        //      Every press in the page wakes it - in the capture phase, so before
+        //      the game's own handler asks for a sound - which is also what
+        //      brings it back after a hidden tab or a phone call stopped it;
+        //   2. the speaker in the header silences all of it, and the choice is
+        //      kept on THIS device (localStorage), not in games.json: a phone on
+        //      a bus and a laptop at home want different answers;
+        //   3. the same sound asked for twice within GAP ms plays once. A mine
+        //      field opening in a flood, or three rocks breaking in one step,
+        //      would otherwise be a roar;
+        //   4. a sound that LASTS - the thrust, the flying saucer - is held, not
+        //      started: hold() is called on every step it goes on, and the moment
+        //      the calls stop it fades out by itself, on the audio thread. A game
+        //      paused, left or hidden mid-thrust cannot leave it hissing behind
+        //      the Games screen, because nothing has to remember to stop it.
+
+        var Sfx = ( function ()
+        {
+            var KEY    = 'nayive-games-sound';     // 'off' = silenced; anything else is on
+            var VOLUME = 0.5;                       // the master gain every recipe is written against
+            var GAP    = 25;                        // ms - the same sound again this soon is dropped (rule 3)
+
+            var ctx  = null, out = null, hiss = null;   // the context, the master gain, 1 s of white noise
+            var on   = true;
+            var t0   = 0;                           // "now" for the recipe being played, in context seconds
+            var last = {};                          // name -> when it last played (Date.now)
+            var held = {};                          // name -> the held sound that is sounding (rule 4)
+
+            try { on = localStorage.getItem( KEY ) !== 'off'; } catch ( e ) {}
+
+            // resume() and suspend() answer a promise in every browser but old
+            // Safari, and a refused one is nothing to report.
+            function settle( p ) { if( p && p.catch ) p.catch( function () {} ); }
+
+            // Rule 1. Cheap enough to run on every press: once the context is
+            // up and running it returns at the first line.
+            function wake()
+            {
+                var AC = window.AudioContext || window.webkitAudioContext, comp, data, i;
+
+                if( ! on || ( ctx && ctx.state === 'running' ) ) return;
+
+                if( ctx ) { settle( ctx.resume() ); return; }
+                if( ! AC ) return;
+
+                try { ctx = new AC(); } catch ( e ) { ctx = null; return; }
+
+                // A compressor in front of the speakers: a march step, a shot
+                // and an explosion can all land in the same step, and summed they
+                // would clip.
+                comp = ctx.createDynamicsCompressor();
+                comp.threshold.value = -14;
+                comp.ratio.value     = 6;
+                comp.connect( ctx.destination );
+
+                out = ctx.createGain();
+                out.gain.value = VOLUME;
+                out.connect( comp );
+
+                // One second of white noise, made once and started at a random
+                // point each time: every explosion, crunch and hiss is this,
+                // filtered.
+                hiss = ctx.createBuffer( 1, ctx.sampleRate, ctx.sampleRate );
+                data = hiss.getChannelData( 0 );
+                for( i = 0; i < data.length; i++ ) data[ i ] = Math.random() * 2 - 1;
+            }
+
+            //---- the three primitives ----------------------------------------
+
+            // The envelope every sound wears: up to `vol` in `a` seconds, held
+            // there until `hold`, then an exponential fall to silence at `end`.
+            // An exponential ramp can never reach 0, hence the 0.0001 at both
+            // ends.
+            function env( g, t, vol, a, hold, end )
+            {
+                g.setValueAtTime( 0.0001, t );
+                g.exponentialRampToValueAtTime( vol, t + a );
+                if( hold > a ) g.setValueAtTime( vol, t + hold );
+                g.exponentialRampToValueAtTime( 0.0001, t + end );
+            }
+
+            // The optional filter between a source and its envelope: lp, hp or
+            // bp is its kind and its frequency, `sweep` where the frequency ends
+            // up by the end of the sound.
+            function through( node, o, t )
+            {
+                var f;
+
+                if( ! o.lp && ! o.hp && ! o.bp ) return node;
+
+                f = ctx.createBiquadFilter();
+                f.type = o.lp ? 'lowpass' : o.hp ? 'highpass' : 'bandpass';
+                f.frequency.setValueAtTime( o.lp || o.hp || o.bp, t );
+                if( o.sweep ) f.frequency.exponentialRampToValueAtTime( o.sweep, t + o.dur );
+                f.Q.value = o.q || 0.8;
+                node.connect( f );
+                return f;
+            }
+
+            // One oscillator: `f` Hz, sliding to `to` over `glide` seconds (the
+            // whole sound if not given), a `type` wave, `vol` loud, `dur` long,
+            // starting `at` seconds in.
+            function tone( o )
+            {
+                var t = t0 + ( o.at || 0 ), osc = ctx.createOscillator(), g = ctx.createGain();
+
+                osc.type = o.type || 'triangle';
+                osc.frequency.setValueAtTime( o.f, t );
+                if( o.to ) osc.frequency.exponentialRampToValueAtTime( o.to, t + ( o.glide || o.dur ) );
+
+                env( g.gain, t, o.vol, o.a || 0.005, o.hold || 0, o.dur );
+                through( osc, o, t ).connect( g );
+                g.connect( out );
+
+                osc.start( t );
+                osc.stop( t + o.dur + 0.05 );
+            }
+
+            // A burst of the noise, through its filter. The same options.
+            function noise( o )
+            {
+                var t = t0 + ( o.at || 0 ), src = ctx.createBufferSource(), g = ctx.createGain();
+
+                src.buffer = hiss;
+                src.loop   = true;
+
+                env( g.gain, t, o.vol, o.a || 0.003, o.hold || 0, o.dur );
+                through( src, o, t ).connect( g );
+                g.connect( out );
+
+                src.start( t, Math.random() * 0.9 );
+                src.stop( t + o.dur + 0.05 );
+            }
+
+            //---- notes -------------------------------------------------------
+
+            function hz( midi ) { return 440 * Math.pow( 2, ( midi - 69 ) / 12 ); }
+
+            // The k-th step up a major pentatonic scale, in semitones. It is the
+            // scale with no wrong note in it, which is what lets 2048 and Sudoku
+            // play whatever the board hands them and still sound like a tune.
+            var PENTA = [ 0, 2, 4, 7, 9 ];
+
+            function penta( k ) { return 12 * Math.floor( k / 5 ) + PENTA[ k % 5 ]; }
+
+            // A run of notes (MIDI numbers), `gap` seconds apart, each one tone( o ).
+            function notes( list, gap, o )
+            {
+                list.forEach( function ( n, i )
+                {
+                    var p = {}, k;
+
+                    for( k in o ) p[ k ] = o[ k ];
+                    p.f  = hz( n );
+                    p.at = ( o.at || 0 ) + i * gap;
+                    tone( p );
+                } );
+            }
+
+            // Something blowing up, `s` from 0 (a pebble) to 1 (a ship): a roar
+            // of noise closing down from bright to dull, a thump under it and a
+            // crackle on top. Mines, rocks and ships are all this, at a size.
+            function blast( s, at )
+            {
+                at = at || 0;
+                noise( { lp: 700 + 3200 * s, sweep: 90, q: 0.7, dur: 0.25 + 0.95 * s, vol: 0.9, at: at } );
+                noise( { hp: 2600, dur: 0.05 + 0.1 * s, vol: 0.35, at: at } );
+                tone ( { f: 70 + 90 * s, to: 32, type: 'sine', dur: 0.2 + 0.4 * s, vol: 0.2 + 0.5 * s, at: at } );
+            }
+
+            // The pop of two 2048 tiles becoming one: a sine that bends up into
+            // its note, and a glint an octave above it.
+            function pop( m, at )
+            {
+                tone( { f: hz( m ) * 0.7, to: hz( m ), glide: 0.04, type: 'sine', dur: 0.2, vol: 0.75, at: at } );
+                tone( { f: hz( m + 12 ), type: 'triangle', dur: 0.07, vol: 0.15, at: at } );
+            }
+
+            //---- the recipes -------------------------------------------------
+
+            var SOUNDS = {
+
+                // The whole suite. `on` answers the speaker being switched back
+                // on - the one sound that is about the button and not a game.
+                on:     function () { notes( [ 72, 79 ], 0.07, { type: 'sine', dur: 0.14, vol: 0.4 } ); },
+                start:  function () { notes( [ 67, 74, 79 ], 0.06, { type: 'triangle', dur: 0.13, vol: 0.35 } ); },
+                pause:  function () { notes( [ 76, 69 ], 0.08, { type: 'sine', dur: 0.15, vol: 0.35 } ); },
+                resume: function () { notes( [ 69, 76 ], 0.08, { type: 'sine', dur: 0.15, vol: 0.35 } ); },
+
+                // A board finished: a major arpeggio up to a held top note.
+                win: function ()
+                {
+                    notes( [ 60, 64, 67, 72, 76 ], 0.075, { type: 'triangle', dur: 0.22, vol: 0.35 } );
+                    tone( { f: hz( 84 ), type: 'triangle', dur: 1, hold: 0.25, vol: 0.35, at: 0.375 } );
+                    tone( { f: hz( 79 ), type: 'sine',     dur: 1, hold: 0.25, vol: 0.2,  at: 0.375 } );
+                },
+
+                // ...and a record: the same, and a sparkle over the held note.
+                record: function ()
+                {
+                    SOUNDS.win();
+                    notes( [ 91, 96, 100, 103, 108 ], 0.05, { type: 'sine', dur: 0.3, vol: 0.14, at: 0.55 } );
+                },
+
+                // Game over: three notes down and a fourth that sags as it fades.
+                over: function ()
+                {
+                    notes( [ 67, 63, 60 ], 0.16, { type: 'triangle', dur: 0.24, vol: 0.35 } );
+                    tone( { f: hz( 55 ), to: hz( 53 ), type: 'triangle', dur: 0.9, hold: 0.3, vol: 0.35, at: 0.48 } );
+                },
+
+                // 2048. A move that slides tiles is a short swish; one that
+                // merges them pops instead, once per merged VALUE (the biggest
+                // three, lowest first) - and the note climbs with the tile, 4 at
+                // the bottom and 2048 two octaves up, so a good move is heard as
+                // well as seen. A move that changes nothing only bumps.
+                slide: function () { noise( { bp: 1700, sweep: 500, q: 1.1, dur: 0.1, vol: 2.4 } ); },
+                merge: function ( vals )
+                {
+                    vals.forEach( function ( v, i )
+                    {
+                        pop( 60 + penta( Math.max( 0, Math.round( Math.log( v ) / Math.LN2 ) - 2 ) ), i * 0.06 );
+                    } );
+                },
+                bump:  function () { tone( { f: 220, to: 150, type: 'triangle', dur: 0.09, vol: 1 } ); },
+
+                // Minesweeper. One square is a dry click; a field opening at
+                // once is a ripple up, longer the more of it there was. A flag
+                // goes up with a flick and comes down with the same flick
+                // backwards.
+                open: function ()
+                {
+                    tone ( { f: 1300, to: 700, type: 'triangle', dur: 0.04, vol: 0.85 } );
+                    noise( { hp: 3000, dur: 0.03, vol: 1.1 } );
+                },
+                flood: function ( n )
+                {
+                    var k = Math.min( 9, 3 + Math.floor( n / 10 ) ), list = [], i;
+
+                    for( i = 0; i < k; i++ ) list.push( 72 + penta( i ) );
+                    notes( list, 0.03, { type: 'sine', dur: 0.14, vol: 0.2 } );
+                    noise( { bp: 900, sweep: 3600, q: 0.9, dur: 0.06 + k * 0.03, vol: 0.45 } );
+                },
+                flag:   function () { tone( { f: 520, to: 1250, type: 'triangle', dur: 0.08, vol: 1 } ); },
+                unflag: function () { tone( { f: 1250, to: 520, type: 'triangle', dur: 0.08, vol: 0.85 } ); },
+                mine:   function ()
+                {
+                    blast( 1 );
+                    notes( [ 62, 57 ], 0.2, { type: 'triangle', dur: 0.32, vol: 0.25, at: 0.75 } );
+                },
+
+                // Sudoku. A digit is a soft wooden note - and the digit IS the
+                // note, 1 to 9 up the pentatonic scale, so filling in a row plays
+                // a small tune of its own. The pencil scratches, the rubber rubs.
+                // A digit that repeats in its row, column or box buzzes: it is
+                // what the red already says, never a check against the answer.
+                // A row, a column or a box filled with nothing repeated chimes.
+                digit: function ( v )
+                {
+                    var f = hz( 60 + penta( v - 1 ) );
+
+                    tone ( { f: f,       type: 'sine', dur: 0.25, vol: 0.45 } );
+                    tone ( { f: f * 3.9, type: 'sine', dur: 0.05, vol: 0.08 } );
+                    noise( { bp: 2500, q: 2, dur: 0.02, vol: 0.25 } );
+                },
+                pencil: function ()
+                {
+                    noise( { hp: 5000, dur: 0.035, vol: 0.8 } );
+                    noise( { hp: 5000, dur: 0.03,  vol: 0.55, at: 0.05 } );
+                },
+                rub: function ()
+                {
+                    noise( { bp: 1500, sweep: 700, q: 1.5, dur: 0.09, vol: 1.2 } );
+                    noise( { bp: 1100, sweep: 600, q: 1.5, dur: 0.09, vol: 1, at: 0.1 } );
+                },
+                clash: function ()
+                {
+                    tone( { f: 185, type: 'sawtooth', lp: 900, dur: 0.24, vol: 0.14, at: 0.08 } );
+                    tone( { f: 196, type: 'sawtooth', lp: 900, dur: 0.24, vol: 0.14, at: 0.08 } );
+                },
+                unit: function () { notes( [ 84, 88, 91 ], 0.06, { type: 'sine', dur: 0.4, vol: 0.2, at: 0.1 } ); },
+
+                // Space Invaders. The march is two low notes taking turns, one
+                // per step of the formation - its tread, and it quickens with it
+                // because march() itself plays it. Square waves, because the
+                // notes are so low that a phone speaker only has the overtones
+                // to play them with.
+                march:  function ( k ) { tone( { f: k ? 87 : 104, to: k ? 72 : 86, type: 'square', lp: 700, dur: 0.1, vol: 0.6 } ); },
+                laser:  function () { tone( { f: 1800, to: 320, type: 'sawtooth', lp: 4000, dur: 0.13, vol: 0.65 } ); },
+                zap:    function ()
+                {
+                    noise( { bp: 1800, sweep: 400, q: 1.5, dur: 0.16, vol: 3 } );
+                    tone ( { f: 700, to: 140, type: 'square', lp: 2000, dur: 0.12, vol: 0.3 } );
+                },
+                saucer: function ()
+                {
+                    notes( [ 96, 91, 96, 100 ], 0.045, { type: 'square', lp: 3000, dur: 0.09, vol: 0.14 } );
+                    blast( 0.3 );
+                },
+                crumble: function () { noise( { lp: 1100, dur: 0.07, vol: 1.8 } ); },
+                clink:   function () { tone( { f: 2400, to: 1800, type: 'triangle', dur: 0.04, vol: 0.75 } ); },
+                wave:    function () { notes( [ 67, 71, 74, 79, 83, 86 ], 0.06, { type: 'square', lp: 2500, dur: 0.13, vol: 0.25 } ); },
+
+                // A ship lost - Invaders' and Asteroids' alike: the biggest
+                // blast, and a whine falling through it.
+                crash: function ()
+                {
+                    blast( 1 );
+                    tone( { f: 600, to: 50, type: 'square', lp: 1500, dur: 0.9, vol: 0.09 } );
+                },
+
+                // Asteroids. A softer shot than the invaders' laser; a rock
+                // breaks with a blast its own size (the big ones boom, the small
+                // ones crack); a spare ship rings; a new ship warps in.
+                pew:  function ()
+                {
+                    tone( { f: 1300, to: 260, type: 'triangle', dur: 0.1, vol: 0.8 } );
+                    tone( { f: 2600, to: 520, type: 'square', lp: 3500, dur: 0.05, vol: 0.09 } );
+                },
+                rock: function ( gen ) { blast( [ 0.75, 0.45, 0.2 ][ gen ] || 0.2 ); },
+                life: function () { notes( [ 84, 88, 91, 96 ], 0.06, { type: 'sine', dur: 0.35, vol: 0.25 } ); },
+                warp: function () { tone( { f: 220, to: 880, type: 'sine', dur: 0.3, vol: 0.4 } ); },
+                rocks: function () { notes( [ 60, 67, 72 ], 0.09, { type: 'triangle', dur: 0.25, vol: 0.25 } ); },
+
+                // Tetris. A step sideways ticks, a turn flicks up, a piece that
+                // lands knocks, a hard drop swooshes into the knock. Full rows
+                // ring as they flash - one note more for each row, and four rows
+                // at once get the whole run and a held chord - and a new level
+                // climbs.
+                shift: function () { tone( { f: 330, type: 'square', lp: 1200, dur: 0.035, vol: 0.5 } ); },
+                turn:  function () { tone( { f: 520, to: 780, type: 'triangle', dur: 0.06, vol: 0.85 } ); },
+                lock:  function ()
+                {
+                    tone ( { f: 150, to: 90, type: 'triangle', dur: 0.1, vol: 1 } );
+                    noise( { lp: 900, dur: 0.05, vol: 1 } );
+                },
+                drop:  function () { noise( { lp: 3000, sweep: 400, dur: 0.09, vol: 2 } ); },
+                lines: function ( n )
+                {
+                    var run = [ 72, 76, 79, 84, 88, 91, 96 ];
+
+                    if( n < 4 )
+                    {
+                        notes( run.slice( 0, n + 1 ), 0.055, { type: 'square', lp: 2800, dur: 0.15, vol: 0.27 } );
+                        noise( { bp: 3000, dur: 0.15, vol: 0.75 } );
+                        return;
+                    }
+                    notes( run, 0.045, { type: 'square', lp: 2800, dur: 0.15, vol: 0.2 } );
+                    notes( [ 84, 88, 91 ], 0, { type: 'triangle', dur: 0.8, hold: 0.2, vol: 0.2, at: 0.32 } );
+                    noise( { bp: 1200, sweep: 6000, q: 0.7, dur: 0.45, vol: 0.4 } );
+                },
+                level: function () { notes( [ 79, 84, 88, 91 ], 0.05, { type: 'sine', dur: 0.2, vol: 0.25 } ); }
+            };
+
+            // The two sounds that last (rule 4). make( g ) starts what the sound
+            // is made of, playing into the gain `g`, and returns what has to be
+            // stopped later.
+            var HOLDS = {
+
+                // Asteroids' thrust: low rumbling noise.
+                thrust: { level: 0.65, make: function ( g )
+                {
+                    var src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+
+                    src.buffer = hiss; src.loop = true;
+                    f.type = 'lowpass'; f.frequency.value = 420; f.Q.value = 0.9;
+                    src.connect( f ); f.connect( g );
+                    src.start();
+                    return [ src ];
+                } },
+
+                // Space Invaders' flying saucer: a note wobbling nine times a
+                // second, for as long as it is on the screen.
+                ufo: { level: 0.065, make: function ( g )
+                {
+                    var osc = ctx.createOscillator(), lfo = ctx.createOscillator(), depth = ctx.createGain(), f = ctx.createBiquadFilter();
+
+                    osc.type = 'square'; osc.frequency.value = 560;
+                    lfo.frequency.value = 9; depth.gain.value = 140;
+                    f.type = 'lowpass'; f.frequency.value = 1600;
+                    lfo.connect( depth ); depth.connect( osc.frequency );
+                    osc.connect( f ); f.connect( g );
+                    osc.start(); lfo.start();
+                    return [ osc, lfo ];
+                } }
+            };
+
+            //---- what the games call -----------------------------------------
+
+            // `later` puts the sound that many seconds off - a win after the
+            // move that won it, a game over after the crash.
+            function play( name, arg, later )
+            {
+                var now = Date.now();
+
+                if( ! on || ! ctx ) return;
+                if( now - ( last[ name ] || 0 ) < GAP ) return;     // rule 3
+                last[ name ] = now;
+
+                t0 = ctx.currentTime + ( later || 0 );
+                try { SOUNDS[ name ]( arg ); } catch ( e ) {}       // a sound is never worth a broken game
+            }
+
+            // Rule 4: called on every step the sound goes on. Each call pushes
+            // the fade back; the first step without one lets it happen, and a
+            // moment later the nodes are let go.
+            function hold( name )
+            {
+                var h = held[ name ], d = HOLDS[ name ], g, t;
+
+                if( ! on || ! ctx || ! d ) return;
+
+                if( ! h )
+                {
+                    g = ctx.createGain();
+                    g.gain.value = 0;
+                    g.connect( out );
+                    try { h = held[ name ] = { gain: g, stop: d.make( g ), timer: 0 }; }
+                    catch ( e ) { return; }
+                }
+
+                t = ctx.currentTime;
+                g = h.gain.gain;
+                g.cancelScheduledValues( t );
+                g.setTargetAtTime( d.level, t, 0.02 );
+                g.setTargetAtTime( 0, t + 0.12, 0.04 );
+
+                clearTimeout( h.timer );
+                h.timer = setTimeout( function () { release( name, 0 ); }, 600 );
+            }
+
+            // The held sound is let go: faded out over `fade` seconds (0 when it
+            // has faded by itself already) and its nodes stopped after that.
+            function release( name, fade )
+            {
+                var h = held[ name ], t = ctx.currentTime;
+
+                if( ! h ) return;
+                delete held[ name ];
+                clearTimeout( h.timer );
+
+                h.gain.gain.cancelScheduledValues( t );
+                h.gain.gain.setTargetAtTime( 0, t, fade / 4 || 0.001 );
+                h.stop.forEach( function ( s ) { try { s.stop( t + fade + 0.02 ); } catch ( e ) {} } );
+            }
+
+            // Every held sound off NOW, without waiting for the missed step: a
+            // pause, a pane switch, the speaker turned off. A short fade all the
+            // same - a sound cut dead clicks.
+            function hush()
+            {
+                Object.keys( held ).forEach( function ( name ) { release( name, 0.06 ); } );
+            }
+
+            function set( v )
+            {
+                on = !! v;
+                try { localStorage.setItem( KEY, on ? 'on' : 'off' ); } catch ( e ) {}
+
+                if( ! on ) { if( ctx ) { hush(); settle( ctx.suspend() ); } return; }
+
+                wake();
+                play( 'on' );
+            }
+
+            [ 'pointerdown', 'pointerup', 'touchend', 'keydown' ].forEach( function ( type )
+            {
+                document.addEventListener( type, wake, true );
+            } );
+
+            // A hidden tab stops the audio thread along with the game; the next
+            // press wakes it (rule 1).
+            document.addEventListener( 'visibilitychange', function ()
+            {
+                if( ! document.hidden || ! ctx || ctx.state !== 'running' ) return;
+                hush();
+                settle( ctx.suspend() );
+            } );
+
+            return { play: play, hold: hold, hush: hush, set: set, isOn: function () { return on; } };
+        } )();
+
+        //------------------------------------------------------------------------//
+        // THE NINE GAMES - one file each
         //
         // Every game is a file of its own beside this one, holding its style,
         // its pane and its script, so one game can be changed without
-        // scrolling past the other five. All six are fetched at boot, at the
+        // scrolling past the other eight. All nine are fetched at boot, at the
         // same time as the dictionary, and mounted before start() - which then
         // finds exactly the page it did when they were all in here.
         //
         // A game's script reaches the helpers above through window.NayiveGames
         // and hands its module back with NayiveGames.add( name, module ).
 
-        var FILES = [ 'sudoku', 'g2048', 'mines', 'invaders', 'asteroids', 'tetris' ];   // the cards' order
+        var FILES = [ 'sudoku', 'g2048', 'mines', 'invaders', 'asteroids', 'tetris', 'solitaire', 'checkers', 'chess' ];   // the cards' order
         var MODS  = {};                        // name -> the module its file handed back
-        var G2048, Mines, Sudoku, Invaders, Asteroids, Tetris;
+        var G2048, Mines, Sudoku, Invaders, Asteroids, Tetris, Chess, Solitaire, Checkers;
 
         window.NayiveGames = {
             T: T, TF: TF, STEP: STEP, clock: clock, keyBusy: keyBusy,
             pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop,
-            arcade: arcade, saveBest: saveBest, saveTime: saveTime,
+            arcade: arcade, saveBest: saveBest, saveTime: saveTime, sfx: Sfx,
             add: function ( name, mod ) { MODS[ name ] = mod; }
         };
 
@@ -818,10 +1354,17 @@
         // Sudoku keep a TIME per difficulty, where less is. Each is merged its
         // own way (see adoptBest / adoptTimes).
         //
-        // The two timed games share the one `times` map and each reads only the
-        // keys it knows: Minesweeper was first and took the bare easy / medium /
-        // hard, so Sudoku's carry its name. A third timed game only has to pick
-        // a prefix of its own.
+        // The three timed games share the one `times` map and each reads only
+        // the keys it knows: Minesweeper was first and took the bare easy /
+        // medium / hard, so Sudoku's carry its name and Solitaire's carry its
+        // own - solitaire1 and solitaire3, one per draw mode, because turning
+        // one card over is a different game from turning three. A fourth timed
+        // game only has to pick a prefix of its own.
+        //
+        // Chess and Checkers have no line here at all. They end in a RESULT
+        // and not in a number to beat, so there is nothing of either to write
+        // and nothing for loadData() to merge - the two games of the nine that
+        // ask the server for nothing whatever.
         //
         // The board itself is not saved. A game is one sitting, and writing it
         // would PUT the whole file on every arrow key; only the record outlives
@@ -875,6 +1418,9 @@
 
             var sudokuTimes = Sudoku.adoptTimes( data.times );
             Object.keys( sudokuTimes ).forEach( function ( k ) { saveTime( k, sudokuTimes[ k ] ); } );
+
+            var solTimes = Solitaire.adoptTimes( data.times );
+            Object.keys( solTimes ).forEach( function ( k ) { saveTime( k, solTimes[ k ] ); } );
         }
 
         // Writes the local copy now and queues the upload; the store flushes it
@@ -920,7 +1466,7 @@
             } );
 
             // Escape is the way back on a keyboard - the same thing the game's
-            // name does with a click, from any of the six and whatever the game
+            // name does with a click, from any of the nine and whatever the game
             // is doing. goHome() calls leave(), so the loop stops, the held keys
             // are let go and the record is written, exactly as it is when the
             // name is clicked.
@@ -936,6 +1482,23 @@
             // not any more - `p` is, in both - because a key that means "out of
             // here" everywhere else in the suite cannot mean "wait a moment" in
             // two of six games.
+            // The speaker. Its tooltip says what a press DOES, the way the
+            // pause button's does: "turn the sound off" while it is on.
+            var soundBtn = document.getElementById( 'gamesSound' );
+
+            function paintSound()
+            {
+                var on = Sfx.isOn();
+
+                soundBtn.title = T( on ? 'games.soundOff' : 'games.soundOn' );
+                soundBtn.setAttribute( 'aria-label', soundBtn.title );
+                soundBtn.querySelector( '[data-ic="on"]'  ).toggleAttribute( 'hidden', ! on );
+                soundBtn.querySelector( '[data-ic="off"]' ).toggleAttribute( 'hidden', on );
+            }
+
+            soundBtn.addEventListener( 'click', function () { Sfx.set( ! Sfx.isOn() ); paintSound(); } );
+            paintSound();
+
             document.addEventListener( 'keydown', function ( e )
             {
                 if( e.key !== 'Escape' || e.ctrlKey || e.altKey || e.metaKey ) return;
@@ -951,8 +1514,11 @@
             GAMES.invaders = Invaders.init();
             GAMES.asteroids = Asteroids.init();
             GAMES.tetris   = Tetris.init();
+            GAMES.chess    = Chess.init();
+            GAMES.solitaire = Solitaire.init();
+            GAMES.checkers = Checkers.init();
 
-            // The six toolbars are written inside their panes - that is where
+            // The nine toolbars are written inside their panes - that is where
             // they are read, next to the board they act on - and MOVED into the
             // header here, after every init() has taken its references. A moved
             // node keeps its listeners and its id, so nothing above knows.
@@ -972,6 +1538,10 @@
                     { sel: '.game-tile[data-game="invaders"]',  text: T( 'games.introInvaders' ) },
                     { sel: '.game-tile[data-game="asteroids"]', text: T( 'games.introAsteroids' ) },
                     { sel: '.game-tile[data-game="tetris"]',    text: T( 'games.introTetris' ) },
+                    { sel: '.game-tile[data-game="solitaire"]', text: T( 'games.introSolitaire' ) },
+                    { sel: '.game-tile[data-game="checkers"]',  text: T( 'games.introCheckers' ) },
+                    { sel: '.game-tile[data-game="chess"]',     text: T( 'games.introChess' ) },
+                    { sel: '#gamesSound',                       text: T( 'games.introSound' ) },
                     { sel: '#syncIndicator', name: T( 'ui.syncName' ), text: T( 'games.introSync' ) }
                 ]
             } );
@@ -987,6 +1557,9 @@
             Invaders  = MODS.invaders;
             Asteroids = MODS.asteroids;
             Tetris    = MODS.tetris;
+            Chess     = MODS.chess;
+            Solitaire = MODS.solitaire;
+            Checkers  = MODS.checkers;
 
             store = NayiveStore.createStore( { apiBase: GumApi.API_FILES } );
 

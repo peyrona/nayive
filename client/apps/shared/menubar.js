@@ -17,7 +17,7 @@
  * cfg.exec). So there is only ever ONE set of handlers, whichever chrome shows.
  *
  * -----------------------------------------------------------------------------
- * NayiveMenus.create( cfg ) -> { build, close, isOpen, openAt, anchorRect, rect }
+ * NayiveMenus.create( cfg ) -> { build, close, isOpen, openAt, openItems, isOpenFor, anchorRect, rect }
  *
  *   cfg.bar / .panel / .sub   element ids  (default menuBar / menuPanel / menuSub)
  *   cfg.menus                 [ { key|text, items: [...] } ]  - array or a function
@@ -50,6 +50,14 @@
  *
  * Anything else on an item (check, radio, arg …) is the app's business and
  * reaches it untouched through cfg.checked / cfg.enabled / cfg.exec.
+ *
+ * openItems( items, trigger ) opens the same panel with ANY list of items,
+ * hanging under a button that is not on the bar - a toolbar drop-down (Write's
+ * styles, colours, zoom ...). Same rows, same ticks, same hooks: a drop-down
+ * and its menu entry can be one table. A second click on the trigger closes
+ * it (isOpenFor( trigger ) says whether it is the one showing). Given a
+ * rectangle instead of a button, it hangs from that - a right-click menu at
+ * the pointer (Write's spelling suggestions).
  *
  * -----------------------------------------------------------------------------
  * NayiveMenus.chrome( cfg ) -> { on, mode, set, apply, sync, wire }
@@ -86,7 +94,8 @@ const NayiveMenus = ( function ()
         const PANEL = cfg.panel || 'menuPanel';
         const SUB   = cfg.sub   || 'menuSub';
 
-        let openIdx    = -1;     // which top-level menu is showing, or -1
+        let openIdx    = -1;     // which top-level menu is showing, -2 a drop-down (openItems), -1 none
+        let trigger    = null;   // the button a drop-down hangs from
         let panelItems = [];     // the items the open panel was built from
         let subItems   = [];     // ... and its submenu
         let lastRect   = null;   // rect of the entry that opened an anchored popup
@@ -129,7 +138,7 @@ const NayiveMenus = ( function ()
         }
 
         // The glyph before the label (an <svg>, or a character), or null. Read at open time like everything
-        // else on a row, so an icon a toolbar draws late (SuperDoc's) still
+        // else on a row, so an icon a toolbar draws late still
         // shows up, and a bad selector costs the glyph - never the menu.
         function iconNode( it )
         {
@@ -296,6 +305,9 @@ const NayiveMenus = ( function ()
             for( const b of document.querySelectorAll( '#' + BAR + ' .menu-top' ) )
                 b.setAttribute( 'aria-expanded', 'false' );
 
+            if( trigger ) trigger.setAttribute( 'aria-expanded', 'false' );
+            trigger = null;
+
             openIdx = -1;
         }
 
@@ -316,6 +328,28 @@ const NayiveMenus = ( function ()
             btn.setAttribute( 'aria-expanded', 'true' );
 
             openIdx = i;
+        }
+
+        // A drop-down off a button that is not on the bar, or off a rectangle
+        // (see the header).
+        function openItems( items, anchor )
+        {
+            close();
+
+            const panel = gid( PANEL );
+            if( ! panel || ! anchor ) return;
+
+            const btn = typeof anchor.getBoundingClientRect === 'function' ? anchor : null;
+
+            panelItems = typeof items === 'function' ? items() : items;
+            fillPanel( panel, panelItems );
+
+            panel.hidden = false;              // lay it out before measuring
+            placePanel( panel, btn ? btn.getBoundingClientRect() : anchor );
+
+            trigger = btn;
+            if( trigger ) trigger.setAttribute( 'aria-expanded', 'true' );
+            openIdx = -2;
         }
 
         function openSubFor( row, it )
@@ -463,8 +497,9 @@ const NayiveMenus = ( function ()
 
             document.addEventListener( 'pointerdown', function ( e )
             {
-                if( openIdx < 0 ) return;
+                if( openIdx === -1 ) return;
                 if( bar.contains( e.target ) || panel.contains( e.target ) || sub.contains( e.target ) ) return;
+                if( trigger && trigger.contains( e.target ) ) return;     // its own click toggles it
 
                 close();
             }, true );
@@ -473,7 +508,7 @@ const NayiveMenus = ( function ()
             // Escape chain (a popup, a dialog) must not fire at the same time.
             document.addEventListener( 'keydown', function ( e )
             {
-                if( e.key !== 'Escape' || openIdx < 0 ) return;
+                if( e.key !== 'Escape' || openIdx === -1 ) return;
 
                 e.stopPropagation();
                 close();
@@ -500,8 +535,10 @@ const NayiveMenus = ( function ()
         return {
             build:      build,
             close:      close,
-            isOpen:     function () { return openIdx >= 0; },
+            isOpen:     function () { return openIdx !== -1; },
             openAt:     openAt,
+            openItems:  openItems,
+            isOpenFor:  function ( btn ) { return openIdx === -2 && trigger === btn; },
             anchorRect: anchorRect,
             rect:       function () { return lastRect; }
         };

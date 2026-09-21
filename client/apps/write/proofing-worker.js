@@ -86,8 +86,8 @@ async function check( msg )
     postMessage( { type: 'result', id: msg.id, issues } );
 
     // The newest check's words go first, in reading order. What was already
-    // waiting stays behind them: SuperDoc checks in pairs (a smaller story,
-    // then the body), so the last check is not always the whole document.
+    // waiting stays behind them: the overlay asks for the paragraphs on screen
+    // as they change, so the last check is not always the whole document.
     queue = fresh.concat( queue.filter( j => ! seen.has( j.key ) ) );
     pump();
 }

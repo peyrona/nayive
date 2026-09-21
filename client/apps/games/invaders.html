@@ -1,4 +1,4 @@
-<!-- invaders.html - Space Invaders, one of the six games of index.html.
+<!-- invaders.html - Space Invaders, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -159,7 +159,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -171,7 +171,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // SPACE INVADERS
@@ -500,6 +501,7 @@
 
                 if( drop ) { dir = -dir; chew(); }
                 frame ^= 1;                                             // the legs move with the step
+                sfx.play( 'march', frame );                             // ...and the tread with the legs
             }
 
             // A bomb comes off the LOWEST alien of a random column - the one
@@ -630,7 +632,10 @@
                 // the button. So holding it is exactly right: the next shot
                 // leaves as soon as the last one is spent.
                 if( firing && ! shot )
+                {
                     shot = { x: px + Math.round( ( SPR.ship.w - SHOT_W ) / 2 ), y: SHIP_Y - SHOT_H };
+                    sfx.play( 'laser' );
+                }
             }
 
             function moveShot()
@@ -641,17 +646,17 @@
 
                 top = shot.y - SHOT_SPEED;
 
-                if( sweep( shot.x, shot.y, top, 0 ) ) { shot = null; return; }
+                if( sweep( shot.x, shot.y, top, 0 ) ) { shot = null; sfx.play( 'crumble' ); return; }
 
                 shot.y = top;
                 if( shot.y + SHOT_H < 0 ) { shot = null; return; }
 
                 for( i = 0; i < bombs.length; i++ )
                     if( hits( shot.x, shot.y, SHOT_W, SHOT_H, bombs[ i ].x, bombs[ i ].y, BOMB_W, BOMB_H ) )
-                    { bombs.splice( i, 1 ); shot = null; return; }
+                    { bombs.splice( i, 1 ); shot = null; sfx.play( 'clink' ); return; }
 
                 if( ufo && hits( shot.x, shot.y, SHOT_W, SHOT_H, ufo.x, UFO_Y, SPR.ufo.w, SPR.ufo.h ) )
-                { addScore( ufo.points ); ufo = null; shot = null; return; }
+                { addScore( ufo.points ); ufo = null; shot = null; sfx.play( 'saucer' ); return; }
 
                 for( i = 0; i < aliens.length; i++ )
                 {
@@ -664,6 +669,7 @@
                     alive  -= 1;
                     addScore( POINTS[ a.row ] );
                     shot = null;
+                    sfx.play( 'zap' );
                     return;
                 }
             }
@@ -678,7 +684,7 @@
                     b    = bombs[ i ];
                     b.y += speed;
 
-                    if( sweep( b.x + 1, b.y + BOMB_H - speed, b.y + BOMB_H, 1 ) ) { bombs.splice( i, 1 ); continue; }
+                    if( sweep( b.x + 1, b.y + BOMB_H - speed, b.y + BOMB_H, 1 ) ) { bombs.splice( i, 1 ); sfx.play( 'crumble' ); continue; }
                     if( b.y > GROUND_Y ) { bombs.splice( i, 1 ); continue; }
 
                     if( hits( b.x, b.y, BOMB_W, BOMB_H, px, SHIP_Y, SPR.ship.w, SPR.ship.h ) )
@@ -698,6 +704,7 @@
                 {
                     ufo.x += ufo.dir * UFO_SPEED;
                     if( ufo.x < -SPR.ufo.w || ufo.x > W ) ufo = null;
+                    else sfx.hold( 'ufo' );            // its warble lasts exactly as long as these calls do
                     return;
                 }
 
@@ -736,7 +743,7 @@
                 moveBombs();
                 moveUfo();
 
-                if( state === 'playing' && alive === 0 ) { state = 'wave'; waveTick = WAVE_TICKS; }
+                if( state === 'playing' && alive === 0 ) { state = 'wave'; waveTick = WAVE_TICKS; sfx.play( 'wave' ); }
             }
 
             //---- losing, winning, and the wave in between ---------------------
@@ -749,6 +756,7 @@
                 state   = 'dying';
                 dieTick = DIE_TICKS;
                 paint();
+                sfx.play( 'crash' );
             }
 
             function respawn()
@@ -777,6 +785,7 @@
                 // and the record adopted a moment later can be higher than this
                 // whole game - which is not a record to announce.
                 if( record && score === best ) NayiveUI.toast( TF( 'games.invadersRecord', { n: score } ) );
+                sfx.play( record && score === best ? 'record' : 'over' );
                 A.overlay();
             }
 

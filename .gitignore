@@ -31,6 +31,10 @@ deploy.local.sh
 # Generated on every deploy / pack by tools/build-gzip - not source.
 *.gz
 
+# Write's docx-editor.dev engine IS tracked (Apache/MIT/OFL); only the previous
+# build that tools/build-docx-editor.sh keeps for --restore is not.
+client/apps/write/lib/.docx-editor-prev/
+
 # Build output.
 /nayive.zip
 /server/go/nayive
@@ -46,3 +50,12 @@ deploy.local.sh
 *.swp
 *.swo
 .DS_Store
+
+# The Android app (android/): its private settings (where Nayive is served,
+# where the signing key is) and everything Gradle builds. The keystore itself
+# lives in store/config/, already ignored above.
+/android/local.properties
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/

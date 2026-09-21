@@ -629,7 +629,8 @@
     </div>
 
     <!-- EDITAR mode: the photo opens here, in this tab (TOAST UI Image Editor).
-         On close the edited pixels + comment are saved and the views re-render. -->
+         The checkmark saves the edited pixels + comment and the views re-render;
+         the X asks before it drops unsaved changes. -->
     <div id="editorBackdrop" class="editor-backdrop" role="dialog" aria-modal="true" data-i18n-attr="aria-label:photos.editorTitle">
         <div class="editor-bar">
             <span id="editorName" class="editor-title"></span>
@@ -674,7 +675,8 @@ const { esc, extOf, baseName, fmtSize, sleep, pool } = NayiveMedia;
  * WHICH FOLDER
  *
  * Drive opens Photos as  ?dir=<folder path relative to the file root>
- * e.g. "files/viajes/lisboa". With no ?dir= the page runs in DEMO mode on a
+ * e.g. "files/viajes/lisboa". Chat adds &photo=<that folder's photo> to open
+ * one photo straight away. With no ?dir= the page runs in DEMO mode on a
  * small built-in example set (a Lisbon trip) - handy for opening it directly.
  * ==========================================================================*/
 const PARAMS = new URLSearchParams( location.search );
@@ -1889,9 +1891,10 @@ function setPlaying( on )
  * EDITAR : open the photo in the image editor, in this tab
  *
  * Same TOAST UI build Drive ships, loaded from ../drive/lib on first use.
- * Closing (checkmark or X) always applies: an image edit is written back to
- * the file (real mode) or kept in EDITS (demo), and the comment is saved -
- * then the grid / map strip / lightbox re-render.
+ * The checkmark (or Ctrl+Enter) saves: an image edit is written back to the
+ * file (real mode) or kept in EDITS (demo), and the comment is saved - then
+ * the grid / map strip / lightbox re-render. The X (or Escape) leaves without
+ * saving, and asks first when there is something to lose - as Drive and Chat.
  * -------------------------------------------------------------------------*/
 let editorLibPromise = null;
 function loadEditorLib()
@@ -1918,6 +1921,9 @@ function loadEditorLib()
 let imageEditor  = null;      // the live tui.ImageEditor, or null
 let editorPhoto  = null;      // the photo being edited
 let editorDirty  = false;     // an image edit is on the undo stack
+let commentBase  = "";        // the note as it was when the editor opened
+
+function editorChanged() { return editorDirty || $( "#editorComment" ).value.trim() !== commentBase; }
 
 function editPhoto( id )
 {
@@ -1941,6 +1947,7 @@ async function openImageEditor( p )
     $( "#editorSaveAsBtn" ).innerHTML = NayiveUI.icon( "saveas" );
     $( "#editorCloseBtn"  ).innerHTML = "&times;";
     $( "#editorComment" ).value = COMMENTS[ p.id ] || "";
+    commentBase = $( "#editorComment" ).value.trim();
     NayiveUI.setOpen( "editorBackdrop", true );
 
     try { await loadEditorLib(); }
@@ -1955,6 +1962,10 @@ async function openImageEditor( p )
     const host = $( "#tuiEditor" );
     host.innerHTML = "";
     const path = EDITS[ p.id ] || ( DEMO ? sceneImage( p ) : srcFor( p ) );
+    // The library puts the picture between its own two 64px rows (tools
+    // below, zoom / undo above), so it gets the host minus both. Asking for
+    // the whole window left a portrait photo running off the bottom.
+    const box = host.getBoundingClientRect();
     imageEditor = new tui.ImageEditor( host, {
         includeUI: {
             loadImage: { path, name: p.name },
@@ -1962,12 +1973,14 @@ async function openImageEditor( p )
             initMenu: "",
             menuBarPosition: "bottom",
             uiSize: { width: "100%", height: "100%" },
+            locale: NayivePhoto.editorLocale(),     // its words in the user's language
         },
-        cssMaxWidth:  window.innerWidth,
-        cssMaxHeight: window.innerHeight - 44,
+        cssMaxWidth:  Math.max( 160, box.width - 16 ),
+        cssMaxHeight: Math.max( 160, box.height - 136 ),
         selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
         usageStatistics: false,
     } );
+    NayivePhoto.localizeEditor( host );
     imageEditor.on( "undoStackChanged", len => { editorDirty = len > 0; } );
 }
 
@@ -1978,22 +1991,34 @@ function editorFormat( name )
 }
 function dataUrlToBytes( u )
 {
+    // "data:," is a canvas with no picture - what a device hands back for a
+    // canvas bigger than it allows (an iPhone stops near 16.7 MP). Saving it
+    // would leave an empty file where the photo was.
+    if( ! /^data:image\//.test( u ) ) throw new Error( "empty render" );
     const bin = atob( u.slice( u.indexOf( "," ) + 1 ) );
     const out = new Uint8Array( bin.length );
     for( let i = 0; i < bin.length; i++ ) out[ i ] = bin.charCodeAt( i );
     return out;
 }
 
-async function closeImageEditor( announce )
+// save: true = the checkmark; false = the X, Escape or another mode, which
+// ask before dropping unsaved changes (a "no" keeps the editor open).
+async function closeImageEditor( save )
 {
     const p = editorPhoto;
 
-    let dataUrl = null;
-    if( p && imageEditor && editorDirty )
+    if( ! save && p && editorChanged() &&
+        ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.unsavedTitle' ), body: NayiveUI.t( 'drive.unsavedBody' ),
+                                    confirm: NayiveUI.t( 'drive.closeWithout' ), danger: true } ) ) return;
+    if( editorPhoto !== p ) return;             // closed some other way meanwhile
+
+    let dataUrl = null, size = null;
+    if( save && p && imageEditor && editorDirty )
     {
         const fmt  = editorFormat( p.name );
         const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
-        try { dataUrl = imageEditor.toDataURL( opts ); } catch( _ ) {}
+        try { dataUrl = imageEditor.toDataURL( opts ); size = imageEditor.getCanvasSize(); }
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }   // stays open: nothing lost
     }
     const comment = p ? $( "#editorComment" ).value.trim() : "";
 
@@ -2004,7 +2029,7 @@ async function closeImageEditor( announce )
     editorDirty = false;
     NayiveUI.setOpen( "editorBackdrop", false );
 
-    if( ! p ) return;
+    if( ! p || ! save ) return;
 
     if( dataUrl )
     {
@@ -2013,9 +2038,12 @@ async function closeImageEditor( announce )
         {
             try
             {
-                await GumApi.writeFileBytes( p.path, dataUrlToBytes( dataUrl ) );
+                const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
+                const old   = thumbPath( p );
+                await GumApi.writeFileBytes( p.path, bytes );
                 p.bust = Date.now();
                 await refreshStat( p );           // new size + mtime -> new thumbnail key
+                if( thumbPath( p ) !== old ) NayivePhoto.dropThumb( old );   // nothing asks for it now
             }
             catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.saveImageFailed' ) ); }
         }
@@ -2025,7 +2053,15 @@ async function closeImageEditor( announce )
     renderGrid();
     if( st.cluster != null ) openCluster( st.cluster );
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
-    if( announce ) NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) );
+    NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) );
+}
+
+/* Is `name` already in the folder `dir` ("files/x/")? A listing that fails
+ * answers no, as Drive's check does. */
+async function nameTaken( dir, name )
+{
+    try { return ( ( await GumApi.listDir( dir.replace( /\/$/, "" ) ) ).nodes || [] ).some( n => n.path === dir + name ); }
+    catch( _ ) { return false; }
 }
 
 /* "Guardar como copia": opens the #saveAsBackdrop sheet to name the copy;
@@ -2039,7 +2075,8 @@ function saveImageEditorAs()
 
     const cur  = p.name;
     const dot  = cur.lastIndexOf( "." );
-    const seed = dot > 0 ? cur.slice( 0, dot ) + "-editado" + cur.slice( dot ) : cur + "-editado";
+    const tag  = "-" + NayiveUI.t( "ui.editedSuffix" );
+    const seed = dot > 0 ? cur.slice( 0, dot ) + tag + cur.slice( dot ) : cur + tag;
 
     const inp = $( "#saveAsName" );
     inp.value = seed;
@@ -2058,6 +2095,23 @@ async function confirmSaveAs()
 
     NayiveUI.setOpen( "saveAsBackdrop", false );
 
+    const dir  = p.path.slice( 0, p.path.lastIndexOf( "/" ) + 1 );   // "" at the root
+    const dest = dir + name;
+
+    // A PUT replaces a file outright, with no trip through the papelera, so
+    // a name already taken is asked about first - as Drive's "Guardar copia"
+    // does. "No" leaves the editor open with the edits.
+    if( ! DEMO && dest !== p.path && await nameTaken( dir, name ) )
+    {
+        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.nameExistsTitle' ),
+                                        body: NayiveUI.tf( 'drive.nameExistsCopyBody', { name } ),
+                                        confirm: NayiveUI.t( 'drive.replace' ), danger: true } ) ) return;
+        try { await GumApi.deletePaths( [ dest ] ); }
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.moveExistingFailed' ) ); return; }
+        await NayiveMedia.purgePaths( [ dest ] );    // its thumbnail + scan entry, as Drive's delete does
+    }
+    if( editorPhoto !== p || ! imageEditor ) return;    // the editor went away meanwhile
+
     const fmt  = editorFormat( name );
     const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
     let dataUrl;
@@ -2065,6 +2119,7 @@ async function confirmSaveAs()
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }
 
     const comment = $( "#editorComment" ).value.trim();
+    const size    = imageEditor.getCanvasSize();
 
     // tear the editor down first (same order as closeImageEditor)
     try { imageEditor.destroy(); } catch( _ ) {}
@@ -2076,12 +2131,15 @@ async function confirmSaveAs()
 
     if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoCreate' ) ); return; }
 
-    const dir  = p.path.slice( 0, p.path.lastIndexOf( "/" ) + 1 );   // "" at the root
-    const dest = dir + name;
-    try { await GumApi.writeFileBytes( dest, dataUrlToBytes( dataUrl ) ); }
+    try
+    {
+        const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
+        await GumApi.writeFileBytes( dest, bytes );
+    }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
 
-    if( comment ) await saveComment( dest, comment );
+    // a replaced file's note must not stick to the new picture
+    if( comment || COMMENTS[ dest ] ) await saveComment( dest, comment );
 
     await loadFolder();
     NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) );
@@ -2289,6 +2347,10 @@ async function boot()
     if( subs.length && ! imgs.length ) { renderAlbums( subs ); return; }
 
     await loadFolder( folder );
+
+    // ?photo=<path> (Chat's "Abrir en Fotos"): that photo, straight in the lightbox.
+    const want = PARAMS.get( "photo" );
+    if( want && PHOTOS.some( p => p.id === want ) ) openLb( want );
 }
 // shared/gum-api.js, shared/ui.js and shared/photo.js load deferred now, so
 // wait for them (deferred scripts all run before DOMContentLoaded) before

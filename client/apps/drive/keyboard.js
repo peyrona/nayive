@@ -156,6 +156,8 @@ const SHORTCUTS = [
 
 function focusSearch()
 {
+    if( advSearch ) { openSearchBuilder(); return; }    // the box is hidden behind its button
+
     const box = document.getElementById( 'searchInput' );
     box.focus();
     box.select();

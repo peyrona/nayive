@@ -503,6 +503,11 @@ function initGrid( d )
         formulas    : { engine: HyperFormula, sheetName: activeSheet.name || 'Hoja1' },
         width       : '100%',
         height      : '100%',
+        // The cell's look is this app's, not Handsontable's - see CLIPBOARD
+        // STYLES below.
+        afterCopy         : stashClipStyles,
+        afterCut          : cutClipStyles,
+        afterPaste        : applyClipStyles,
         // The formula bar follows the cell under the cursor even when the
         // cursor does not move: undo, redo, paste, fill and fx all change
         // it in place.
@@ -598,6 +603,131 @@ function untrackMerge( cellRange )
     const row = cellRange.from.row;
     const col = cellRange.from.col;
     activeSheet.merges = activeSheet.merges.filter( function( e ) { return ! ( e.row === row && e.col === col ); } );
+}
+
+//--------------------------------------------------------------------//
+// CLIPBOARD STYLES
+//
+// Handsontable's clipboard carries VALUES. The look of a cell lives in
+// `activeSheet.cellStyles`, which is this app's own map and means nothing
+// to the plugin, so a copy would paste the numbers naked. These three
+// hooks ride the styles along: the copy stashes them, the paste lays them
+// down again. Ctrl+C / Ctrl+X / Ctrl+V and the Edicion menu both end in
+// the plugin, so both get this for free.
+//
+// The stash is matched on the copied VALUES, never on the clipboard text:
+// a paste whose values are not the ones that were copied came from
+// somewhere else - Excel, a text editor, another tab - and its cells are
+// left with whatever style they already had. That also means a copy in
+// ONE Calc tab and a paste in ANOTHER moves values only; the stash is a
+// page's own memory, not something the system clipboard can hold.
+
+let clipStash = null;         // { values: [[…]], styles: [[…]] } of the last copy / cut
+let clipBare  = false;        // one paste, values only: "pegar sin formato"
+
+// Ctrl+Shift+V. Armed by calc.js right before it hands the paste over, and
+// disarmed the moment a paste has been through - so a paste that never happens
+// (empty clipboard, a browser that says no) cannot strip the NEXT one's styles.
+function pasteWithoutStyles( on ) { clipBare = on !== false; }
+
+// The block a hook is talking about. Only 'cells-only' copies are stashed:
+// the header modes hand back rows the styles map has no cells for.
+function clipBlock( coords )
+{
+    const c = coords && coords[ 0 ];
+    return ( c && c.startRow >= 0 && c.startCol >= 0 ) ? c : null;
+}
+
+function styleAt( r, c )    { return activeSheet.cellStyles[ encodeCell( { r: r, c: c } ) ] || null; }
+
+function stashClipStyles( data, coords )
+{
+    clipBare = false;         // a fresh copy is never a bare paste
+    const c = clipBlock( coords );
+
+    if( ! c ) { clipStash = null; return; }
+
+    const styles = [];
+
+    for( let r = c.startRow; r <= c.endRow; r++ )
+    {
+        const row = [];
+        for( let k = c.startCol; k <= c.endCol; k++ ) row.push( styleAt( r, k ) );
+        styles.push( row );
+    }
+
+    clipStash = { values: data, styles: styles };
+}
+
+// A cut takes the look with it, the way every spreadsheet does: the values
+// are already gone by the time this runs, and a cell left empty but still
+// red on yellow is not what "cut" means.
+function cutClipStyles( data, coords )
+{
+    stashClipStyles( data, coords );
+
+    const c = clipBlock( coords );
+    if( ! c ) return;
+
+    for( let r = c.startRow; r <= c.endRow; r++ )
+        for( let k = c.startCol; k <= c.endCol; k++ )
+            delete activeSheet.cellStyles[ encodeCell( { r: r, c: k } ) ];
+
+    table.render();
+    updateToolbarActiveState();
+    scheduleAutosave();
+}
+
+function applyClipStyles( data, coords )
+{
+    const c    = clipBlock( coords );
+    const bare = clipBare;
+
+    clipBare = false;         // whatever happens below, the arming is spent
+
+    if( bare || ! clipStash || ! c || ! sameValues( data, clipStash.values ) ) return;
+
+    const st = clipStash.styles;
+    if( ! st.length || ! st[ 0 ].length ) return;
+
+    for( let r = c.startRow; r <= c.endRow; r++ )
+        for( let k = c.startCol; k <= c.endCol; k++ )
+        {
+            // A paste into a selection bigger than the copy repeats the block,
+            // so the styles repeat with it.
+            const s    = st[ ( r - c.startRow ) % st.length ][ ( k - c.startCol ) % st[ 0 ].length ];
+            const addr = encodeCell( { r: r, c: k } );
+
+            // A fresh object per cell: the styles map is edited in place by the
+            // toolbar, and two cells must never end up sharing one entry.
+            if( s ) activeSheet.cellStyles[ addr ] = JSON.parse( JSON.stringify( s ) );
+            else    delete activeSheet.cellStyles[ addr ];
+        }
+
+    table.render();
+    updateToolbarActiveState();
+    scheduleAutosave();
+}
+
+// Cell by cell, as text: Handsontable hands a paste back as strings even when
+// the copy held numbers.
+function sameValues( a, b )
+{
+    if( ! a || ! b || a.length !== b.length ) return false;
+
+    for( let r = 0; r < a.length; r++ )
+    {
+        if( ! a[ r ] || ! b[ r ] || a[ r ].length !== b[ r ].length ) return false;
+
+        for( let c = 0; c < a[ r ].length; c++ )
+        {
+            const x = a[ r ][ c ], y = b[ r ][ c ];
+            if( String( x === null || x === undefined ? '' : x ) !==
+                String( y === null || y === undefined ? '' : y ) ) return false;
+        }
+    }
+
+    return true;
 }
 
 // Delegates to Handsontable's own text renderer, then paints the style this app
@@ -1288,5 +1418,5 @@ function wireFormulaPanel()
 export
 {
     table, newSheet, newDoc, doc, activeSheet, gridBooting, lastSelection, htThemeName,
-    CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel
+    CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles
 };

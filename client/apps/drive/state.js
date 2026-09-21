@@ -73,12 +73,18 @@ let searchHits      = null;          // array of match nodes while a search is a
 let searchTruncated = false;         // the server capped the result list
 let searchSeq       = 0;             // guards against a stale search response landing late
 let searchTimer     = null;          // debounce for the search box
+let advSearch       = null;          // the advanced search in force: { draft, spec, summary, nFilters } (listing.js)
+let bigMode         = false;         // the "Biggest files" list is on screen (listing.js, openBigFiles)
 let trashMode       = false;         // the "Papelera" view is open instead of the file tree
 let trashItems      = [];            // entries from GumApi.trashList() while trashMode is on
 let trashDays       = null;          // auto-delete period (days) shown in the Papelera bar
 let dragPaths       = null;          // paths being drag-moved inside Drive (null = not an internal drag)
 let kbdPane         = 'list';        // which pane the arrow keys drive: 'tree' (folders) | 'list' (files)
 let kbdTreePath     = null;          // tree row under the keyboard cursor while kbdPane === 'tree'
+
+// A search of any kind - the box's own, the advanced one, or the "Biggest
+// files" list - is on screen.
+function isSearching() { return !! searchQuery.trim() || !! advSearch || bigMode; }
 
 // Phone layout: the folder tree becomes a slide-in sheet, the search field
 // collapses behind a magnifier, the app launchers are hidden (see @media ≤640px).

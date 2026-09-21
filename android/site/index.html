@@ -1,0 +1,51 @@
+<!-- The download page of the Android app, served from the VPS's sites_dir at
+     /app/ (server/go/sites.go) beside nayive.apk and version.json - see
+     android/publish.sh. Public on purpose: a phone that has never signed in
+     must reach it. Spanish: it is for the family. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1E1F23">
+    <title>Nayive para Android</title>
+    <style>
+        :root { --bg: #1E1F23; --card: #25272B; --text: #E7E7E9; --dim: #93959F; --accent: #16A085; --on: #0D0F17; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.5 system-ui, sans-serif; }
+        main { max-width: 520px; margin: 0 auto; padding: 32px 16px 48px; }
+        h1 { font-size: 1.5rem; margin: 0 0 8px; }
+        p { color: var(--dim); margin: 0 0 20px; }
+        .get { display: block; text-align: center; background: var(--accent); color: var(--on); text-decoration: none;
+               font-weight: 700; font-size: 1.15rem; padding: 16px; border-radius: 28px; margin: 24px 0 8px; }
+        .ver { text-align: center; font-size: .85rem; color: var(--dim); margin: 0 0 28px; }
+        ol { background: var(--card); border-radius: 14px; padding: 18px 18px 18px 38px; margin: 0; }
+        li { margin: 0 0 12px; }
+        li:last-child { margin: 0; }
+        b { color: var(--text); }
+        .ios { margin-top: 28px; font-size: .95rem; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Nayive para Android</h1>
+    <a class="get" href="nayive.apk" download>Descargar Nayive</a>
+    <div class="ver" id="ver"></div>
+
+    <ol>
+        <li>Toca <b>Descargar Nayive</b>. Si Chrome avisa, toca <b>Descargar de todas formas</b>.</li>
+        <li>Abre el archivo descargado. El móvil pedirá permiso para <b>instalar apps de este origen</b>: actívalo y vuelve atrás.</li>
+        <li>Si aparece <b>Play Protect</b> diciendo que no conoce la app, toca <b>Más detalles</b> → <b>Instalar de todas formas</b>. Es normal: la app no viene de la tienda de Google.</li>
+        <li>Abre <b>Nayive</b> y acepta los permisos que pide, uno por uno. Cada uno dice para qué sirve.</li>
+        <li>Entra con tu usuario y tu contraseña de siempre. Listo: el móvil queda conectado.</li>
+    </ol>
+
+    <p class="ios">¿Tienes un iPhone? No necesitas nada de esto: sigue usando Nayive desde Safari, como hasta ahora.</p>
+</main>
+<script>
+    fetch( "version.json", { cache: "no-store" } ).then( function ( r ) { return r.json(); } )
+        .then( function ( v ) { document.getElementById( "ver" ).textContent = "Versión " + ( v.name || v.code ); } )
+        .catch( function () {} );
+</script>
+</body>
+</html>

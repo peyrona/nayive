@@ -1,7 +1,7 @@
 <!-- This is an admin/ops tool, not a user-facing app - it will never be
      translated into any language other than English. -->
 <!-- admin.html - Nayive admin panel: create/rename/edit/delete users, the admin
-     account, and the external-storage rules. Open with no login only until an
+     account, the external-storage rules and the web sites folder - one tab each. Open with no login only until an
      admin account exists; after that it asks you to sign in as that admin.
      Talks to /api/admin.
      NO timezone here: a timezone belongs to a person, so each account picks its
@@ -37,11 +37,11 @@
 
         .brand
         {
-            display: flex; align-items: center; gap: 10px;
-            font-size: 1.3rem; font-weight: 700; margin: 4px 0 22px;
+            display: flex; align-items: center; gap: 10px; margin: 4px 0 22px;
         }
-        .brand > svg { width: 26px; height: 26px; color: var(--accent); flex: 0 0 auto; }
-        /* the one page-wide Save + the Back button live at the right of the title */
+        /* the icon + title go back to the launcher, as in every app (shared/ui.js) */
+        .brand > svg { width: 26px; height: 26px; }
+        /* the one page-wide Save lives at the right of the title */
         .brand-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
         section
@@ -76,14 +76,9 @@
 
         select:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* sub-section header inside a card (e.g. "External Storage") */
-        .subhead
-        {
-            display: flex; align-items: center;
-            font-size: 0.9rem; font-weight: 600; letter-spacing: 0.02em;
-            margin: 22px 0 14px; padding-top: 16px;
-            border-top: 1px solid var(--line);
-        }
+        /* One tab per section (shared .pill buttons); only the chosen section
+           shows, so the page no longer grows with every new setting. */
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
         .ext-size { display: flex; align-items: center; gap: 8px; }
         .ext-size input { width: 90px; text-align: right; }
         .ext-size span { font-size: 0.9rem; color: var(--text-dim); }
@@ -109,6 +104,8 @@
         }
         .pw-eye:hover { color: var(--text); filter: none; }
         .pw-eye svg { width: 17px; height: 17px; }
+        /* a user row's in-field trash: removes the password on Save */
+        .pw-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
 
         table { width: 100%; border-collapse: collapse; }
         th
@@ -136,6 +133,7 @@
         .msg.err  { color: var(--danger); }
         .msg:empty { min-height: 0; margin: 0; }
         .hint { font-size: 0.82rem; color: var(--text-dim); margin: 12px 2px 0; }
+        .hint.lead { margin: 0 2px 14px; }   /* a description ABOVE the fields */
 
         a.link { color: var(--link, var(--accent) ); }
         .hide { display: none !important; }
@@ -150,22 +148,31 @@
 <body>
 <div class="wrap">
     <div class="brand">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             <path d="m9 12 2 2 4-4"/>
         </svg>
-        <span>Nayive · Admin</span>
+        <h1 class="app-title">Nayive · Admin</h1>
         <div class="brand-acts">
-            <button id="saveAll" data-act="primary" title="Save changes"></button>
-            <button id="backBtn" data-act="secondary:back" title="Back to apps"></button>
+            <button id="saveAll" data-act="primary:save" title="Save changes"></button>
         </div>
+    </div>
+
+    <!-- Short labels, so the four fit one row on a phone; each section's own
+         heading has the full name. Hidden on first run, when the admin
+         account is the only section. -->
+    <div class="tabs hide" id="tabs" role="tablist">
+        <button class="pill" type="button" role="tab" data-tab="adminSec">Admin</button>
+        <button class="pill" type="button" role="tab" data-tab="storageSec">Storage</button>
+        <button class="pill" type="button" role="tab" data-tab="sitesSec">Web sites</button>
+        <button class="pill" type="button" role="tab" data-tab="usersSec">Users</button>
     </div>
 
     <p class="msg" id="saveMsg"></p>
     <p class="msg err" id="fatal"></p>
 
     <!-- ADMIN ACCOUNT -------------------------------------------------------- -->
-    <section id="adminSec" class="hide">
+    <section id="adminSec" class="hide" role="tabpanel">
         <h2>Admin account</h2>
         <p class="banner" id="firstRunBanner">
             First run: create the admin account. After saving it you'll be
@@ -187,10 +194,12 @@
         </div>
     </section>
 
-    <!-- SERVER SETTINGS ------------------------------------------------------ -->
-    <section id="serverSec" class="hide">
-        <h2>Server settings</h2>
-        <h3 class="subhead">External Storage<button class="info-dot" data-info="Servers with a big local disk are expensive. It is often cheaper to rent a smaller server and add cheap bulk storage separately, mounted into the filesystem.&#10;&#10;When a mount path is set, big files (movies, music, disk images...) are written to that external storage instead of the server's own disk.&#10;&#10;A file goes to external storage when its extension is in the &quot;always send&quot; list, or - if it is in neither list - when it is at least the size below. Extensions in the &quot;never send&quot; list always stay on the server.&#10;&#10;Leave &quot;Mounted at&quot; empty to keep every file on the server."></button></h3>
+    <!-- EXTERNAL STORAGE ----------------------------------------------------- -->
+    <section id="storageSec" class="hide" role="tabpanel">
+        <div class="sec-title">
+            <h2>External storage</h2>
+            <button class="info-dot" data-info="Servers with a big local disk are expensive. It is often cheaper to rent a smaller server and add cheap bulk storage separately, mounted into the filesystem.&#10;&#10;When a mount path is set, big files (movies, music, disk images...) are written to that external storage instead of the server's own disk.&#10;&#10;A file goes to external storage when its extension is in the &quot;always send&quot; list, or - if it is in neither list - when it is at least the size below. Extensions in the &quot;never send&quot; list always stay on the server.&#10;&#10;Leave &quot;Mounted at&quot; empty to keep every file on the server."></button>
+        </div>
 
         <div class="field">
             <label for="extMount">Mounted at</label>
@@ -214,8 +223,25 @@
         </div>
     </section>
 
+    <!-- WEB SITES ---------------------------------------------------------- -->
+    <section id="sitesSec" class="hide" role="tabpanel">
+        <h2>Web sites</h2>
+        <p class="hint lead">
+            Plain web sites served by this server, apart from Nayive. Each
+            sub-folder of this folder is one site: <code>cv/index.html</code>
+            opens at <span id="sitesUrl">/cv/</span>. A new sub-folder works at
+            once. Only put pages you trust here: they share Nayive's address.
+            Leave empty to serve no web sites.
+        </p>
+        <div class="field">
+            <label for="sitesDir">Base folder</label>
+            <input id="sitesDir" type="text" placeholder="~/web_sites"
+                   autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+    </section>
+
     <!-- USERS ------------------------------------------------------------- -->
-    <section id="usersSec" class="hide">
+    <section id="usersSec" class="hide" role="tabpanel">
         <div class="sec-title">
             <h2>Users</h2>
             <button id="addUser" data-act="secondary:plus" title="Add a user"></button>
@@ -241,7 +267,9 @@
            Edits and new users are saved with the <strong>Save</strong> button at the top.
            Changing a username renames the account: everything the person owns travels with it, but
            they are signed out and must sign in again with the new name.
-           The trash icon deletes a user (after a confirmation) along with all their data.</p>
+           The trash icon deletes a user (after a confirmation) along with all their data.
+           The small trash inside a password field removes that password on Save: the user
+           signs in with a blank one and must pick a new password.</p>
     </section>
 </div>
 
@@ -314,8 +342,35 @@
         return d.error || ( 'Error ' + res.status );
     }
 
+    // -- tabs ---------------------------------------------------------------
+    // One section at a time. The last tab chosen is remembered in this browser
+    // only (a convenience - the page works the same without it).
+    var TAB_KEY = 'nayive-admin-tab';
+    var TABS    = [].map.call( document.querySelectorAll( '#tabs [data-tab]' ),
+                               function ( b ) { return b.dataset.tab; } );
+
+    function showTab( id )
+    {
+        if ( TABS.indexOf( id ) < 0 ) id = TABS[ 0 ];
+        document.querySelectorAll( '#tabs [data-tab]' ).forEach( function ( b )
+        {
+            var on = b.dataset.tab === id;
+            b.classList.toggle( 'is-active', on );
+            b.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+        } );
+        TABS.forEach( function ( t ) { $( t ).classList.toggle( 'hide', t !== id ); } );
+        try { localStorage.setItem( TAB_KEY, id ); } catch ( e ) {}
+    }
+
+    $( 'tabs' ).addEventListener( 'click', function ( e )
+    {
+        var b = e.target.closest( '[data-tab]' );
+        if ( b ) showTab( b.dataset.tab );
+    } );
+
     // -- load ---------------------------------------------------------------
     var CONFIGURED = false;
+    var SITES_ORIG = '';      // the web sites folder as loaded / last saved
 
     // When the server has never been given external-storage rules, we pre-fill
     // the two lists with sensible defaults so the admin starts from something
@@ -371,16 +426,15 @@
         var data = await res.json();
         CONFIGURED = !!data.configured;
 
-        $( 'adminSec' ).classList.remove( 'hide' );
         $( 'firstRunBanner' ).classList.toggle( 'hide', CONFIGURED );
         $( 'adminName' ).value = ( data.admin && data.admin.name ) || '';
         $( 'adminPass' ).placeholder = CONFIGURED ? "leave blank = don't change"
                                                   : 'new password';
 
-        if ( CONFIGURED )
+        if ( !CONFIGURED )
+            $( 'adminSec' ).classList.remove( 'hide' );   // first run: no tabs
+        else
         {
-            $( 'serverSec' ).classList.remove( 'hide' );
-
             var ext = data.external_storage || {};
             var always = ext.always_ext || [];
             var never  = ext.never_ext  || [];
@@ -392,8 +446,16 @@
             $( 'extMinMB'  ).value = ext.min_mb ? String( ext.min_mb ) : '';
             syncExtEnabled();
 
-            $( 'usersSec' ).classList.remove( 'hide' );
+            SITES_ORIG = data.sites_dir || '';
+            $( 'sitesDir' ).value = SITES_ORIG;
+            $( 'sitesUrl' ).textContent = location.origin + '/cv/';
+
             renderUsers( data.users || [] );
+
+            $( 'tabs' ).classList.remove( 'hide' );
+            var last = null;
+            try { last = localStorage.getItem( TAB_KEY ); } catch ( e ) {}
+            showTab( last );
         }
     }
 
@@ -415,12 +477,10 @@
         } );
     } )();
 
-    // -- "Back to apps" (top-right, after Save) ------------------------
-    $( 'backBtn' ).addEventListener( 'click', function () { location.href = '/nayive/'; } );
-
     // -- the one Save button (top-right) ------------------------------
     // Commits, in order: the admin account, then - once an admin exists - the
-    // external-storage rules, every changed user row and the "new user" row.
+    // external-storage rules, the web sites folder, every changed user row and
+    // the "new user" row. It saves every tab, not only the one on show.
     // Deleting a user stays immediate (its trash icon).
     $( 'saveAll' ).addEventListener( 'click', saveAll );
 
@@ -477,14 +537,26 @@
                 $( 'extMinMB'  ).value = ext.min_mb ? String( ext.min_mb ) : '';
             }
 
-            // 3. changed user rows --------------------------------
+            // 3. web sites folder --------------------------------
+            // Only when edited: a saved folder that has since gone missing must
+            // not make every later save fail.
+            var sd = $( 'sitesDir' ).value.trim();
+            if ( sd !== SITES_ORIG )
+            {
+                var rS = await api( { action: 'set-sites', sites_dir: sd } );
+                if ( !rS.ok ) errs.push( 'web sites: ' + await errText( rS ) );
+                else          SITES_ORIG = sd;
+            }
+
+            // 4. changed user rows --------------------------------
             for ( var i = 0; i < USER_CTLS.length; i++ )
             {
                 var c   = USER_CTLS[ i ];
                 var nn  = c.nameIn.value.trim();
                 if ( nn === c.name &&
                      String( c.quota.value ).trim() === c.orig &&
-                     String( c.photo.value ).trim() === c.origPhoto && !c.pass.value )
+                     String( c.photo.value ).trim() === c.origPhoto && !c.pass.value &&
+                     !c.clearPass )
                     continue;                        // nothing touched on this row
 
                 // A rename goes first and on its own: the other fields are then
@@ -506,12 +578,13 @@
 
                 var ub = { action: 'update-user', name: c.name, quota: c.quota.value,
                            photo_max: c.photo.value };
-                if ( c.pass.value ) ub.password = c.pass.value;
+                if ( c.pass.value )     ub.password = c.pass.value;
+                else if ( c.clearPass ) ub.password = null;   // null = remove it
                 var ru = await api( ub );
                 if ( !ru.ok ) errs.push( c.name + ': ' + await errText( ru ) );
             }
 
-            // 4. the rows added with "+" ---------------------------
+            // 5. the rows added with "+" ---------------------------
             // A copy of the list: a created row is taken out of NEW_CTLS as we go.
             var pending = NEW_CTLS.slice();
             for ( var k = 0; k < pending.length; k++ )
@@ -700,6 +773,24 @@
             p.placeholder = u.has_password ? 'new password' : 'not set — user will pick it';
             tdP.appendChild( p );
 
+            // Trash inside the field: remove the password on Save, so the user
+            // must pick a new one at next sign-in. Typing a password undoes it.
+            var clr = null;
+            if ( u.has_password && window.NayiveUI )
+            {
+                var pw = document.createElement( 'div' );
+                pw.className = 'pw-wrap';        // room on the right for the trash
+                tdP.appendChild( pw );
+                pw.appendChild( p );
+                clr = document.createElement( 'button' );
+                clr.type = 'button';
+                clr.className = 'icon-btn sm danger pw-clear';
+                clr.title = 'Remove password (saved with Save)';
+                clr.setAttribute( 'aria-label', clr.title );
+                clr.innerHTML = NayiveUI.icon( 'trash' );
+                pw.appendChild( clr );
+            }
+
             var tdA = document.createElement( 'td' );
             tdA.className = 'col-act';
             var acts = document.createElement( 'div' );
@@ -718,6 +809,24 @@
                         orig: String( q.value ).trim(),
                         origPhoto: String( m.value ).trim() };
             USER_CTLS.push( ctl );
+
+            if ( clr )
+            {
+                clr.addEventListener( 'click', function ()
+                {
+                    ctl.clearPass = true;
+                    p.value = '';
+                    p.placeholder = 'removed on Save';
+                    clr.classList.add( 'hide' );
+                } );
+                p.addEventListener( 'input', function ()
+                {
+                    if ( !ctl.clearPass || !p.value ) return;
+                    ctl.clearPass = false;          // a typed password wins
+                    p.placeholder = 'new password';
+                    clr.classList.remove( 'hide' );
+                } );
+            }
 
             del.addEventListener( 'click', async function ()
             {

@@ -1,0 +1,94 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Everything private comes from local.properties (not committed): where Nayive
+// is served, and where the signing key lives. See local.properties.example.
+def local = new Properties()
+def localFile = rootProject.file('local.properties')
+if (localFile.exists()) localFile.withInputStream { local.load(it) }
+
+def origin = (local.getProperty('nayive.origin') ?: 'https://example.com').replaceAll('/+$', '')
+def host = new URI(origin).host
+
+def signing = null
+def signingPath = local.getProperty('nayive.signing')
+if (signingPath) {
+    def f = rootProject.file(signingPath)
+    if (f.exists()) {
+        signing = new Properties()
+        f.withInputStream { signing.load(it) }
+        signing.setProperty('dir', f.parentFile.absolutePath)
+    }
+}
+
+android {
+    namespace = 'org.nayive.app'
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = 'org.nayive.app'
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 2
+        versionName = '0.2'
+
+        buildConfigField 'String', 'ORIGIN', "\"${origin}\""
+        manifestPlaceholders = [
+            nayiveOrigin: origin,
+            nayiveHost  : host,
+        ]
+        // The Digital Asset Links statement the TWA checks against
+        // <origin>/.well-known/assetlinks.json.
+        resValue 'string', 'asset_statements',
+            "[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"${origin}\"}}]"
+        // "Share -> Nayive" for photos: the PWA's own share_target
+        // (client/apps/manifest.json), which the TWA forwards to.
+        resValue 'string', 'share_target',
+            "{\"action\":\"${origin}/nayive/share-target/\",\"method\":\"POST\",\"enctype\":\"multipart/form-data\",\"params\":{\"title\":\"title\",\"text\":\"text\",\"url\":\"url\",\"files\":[{\"name\":\"photos\",\"accept\":[\"image/*\"]}]}}"
+    }
+
+    signingConfigs {
+        if (signing) {
+            release {
+                storeFile = new File(signing.getProperty('dir'), signing.getProperty('storeFile'))
+                storePassword = signing.getProperty('storePassword')
+                keyAlias = signing.getProperty('keyAlias')
+                keyPassword = signing.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        // A debug build may talk to a test server instead (nayive.origin.debug,
+        // e.g. http://10.0.2.2:4343 - the emulator's host). Plain HTTP is only
+        // allowed in debug (src/debug/res/xml/network_security_config.xml).
+        debug {
+            def dbg = local.getProperty('nayive.origin.debug')
+            if (dbg) {
+                dbg = dbg.replaceAll('/+$', '')
+                buildConfigField 'String', 'ORIGIN', "\"${dbg}\""
+                manifestPlaceholders = [nayiveOrigin: dbg, nayiveHost: new URI(dbg).host]
+            }
+        }
+        release {
+            minifyEnabled = false
+            if (signing) signingConfig = signingConfigs.release
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+        resValues = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
+    implementation 'androidx.core:core:1.17.0'
+}

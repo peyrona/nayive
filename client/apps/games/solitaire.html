@@ -1,0 +1,1145 @@
+<!-- solitaire.html - Klondike, one of the nine games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the games share
+     through window.NayiveGames.
+
+     It is the widest game of the nine - eleven piles across and a column
+     that can grow to nineteen cards - and that is the whole of its layout
+     problem: the cards are sized off ONE length, like every other board in
+     the suite, and a column too tall for the room it is in CLOSES UP
+     instead of pushing the table off the screen (see layout()). -->
+    <style>
+        /* ---- Solitaire ----------------------------------------------------
+           Eleven piles in two rows: the stock and the waste on the left of the
+           top row, the four homes on its right, and the seven columns under
+           them. Like Chess and 2048 it is turn-based - no canvas, no loop -
+           and like them everything is a fraction of one length, --card-h, so
+           the whole table scales with the window and nothing ever has to be
+           scrolled to.
+
+           The one thing that length CANNOT be measured against is the tallest
+           column: a column of nineteen cards fanned at a comfortable step is
+           five times the height of the card, and sizing for it would leave a
+           phone playing with stamps. So the cards are sized for a table of a
+           normal shape and the FAN is what gives: layout() shortens the step
+           of a column that would not fit, and only of that column. */
+        .solitaire
+        {
+            position: relative;             /* the two covers are absolute over the pane */
+            display: flex; flex-direction: column; height: 100%;
+            padding: 10px 12px 6px; box-sizing: border-box; gap: 8px;
+        }
+
+        /* NOTHING but the table goes in here: anything else inside a size
+           container eats into the very height the cards are measured against
+           (see 2048 and Chess, where the hint had to move out for the same
+           reason). */
+        .sol-area
+        {
+            flex: 1 1 auto; min-height: 0; align-self: stretch; overflow: auto;
+            display: flex; container-type: size;
+        }
+
+        .sol-table
+        {
+            /* The one length. Three limits meet in it: the width of eleven
+               cards' worth of columns (7 across, the top row is never wider),
+               the height of a table with a column of about three and a half
+               cards in it, and a cap so a 4K window does not deal playing
+               cards the size of postcards. The floor is a card a FINGER can
+               hit; under it the table scrolls inside the pane, the way
+               Minesweeper's board does. */
+            --card-h: max( 44px, min( 140px, 100cqw / 7.42 * 1.42, 100cqh / 4.9 ) );
+            --card-w: calc( var(--card-h) / 1.42 );
+            --gap:    calc( var(--card-w) * 0.07 );
+            /* The face is the same off-white in both schemes, mixed a little
+               way into the theme's card colour: a playing card is light, and
+               the dark scheme only takes the glare off it. One expression, two
+               schemes, nothing to keep in step by hand (Chess's squares are
+               the same trick). */
+            --face:   color-mix( in srgb, #F7F2E7 88%, var(--card2) );
+            --back:   color-mix( in srgb, var(--accent) 55%, #1F3A40 );
+            --ink:    #2A2620;
+            --ink-red:#B02A1E;
+
+            position: relative; margin: auto; height: 100%;
+            width: calc( var(--card-w) * 7 + var(--gap) * 6 );
+            display: flex; flex-direction: column;
+            gap: calc( var(--card-h) * 0.2 );
+            -webkit-user-select: none; user-select: none;
+        }
+
+        /* Both rows are the same seven-column grid, so a home pile is exactly
+           over the column under it and the whole table reads as one shape. */
+        .sol-top, .sol-cols
+        {
+            display: grid; gap: var(--gap);
+            grid-template-columns: repeat( 7, 1fr );
+        }
+        .sol-top  { flex: 0 0 auto; height: var(--card-h); }
+        .sol-cols { flex: 1 1 auto; min-height: 0; }
+
+        /* A pile is only a box with a position: what is in it is placed by
+           layout(), because a fanned column is not a thing any flow can do. */
+        .sol-pile, .sol-col { position: relative; }
+        .sol-col            { min-height: var(--card-h); }
+
+        /* The empty pile: where a card may go when there is none there yet.
+           It is a <button> so a keyboard and a screen reader get the table for
+           nothing, and a column only has one while it IS empty - a box under a
+           card is a border peeking out at the corners and one more thing for
+           the tab key to walk through. */
+        .sol-slot
+        {
+            position: absolute; inset: 0 0 auto 0; height: var(--card-h);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--line); border-radius: calc( var(--card-h) * 0.075 );
+            background: color-mix( in srgb, var(--card2) 45%, transparent );
+            color: var(--text-faint); font-family: inherit; line-height: 1;
+            font-size: calc( var(--card-h) * 0.34 ); padding: 0; cursor: pointer;
+            touch-action: manipulation;
+        }
+        .sol-slot:disabled  { cursor: default; }
+        .sol-slot svg       { width: calc( var(--card-h) * 0.3 ); height: calc( var(--card-h) * 0.3 ); }
+
+        /* A card. `touch-action: manipulation` is what takes the 300 ms wait
+           off a tap on a phone without also stopping the page from scrolling
+           around it. */
+        .sol-card
+        {
+            position: absolute; left: 0; top: 0;
+            width: 100%; height: var(--card-h);
+            box-sizing: border-box; padding: 0; margin: 0; cursor: pointer;
+            border: 1px solid color-mix( in srgb, var(--ink) 25%, transparent );
+            border-radius: calc( var(--card-h) * 0.075 );
+            background: var(--face); color: var(--ink);
+            font-family: inherit; font-weight: 600; line-height: 1;
+            box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.22 );
+            touch-action: manipulation; overflow: hidden;
+        }
+        .sol-card.red  { color: var(--ink-red); }
+        /* The back. Two tints of the app's own accent and a rim, so the stock
+           reads as a stack of cards and not as a hole. */
+        .sol-card.down
+        {
+            background:
+                repeating-linear-gradient( 45deg,
+                    color-mix( in srgb, #FFFFFF 12%, transparent ) 0 calc( var(--card-h) * 0.05 ),
+                    transparent calc( var(--card-h) * 0.05 ) calc( var(--card-h) * 0.1 ) ),
+                var(--back);
+            border-color: color-mix( in srgb, #000000 30%, transparent );
+        }
+
+        /* The index in the corner and the suit in the middle: the two things a
+           fanned column shows of a card it is mostly covering. The corner one
+           has to be readable when 70% of the card is under the next one, so it
+           is the bigger of the two jobs and sits at the very top. */
+        .sol-ix
+        {
+            position: absolute; top: 6%; left: 7%;
+            font-size: calc( var(--card-h) * 0.235 ); letter-spacing: -0.02em;
+        }
+        .sol-pip
+        {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: calc( var(--card-h) * 0.4 ); opacity: 0.9;
+        }
+
+        /* The card the player has picked up, and where it may go: a ring in
+           the accent on the one, a dashed one on the others - the same idea as
+           Chess's dots and rings, where the shape says what the square is for
+           before anything moves. */
+        .sol-card.is-sel
+        {
+            box-shadow: 0 0 0 calc( var(--card-h) * 0.035 ) var(--accent), 0 2px 6px rgba( 0, 0, 0, 0.3 );
+        }
+        .sol-card.is-drop, .sol-slot.is-drop
+        {
+            outline: calc( var(--card-h) * 0.03 ) dashed var(--accent);
+            outline-offset: calc( var(--card-h) * -0.03 );
+        }
+        .sol-slot.is-drop { background: color-mix( in srgb, var(--accent) 16%, transparent ); }
+
+        .sol-card:focus, .sol-slot:focus         { outline: none; }
+        .sol-card:focus-visible, .sol-slot:focus-visible
+        {
+            outline: 2px solid var(--accent); outline-offset: 2px;
+        }
+
+        /* The hint is OUTSIDE .sol-area, like Sudoku's and Tetris's: it is not
+           sized off --card-h, and a size container must hold nothing that is
+           not. */
+        .sol-hint { margin: 0; text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+
+        /* PHONE: the table takes the whole width it can get. */
+        @media (max-width: 640px)
+        {
+            .solitaire { padding: 6px 6px 4px; gap: 6px; }
+        }
+    </style>
+
+            <!-- Solitaire. The eleven piles are here and every card in them is
+                 built in JS - they are all the same and only their faces and
+                 their places change - so the table opens empty. The two covers
+                 sit over the PANE and not over the header, so the game's name
+                 (the way back) and its toolbar stay live. -->
+            <section class="game-pane" data-pane="solitaire">
+                <div class="solitaire">
+                    <div class="view-bar" data-options="solitaire">
+                        <!-- How many cards a tap on the stock turns over. It is
+                             a mode switch, the same shape as Minesweeper's
+                             three sizes, and like them it DEALS AGAIN at once:
+                             one card or three is what the whole game is, not a
+                             setting inside it. -->
+                        <div class="tb-modes">
+                            <button class="icon-btn sm" data-sol-draw="1" type="button" data-i18n-attr="title:games.solitaireDraw1, aria-label:games.solitaireDraw1">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="4" width="9" height="16" rx="2"></rect></svg>
+                            </button>
+                            <button class="icon-btn sm is-active" data-sol-draw="3" type="button" data-i18n-attr="title:games.solitaireDraw3, aria-label:games.solitaireDraw3">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="8" height="16" rx="2"></rect><path d="M13 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"></path><path d="M17.5 6.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2"></path></svg>
+                            </button>
+                        </div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.solitaireMoves">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><line x1="4" y1="6" x2="4.01" y2="6"></line><line x1="4" y1="12" x2="4.01" y2="12"></line><line x1="4" y1="18" x2="4.01" y2="18"></line></svg>
+                                <b id="solMoves">0</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.solitaireTime">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15.5 14"></polyline></svg>
+                                <b id="solTime">0:00</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.solitaireBest">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0z"></path><path d="M8 4.5H5.5V7a3 3 0 0 0 3 3"></path><path d="M16 4.5h2.5V7a3 3 0 0 1-3 3"></path><line x1="12" y1="12" x2="12" y2="17"></line><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line><path d="M9.5 20.5c0-2 1-3.5 2.5-3.5s2.5 1.5 2.5 3.5"></path></svg>
+                                <b id="solBest">--</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="solPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="solUndo" type="button" data-i18n-attr="title:games.solitaireUndo, aria-label:games.solitaireUndo">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-6a5 5 0 0 0-5-5H4"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="solNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Paused: the table is covered SOLIDLY, the way the two
+                         timed games' boards are. A stopped clock over a table
+                         you can still read is not a pause, it is free thinking
+                         time - and here it is thinking time over every card on
+                         the screen. -->
+                    <div class="game-cover solid" id="solPaused" hidden>
+                        <p class="game-cover-t" data-i18n="games.paused"></p>
+                        <button class="text-btn" id="solResume" type="button" data-i18n="games.resume"></button>
+                    </div>
+
+                    <!-- Won. Not solid: there is nothing left to work out from
+                         a table that is over, and the four full homes are the
+                         nicest thing in the game to look at. -->
+                    <div class="game-cover" id="solOver" hidden>
+                        <p class="game-cover-t" id="solOverTitle"></p>
+                        <p class="game-cover-s" id="solOverSub"></p>
+                        <button class="text-btn" id="solOverBtn" type="button" data-i18n="games.newGame"></button>
+                    </div>
+
+                    <div class="sol-area">
+                        <div class="sol-table" id="solTable">
+                            <div class="sol-top">
+                                <div class="sol-pile" id="solStock" data-pile="stock"></div>
+                                <div class="sol-pile" id="solWaste" data-pile="waste"></div>
+                                <div class="sol-pile"></div>
+                                <div class="sol-pile" data-pile="found" data-i="0"></div>
+                                <div class="sol-pile" data-pile="found" data-i="1"></div>
+                                <div class="sol-pile" data-pile="found" data-i="2"></div>
+                                <div class="sol-pile" data-pile="found" data-i="3"></div>
+                            </div>
+                            <div class="sol-cols" id="solCols"></div>
+                        </div>
+                    </div>
+
+                    <p class="sol-hint" data-i18n="games.hintSolitaire"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE GAMES"): the same twelve in
+        // every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
+
+        //------------------------------------------------------------------------//
+        // SOLITAIRE (Klondike)
+        //
+        // Three parts, in the order they are best read: the PACK (what a card
+        // is and where it may go), the GAME (the piles and the moves between
+        // them) and the TABLE (what is on the screen, and the one piece of
+        // arithmetic that keeps it there - see layout()).
+        //
+        // It keeps a TIME, like Minesweeper and Sudoku, and keeps one per draw
+        // mode: turning one card over is a different game from turning three,
+        // and a record set at the easy one would never be beaten at the other.
+        // A time is only written when the table is finished, so a game given
+        // up on costs nothing.
+
+        var Solitaire = ( function ()
+        {
+            //---- the pack ----------------------------------------------------
+            //
+            // A card is ONE NUMBER, 0..51: the suit is what is left over from
+            // four and the rank is what is left of the division. So a whole
+            // deal is an array of 52 small integers, an undo snapshot is a
+            // short string, and there is no object to keep in step with itself.
+
+            var SUITS = [ '♠', '♥', '♦', '♣' ];   // spades hearts diamonds clubs
+            var RANKS = [ '', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
+
+            function suit( c ) { return c % 4; }
+            function rank( c ) { return ( ( c / 4 ) | 0 ) + 1; }
+            function red ( c ) { return c % 4 === 1 || c % 4 === 2; }
+
+            //---- the game ----------------------------------------------------
+
+            var KEY   = { 1: 'solitaire1', 3: 'solitaire3' };   // this game's two keys in the shared `times` map
+            var ORDER = [ 1, 3 ];
+
+            var draw  = 3;                     // how many cards a tap on the stock turns over
+            var stock = [], waste = [];        // card numbers, the last one on top
+            var found = [ [], [], [], [] ];    // one home per suit, in suit order
+            var cols  = [];                    // seven columns of { c: card, up: bool }
+
+            var sel   = null;                  // what the player has picked up: { pile, i, k }
+            var moves = 0, over = false, live = false;
+            var hist  = [];                    // undo: the whole table before each move, as a string
+            var auto  = 0;                     // the timer that walks the last cards home
+
+            // The clock, exactly as the two timed games keep theirs: two
+            // timestamps, never added up, so stopping the interval behind
+            // another pane or a hidden tab only stops a repaint.
+            var startedAt = 0, endedAt = 0, ticker = 0;
+            var paused = false, pausedAt = 0;
+            var times  = {};                   // best time per draw mode, in seconds
+
+            var tableEl, colsEl, stockEl, wasteEl, foundEls = [], colEls = [];
+            var movesEl, timeEl, bestEl, pauseBtn, undoBtn, coverEl;
+            var overEl, overTitleEl, overSubEl;
+
+            //---- what may go where -------------------------------------------
+
+            // A home takes its own suit, in order, from the ace up.
+            function canHome( c, s )
+            {
+                return suit( c ) === s && rank( c ) === found[ s ].length + 1;
+            }
+
+            // A column takes a king when it is empty, and otherwise a card one
+            // lower than its top one and of the other colour.
+            function canCol( c, i )
+            {
+                var col = cols[ i ], top;
+
+                if( ! col.length ) return rank( c ) === 13;
+
+                top = col[ col.length - 1 ];
+                return top.up && red( top.c ) !== red( c ) && rank( top.c ) === rank( c ) + 1;
+            }
+
+            // The cards the player is holding: the selected one and everything
+            // on top of it. Only a column can hand over more than one, and what
+            // it hands over is always a run - a column is only ever built by
+            // the rule above - but it is checked anyway, because an undo of a
+            // half-finished deal is cheaper to rule out here than to find later.
+            function held()
+            {
+                var out = [], col, j;
+
+                if( ! sel ) return out;
+                if( sel.pile === 'waste' ) return waste.length ? [ waste[ waste.length - 1 ] ] : [];
+                if( sel.pile === 'found' ) return found[ sel.i ].length ? [ found[ sel.i ][ found[ sel.i ].length - 1 ] ] : [];
+
+                col = cols[ sel.i ];
+                for( j = sel.k; j < col.length; j++ )
+                {
+                    if( ! col[ j ].up ) return [];
+                    if( out.length && ( red( col[ j ].c ) === red( out[ out.length - 1 ] ) ||
+                                        rank( col[ j ].c ) !== rank( out[ out.length - 1 ] ) - 1 ) ) return [];
+                    out.push( col[ j ].c );
+                }
+                return out;
+            }
+
+            //---- a new deal ---------------------------------------------------
+
+            function shuffle( a )
+            {
+                var i, j, t;
+
+                for( i = a.length - 1; i > 0; i-- )
+                {
+                    j = Math.floor( Math.random() * ( i + 1 ) );
+                    t = a[ i ]; a[ i ] = a[ j ]; a[ j ] = t;
+                }
+                return a;
+            }
+
+            function newGame()
+            {
+                var pack = [], i, j;
+
+                for( i = 0; i < 52; i++ ) pack.push( i );
+                shuffle( pack );
+
+                cols = [ [], [], [], [], [], [], [] ];
+                for( i = 0; i < 7; i++ )
+                    for( j = i; j < 7; j++ )
+                        cols[ j ].push( { c: pack.pop(), up: i === j } );   // one face up at the foot of each
+
+                stock = pack;                  // the twenty-four that were not dealt
+                waste = [];
+                found = [ [], [], [], [] ];
+
+                sel = null; moves = 0; over = false; hist = [];
+                startedAt = 0; endedAt = 0;
+                stopAuto();
+                stopClock();
+                unpause();
+                overEl.hidden = true;
+
+                render();
+                sfx.play( 'start' );           // silent at boot: there is no sound before the first press
+            }
+
+            //---- the moves ----------------------------------------------------
+            //
+            // Every one of them goes through here: snap() first, so the undo
+            // button has the table as it was, then the cards, then done().
+
+            function snap()
+            {
+                hist.push( JSON.stringify( { s: stock, w: waste, f: found, c: cols, m: moves } ) );
+                if( hist.length > 400 ) hist.shift();
+            }
+
+            function undo()
+            {
+                var was;
+
+                // Not while the table is paused, and not once it is finished:
+                // a won game is a result, and the button is disabled at both
+                // ends the way the pause button is.
+                if( paused || over || ! hist.length ) return;
+
+                stopAuto();
+                was = JSON.parse( hist.pop() );
+                stock = was.s; waste = was.w; found = was.f; cols = was.c; moves = was.m;
+
+                sel = null;
+                paintPause();
+                render();
+                sfx.play( 'slide' );
+            }
+
+            // What every move ends with: the clock started if this was the
+            // first one, the count up, the table painted and the four homes
+            // asked whether that was the last card.
+            function done()
+            {
+                moves++;
+                begin();
+                sel = null;
+                render();
+                if( ! win() ) mayAuto();
+            }
+
+            // The stock: turn cards over, or - when it is empty - put the
+            // waste back under it and go round again. Unlimited, at both draw
+            // modes: a Klondike that cannot be dealt again is a different game.
+            function tapStock()
+            {
+                var n, i;
+
+                // Nothing to turn and nothing to put back. render() and not a
+                // bare return: tap() has already emptied the hand, and the ring
+                // would stay on the screen over a card that is no longer held.
+                if( ! stock.length && ! waste.length ) { sfx.play( 'bump' ); render(); return; }
+
+                snap();
+
+                if( stock.length )
+                {
+                    n = Math.min( draw, stock.length );
+                    for( i = 0; i < n; i++ ) waste.push( stock.pop() );
+                    sfx.play( 'slide' );
+                }
+                else
+                {
+                    while( waste.length ) stock.push( waste.pop() );
+                    sfx.play( 'slide' );
+                }
+
+                done();
+            }
+
+            // Takes the held cards off the pile they are on. Called only once
+            // the move is known to be legal.
+            function lift( n )
+            {
+                var col;
+
+                if( sel.pile === 'waste' ) { waste.pop(); return; }
+                if( sel.pile === 'found' ) { found[ sel.i ].pop(); return; }
+
+                col = cols[ sel.i ];
+                col.splice( col.length - n, n );
+
+                // The card that was under them comes face up. This is the only
+                // thing in the game that happens by itself, and it is the whole
+                // point of the game.
+                if( col.length && ! col[ col.length - 1 ].up )
+                {
+                    col[ col.length - 1 ].up = true;
+                    sfx.play( 'open' );
+                }
+            }
+
+            // The move the player asked for, from what is held to (pile, i).
+            // Returns true when something moved.
+            function moveTo( pile, i )
+            {
+                var cards = held(), j;
+
+                if( ! cards.length ) return false;
+
+                if( pile === 'found' )
+                {
+                    if( cards.length !== 1 || ! canHome( cards[ 0 ], i ) ) return false;
+                    if( sel.pile === 'found' ) return false;         // a home to itself
+
+                    snap();
+                    lift( 1 );
+                    found[ i ].push( cards[ 0 ] );
+                    sfx.play( 'unit' );
+                    done();
+                    return true;
+                }
+
+                if( pile === 'col' )
+                {
+                    if( sel.pile === 'col' && sel.i === i ) return false;
+                    if( ! canCol( cards[ 0 ], i ) ) return false;
+
+                    snap();
+                    lift( cards.length );
+                    for( j = 0; j < cards.length; j++ ) cols[ i ].push( { c: cards[ j ], up: true } );
+                    sfx.play( 'open' );
+                    done();
+                    return true;
+                }
+
+                return false;
+            }
+
+            // The shortcut every solitaire has: a card that has a home goes to
+            // it without being told which. It is what a second tap on the card
+            // already in the hand does.
+            function toHome()
+            {
+                var cards = held();
+
+                if( cards.length !== 1 ) return false;
+                return moveTo( 'found', suit( cards[ 0 ] ) );
+            }
+
+            //---- picking a card up --------------------------------------------
+            //
+            // One tap chooses, the next says where - Chess's way, and for
+            // Chess's reason: it is the one thing that works the same with a
+            // mouse and with a thumb. A tap on the card already in the hand
+            // sends it home if it can go, and otherwise puts it down.
+
+            function canTake( pile, i, k )
+            {
+                if( pile === 'waste' ) return waste.length > 0 && k === waste.length - 1;
+                if( pile === 'found' ) return found[ i ].length > 0 && k === found[ i ].length - 1;
+                if( pile === 'col'   ) return k >= 0 && k < cols[ i ].length && cols[ i ][ k ].up;
+                return false;
+            }
+
+            function tap( pile, i, k )
+            {
+                var was = sel;
+
+                if( paused || over || auto ) return;
+
+                if( pile === 'stock' ) { sel = null; tapStock(); return; }
+
+                // Something is in the hand: this tap is where it goes.
+                if( was )
+                {
+                    if( was.pile === pile && was.i === i && ( k < 0 || was.k === k ) )
+                    {
+                        if( ! toHome() ) { sel = null; render(); }      // put it down again
+                        return;
+                    }
+
+                    if( moveTo( pile, i ) ) return;
+
+                    // Not a move. The tap is read as a new choice instead of as
+                    // a mistake: a player who tapped a card meant that card.
+                    sel = null;
+                    if( ! canTake( pile, i, k ) ) { sfx.play( 'bump' ); render(); return; }
+                }
+
+                if( ! canTake( pile, i, k ) ) { if( was ) render(); return; }
+
+                sel = { pile: pile, i: i, k: k };
+                render();
+            }
+
+            //---- the last cards ------------------------------------------------
+            //
+            // Once the stock is empty and every card on the table is face up,
+            // the rest of the game is arithmetic: there is no choice left to
+            // make and no card left to find. So it plays itself out, one card
+            // every 140 ms, and the player watches the table empty.
+
+            function mayAuto()
+            {
+                var i, j;
+
+                if( over || auto || stock.length || waste.length ) return;
+
+                for( i = 0; i < 7; i++ )
+                    for( j = 0; j < cols[ i ].length; j++ )
+                        if( ! cols[ i ][ j ].up ) return;
+
+                auto = setTimeout( autoStep, 180 );
+            }
+
+            // One card, and no timer of its own for the next: the move ends in
+            // done(), which asks mayAuto() again, so the whole run is ONE
+            // timer handle from beginning to end and stopAuto() really stops it.
+            function autoStep()
+            {
+                var i, top;
+
+                auto = 0;
+                if( paused || over ) return;
+
+                for( i = 0; i < 7; i++ )
+                {
+                    if( ! cols[ i ].length ) continue;
+
+                    top = cols[ i ][ cols[ i ].length - 1 ].c;
+                    if( ! canHome( top, suit( top ) ) ) continue;
+
+                    sel = { pile: 'col', i: i, k: cols[ i ].length - 1 };
+                    if( moveTo( 'found', suit( top ) ) ) return;
+                }
+
+                sel = null;
+                render();
+            }
+
+            function stopAuto()
+            {
+                if( auto ) clearTimeout( auto );
+                auto = 0;
+            }
+
+            //---- the clock -----------------------------------------------------
+            //
+            // Minesweeper's and Sudoku's, word for word: two timestamps, the
+            // elapsed time READ from them, and a pause that shifts the start
+            // rather than counting the seconds itself.
+
+            function seconds()
+            {
+                if( ! startedAt ) return 0;
+                return Math.floor( ( ( endedAt || ( paused ? pausedAt : Date.now() ) ) - startedAt ) / 1000 );
+            }
+
+            function runClock()
+            {
+                if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
+                ticker = setInterval( function () { timeEl.textContent = clock( seconds() ); }, 250 );
+            }
+
+            function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
+
+            // The clock starts on the first move and not on the deal: a table
+            // dealt and left while another game is played two cards away is not
+            // a game that took twenty minutes.
+            function begin()
+            {
+                if( startedAt ) return;
+                startedAt = Date.now();
+                runClock();
+                paintPause();
+            }
+
+            //---- pausing --------------------------------------------------------
+
+            function paintPause()
+            {
+                pauseButton( pauseBtn, paused, ! startedAt || over );
+            }
+
+            function pause()
+            {
+                if( paused || over || ! startedAt ) return;
+
+                paused   = true;
+                pausedAt = Date.now();
+                stopAuto();
+                stopClock();
+                coverEl.hidden = false;
+                paintPause();
+                // Heard only when the player pressed it: leave() gets here with
+                // `live` already false, and a hidden tab with document.hidden.
+                if( live && ! document.hidden ) sfx.play( 'pause' );
+            }
+
+            function resume()
+            {
+                if( ! paused ) return;
+
+                startedAt += Date.now() - pausedAt;   // the pause never happened, as far as the clock is concerned
+                paused = false;
+                coverEl.hidden = true;
+                timeEl.textContent = clock( seconds() );
+                runClock();
+                paintPause();
+                mayAuto();
+                sfx.play( 'resume' );
+            }
+
+            function unpause()                        // a new deal: no pause to come back from
+            {
+                paused = false;
+                coverEl.hidden = true;
+                paintPause();
+            }
+
+            //---- the end --------------------------------------------------------
+
+            function win()
+            {
+                var secs, record;
+
+                if( found[ 0 ].length + found[ 1 ].length + found[ 2 ].length + found[ 3 ].length < 52 ) return false;
+
+                over    = true;
+                endedAt = Date.now();
+                stopAuto();
+                stopClock();
+                paintPause();
+
+                secs   = seconds();
+                record = ! times[ draw ] || secs < times[ draw ];
+                if( record ) { times[ draw ] = secs; saveTime( KEY[ draw ], secs ); }
+                bestEl.textContent = clock( times[ draw ] );
+
+                overTitleEl.textContent = T( 'games.solitaireWonTitle' );
+                overSubEl.textContent   = TF( 'games.solitaireWon', { time: clock( secs ), n: moves } );
+                overEl.hidden = false;
+
+                NayiveUI.toast( TF( record ? 'games.solitaireRecord' : 'games.solitaireWon',
+                                    { time: clock( secs ), n: moves } ) );
+                sfx.play( record ? 'record' : 'win', null, 0.2 );
+
+                // The table is painted BEFORE this is called - done() paints and
+                // then asks - so the last paint still thought the game was
+                // going. Without this the undo button sits there enabled over a
+                // finished table and does nothing when it is pressed.
+                render();
+                return true;
+            }
+
+            //---- the table -------------------------------------------------------
+            //
+            // Everything on the screen is built again on every move: fifty-two
+            // buttons is nothing to a browser, and a table built once and then
+            // kept in step with the game by hand is where a solitaire goes
+            // wrong. The cards are placed by layout(), below.
+
+            function cardEl( c, up )
+            {
+                var el = document.createElement( up ? 'button' : 'div' );
+                var ix, pip;
+
+                if( up ) el.type = 'button';
+                el.className = 'sol-card' + ( up ? ( red( c ) ? ' red' : '' ) : ' down' );
+
+                if( up )
+                {
+                    ix = document.createElement( 'span' );
+                    ix.className   = 'sol-ix';
+                    ix.textContent = RANKS[ rank( c ) ] + SUITS[ suit( c ) ];
+
+                    pip = document.createElement( 'span' );
+                    pip.className   = 'sol-pip';
+                    pip.textContent = SUITS[ suit( c ) ];
+
+                    el.appendChild( ix );
+                    el.appendChild( pip );
+                }
+                return el;
+            }
+
+            // An empty pile: the button that is the drop zone until a card
+            // covers it. `glyph` is what it shows - a suit for a home, the two
+            // arrows for a stock that is ready to go round again.
+            function slotEl( glyph, disabled )
+            {
+                var el = document.createElement( 'button' );
+
+                el.type      = 'button';
+                el.className = 'sol-slot';
+                el.disabled  = !! disabled;
+                if( glyph === 'redeal' )
+                    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>';
+                else if( glyph ) el.textContent = glyph;
+
+                return el;
+            }
+
+            // The marks the selection puts on the table: the card in the hand
+            // gets the ring, and every pile it may legally go to gets the
+            // dashed one. Worked out once per paint, from the cards held.
+            function drops()
+            {
+                var cards = held(), out = { found: {}, col: {} }, i;
+
+                if( ! cards.length ) return out;
+
+                for( i = 0; i < 4; i++ )
+                    if( cards.length === 1 && sel.pile !== 'found' && canHome( cards[ 0 ], i ) ) out.found[ i ] = true;
+
+                for( i = 0; i < 7; i++ )
+                    if( ! ( sel.pile === 'col' && sel.i === i ) && canCol( cards[ 0 ], i ) ) out.col[ i ] = true;
+
+                return out;
+            }
+
+            function render()
+            {
+                var mark = drops(), i, k, el, col, slot;
+
+                //---- the stock: ONE back for the whole pile, or the arrows
+                stockEl.innerHTML = '';
+                if( stock.length )
+                {
+                    // The back is what is tapped, so it is a real button and
+                    // not the scenery cardEl() makes of a face-down card.
+                    el = document.createElement( 'button' );
+                    el.type      = 'button';
+                    el.className = 'sol-card down';
+                    el.title     = T( 'games.solitaireStock' );
+                    el.setAttribute( 'aria-label', el.title );   // a back has no text to read out
+                    stockEl.appendChild( el );
+                }
+                else
+                {
+                    slot = slotEl( waste.length ? 'redeal' : '', ! waste.length );
+                    slot.title = T( waste.length ? 'games.solitaireRedeal' : 'games.solitaireStock' );
+                    slot.setAttribute( 'aria-label', slot.title );
+                    stockEl.appendChild( slot );
+                }
+
+                //---- the waste: the top card, and a glimpse of the two under it
+                wasteEl.innerHTML = '';
+                if( ! waste.length ) wasteEl.appendChild( slotEl( '', true ) );
+                else
+                {
+                    k = Math.max( 0, waste.length - 3 );
+                    for( i = k; i < waste.length; i++ )
+                    {
+                        el = cardEl( waste[ i ], true );
+                        el.style.left = ( ( i - k ) * 26 ) + '%';
+
+                        if( i === waste.length - 1 )
+                        {
+                            el.dataset.pile = 'waste';
+                            el.dataset.k    = String( i );
+                            if( sel && sel.pile === 'waste' ) el.classList.add( 'is-sel' );
+                        }
+                        else
+                        {
+                            // The ones behind are scenery: disabled, so there
+                            // is nothing for a tab or a tap to find on them.
+                            el.disabled = true;
+                        }
+                        wasteEl.appendChild( el );
+                    }
+                }
+
+                //---- the four homes
+                for( i = 0; i < 4; i++ )
+                {
+                    foundEls[ i ].innerHTML = '';
+                    if( ! found[ i ].length )
+                    {
+                        slot = slotEl( SUITS[ i ], false );
+                        if( mark.found[ i ] ) slot.classList.add( 'is-drop' );
+                        foundEls[ i ].appendChild( slot );
+                    }
+                    else
+                    {
+                        el = cardEl( found[ i ][ found[ i ].length - 1 ], true );
+                        el.dataset.pile = 'found';
+                        el.dataset.i    = String( i );
+                        el.dataset.k    = String( found[ i ].length - 1 );
+                        if( sel && sel.pile === 'found' && sel.i === i ) el.classList.add( 'is-sel' );
+                        if( mark.found[ i ] ) el.classList.add( 'is-drop' );
+                        foundEls[ i ].appendChild( el );
+                    }
+                }
+
+                //---- the seven columns
+                for( i = 0; i < 7; i++ )
+                {
+                    col = cols[ i ];
+                    colEls[ i ].innerHTML = '';
+
+                    // The empty box is there only while the column IS empty: a
+                    // box under a card is a border peeking out at the corners
+                    // and one more thing for the tab key to walk through.
+                    if( ! col.length )
+                    {
+                        slot = slotEl( '', false );
+                        if( mark.col[ i ] ) slot.classList.add( 'is-drop' );
+                        colEls[ i ].appendChild( slot );
+                    }
+
+                    for( k = 0; k < col.length; k++ )
+                    {
+                        el = cardEl( col[ k ].c, col[ k ].up );
+                        if( col[ k ].up )
+                        {
+                            el.dataset.pile = 'col';
+                            el.dataset.i    = String( i );
+                            el.dataset.k    = String( k );
+                            if( sel && sel.pile === 'col' && sel.i === i && k >= sel.k ) el.classList.add( 'is-sel' );
+                            if( mark.col[ i ] && k === col.length - 1 ) el.classList.add( 'is-drop' );
+                        }
+                        colEls[ i ].appendChild( el );
+                    }
+                }
+
+                movesEl.textContent = String( moves );
+                timeEl.textContent  = clock( seconds() );
+                undoBtn.disabled    = ! hist.length || over;
+
+                layout();
+            }
+
+            // WHERE THE CARDS SIT, and the only arithmetic on the screen.
+            //
+            // A column is a stack of absolutely placed cards, each one a step
+            // below the one before it: a small step over a face-down card
+            // (nothing of it has to be read) and a bigger one over a face-up
+            // card (its corner index has to be). A column that would run past
+            // the foot of the pane CLOSES UP - both steps scaled by the one
+            // factor that makes it fit - so the table never grows a scrollbar
+            // and the cards never have to be dealt small enough for the worst
+            // column in Klondike (six down and thirteen up, five cards tall).
+            function layout()
+            {
+                var cardH = foundEls[ 0 ].getBoundingClientRect().height;
+                var room  = colsEl.clientHeight;
+                var col, kids, down, up, need, k, y, i, j;
+
+                if( ! cardH ) return;          // the pane is not on screen yet: enter() does it again
+
+                for( i = 0; i < 7; i++ )
+                {
+                    col  = cols[ i ];
+                    kids = colEls[ i ].querySelectorAll( '.sol-card' );
+                    down = cardH * 0.16;
+                    up   = cardH * 0.3;
+                    need = 0;
+                    k    = 1;
+                    y    = 0;
+
+                    for( j = 0; j + 1 < col.length; j++ ) need += col[ j ].up ? up : down;
+
+                    if( need > 0 && need + cardH > room ) k = ( room - cardH ) / need;
+                    if( k < 0.12 ) k = 0.12;   // a floor: under it the corner index is covered anyway
+
+                    for( j = 0; j < col.length && j < kids.length; j++ )
+                    {
+                        kids[ j ].style.top = Math.round( y ) + 'px';
+                        y += ( col[ j ].up ? up : down ) * k;
+                    }
+                }
+            }
+
+            //---- mounting ---------------------------------------------------------
+
+            function enter()
+            {
+                if( live ) return;
+                live = true;
+                timeEl.textContent = clock( seconds() );
+                paintPause();
+                runClock();
+                layout();                      // the first real measurement: the pane had no size until now
+            }
+
+            // Leaving PAUSES, the way the two timed games do and for their
+            // reason: the clock is two timestamps, so a table left behind goes
+            // on being timed while the Games screen is up, and Escape leaves in
+            // one press.
+            function leave()
+            {
+                live = false;
+                pause();
+                stopAuto();
+                stopClock();
+            }
+
+            // Times come in from the file and go back the same way, merged by
+            // MINIMUM - Minesweeper's rule, for Minesweeper's reason: the plug
+            // re-reads whenever the tab is focused and that answer can be older
+            // than the table just finished here. Only this game's own two keys
+            // are read, so the other two games' sit in the same map untouched.
+            function adoptTimes( saved )
+            {
+                var out = {};
+
+                ORDER.forEach( function ( k )
+                {
+                    var n = Number( saved[ KEY[ k ] ] );
+
+                    if( isFinite( n ) && n > 0 && ( ! times[ k ] || n < times[ k ] ) ) times[ k ] = n;
+                    if( times[ k ] ) out[ KEY[ k ] ] = times[ k ];
+                } );
+
+                bestEl.textContent = times[ draw ] ? clock( times[ draw ] ) : '--';
+                return out;
+            }
+
+            function init()
+            {
+                var i, el;
+
+                tableEl     = document.getElementById( 'solTable' );
+                colsEl      = document.getElementById( 'solCols' );
+                stockEl     = document.getElementById( 'solStock' );
+                wasteEl     = document.getElementById( 'solWaste' );
+                movesEl     = document.getElementById( 'solMoves' );
+                timeEl      = document.getElementById( 'solTime' );
+                bestEl      = document.getElementById( 'solBest' );
+                pauseBtn    = document.getElementById( 'solPause' );
+                undoBtn     = document.getElementById( 'solUndo' );
+                coverEl     = document.getElementById( 'solPaused' );
+                overEl      = document.getElementById( 'solOver' );
+                overTitleEl = document.getElementById( 'solOverTitle' );
+                overSubEl   = document.getElementById( 'solOverSub' );
+
+                // .sol-pile and not the bare [data-pile="found"]: the card on a
+                // home wears the same two attributes (that is how a tap on it
+                // is read), so the bare one would match the cards as well the
+                // moment there was one on the table.
+                foundEls = Array.prototype.slice.call( tableEl.querySelectorAll( '.sol-pile[data-pile="found"]' ) );
+
+                // The seven columns belong to the table, not to the markup:
+                // they are all the same and only what stands in them changes.
+                for( i = 0; i < 7; i++ )
+                {
+                    el = document.createElement( 'div' );
+                    el.className   = 'sol-col';
+                    el.dataset.pile = 'col';
+                    el.dataset.i    = String( i );
+                    colsEl.appendChild( el );
+                    colEls.push( el );
+                }
+
+                // ONE listener for the whole table rather than one per card,
+                // and it reads the pile off the nearest thing that names one -
+                // so a tap on the empty foot of a column is a tap on the
+                // column, which is exactly what a player means by it.
+                tableEl.addEventListener( 'click', function ( e )
+                {
+                    var el = e.target.closest( '[data-pile]' );
+
+                    if( ! el ) return;
+                    tap( el.dataset.pile,
+                         el.dataset.i === undefined ? 0  : Number( el.dataset.i ),
+                         el.dataset.k === undefined ? -1 : Number( el.dataset.k ) );
+                } );
+
+                // One card or three. Unlike Chess's level and like
+                // Minesweeper's size, it deals again at once: it is not how
+                // hard the game is trying, it is which game is being played.
+                Array.prototype.slice.call( document.querySelectorAll( '[data-sol-draw]' ) ).forEach( function ( b )
+                {
+                    b.addEventListener( 'click', function ()
+                    {
+                        if( Number( b.dataset.solDraw ) === draw ) return;    // it is already this one
+
+                        draw = Number( b.dataset.solDraw );
+                        Array.prototype.slice.call( document.querySelectorAll( '[data-sol-draw]' ) )
+                             .forEach( function ( o ) { o.classList.toggle( 'is-active', o === b ); } );
+                        bestEl.textContent = times[ draw ] ? clock( times[ draw ] ) : '--';
+                        newGame();
+                    } );
+                } );
+
+                pauseBtn.addEventListener( 'click', function () { if( paused ) resume(); else pause(); } );
+                undoBtn.addEventListener( 'click', undo );
+                document.getElementById( 'solNew' ).addEventListener( 'click', newGame );
+                document.getElementById( 'solOverBtn' ).addEventListener( 'click', newGame );
+
+                // The whole cover, not just its button: it is one card and the
+                // card is what the eye and the thumb both aim at.
+                coverEl.addEventListener( 'click', resume );
+
+                // A hidden tab PAUSES the game, the same rule leave() follows:
+                // the clock is two timestamps, so a phone locking mid-game
+                // would go on timing it in a pocket.
+                document.addEventListener( 'visibilitychange', function ()
+                {
+                    if( document.hidden ) pause();
+                    else if( live ) { timeEl.textContent = clock( seconds() ); runClock(); }
+                } );
+
+                // The cards are placed in pixels, so a window that changes
+                // shape has to have them placed again - and the pane's own
+                // height changes with the header's second row on a phone, not
+                // only with the window.
+                if( window.ResizeObserver ) new ResizeObserver( layout ).observe( colsEl );
+
+                newGame();
+                return { enter: enter, leave: leave };
+            }
+
+            return { init: init, adoptTimes: adoptTimes };
+        } )();
+
+        NayiveGames.add( 'solitaire', Solitaire );
+    } )();
+    </script>

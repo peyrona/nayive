@@ -418,10 +418,19 @@ type SearchRoot struct {
 // `limit` and the walk stopped early.
 //
 // Matching is shell-style (`*`, `?`, `[seq]`) on the BASENAME only,
-// case-insensitive. Dot-directories (.trash, .bak, ...), half-written temp
-// files and symlinks are skipped - the same things every other listing hides.
+// case-insensitive.
 func Search(roots []SearchRoot, pattern string, limit int) ([]Node, bool) {
 	pat := strings.ToLower(pattern)
+	return SearchBy(roots, limit, func(name string, _ fs.DirEntry) bool {
+		return fnmatch(strings.ToLower(name), pat)
+	})
+}
+
+// SearchBy is the walk behind Search and the advanced search (search.go):
+// `keep` decides each entry from its basename and its DirEntry. Dot-directories
+// (.trash, .bak, ...), half-written temp files and symlinks are skipped before
+// `keep` sees them - the same things every other listing hides.
+func SearchBy(roots []SearchRoot, limit int, keep func(name string, d fs.DirEntry) bool) ([]Node, bool) {
 	out := []Node{}
 
 	for _, root := range roots {
@@ -457,7 +466,7 @@ func Search(roots []SearchRoot, pattern string, limit int) ([]Node, bool) {
 				}
 			}
 
-			if !fnmatch(strings.ToLower(name), pat) {
+			if !keep(name, d) {
 				return nil
 			}
 			rel := virtualPath(base, p, root.Prefix)
@@ -482,6 +491,67 @@ func Search(roots []SearchRoot, pattern string, limit int) ([]Node, bool) {
 		}
 	}
 	return out, false
+}
+
+// Biggest is the `n` largest FILES under the roots, biggest first - what the
+// "almost out of space" warning sends the user to (GET ?big=). The walk skips
+// what SearchBy skips (dot-folders such as .trash, temp files, symlinks), but it
+// is never cut short: the answer must be the biggest of ALL the files, not of
+// the first few hundred met. Only `n` are kept while walking.
+func Biggest(roots []SearchRoot, n int) []Node {
+	type hit struct {
+		size int64
+		path string
+		info fs.FileInfo
+	}
+	top := []hit{}
+	if n <= 0 {
+		return []Node{}
+	}
+
+	for _, root := range roots {
+		base, err := filepath.Abs(root.Dir)
+		if err != nil {
+			continue
+		}
+		filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || p == base {
+				return nil
+			}
+			name := d.Name()
+			if d.Type()&fs.ModeSymlink != 0 {
+				return nil
+			}
+			if d.IsDir() {
+				if strings.HasPrefix(name, ".") {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if strings.HasPrefix(name, ".") || isTempName(name) {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil || !info.Mode().IsRegular() {
+				return nil
+			}
+			if len(top) == n && info.Size() <= top[n-1].size {
+				return nil
+			}
+			top = append(top, hit{info.Size(), virtualPath(base, p, root.Prefix), info})
+			sort.SliceStable(top, func(i, j int) bool { return top[i].size > top[j].size })
+			if len(top) > n {
+				top = top[:n]
+			}
+			return nil
+		})
+	}
+
+	out := make([]Node, 0, len(top))
+	for _, h := range top {
+		out = append(out, fileNode(scanned{h.info.Name(), "", h.path, false, h.info}))
+	}
+	return out
 }
 
 // virtualPath turns an absolute path back into the path the API addresses.

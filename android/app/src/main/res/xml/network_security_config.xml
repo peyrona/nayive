@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release: HTTPS only. (The debug build has its own copy that also allows
+     plain HTTP, to test against a server on the LAN or the emulator's host.) -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

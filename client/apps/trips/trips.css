@@ -209,18 +209,10 @@
 .photos-row .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
 
 
-/* "Ubicación" field: input (with an in-field "locate on map" button) + a gap + a round action button */
+/* "Ubicación" field: the input + a gap + a round action button */
 .loc-row { display: flex; align-items: center; gap: 12px; }
 .loc-row .icon-btn { flex: 0 0 auto; }
-.loc-input-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
-.loc-input-wrap input[type=text] { width: 100%; padding-right: 40px; }
-.loc-map-btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }   /* look: the shared .icon-btn.sm */
-/* Below the route-panel breakpoint the map isn't shown, so hide the in-field button. */
-@media (max-width: 919.98px)
-{
-    .loc-map-btn { display: none; }
-    .loc-input-wrap input[type=text] { padding-right: 10px; }
-}
+.loc-input-wrap { flex: 1 1 auto; min-width: 0; }
 
 .confirm-msg { font-size: 0.9rem; color: var(--text); line-height: 1.45; margin: 0 0 18px; }
 
@@ -271,6 +263,26 @@
 .calc-source-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: var(--text-dim); background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 7px 10px; }
 .calc-source-row span:first-child { color: var(--text); }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- "Que hay aqui" (discover.js) --------------------------------------- */
+/* The category ticks. Two columns where there is room, one on a phone. Each row
+   is a plain .share-add label from shared/app.css, so the tick and its spacing
+   look like every other tick in Nayive - only the grid is local. They are the
+   dialog's content, not a footnote, so they keep the full text colour. */
+.disc-grid
+{
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0 18px;
+    margin: 2px 0 6px;
+}
+
+@media (min-width: 420px)
+{
+    .disc-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.disc-item { margin: 0; padding: 6px 2px; color: var(--text); }
 
 /* ---- Trip -> PDF (print) ------------------------------------------------ */
 /* #printRoot is filled by exportTripPdf() just before window.print(), then

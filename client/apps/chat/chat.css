@@ -1,0 +1,882 @@
+/* =============================================================================
+ * chat.css - the Chat app (owner: chat/index.html; a person by link:
+ * chat/guest.html). Both pages draw the same screens from chat.js.
+ *
+ * The layout copies WhatsApp on purpose (the owner asked for it: it is what
+ * everybody already knows): the list of chats, a conversation with bubbles,
+ * the bar to write at the BOTTOM and a round green button to start a chat.
+ * That bottom bar and the floating button are this app's one exception to
+ * "toolbars at the top" (app.css). The colours are Nayive's own tokens.
+ *
+ * TWO LAYOUTS (the one 640px break of app.css): on a phone one screen at a
+ * time; wider, the list on the left and the open conversation on the right,
+ * like WhatsApp on a PC.
+ * ===========================================================================*/
+
+html, body { height: 100%; }
+body       { overflow: hidden; }
+
+/* The chat's own names for theme tokens. On :root, not on .chat: the layers
+   laid over everything (menus, sheets, the first-visit screens) hang off
+   <body>, outside it. */
+:root
+{
+    --wall:       var(--bg);
+    --head:       var(--card);
+    --bubble-in:  var(--card);
+    --bubble-out: color-mix(in srgb, var(--accent) 24%, var(--card));
+    --tick-read:  var(--link);
+}
+
+.chat
+{
+    display: flex;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    color: var(--text);
+    background: var(--wall);
+}
+
+/* Person colours: names in a group, avatars. Theme tokens, so each one stays
+   readable in both schemes. */
+[data-c="0"] { --c: var(--accent); }
+[data-c="1"] { --c: var(--link); }
+[data-c="2"] { --c: var(--warn); }
+[data-c="3"] { --c: var(--danger); }
+[data-c="4"] { --c: var(--busy); }
+[data-c="5"] { --c: var(--ok); }
+
+/* ---- the two panes ------------------------------------------------------- */
+.side
+{
+    position: relative;
+    flex: 0 0 var(--side-w, 340px);
+    container: side / inline-size;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--head);
+}
+.main
+{
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.view            { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.view[hidden]    { display: none !important; }
+
+.main-empty
+{
+    flex: 1 1 auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 24px; text-align: center; color: var(--text-faint); font-size: 0.9rem;
+}
+.main-empty svg { width: 64px; height: 64px; color: var(--text-faint); opacity: 0.6; }
+
+@media (max-width: 640px)
+{
+    .side          { flex: 1 1 auto; }
+    .pane-resizer  { display: none; }
+    .main          { display: none; }
+    .chat.in-main .side { display: none; }
+    .chat.in-main .main { display: flex; }
+}
+
+/* ---- avatar -------------------------------------------------------------- */
+.av
+{
+    flex: 0 0 auto;
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.92rem; font-weight: 700;
+    color: var(--c, var(--accent));
+    background: color-mix(in srgb, var(--c, var(--accent)) 22%, var(--card2));
+    user-select: none;
+}
+.av svg   { width: 55%; height: 55%; }
+.av.sm    { width: 34px; height: 34px; font-size: 0.8rem; }
+.av.lg    { width: 48px; height: 48px; font-size: 1.05rem; }
+.av.xl    { width: 96px; height: 96px; font-size: 2rem; }
+.av.has-photo      { overflow: hidden; background: var(--card2); }
+/* connected: a green dot on the picture (lists), a green ring (the open chat) */
+.av-on             { position: relative; flex: 0 0 auto; display: inline-flex; }
+.av-on .on-dot     { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 50%;
+                     background: var(--ok); box-shadow: 0 0 0 2px var(--head); }
+.av.on-ring        { box-shadow: 0 0 0 2px var(--head), 0 0 0 4px var(--ok); }
+.av.has-photo img  { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---- headers ------------------------------------------------------------- */
+/* The list's header is the shared .topbar (app.css): icon, title, then the
+   buttons and the plug in .topbar-actions. Only the search-in-the-bar is ours. */
+.list-head             { flex-wrap: nowrap; overflow: visible; min-height: 53px; }
+.list-head .app-icon   { width: 20px; height: 20px; }
+/* Brand block (the owner): the icon + "Chat" on one row, and the motto - the
+   optional line from "Your profile" - in small print under both. It may shrink
+   so the buttons keep their room: the name wraps no further than its own width
+   (app.css), and a long motto is cut with an ellipsis (its title has it whole). */
+.list-head .brand      { display: inline-flex; flex-direction: column; align-items: stretch;
+                         flex: 0 1 auto; min-width: 0; margin-right: 10px; }
+.list-head .brand-row  { display: flex; align-items: center; }
+.list-head .brand .app-title { margin-right: 0; }
+.list-head .app-motto  { max-width: 34ch; margin-top: 1px; font-size: 0.78rem; line-height: 1.2;
+                         color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A person's page: the same title, but not a link to the launcher (ui.js only
+   turns .app-title into one - a person has no Nayive to go back to). */
+.list-head .app-title-guest { margin: 0 10px 0 4px; font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+.list-head .sync-indicator  { margin-left: 4px; }
+.list-head .search-wrap     { display: none; position: relative; flex: 1 1 auto; min-width: 0; }
+.list-head .search-wrap input { width: 100%; padding-right: 34px; }
+.list-head .search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
+.list-head.searching .topbar-actions { flex: 1 1 auto; min-width: 0; }
+.list-head.searching .search-wrap    { display: block; }
+.list-head.searching .topbar-actions > .icon-btn { display: none; }
+/* Searching: the field takes the bar, so the motto steps aside with the buttons. */
+.list-head.searching .app-motto { display: none; }
+/* The owner's bar holds six buttons: when the list is narrow (a small phone,
+   or dragged thin on a desktop) the word "Chat" steps aside (its icon stays),
+   and the motto with it. */
+@container side (max-width: 339px) { .list-head .app-title, .list-head .app-motto { display: none; } }
+
+.bar
+{
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 4px;
+    min-height: 56px;
+    padding: 6px 6px 6px 4px;
+    background: var(--head);
+    border-bottom: 1px solid var(--line);
+}
+.bar .av  { margin: 0 6px 0 2px; }
+.who
+{
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-direction: column;
+    padding-left: 4px;
+    border: none; background: none; color: inherit; font: inherit; text-align: left;
+}
+button.who { cursor: pointer; }
+.who b     { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-top   { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.who small { font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small.typing { color: var(--accent); }
+.bar .search-in { flex: 1 1 auto; min-width: 0; }
+/* WhatsApp on a PC has no "back" on the open chat: the list is right there. */
+@media (min-width: 641px) { #convBar .back-btn { display: none; } #convBar .av { margin-left: 8px; } }
+.bar .count     { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; padding: 0 4px; }
+
+/* ---- the list of chats --------------------------------------------------- */
+.filters { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px; overflow-x: auto; }
+.filters .pill { font-size: 0.8rem; padding: 5px 12px; }
+/* auto-delete: a clock with the days, one for every chat - the row's right end.
+   It only tells; the clock in the bar is the button. */
+.filters .ttl
+{
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+    margin-left: auto; padding: 5px 4px;
+    font-size: 0.8rem; color: var(--text-dim);
+}
+.filters .ttl[hidden]   { display: none; }
+.filters .ttl svg       { width: 15px; height: 15px; }
+
+.rows { flex: 1 1 auto; overflow-y: auto; padding-bottom: 12px; }
+.row
+{
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 9px 14px;
+    border: none; background: none; color: inherit; font: inherit; text-align: left;
+    cursor: pointer;
+}
+.row:hover          { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.row:focus-visible  { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row.is-open        { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.row .body          { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .l1, .row .l2  { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.row .name          { flex: 1 1 auto; min-width: 0; font-size: 0.98rem; font-weight: 600;
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row time           { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-dim); }
+.row.unread time    { color: var(--accent); font-weight: 600; }
+.row .prev
+{
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 3px;
+    font-size: 0.86rem; color: var(--text-dim); white-space: nowrap; overflow: hidden;
+}
+.row .prev > span   { overflow: hidden; text-overflow: ellipsis; }
+.row .prev svg      { flex: 0 0 auto; width: 16px; height: 16px; }
+.row .prev .read    { color: var(--tick-read); }
+.row .prev.typing   { color: var(--accent); }
+.row .flag svg      { width: 15px; height: 15px; color: var(--text-faint); display: block; }
+.row .state         { font-size: 0.78rem; color: var(--text-dim); }
+.row .state.ok      { color: var(--accent); }
+.row .state.warn    { color: var(--warn); }
+.row .ring
+{
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--accent);
+}
+.row .ring svg      { width: 20px; height: 20px; }
+.row .chk
+{
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--text-faint);
+    display: flex; align-items: center; justify-content: center;
+}
+.row .chk.on        { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.row .chk svg       { width: 14px; height: 14px; }
+.row .x-btn         { margin-right: -6px; }
+.badge
+{
+    flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700; color: var(--on-accent); background: var(--accent);
+}
+.list-note { padding: 18px 20px; font-size: 0.86rem; line-height: 1.45; color: var(--text-dim); text-align: center; }
+.lbl
+{
+    padding: 12px 16px 4px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-dim);
+}
+.hint-bar
+{
+    display: flex; align-items: center; gap: 10px;
+    margin: 4px 12px 8px; padding: 10px 12px;
+    border-radius: var(--radius-m); background: var(--card2);
+    font-size: 0.82rem; line-height: 1.4; color: var(--text-dim);
+}
+.hint-bar svg    { flex: 0 0 auto; width: 20px; height: 20px; color: var(--warn); }
+.hint-bar button { margin-left: auto; }
+
+/* ---- the conversation ---------------------------------------------------- */
+.wall
+{
+    position: relative;
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; overflow-x: hidden;
+    padding: 8px 12px 10px;
+    background-color: var(--wall);
+    background-image: radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.6px);
+    background-size: 18px 18px;
+    overscroll-behavior: contain;
+}
+.wall-in    { display: flex; flex-direction: column; gap: 3px; max-width: 920px; margin: 0 auto; }
+.older      { align-self: center; margin: 4px 0 8px; }
+.chip
+{
+    align-self: center; margin: 8px 0 6px; padding: 4px 10px;
+    border-radius: var(--radius-s); background: var(--head);
+    font-size: 0.72rem; color: var(--text-dim); box-shadow: 0 1px 1px var(--shadow);
+}
+.band
+{
+    align-self: stretch; margin: 8px -12px; padding: 5px;
+    text-align: center; font-size: 0.76rem; color: var(--text-dim);
+    background: color-mix(in srgb, var(--head) 85%, transparent);
+}
+
+.msg
+{
+    position: relative;
+    max-width: min(82%, 560px);
+    padding: 6px 8px 5px 9px;
+    border-radius: var(--radius-s);
+    background: var(--bubble-in);
+    font-size: 0.92rem; line-height: 1.38;
+    box-shadow: 0 1px 1px var(--shadow);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    user-select: text;
+    -webkit-touch-callout: none;
+}
+/* A phone's long press opens the message menu (it has "Copiar"): it must not
+   also select text, as the browser does on its own. The mouse still selects. */
+@media (hover: none), (pointer: coarse)
+{
+    .msg { -webkit-user-select: none; user-select: none; }
+}
+.msg.in               { align-self: flex-start; }
+.msg.out              { align-self: flex-end; background: var(--bubble-out); }
+.msg.tail             { margin-top: 5px; }
+.msg.tail.in          { border-top-left-radius: 0; }
+.msg.tail.out         { border-top-right-radius: 0; }
+.msg.tail::before     { content: ""; position: absolute; top: 0; width: 8px; height: 12px; background: inherit; }
+.msg.tail.in::before  { left: -7px;  clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.msg.tail.out::before { right: -7px; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.msg.has-reac         { margin-bottom: 14px; }
+.msg.hit              { outline: 2px solid var(--warn); outline-offset: 2px; }
+.msg.flash            { outline: 2px solid var(--accent); outline-offset: 2px; }
+.msg.failed           { opacity: 0.75; }
+.msg mark             { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 2px; }
+.msg a                { color: var(--link); text-decoration: underline; }
+.msg .caret
+{
+    position: absolute; top: 2px; right: 2px; width: 26px; height: 26px;
+    display: none; align-items: center; justify-content: center;
+    border: none; border-radius: 50%; padding: 0; cursor: pointer;
+    color: var(--text-dim); background: color-mix(in srgb, var(--head) 80%, transparent);
+}
+.msg .caret svg       { width: 16px; height: 16px; }
+@media (hover: hover) and (pointer: fine)
+{
+    .msg:hover .caret { display: flex; }
+}
+/* A phone has no hover: a photo shows its caret all the time (his call). */
+@media (hover: none), (pointer: coarse)
+{
+    .msg.photo .caret { display: flex; }
+}
+
+.meta
+{
+    float: right;
+    display: inline-flex; align-items: center; gap: 3px;
+    margin: 7px 0 -3px 10px;
+    font-size: 0.66rem; color: var(--text-dim); white-space: nowrap;
+    user-select: none;
+}
+.meta svg       { width: 16px; height: 16px; }
+.meta .read     { color: var(--tick-read); }
+.meta .edited   { font-style: italic; }
+.meta.on-media
+{
+    position: absolute; right: 8px; bottom: 7px; margin: 0; float: none;
+    padding: 1px 6px; border-radius: var(--radius-pill);
+    color: var(--on-accent); background: color-mix(in srgb, var(--text) 45%, transparent);
+}
+.meta.on-media .read { color: inherit; }
+.from  { display: block; margin-bottom: 1px; font-size: 0.8rem; font-weight: 700; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fwd   { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-size: 0.74rem; font-style: italic; color: var(--text-dim); }
+.fwd svg { width: 14px; height: 14px; }
+
+.quote
+{
+    display: block; margin: 0 0 5px; padding: 4px 8px;
+    border-left: 4px solid var(--c, var(--accent)); border-radius: var(--radius-s);
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+    font-size: 0.8rem; white-space: normal; cursor: pointer;
+}
+.quote b    { display: block; color: var(--c, var(--accent)); font-size: 0.78rem; }
+.quote span { color: var(--text-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.reac
+{
+    position: absolute; left: 10px; bottom: -14px;
+    display: flex; align-items: center; gap: 2px;
+    padding: 1px 6px; border-radius: var(--radius-pill);
+    background: var(--head); border: 1px solid var(--line);
+    font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; cursor: pointer;
+}
+.msg.out .reac { left: auto; right: 10px; }
+
+.msg.gone      { color: var(--text-dim); font-style: italic; }
+.msg.gone svg.ic { width: 15px; height: 15px; vertical-align: -3px; margin-right: 4px; }
+
+/* photo */
+.msg.photo        { padding: 3px; }
+.msg.photo .ph
+{
+    display: block; width: 240px; max-width: 100%; height: 200px; border-radius: 6px;
+    object-fit: cover; background: var(--card2); cursor: zoom-in;
+}
+.msg.photo .ph-wrap { position: relative; }
+.msg.photo .cap   { padding: 5px 6px 2px; }
+.msg.photo .from, .msg.photo .fwd, .msg.photo .quote { margin: 3px 6px 5px; }
+
+/* file */
+.filec
+{
+    display: flex; align-items: center; gap: 10px; min-width: 220px;
+    padding: 8px; margin-bottom: 2px; border-radius: var(--radius-s);
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    color: inherit; text-decoration: none; white-space: normal; cursor: pointer;
+}
+.msg a.filec       { color: inherit; text-decoration: none; }
+.filec:hover, .msg a.filec:hover { text-decoration: none; opacity: 1; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.fic
+{
+    flex: 0 0 auto; width: 34px; height: 42px; border-radius: 4px;
+    display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px;
+    font-size: 0.58rem; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase;
+    color: var(--on-accent); background: var(--c, var(--danger));
+}
+.filec .fn  { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.filec .fn b     { font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filec .fn small { font-size: 0.72rem; color: var(--text-dim); }
+.dl
+{
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line); color: var(--text-dim);
+}
+.dl svg { width: 16px; height: 16px; }
+
+/* location */
+.msg.loc      { padding: 3px; width: 260px; }
+.msg.loc .mini
+{
+    position: relative; display: block; width: 100%; height: 140px; border-radius: 6px;
+    overflow: hidden; background: var(--card2); cursor: pointer; isolation: isolate;
+}
+.msg.loc .mini .leaflet-control-container { display: none; }
+.mini-pin
+{
+    position: absolute; left: 50%; top: 50%; z-index: 500; width: 30px; height: 30px;
+    transform: translate(-50%, -100%); color: var(--danger); pointer-events: none;
+}
+.mini-pin svg { width: 30px; height: 30px; fill: currentColor; stroke: var(--card); stroke-width: 1.5; }
+.msg.loc .lt       { padding: 5px 6px 2px; white-space: normal; }
+.msg.loc .lt b     { display: block; font-size: 0.86rem; }
+.msg.loc .lt small { font-size: 0.74rem; color: var(--text-dim); }
+.msg.loc .from, .msg.loc .fwd, .msg.loc .quote { margin: 3px 6px 5px; }
+
+/* contact card */
+.msg.vcard   { width: 250px; padding-bottom: 0; white-space: normal; }
+.cc          { display: flex; align-items: center; gap: 10px; padding: 4px 0 8px; }
+.cc b        { display: block; font-size: 0.92rem; }
+.cc small    { display: block; font-size: 0.74rem; color: var(--text-dim); }
+.cc-act      { display: flex; margin: 0 -8px 0 -9px; border-top: 1px solid var(--line); }
+.cc-act a, .cc-act button
+{
+    flex: 1; padding: 9px 4px; text-align: center; border: none; background: none;
+    font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--accent); cursor: pointer;
+    text-decoration: none;
+}
+.cc-act > * + * { border-left: 1px solid var(--line); }
+
+/* poll */
+.msg.poll        { width: 290px; white-space: normal; }
+.poll-q          { font-weight: 700; margin: 2px 0 2px; }
+.poll-hint       { font-size: 0.74rem; color: var(--text-dim); margin-bottom: 6px; }
+.popt
+{
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 10px;
+    width: 100%; padding: 6px 0; border: none; background: none; color: inherit; font: inherit;
+    text-align: left; cursor: pointer;
+}
+.popt .chk
+{
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--text-faint);
+    display: flex; align-items: center; justify-content: center; color: var(--on-accent);
+}
+.popt .chk.on    { border-color: var(--accent); background: var(--accent); }
+.popt .chk svg   { width: 12px; height: 12px; }
+.popt .n         { font-size: 0.8rem; color: var(--text-dim); }
+.popt .barx      { grid-column: 2 / 4; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
+.popt .barx i    { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.poll-foot       { display: flex; justify-content: center; margin: 4px -8px 0 -9px; border-top: 1px solid var(--line); }
+.poll-foot button{ padding: 8px; border: none; background: none; font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--accent); cursor: pointer; }
+
+.typing-dots { align-self: flex-start; }
+
+.down
+{
+    position: absolute; right: 16px; bottom: 84px; z-index: 3;
+    width: 42px; height: 42px; border-radius: 50%; border: none;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); background: var(--head); box-shadow: var(--elev-card); cursor: pointer;
+}
+.down svg   { width: 20px; height: 20px; }
+.down .badge { position: absolute; top: -6px; right: -4px; }
+
+/* ---- writing ------------------------------------------------------------- */
+.composer
+{
+    position: relative;
+    flex: 0 0 auto;
+    display: flex; align-items: flex-end; gap: 6px;
+    padding: 6px 8px calc(10px + env(safe-area-inset-bottom));
+    background: var(--wall);
+}
+.cbox
+{
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-direction: column;
+    border-radius: 23px; background: var(--head); box-shadow: 0 1px 1px var(--shadow);
+}
+.cbox .row1       { display: flex; align-items: flex-end; min-height: 46px; padding: 0 2px; }
+.cbox .icon-btn   { width: 42px; height: 42px; margin: 2px 0; }
+.cbox .icon-btn svg { width: 22px; height: 22px; }
+.cbox textarea
+{
+    flex: 1 1 auto; min-width: 0; min-height: 0; max-height: 140px;
+    margin: 0; padding: 12px 4px; resize: none;
+    border: none; background: transparent; outline: none;
+    font-size: 1rem; line-height: 1.35;
+}
+.cbox .quote      { position: relative; margin: 6px 6px 0; padding-right: 34px; cursor: default; }
+.cbox .quote .x   { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; margin: 0; }
+.cbox .quote .x svg { width: 16px; height: 16px; }
+.send
+{
+    flex: 0 0 auto; width: 48px; height: 48px; border: none; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 2px var(--shadow);
+    cursor: pointer;
+}
+/* held down (touch) it opens its menu: no text selection, no phone callout */
+.send          { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+.send svg      { width: 21px; height: 21px; margin-left: -2px; }
+.send:disabled { opacity: 0.5; cursor: default; }
+.composer-note { flex: 1 1 auto; padding: 12px; text-align: center; font-size: 0.85rem; color: var(--text-dim); }
+
+/* the Send button's menu (held down): over the button, inside the composer */
+.composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
+
+/* the clock of my scheduled texts, with how many; their list */
+.cbox .later-btn        { position: relative; color: var(--accent); }
+.cbox .later-btn .badge { position: absolute; top: 3px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; font-size: 0.64rem; }
+.later-row              { display: flex; align-items: center; gap: 4px; padding: 8px 0; }
+.later-row + .later-row { border-top: 1px solid var(--line); }
+.later-row .t           { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.later-row .t small     { font-size: 0.76rem; color: var(--accent); }
+.later-row .t span      { font-size: 0.92rem; white-space: pre-wrap; overflow-wrap: anywhere;
+                          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* the clip's panel */
+.attach
+{
+    position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 5;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 6px;
+    max-width: 420px;
+    padding: 22px 10px 18px; border-radius: var(--radius-l);
+    background: var(--head); box-shadow: var(--elev-dialog);
+}
+.att
+{
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    border: none; background: none; font: inherit; font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
+}
+.att .ai
+{
+    width: 54px; height: 54px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--c);
+}
+.att .ai svg { width: 24px; height: 24px; }
+.att:hover .ai { filter: brightness(1.08); }
+
+/* the emoji panel (writing, or "+" in the reactions) */
+.emojis
+{
+    position: absolute; left: 8px; bottom: calc(100% + 4px); z-index: 6;
+    width: min(340px, calc(100vw - 16px)); max-height: 260px; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+    padding: 8px; border-radius: var(--radius-l);
+    background: var(--head); box-shadow: var(--elev-dialog);
+}
+.emojis button
+{
+    padding: 4px 0; border: none; border-radius: var(--radius-s); background: none;
+    font-size: 1.45rem; line-height: 1.2; cursor: pointer;
+}
+.emojis button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+/* ---- holding a message down ---------------------------------------------- */
+.ctx
+{
+    position: fixed; inset: 0; z-index: 150;
+    display: flex; flex-direction: column; justify-content: center; gap: 8px;
+    padding: 14px;
+    background: color-mix(in srgb, var(--wall) 55%, transparent);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.ctx.out   { align-items: flex-end; }
+.ctx.in    { align-items: flex-start; }
+.ctx-box   { display: flex; flex-direction: column; gap: 8px; max-width: min(92vw, 420px); }
+.ctx.out .ctx-box { align-items: flex-end; }
+.ctx .msg  { max-width: 100%; max-height: 40vh; overflow: hidden; pointer-events: none; }
+.reacts
+{
+    display: flex; align-items: center; gap: 2px; padding: 5px 8px;
+    border-radius: var(--radius-pill); background: var(--head); box-shadow: var(--elev-card);
+}
+.reacts button
+{
+    padding: 2px 3px; border: none; border-radius: 50%; background: none;
+    font-size: 1.5rem; line-height: 1; cursor: pointer;
+}
+.reacts button.on  { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.reacts .more
+{
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); background: var(--card2); border-radius: 50%;
+}
+.reacts .more svg  { width: 18px; height: 18px; }
+.ctx .top-menu     { position: static; width: 240px; min-width: 0; background: var(--head); }
+.ctx .menu-item    { padding: 9px 12px; }
+.ctx .emojis       { position: static; width: min(340px, 92vw); }
+
+/* ---- screens in the side pane: new chat, new person, new group ------------ */
+.pane              { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px 24px; }
+.hint              { margin: -6px 0 14px; font-size: 0.8rem; line-height: 1.45; color: var(--text-dim); }
+/* Auto-delete: the days box and "Días (0 = nunca)" on one row */
+.days-field        { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 0.9rem; }
+.days-field input  { flex: 0 0 auto; width: 6em; text-align: center; }
+.linkbox           { padding: 12px; border-radius: var(--radius-m); border: 1px solid var(--line); background: var(--card2); }
+.linkbox code      { display: block; margin: 4px 0 10px; font-family: var(--font-mono); font-size: 0.76rem; overflow-wrap: anywhere; }
+.linkbox .btns     { display: flex; gap: 8px; }
+.linkbox .btns .text-btn { flex: 1; }
+.qr                { display: flex; align-items: center; gap: 14px; margin-top: 14px; font-size: 0.82rem; line-height: 1.4; color: var(--text-dim); }
+.qr canvas, .qr img { flex: 0 0 auto; width: 120px; height: 120px; padding: 6px; border-radius: var(--radius-s); background: white; image-rendering: pixelated; }
+.pane .text-btn.wide { width: 100%; margin-top: 6px; }
+.sel-chips         { flex: 0 0 auto; display: flex; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.sel-chips:empty   { display: none; }
+.sel-chips > button
+{
+    position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    width: 54px; border: none; background: none; color: inherit; font: inherit; font-size: 0.74rem; cursor: pointer;
+}
+.sel-chips > button span.nm { max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-chips .x
+{
+    position: absolute; top: 24px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--text-faint); color: var(--head); border: 2px solid var(--head);
+}
+.sel-chips .x svg  { width: 10px; height: 10px; }
+
+/* ---- a person's or a group's info (main pane) ------------------------------ */
+.info-wall  { flex: 1 1 auto; overflow-y: auto; background: color-mix(in srgb, var(--text) 5%, var(--head)); }
+.info-top   { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 16px 14px; background: var(--head); text-align: center; }
+.info-top b     { font-size: 1.3rem; }
+/* Options (owner): the circle and the name are the buttons that change them.
+   The same circle sits on top of the "Your name" dialog (.me-photo). */
+.face { position: relative; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
+.face .cam
+{
+    position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--accent); border: 2px solid var(--head);
+}
+.face .cam svg { width: 15px; height: 15px; }
+.face:hover .av { filter: brightness(0.95); }
+.me-photo       { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 14px; }
+.me-photo .face .cam { border-color: var(--card); }
+.info-top .name-btn
+{
+    padding: 2px 8px; border: none; border-radius: var(--radius-s); background: none;
+    font: inherit; font-size: 1.3rem; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.info-top .name-btn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.info-top small { font-size: 0.82rem; color: var(--text-dim); }
+.info-sec       { margin-top: 8px; background: var(--head); }
+.irow
+{
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    padding: 12px 16px; border: none; background: none; color: inherit; font: inherit;
+    font-size: 0.92rem; text-align: left;
+}
+button.irow     { cursor: pointer; }
+button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.irow > svg     { flex: 0 0 auto; width: 20px; height: 20px; color: var(--text-dim); }
+.irow .t        { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.irow .t small  { font-size: 0.76rem; color: var(--text-dim); }
+.irow.danger, .irow.danger > svg { color: var(--danger); }
+.irow .end      { display: flex; align-items: center; gap: 2px; color: var(--text-dim); font-size: 0.85rem; }
+.irow .end svg  { width: 18px; height: 18px; }
+.thumbs         { display: flex; gap: 6px; padding: 0 16px 12px; overflow-x: auto; }
+
+/* Options: what the chat holds, one icon per kind with its count. */
+.kinds          { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; padding: 2px 10px 12px; }
+.kind
+{
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 8px 2px; border: none; border-radius: var(--radius-m); background: none;
+    font: inherit; font-size: 0.76rem; color: var(--text-dim); cursor: pointer;
+}
+.kind:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.kind:disabled  { opacity: 0.45; cursor: default; }
+.kind.is-active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); }
+.kind .ki
+{
+    position: relative; width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card2));
+}
+.kind .ki svg   { width: 22px; height: 22px; }
+.kind .ki b
+{
+    position: absolute; top: -4px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px;
+    display: flex; align-items: center; justify-content: center; border-radius: 10px;
+    font-size: 0.68rem; color: var(--text); background: var(--card2); border: 1px solid var(--line);
+}
+.kind-list         { padding: 0 16px 12px; }
+.kind-list .thumbs { flex-wrap: wrap; padding: 0; overflow: visible; }
+.kind-list .irow   { padding: 10px 4px; }
+.kind-list a.irow  { color: inherit; text-decoration: none; }
+.kind-list a.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent); opacity: 1; }
+.kind-list .url    { overflow-wrap: anywhere; color: var(--link); }
+.thumbs img     { flex: 0 0 auto; width: 72px; height: 72px; border-radius: var(--radius-s); object-fit: cover; cursor: zoom-in; background: var(--card2); }
+
+/* ---- full screen: a photo, a map, picking a place ------------------------- */
+.full           { z-index: 160; }
+/* The owner's image editor (Editar foto) opens over the viewer; a sheet asked
+   from either (the Photos folder question, "close without saving?") must sit
+   above them, not behind. */
+.photo-editor   { z-index: 170; }
+.full ~ .sheet-backdrop, .photo-editor ~ .sheet-backdrop { z-index: 180; }
+.full .editor-canvas { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.full .editor-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
+/* a computer's own camera (C.openCamera): the live view, the shutter under it */
+.full.camera video { max-width: 100%; max-height: 100%; object-fit: contain; background: #000; }
+.full .cam-bar  { flex: 0 0 auto; display: flex; justify-content: center; padding: 14px 0 calc(18px + env(safe-area-inset-bottom)); background: #151515; }
+.full .nav      { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; }
+.full .nav.prev { left: 10px; }
+.full .nav.next { right: 10px; }
+.full .caption  { flex: 0 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); color: white; text-align: center; font-size: 0.9rem; background: #151515; white-space: pre-wrap; }
+.full .caption:empty { display: none; }
+.full .map-host { position: absolute; inset: 0; }
+
+.picker         { position: fixed; inset: 0; z-index: 160; display: flex; flex-direction: column; background: var(--head); }
+.picker .map-box { position: relative; flex: 1 1 auto; min-height: 0; }
+.picker .map-host { position: absolute; inset: 0; }
+.picker .foot   { flex: 0 0 auto; padding: 6px 0 calc(12px + env(safe-area-inset-bottom)); }
+.picker .row[disabled] { opacity: 0.5; cursor: default; }
+.picker .me-btn
+{
+    position: absolute; right: 14px; bottom: 14px; z-index: 900;
+    width: 44px; height: 44px; border-radius: 50%; border: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--head); color: var(--link); box-shadow: var(--elev-card); cursor: pointer;
+}
+.picker .me-btn svg { width: 20px; height: 20px; }
+
+/* photo preview before sending */
+.prev-grid      { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
+.prev-grid img  { flex: 0 0 auto; width: 96px; height: 96px; border-radius: var(--radius-s); object-fit: cover; background: var(--card2); }
+.prev-one       { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 12px; border-radius: var(--radius-s); }
+
+/* poll creator */
+.opt-row        { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.opt-row input  { flex: 1 1 auto; min-width: 0; }
+
+/* who read / who reacted */
+.who-list       { list-style: none; margin: 0; padding: 0; }
+.who-list li    { display: flex; align-items: center; gap: 10px; padding: 8px 2px; font-size: 0.92rem; }
+.who-list li + li { border-top: 1px solid var(--line); }
+.who-list .em   { margin-left: auto; font-size: 1.2rem; }
+
+/* Options -> bin: each way of deleting, a wide quiet button and what it does. */
+.del-opt, .pick-opt   { margin-bottom: 14px; }
+.del-opt .text-btn,
+.pick-opt .text-btn   { width: 100%; justify-content: flex-start; }
+.del-opt .hint        { margin: 6px 2px 0; }
+
+/* ---- a person's first visit (guest.html) ----------------------------------- */
+.onb
+{
+    position: fixed; inset: 0; z-index: 140;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 22px calc(20px + env(safe-area-inset-bottom));
+    overflow-y: auto; background: var(--head); text-align: center;
+}
+.onb-in       { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; }
+.onb h3       { margin: 12px 0 4px; font-size: 1.2rem; }
+.onb p        { margin: 0; font-size: 0.9rem; line-height: 1.45; color: var(--text-dim); }
+.onb .install-steps { align-self: stretch; text-align: left; margin-top: 12px; }
+.onb .install-steps li { font-size: 0.88rem; }
+.onb .install-steps svg.ic { width: 20px; height: 20px; flex: 0 0 auto; color: var(--link); }
+.safari
+{
+    align-self: stretch; margin: 2px 0 4px 32px;
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 8px 6px; border-radius: var(--radius-m); background: var(--card2); color: var(--link);
+}
+.safari svg      { width: 20px; height: 20px; }
+.safari .hot     { position: relative; display: flex; }
+.safari .hot::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid var(--accent); }
+.homeicon        { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.7rem; color: var(--text); }
+.homeicon .sq    { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent); }
+.onb .install-steps .homeicon svg.ic { width: 24px; height: 24px; color: var(--on-accent); }
+.bigbell
+{
+    width: 96px; height: 96px; border-radius: 50%; margin-top: 40px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--card2));
+}
+.bigbell svg     { width: 46px; height: 46px; }
+.onb .text-btn   { align-self: stretch; min-height: 48px; font-size: 1rem; margin-top: 22px; }
+.onb .quiet
+{
+    margin-top: 14px; padding: 6px; border: none; background: none;
+    font: inherit; font-size: 0.86rem; color: var(--text-dim); text-decoration: underline; cursor: pointer;
+}
+.onb .small      { margin-top: 12px; font-size: 0.8rem; color: var(--text-faint); }
+
+.gone-page       { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.gone-page p     { max-width: 360px; color: var(--text-dim); line-height: 1.5; }
+
+/* ---- calls (call.js) ------------------------------------------------------ */
+/* The call bubble: [phone] Voice call · 3:12 [call back]. Red when it is a
+   call I missed. */
+.msg.call .call-line { display: flex; align-items: center; gap: 10px; min-width: 190px; }
+.msg.call .call-ic
+{
+    width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.msg.call .call-ic svg { width: 17px; height: 17px; }
+.msg.call.missed .call-ic { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.msg.call.missed .call-words { color: var(--danger); }
+.msg.call .call-words { flex: 1 1 auto; }
+
+/* The call screen: dark in both themes, as a phone's call screen is. Over
+   everything (the viewers are 160). No ×: Back does nothing, leaving is
+   hanging up. */
+.call-screen
+{
+    position: fixed; inset: 0; z-index: 400;
+    display: flex; flex-direction: column; align-items: center;
+    padding: calc(40px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+    color: #fff; background: color-mix(in srgb, var(--accent) 30%, #0b0e0d);
+    overflow: hidden;
+}
+.call-screen[hidden] { display: none; }
+.call-screen .call-top  { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.call-screen .call-top b { font-size: 1.45rem; margin-top: 6px; }
+.call-screen .call-state { font-size: 1rem; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.call-screen .call-note  { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; opacity: 0.8; }
+.call-screen .call-note svg { width: 15px; height: 15px; }
+.call-screen .call-btns
+{
+    position: relative; z-index: 2; margin-top: auto;
+    display: flex; justify-content: center; gap: 22px; flex-wrap: wrap;
+}
+.call-screen .call-btns .icon-btn:not(.solid-ok):not(.solid-danger):not(.is-active)
+{
+    color: #fff; background: rgba(255, 255, 255, 0.16);
+}
+.call-screen .call-btns .icon-btn:disabled { opacity: 0.4; }
+.call-screen .call-hear { position: relative; z-index: 2; margin-top: 24px; }
+.call-screen audio      { display: none; }
+
+/* Video: the other side fills the screen, I am a small box in a corner. */
+.call-screen .call-remote { display: none; }
+.call-screen.video.live .call-remote
+{
+    display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; background: #000; z-index: 1;
+}
+/* Their camera off: their picture again (the video keeps playing: it carries the sound). */
+.call-screen.video.live.peer-cam-off .call-remote { opacity: 0; }
+.call-screen.video.live:not(.peer-cam-off) .call-top .av { display: none; }
+.call-screen.video.live:not(.peer-cam-off) .call-top { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
+.call-screen .call-self
+{
+    position: absolute; z-index: 3; right: 14px; bottom: calc(110px + env(safe-area-inset-bottom));
+    width: 28vw; max-width: 170px; aspect-ratio: 3 / 4; object-fit: cover;
+    border-radius: var(--radius-m); background: #000; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.call-screen .call-self.mirror { transform: scaleX(-1); }
+.call-screen.video:not(.live) .call-self
+{
+    /* Before it connects: my own camera fills the screen, as on a phone. */
+    inset: 0; right: 0; bottom: 0; width: 100%; max-width: none; height: 100%; aspect-ratio: auto;
+    border-radius: 0; z-index: 0; opacity: 0.55;
+}

@@ -13,6 +13,7 @@ NayiveI18n.ready.then( function () {
         title: T( 'trips.itinerary' ),
         buttons: [
             { icon: 'plus',   name: T( 'trips.addStage' ),      text: T( 'trips.introStage' ) },
+            { icon: 'compass', name: T( 'trips.disc.btn' ),      text: T( 'trips.introDiscover' ) },
             { icon: 'edit',   name: T( 'trips.editStage' ),     text: T( 'trips.introEditStage' ) },
             { icon: 'eyeoff', name: T( 'trips.toggleStage' ),   text: T( 'trips.introToggleStage' ) },
             { icon: 'trash',  name: T( 'trips.deleteStage' ),   text: T( 'trips.introDeleteStage' ) },

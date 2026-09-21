@@ -521,6 +521,19 @@ html.is-embedded .page > .page-inner > .card
 .icon-btn.is-active         { background: var(--accent); color: var(--on-accent); }
 .icon-btn.is-active:hover   { background: var(--accent); }
 
+/* A call's buttons (chat/call.js): .lg is the big round button of a call
+ * screen, .solid-ok answers (a green fill), .solid-danger hangs up or
+ * declines (a red fill) - the one place a phone-call convention beats the
+ * "borderless, red icon only" rule of .danger above. */
+.icon-btn.lg                { width: 60px; height: 60px; }
+.icon-btn.lg svg            { width: 26px; height: 26px; }
+.icon-btn.solid-ok,
+.icon-btn.solid-ok:hover    { background: var(--ok); color: #fff; }
+.icon-btn.solid-danger,
+.icon-btn.solid-danger:hover { background: var(--danger); color: #fff; }
+.icon-btn.solid-ok:active,
+.icon-btn.solid-danger:active { filter: brightness(0.9); }
+
 /* TOOLBAR BUTTON - a related but distinct component, NOT styled here.
  * calc (.fmt-btn), text (.tb-btn) and write (#writeTools .icon-btn) each define
  * their own: a 30-32px rounded SQUARE (--radius-s), --text-dim icon, and an
@@ -640,6 +653,12 @@ html.is-embedded .page > .page-inner > .card
  *   pressing a free spot of it (not a control) - shared/ui.js does this for
  *   every .sheet, there is nothing to add to a dialog. It always reopens
  *   centred. Phones (<= 640px) never move a dialog.
+ * - FOCUS: on open, shared/ui.js puts the caret in the dialog's FIRST field
+ *   (input / select / textarea / contenteditable) - again for every .sheet,
+ *   nothing to add. It never focuses a button, and it leaves alone any focus
+ *   the app set itself, so a dialog that wants another field focused just
+ *   focuses it when it opens. Fields that only appear after a fetch are waited
+ *   for. Write the fields in the order they should be filled in.
  * ---------------------------------------------------------------------------*/
 .sheet-backdrop
 {
@@ -779,6 +798,17 @@ html.is-embedded .page > .page-inner > .card
     flex-wrap: wrap;
 }
 .field-row .field  { flex: 1 1 120px; min-width: 0; }
+
+/* What a field got wrong, right under it: "the two passwords do not match".
+ * Hidden until there is something to say ([hidden] wins over the display). */
+.field-error
+{
+    margin: -8px 0 12px;
+    color: var(--danger);
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+.field-error[hidden] { display: none; }
 
 /* A field's control fills the row. Scoped to .field so it never stretches a
  * toolbar / search input that lives outside a form. */
@@ -1141,6 +1171,20 @@ input[type="range"]
  * were dropped for being too intrusive. The one-time first-run intro card
  * (.intro-*, below) stays, and the "?" dot next to each app title re-opens it.
  * ---------------------------------------------------------------------------*/
+
+/* -----------------------------------------------------------------------------
+ * PANE RESIZER  (.pane-resizer)
+ *
+ * A 5px drag handle between two side-by-side panes (Drive tree, Chat list).
+ * The app's JS sets a width custom property and hides it on a phone.
+ * ---------------------------------------------------------------------------*/
+.pane-resizer
+{
+    flex: 0 0 auto; width: 5px; cursor: col-resize; background: var(--line);
+    touch-action: none;
+}
+.pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
+
 
 /* A long-press on a button would otherwise pop the iOS callout / selection menu. */
 button { -webkit-touch-callout: none; }
@@ -1575,6 +1619,12 @@ button { -webkit-touch-callout: none; }
 .share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .share-user input { flex: 0 0 auto; width: auto; margin: 0; }
 
+/* "Todos" - the first row of the list, the whole width. While it is ticked the
+   names are greyed out: everybody is in already. */
+.share-all { grid-column: 1 / -1; }
+.share-pick.all .share-user:not(.share-all) { opacity: 0.45; cursor: default; }
+.share-pick.all .share-user:not(.share-all):hover { background: none; }
+
 /* The sheet's sections: "Cualquiera con el enlace" (a trip only, on top) and
    the people. Each has a heading and a note; the divider goes only BETWEEN two
    of them, so a sheet with just the people (Drive, Photos, Split) gets none. */
@@ -1631,6 +1681,78 @@ button { -webkit-touch-callout: none; }
 
 
 /* -----------------------------------------------------------------------------
+ * TOOLBAR GROUP POPUP  (.has-popup button  ->  .popup > .popup-row > .pop-btn)
+ *   -  NayiveOffice.groupPopup
+ *
+ * A run of near-identical toolbar buttons - the six alignments, the four
+ * row/column edits, the two sorts - costs six slots on the bar and reads as
+ * noise. One button takes their place and the REAL buttons live in a small
+ * card under it: the same buttons, the same handlers, the same "active"
+ * light, just somewhere else. Calc's border picker has worked this way from
+ * the start; this only gives the shape a name so Write and the rest can use
+ * it too.
+ *
+ * position: fixed, anchored under its trigger in JS, like .top-menu: the
+ * toolbars carry overflow and would clip an absolute child.
+ *
+ * `.has-popup` is the mark ON THE TRIGGER: a hairline caret in the corner,
+ * so a button that opens something never looks like a button that does
+ * something. It goes on the app's own toolbar button class (.fmt-btn,
+ * .icon-btn, .tb-btn), never instead of it.
+ * -------------------------------------------------------------------------- */
+.popup
+{
+    position: fixed;
+    z-index: 200;
+    display: none;
+    padding: 6px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    box-shadow: var(--elev-dialog);
+}
+.popup.open              { display: block; }
+.popup-row               { display: flex; gap: 2px; }
+.popup-row + .popup-row  { margin-top: 2px; }
+.popup-row-sep           { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+.pop-btn
+{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    cursor: pointer;
+}
+.pop-btn:hover           { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.pop-btn.active,
+.pop-btn.is-active       { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+.pop-btn:disabled        { opacity: 0.45; cursor: default; background: transparent; color: var(--text-dim); }
+
+.has-popup               { position: relative; }
+.has-popup::after
+{
+    content: "";
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 3px solid currentColor;
+    opacity: 0.75;
+}
+
+
+/* -----------------------------------------------------------------------------
  * "MORE" MENU  (.top-menu > .menu-item)  -  NayiveUI.wireMenu
  *
  * The small popup a header "⋮" button opens: view switch (Calendar), the
@@ -1678,6 +1800,14 @@ button { -webkit-touch-callout: none; }
 .menu-item.danger,
 .menu-item.danger svg    { color: var(--danger); }
 .menu-sep                { height: 1px; margin: 4px 6px; background: var(--line); }
+
+/* A row for a button that IS on the bar on a PC and only disappears on a
+   phone (Write's print, page setup, comments...). The menu carries it for
+   the phone and drops it here, so a PC never offers the same thing twice. */
+@media (min-width: 641px)
+{
+    .top-menu .mi-phone  { display: none; }
+}
 
 /* -----------------------------------------------------------------------------
  * PULL-DOWN MENU BAR  (#menuBar > .menu-top, .menu-panel)  -  shared/menubar.js
@@ -1811,7 +1941,7 @@ button { -webkit-touch-callout: none; }
 
 
 /* -----------------------------------------------------------------------------
- * OFFICE CHROME  (.file-label, .open-list, .folder-pick, .sc-list)  -  Calc, Text, Write
+ * OFFICE CHROME  (.file-label, .open-list, .folder-pick, .sc-list, .st-list)  -  Calc, Text, Write
  *
  * The three document editors share one header shape: after the app name, the
  * open document's name (.file-label - click it to rename in place, which swaps
@@ -1904,6 +2034,14 @@ button { -webkit-touch-callout: none; }
     color: var(--text-dim); border: 1px solid var(--line);
     border-radius: var(--radius-s); padding: 1px 6px; background: var(--card2);
 }
+
+/* Help ▸ "Statistics" (Calc, Text, Write): label left, number right, the same
+   rhythm as the shortcut sheet above. NayiveOffice.showStats fills #stList. */
+.st-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
+.st-row  { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; padding: 5px 0; }
+.st-row + .st-row { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.st-row b { font-variant-numeric: tabular-nums; }
+.st-note { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 4px; }
 
 
 /* -----------------------------------------------------------------------------
@@ -2081,16 +2219,16 @@ input[type=range]:disabled           { opacity: 0.5; }
 
 /* -----------------------------------------------------------------------------
  * IMAGE EDITOR CHROME  (.editor-backdrop > .editor-bar / .editor-canvas /
- *                        .editor-comment)  -  Drive and Photos
+ *                        .editor-comment)  -  Drive, Photos and Chat
  *
- * The frame around the TOAST UI Image Editor, which both apps load on first use.
+ * The frame around the TOAST UI Image Editor, which the apps load on first use.
  * It is a FIXED DARK surface in both schemes - literal colours on purpose, never
  * the theme tokens: you judge a photo against a neutral dark ground, the same
  * reason Drive's lightbox is always dark. That is the one place in Nayive where
  * a hex colour is the right answer.
  *
- * The two apps differ only in the stacking context they open over, so each sets
- * its own `z-index` on .editor-backdrop (Drive 200, Photos 60).
+ * The apps differ only in the stacking context they open over, so each sets
+ * its own `z-index` on .editor-backdrop (Drive 99, Photos 60, Chat 170).
  * ---------------------------------------------------------------------------*/
 .editor-backdrop
 {
@@ -2171,6 +2309,56 @@ input[type=range]:disabled           { opacity: 0.5; }
    save and close from .editor-bar instead. Its undo / redo / reset controls sit
    in a separate element (.tui-image-editor-help-menu) and stay visible. */
 .editor-canvas .tui-image-editor-header { display: none; }
+
+/* On a phone the library's two icon rows were wider than the screen - nine
+   tools at 48px each, and a zoom / undo row fixed at 506px - so both were cut
+   at the edges: Filter and Zoom in could not be reached. Tighter spacing fits
+   them. The host itself gets the library's container class, and four classes
+   beat the library's own rule (its sheet loads later). */
+@media (max-width: 520px)
+{
+    .editor-canvas.tui-image-editor-container .tui-image-editor-menu > .tui-image-editor-item,
+    .editor-canvas.tui-image-editor-container .tui-image-editor-help-menu > .tui-image-editor-item
+    {
+        margin: 0;
+        padding: 7px 5px 3px;
+    }
+    .editor-canvas.tui-image-editor-container .tui-image-editor-help-menu.top
+    {
+        width: max-content;
+        max-width: calc(100% - 8px);
+    }
+
+    /* A tool's options (the panel above the tools) are wider than a phone -
+       Filter's is ~900px - so they scroll sideways instead of running off
+       the edge. Only while a tool is open: the attribute test matches the
+       library's "tui-image-editor-menu-<tool>" class on its main area. */
+    .editor-canvas.tui-image-editor-container .tui-image-editor-main[class*="tui-image-editor-menu-"] .tui-image-editor-submenu
+    {
+        display: flex;
+        align-items: flex-end;
+        overflow-x: auto;
+    }
+    .editor-canvas.tui-image-editor-container .tui-image-editor-submenu > div
+    {
+        flex: none;
+        margin: 0 auto;
+        padding-left: 24px;
+        padding-right: 12px;
+    }
+}
+
+/* Filter's two columns of check boxes had a fixed width made for the English
+   words, so a longer one ran into its neighbour ("Escala de grises" over
+   "Invertir"). Columns as wide as their words instead; the gap leaves room
+   for the box, which the library draws 19px left of its label. */
+.editor-canvas.tui-image-editor-container .tui-image-editor-checkbox-wrap.fixed-width
+{
+    display: inline-grid !important;      /* the library's own rule is !important too */
+    grid-template-columns: auto auto;
+    column-gap: 30px;
+    width: auto;
+}
 
 
 /* -----------------------------------------------------------------------------

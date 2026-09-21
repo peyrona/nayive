@@ -123,7 +123,15 @@ function initPaneResizer()
 function render()
 {
     document.body.classList.toggle( 'trash-mode', trashMode );
-    document.getElementById( 'trashViewBtn' ).classList.toggle( 'is-active', trashMode );
+    // The bin is the Papelera's on/off switch: lit while it is open, and
+    // then its tooltip says where a tap takes you - back to Drive.
+    const binBtn = document.getElementById( 'trashViewBtn' );
+    binBtn.classList.toggle( 'is-active', trashMode );
+    binBtn.title = T( trashMode ? 'drive.backToDrive' : 'acct.trash' );
+    // "Biggest files" is the same kind of switch.
+    const bigBtn = document.getElementById( 'bigFilesBtn' );
+    bigBtn.classList.toggle( 'is-active', bigMode );
+    bigBtn.title = T( bigMode ? 'drive.backToDrive' : 'drive.bigTitle' );
 
     if( trashMode )
     {

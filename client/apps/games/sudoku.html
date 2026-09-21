@@ -1,4 +1,4 @@
-<!-- sudoku.html - Sudoku, one of the six games of index.html.
+<!-- sudoku.html - Sudoku, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -259,7 +259,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -271,7 +271,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // SUDOKU
@@ -510,6 +511,7 @@
                 boardEl.classList.remove( 'is-done' );
                 levelBtns.forEach( function ( b ) { b.classList.toggle( 'is-active', b.dataset.sudokuLevel === level ); } );
                 render();
+                sfx.play( 'start' );               // silent at boot: there is no sound before the first press
             }
 
             //---- the clock ---------------------------------------------------
@@ -563,6 +565,9 @@
                 stopClock();
                 coverEl.hidden = false;
                 paintPause();
+                // Heard only when the player pressed it: leave() gets here with
+                // `live` already false, and a hidden tab with document.hidden.
+                if( live && ! document.hidden ) sfx.play( 'pause' );
             }
 
             function resume()
@@ -576,6 +581,7 @@
                 runClock();
                 paintPause();
                 if( sel >= 0 && cells[ sel ] ) cells[ sel ].focus();
+                sfx.play( 'resume' );
             }
 
             function unpause()                        // a new board: no pause to come back from
@@ -686,15 +692,22 @@
             // every player does by hand otherwise.
             function put( v )
             {
+                var sound = 'rub';                              // what the move sounds like (see heard)
+
                 if( over || paused || sel < 0 || given[ sel ] ) return;
 
                 beginClock();
 
-                if( v === 0 )                { grid[ sel ] = 0; notes[ sel ] = 0; }
+                if( v === 0 )
+                {
+                    if( ! grid[ sel ] && ! notes[ sel ] ) sound = '';   // nothing there to rub out
+                    grid[ sel ] = 0; notes[ sel ] = 0;
+                }
                 else if( noteMode )
                 {
                     if( grid[ sel ] ) return;                   // a square holding a digit holds no marks
                     notes[ sel ] ^= 1 << v;
+                    sound = 'pencil';
                 }
                 else if( grid[ sel ] === v ) { grid[ sel ] = 0; }
                 else
@@ -702,20 +715,42 @@
                     grid[ sel ]  = v;
                     notes[ sel ] = 0;
                     PEERS[ sel ].forEach( function ( at ) { notes[ at ] &= ~( 1 << v ); } );
+                    sound = 'digit';
                 }
 
                 render();
-                win();
+                if( sound ) sfx.play( sound, v );
+                if( ! win() && sound === 'digit' ) heard();
+            }
+
+            // What a digit adds to its own note: a buzz when it repeats in its
+            // row, column or box - what the red already says, never a check
+            // against the solution - or else a chime when it completes one of
+            // them with nothing repeated.
+            function heard()
+            {
+                if( wrong()[ sel ] ) { sfx.play( 'clash' ); return; }
+
+                if( UNITS.some( function ( u ) { return u.indexOf( sel ) >= 0 && full( u ); } ) ) sfx.play( 'unit' );
+            }
+
+            // All nine digits in the unit, each one once.
+            function full( u )
+            {
+                var seen = 0;
+
+                u.forEach( function ( at ) { if( grid[ at ] ) seen |= 1 << grid[ at ]; } );
+                return seen === ALL;
             }
 
             // The board is finished when it IS the solution. There is only one,
             // so "full and with no repeat" would say the same thing - this way
-            // says it in one line.
+            // says it in one line. Answers whether it was.
             function win()
             {
                 var i, secs, record;
 
-                for( i = 0; i < 81; i++ ) if( grid[ i ] !== solution[ i ] ) return;
+                for( i = 0; i < 81; i++ ) if( grid[ i ] !== solution[ i ] ) return false;
 
                 over = true;
                 endedAt = Date.now();
@@ -731,6 +766,8 @@
                 bestEl.textContent = clock( times[ level ] );
 
                 NayiveUI.toast( TF( record ? 'games.sudokuRecord' : 'games.sudokuWon', { time: clock( secs ) } ) );
+                sfx.play( record ? 'record' : 'win', null, 0.2 );   // after the last digit's own note
+                return true;
             }
 
             //---- input -------------------------------------------------------

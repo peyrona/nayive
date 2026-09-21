@@ -62,6 +62,15 @@ APPS="client/apps"                 # what the browser loads
 RUN="store"                        # the run-root: config/, homes/
 [[ -f $BIN  ]] || { echo "error: $BIN not found next to install.sh"   >&2; exit 1; }
 [[ -d $APPS ]] || { echo "error: $APPS/ not found next to install.sh" >&2; exit 1; }
+
+# Write's editor is the vendored docx-editor.dev engine. It IS kept in the repo
+# (Apache-2.0, its fonts OFL), so a zip should always carry it - but a package
+# built from a tree where it was never built has no Write.
+[[ -f $APPS/write/lib/docx-editor/docx-editor.lock.json ]] || cat >&2 <<'WARN'
+warning: Write's editor engine is missing from this package.
+         Everything else works; Write will not open.
+         On the machine that built the zip, run:  tools/build-docx-editor.sh
+WARN
 chmod +x "$BIN"
 
 # ---- store/config/server.json + store/homes/ --------------------------------

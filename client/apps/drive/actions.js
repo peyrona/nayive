@@ -325,6 +325,27 @@ function flashStatus( text )
     statusFlashTimer = setTimeout( function() { setStatus( '' ); }, 3000 );
 }
 
+// The papelera's own "done": it gulps twice (see .bin-gulp in drive.css) for
+// the three seconds a status message would have lasted, so a move to the bin
+// is answered where the files went instead of in words. On a phone the bin
+// button hides inside the header's "⋮", so that one gulps in its place.
+let binGulpTimer = null;
+
+function flashBin()
+{
+    const btns = [ 'trashViewBtn', 'moreBtn' ].map( function( id ) { return document.getElementById( id ); } );
+    const el   = btns.find( function( b ) { return b && b.getClientRects().length; } );
+
+    if( ! el ) return;
+
+    clearTimeout( binGulpTimer );
+    btns.forEach( function( b ) { if( b ) b.classList.remove( 'bin-gulp' ); } );
+    void el.offsetWidth;                 // two deletes in a row: without this reflow
+    el.classList.add( 'bin-gulp' );      // re-adding the class would not restart it
+
+    binGulpTimer = setTimeout( function() { el.classList.remove( 'bin-gulp' ); }, 3000 );
+}
+
 //------------------------------------------------------------------------//
 // DEEP LINK: ?sel=<path>   -> open that item's folder with it selected
 //            ?open=<path>  -> navigate straight into that folder (used by Trip's
@@ -334,6 +355,8 @@ async function applyDeepLink()
 {
     const params = new URLSearchParams( location.search );
     const open   = params.get( 'open' );
+
+    if( params.get( 'big' ) ) { openBigFiles(); return; }      // the "space almost full" card
 
     if( open )
     {
@@ -449,7 +472,6 @@ async function confirmDelete()
     setStatus( T( 'drive.movingToTrash' ) );
 
     const droppedCurrent = deleteTargets.indexOf( currentFolder ) !== -1;
-    const n = deleteTargets.length;
 
     try
     {
@@ -463,7 +485,8 @@ async function confirmDelete()
                             ? currentFolder.slice( 0, currentFolder.lastIndexOf( '/' ) ) : FS_ROOT;
 
         await reload();
-        flashStatus( n === 1 ? T( 'drive.movedToTrash' ) : TF( 'drive.nMovedToTrash', { n: n } ) );
+        setStatus( '' );      // clears "Moving to the bin..."; the bin itself says it landed
+        flashBin();
     }
     catch( _ )
     {

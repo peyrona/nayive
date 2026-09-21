@@ -14,6 +14,17 @@
 let panelMapInstance = null;
 let sheetMapInstance = null;
 
+// "El mapa necesita conexión…" - shown where a map cannot be drawn. Built in one
+// place: the Journey guard below raises it up front, and buildRealMap()'s onFail
+// raises it for the Plan map once the tiles have really failed to load.
+function offlineNote()
+{
+    const off = document.createElement( 'div' );
+    off.className = 'route-offline';
+    off.textContent = T( 'trips.mapNeedsNet' );
+    return off;
+}
+
 function destroyMap( sWhich )
 {
     const instance = sWhich === 'panel' ? panelMapInstance : sheetMapInstance;
@@ -45,31 +56,6 @@ function setLegActive( sStageId, bOn )
     });
 }
 
-// Fly the always-on route panel map to a stage's coordinates and drop a labelled
-// popup there. Called from the "Ver en el mapa" button inside the Ubicación field
-// (only reachable on wide layouts, where the panel map exists).
-function highlightStageOnMap( lat, lon, sLabel )
-{
-    const map = panelMapInstance;
-
-    if( ! map )
-    {
-        NayiveUI.toast( T( 'trips.mapUnavailable' ) );
-        return false;
-    }
-
-    const content = document.createElement( 'span' );
-    content.textContent = sLabel;
-
-    map.flyTo( [ lat, lon ], Math.max( map.getZoom(), 10 ), { duration: 0.6 } );
-    L.popup( { autoClose: false, closeOnClick: false } )
-        .setLatLng( [ lat, lon ] )
-        .setContent( content )
-        .openOn( map );
-
-    return true;
-}
-
 function buildRealMap( trip, container, sWhich )
 {
     destroyMap( sWhich );
@@ -78,9 +64,11 @@ function buildRealMap( trip, container, sWhich )
 
     // The base map is visually busy, so `.route-map` desaturates it in CSS to a
     // calm grey backdrop - the trip route stays the only colour on the map.
-    // Connected to Wi-Fi but no real internet -> navigator.onLine is still
-    // true, so the map just fails. Swap the whole block for the offline
-    // note the first time it can't load.
+    // onFail is the ONLY thing standing between the user and a blank grey box:
+    // it covers no internet at all, connected to Wi-Fi with no real internet
+    // (navigator.onLine is still true then), and offline with these tiles not in
+    // the browser cache. Swap the block for the offline note the first time it
+    // can't load.
     let swapped = false;
     NayiveBaseMap.add( map, { onFail: function()
     {
@@ -92,11 +80,13 @@ function buildRealMap( trip, container, sWhich )
 
         if( block )
         {
+            // The legend and the caption go with the map, but the bar's Plan / Journey
+            // switch must stay: this is the only route back, and offline (where this
+            // now fires) it is the one control still worth having.
+            const bar = block.querySelector( '.map-bar' );
             block.innerHTML = '';
-            const off = document.createElement( 'div' );
-            off.className = 'route-offline';
-            off.textContent = T( 'trips.mapNeedsNet' );
-            block.appendChild( off );
+            if( bar ) block.appendChild( bar );
+            block.appendChild( offlineNote() );
         }
     } } );
 
@@ -176,25 +166,31 @@ function buildRouteMapBlock( trip, sWhich, parentEl )
     if( ! tripIsRO( trip ) ) bar.appendChild( buildMapModeSwitch() );
     wrap.appendChild( bar );
 
-    // The map needs live map tiles. Offline, skip Leaflet entirely
-    // and show a note — the stages are still listed in the detail view.
-    if( ! navigator.onLine )
-    {
-        destroyMap( sWhich );
-        const off = document.createElement( 'div' );
-        off.className = 'route-offline';
-        off.textContent = T( 'trips.mapNeedsNet' );
-        wrap.appendChild( off );
-        parentEl.appendChild( wrap );
-        return;
-    }
-
     if( mapMode === 'journey' && ! tripIsRO( trip ) )
     {
+        // Journey cannot be drawn without the network: it is GET /api/journey that
+        // has the positions, the photo spots and "where I am now", and /api/* is
+        // never cached (sw.js). So offline it can only say so - the same note the
+        // Plan map used to show as well.
+        if( ! navigator.onLine )
+        {
+            destroyMap( sWhich );
+            wrap.appendChild( offlineNote() );
+            parentEl.appendChild( wrap );
+            return;
+        }
+
         parentEl.appendChild( wrap );
         buildJourneyBlock( trip, sWhich, wrap, bar );
         return;
     }
+
+    // The PLAN map does not get that guard. Its tiles live in the browser's own
+    // HTTP cache - OpenFreeMap serves them max-age=315360000, the OSM raster
+    // fallback ~6 days - so an area already looked at draws again with no network
+    // at all, which is exactly what you want on a trip with the roaming off.
+    // Nothing is lost when they are NOT cached: basemap.js still calls onFail in
+    // buildRealMap() below, which puts up the very same note.
 
     // Legend for the coloured route legs - only the transport modes this trip
     // actually uses to travel between stages. Each leg is coloured by the stage it

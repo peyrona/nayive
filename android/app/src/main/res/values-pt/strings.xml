@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Bem-vindo ao Nayive</string>
+    <string name="setup_lead">Para funcionar bem neste telemóvel, o Nayive precisa de algumas permissões. Só são pedidas uma vez.</string>
+    <string name="step_notif_title">Notificações</string>
+    <string name="step_notif_why">Para que as chamadas toquem e vejas o que tens pendente.</string>
+    <string name="step_loc_title">Localização</string>
+    <string name="step_loc_why">Para guardar por onde andas durante as tuas viagens. Escolhe «Permitir sempre».</string>
+    <string name="step_loc_bg">Falta «Permitir sempre»: toca em Permitir e escolhe-o no ecrã que se abre.</string>
+    <string name="step_batt_title">Bateria</string>
+    <string name="step_batt_why">Para que o Nayive continue acordado com o ecrã desligado. Escolhe «Permitir».</string>
+    <string name="step_full_title">Ecrã inteiro</string>
+    <string name="step_full_why">Para que uma chamada apareça mesmo com o telemóvel bloqueado.</string>
+    <string name="step_do">Permitir</string>
+    <string name="step_ok">Feito</string>
+    <string name="setup_continue">Continuar</string>
+    <string name="setup_missing">Sem todas as permissões, algumas coisas não vão funcionar. Para voltar aqui, mantém premido o ícone do Nayive.</string>
+    <string name="chan_link">Ligação</string>
+    <string name="chan_calls">Chamadas</string>
+    <string name="chan_find">Encontrar o meu telemóvel</string>
+    <string name="chan_pending">Por ler</string>
+    <string name="chan_updates">Atualizações</string>
+    <string name="link_on">O Nayive está ligado</string>
+    <string name="link_tracking">O Nayive guarda a tua posição da viagem</string>
+    <string name="link_enrol">Abre o Nayive e entra com o teu utilizador para ativar este telemóvel</string>
+    <string name="link_offline">Sem ligação: o Nayive vai tentar de novo</string>
+    <string name="link_fix">Falta uma permissão. Toca para corrigir.</string>
+    <string name="call_voice">Chamada de voz a entrar</string>
+    <string name="call_video">Videochamada a entrar</string>
+    <string name="call_answer">Atender</string>
+    <string name="call_decline">Recusar</string>
+    <string name="find_title">O Nayive está à tua procura</string>
+    <string name="find_text">Alguém carregou em «Encontrar o meu telemóvel».</string>
+    <string name="find_stop">Parar</string>
+    <plurals name="pending_chat">
+        <item quantity="one">Tens 1 mensagem por ler</item>
+        <item quantity="other">Tens %d mensagens por ler</item>
+    </plurals>
+    <string name="update_title">Há uma versão nova do Nayive</string>
+    <string name="update_text">Toca para a descarregar.</string>
+    <string name="shortcut_setup">Permissões</string>
+    <string name="shortcut_setup_long">Permissões do Nayive</string>
+</resources>

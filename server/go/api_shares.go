@@ -6,6 +6,7 @@ package main
 //
 //	GET    -> {"mine": [...], "with_me": [...]}
 //	POST   -> share one file or folder: {to, root, app, title, mode}
+//	          to "*" (Everyone) shares it with every user, now and later
 //	DELETE -> ?id=<share id>, owner only
 //
 // Regular users only. The admin has no home to share from and its paths are
@@ -149,7 +150,7 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request, user, role 
 	}
 	// ListUserNames, NOT ListUsers: the latter measures every home on disk
 	// (tens of GB of photos) just to build the same list of names.
-	if !contains(s.users.ListUserNames(), to) {
+	if to != Everyone && !contains(s.users.ListUserNames(), to) {
 		sendError(w, r, http.StatusBadRequest, "no existe esa persona")
 		return
 	}
@@ -182,7 +183,7 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request, user, role 
 	}
 	grant := s.shares.Create(user, to, root, app, title, mode)
 	if grant == nil {
-		sendError(w, r, http.StatusConflict, "ya lo has compartido con esa persona")
+		sendError(w, r, http.StatusConflict, "ya lo has compartido con esa persona o con todos")
 		return
 	}
 	sendJSON(w, r, http.StatusCreated, s.shareOut(grant, true))

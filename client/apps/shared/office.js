@@ -1,9 +1,11 @@
 /*
  * office.js - what the three document editors (Calc, Text, Write) share.
  *
- * Classic script, one global `NayiveOffice`. Load it deferred, after ui.js
- * (it calls NayiveUI at run time, never while it is parsed):
+ * Classic script, one global `NayiveOffice`. Load it deferred, after ui.js and
+ * crypt.js (it calls NayiveUI and NayiveCrypt at run time, never while it is
+ * parsed):
  *     <script src="../shared/ui.js" defer></script>
+ *     <script src="../shared/crypt.js" defer></script>
  *     <script src="../shared/office.js" defer></script>
  *
  * Each editor used to carry its own copy of the same plumbing: the path
@@ -246,7 +248,13 @@
             catch ( e ) {}
         }
 
-        return { list: list, add: add };
+        function remove( path )
+        {
+            try { localStorage.setItem( KEY, JSON.stringify( list().filter( function ( p ) { return p !== path; } ) ) ); }
+            catch ( e ) {}
+        }
+
+        return { list: list, add: add, remove: remove };
     }
 
     //------------------------------------------------------------------------//
@@ -448,9 +456,18 @@
 
     // Build the menu entries and wire the popup. `ids` are the buttons to
     // mirror; the menu is the .top-menu element, the button the header "...".
-    function fileMenu( opts )
+    // `phoneOnly` names the ids that are still ON the bar on a PC (Write's
+    // print, page setup, comments...): they are built all the same, so the
+    // phone has them when the bar is gone, and CSS drops them above 640px so
+    // a PC is never offered the same thing twice (.mi-phone in app.css).
+    //
+    // The same builder serves the "?" - its Ayuda menu is three hidden buttons
+    // mirrored exactly like the file ones - so it is exported twice: fileMenu
+    // for the header "...", buttonMenu for anything else.
+    function buttonMenu( opts )
     {
-        var menu = byId( opts.menu || "topMenu" );
+        var menu  = byId( opts.menu || "topMenu" );
+        var phone = opts.phoneOnly || [];
         ( opts.ids || [] ).forEach( function ( id )
         {
             var src = byId( id );
@@ -458,7 +475,7 @@
             if( ! svg ) return;
             var item = document.createElement( "button" );
             item.type         = "button";
-            item.className    = "menu-item";
+            item.className    = "menu-item" + ( phone.indexOf( id ) >= 0 ? " mi-phone" : "" );
             item.dataset.menu = id;
             item.appendChild( svg.cloneNode( true ) );
             item.appendChild( document.createTextNode( src.getAttribute( "title" ) || id ) );
@@ -469,6 +486,105 @@
             var src = item.dataset.menu && byId( item.dataset.menu );
             if( src ) src.click();
         } } );
+    }
+
+    //------------------------------------------------------------------------//
+    // TOOLBAR GROUP POPUP  (paired CSS: TOOLBAR GROUP POPUP in shared/app.css)
+    //
+    // Six alignment buttons in a row cost six slots and read as one blur. One
+    // button takes their place on the bar and the six live in a .popup card
+    // under it. The buttons in that card are THE REAL ONES - they sit inside
+    // the popup in index.html, they keep their ids, their handlers and their
+    // "active" light. Nothing is cloned and nothing is moved at run time, so
+    // there is no flash on load and no second copy to keep in step.
+    //
+    //   var g = NayiveOffice.groupPopup( { btn: "fmtAlignBtn", popup: "alignPopup",
+    //                                      activeFrom: [ "fmtWrapBtn" ] } );
+    //
+    //   btn         the trigger already in the markup, carrying .has-popup
+    //   popup       the .popup element holding the real buttons
+    //   activeFrom  ids whose "active" lights the TRIGGER too, so a toggle that
+    //               is on can be seen with the card shut. Left out: never lit.
+    //   anchor      () -> a DOMRect to hang the card from, when the trigger
+    //               itself is collapsed (menu chrome). Default: the trigger.
+    //
+    // Returns { open, close, isOpen, sync }. Call sync() from wherever the app
+    // refreshes its toolbar state.
+    function groupPopup( opts )
+    {
+        var btn = typeof opts.btn   === "string" ? byId( opts.btn )   : opts.btn;
+        var pop = typeof opts.popup === "string" ? byId( opts.popup ) : opts.popup;
+        if( ! btn || ! pop ) return null;
+
+        var watch = ( opts.activeFrom || [] ).map( byId ).filter( Boolean );
+
+        function isOpen() { return pop.classList.contains( "open" ); }
+
+        function close()
+        {
+            if( ! isOpen() ) return;
+            pop.classList.remove( "open" );
+            btn.setAttribute( "aria-expanded", "false" );
+        }
+
+        function open()
+        {
+            var r = opts.anchor ? opts.anchor() : btn.getBoundingClientRect();
+            pop.style.top  = ( r.bottom + 4 ) + "px";
+            pop.style.left = r.left + "px";
+            pop.classList.add( "open" );
+
+            // nudge back inside the viewport when the trigger sits near an edge
+            var pr = pop.getBoundingClientRect();
+            if( pr.right > window.innerWidth - 8 )
+                pop.style.left = Math.max( 8, window.innerWidth - 8 - pr.width ) + "px";
+
+            btn.setAttribute( "aria-expanded", "true" );
+        }
+
+        // The trigger lights up when one of its toggles is on, so "ajustar
+        // texto" can be seen without opening the card.
+        function sync()
+        {
+            if( ! watch.length ) return;
+            btn.classList.toggle( "active", watch.some( function ( el )
+            {
+                return el.classList.contains( "active" ) || el.classList.contains( "is-active" );
+            } ) );
+        }
+
+        btn.addEventListener( "click", function ( e )
+        {
+            e.stopPropagation();
+            if( isOpen() ) close(); else open();
+        } );
+
+        // Pressing inside the card must not take focus off the document: Calc
+        // would lose the cell selection the button is about to format.
+        pop.addEventListener( "mousedown", function ( e )
+        {
+            if( ! e.target.closest( "input, select, textarea" ) ) e.preventDefault();
+        } );
+
+        // Every button in there is an action - it closes behind itself. The
+        // button's own handler runs as usual; this only shuts the card.
+        pop.addEventListener( "click", function ( e )
+        {
+            if( e.target.closest( "button" ) ) close();
+        } );
+
+        document.addEventListener( "click", function ( e )
+        {
+            if( isOpen() && ! pop.contains( e.target ) && ! btn.contains( e.target ) ) close();
+        } );
+        document.addEventListener( "keydown", function ( e ) { if( e.key === "Escape" ) close(); } );
+        window.addEventListener( "resize", close );
+
+        btn.setAttribute( "aria-haspopup", "true" );
+        btn.setAttribute( "aria-expanded", "false" );
+        sync();
+
+        return { open: open, close: close, isOpen: isOpen, sync: sync };
     }
 
     // The "?" is the SAME button in both layouts - a second copy would break
@@ -553,6 +669,10 @@
     //   saver.takeDraft()         at boot: the device draft -> { name, body, at } or null
     //   saver.restored( d )       the app has put that draft on screen
     //   saver.dropDraft()         the user threw the untitled document away
+    //   saver.lock()              the open document's key, or null
+    //   saver.setLock( l )        this document is (not) locked - no writing
+    //   saver.lockDoc( l )        put a password on: also frees the plain .bak
+    //   saver.unlockDoc()         take it off: puts the sealed .bak back in the clear
     //
     // What it does:
     //   - saves 7 s after the last edit, and at least every 3 min while typing
@@ -562,6 +682,8 @@
     //     on another open tab and silently turn the store online-only). The
     //     session asks an untitled one for its name and folder at the first
     //     pause after its first edit; that save drops the draft.
+    //   - a document with a password (see THE PADLOCK) is encrypted on the one
+    //     road out of here - the server file, its .bak and the device draft
     //   - one .bak/<name> beside the document: the server's copy from before
     //     the document's first save in this session
     //   - "Guardado 12:04" / "Borrador 12:04" in #savedAt
@@ -641,6 +763,7 @@
         var savingAs = false;       // inside saveTo(): no conflict dialog on top of "Guardar como"
         var pristine = null;        // imported bytes: the .bak when the server has no copy yet
         var backedUp = new Set();   // paths already copied to .bak/ this session
+        var lock     = null;        // set = this document is written encrypted (shared/crypt.js)
 
         function sync( s )  { if( o.setSync ) o.setSync( s ); }
         function path()     { return o.path(); }
@@ -689,6 +812,55 @@
 
         function flush() { return timer ? run() : Promise.resolve(); }
 
+        // ---- the password ----------------------------------------------------
+        //
+        // A locked document is encrypted HERE, on the one road out of the
+        // editor - the server file, the .bak beside it and the device draft all
+        // go through it, so none of them can be left in the clear by accident.
+        // The key only ever lives in this closure: a reload asks again.
+
+        function sealed( body )
+        {
+            return lock ? NayiveCrypt.seal( lock, body ) : Promise.resolve( body );
+        }
+
+        // Put a password on the open document. The .bak beside it is the copy
+        // from BEFORE the password - plain - so it is dropped from the "already
+        // taken" set: the next save reads the server copy, seals it, and writes
+        // it over that one.
+        function lockDoc( l )
+        {
+            lock = l;
+            if( path() ) backedUp.delete( path() );
+        }
+
+        // Take it off. The .bak is sealed and we are about to throw the only key
+        // away, so it is put back in the clear first - with no key it would be a
+        // "previous copy" nobody could ever restore.
+        async function unlockDoc()
+        {
+            var p   = path();
+            var old = lock;
+            lock = null;
+            if( ! p || ! old ) return;
+
+            try
+            {
+                var prev = await GumApi.readFileBytes( bakPath( p ) );
+                if( prev && prev.length && NayiveCrypt.looksLocked( prev ) )
+                {
+                    var plain = await NayiveCrypt.unseal( old, prev );
+                    await GumApi.writeFileBytes( bakPath( p ),
+                        typeof plain === "string" ? new TextEncoder().encode( plain ) : plain );
+                }
+            }
+            catch ( e ) { /* no .bak, or it cannot be read: nothing to put back */ }
+
+            // Either way, never take a NEW one from the server this session: the
+            // copy up there is still sealed until the save that follows.
+            backedUp.add( p );
+        }
+
         async function writeTo( p )
         {
             if( o.blocked && o.blocked( p ) ) return null;
@@ -700,14 +872,14 @@
                 sync( "saving" );
 
                 var body;
-                try { body = await o.encode( p ); }
+                try { body = await sealed( await o.encode( p ) ); }
                 catch ( e )
                 {
                     if( mine === seq )
                     {
                         failed = true;
                         sync( "error" );
-                        if( o.failKey ) NayiveUI.toast( t( o.failKey ) );
+                        NayiveUI.toast( t( lock ? "lock.failed" : ( o.failKey || "ui.saveFailed" ) ) );
                     }
                     return null;
                 }
@@ -748,7 +920,7 @@
             try
             {
                 var body;
-                try { body = await o.encode( null ); }
+                try { body = await sealed( await o.encode( null ) ); }
                 catch ( e ) { return null; }
                 if( mine !== seq ) return null;
 
@@ -782,12 +954,19 @@
                 try { prev = await GumApi.readFileBytes( p ); }
                 catch ( e ) { prev = pristine; }
 
+                // The server copy of a locked document is already sealed;
+                // imported bytes never are. Either way what lands in .bak/ is
+                // what the document itself is, so a reader needs the same key.
+                if( prev && prev.length && lock && ! NayiveCrypt.looksLocked( prev ) )
+                    prev = await NayiveCrypt.seal( lock, prev );
+
                 if( prev && prev.length )
                 {
                     // The document can sit in any folder ("Guardar como" asks for
                     // one), so make its .bak/ first. Already there = a harmless refusal.
                     try { await GumApi.makeDir( dirName( p ) || "files", ".bak" ); } catch ( e ) {}
-                    await GumApi.writeFileBytes( bakPath( p ), prev );
+                    await GumApi.writeFileBytes( bakPath( p ),
+                        typeof prev === "string" ? new TextEncoder().encode( prev ) : prev );
                 }
 
                 backedUp.add( p );     // taken, or nothing to take - not again this session
@@ -920,7 +1099,12 @@
             dirty:     function () { return dirty; },
             takeDraft: takeDraft,
             restored:  restored,
-            dropDraft: dropDraft
+            dropDraft: dropDraft,
+            drafted:   function () { return drafted; },
+            lock:      function () { return lock; },
+            setLock:   function ( l ) { lock = l; },
+            lockDoc:   lockDoc,
+            unlockDoc: unlockDoc
         };
     }
 
@@ -958,6 +1142,13 @@
     //   session.untitled( name, o )            the app put a new untitled document on screen (o.dirty, o.pristine)
     //   session.edited()  .flush()  .saveNow()  .openSaveAs()  .dirty()
     //   session.openDialog()  .recent()        the "Abrir documento" sheet
+    //   session.locked()                       it is written encrypted
+    //
+    // THE PADLOCK (#lockBtn, optional): a password on the open document. The
+    // key is derived once and kept in this tab only (shared/crypt.js), so a
+    // reload asks for it again and a forgotten one cannot be recovered by
+    // anybody - us included. Everything read back (a file, an import, the
+    // device draft, the .bak) is sniffed for the seal and asks by itself.
     //
     // It wires whatever the page has of: #newBtn, #openBtn, #importBtn +
     // #importInput, #saveAsBtn, #restoreBtn, the "Abrir documento" sheet
@@ -986,6 +1177,7 @@
         var pending  = null;     // the name of a document that has none on the server yet
         var asked    = false;    // this untitled document was already offered "Guardar como"
         var askTimer = null;
+        var wipeAfter = null;    // "Copia limpia": the plain path to wipe after the save-as
 
         var sync     = NayiveUI.syncIndicator( { titles: OFFICE_TITLES } );
         var label    = fileLabel( { onCommit: rename } );
@@ -1037,7 +1229,15 @@
         {
             label.set( path ? relLabel( path, o.appDir, o.openRoot ) + ( readOnly ? t( "text.readOnlySuffix" ) : "" )
                             : ( pending || t( "ui.untitled" ) ) );
+            showLock();
             if( o.onChange ) o.onChange();
+        }
+
+        // The toolbar padlock lit = what leaves this tab is encrypted.
+        function showLock()
+        {
+            var btn = byId( "lockBtn" );
+            if( btn ) btn.classList.toggle( "is-active", !! saver.lock() );
         }
 
         function notReady()
@@ -1045,6 +1245,37 @@
             if( ! o.ready || o.ready() ) return false;
             toast( "write.waitForDoc" );
             return true;
+        }
+
+        // ---- a locked document ------------------------------------------------
+        //
+        // Anything read back - a file, an import, the device draft, the .bak -
+        // may be sealed (shared/crypt.js). Ask for its password and open it;
+        // null = the user gave up, and the caller must NOT put it on screen.
+
+        async function unsealAsk( body, name )
+        {
+            if( ! NayiveCrypt.available() ) { toast( "lock.noCrypto" ); return null; }
+
+            for( ;; )
+            {
+                var pw = await NayiveUI.askPassword( { title:   t( "lock.askTitle" ),
+                                                       body:    tf( "lock.askBody", { name: name } ),
+                                                       confirm: t( "lock.openIt" ) } );
+                if( pw === null ) return null;
+
+                try
+                {
+                    var lock = await NayiveCrypt.lockFrom( pw, body );
+                    return { lock: lock, body: await NayiveCrypt.unseal( lock, body ) };
+                }
+                catch ( e )
+                {
+                    // A wrong password and a damaged file look exactly the same
+                    // from here - that is what the tag is for.
+                    toast( "lock.wrong" );
+                }
+            }
         }
 
         // ---- what is on screen ----------------------------------------------
@@ -1069,6 +1300,7 @@
             asked    = false;
             clearTimeout( askTimer );
             askTimer = null;
+            saver.setLock( x.lock || null );     // another document: never its password
             saver.opened( x );
             showLabel();
             if( x.dirty ) sync( "unsaved" );   // on screen, not on the server yet
@@ -1081,7 +1313,17 @@
             var res = await readViaStore( o.store, p );   // the store drives the plug; toasts on trouble
             if( res.body === null ) return false;
 
-            try { await o.load( res.body, p, "open" ); }
+            var body = res.body;
+            var got  = null;
+
+            if( NayiveCrypt.looksLocked( body ) )
+            {
+                got = await unsealAsk( body, baseName( p ) );
+                if( ! got ) return false;                // no password, no document
+                body = got.body;
+            }
+
+            try { await o.load( body, p, "open" ); }
             catch ( e )
             {
                 sync( "error" );
@@ -1090,6 +1332,7 @@
             }
 
             opened( p );
+            saver.setLock( got ? got.lock : null );      // opened() reopened the saver: set it after
             return true;
         }
 
@@ -1097,10 +1340,21 @@
         // original bytes are the first .bak copy.
         async function importBytes( bytes, name )
         {
+            var got = null;
+
+            if( NayiveCrypt.looksLocked( bytes ) )
+            {
+                got = await unsealAsk( bytes, name );
+                if( ! got ) return false;
+                bytes = got.body;
+            }
+
             try { await o.load( bytes, name, "import" ); }
             catch ( e ) { toast( "text.importFailed" ); return false; }
 
-            untitled( name, { pristine: bytes, dirty: true } );
+            // `pristine` is the plain original on purpose: autosave seals
+            // whatever goes to .bak/ while a password is on.
+            untitled( name, { pristine: bytes, dirty: true, lock: got && got.lock } );
             return true;
         }
 
@@ -1141,10 +1395,19 @@
                 var d = await saver.takeDraft();
                 if( d )
                 {
-                    try
+                    var lock = null;
+
+                    if( NayiveCrypt.looksLocked( d.body ) )
+                    {
+                        var got = await takeLockedDraft( d );
+                        if( got ) { d = { name: d.name, body: got.body, at: d.at }; lock = got.lock; }
+                        else      { d = null; }        // thrown away: fall through to a blank one
+                    }
+
+                    if( d ) try
                     {
                         await o.load( d.body, d.name, "draft" );
-                        untitled( d.name );
+                        untitled( d.name, { lock: lock } );
                         saver.restored( d );
                         askSoon();                     // still nowhere to save it: ask for a name
                         return;
@@ -1155,6 +1418,25 @@
 
             await o.blank();
             untitled( null );
+        }
+
+        // A draft is kept on this device alone: there is no copy anywhere else.
+        // So a cancelled password cannot just drop through to a blank document -
+        // the next edit would write over it. Ask again, or throw it away for good.
+        async function takeLockedDraft( d )
+        {
+            for( ;; )
+            {
+                var got = await unsealAsk( d.body, d.name || t( "ui.untitled" ) );
+                if( got ) return got;
+
+                var drop = await NayiveUI.confirm( { title:   t( "lock.draftTitle" ),
+                                                     body:    t( "lock.draftBody" ),
+                                                     confirm: t( "ui.discardDoc" ),
+                                                     cancel:  t( "lock.tryAgain" ),
+                                                     danger:  true } );
+                if( drop ) { await saver.dropDraft(); return null; }
+            }
         }
 
         // A blank document without leaving the app. An untitled one with edits
@@ -1231,11 +1513,17 @@
         // Back into the document when "Guardar como" closes, whichever way.
         var saveBack = byId( "saveAsBackdrop" );
         var saveOpen = false;
-        if( saveBack && o.focus )
+        if( saveBack )
             new MutationObserver( function ()
             {
                 var now = saveBack.classList.contains( "open" );
-                if( saveOpen && ! now ) o.focus();
+                if( saveOpen && ! now )
+                {
+                    // Closed without writing: a "Copia limpia" that never
+                    // happened must not wipe anything on the NEXT save-as.
+                    wipeAfter = null;
+                    if( o.focus ) o.focus();
+                }
                 saveOpen = now;
             } ).observe( saveBack, { attributes: true, attributeFilter: [ "class" ] } );
 
@@ -1286,17 +1574,29 @@
             name = o.finishName ? o.finishName( name, fmt ) : withExt( name, fmt );
             if( ! name ) return;
 
+            // Taken BEFORE the sheet closes: closing clears it (a "Copia
+            // limpia" the user backed out of must not wipe anything later).
+            var wipeThis = wipeAfter;
+            wipeAfter = null;
+
             NayiveUI.close( "saveAsBackdrop" );
 
             // saveTo lands any waiting autosave under the OLD name first, then
             // writes here - and a new destination gets its own .bak copy.
-            var p = dirField.get() + "/" + name;
-            await saver.saveTo( p );
+            var p   = dirField.get() + "/" + name;
+            var res = await saver.saveTo( p );
 
             path     = p;
             readOnly = false;
             pending  = null;
             showLabel();
+
+            // "Copia limpia": the plain original goes only once the protected
+            // copy is REALLY on the server. Offline, queued or refused, it
+            // stays - and so does the only readable version of the document.
+            if( wipeThis && wipeThis !== p && res && res.ok === true && ! res.conflict )
+                await wipeForGood( wipeThis );
+
             if( o.onSavedAs ) o.onSavedAs( p );
             if( o.focus ) o.focus();
         }
@@ -1367,15 +1667,160 @@
                                                confirm: t( "write.restore" ) } );
             if( ! ok ) return;
 
+            // The copy coming back was sealed by the key of its day: the one we
+            // hold, or - after the password changed - one only the user knows.
+            // Opened BEFORE anything is written: a cancel here must leave the
+            // .bak exactly as it was.
+            if( NayiveCrypt.looksLocked( prev ) )
+            {
+                var plain = null;
+                if( saver.lock() )
+                    try { plain = await NayiveCrypt.unseal( saver.lock(), prev ); } catch ( e ) { plain = null; }
+
+                if( plain === null )
+                {
+                    var got = await unsealAsk( prev, baseName( bak ) );
+                    if( ! got ) return;
+                    saver.setLock( got.lock );
+                    showLock();
+                    plain = got.body;
+                }
+                prev = plain;
+            }
+
             try
             {
+                // The copy going up takes the document's own state with it.
                 var now = await o.encode( path );
+                if( saver.lock() ) now = await NayiveCrypt.seal( saver.lock(), now );
                 await GumApi.writeFileBytes( bak, typeof now === "string" ? new TextEncoder().encode( now ) : now );
+
                 await o.load( prev, path, "restore" );
                 saver.edited();                // the restored copy still has to be saved over the document
                 toast( "write.restored" );
             }
             catch ( e ) { toast( "write.actionFailed" ); }
+        }
+
+        // ---- the padlock: put a password on, or take it off ---------------------
+        //
+        // On: the body is encrypted from here on - the server file, the .bak
+        // beside it and the device draft. Off: it goes back to plain, and the
+        // sealed .bak with it (autosave.unlockDoc, while the key is still here).
+        // Either way the document is written at once, so what is up there
+        // matches what the padlock says.
+
+        async function toggleLock()
+        {
+            if( notReady() ) return;
+            if( readOnly )                   { toast( "text.notYours" ); return; }
+            if( ! NayiveCrypt.available() )  { toast( "lock.noCrypto" ); return; }
+
+            if( saver.lock() ) await removeLock();
+            else               await addLock();
+        }
+
+        // A document that has been written already is the dangerous case: the
+        // version from before the password is on this device (the store cache,
+        // the device draft) and on the server (the file and its .bak), and a
+        // password now does NOT go back and erase it. Nothing about the padlock
+        // shows that, so it is said out loud, once, before the password is even
+        // asked for - and with the way out offered as the first answer.
+        async function warnAlreadyWritten()
+        {
+            if( ! path )
+                return await NayiveUI.confirm( { title:   t( "lock.pastTitle" ),
+                                                 body:    t( "lock.pastDraftBody" ),
+                                                 confirm: t( "lock.protect" ) } ) ? "lock" : null;
+
+            var r = await NayiveUI.confirm( {
+                title:     t( "lock.pastTitle" ),
+                body:      tf( "lock.pastBody", { name: baseName( path ) } ),
+                confirm:   t( "lock.cleanCopy" ),
+                other:     t( "lock.lockAnyway" ),
+                otherIcon: "lock" } );
+
+            return r === true ? "clean" : ( r === "other" ? "lock" : null );
+        }
+
+        async function addLock()
+        {
+            // Never written anywhere yet (the padlock pressed before the first
+            // word): there is no past to warn about, and none will exist.
+            var how = ( path || saver.drafted() ) ? await warnAlreadyWritten() : "lock";
+            if( ! how ) return;
+
+            var pw = await NayiveUI.askPassword( { title:   t( "lock.setTitle" ),
+                                                   body:    t( "lock.setBody" ),
+                                                   confirm: t( "lock.protect" ),
+                                                   verify:  true } );
+            if( pw === null ) return;
+
+            try { saver.lockDoc( await NayiveCrypt.newLock( pw ) ); }
+            catch ( e ) { toast( "lock.failed" ); return; }
+
+            showLock();
+
+            // A clean copy goes to a NEW name; the old one is wiped only once
+            // the protected copy is really on the server (confirmSaveAs).
+            if( how === "clean" ) { wipeAfter = path; openSaveAs(); return; }
+
+            await writeLockState();
+            toast( "lock.on" );
+        }
+
+        // The copy from before the password, once the protected one is safe:
+        // out of Drive AND out of the Bin, so it is not left sitting there in
+        // the clear. What this canNOT reach is said in the dialog, not hidden:
+        // the nightly off-site backup keeps its own copy for a while.
+        async function wipeForGood( old )
+        {
+            var paths = [ old, bakPath( old ) ];
+
+            try
+            {
+                try { await o.store.forget( old ); } catch ( e ) {}
+                recent.remove( old );
+
+                // One at a time: a document with no .bak yet must not stop the
+                // deletion of the document itself.
+                for( var i = 0; i < paths.length; i++ )
+                    try { await GumApi.deletePaths( [ paths[ i ] ] ); } catch ( e ) {}
+
+                // deletePaths() only moves them to the papelera - take them out
+                // of it too, by the entryIds the trash listing gives back.
+                var items = await GumApi.trashList();
+                var ids   = items.filter( function ( it ) { return paths.indexOf( it.orig ) !== -1; } )
+                                 .map( function ( it ) { return it.id; } );
+
+                if( ids.length ) await GumApi.trashDelete( ids );
+                toast( "lock.wiped" );
+            }
+            catch ( e ) { toast( "lock.wipeFailed" ); }
+        }
+
+        async function removeLock()
+        {
+            var ok = await NayiveUI.confirm( { title:   t( "lock.offTitle" ),
+                                               body:    t( "lock.offBody" ),
+                                               confirm: t( "lock.remove" ),
+                                               danger:  true } );
+            if( ! ok ) return;
+
+            await saver.unlockDoc();
+            showLock();
+            await writeLockState();
+            toast( "lock.off" );
+        }
+
+        // Right now, not in seven seconds: while the old state is still up
+        // there, the padlock would be telling the truth about the wrong file.
+        // An untitled document has only its device draft - flush() writes that.
+        async function writeLockState()
+        {
+            if( path && ! readOnly ) await saver.saveNow();
+            else                     { saver.edited(); await saver.flush(); }
+            if( o.focus ) o.focus();
         }
 
         // ---- the buttons and the sheet ------------------------------------------
@@ -1385,6 +1830,7 @@
         on( "newBtn",           "click",   function () { newDocument(); } );
         on( "openBtn",          "click",   function () { openDialog(); } );
         on( "restoreBtn",       "click",   function () { restorePrevious(); } );
+        on( "lockBtn",          "click",   function () { toggleLock(); } );
         on( "importBtn",        "click",   function () { if( byId( "importInput" ) ) byId( "importInput" ).click(); } );
         on( "importInput",      "change",  function ( e ) { var f = e.target.files[ 0 ]; e.target.value = ""; importFile( f ); } );
         on( "saveAsBtn",        "click",   function () { openSaveAs(); } );
@@ -1405,7 +1851,8 @@
             dirty:      saver.dirty,
             openSaveAs: openSaveAs,
             openDialog: openDialog,
-            recent:     recent.list
+            recent:     recent.list,
+            locked:     function () { return !! saver.lock(); }
         };
     }
 
@@ -1442,6 +1889,211 @@
         NayiveUI.open( "scBackdrop" );
     }
 
+    //------------------------------------------------------------------------//
+    // STATISTICS  -  Help > "Statistics" in Write, Calc and Text
+    //
+    //   NayiveOffice.showStats( [ { text: "Words", value: "812" }, ... ], note );
+    //
+    // Same sheet in the three apps: #statsBackdrop, one #stList row per figure,
+    // the number on the right, an optional grey `note` under the list. Paired
+    // CSS: .st-list / .st-row / .st-note in the OFFICE CHROME block of app.css.
+
+    function showStats( rows, note )
+    {
+        var list = byId( "stList" );
+        if( ! list ) return;
+        list.innerHTML = "";
+
+        rows.forEach( function ( r )
+        {
+            var row  = document.createElement( "div" );
+            var what = document.createElement( "span" );
+            var val  = document.createElement( "b" );
+            row.className    = "st-row";
+            what.textContent = r.text;
+            val.textContent  = r.value;
+            row.appendChild( what );
+            row.appendChild( val );
+            list.appendChild( row );
+        } );
+
+        var n = byId( "stNote" );
+        if( n )
+        {
+            n.textContent = note || "";
+            n.hidden      = ! note;
+        }
+
+        NayiveUI.open( "statsBackdrop" );
+    }
+
+    //------------------------------------------------------------------------//
+    // THE CLIPBOARD
+    //
+    // Cut / copy / paste in a menu must move exactly what Ctrl+X / Ctrl+C /
+    // Ctrl+V move, formatting and all. Neither editor engine offers that:
+    // Write's takes a bare string, Handsontable's takes text, and a page may
+    // not call execCommand( "paste" ) at all.
+    //
+    // What BOTH engines do have is ordinary DOM listeners for "copy" / "cut" /
+    // "paste" that work off the event's clipboardData rather than the system
+    // clipboard. So a synthetic ClipboardEvent carrying our own DataTransfer
+    // drives the very same code the keyboard drives:
+    //
+    //   copy / cut  - hand the engine an empty DataTransfer, let it fill in
+    //                 text/plain + text/html + whatever private formats it
+    //                 keeps, then put all of that on the system clipboard;
+    //   paste       - read the system clipboard back into a DataTransfer and
+    //                 hand it over, and the engine picks the richest form.
+    //
+    // `node` is where the event is dispatched. It only has to be somewhere the
+    // engine's listener will see it - both listen with capture, high up - and
+    // Handsontable additionally insists the target be the body or inside its
+    // own root, so the apps pass what each engine accepts.
+    //
+    // Private formats travel as Chrome "web custom formats" (a "web " prefix),
+    // which is what makes an app-to-app paste exact. A browser without them
+    // still gets text/html, which is already styled; one without
+    // clipboard.read() gets plain text. Every rung falls to the next.
+
+    var CLIP_WEB = "web ";
+
+    // The two types a ClipboardItem takes under their own name.
+    function clipPlainType( type ) { return type === "text/plain" || type === "text/html"; }
+
+    // Onto the system clipboard, richest form first. Firefox rejects a
+    // ClipboardItem holding types it does not know, hence the second rung.
+    async function clipWrite( dt )
+    {
+        function item( all )
+        {
+            var parts = {}, i, type, data;
+
+            for( i = 0; i < dt.types.length; i++ )
+            {
+                type = dt.types[ i ];
+                if( ! all && ! clipPlainType( type ) ) continue;
+
+                data = dt.getData( type );
+                if( ! data ) continue;
+
+                parts[ clipPlainType( type ) ? type : CLIP_WEB + type ] = new Blob( [ data ], { type: type } );
+            }
+
+            return new ClipboardItem( parts );
+        }
+
+        if( window.ClipboardItem && navigator.clipboard && navigator.clipboard.write )
+        {
+            try { await navigator.clipboard.write( [ item( true  ) ] ); return true; } catch ( e ) {}
+
+            if( dt.getData( "text/html" ) )
+            { try { await navigator.clipboard.write( [ item( false ) ] ); return true; } catch ( e ) {} }
+        }
+
+        try { await navigator.clipboard.writeText( dt.getData( "text/plain" ) ); return true; }
+        catch ( e ) { return false; }
+    }
+
+    // The system clipboard as a DataTransfer. `unsanitized` keeps Chrome from
+    // rewriting the HTML on the way out; an older Chrome ignores the unknown
+    // option, and a browser with no clipboard.read() leaves us plain text.
+    async function clipRead()
+    {
+        var dt = new DataTransfer(), items = null, i, j, type, name, blob;
+
+        if( navigator.clipboard && navigator.clipboard.read )
+        {
+            try
+            {
+                try      { items = await navigator.clipboard.read( { unsanitized: [ "text/html" ] } ); }
+                catch ( e ) { items = await navigator.clipboard.read(); }
+
+                for( i = 0; i < items.length; i++ )
+                    for( j = 0; j < items[ i ].types.length; j++ )
+                    {
+                        type = items[ i ].types[ j ];
+                        name = type.indexOf( CLIP_WEB ) === 0 ? type.slice( CLIP_WEB.length ) : type;
+                        blob = await items[ i ].getType( type );
+
+                        // An image is a file to an engine, never a string.
+                        if( name.indexOf( "image/" ) === 0 ) dt.items.add( new File( [ blob ], "image", { type: name } ) );
+                        else                                 dt.setData( name, await blob.text() );
+                    }
+
+                if( dt.types.length ) return dt;
+            }
+            catch ( e ) { /* fall through to plain text */ }
+        }
+
+        try { dt.setData( "text/plain", await navigator.clipboard.readText() ); }
+        catch ( e ) { return null; }
+
+        return dt.types.length ? dt : null;
+    }
+
+    function clipEvent( node, kind, dt )
+    {
+        node.dispatchEvent( new ClipboardEvent( kind,
+            { clipboardData: dt, bubbles: true, cancelable: true, composed: true } ) );
+    }
+
+    // "empty" = the engine had nothing to give / the clipboard held nothing,
+    // "blocked" = the browser refused the clipboard, "ok" = done. The caller
+    // words the toast: only it knows what "nothing selected" means on screen.
+    var clip =
+    {
+        out: async function( node, kind )
+        {
+            if( ! node ) return "empty";
+
+            var dt = new DataTransfer();
+            clipEvent( node, kind, dt );
+
+            if( ! dt.types.length ) return "empty";
+
+            return await clipWrite( dt ) ? "ok" : "blocked";
+        },
+
+        // `plainOnly` is "paste without formatting": the text alone reaches the
+        // engine, so it takes the look of wherever the caret is.
+        into: async function( node, plainOnly )
+        {
+            if( ! node ) return "empty";
+
+            var dt = await clipRead(), txt;
+
+            if( ! dt )              return "blocked";
+            if( ! dt.types.length ) return "empty";
+
+            if( plainOnly )
+            {
+                txt = dt.getData( "text/plain" );
+                if( ! txt ) return "empty";
+
+                dt = new DataTransfer();
+                dt.setData( "text/plain", txt );
+            }
+
+            clipEvent( node, "paste", dt );
+            return "ok";
+        },
+
+        // A DataTransfer the caller built itself, straight onto the system
+        // clipboard. For an engine whose copy EVENT cannot be trusted but whose
+        // document API can - see Write's "Edicion > cortar / copiar / pegar".
+        put: clipWrite,
+
+        // The system clipboard as a DataTransfer (null = the browser refused),
+        // for an engine whose paste is a COMMAND taking the text and the HTML
+        // rather than an event - Write's "Edicion > pegar".
+        read: clipRead,
+
+        // Plain text both ways, for an editor that has no formats of its own.
+        text:  async function()     { try { return await navigator.clipboard.readText(); } catch ( e ) { return null; } },
+        write: async function( txt ) { try { await navigator.clipboard.writeText( txt ); return true; } catch ( e ) { return false; } }
+    };
+
     window.NayiveOffice = {
         baseName:       baseName,
         dirName:        dirName,
@@ -1456,13 +2108,17 @@
         folderField:    folderField,
         openBrowser:    openBrowser,
         recentFiles:    recentFiles,
-        fileMenu:       fileMenu,
+        fileMenu:       buttonMenu,
+        buttonMenu:     buttonMenu,
+        groupPopup:     groupPopup,
         placeHelpButton: placeHelpButton,
         foldingToolbar: foldingToolbar,
         autosave:       autosave,
         session:        session,
         bakPath:        bakPath,
         withExt:        withExt,
-        showShortcuts:  showShortcuts
+        showShortcuts:  showShortcuts,
+        showStats:      showStats,
+        clip:           clip
     };
 } )();

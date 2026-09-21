@@ -108,7 +108,7 @@ function renderBreadcrumb()
 
     // The "Drive" crumb doubles as the folder-tree opener on phone, so it is
     // always shown — even in search mode.
-    const searching = !! searchQuery.trim();
+    const searching = isSearching();
     const rootCrumb = document.createElement( 'span' );
     rootCrumb.className   = 'crumb crumb-root' + (currentFolder === FS_ROOT && ! searching ? ' current' : '');
     rootCrumb.textContent = 'Drive';
@@ -125,7 +125,9 @@ function renderBreadcrumb()
         const info = document.createElement( 'span' );
         info.className   = 'crumb current';
         info.textContent = TF( 'movies.resultsFor', { q: searchQuery.trim() } );
-        host.appendChild( info );
+        if( bigMode )        bigFilesCrumbs( host, info );      // listing.js
+        else if( advSearch ) advSearchCrumbs( host, info );     // advsearch.js
+        else                 host.appendChild( info );
         return;
     }
 
@@ -224,7 +226,9 @@ function clearSearch()
     searchQuery     = '';
     searchHits      = null;
     searchTruncated = false;
+    bigMode         = false;
     if( searchTimer ) { clearTimeout( searchTimer ); searchTimer = null; }
     const el = document.getElementById( 'searchInput' );
     if( el ) el.value = '';
+    if( advSearch ) { advSearch = null; showAdvSearchBox(); }      // advsearch.js
 }

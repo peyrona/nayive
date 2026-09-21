@@ -23,6 +23,8 @@
  *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
  *   - movable dialogs: drag any open .sheet from a free spot (see MOVABLE
  *     DIALOGS below). Wired once for the whole page, no per-dialog code.
+ *   - dialogs open with the caret already in their first field (see DIALOG
+ *     FIRST FIELD below). Also wired once, nothing to add to a new dialog.
  *   - embedded mode: when the page runs inside another Nayive page's <iframe>
  *     (Planner frames calendar + tasks + habits) the <html> gets .is-embedded, app.css
  *     hides the app's own title / sync dot (the host shows them once), and
@@ -494,6 +496,7 @@
         help:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>' ],
         info:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="11" x2="12" y2="16"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>' ],
         search: [ 2,   '<circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>' ],
+        textcursor: [ 2, '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"></path><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"></path><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"></path><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"></path><line x1="9" y1="7" x2="9" y2="17"></line>' ],
         plus:   [ 2.4, '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>' ],
         back:   [ 2.2, '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>' ],
         // Arrows move BETWEEN SCREENS - "back", and "forward" to open an item. A chevron
@@ -503,9 +506,13 @@
         edit:   [ 2,   '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>' ],
         grid:   [ 1.9, '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line>' ],
         folder: [ 2,   '<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>' ],
+        // "New folder" - the same glyph Drive's toolbar uses, so the verb reads
+        // the same in the toolbar and in the folder picker.
+        folderplus: [ 2, '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line>' ],
         doc:    [ 2,   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="12" y2="17"></line>' ],
         // "Save as" - the check, with a small + centred near the top edge for "as a new copy".
         saveas: [ 2,   '<polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line>' ],
+        save:   [ 2,   '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>' ],
         // "Quick tour" - a compass.
         compass:[ 2,   '<circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>' ],
         // Settings - a cog wheel.
@@ -525,6 +532,8 @@
         download: [ 2, '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>' ],
         share:    [ 2, '<path d="M8 7H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path><polyline points="8 6 12 2 16 6"></polyline><line x1="12" y1="2" x2="12" y2="14"></line>' ],
         addhome:  [ 2, '<rect x="3" y="3" width="18" height="18" rx="3"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line>' ],
+        // Android's browser menu (three dots, one above the other).
+        menudots: [ 0, '<circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle>' ],
         fullscr:  [ 2, '<path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path>' ],
         bolt:     [ 2, '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon>' ],
         // "Solo lectura" - a closed padlock. Drawn blue in .ro-badge (see app.css).
@@ -939,6 +948,12 @@
     //                               confirm: 'Vaciar', danger: true } ) ) { ... }
     //   await NayiveUI.alert( { title: 'No se pudo importar', body: msg } );
     //
+    // A confirm may carry a THIRD answer - `other: 'Solo protegerlo'` (with
+    // `otherIcon`) puts a second button between cancel and confirm and resolves
+    // the string "other". For the question that is not yes/no: two ways
+    // forward and a way out. Three is the ceiling - a fourth is a menu, not a
+    // question.
+    //
     // The sheet is built on the fly and removed on close. It closes on its own
     // buttons or Escape only - never a backdrop click (dialog-close rule).
     // `body` may hold "\n" - each line becomes its own <p>. A plain string
@@ -996,6 +1011,15 @@
                 row.appendChild( cancel );
             }
 
+            var other = null;
+            if( withCancel && opts.other )
+            {
+                other = document.createElement( "button" );
+                other.setAttribute( "data-act", "secondary:" + ( opts.otherIcon || "check" ) );
+                other.title = opts.other;
+                row.appendChild( other );
+            }
+
             var ok = document.createElement( "button" );
             if( withCancel )
                 ok.setAttribute( "data-act", opts.danger ? "danger" : "primary" );
@@ -1031,6 +1055,7 @@
             // applySheetButtons keeps the same button nodes (it only re-classes
             // them and may move a lone close to the sheet corner).
             ok.addEventListener( "click", function () { finish( true ); } );
+            if( other )  other.addEventListener( "click", function () { finish( "other" ); } );
             if( cancel ) cancel.addEventListener( "click", function () { finish( false ); } );
 
             document.addEventListener( "keydown", onKey, true );
@@ -1044,6 +1069,161 @@
 
     function confirmDialog( opts ) { return makeDialog( opts, true ); }
     function alertDialog( opts )   { return makeDialog( opts, false ); }
+
+    //------------------------------------------------------------------------//
+    // ASK FOR A PASSWORD  -  the sheet the office apps lock a document with
+    //
+    //   var pw = await NayiveUI.askPassword( { title: '...', body: '...',
+    //                                          confirm: 'Proteger', verify: true } );
+    //   if( pw === null ) { ... }        // cancelled, or Escape
+    //
+    // `verify: true` asks for it twice (setting a NEW password: there is no way
+    // back from a typo) and refuses anything shorter than `min` (default 8).
+    // Without it the sheet asks for a password that already exists, so it only
+    // refuses an empty box.
+    // Built and thrown away like confirm/alert, and it closes the same way:
+    // its own buttons or Escape, never a backdrop click.
+    //
+    // The value is returned, never kept: the caller turns it into a key and
+    // this sheet's nodes are gone from the DOM before the promise resolves.
+
+    function askPassword( opts )
+    {
+        opts = normDialogOpts( opts );
+        var min = opts.min || 8;
+
+        return new Promise( function ( resolve )
+        {
+            var done = false;
+
+            var back = document.createElement( "div" );
+            back.className = "sheet-backdrop";
+            back.setAttribute( "role", "dialog" );
+            back.setAttribute( "aria-modal", "true" );
+
+            var sheet = document.createElement( "div" );
+            sheet.className = "sheet sheet--pack";
+            back.appendChild( sheet );
+
+            if( opts.title )
+            {
+                var h = document.createElement( "h2" );
+                h.textContent = opts.title;
+                sheet.appendChild( h );
+            }
+
+            if( opts.body )
+            {
+                var lead = document.createElement( "p" );
+                lead.className   = "dialog-text";
+                lead.textContent = String( opts.body );
+                sheet.appendChild( lead );
+            }
+
+            // A field is the standard .field pair, so it inherits the app's
+            // input styling instead of growing a look-alike of its own.
+            function field( labelText, id )
+            {
+                var box = document.createElement( "div" );
+                var lab = document.createElement( "label" );
+                var inp = document.createElement( "input" );
+
+                box.className    = "field";
+                lab.textContent  = labelText;
+                lab.htmlFor      = id;
+                inp.type         = "password";
+                inp.id           = id;
+                inp.autocomplete = "new-password";
+
+                box.appendChild( lab );
+                box.appendChild( inp );
+                sheet.appendChild( box );
+                return inp;
+            }
+
+            var one = field( t( "lock.password" ), "askPw1" );
+            var two = opts.verify ? field( t( "lock.repeat" ), "askPw2" ) : null;
+
+            var warn = document.createElement( "p" );
+            warn.className = "field-error";
+            warn.hidden    = true;
+            sheet.appendChild( warn );
+
+            var row = document.createElement( "div" );
+            row.className = "sheet-actions";
+            sheet.appendChild( row );
+
+            var cancel = document.createElement( "button" );
+            cancel.setAttribute( "data-act", "close" );
+            cancel.title = opts.cancel || t( "ui.cancel" );
+            row.appendChild( cancel );
+
+            var ok = document.createElement( "button" );
+            ok.setAttribute( "data-act", "primary" );
+            ok.title = opts.confirm || t( "ui.accept" );
+            row.appendChild( ok );
+
+            function complain( key )
+            {
+                warn.textContent = t( key );
+                warn.hidden      = false;
+            }
+
+            function finish( val )
+            {
+                if( done ) return;
+                done = true;
+                document.removeEventListener( "keydown", onKey, true );
+                back.classList.remove( "open" );
+                if( back.parentNode ) back.parentNode.removeChild( back );
+                resolve( val );
+            }
+
+            function submit()
+            {
+                var pw = one.value;
+
+                // The length rule belongs to a NEW password. Asking for an
+                // existing one only refuses an empty box - the password it
+                // was set with is whatever it is.
+                if( two )
+                {
+                    if( pw.length < min )     { complain( "lock.tooShort" ); one.focus(); return; }
+                    if( two.value !== pw )    { complain( "lock.noMatch" ); two.value = ""; two.focus(); return; }
+                }
+                else if( ! pw ) { one.focus(); return; }
+
+                finish( pw );
+            }
+
+            function onKey( e )
+            {
+                if( e.key === "Escape" )
+                {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    finish( null );
+                }
+                else if( e.key === "Enter" && ( e.target === one || e.target === two ) )
+                {
+                    e.preventDefault();
+                    submit();
+                }
+            }
+
+            document.body.appendChild( back );
+            applySheetButtons( sheet );
+
+            ok.addEventListener( "click", submit );
+            cancel.addEventListener( "click", function () { finish( null ); } );
+
+            document.addEventListener( "keydown", onKey, true );
+            back.classList.add( "open" );
+            packSheet( sheet, { min: 300, max: 420 } );
+            one.focus();
+        } );
+    }
 
     //------------------------------------------------------------------------//
     // ROOM FOR AN UPLOAD  (and the offer to empty the papelera)
@@ -1111,7 +1291,8 @@
     //
     // A row's glyph + name come from the real button named by `sel` (so they
     // always match what is on screen); `text` is the hand-written explanation.
-    // `{ icon, name, text }` describes a row with no single button behind it.
+    // `{ icon, name, text }` describes a row with no single button behind it;
+    // `icon` next to `sel` swaps just the glyph (two buttons that look alike).
     // Apps never auto-open the dialog - it opens only from the toolbar "?"
     // button ([data-intro-open], wired here) or NayiveUI.showIntro(). The launcher
     // passes autoShow + dismissible: it re-opens every visit until the user
@@ -1119,6 +1300,13 @@
 
     var introOpts = null;
     var introHeld = false;      // set by holdIntro() when something more important must own the screen
+
+    // Write / Calc / Text put a three-entry Ayuda menu on the "?" (Estadisticas,
+    // Atajos de teclado, Botones de la barra) instead of opening this card
+    // straight away - the card is one of the three entries. They say so with
+    // NayiveUI.setHelpMenu( true ) and open the menu themselves; the "?" keeps
+    // its data-intro-open, so the coach marks and placeHelpButton still find it.
+    var helpIsMenu = false;
 
     // Suppress the auto-opening help card for this page load and close it if it
     // is already up. The launcher calls this when a first-time user must set a
@@ -1130,24 +1318,26 @@
         if( x ) x.click();
     }
 
-    // The glyph for one list row: the real button's <svg> (cloned so CSS sizes
-    // it), else a named shared icon, else the button's short text, else a dot.
+    // The glyph for one list row: a named shared icon when the row gives one
+    // (it wins over `sel`, e.g. to tell two same-looking buttons apart), else
+    // the real button's <svg> (cloned so CSS sizes it), else the button's short
+    // text, else a dot.
     function introGlyph( it, el )
     {
         var span = document.createElement( "span" );
         span.className = "intro-btn-i";
 
         var svg = el && el.querySelector && el.querySelector( "svg" );
-        if( svg )
+        if( it.icon )
+        {
+            span.innerHTML = icon( it.icon );
+        }
+        else if( svg )
         {
             var c = svg.cloneNode( true );
             c.removeAttribute( "width" );
             c.removeAttribute( "height" );
             span.appendChild( c );
-        }
-        else if( it.icon )
-        {
-            span.innerHTML = icon( it.icon );
         }
         else
         {
@@ -1723,7 +1913,7 @@
                 if( t && t.closest && t.closest( "[data-intro-open]" ) )
                 {
                     e.preventDefault();
-                    doShowIntro( introOpts, false );
+                    if( ! helpIsMenu ) doShowIntro( introOpts, false );
                 }
             }, true );
         }
@@ -1748,6 +1938,9 @@
     // two: Split calls it from render() with the list card or the group card.
     function setIntro( opts ) { if( opts ) introOpts = opts; }
 
+    // "The ? opens my own Ayuda menu, not the card." See helpIsMenu above.
+    function setHelpMenu( on ) { helpIsMenu = on !== false; }
+
     //------------------------------------------------------------------------//
     // FOLDER PICKER
     //
@@ -1762,6 +1955,12 @@
     // Needs GumApi (shared/gum-api.js) for the folders-only tree (GET ?tree=dirs).
     // Same rules as the confirm/alert sheet: closes on its own button or Escape,
     // never a backdrop click.
+    //
+    // It also DOES the folder housekeeping the user would otherwise have to go
+    // to Drive for: three buttons in the bottom-left corner delete, rename and
+    // create folders (folders only - files are Drive's job). They are part of
+    // the shared sheet, so every caller gets them: Photos / Music / Movies, the
+    // office save-as folder row, Write's templates folder, share-target, Trips.
 
     var FP_CSS_DONE = false;
 
@@ -1783,7 +1982,13 @@
                 "justify-content:center;color:var(--text-dim);font-size:.8rem}" +
             ".fp-caret.has:hover{color:var(--text)}" +
             ".fp-ic{flex:0 0 auto;display:flex;color:var(--text-dim)}.fp-ic svg{width:16px;height:16px}" +
-            ".fp-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem}";
+            ".fp-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem}" +
+            // pickFile: the crumb of the folder on show, and a file's size
+            ".fp-crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:0 0 6px;font-size:.85rem;color:var(--text-dim)}" +
+            ".fp-crumbs button{border:none;background:none;padding:2px 4px;border-radius:var(--radius-s);font:inherit;color:var(--link);cursor:pointer}" +
+            ".fp-crumbs button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}" +
+            ".fp-crumbs b{padding:2px 4px;color:var(--text);font-weight:600}" +
+            ".fp-size{flex:0 0 auto;font-size:.78rem;color:var(--text-dim)}";
         document.head.appendChild( s );
     }
 
@@ -1799,6 +2004,18 @@
             var selected  = null;     // the folder path the user has highlighted
             var filesNode = null;     // { path:'files', nodes:[...] }, once loaded
             var treeErr   = false;
+
+            // The three folder verbs (delete / rename / new folder) live in the
+            // bottom-left corner. While a name is being typed the same sheet
+            // becomes the name form: the tree stays visible, and x / v mean
+            // "drop the name" / "apply it" instead of "cancel" / "choose".
+            // No second dialog is stacked on this one - a child sheet would sit
+            // under this one's document-level Escape handler.
+            var nameMode   = null;    // null | "create" | "rename"
+            var nameTarget = null;    // create: the parent folder;  rename: the folder itself
+            var nameVal    = "";
+            var namePicked = false;   // the text was select()ed once already
+            var busy       = false;   // a server call is in flight
 
             var back = document.createElement( "div" );
             back.className = "sheet-backdrop";
@@ -1826,7 +2043,10 @@
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    finish( null );
+                    // This runs on document/capture, BEFORE the name field's own
+                    // keydown: while a name is open, that is what Escape drops.
+                    if( nameMode ) cancelName();
+                    else           finish( null );
                 }
             }
 
@@ -1887,12 +2107,146 @@
 
                 row.addEventListener( "click", function ()
                 {
+                    if( busy ) return;
                     selected = node.path;
                     render();
                 } );
 
                 return row;
             }
+
+            // One of the three bottom-left folder buttons.
+            function fpAct( act, title, off, fn )
+            {
+                var b = document.createElement( "button" );
+                b.setAttribute( "data-act", act );
+                b.title    = title;
+                b.disabled = !! off;
+                b.addEventListener( "click", fn );
+                return b;
+            }
+
+            //---- the tree -------------------------------------------------//
+
+            function loadTree()
+            {
+                return ( window.GumApi ? GumApi.dirTree() : Promise.reject( new Error( "no GumApi" ) ) )
+                    .then( function ( tree )
+                    {
+                        var nodes = ( tree && tree.nodes ) || [];
+                        var found = null;
+                        for( var i = 0; i < nodes.length; i++ )
+                            if( nodes[ i ].path === "files" ) { found = nodes[ i ]; break; }
+                        filesNode = found || { path: "files", nodes: [] };
+                        treeErr   = false;
+                    },
+                    function () { treeErr = true; } );
+            }
+
+            function nodeAt( node, path )
+            {
+                if( ! node ) return null;
+                if( node.path === path ) return node;
+
+                var kids = node.nodes || [];
+                for( var i = 0; i < kids.length; i++ )
+                {
+                    var hit = nodeAt( kids[ i ], path );
+                    if( hit ) return hit;
+                }
+                return null;
+            }
+
+            // Run one server call, then re-read the whole tree: the server is
+            // the truth, so nothing here patches the local nodes by hand. `p`
+            // resolves to the path that should stay selected afterwards.
+            function runTask( p )
+            {
+                busy     = true;
+                nameMode = null;
+                render();
+
+                p.then( function ( sel ) { selected = sel || null; },
+                        function ( err ) { toast( String( ( err && err.message ) || err ) ); } )
+                 .then( loadTree )
+                 .then( function ()
+                 {
+                     busy = false;
+                     if( selected && ! nodeAt( filesNode, selected ) ) selected = null;
+                     render();
+                 } );
+            }
+
+            //---- delete / rename / new folder -----------------------------//
+
+            function startName( mode )
+            {
+                nameMode   = mode;
+                namePicked = false;
+                nameTarget = mode === "create" ? ( selected || filesNode.path ) : selected;
+                nameVal    = mode === "create" ? "" : String( selected ).split( "/" ).pop();
+                render();
+            }
+
+            function cancelName()
+            {
+                nameMode   = null;
+                nameTarget = null;
+                nameVal    = "";
+                render();
+            }
+
+            // A folder name is ONE segment: not empty, no "/", not "." / "..".
+            function nameOk()
+            {
+                var nm = String( nameVal || "" ).trim();
+                return !! nm && nm.indexOf( "/" ) === -1 && nm !== "." && nm !== "..";
+            }
+
+            function commitName()
+            {
+                if( ! nameOk() ) return;
+
+                var nm     = String( nameVal ).trim();
+                var target = nameTarget;
+
+                if( nameMode === "create" )
+                {
+                    expanded[ target ] = true;          // show the new child at once
+                    runTask( GumApi.makeDir( target, nm )
+                                   .then( function () { return target + "/" + nm; } ) );
+                    return;
+                }
+
+                var to = target.slice( 0, target.lastIndexOf( "/" ) + 1 ) + nm;
+                if( to === target ) { cancelName(); return; }
+
+                runTask( GumApi.rename( target, to ).then( function ()
+                {
+                    // The whole sub-tree moves with the folder, so re-key what
+                    // the user had open under it or it all collapses on the
+                    // reload. Only once the server has said yes: a refused
+                    // rename must leave the tree exactly as it was.
+                    var reopen = {};
+                    Object.keys( expanded ).forEach( function ( k )
+                    {
+                        var moved = ( k === target || k.indexOf( target + "/" ) === 0 );
+                        reopen[ moved ? to + k.slice( target.length ) : k ] = expanded[ k ];
+                    } );
+                    expanded = reopen;
+
+                    return to;
+                } ) );
+            }
+
+            // Straight to the papelera - Drive can put it back - so this acts at
+            // once: a delete already inside a dialog never asks a second time.
+            function deleteFolder()
+            {
+                runTask( GumApi.deletePaths( [ selected ] ).then( function () { return null; } ) );
+            }
+
+            //---- the sheet ------------------------------------------------//
 
             function render()
             {
@@ -1946,8 +2300,56 @@
 
                 box.scrollTop = prevScroll;
 
+                // The name form, only while Rename / New folder is open.
+                var input = null;
+
+                if( nameMode )
+                {
+                    var fld = document.createElement( "div" );
+                    fld.className = "field";
+
+                    var lab = document.createElement( "label" );
+                    lab.textContent = nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" );
+                    fld.appendChild( lab );
+
+                    input = document.createElement( "input" );
+                    input.type         = "text";
+                    input.autocomplete = "off";
+                    input.value        = nameVal;
+                    input.addEventListener( "input", function ()
+                    {
+                        nameVal     = input.value;
+                        ok.disabled = ! nameOk();
+                    } );
+                    input.addEventListener( "keydown", function ( e )
+                    {
+                        if( e.key === "Enter" ) { e.preventDefault(); commitName(); }
+                    } );
+                    fld.appendChild( input );
+
+                    sheet.appendChild( fld );
+                }
+
                 var arow = document.createElement( "div" );
                 arow.className = "sheet-actions";
+
+                if( ! nameMode )
+                {
+                    // Folder housekeeping, pinned to the far left: delete or
+                    // rename the highlighted folder, create one inside it (with
+                    // nothing highlighted, "new" creates it in Files itself).
+                    var ready = ! busy && !! filesNode && ! treeErr;
+                    var onOne = ready && !! selected && selected !== filesNode.path;
+
+                    var left = document.createElement( "div" );
+                    left.className = "sheet-actions-left";
+                    left.appendChild( fpAct( "danger", t( "ui.delete" ), ! onOne, deleteFolder ) );
+                    left.appendChild( fpAct( "secondary:edit", t( "ui.rename" ), ! onOne,
+                                             function () { startName( "rename" ); } ) );
+                    left.appendChild( fpAct( "secondary:folderplus", t( "ui.newFolder" ), ! ready,
+                                             function () { startName( "create" ); } ) );
+                    arow.appendChild( left );
+                }
 
                 var cancel = document.createElement( "button" );
                 cancel.setAttribute( "data-act", "close" );
@@ -1956,15 +2358,32 @@
 
                 var ok = document.createElement( "button" );
                 ok.setAttribute( "data-act", "primary" );
-                ok.title = t( "ui.fp.choose" );
+                ok.title = ! nameMode ? t( "ui.fp.choose" )
+                         : nameMode === "create" ? t( "ui.newFolder" ) : t( "ui.rename" );
                 arow.appendChild( ok );
 
                 sheet.appendChild( arow );
 
                 applySheetButtons( sheet );
-                cancel.addEventListener( "click", function () { finish( null ); } );
-                ok.disabled = ! selected;
-                ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
+
+                cancel.addEventListener( "click", function ()
+                {
+                    if( nameMode ) cancelName();
+                    else           finish( null );
+                } );
+
+                if( nameMode )
+                {
+                    ok.disabled = ! nameOk();
+                    ok.addEventListener( "click", commitName );
+                    input.focus();
+                    if( ! namePicked ) { namePicked = true; input.select(); }
+                }
+                else
+                {
+                    ok.disabled = ! selected || busy;
+                    ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
+                }
             }
 
             document.body.appendChild( back );
@@ -1972,16 +2391,204 @@
             document.addEventListener( "keydown", onKey, true );
             back.classList.add( "open" );
 
-            ( window.GumApi ? GumApi.dirTree() : Promise.reject( new Error( "no GumApi" ) ) )
-                .then( function ( tree )
+            loadTree().then( render );
+        } );
+    }
+
+    //------------------------------------------------------------------------//
+    // FILE PICKER
+    //
+    // Pick ONE file from the user's own files/ tree - for an app that sends
+    // something already in Nayive (Chat: the clip's "Nayive doc", a picture
+    // for a profile). One folder at a time: the crumb on top goes back up,
+    // folders come first, then the files with their size. A folder opens on a
+    // tap; a file is highlighted on a tap and chosen with the button (or a
+    // double tap). opts.dir: the folder it opens in ("files" by default);
+    // opts.only( name ): the files to show (every folder always shows).
+    //
+    //   const f = await NayiveUI.pickFile( { title: 'Elige un archivo' } );
+    //   if( f ) { ... }       // { path: "files/fotos/a.jpg", name: "a.jpg", size: 1234 }
+    //
+    // Needs GumApi (listDir). Same closing rules as pickFolder: its own
+    // buttons or Escape, never a backdrop click.
+
+    function pickFile( opts )
+    {
+        opts = opts || {};
+        injectFpCss();
+
+        return new Promise( function ( resolve )
+        {
+            var done     = false;
+            var dir      = opts.dir || "files";
+            var nodes    = null;      // what `dir` holds, once listed
+            var failed   = false;
+            var selected = null;      // the highlighted file's node
+            var seq      = 0;         // the newest listing asked for
+
+            var back = document.createElement( "div" );
+            back.className = "sheet-backdrop";
+            back.setAttribute( "role", "dialog" );
+            back.setAttribute( "aria-modal", "true" );
+
+            var sheet = document.createElement( "div" );
+            sheet.className = "sheet";
+            back.appendChild( sheet );
+
+            function finish( node )
+            {
+                if( done ) return;
+                done = true;
+                document.removeEventListener( "keydown", onKey, true );
+                back.classList.remove( "open" );
+                if( back.parentNode ) back.parentNode.removeChild( back );
+                resolve( node ? { path: node.path, name: nameOf( node ), size: node.size || 0 } : null );
+            }
+
+            function onKey( e )
+            {
+                if( e.key !== "Escape" ) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                finish( null );
+            }
+
+            function nameOf( n )  { return String( n.path ).split( "/" ).pop(); }
+            function isDir( n )   { return Array.isArray( n.nodes ); }
+
+            function open( path )
+            {
+                dir = path; nodes = null; failed = false; selected = null;
+                var my = ++seq;
+                render();
+                ( window.GumApi ? GumApi.listDir( path ) : Promise.reject( new Error( "no GumApi" ) ) ).then( function ( res )
                 {
-                    var nodes = ( tree && tree.nodes ) || [];
-                    for( var i = 0; i < nodes.length; i++ )
-                        if( nodes[ i ].path === "files" ) { filesNode = nodes[ i ]; break; }
-                    if( ! filesNode ) filesNode = { path: "files", nodes: [] };
+                    if( my !== seq ) return;
+                    nodes = ( ( res && res.nodes ) || [] ).filter( function ( n )
+                    {
+                        if( nameOf( n ).charAt( 0 ) === "." ) return false;   // hide .bak etc.
+                        return isDir( n ) || ! opts.only || opts.only( nameOf( n ) );
+                    } ).sort( function ( a, b )
+                    {
+                        if( isDir( a ) !== isDir( b ) ) return isDir( a ) ? -1 : 1;
+                        return nameOf( a ).localeCompare( nameOf( b ), undefined, { numeric: true, sensitivity: "base" } );
+                    } );
                     render();
-                } )
-                .catch( function () { treeErr = true; render(); } );
+                }, function () { if( my === seq ) { failed = true; render(); } } );
+            }
+
+            function fpMsg( text )
+            {
+                var p = document.createElement( "p" );
+                p.className   = "fp-msg";
+                p.textContent = text;
+                return p;
+            }
+
+            function fileRow( n )
+            {
+                var row = document.createElement( "div" );
+                row.className = "fp-row" + ( selected === n ? " sel" : "" );
+                row.setAttribute( "role", "option" );
+                row.setAttribute( "aria-selected", selected === n ? "true" : "false" );
+
+                var caret = document.createElement( "span" );
+                caret.className   = "fp-caret";
+                caret.textContent = isDir( n ) ? "▸" : "";
+                row.appendChild( caret );
+
+                var ic = document.createElement( "span" );
+                ic.className = "fp-ic";
+                ic.innerHTML = icon( isDir( n ) ? "folder" : "doc" );
+                row.appendChild( ic );
+
+                var name = document.createElement( "span" );
+                name.className   = "fp-name";
+                name.textContent = nameOf( n );
+                row.appendChild( name );
+
+                if( ! isDir( n ) )
+                {
+                    var size = document.createElement( "span" );
+                    size.className   = "fp-size";
+                    size.textContent = fmtBytes( n.size || 0 );
+                    row.appendChild( size );
+                }
+
+                row.addEventListener( "click", function ()
+                {
+                    if( isDir( n ) ) { open( n.path ); return; }
+                    selected = n;
+                    render();
+                } );
+                if( ! isDir( n ) ) row.addEventListener( "dblclick", function () { finish( n ); } );
+                return row;
+            }
+
+            function render()
+            {
+                sheet.innerHTML = "";
+
+                var h = document.createElement( "h2" );
+                h.textContent = opts.title || t( "ui.fp.pickFile" );
+                sheet.appendChild( h );
+
+                // "Archivos > fotos > 2024": every step but the last goes back there.
+                var crumbs = document.createElement( "div" );
+                crumbs.className = "fp-crumbs";
+                var parts = String( dir ).split( "/" );
+                parts.forEach( function ( part, i )
+                {
+                    if( i ) crumbs.appendChild( document.createTextNode( "›" ) );
+                    var label = i === 0 ? t( "ui.filesRoot" ) : part;
+                    var el;
+                    if( i === parts.length - 1 ) { el = document.createElement( "b" ); el.textContent = label; }
+                    else
+                    {
+                        el = document.createElement( "button" );
+                        el.type        = "button";
+                        el.textContent = label;
+                        el.addEventListener( "click", function () { open( parts.slice( 0, i + 1 ).join( "/" ) ); } );
+                    }
+                    crumbs.appendChild( el );
+                } );
+                sheet.appendChild( crumbs );
+
+                var box = document.createElement( "div" );
+                box.className = "fp-tree";
+                box.setAttribute( "role", "listbox" );
+                sheet.appendChild( box );
+
+                if( failed )             box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
+                else if( nodes === null ) box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
+                else if( ! nodes.length ) box.appendChild( fpMsg( t( "ui.fp.emptyFolder" ) ) );
+                else nodes.forEach( function ( n ) { box.appendChild( fileRow( n ) ); } );
+
+                var arow = document.createElement( "div" );
+                arow.className = "sheet-actions";
+
+                var cancel = document.createElement( "button" );
+                cancel.setAttribute( "data-act", "close" );
+                cancel.title = t( "ui.cancel" );
+                cancel.addEventListener( "click", function () { finish( null ); } );
+                arow.appendChild( cancel );
+
+                var ok = document.createElement( "button" );
+                ok.setAttribute( "data-act", "primary" );
+                ok.title    = opts.confirm || t( "ui.fp.chooseFile" );
+                ok.disabled = ! selected;
+                ok.addEventListener( "click", function () { if( selected ) finish( selected ); } );
+                arow.appendChild( ok );
+
+                sheet.appendChild( arow );
+                applySheetButtons( sheet );
+            }
+
+            document.body.appendChild( back );
+            document.addEventListener( "keydown", onKey, true );
+            back.classList.add( "open" );
+            open( dir );
         } );
     }
 
@@ -2102,7 +2709,12 @@
     }
 
     // What can this device actually do right now?
-    //   installed | prompt (Chromium) | ios (manual steps) | inapp | unsupported
+    //   installed | prompt (Chromium) | ios (manual steps) | inapp |
+    //   android (manual steps) | unsupported
+    //
+    // "android": Chrome on Android does not always fire beforeinstallprompt
+    // (its own rules on when to offer it), yet its ⋮ menu always has "Instalar
+    // app". Saying "this browser can't" there was simply wrong (2026-09-19).
     function installMode()
     {
         var v;
@@ -2111,6 +2723,7 @@
         if( deferredInstall )                     return "prompt";
         if( isIOS() )                             return "ios";
         if( isInAppBrowser() )                    return "inapp";
+        if( /android/i.test( navigator.userAgent ) ) return "android";
         return "unsupported";
     }
 
@@ -2276,6 +2889,27 @@
             sheet.appendChild( ol );
         }
 
+        if( mode === "android" )
+        {
+            var subA = document.createElement( "p" );
+            subA.className   = "scm-h install-h";
+            subA.textContent = t( "ui.install.stepsH" );
+            sheet.appendChild( subA );
+
+            var olA = document.createElement( "ol" );
+            olA.className = "install-steps";
+            olA.appendChild( installStep( "menudots", t( "ui.install.a1a" ),
+                                                      t( "ui.install.a1b" ),
+                                                      t( "ui.install.a1c" ) ) );
+            olA.appendChild( installStep( "addhome",  t( "ui.install.a2a" ),
+                                                      t( "ui.install.a2b" ),
+                                                      t( "ui.install.a2c" ) ) );
+            olA.appendChild( installStep( "check",    t( "ui.install.a3a" ),
+                                                      t( "ui.install.a3b" ),
+                                                      t( "ui.install.a3c" ) ) );
+            sheet.appendChild( olA );
+        }
+
         if( mode === "inapp" || mode === "unsupported" )
         {
             var note = document.createElement( "p" );
@@ -2422,7 +3056,7 @@
     // can sit on the old version until its storage is cleared by hand.
     //
     // clients.claim() fires "controllerchange" here; we offer a reload rather
-    // than forcing one - Write/SuperDoc may hold unsaved text, and share-target
+    // than forcing one - Write may hold unsaved text, and share-target
     // is mid-upload when it runs.
 
     var updateBar = null;
@@ -2648,6 +3282,7 @@
 
             var users = [], mine = [], chosen = [];   // chosen = every person ticked right now
             var mayAdd = false;                      // "pueden añadir archivos" ticked?
+            var toAll  = false;                      // "Todos" ticked: one grant to every user, now and later
             var link   = null;                       // a trip's public link, when it has one
             var dropped = false;                     // × on the link: no new one until the sheet opens again
 
@@ -2707,10 +3342,12 @@
                         var row = document.createElement( "div" );
                         row.className = "share-row";
 
-                        var who = document.createElement( "span" );
+                        // "*" is the grant to everybody (server/go/shares.go Everyone).
+                        var name = g.to === "*" ? t( "share.all" ) : g.to;
+                        var who  = document.createElement( "span" );
                         who.textContent = g.mode === "add"
-                                        ? tf( "share.hasadd", { who: g.to } )
-                                        : g.to;
+                                        ? tf( "share.hasadd", { who: name } )
+                                        : name;
                         row.appendChild( who );
 
                         var del = document.createElement( "button" );
@@ -2732,8 +3369,10 @@
                 }
 
                 // --- who else could have it ---
+                // Shared with everybody already: nobody is left to pick.
                 var already = mine.map( function ( g ) { return g.to; } );
-                var free    = users.filter( function ( n ) { return already.indexOf( n ) === -1; } );
+                var free    = already.indexOf( "*" ) !== -1 ? []
+                            : users.filter( function ( n ) { return already.indexOf( n ) === -1; } );
 
                 if( ! free.length )
                 {
@@ -2750,6 +3389,33 @@
                     list.className = "share-pick";
                     list.setAttribute( "role", "group" );
                     list.setAttribute( "aria-label", t( "share.pick" ) );
+                    list.classList.toggle( "all", toAll );
+
+                    // "Todos" on top, the whole width: one grant that also reaches
+                    // whoever gets an account later. While it is ticked the names
+                    // below are greyed out - everybody is in already.
+                    var allLab = document.createElement( "label" );
+                    allLab.className = "share-user share-all" + ( toAll ? " on" : "" );
+
+                    var allBox = document.createElement( "input" );
+                    allBox.type    = "checkbox";
+                    allBox.checked = toAll;
+                    allBox.addEventListener( "change", function ()
+                    {
+                        toAll = allBox.checked;
+                        allLab.classList.toggle( "on", toAll );
+                        list.classList.toggle( "all", toAll );
+                        list.querySelectorAll( "input" ).forEach( function ( b ) { if( b !== allBox ) b.disabled = toAll; } );
+                        if( ok ) ok.disabled = ! ( toAll || chosen.length );
+                    } );
+
+                    var allName = document.createElement( "span" );
+                    allName.textContent = t( "share.allPick" );
+                    allLab.title = allName.textContent;
+
+                    allLab.appendChild( allBox );
+                    allLab.appendChild( allName );
+                    list.appendChild( allLab );
 
                     free.forEach( function ( name )
                     {
@@ -2760,9 +3426,10 @@
                         // A plain <input type="checkbox"> inside a <label>: every browser
                         // draws it, and clicking the name ticks it. No custom drawing.
                         var box = document.createElement( "input" );
-                        box.type    = "checkbox";
-                        box.value   = name;
-                        box.checked = on;
+                        box.type     = "checkbox";
+                        box.value    = name;
+                        box.checked  = on;
+                        box.disabled = toAll;
                         box.addEventListener( "change", function ()
                         {
                             var at = chosen.indexOf( name );
@@ -2771,7 +3438,7 @@
 
                             // No render() here: it would scroll the list back to the top.
                             lab.classList.toggle( "on", box.checked );
-                            if( ok ) ok.disabled = ! chosen.length;
+                            if( ok ) ok.disabled = ! ( toAll || chosen.length );
                         } );
 
                         // A <span>, not a bare text node: only an element can end in "..."
@@ -2828,11 +3495,28 @@
                     ok = document.createElement( "button" );
                     ok.setAttribute( "data-act", "primary" );
                     ok.title    = t( "share.send" );
-                    ok.disabled = ! chosen.length;
+                    ok.disabled = ! ( toAll || chosen.length );
                     ok.addEventListener( "click", function ()
                     {
-                        if( ! chosen.length ) return;
+                        if( ! toAll && ! chosen.length ) return;
                         ok.disabled = true;
+
+                        // Everybody: ONE grant. The server drops the ones made to
+                        // single people for this same item.
+                        if( toAll )
+                        {
+                            shareApi( "POST", { to: "*", root: path,
+                                                app: opts.app || "folder", title: opts.title || "",
+                                                mode: mayAdd ? "add" : "ro" } )
+                                .then( function ()
+                                {
+                                    toAll = false;
+                                    toast( t( "share.allDone" ) );
+                                    return load();
+                                } )
+                                .catch( function ( e ) { toast( e.message ); return load(); } );
+                            return;
+                        }
 
                         var done = [];
 
@@ -3050,11 +3734,12 @@
             card.appendChild( links );
 
             // The steps - or, on a PC, where to go instead. The (i) follows the
-            // sheet's last words, which is the last card's note.
-            var how = document.createElement( "p" );
+            // sheet's last words, but only when those words are the steps.
+            var mine = app.mine();
+            var how  = document.createElement( "p" );
             how.className   = "share-note share-link-how";
-            how.textContent = app.mine() ? t( app.how ) : t( "trips.loc.onPhone" );
-            if( last ) how.appendChild( infoButton() );
+            how.textContent = mine ? t( app.how ) : t( "trips.loc.onPhone" );
+            if( last && mine ) how.appendChild( infoButton() );
             card.appendChild( how );
 
             return card;
@@ -3114,7 +3799,7 @@
             {
                 // The phone keeps sending to this URL, which then just fails: ask first.
                 return confirmDialog( { title: t( "trips.loc.stopTitle" ), body: t( "trips.loc.stopBody" ),
-                                        confirm: t( "trips.loc.stopOk" ), danger: true } )
+                                        confirm: t( "trips.loc.stopOk" ) } )
                     .then( function ( yes ) { if( yes ) return jsonApi( "/api/location", "DELETE" ).then( load ); } );
             } ) );
             box.appendChild( off );
@@ -3232,6 +3917,7 @@
     var UPLOAD_HIDE_MS = 400;
 
     var uploads     = {};     // id -> { loaded, total }, the requests in flight
+    var burstBytes  = 0;      // bytes the finished uploads of this burst sent
     var uploadBar   = null;
     var burstStart  = 0;      // when the current burst began; 0 = none
     var uploadShowT = null;
@@ -3277,11 +3963,16 @@
         uploadShowT = null;
         burstStart  = 0;
         if( uploadBar ) uploadBar.classList.remove( "show" );
+        // A real upload (not an autosave or a thumbnail) may just have pushed
+        // the space past 90%: look now rather than at the next page.
+        if( burstBytes >= QUOTA_BURST_MIN ) scheduleQuotaCheck( true, 1500 );
+        burstBytes = 0;
     }
 
     function onUploadEvent( e )
     {
         var d = e.detail || {};
+        if( d.done && uploads[ d.id ] ) burstBytes += uploads[ d.id ].total;
         if( d.done ) delete uploads[ d.id ];
         else         uploads[ d.id ] = { loaded: d.loaded || 0, total: d.total || 0 };
 
@@ -3310,6 +4001,155 @@
     }
 
     document.addEventListener( "nayive:upload", onUploadEvent );
+
+
+    //------------------------------------------------------------------------//
+    // "SPACE ALMOST FULL" CARD
+    //
+    // Once 90% of the account's space is used, the next Nayive page shows a
+    // card at the bottom: how full it is, how to get space back (the bin, Chat,
+    // big files) and a button to Drive's "Biggest files" list. It stays until
+    // closed, and it is shown ONCE: this browser remembers it per account
+    // ("nayive-quota-warned:<user>") and forgets it when the space drops below
+    // 90% again, so filling up a second time warns a second time.
+    //
+    // A page checks a few seconds after it opens (its own requests go first),
+    // when it comes back to the screen, and right after an upload burst of a
+    // megabyte or more ends - the moment the space usually crosses the line.
+    // The first two are throttled to one check per QUOTA_EVERY_MS for the whole
+    // browser, and every check waits while a dialog is open. Plain
+    // fetch, not GumApi: a signed-out page must get a quiet 401, not the
+    // "session expired" bar. Framed pages (Planner's panes), the sign-in and
+    // admin pages, and the pages behind a public link never check.
+
+    var QUOTA_WARN_AT  = 0.9;
+    var QUOTA_EVERY_MS = 10 * 60 * 1000;
+    var QUOTA_BURST_MIN = 1024 * 1024;  // an upload burst this big checks at once
+    var QUOTA_LAST_KEY = "nayive-quota-checked";
+    var quotaCard      = null;
+    var quotaTimer     = null;
+    var quotaForce     = false;     // a pending check skips the throttle (an upload asked for it)
+
+    function quotaPage()
+    {
+        var p = location.pathname;
+        return window.top === window && p.indexOf( "/nayive/" ) === 0 &&
+               ! /\/(login|admin|public|guest)\.html$/.test( p );
+    }
+
+    function scheduleQuotaCheck( force, ms )
+    {
+        quotaForce = quotaForce || force;
+        clearTimeout( quotaTimer );
+        quotaTimer = setTimeout( function ()
+        {
+            var f = quotaForce;
+            quotaForce = false;
+            checkQuota( f );
+        }, ms );
+    }
+
+    function dialogOpen() { return !! document.querySelector( ".sheet-backdrop.open" ); }
+
+    async function checkQuota( force )
+    {
+        if( ! quotaPage() || ( quotaCard && document.body.contains( quotaCard ) ) ) return;
+        if( dialogOpen() ) { scheduleQuotaCheck( force, 5000 ); return; }      // never over a dialog
+        try
+        {
+            if( ! force && Date.now() - Number( localStorage.getItem( QUOTA_LAST_KEY ) || 0 ) < QUOTA_EVERY_MS ) return;
+        }
+        catch ( _ ) { return; }         // no storage: it could not remember "shown once", so never nag
+
+        var s;
+        try
+        {
+            var r = await fetch( location.origin + "/api/files?stat=disk", { credentials: "same-origin" } );
+            if( ! r.ok ) return;        // signed out: no stamp, so signing in checks at once
+            localStorage.setItem( QUOTA_LAST_KEY, String( Date.now() ) );
+            s = await r.json();
+        }
+        catch ( _ ) { return; }
+        if( ! s || ! ( s.total > 0 ) || typeof s.usable !== "number" ) return;
+
+        var used = Math.max( 0, s.total - s.usable );
+        var key  = "nayive-quota-warned:" + ( s.user || "" );
+        try
+        {
+            if( used / s.total < QUOTA_WARN_AT ) { localStorage.removeItem( key ); return; }
+            if( localStorage.getItem( key ) ) return;
+            if( dialogOpen() ) { scheduleQuotaCheck( true, 5000 ); return; }  // one opened meanwhile
+            localStorage.setItem( key, "1" );
+        }
+        catch ( _ ) { return; }
+
+        showQuotaCard( used, s.total, s.trash || 0 );
+    }
+
+    function showQuotaCard( used, total, held )
+    {
+        if( ! document.body ) return;
+
+        var card = document.createElement( "div" );
+        card.className = "quota-card";
+        card.setAttribute( "role", "alert" );
+
+        var head  = document.createElement( "div" );
+        head.className = "quota-card-head";
+        var title = document.createElement( "strong" );
+        title.textContent = t( "ui.quota.title" );
+        var close = document.createElement( "button" );
+        close.type      = "button";
+        close.className = "icon-btn sm";
+        close.title     = t( "ui.close" );
+        close.setAttribute( "aria-label", t( "ui.close" ) );
+        close.innerHTML = icon( "x" );
+        close.addEventListener( "click", function () { card.remove(); } );
+        head.appendChild( title );
+        head.appendChild( close );
+
+        var pct  = Math.min( 100, Math.floor( 100 * used / total ) );
+        var line = document.createElement( "p" );
+        line.textContent = tf( "ui.quota.used", { pct: pct, used: fmtBytes( used ), total: fmtBytes( total ) } );
+
+        var how = document.createElement( "p" );
+        how.textContent = t( "ui.quota.how" );
+
+        var list = document.createElement( "ul" );
+        [ held > 0 ? tf( "ui.quota.binHolds", { held: fmtBytes( held ) } ) : t( "ui.quota.bin" ),
+          t( "ui.quota.chat" ),
+          t( "ui.quota.big" ) ].forEach( function ( text )
+        {
+            var li = document.createElement( "li" );
+            li.textContent = text;
+            list.appendChild( li );
+        } );
+
+        // Drive listens for "nayive:bigfiles" and opens the list in place;
+        // anywhere else it is a trip to Drive.
+        var find = document.createElement( "button" );
+        find.type      = "button";
+        find.className = "text-btn";
+        find.innerHTML = icon( "search" ) + "<span></span>";
+        find.lastChild.textContent = t( "ui.quota.find" );
+        find.addEventListener( "click", function ()
+        {
+            card.remove();
+            var ev = new CustomEvent( "nayive:bigfiles", { cancelable: true } );
+            if( document.dispatchEvent( ev ) ) location.href = "/nayive/drive/index.html?big=1";
+        } );
+        var acts = document.createElement( "div" );
+        acts.className = "quota-card-actions";
+        acts.appendChild( find );
+
+        card.appendChild( head );
+        card.appendChild( line );
+        card.appendChild( how );
+        card.appendChild( list );
+        card.appendChild( acts );
+        document.body.appendChild( card );
+        quotaCard = card;
+    }
 
 
     //------------------------------------------------------------------------//
@@ -3537,11 +4377,24 @@
             menu.style.left  = "auto";
             menu.style.right = Math.max( 6, window.innerWidth - r.right ) + "px";
         }
+
+        // Right-aligned under its button is right for a header "..." at the end
+        // of the row; a trigger sitting near the LEFT edge (Text's "?" on a
+        // phone) would push the card off screen instead. Measured once it is
+        // shown, and only then flipped to hang off its left edge.
+        function keepInside()
+        {
+            var r = menu.getBoundingClientRect();
+            if( r.left >= 6 ) return;
+            menu.style.right = "auto";
+            menu.style.left  = "6px";
+        }
         function isOpen() { return ! menu.hidden; }
         function open()
         {
             place();
             menu.hidden = false;
+            keepInside();
             btn.setAttribute( "aria-expanded", "true" );
         }
         function close()
@@ -3620,6 +4473,162 @@
         } );
     }
 
+    //------------------------------------------------------------------------//
+    // DIALOG FIRST FIELD  -  every dialog opens with the caret already in it.
+    //
+    // The rule for the whole suite: when a .sheet-backdrop gets ".open", the
+    // FIRST usable field inside it takes the focus, so the user can type (or
+    // arrow / space) straight away without reaching for the mouse. Wired ONCE
+    // here for every dialog in the page - static markup and the sheets ui.js
+    // builds on the fly alike - so there is nothing to add to a new dialog.
+    //
+    // What it never does:
+    //   - it does not steal a focus the app set itself. A dialog that puts the
+    //     caret somewhere else on purpose (Drive's "Propiedades" -> the close
+    //     button, a destructive confirm -> "cancel", pickFolder -> the name it
+    //     pre-selects) has already focused it by the time we look, and anything
+    //     already focused inside the sheet is left alone.
+    //   - it never focuses a BUTTON. A dialog with no field keeps the focus
+    //     where it was: landing on the corner "x" would turn a stray Enter into
+    //     "close", which is exactly the accident this feature must not cause.
+    //
+    // "Ready to receive input" is the catch: some sheets are still empty when
+    // they open (shareSheet lists people after a fetch, a field may start
+    // disabled). So when there is no field yet, a small observer watches THAT
+    // dialog and focuses the first one that shows up. It gives up on the first
+    // success, when the dialog closes, or after FOCUS_WAIT ms.
+    //------------------------------------------------------------------------//
+
+    var FOCUS_WAIT = 4000;    // ms to keep waiting for an async dialog's fields
+
+    // A field the user can actually put text / a choice into - never a button.
+    function isField( el )
+    {
+        var tag = el.tagName;
+
+        if( el.disabled || el.readOnly ) return false;
+        if( el.getAttribute( "aria-hidden" ) === "true" ) return false;
+
+        // Taken out of the tab order on purpose = not a field to start on. The
+        // ATTRIBUTE, not el.tabIndex: a contenteditable div reads -1 there by
+        // default in Chrome, and that one IS where the user types.
+        var ti = el.getAttribute( "tabindex" );
+        if( ti !== null && +ti < 0 ) return false;
+
+        if( tag === "INPUT" )
+        {
+            var ty = ( el.type || "text" ).toLowerCase();
+            if( ty === "hidden" || ty === "button" || ty === "submit" ||
+                ty === "reset"  || ty === "image" ) return false;
+        }
+        else if( tag !== "SELECT" && tag !== "TEXTAREA" )
+        {
+            var ce = el.getAttribute( "contenteditable" );
+            if( ce === null || ce === "false" ) return false;
+        }
+
+        return el.getClientRects().length > 0;      // laid out = really on screen
+    }
+
+    function firstField( sheet )
+    {
+        var all  = sheet.querySelectorAll( "input, select, textarea, [contenteditable]" );
+        var head = null;                  // a field in .sheet-header, kept as a last resort
+
+        for( var i = 0; i < all.length; i++ )
+        {
+            var el = all[ i ];
+            if( ! isField( el ) ) continue;
+
+            // .sheet-header is the title row - "one small control on the right"
+            // (Calendar's "all day" switch). It sits before the form but it is
+            // not the form's first field, so the caret goes past it. Unless it
+            // is the only field there is.
+            if( el.closest( ".sheet-header" ) ) { if( ! head ) head = el; continue; }
+
+            return el;
+        }
+
+        return head;
+    }
+
+    // Try once. true = done with this dialog (focused, or someone else owns it).
+    function focusFirstField( back )
+    {
+        if( ! back.classList.contains( "open" ) ) return true;
+        if( back.contains( document.activeElement ) ) return true;   // the app chose
+
+        var f = firstField( back );
+        if( ! f ) return false;
+
+        f.focus( { preventScroll: true } );
+
+        // A text field opens with the caret AFTER what is already there (a
+        // suggested file name, the value being edited) - ready to add to it, not
+        // to type in front of it. Dialogs that mean "replace this whole value"
+        // call select() themselves, and those we never reach anyway.
+        if( f.tagName === "TEXTAREA" || /^(text|search|url|tel|password)$/.test( f.type || "" ) )
+            try { f.setSelectionRange( f.value.length, f.value.length ); } catch ( e ) {}
+
+        return true;
+    }
+
+    // Nothing to focus yet: watch this one dialog until there is.
+    function waitForField( back )
+    {
+        var mo    = null;
+        var timer = null;
+
+        function stop()
+        {
+            if( mo )    { mo.disconnect();  mo    = null; }
+            if( timer ) { clearTimeout( timer ); timer = null; }
+        }
+
+        mo = new MutationObserver( function ()
+        {
+            if( focusFirstField( back ) ) stop();
+        } );
+
+        mo.observe( back, { childList: true, subtree: true,
+                            attributes: true,
+                            attributeFilter: [ "disabled", "readonly", "class", "style" ] } );
+
+        timer = setTimeout( stop, FOCUS_WAIT );
+    }
+
+    function wireSheetFocus()
+    {
+        // One observer for the page: every .sheet-backdrop that gains ".open".
+        // Both dialog families are covered - setOpen() toggles the class on the
+        // markup's backdrops, and the sheets ui.js builds are in the document
+        // before they get it.
+        new MutationObserver( function ( recs )
+        {
+            for( var i = 0; i < recs.length; i++ )
+            {
+                var back = recs[ i ].target;
+
+                if( back.nodeType !== 1 || ! back.classList.contains( "sheet-backdrop" ) ) continue;
+
+                // Read the LIVE class, not the record: an open-then-close inside
+                // one tick arrives here as two records for a closed dialog.
+                if( ! back.classList.contains( "open" ) ) { back._nayiveFocused = false; continue; }
+                if( back._nayiveFocused ) continue;
+
+                back._nayiveFocused = true;
+
+                // Right here, no rAF, no timer. A MutationObserver callback is a
+                // microtask: the whole opening handler - packSheet, the app's own
+                // focus() / select() - has already run, and we are still inside
+                // the user's gesture, which is the only moment iOS Safari lets a
+                // programmatic focus raise the keyboard.
+                if( ! focusFirstField( back ) ) waitForField( back );
+            }
+        } ).observe( document.documentElement,
+                     { attributes: true, attributeFilter: [ "class" ], subtree: true } );
+    }
+
     function uiInit()
     {
         applyI18n();
@@ -3630,6 +4639,7 @@
         applySyncDots();
         initDragSheets();
         wireSheetClosing();
+        wireSheetFocus();
 
         // uiInit runs at DOMContentLoaded; the dictionary usually lands a moment
         // later, and applySheetButtons / applyInfoDots may have added keys of
@@ -3637,10 +4647,12 @@
         i18nReady.then( function () { applyI18n(); } );
 
         pingSwUpdate();
+        scheduleQuotaCheck( false, 3000 );
         document.addEventListener( "visibilitychange", function ()
         {
             if( document.visibilityState !== "visible" ) return;
             pingSwUpdate();
+            scheduleQuotaCheck( false, 3000 );
         } );
     }
 
@@ -3686,11 +4698,13 @@
         embedded:          EMBEDDED,     // true inside Planner's iframes
         localizeDateTimeInputs: localizeDateTimeInputs,
         confirm:  confirmDialog,
+        askPassword: askPassword,
         alert:    alertDialog,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,
         firstRun:  firstRun,      // register the help dialog for this app
         setIntro:  setIntro,      // swap that dialog when the app changes screen
+        setHelpMenu: setHelpMenu, // the "?" opens the app's own Ayuda menu instead
         showIntro: showIntro,     // open it now (the toolbar "?" button)
         showCoach: showCoach,     // the once-ever "name = inicio" / "? = ayuda" bubbles
         holdIntro: holdIntro,     // suppress + close the auto help card for this load
@@ -3701,6 +4715,7 @@
         shareSheet:   shareSheet,
         locationSection: locationSection,     // Trips' "My location" sheet: the location URL
         pickFolder:           pickFolder,
+        pickFile:             pickFile,
         launcherFolder:       launcherFolder,
         changeLauncherFolder: changeLauncherFolder,
         offerInstall:         offerInstall,

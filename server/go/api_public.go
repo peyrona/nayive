@@ -71,6 +71,7 @@ type publicTripStage struct {
 	StartDate string   `json:"startDate"`
 	StartTime string   `json:"startTime"`
 	EndDate   string   `json:"endDate"`
+	EndTime   string   `json:"endTime"` // read by the location alerts only (reminders_location.go)
 	Lat       *float64 `json:"lat"`
 	Lon       *float64 `json:"lon"`
 	Tz        string   `json:"tz"`      // the place's IANA time zone, when Trips found one

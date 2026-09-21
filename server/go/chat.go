@@ -1,0 +1,1801 @@
+package main
+
+// =============================================================================
+// Chat - a small private messenger: a Nayive user and the people they invite.
+// =============================================================================
+//
+// WHO TALKS TO WHOM. Every Nayive user owns one Chat (apps/chat). They add a
+// person by name and that person gets a secret link, /c/<token>/ - no account,
+// no app to install. A person talks with the owner, and in the groups the owner
+// makes; never with another person on their own. A star, not a mesh.
+//
+// ANOTHER NAYIVE USER is a person too, known by their account instead of a
+// link (ChatContact.User, no token). The chat lives in the home of whoever
+// started it; the other user reads it from their OWN Chat, through
+// /api/chat/via/<that home>/... (api_chat.go), and is notified on their
+// account's devices. Only one chat per pair: starting it again from the other
+// side opens the same one (chatContacts).
+//
+// ON DISK, all of it inside the OWNER's home, homes/<owner>/data/chat/:
+//
+//	chat.json                    the owner's display name, the people, the groups
+//	conv/<conv>/YYYY-MM.json     that month's messages (UTC month of sending)
+//	conv/<conv>/state.json       rev, next id, read cursors, pins and mutes
+//	conv/<conv>/media/<id>.<ext> the photo or file of message <id>
+//
+// A photo the owner KEPT (Copiar, keep in api_chat.go) left media/ for the
+// owner's own files - files/<their Photos folder>/<name> - and the message
+// points there (state.json "kept"), so deleting the message never takes it.
+// A JPEG the owner sends from their own files is kept from the start: no copy
+// at all (POST messages {"ref"}). A kept file is followed by its inode
+// ("keptId") when it is renamed or moved.
+//
+// AUTO-DELETE. With chat.json "deleteAfter" = N days, every message older
+// than that is deleted for good - its photo or file too, unless kept (expire,
+// run hourly by RunExpiry and at once when N changes).
+//
+// LATER. A text scheduled for a time to come (the send button held down ->
+// "Schedule message") waits in chat.json "later" - only its sender sees it -
+// and RunLater sends it, as its sender, once its time has come. "Send without
+// sound" is a flag on the message: its notifications arrive silent.
+//
+// A conversation is "d-<person>" (the owner and one person) or "g-<group>". A
+// participant is "o" (the owner) or a person's id. Months, not one file: only
+// the current month is rewritten on each message, and "delete for everyone"
+// really erases the text (an append-only log would keep it).
+//
+// REV. Every change to a conversation - a message, an edit, a delete, a
+// reaction, a vote, a read cursor - bumps its `rev` and stamps it on what
+// changed, so "everything since rev N" is one question with one answer.
+//
+// LIVE. A page long-polls GET .../wait?v=N. It returns at once when the owner's
+// `version` moved (any change in any of their conversations), else after
+// chatWaitMax. A participant with a wait open is "online"; pages drop their
+// wait when they go to the background. No sockets, no SSE.
+//
+// PUSH. A new message is pushed to every other participant who is not online
+// and has not muted the conversation. One who LOOKED online (an iPhone app
+// suspended mid-wait still looks online for a few seconds) is checked again
+// after chatPushRecheck: still unread and gone -> pushed then.
+//
+// ONE LOCK. Every owner and every conversation sits behind ChatHub.mu. A
+// personal server has a handful of writers; one lock is the honest size, and
+// it makes every rule here true by construction. Nothing slow runs under it:
+// a request body is read BEFORE taking it, pushes are sent AFTER releasing it.
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"io/fs"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+	"unicode/utf8"
+)
+
+const (
+	chatMaxText      = 4000             // runes in one message (or caption)
+	chatMaxName      = 60               // runes in a person's or a group's name
+	chatMaxMotto     = 100              // runes in the owner's motto (the line under "Chat")
+	chatMaxFile      = 25 << 20         // one photo or file, bytes
+	chatMaxOpts      = 12               // poll options
+	chatPage         = 60               // messages per page when a conversation opens
+	chatWaitMax      = 25 * time.Second // a long-poll's longest wait
+	chatOnlineGrace  = 12 * time.Second // between two waits a page is still online
+	chatTypingFor    = 6 * time.Second  // "escribiendo..." lasts this long after the last key
+	chatPushRecheck  = 30 * time.Second
+	chatPushTTL      = 24 * 60 * 60
+	chatMaxSubs      = 5  // devices per person
+	chatGuestPerMin  = 30 // messages a person may send per minute
+	chatGuestDayByte = 300 << 20
+	chatMaxLater     = 100                  // scheduled texts one sender may have waiting in one home
+	chatLaterMax     = 366 * 24 * time.Hour // how far ahead a text may be scheduled
+	chatLaterTick    = 20 * time.Second     // how often RunLater looks for texts whose time has come
+)
+
+// chatPushHosts are the push services a PERSON's subscription may point at.
+// A signed-in user's endpoint only needs https (users.go cleanSub); a stranger
+// holding a link must not be able to make this server POST to any URL it likes.
+var chatPushHosts = []string{
+	"fcm.googleapis.com", "android.googleapis.com", // Chrome, Edge on Android, Samsung, Opera
+	".push.apple.com",            // Safari, iPhone
+	".push.services.mozilla.com", // Firefox
+	".notify.windows.com",        // Edge on Windows
+}
+
+// -----------------------------------------------------------------------------
+// what is stored
+// -----------------------------------------------------------------------------
+
+// ChatContact is one person the owner invited.
+type ChatContact struct {
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Token   string    `json:"token,omitempty"`
+	User    string    `json:"user,omitempty"` // a Nayive account: no link, their own Chat reads it (via)
+	Created int64     `json:"created"`
+	Opened  int64     `json:"opened,omitempty"` // first time their link was used (unix s)
+	Photo   int64     `json:"photo,omitempty"`  // their picture's version (avatars/<id>.jpg); 0 = none
+	Subs    []PushSub `json:"subs,omitempty"`   // their devices' notifications
+	Deleted bool      `json:"deleted,omitempty"`
+}
+
+// ChatGroup is a group the owner made. The owner is always in it.
+type ChatGroup struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+	Created int64    `json:"created"`
+	Photo   int64    `json:"photo,omitempty"` // the group's picture's version; 0 = none
+	Deleted bool     `json:"deleted,omitempty"`
+}
+
+type chatMe struct {
+	Name string `json:"name"`
+	// Motto: an optional line the owner writes about themselves. Their own
+	// page shows it in small print under the app's icon and name.
+	Motto string `json:"motto,omitempty"`
+	Photo int64  `json:"photo,omitempty"` // the owner's picture's version (avatars/o.jpg); 0 = none
+}
+
+// chatData is chat.json.
+type chatData struct {
+	Me          chatMe         `json:"me"`
+	Contacts    []*ChatContact `json:"contacts"`
+	Groups      []*ChatGroup   `json:"groups"`
+	DeleteAfter int            `json:"deleteAfter,omitempty"` // days a message lives; 0 = for ever
+	Later       []*ChatLater   `json:"later,omitempty"`       // texts waiting for their time (sendDue)
+}
+
+// ChatLater is a text scheduled by its sender for a time to come. It is not a
+// message yet: no id, no rev; nobody but its sender sees it until it goes.
+type ChatLater struct {
+	ID      string `json:"id"`
+	Conv    string `json:"conv"`
+	From    string `json:"from"`
+	At      int64  `json:"at"` // when it goes, unix ms
+	Text    string `json:"text"`
+	ReplyTo int64  `json:"replyTo,omitempty"`
+	CID     string `json:"cid,omitempty"` // the sender's own id for it: a retry is not a second one
+}
+
+// ChatFileRef is the attachment of a photo or file message.
+type ChatFileRef struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	Ext  string `json:"ext,omitempty"` // the stored file's extension
+	W    int    `json:"w,omitempty"`
+	H    int    `json:"h,omitempty"`
+	// Pos: where a photo was taken, read from its Exif GPS when it arrived;
+	// the page's hold menu offers "See on the map" with it.
+	Pos *ChatLoc `json:"pos,omitempty"`
+}
+
+type ChatLoc struct {
+	Lat   float64 `json:"lat"`
+	Lon   float64 `json:"lon"`
+	Acc   float64 `json:"acc,omitempty"`
+	Place string  `json:"place,omitempty"`
+}
+
+type ChatCard struct {
+	Name   string   `json:"name"`
+	Tels   []string `json:"tels,omitempty"`
+	Emails []string `json:"emails,omitempty"`
+}
+
+type ChatPoll struct {
+	Q     string           `json:"q"`
+	Opts  []string         `json:"opts"`
+	Multi bool             `json:"multi,omitempty"`
+	Votes map[string][]int `json:"votes,omitempty"` // participant -> chosen options
+}
+
+// ChatCallInfo is a call's bubble (chat_call.go): how long it lasted, or how it
+// ended without an answer - End is "" (answered), missed, declined, busy, failed.
+type ChatCallInfo struct {
+	Video bool   `json:"video,omitempty"`
+	Secs  int    `json:"secs,omitempty"`
+	End   string `json:"end,omitempty"`
+}
+
+// ChatMsg is one message. Kind is text | photo | file | loc | card | poll |
+// call (written by the server only, when a call ends).
+type ChatMsg struct {
+	ID      int64             `json:"id"`
+	Rev     int64             `json:"rev"`
+	At      int64             `json:"at"` // unix ms
+	From    string            `json:"from"`
+	Kind    string            `json:"kind"`
+	Text    string            `json:"text,omitempty"`
+	File    *ChatFileRef      `json:"file,omitempty"`
+	Loc     *ChatLoc          `json:"loc,omitempty"`
+	Card    *ChatCard         `json:"card,omitempty"`
+	Poll    *ChatPoll         `json:"poll,omitempty"`
+	Call    *ChatCallInfo     `json:"call,omitempty"`
+	ReplyTo int64             `json:"replyTo,omitempty"`
+	Fwd     bool              `json:"fwd,omitempty"`
+	Edited  int64             `json:"edited,omitempty"`
+	Deleted bool              `json:"deleted,omitempty"`
+	Reacts  map[string]string `json:"reacts,omitempty"` // participant -> emoji
+	CID     string            `json:"cid,omitempty"`    // the sender's own id for it: a retry is not a second message
+	Silent  bool              `json:"silent,omitempty"` // "Send without sound": its notifications make none
+}
+
+// chatState is conv/<conv>/state.json.
+type chatState struct {
+	Rev  int64            `json:"rev"`
+	Next int64            `json:"next"`
+	Read map[string]int64 `json:"read"`
+	Pin  map[string]bool  `json:"pin,omitempty"`
+	Mute map[string]bool  `json:"mute,omitempty"`
+	// Cleared: a participant deleted the chat (for them only, as in WhatsApp)
+	// when its last message was this id. Nothing up to it is theirs to see; the
+	// chat leaves their list until a newer message arrives. Once EVERY member
+	// has cleared past a message, it is purged from the disk (purge).
+	Cleared map[string]int64 `json:"cleared,omitempty"`
+	// Kept: a photo the owner copied into their own files - message id ->
+	// "files/...". It is no longer under media/; the message shows that file.
+	Kept map[int64]string `json:"kept,omitempty"`
+	// KeptID: the kept file's inode (fileID) and size - message id -> them.
+	// Renamed or moved, the file is found again by both (openMedia): the size
+	// too, as a freed inode number can come back on another file.
+	KeptID map[int64]keptID `json:"keptId,omitempty"`
+	// Gone: every message up to this id was deleted for its age (expire). A
+	// page still showing one drops it.
+	Gone int64 `json:"gone,omitempty"`
+}
+
+type keptID struct {
+	Ino  uint64 `json:"ino"`
+	Size int64  `json:"size"`
+}
+
+// keptIDOf is a file's keptID; zero when this system has no inodes.
+func keptIDOf(info os.FileInfo) keptID {
+	if ino := fileID(info); ino != 0 {
+		return keptID{Ino: ino, Size: info.Size()}
+	}
+	return keptID{}
+}
+
+type chatMonth struct {
+	Messages []*ChatMsg `json:"messages"`
+}
+
+// -----------------------------------------------------------------------------
+// in memory
+// -----------------------------------------------------------------------------
+
+type chatConv struct {
+	id   string
+	dir  string
+	st   chatState
+	msgs []*ChatMsg // by id
+	byID map[int64]*ChatMsg
+	cids map[string]int64 // from + "|" + cid -> message id
+	// missed: a kept file looked for in the whole home and not found - message
+	// id -> when. Not looked for again for a while (chatFindAgain): the walk
+	// runs under h.mu, and anyone with the link can ask for that photo.
+	missed map[int64]time.Time
+}
+
+type chatOwner struct {
+	user    string
+	dir     string
+	data    chatData
+	convs   map[string]*chatConv
+	version int64 // any change at all
+	meta    int64 // a change to chat.json (names, people, groups)
+	wake    chan struct{}
+
+	waits   map[string]int       // participant -> open waits
+	lastEnd map[string]time.Time // participant -> when their last wait ended
+	online  map[string]bool
+	typing  map[string]map[string]time.Time // conv -> participant -> until
+
+	sent map[string][]time.Time // a person's recent messages (rate limit)
+	day  map[string]chatDayUse  // a person's upload bytes today
+
+	calls *chatCalls // voice and video calls (chat_call.go); nil until a page with a device id waits
+
+	notify func() // the hub's onChange (the Android app's waits)
+}
+
+type chatDayUse struct {
+	day   string
+	bytes int64
+}
+
+type chatTokenRef struct {
+	owner, contact string
+}
+
+// ChatHub is every owner's chat. One per server.
+type ChatHub struct {
+	mu      sync.Mutex
+	cfg     *Config
+	users   *Users
+	push    *VapidStore
+	log     Logger
+	owners  map[string]*chatOwner
+	tokens  map[string]chatTokenRef   // sha256(token) -> whose
+	links   map[string][]chatTokenRef // a Nayive account -> the homes holding them as a contact
+	indexed bool
+
+	wordsMu sync.Mutex
+	words   *phrasebook
+
+	closing   chan struct{}
+	closeOnce sync.Once
+	sweepOnce sync.Once
+
+	turnOnce sync.Once
+	turn     chatTurn // coturn for calls (chat_call.go), read on first use
+
+	// The Android app's hooks (devices.go), set once at start; nil in tests.
+	// Both are called under h.mu and take nothing but their own lock.
+	onChange func()                                             // any change: the phones' waits re-check
+	onCall   func(account string, ring deviceRing, kind string) // a call to an account: ring | missed | quiet
+	skipPush func(account, endpoint string) bool                // that Chrome's phone rings the call itself
+
+	laterRead bool // every home's scheduled texts are in memory (sendDue)
+}
+
+func NewChatHub(cfg *Config, users *Users, push *VapidStore, log Logger) *ChatHub {
+	return &ChatHub{
+		cfg:     cfg,
+		users:   users,
+		push:    push,
+		log:     log,
+		owners:  make(map[string]*chatOwner),
+		tokens:  make(map[string]chatTokenRef),
+		links:   make(map[string][]chatTokenRef),
+		words:   newPhrasebook(cfg.AppsDir),
+		closing: make(chan struct{}),
+	}
+}
+
+// Close ends every open wait: a shutdown must not sit out 25-second polls.
+func (h *ChatHub) Close() {
+	h.closeOnce.Do(func() { close(h.closing) })
+}
+
+// DropUser forgets a deleted or renamed account: its owner record and every
+// token that pointed at it. The next lookup reads the disk again.
+func (h *ChatHub) DropUser(name string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.owners, name)
+	h.resetIndex()
+}
+
+func (h *ChatHub) resetIndex() {
+	h.indexed = false
+	h.laterRead = false // a home dropped from memory may hold scheduled texts
+	h.tokens = make(map[string]chatTokenRef)
+	h.links = make(map[string][]chatTokenRef)
+}
+
+// RenameUser follows an account the admin renamed: its own chat is read again
+// under the new name, and every other home that holds it as a contact now
+// points at the new name.
+func (h *ChatHub) RenameUser(old, name string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.owners, old)
+	h.resetIndex()
+	h.eachOwner(func(o *chatOwner) {
+		moved := false
+		for _, c := range o.data.Contacts {
+			if c.User == old {
+				c.User, moved = name, true
+			}
+		}
+		if moved {
+			h.saveData(o)
+			o.changed(true)
+		}
+	})
+}
+
+// DeleteUser follows an account the admin deleted: every other home that held
+// it as a contact deletes that contact, as the owner's "delete person" would.
+func (h *ChatHub) DeleteUser(name string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.owners, name)
+	h.resetIndex()
+	h.eachOwner(func(o *chatOwner) {
+		moved := false
+		for _, c := range o.data.Contacts {
+			if c.User == name && !c.Deleted {
+				h.dropContact(o, c)
+				moved = true
+			}
+		}
+		if moved {
+			h.saveData(o)
+			o.changed(true)
+		}
+	})
+}
+
+// eachOwner runs `fn` on every home that has a chat, reading it if needed.
+// Caller holds h.mu.
+func (h *ChatHub) eachOwner(fn func(o *chatOwner)) {
+	entries, err := os.ReadDir(h.cfg.HomesDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !ValidUsername(e.Name()) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(h.chatDir(e.Name()), "chat.json")); err != nil {
+			continue
+		}
+		if o := h.owner(e.Name()); o != nil {
+			fn(o)
+		}
+	}
+}
+
+// dropContact deletes a person: their link dies, their devices and picture go,
+// they leave every group. Their messages stay. Caller holds h.mu and saves.
+func (h *ChatHub) dropContact(o *chatOwner, c *ChatContact) {
+	h.ensureIndex()
+	if c.Token != "" {
+		delete(h.tokens, tokenKey(c.Token))
+	}
+	c.Deleted, c.Token, c.Subs = true, "", nil
+	if c.Photo > 0 {
+		os.Remove(filepath.Join(o.dir, "avatars", c.ID+".jpg"))
+		c.Photo = 0
+	}
+	for _, g := range o.data.Groups {
+		g.Members = without(g.Members, c.ID)
+	}
+	if c.User != "" {
+		// Their own Chat drops this home at once (its "via" list moved).
+		if other := h.owners[c.User]; other != nil {
+			other.changed(true)
+		}
+	}
+}
+
+func tokenKey(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func newChatID() string {
+	raw := make([]byte, 5)
+	rand.Read(raw)
+	return hex.EncodeToString(raw)
+}
+
+func nowMs() int64 { return time.Now().UnixMilli() }
+
+// -----------------------------------------------------------------------------
+// loading and saving (caller holds h.mu)
+// -----------------------------------------------------------------------------
+
+func (h *ChatHub) chatDir(user string) string {
+	return filepath.Join(h.cfg.HomesDir, user, "data", "chat")
+}
+
+// owner is `user`'s chat, read from disk the first time. Nil when the account
+// has no home.
+func (h *ChatHub) owner(user string) *chatOwner {
+	if o, ok := h.owners[user]; ok {
+		return o
+	}
+	if user == "" || !ValidUsername(user) {
+		return nil
+	}
+	if info, err := os.Stat(filepath.Join(h.cfg.HomesDir, user)); err != nil || !info.IsDir() {
+		return nil
+	}
+	o := &chatOwner{
+		user:    user,
+		dir:     h.chatDir(user),
+		convs:   make(map[string]*chatConv),
+		wake:    make(chan struct{}),
+		notify:  h.changedHook,
+		waits:   make(map[string]int),
+		lastEnd: make(map[string]time.Time),
+		online:  make(map[string]bool),
+		typing:  make(map[string]map[string]time.Time),
+		sent:    make(map[string][]time.Time),
+		day:     make(map[string]chatDayUse),
+	}
+	loadJSONFile(filepath.Join(o.dir, "chat.json"), &o.data)
+	var live []*ChatContact
+	for _, c := range o.data.Contacts {
+		if c != nil && c.ID != "" {
+			live = append(live, c)
+		}
+	}
+	o.data.Contacts = live
+	var groups []*ChatGroup
+	for _, g := range o.data.Groups {
+		if g != nil && g.ID != "" {
+			groups = append(groups, g)
+		}
+	}
+	o.data.Groups = groups
+	if strings.TrimSpace(o.data.Me.Name) == "" {
+		o.data.Me.Name = titleCase(user)
+	}
+	h.owners[user] = o
+	return o
+}
+
+func titleCase(s string) string {
+	r, n := utf8.DecodeRuneInString(s)
+	if n == 0 {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[n:]
+}
+
+func (h *ChatHub) saveData(o *chatOwner) error {
+	if err := os.MkdirAll(o.dir, 0o755); err != nil {
+		return err
+	}
+	if o.data.Contacts == nil {
+		o.data.Contacts = []*ChatContact{}
+	}
+	if o.data.Groups == nil {
+		o.data.Groups = []*ChatGroup{}
+	}
+	return atomicWriteJSON(filepath.Join(o.dir, "chat.json"), o.data, 2)
+}
+
+// ensureIndex reads every home's chat.json once for its tokens and its
+// Nayive-user contacts.
+func (h *ChatHub) ensureIndex() {
+	if h.indexed {
+		return
+	}
+	h.indexed = true
+	entries, err := os.ReadDir(h.cfg.HomesDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !ValidUsername(e.Name()) {
+			continue
+		}
+		var data chatData
+		if o, ok := h.owners[e.Name()]; ok {
+			data = o.data
+		} else if !loadJSONFile(filepath.Join(h.chatDir(e.Name()), "chat.json"), &data) {
+			continue
+		}
+		for _, c := range data.Contacts {
+			if c != nil && !c.Deleted && len(c.Token) >= 32 {
+				h.tokens[tokenKey(c.Token)] = chatTokenRef{owner: e.Name(), contact: c.ID}
+			}
+			if c != nil && !c.Deleted && c.User != "" {
+				h.links[c.User] = append(h.links[c.User], chatTokenRef{owner: e.Name(), contact: c.ID})
+			}
+		}
+	}
+}
+
+// viaOf are the homes that hold `user` as a contact, each with that contact:
+// the chats `user` reads through /api/chat/via/<home>. Caller holds h.mu.
+func (h *ChatHub) viaOf(user string) []chatTokenRef {
+	h.ensureIndex()
+	out := []chatTokenRef{}
+	seen := map[string]bool{}
+	for _, ref := range h.links[user] {
+		if seen[ref.owner] || ref.owner == user {
+			continue
+		}
+		o := h.owner(ref.owner)
+		if o == nil {
+			continue
+		}
+		if c := o.userContact(user); c != nil {
+			seen[ref.owner] = true
+			out = append(out, chatTokenRef{owner: ref.owner, contact: c.ID})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].owner < out[j].owner })
+	return out
+}
+
+// userContact is the live contact for the Nayive account `user`, or nil.
+func (o *chatOwner) userContact(user string) *ChatContact {
+	for _, c := range o.data.Contacts {
+		if c.User == user && !c.Deleted {
+			return c
+		}
+	}
+	return nil
+}
+
+// byToken is the owner and person behind a link, or nils.
+func (h *ChatHub) byToken(token string) (*chatOwner, *ChatContact) {
+	if len(token) < 32 || len(token) > 128 {
+		return nil, nil
+	}
+	h.ensureIndex()
+	ref, ok := h.tokens[tokenKey(token)]
+	if !ok {
+		return nil, nil
+	}
+	o := h.owner(ref.owner)
+	if o == nil {
+		return nil, nil
+	}
+	c := o.contact(ref.contact)
+	if c == nil || c.Deleted || subtle.ConstantTimeCompare([]byte(c.Token), []byte(token)) != 1 {
+		return nil, nil
+	}
+	return o, c
+}
+
+func (o *chatOwner) contact(id string) *ChatContact {
+	for _, c := range o.data.Contacts {
+		if c.ID == id {
+			return c
+		}
+	}
+	return nil
+}
+
+func (o *chatOwner) group(id string) *ChatGroup {
+	for _, g := range o.data.Groups {
+		if g.ID == id {
+			return g
+		}
+	}
+	return nil
+}
+
+// members are the participants of a conversation, the owner first; nil when it
+// does not exist (or no longer does).
+func (o *chatOwner) members(conv string) []string {
+	switch {
+	case strings.HasPrefix(conv, "d-"):
+		if c := o.contact(conv[2:]); c != nil && !c.Deleted {
+			return []string{"o", c.ID}
+		}
+	case strings.HasPrefix(conv, "g-"):
+		if g := o.group(conv[2:]); g != nil && !g.Deleted {
+			out := []string{"o"}
+			for _, m := range g.Members {
+				if c := o.contact(m); c != nil && !c.Deleted {
+					out = append(out, m)
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+func (o *chatOwner) isMember(conv, pid string) bool {
+	return contains(o.members(conv), pid)
+}
+
+// avatarsFor are the pictures `pid` may see, id -> version: the owner sees
+// every person's and group's; a person sees their own, their groups' and
+// those of the people in their groups. Everybody sees the owner's ("o").
+func (o *chatOwner) avatarsFor(pid string) map[string]int64 {
+	out := map[string]int64{}
+	if o.data.Me.Photo > 0 {
+		out["o"] = o.data.Me.Photo
+	}
+	for _, g := range o.data.Groups {
+		if g.Deleted || (pid != "o" && !contains(g.Members, pid)) {
+			continue
+		}
+		if g.Photo > 0 {
+			out[g.ID] = g.Photo
+		}
+		for _, m := range g.Members {
+			if c := o.contact(m); c != nil && !c.Deleted && c.Photo > 0 {
+				out[m] = c.Photo
+			}
+		}
+	}
+	for _, c := range o.data.Contacts {
+		if !c.Deleted && c.Photo > 0 && (pid == "o" || pid == c.ID) {
+			out[c.ID] = c.Photo
+		}
+	}
+	return out
+}
+
+// visible are the conversations `pid` takes part in.
+func (o *chatOwner) visible(pid string) []string {
+	var out []string
+	for _, c := range o.data.Contacts {
+		if !c.Deleted && (pid == "o" || pid == c.ID) {
+			out = append(out, "d-"+c.ID)
+		}
+	}
+	for _, g := range o.data.Groups {
+		if !g.Deleted && (pid == "o" || contains(g.Members, pid)) {
+			out = append(out, "g-"+g.ID)
+		}
+	}
+	return out
+}
+
+// conv is a conversation, read from disk the first time.
+func (h *ChatHub) conv(o *chatOwner, id string) *chatConv {
+	if c, ok := o.convs[id]; ok {
+		return c
+	}
+	c := &chatConv{
+		id:   id,
+		dir:  filepath.Join(o.dir, "conv", id),
+		byID: make(map[int64]*ChatMsg),
+		cids: make(map[string]int64),
+	}
+	loadJSONFile(filepath.Join(c.dir, "state.json"), &c.st)
+	if c.st.Read == nil {
+		c.st.Read = map[string]int64{}
+	}
+	if entries, err := os.ReadDir(c.dir); err == nil {
+		var months []string
+		for _, e := range entries {
+			n := e.Name()
+			if len(n) == len("2006-01.json") && strings.HasSuffix(n, ".json") && n[4] == '-' {
+				months = append(months, n)
+			}
+		}
+		sort.Strings(months)
+		for _, n := range months {
+			var m chatMonth
+			loadJSONFile(filepath.Join(c.dir, n), &m)
+			for _, msg := range m.Messages {
+				if msg == nil || msg.ID <= 0 || c.byID[msg.ID] != nil {
+					continue
+				}
+				c.msgs = append(c.msgs, msg)
+				c.byID[msg.ID] = msg
+				if msg.CID != "" {
+					c.cids[msg.From+"|"+msg.CID] = msg.ID
+				}
+				if msg.ID >= c.st.Next {
+					c.st.Next = msg.ID + 1 // a state.json older than the messages
+				}
+				if msg.Rev > c.st.Rev {
+					c.st.Rev = msg.Rev
+				}
+			}
+		}
+	}
+	sort.Slice(c.msgs, func(i, j int) bool { return c.msgs[i].ID < c.msgs[j].ID })
+	if c.st.Next < 1 {
+		c.st.Next = 1
+	}
+	o.convs[id] = c
+	return c
+}
+
+func monthOf(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01") }
+
+// saveMonth rewrites the month file that holds `m`, and the state.
+func (h *ChatHub) saveMonth(c *chatConv, m *ChatMsg) {
+	h.writeMonth(c, monthOf(m.At))
+	h.saveState(c)
+}
+
+// writeMonth rewrites one month file from memory - or removes it when that
+// month has no message left.
+func (h *ChatHub) writeMonth(c *chatConv, month string) {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+		h.log.Error("chat: cannot create a conversation folder", "err", err)
+		return
+	}
+	out := chatMonth{Messages: []*ChatMsg{}}
+	for _, x := range c.msgs {
+		if monthOf(x.At) == month {
+			out.Messages = append(out.Messages, x)
+		}
+	}
+	path := filepath.Join(c.dir, month+".json")
+	if len(out.Messages) == 0 {
+		os.Remove(path)
+		return
+	}
+	if err := atomicWriteJSON(path, out, 1); err != nil {
+		h.log.Error("chat: cannot save messages", "err", err)
+	}
+}
+
+// purge drops from memory and disk every message that all the current
+// members have deleted the chat past - its photo or file too. Caller holds h.mu.
+func (h *ChatHub) purge(o *chatOwner, c *chatConv) {
+	floor := int64(-1)
+	for _, p := range o.members(c.id) {
+		f, ok := c.st.Cleared[p]
+		if !ok {
+			return // somebody still has it all
+		}
+		if floor < 0 || f < floor {
+			floor = f
+		}
+	}
+	if floor <= 0 {
+		return
+	}
+	months := map[string]bool{}
+	keep := c.msgs[:0]
+	for _, m := range c.msgs {
+		if m.ID > floor {
+			keep = append(keep, m)
+			continue
+		}
+		months[monthOf(m.At)] = true
+		delete(c.byID, m.ID)
+		if m.CID != "" {
+			delete(c.cids, m.From+"|"+m.CID)
+		}
+		h.dropMedia(o, c, m)
+	}
+	c.msgs = keep
+	for month := range months {
+		h.writeMonth(c, month)
+	}
+}
+
+// dropMedia deletes the photo or file of a message that is going away - but
+// never a KEPT photo: that one is the owner's file now, and only the link to
+// it goes. Caller holds h.mu.
+func (h *ChatHub) dropMedia(o *chatOwner, c *chatConv, m *ChatMsg) {
+	if _, kept := c.st.Kept[m.ID]; kept {
+		delete(c.st.Kept, m.ID)
+		delete(c.st.KeptID, m.ID)
+		return
+	}
+	if m.File == nil {
+		return
+	}
+	path := filepath.Join(c.dir, "media", mediaName(m))
+	if info, err := os.Stat(path); err == nil && os.Remove(path) == nil {
+		h.users.AdjustUsage(o.user, -info.Size())
+	}
+}
+
+// openMedia opens a message's photo or file: under media/, or - kept - the
+// owner's own file, through the file API's sandbox. A kept file renamed or
+// moved since is found again by its inode (KeptID), and the new path saved; one
+// saved anew at the same path (an edit) is followed by its path. Caller holds h.mu.
+func (h *ChatHub) openMedia(o *chatOwner, c *chatConv, m *ChatMsg) (*os.File, os.FileInfo, error) {
+	kept := c.st.Kept[m.ID]
+	if kept == "" {
+		return openInside(filepath.Join(c.dir, "media"), mediaName(m))
+	}
+	want := c.st.KeptID[m.ID]
+	file, info, err := h.openKept(o.user, kept)
+	if err == nil && want.Ino != 0 && keptIDOf(info) == want {
+		return file, info, nil
+	}
+	if want.Ino != 0 && (err != nil || fileID(info) != want.Ino) && time.Since(c.missed[m.ID]) > chatFindAgain {
+		rel := h.findKept(o.user, want)
+		if rel == "" {
+			if c.missed == nil {
+				c.missed = map[int64]time.Time{}
+			}
+			c.missed[m.ID] = time.Now()
+		} else if rel != kept {
+			if f2, i2, err2 := h.openKept(o.user, rel); err2 == nil {
+				if file != nil {
+					file.Close()
+				}
+				c.st.Kept[m.ID] = rel
+				h.saveState(c)
+				return f2, i2, nil
+			}
+		}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if id := keptIDOf(info); id.Ino != 0 && id != want {
+		h.setKept(c, m.ID, kept, id)
+		h.saveState(c)
+	}
+	return file, info, nil
+}
+
+// setKept links message `id` to the owner's file `rel`, known by `id2`.
+func (h *ChatHub) setKept(c *chatConv, id int64, rel string, id2 keptID) {
+	if c.st.Kept == nil {
+		c.st.Kept = map[int64]string{}
+	}
+	c.st.Kept[id] = rel
+	if id2.Ino == 0 {
+		delete(c.st.KeptID, id)
+		return
+	}
+	if c.st.KeptID == nil {
+		c.st.KeptID = map[int64]keptID{}
+	}
+	c.st.KeptID[id] = id2
+}
+
+// openKept opens the owner's file `rel` ("files/...") through the sandbox,
+// only when it is a regular file.
+func (h *ChatHub) openKept(user, rel string) (*os.File, os.FileInfo, error) {
+	target, ok := h.users.Resolve("user", user, rel)
+	if !ok {
+		return nil, nil, os.ErrNotExist
+	}
+	if info, err := target.Stat(); err != nil || !info.Mode().IsRegular() {
+		return nil, nil, os.ErrNotExist
+	}
+	file, err := target.Open()
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		file.Close()
+		return nil, nil, os.ErrNotExist
+	}
+	return file, info, nil
+}
+
+// chatFindMax caps the walk of findKept: a home is a few thousand files.
+const chatFindMax = 200000
+
+// chatFindAgain: how long a kept file not found is not looked for again.
+const chatFindAgain = 10 * time.Minute
+
+// findKept is the owner's file known by `id`, as "files/...", or "".
+// The bin is not looked in: a binned photo is gone until it is restored.
+func (h *ChatHub) findKept(user string, id keptID) string {
+	home := filepath.Join(h.cfg.HomesDir, user)
+	found, seen := "", 0
+	filepath.WalkDir(filepath.Join(home, "files"), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if seen++; seen > chatFindMax {
+			return filepath.SkipAll
+		}
+		if d.IsDir() {
+			if d.Name() == ".trash" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil && keptIDOf(info) == id {
+			if rel, err := filepath.Rel(home, path); err == nil {
+				found = filepath.ToSlash(rel)
+			}
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+// -----------------------------------------------------------------------------
+// auto-delete
+// -----------------------------------------------------------------------------
+
+// chatMaxDeleteAfter is the longest "delete after N days" (ten years).
+const chatMaxDeleteAfter = 3650
+
+// expire deletes, for good, every message of `o` older than their
+// "deleteAfter" days, in every conversation on disk (a deleted person's too).
+// Caller holds h.mu.
+func (h *ChatHub) expire(o *chatOwner, now time.Time) {
+	days := o.data.DeleteAfter
+	if days <= 0 {
+		return
+	}
+	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+	entries, err := os.ReadDir(filepath.Join(o.dir, "conv"))
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() && (strings.HasPrefix(n, "d-") || strings.HasPrefix(n, "g-")) {
+			h.expireConv(o, h.conv(o, n), cutoff)
+		}
+	}
+}
+
+// expireConv drops the messages sent before `cutoff` (unix ms). Caller holds h.mu.
+func (h *ChatHub) expireConv(o *chatOwner, c *chatConv, cutoff int64) {
+	months := map[string]bool{}
+	keep := c.msgs[:0]
+	for _, m := range c.msgs {
+		if m.At >= cutoff {
+			keep = append(keep, m)
+			continue
+		}
+		months[monthOf(m.At)] = true
+		delete(c.byID, m.ID)
+		if m.CID != "" {
+			delete(c.cids, m.From+"|"+m.CID)
+		}
+		h.dropMedia(o, c, m)
+		c.st.Gone = max(c.st.Gone, m.ID)
+	}
+	if len(months) == 0 {
+		return
+	}
+	clear(c.msgs[len(keep):]) // the dropped tail must not pin the old messages
+	c.msgs = keep
+	for month := range months {
+		h.writeMonth(c, month)
+	}
+	o.bump(c, nil)
+	h.saveState(c)
+}
+
+// RunExpiry applies every owner's auto-delete a minute after the start, then
+// every hour, until `ctx` ends or the hub closes.
+func (h *ChatHub) RunExpiry(ctx context.Context) {
+	timer := time.NewTimer(time.Minute)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-h.closing:
+			return
+		case <-timer.C:
+		}
+		h.expireAll(time.Now())
+		timer.Reset(time.Hour)
+	}
+}
+
+// expireAll runs expire for every account whose chat.json asks for it - read
+// from disk for an owner nobody has opened since the start.
+func (h *ChatHub) expireAll(now time.Time) {
+	entries, err := os.ReadDir(h.cfg.HomesDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		user := e.Name()
+		if !e.IsDir() || !ValidUsername(user) {
+			continue
+		}
+		h.mu.Lock()
+		days := 0
+		if o, ok := h.owners[user]; ok {
+			days = o.data.DeleteAfter
+		} else {
+			var data chatData
+			if loadJSONFile(filepath.Join(h.chatDir(user), "chat.json"), &data) {
+				days = data.DeleteAfter
+			}
+		}
+		if days > 0 {
+			if o := h.owner(user); o != nil {
+				h.expire(o, now)
+			}
+		}
+		h.mu.Unlock()
+	}
+}
+
+// -----------------------------------------------------------------------------
+// later: texts scheduled for a time to come
+// -----------------------------------------------------------------------------
+
+// RunLater sends the scheduled texts whose time has come: at the start, then
+// every chatLaterTick, until `ctx` ends or the hub closes.
+func (h *ChatHub) RunLater(ctx context.Context) {
+	tick := time.NewTicker(chatLaterTick)
+	defer tick.Stop()
+	for {
+		h.sendDue(time.Now())
+		select {
+		case <-ctx.Done():
+			return
+		case <-h.closing:
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+// sendDue sends every scheduled text due by `now`, in every home in memory.
+// The first run (and the first after an account change dropped the homes)
+// reads every home's chat.json, so a text waiting through a restart still goes.
+func (h *ChatHub) sendDue(now time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.laterRead {
+		h.laterRead = true
+		if entries, err := os.ReadDir(h.cfg.HomesDir); err == nil {
+			for _, e := range entries {
+				user := e.Name()
+				if _, ok := h.owners[user]; ok || !e.IsDir() || !ValidUsername(user) {
+					continue
+				}
+				var data chatData
+				if loadJSONFile(filepath.Join(h.chatDir(user), "chat.json"), &data) && len(data.Later) > 0 {
+					h.owner(user)
+				}
+			}
+		}
+	}
+	for _, o := range h.owners {
+		h.sendDueIn(o, now.UnixMilli())
+	}
+}
+
+// sendDueIn sends `o`'s texts due by `now` (unix ms), oldest first. Caller holds h.mu.
+func (h *ChatHub) sendDueIn(o *chatOwner, now int64) {
+	var due, keep []*ChatLater
+	for _, l := range o.data.Later {
+		if l.At <= now {
+			due = append(due, l)
+		} else {
+			keep = append(keep, l)
+		}
+	}
+	if len(due) == 0 {
+		return
+	}
+	o.data.Later = keep
+	sort.SliceStable(due, func(i, j int) bool { return due[i].At < due[j].At })
+	for _, l := range due {
+		h.sendLater(o, l)
+	}
+	h.saveData(o)
+	o.changed(true)
+}
+
+// sendLater turns `l` into a message from its sender, now - nothing when they
+// are no longer in that chat (a person deleted, a group gone). The caller has
+// taken it out of o.data.Later and saves. Caller holds h.mu.
+func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg) {
+	if !o.isMember(l.Conv, l.From) {
+		return nil, nil
+	}
+	c := h.conv(o, l.Conv)
+	m := &ChatMsg{From: l.From, Kind: "text", Text: l.Text, CID: "later-" + l.ID}
+	if l.ReplyTo > 0 && c.byID[l.ReplyTo] != nil {
+		m.ReplyTo = l.ReplyTo
+	}
+	m.ID, m.At = c.st.Next, nowMs()
+	h.store(o, c, m)
+	return c, m
+}
+
+// laterOf are `pid`'s texts waiting in `conv`, soonest first. Caller holds h.mu.
+func (o *chatOwner) laterOf(conv, pid string) []*ChatLater {
+	var out []*ChatLater
+	for _, l := range o.data.Later {
+		if l.Conv == conv && l.From == pid {
+			out = append(out, l)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At < out[j].At })
+	return out
+}
+
+func (h *ChatHub) saveState(c *chatConv) {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+		return
+	}
+	if err := atomicWriteJSON(filepath.Join(c.dir, "state.json"), c.st, 1); err != nil {
+		h.log.Error("chat: cannot save a conversation's state", "err", err)
+	}
+}
+
+// changed wakes every wait of this owner. meta: chat.json changed too.
+func (o *chatOwner) changed(meta bool) {
+	o.version++
+	if meta {
+		o.meta++
+	}
+	close(o.wake)
+	o.wake = make(chan struct{})
+	if o.notify != nil {
+		o.notify()
+	}
+}
+
+// changedHook passes a change on to the Android app's waits (devices.go).
+func (h *ChatHub) changedHook() {
+	if h.onChange != nil {
+		h.onChange()
+	}
+}
+
+// Hook connects the Android app (devices.go). Call once, before serving.
+func (h *ChatHub) Hook(d *Devices) {
+	h.onChange = d.Kick
+	h.onCall = d.OnCall
+	h.skipPush = d.SkipCallPush
+}
+
+// bump gives `c` a new rev and stamps it on `m` (when there is one).
+func (o *chatOwner) bump(c *chatConv, m *ChatMsg) int64 {
+	c.st.Rev++
+	if m != nil {
+		m.Rev = c.st.Rev
+	}
+	o.changed(false)
+	return c.st.Rev
+}
+
+// -----------------------------------------------------------------------------
+// reading
+// -----------------------------------------------------------------------------
+
+// chatQuote is what a reply shows of the message it answers - built when it
+// goes out, so a later edit or delete of the original shows too.
+type chatQuote struct {
+	ID      int64  `json:"id"`
+	From    string `json:"from"`
+	Kind    string `json:"kind"`
+	Text    string `json:"text,omitempty"`
+	Deleted bool   `json:"deleted,omitempty"`
+}
+
+type chatMsgOut struct {
+	*ChatMsg
+	Quote *chatQuote `json:"quote,omitempty"`
+	Kept  bool       `json:"kept,omitempty"` // its photo lives in the owner's files (never the path: a person sees this too)
+}
+
+func (c *chatConv) out(m *ChatMsg) chatMsgOut {
+	o := chatMsgOut{ChatMsg: m, Kept: c.st.Kept[m.ID] != ""}
+	if m.ReplyTo > 0 {
+		if q := c.byID[m.ReplyTo]; q != nil {
+			o.Quote = &chatQuote{ID: q.ID, From: q.From, Kind: q.Kind, Text: quoteText(q), Deleted: q.Deleted}
+		}
+	}
+	return o
+}
+
+// quoteText is the short line a quote or a notification shows.
+func quoteText(m *ChatMsg) string {
+	if m.Deleted {
+		return ""
+	}
+	t := m.Text
+	switch m.Kind {
+	case "file":
+		if t == "" && m.File != nil {
+			t = m.File.Name
+		}
+	case "loc":
+		if m.Loc != nil {
+			t = m.Loc.Place
+		}
+	case "card":
+		if m.Card != nil {
+			t = m.Card.Name
+		}
+	case "poll":
+		if m.Poll != nil {
+			t = m.Poll.Q
+		}
+	case "call":
+		t = "" // the page words it ("Voice call", "Missed video call"...)
+	}
+	return clip(t, 140)
+}
+
+func clip(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:n-1]) + "…"
+}
+
+// floor is the last message `pid` deleted the chat at (0: never).
+func (c *chatConv) floor(pid string) int64 { return c.st.Cleared[pid] }
+
+// hiddenFor: `pid` deleted this chat and nothing came in since.
+func (c *chatConv) hiddenFor(pid string) bool {
+	f, ok := c.st.Cleared[pid]
+	if !ok {
+		return false
+	}
+	m := c.last()
+	return m == nil || m.ID <= f
+}
+
+// lastFor is the last message `pid` may still see, or nil.
+func (c *chatConv) lastFor(pid string) *ChatMsg {
+	if m := c.last(); m != nil && m.ID > c.floor(pid) {
+		return m
+	}
+	return nil
+}
+
+// unread are the messages `pid` has not read, from anybody else.
+func (c *chatConv) unread(pid string) int {
+	seen := max(c.st.Read[pid], c.floor(pid))
+	n := 0
+	for i := len(c.msgs) - 1; i >= 0 && c.msgs[i].ID > seen; i-- {
+		if m := c.msgs[i]; m.From != pid && !m.Deleted {
+			n++
+		}
+	}
+	return n
+}
+
+func (c *chatConv) last() *ChatMsg {
+	if len(c.msgs) == 0 {
+		return nil
+	}
+	return c.msgs[len(c.msgs)-1]
+}
+
+// convName is the conversation as `pid` sees it named.
+func (o *chatOwner) convName(conv, pid string) string {
+	if strings.HasPrefix(conv, "d-") {
+		if pid != "o" {
+			return o.data.Me.Name
+		}
+		if c := o.contact(conv[2:]); c != nil {
+			return c.Name
+		}
+		return ""
+	}
+	if g := o.group(conv[2:]); g != nil {
+		return g.Name
+	}
+	return ""
+}
+
+// onlineFor are the participants `pid` may see online: the owner sees their
+// people, a person sees the owner.
+func (o *chatOwner) onlineFor(pid string) []string {
+	out := []string{}
+	for p, on := range o.online {
+		if on && p != pid && (pid == "o" || p == "o") {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// typingFor are, per conversation `pid` takes part in, who is typing there.
+func (o *chatOwner) typingFor(pid string) map[string][]string {
+	out := map[string][]string{}
+	now := time.Now()
+	for conv, who := range o.typing {
+		if !o.isMember(conv, pid) {
+			continue
+		}
+		for p, until := range who {
+			if p != pid && until.After(now) {
+				out[conv] = append(out[conv], p)
+			}
+		}
+		sort.Strings(out[conv])
+	}
+	return out
+}
+
+// -----------------------------------------------------------------------------
+// presence (caller holds h.mu)
+// -----------------------------------------------------------------------------
+
+func (h *ChatHub) waitStart(o *chatOwner, pid string) {
+	h.sweepOnce.Do(func() { go h.sweep() })
+	o.waits[pid]++
+	if !o.online[pid] {
+		o.online[pid] = true
+		o.changed(false)
+	}
+}
+
+func (h *ChatHub) waitEnd(o *chatOwner, pid string) {
+	if o.waits[pid] > 0 {
+		o.waits[pid]--
+	}
+	o.lastEnd[pid] = time.Now()
+}
+
+// isOnline: a wait is open, or one ended moments ago (the page is between two).
+func (o *chatOwner) isOnline(pid string) bool {
+	return o.waits[pid] > 0 || time.Since(o.lastEnd[pid]) < chatOnlineGrace
+}
+
+// sweep turns off "online" and "escribiendo..." once they run out.
+func (h *ChatHub) sweep() {
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-h.closing:
+			return
+		case <-tick.C:
+		}
+		h.mu.Lock()
+		now := time.Now()
+		var calls []chatCallPush // a call that timed out: its pushes go out after the lock
+		for _, o := range h.owners {
+			calls = append(calls, h.callTick(o, now)...)
+			moved := false
+			for p, on := range o.online {
+				if on && !o.isOnline(p) {
+					o.online[p] = false
+					moved = true
+				}
+			}
+			for conv, who := range o.typing {
+				for p, until := range who {
+					if !until.After(now) {
+						delete(who, p)
+						moved = true
+					}
+				}
+				if len(who) == 0 {
+					delete(o.typing, conv)
+				}
+			}
+			if moved {
+				o.changed(false)
+			}
+		}
+		h.mu.Unlock()
+		if len(calls) > 0 {
+			go h.sendCallPushes(calls)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// checking what comes in
+// -----------------------------------------------------------------------------
+
+// cleanChatName is a person's or a group's name: one line, trimmed, capped.
+func cleanChatName(s string) string { return cleanOneLine(s, chatMaxName) }
+
+// cleanChatMotto is the owner's motto: the same one line, with more room.
+func cleanChatMotto(s string) string { return cleanOneLine(s, chatMaxMotto) }
+
+// cleanOneLine folds every run of spaces (and control characters) into one
+// blank, trims the ends and caps the result at `max` runes.
+func cleanOneLine(s string, max int) string {
+	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
+	if utf8.RuneCountInString(s) > max {
+		s = string([]rune(s)[:max])
+	}
+	return strings.TrimSpace(s)
+}
+
+// cleanChatText keeps line breaks, drops every other control character.
+func cleanChatText(s string, max int) (string, bool) {
+	if !utf8.ValidString(s) {
+		return "", false
+	}
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r == '\r' || unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.TrimSpace(s)
+	if utf8.RuneCountInString(s) > max {
+		return "", false
+	}
+	return s, true
+}
+
+// chatPushHostOK: a person's device may only be reached at a real push service.
+func chatPushHostOK(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, h := range chatPushHosts {
+		if strings.HasPrefix(h, ".") {
+			if strings.HasSuffix(host, h) {
+				return true
+			}
+		} else if host == h {
+			return true
+		}
+	}
+	return false
+}
+
+// fileExt is the extension a stored attachment keeps: letters and digits only.
+func fileExt(name string) string {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
+	if len(ext) == 0 || len(ext) > 8 {
+		return ""
+	}
+	for _, r := range ext {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			return ""
+		}
+	}
+	return ext
+}
+
+// cleanFileName is an attachment's name as shown: no path, no control chars.
+func cleanFileName(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	name = cleanChatName(name)
+	if len([]rune(name)) > 120 {
+		name = string([]rune(name)[:120])
+	}
+	if name == "" || name == "." || name == ".." {
+		name = "file"
+	}
+	return name
+}
+
+func mediaName(m *ChatMsg) string {
+	if m.File == nil {
+		return ""
+	}
+	if m.File.Ext == "" {
+		return itoa64(m.ID)
+	}
+	return itoa64(m.ID) + "." + m.File.Ext
+}
+
+// allowSend is the per-person rate limit (the owner has none).
+func (o *chatOwner) allowSend(pid string) bool {
+	if pid == "o" {
+		return true
+	}
+	now := time.Now()
+	keep := o.sent[pid][:0]
+	for _, t := range o.sent[pid] {
+		if now.Sub(t) < time.Minute {
+			keep = append(keep, t)
+		}
+	}
+	if len(keep) >= chatGuestPerMin {
+		o.sent[pid] = keep
+		return false
+	}
+	o.sent[pid] = append(keep, now)
+	return true
+}
+
+// allowBytes is the per-person daily upload allowance.
+func (o *chatOwner) allowBytes(pid string, n int64) bool {
+	if pid == "o" {
+		return true
+	}
+	today := time.Now().Format("2006-01-02")
+	use := o.day[pid]
+	if use.day != today {
+		use = chatDayUse{day: today}
+	}
+	if use.bytes+n > chatGuestDayByte {
+		return false
+	}
+	use.bytes += n
+	o.day[pid] = use
+	return true
+}
+
+// -----------------------------------------------------------------------------
+// notifications
+// -----------------------------------------------------------------------------
+
+type chatPushJob struct {
+	sub    PushSub
+	owner  string // the account, when the device is a Nayive user's (the owner, or a contact with User)
+	person string // the person's id, when it is theirs
+	token  string // ...and their link, for the URL
+	title  string
+	from   string // the sender's name, for a group line
+	msg    ChatMsg
+	conv   string
+	group  bool
+}
+
+// pushTargets collects the devices to notify of `m`. Caller holds h.mu.
+func (h *ChatHub) pushTargets(o *chatOwner, c *chatConv, m *ChatMsg, only string) []chatPushJob {
+	var jobs []chatPushJob
+	group := strings.HasPrefix(c.id, "g-")
+	from := h.nameOf(o, m.From)
+	for _, p := range o.members(c.id) {
+		if p == m.From || c.st.Mute[p] || (only != "" && p != only) {
+			continue
+		}
+		if c.st.Read[p] >= m.ID {
+			continue
+		}
+		base := chatPushJob{title: o.convName(c.id, p), from: from, msg: *m, conv: c.id, group: group}
+		if p == "o" {
+			for _, sub := range h.users.UserPush(o.user).Subs {
+				j := base
+				j.sub, j.owner = sub, o.user
+				jobs = append(jobs, j)
+			}
+			continue
+		}
+		if ct := o.contact(p); ct != nil && ct.User != "" {
+			// A Nayive user: their account's devices, opening their own Chat.
+			for _, sub := range h.users.UserPush(ct.User).Subs {
+				j := base
+				j.sub, j.owner = sub, ct.User
+				jobs = append(jobs, j)
+			}
+		} else if ct != nil {
+			for _, sub := range ct.Subs {
+				j := base
+				j.sub, j.person, j.token = sub, ct.ID, ct.Token
+				jobs = append(jobs, j)
+			}
+		}
+	}
+	return jobs
+}
+
+func (h *ChatHub) nameOf(o *chatOwner, pid string) string {
+	if pid == "o" {
+		return o.data.Me.Name
+	}
+	if c := o.contact(pid); c != nil {
+		return c.Name
+	}
+	return ""
+}
+
+// announce pushes a new message to whoever is away, and re-checks the ones who
+// looked present. Caller holds h.mu; the sending happens on its own goroutine.
+func (h *ChatHub) announce(o *chatOwner, c *chatConv, m *ChatMsg) {
+	var now, later []string
+	for _, p := range o.members(c.id) {
+		if p == m.From || c.st.Mute[p] {
+			continue
+		}
+		if o.isOnline(p) {
+			later = append(later, p)
+		} else {
+			now = append(now, p)
+		}
+	}
+	var jobs []chatPushJob
+	for _, p := range now {
+		jobs = append(jobs, h.pushTargets(o, c, m, p)...)
+	}
+	if len(jobs) > 0 {
+		go h.sendPushes(o.user, jobs)
+	}
+	for _, p := range later {
+		p := p
+		user, conv, id := o.user, c.id, m.ID
+		time.AfterFunc(chatPushRecheck, func() {
+			h.mu.Lock()
+			o := h.owners[user]
+			var jobs []chatPushJob
+			if o != nil && o.isMember(conv, p) && !o.isOnline(p) {
+				c := h.conv(o, conv)
+				if msg := c.byID[id]; msg != nil && !msg.Deleted {
+					jobs = h.pushTargets(o, c, msg, p)
+				}
+			}
+			h.mu.Unlock()
+			if len(jobs) > 0 {
+				h.sendPushes(user, jobs)
+			}
+		})
+	}
+}
+
+func (h *ChatHub) phrase(lang, key, builtin string) string {
+	h.wordsMu.Lock()
+	defer h.wordsMu.Unlock()
+	return h.words.phrase(lang, key, builtin)
+}
+
+// pushBody is the notification's text, in the device's language.
+func (h *ChatHub) pushBody(j chatPushJob) string {
+	m := j.msg
+	var line string
+	switch m.Kind {
+	case "photo":
+		line = "📷 " + firstNonEmpty(clip(m.Text, 120), h.phrase(j.sub.Lang, "chat.photo", "Foto"))
+	case "file":
+		line = "📄 " + quoteText(&m)
+	case "loc":
+		line = "📍 " + h.phrase(j.sub.Lang, "chat.location", "Ubicación")
+	case "card":
+		line = "👤 " + quoteText(&m)
+	case "poll":
+		line = "📊 " + quoteText(&m)
+	default:
+		line = clip(m.Text, 180)
+	}
+	if j.group && j.from != "" {
+		return j.from + ": " + line
+	}
+	return line
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// pushPayload is what one device is sent about a message.
+func (h *ChatHub) pushPayload(j chatPushJob) map[string]any {
+	link := URLPrefix + "/chat/?c=" + j.conv
+	if j.person != "" {
+		link = "/c/" + j.token + "/?c=" + j.conv
+	}
+	payload := map[string]any{
+		"title": j.title,
+		"body":  h.pushBody(j),
+		"url":   link,
+		"tag":   "chat-" + j.conv,
+	}
+	if j.msg.Silent {
+		payload["quiet"] = true // sw.js, guest-sw.js: shown, but without a sound
+	}
+	return payload
+}
+
+func (h *ChatHub) sendPushes(owner string, jobs []chatPushJob) {
+	for _, j := range jobs {
+		payload := h.pushPayload(j)
+		if j.owner != "" {
+			deliverPush(h.push, h.users, h.log, j.owner, j.sub, payload, chatPushTTL)
+			continue
+		}
+		person, endpoint := j.person, j.sub.Endpoint
+		deliverPushTo(h.push, h.log, j.sub, payload, chatPushTTL, func() {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if o := h.owners[owner]; o != nil {
+				if c := o.contact(person); c != nil && removeSub(c, endpoint) {
+					h.saveData(o)
+					o.changed(true)
+				}
+			}
+		})
+	}
+}
+
+func removeSub(c *ChatContact, endpoint string) bool {
+	for i, s := range c.Subs {
+		if s.Endpoint == endpoint {
+			c.Subs = append(c.Subs[:i], c.Subs[i+1:]...)
+			return true
+		}
+	}
+	return false
+}

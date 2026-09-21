@@ -13,7 +13,8 @@ import
 from './lib/xlsx-format_v2.4.1.js';
 import
 {
-    NF_SAMPLE_DATE, borderWeight, borderColorValue, T, scheduleAutosave, menus, CHROME
+    NF_SAMPLE_DATE, borderWeight, borderColorValue, T, scheduleAutosave, menus, CHROME,
+    syncGroupTriggers
 }
 from './calc.js';
 import
@@ -141,6 +142,12 @@ function updateToolbarActiveState()
 
     document.getElementById( 'fmtFreezeBtn'    ).classList.toggle( 'active', table.getSettings().fixedColumnsStart > 0 );
     document.getElementById( 'fmtFreezeRowBtn' ).classList.toggle( 'active', table.getSettings().fixedRowsTop      > 0 );
+
+    // Alignment, wrap and freeze live inside group cards now, so the bar shows
+    // none of the lights above until a card is opened. The two that answer a
+    // yes/no question - "¿ajustar texto?", "¿algo inmovilizado?" - hand their
+    // light to the button that opens the card (calc.js, groups).
+    syncGroupTriggers();
 }
 
 // Merged range membership has no direct query API, so the anchor cell's

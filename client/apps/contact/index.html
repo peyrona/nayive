@@ -673,7 +673,7 @@
         // {
         //   uid,
         //   fn,                                   // formatted / display name (vCard FN, required on write)
-        //   n: { family, given, additional, prefix, suffix },
+        //   n: { family, given },                  // every given name in one, every surname in the other
         //   org, title,
         //   tels:   [ { type, value } ],
         //   emails: [ { type, value } ],
@@ -688,7 +688,7 @@
             return {
                 uid  : 'contact-' + Date.now() + '-' + Math.random().toString( 36 ).slice( 2, 8 ),
                 fn   : '',
-                n    : { family: '', given: '', additional: '', prefix: '', suffix: '' },
+                n    : { family: '', given: '' },
                 org  : '', title: '',
                 tels : [], emails: [], adrs: [], urls: [],
                 bday : '', note: ''
@@ -731,6 +731,7 @@
         function parseVCard( blockLines )
         {
             const c = makeContact();
+            let   suffix = '';
 
             for( const raw of blockLines )
             {
@@ -749,8 +750,18 @@
 
                     case 'N':
                     {
+                        // vCard N carries five components; a name carries two: every given
+                        // name, and every surname. Spanish surnames come in pairs and no rule
+                        // says where the first one ends ("Ruiz de la Herranz Mata"), so they
+                        // are never split - which is also why the 'additional' component needs
+                        // no guesswork: a phone with an English three-box form files a first
+                        // surname there ("Alberto Gómez Aguilar" -> N:Aguilar;Alberto;Gómez;;),
+                        // so it simply joins the surnames, in front.
                         const p = splitEscaped( value, ';' ).map( unescapeText );
-                        c.n = { family: p[0] || '', given: p[1] || '', additional: p[2] || '', prefix: p[3] || '', suffix: p[4] || '' };
+
+                        c.n = { family : [ p[ 2 ], p[ 0 ] ].filter( Boolean ).join( ' ' ).trim(),
+                                given  : ( p[ 1 ] || '' ).trim() };
+                        suffix = ( p[ 4 ] || '' ).trim();
                         break;
                     }
 
@@ -800,6 +811,12 @@
                         break;
                 }
             }
+
+            // Real cards almost never put "Jr." in N's suffix: they put the note that tells
+            // two people apart - "(peluo)", "(medico)". Keep it, where notes belong. The
+            // honorific prefix is the one part dropped outright; FN still shows it.
+            if( suffix )
+                c.note = c.note ? c.note + '\n' + suffix : suffix;
 
             return c;
         }
@@ -925,7 +942,7 @@
             L.push( 'VERSION:3.0' );
             L.push( 'UID:' + c.uid );
             L.push( 'FN:' + escapeText( displayName( c ) ) );
-            L.push( 'N:' + [ c.n.family, c.n.given, c.n.additional, c.n.prefix, c.n.suffix ].map( escapeText ).join( ';' ) );
+            L.push( 'N:' + [ c.n.family, c.n.given ].map( escapeText ).join( ';' ) + ';;;' );   // N always has five components
 
             if( c.org )   L.push( 'ORG:' + escapeText( c.org ) );
             if( c.title ) L.push( 'TITLE:' + escapeText( c.title ) );
@@ -1029,7 +1046,7 @@
             if( c.fn && c.fn.trim() )
                 return c.fn.trim();
 
-            const nm = [ c.n.given, c.n.additional, c.n.family ].filter( Boolean ).join( ' ' ).trim();
+            const nm = [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ).trim();
             if( nm ) return nm;
 
             if( c.org ) return c.org;
@@ -1133,7 +1150,7 @@
 
         function nameTokens( c )
         {
-            return foldForSearch( [ c.n.given, c.n.additional, c.n.family ].filter( Boolean ).join( ' ' ) )
+            return foldForSearch( [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ) )
                 .replace( /[^a-z0-9]+/g, ' ' ).trim().split( ' ' ).filter( Boolean );
         }
 
@@ -1500,10 +1517,16 @@
 
         // Text fields only (names, org, title, note, emails). Phones are matched separately,
         // digit-by-digit, so that spaces, "+", "(0)" etc. on either side are ignored.
+        //
+        // BOTH parts of N: go in, not only the FN that displayName() returns. A card can
+        // hold a name its FN never shows - an imported surname FN left out - and typing it
+        // has to find the contact: being unsearchable by your own name is never acceptable.
         function contactHaystack( c )
         {
             return foldForSearch( [
-                displayName( c ), c.org, c.title, c.note,
+                displayName( c ),
+                c.n.given, c.n.family,
+                c.org, c.title, c.note,
                 ...c.emails.map( e => e.value )
             ].join( ' ' ) );
         }
@@ -2054,9 +2077,18 @@
             const c = editingUid ? findContact( editingUid ) : makeContact();
             if( ! editingUid ) contacts.push( c );
 
+            // FN is the card's own display name and may say more than the parts do
+            // ("MAD Lola (Villaamil)"). Rebuild it only when the name really changed:
+            // editing a phone or a birthday must leave it exactly as it was.
+            const nameChanged = given  !== c.n.given ||
+                                family !== c.n.family;
+
             c.n.given  = given;
             c.n.family = family;
-            c.fn       = [ given, family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
+
+            if( nameChanged || ! c.fn.trim() )
+                c.fn = [ given, family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
+
             c.org      = org;
             c.title    = document.getElementById( 'fJobTitle' ).value.trim();
             c.tels     = tels;
@@ -2319,13 +2351,13 @@
             return ( arr.map( s => ( s || '' ).trim() ).find( Boolean ) ) || '';
         }
 
-        // Most-complete card: most N components filled, then longest display name.
+        // Most-complete card: both name parts beat one, then longest display name.
         function mostComplete( list )
         {
             return list.slice().sort( ( a, b ) =>
             {
-                const fa = [ a.n.given, a.n.family, a.n.additional, a.n.prefix, a.n.suffix ].filter( Boolean ).length;
-                const fb = [ b.n.given, b.n.family, b.n.additional, b.n.prefix, b.n.suffix ].filter( Boolean ).length;
+                const fa = [ a.n.given, a.n.family ].filter( Boolean ).length;
+                const fb = [ b.n.given, b.n.family ].filter( Boolean ).length;
                 return fb - fa || displayName( b ).length - displayName( a ).length;
             })[ 0 ];
         }

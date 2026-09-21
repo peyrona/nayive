@@ -20,7 +20,7 @@ from './lib/xlsx-format_v2.4.1.js';
 import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
-    switchToSheet, sortByColumn, initGrid, wireFormulaPanel
+    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles
 }
 from './grid.js';
 import
@@ -119,12 +119,51 @@ const session = O.session( {
 // Two moves, both phone-only: the toolbar is ONE row of favourites with a
 // "⋮" that opens the rest in place, and the whole strip folds away the
 // moment a cell editor opens (the keyboard is about to take half the
-// screen). The header's "Aa" brings it back. The file buttons move to the
-// header's "⋮" menu, built from the real buttons by shared/office.js.
+// screen). The header's "Aa" brings it back.
+//
+// The file buttons are NOT one of those two moves any more: they are behind
+// the header's "⋮" on every screen, PC included, because a toolbar with
+// thirty-eight controls on it was no easier to read than a phone's.
 
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 
-const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu', ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn' ] } );
+// AYUDA, wherever it is asked for: the pull-down Ayuda menu and the toolbar's
+// "?" show the SAME three entries, each clicking its own real button - so the
+// two chromes cannot drift and there is still one set of handlers.
+const HELP_ITEMS =
+[
+    { key: 'write.stats',       el: 'statsBtn' },
+    { key: 'write.shortcuts',   el: 'scBtn'    },
+    { key: 'ui.toolbarButtons', el: 'guideBtn' }
+];
+const HELP_IDS = HELP_ITEMS.map( function( it ) { return it.el; } );
+
+const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
+                               ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'scBtn' ] } );
+
+// Ayuda on the "?" - the three entries HELP_ITEMS names. setHelpMenu tells
+// shared/ui.js to leave the click to this menu instead of opening the guide
+// card itself; the card is the third entry.
+const helpMenu = O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: HELP_IDS } );
+NayiveUI.setHelpMenu( true );
+
+// ---- the toolbar's group cards (shared/office.js, groupPopup) ----
+// Four runs of near-identical buttons that cost fifteen slots on the bar and
+// now cost four. The buttons are THE REAL ONES, sitting inside the cards in
+// index.html: their click handlers below are wired exactly as before and
+// format.js still lights them up. Only `align` and `freeze` hold toggles, so
+// only their triggers can light up - syncToolbar() calls sync() on both.
+const groups =
+[
+    O.groupPopup( { btn: 'fmtTableBtn',     popup: 'tablePopup'  } ),
+    O.groupPopup( { btn: 'fmtSortBtn',      popup: 'sortPopup'   } ),
+    O.groupPopup( { btn: 'fmtAlignBtn',     popup: 'alignPopup',  activeFrom: [ 'fmtWrapBtn' ] } ),
+    O.groupPopup( { btn: 'fmtFreezeGrpBtn', popup: 'freezePopup', activeFrom: [ 'fmtFreezeBtn', 'fmtFreezeRowBtn' ] } )
+];
+
+// Called by format.js after every toolbar refresh.
+function syncGroupTriggers() { groups.forEach( function( g ) { if( g ) g.sync(); } ); }
+function closeGroupPopups()  { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // Folding sets height:0 rather than display:none - Handsontable sizes
 // itself to the space left over and re-renders on resize either way.
@@ -144,6 +183,8 @@ function applyPhoneChrome()
 
     O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'savedAt' );
     fileMenu.close();
+    if( helpMenu ) helpMenu.close();
+    closeGroupPopups();
     fold.setMore( false );
     if( ! PHONE.matches ) fold.setOpen( true );
 }
@@ -221,6 +262,23 @@ function wireStaticUI()
 
             e.preventDefault();
             toggleStyleField( { b: 'bold', i: 'italic', u: 'underline' }[ e.key.toLowerCase() ] );
+            return;
+        }
+        // Ctrl/Cmd+Shift+V: paste without the copied cells' formatting. Caught
+        // here rather than left to Handsontable, whose own paste always lays
+        // the styles back down (see CLIPBOARD STYLES in grid.js). Same guards
+        // as the three above: the cell editor and the formula row own their
+        // own keys.
+        if( ( e.ctrlKey || e.metaKey ) && e.shiftKey && ! e.altKey && e.code === 'KeyV' )
+        {
+            if( e.target && ( e.target.id === 'nameBox' || e.target.id === 'formulaBar' ) ) return;
+            if( ! table || ! lastSelection ) return;
+
+            const cellEditor = table.getActiveEditor && table.getActiveEditor();
+            if( cellEditor && typeof cellEditor.isOpened === 'function' && cellEditor.isOpened() ) return;
+
+            e.preventDefault();
+            clipPastePlain();
             return;
         }
         // Escape on the border popup; the "⋮" menu and every dialog are closed by shared/ui.js.
@@ -331,6 +389,8 @@ function wireStaticUI()
     document.getElementById( 'sortAscBtn'      ).addEventListener( 'click', function() { sortByColumn( false ); } );
     document.getElementById( 'sortDescBtn'     ).addEventListener( 'click', function() { sortByColumn( true  ); } );
     document.getElementById( 'scBtn'           ).addEventListener( 'click', openShortcuts );
+    document.getElementById( 'statsBtn'        ).addEventListener( 'click', openStats );
+    document.getElementById( 'guideBtn'        ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
 
     document.getElementById( 'fmtFreezeBtn'    ).addEventListener( 'click', toggleFreezeColumns );
     document.getElementById( 'fmtFreezeRowBtn' ).addEventListener( 'click', toggleFreezeRows );
@@ -814,11 +874,15 @@ async function writeCalcCfg( patch )
 // The key combos shown on the right of an entry. Calc's shortcuts are the
 // handful wired in wireStaticUI() plus the ones Handsontable itself
 // handles (copy / cut / paste, undo / redo).
-const MOD = navigator.platform.indexOf( 'Mac' ) === 0 ? '⌘' : 'Ctrl+';
+const IS_MAC = navigator.platform.indexOf( 'Mac' ) === 0;
+const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
 const SC  =
 {
     save: MOD + 'S', bold: MOD + 'B', italic: MOD + 'I', underline: MOD + 'U',
-    undo: MOD + 'Z', redo: MOD + 'Y', cut: MOD + 'X', copy: MOD + 'C', paste: MOD + 'V'
+    undo: MOD + 'Z', redo: MOD + 'Y', cut: MOD + 'X', copy: MOD + 'C', paste: MOD + 'V',
+    // A getter, not a string: the Shift key's NAME is translated, and this
+    // table is built before the dictionaries are in.
+    get pastePlain() { return IS_MAC ? '⌘⇧V' : MOD + T( 'ui.keyShift' ) + '+V'; }
 };
 
 // Help ▸ Keyboard shortcuts: the combos above, then the grid's own keys
@@ -832,6 +896,7 @@ function openShortcuts()
         [ 'ui.cut',         SC.cut       ],
         [ 'ui.copy',        SC.copy      ],
         [ 'ui.paste',       SC.paste     ],
+        [ 'ui.pastePlain',  SC.pastePlain ],
         [ 'calc.bold',      SC.bold      ],
         [ 'calc.italic',    SC.italic    ],
         [ 'calc.underline', SC.underline ],
@@ -842,6 +907,48 @@ function openShortcuts()
         [ 'calc.sc.cancel', T( 'ui.keyEsc' )      ],
         [ 'calc.sc.clear',  T( 'ui.keyDel' )      ]
     ].map( function( r ) { return { text: T( r[ 0 ] ), keys: r[ 1 ] }; } ) );
+}
+
+// Help > Estadísticas: what the sheet on screen actually holds. Read on open,
+// not live - the status bar already carries the live figures for the selection.
+// Off the SOURCE data, not HyperFormula's answers: "=SUM(A1:A9)" has to count
+// as a formula, and a cell holding only a formula's result is not a filled one.
+function openStats()
+{
+    if( ! table ) { NayiveUI.toast( T( 'write.waitForDoc' ) ); return; }
+
+    // ONE getSourceData() and then plain arrays, as codec.js does on save: a
+    // getSourceDataAtCell() per cell runs Handsontable's hooks a million times
+    // over on a real imported sheet and stalls the tab for seconds.
+    const data = table.getSourceData();
+    let lastRow = -1, lastCol = -1, filled = 0, formulas = 0;
+
+    for( let r = 0; r < data.length; r++ )
+    {
+        const row = data[ r ];
+        if( ! row ) continue;
+
+        for( let c = 0; c < row.length; c++ )
+        {
+            const v = row[ c ];
+            if( v === null || v === undefined || v === '' ) continue;
+
+            filled++;
+            if( r > lastRow ) lastRow = r;
+            if( c > lastCol ) lastCol = c;
+            if( String( v ).charAt( 0 ) === '=' ) formulas++;
+        }
+    }
+
+    const n = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
+
+    O.showStats( [
+        { text: T( 'calc.statSheets'   ), value: n( ( doc && doc.sheets ? doc.sheets.length : 1 ) ) },
+        { text: T( 'calc.statRows'     ), value: n( lastRow + 1 ) },
+        { text: T( 'calc.statCols'     ), value: n( lastCol + 1 ) },
+        { text: T( 'calc.statCells'    ), value: n( filled   ) },
+        { text: T( 'calc.statFormulas' ), value: n( formulas ) }
+    ], T( 'calc.statNote' ) );
 }
 
 // The style of the cell the selection is anchored on - the same one the
@@ -923,51 +1030,67 @@ function colorItems( id, table )
 
 //---- the clipboard -------------------------------------------------//
 //
-// Ctrl+C / Ctrl+X / Ctrl+V are Handsontable's own and keep everything;
-// these menu entries move the VALUES, as tab-separated text, through the
-// browser's clipboard - the same thing Write's Edición menu does. The
-// shortcut shown on each row points at the richer path.
+// These three ARE Ctrl+X / Ctrl+C / Ctrl+V: the same Handsontable
+// handlers, reached the same way, so a menu paste moves exactly what a
+// Ctrl+V moves - values, formulas AND the cell's look. The mechanism is
+// shared/office.js's THE CLIPBOARD (a synthetic ClipboardEvent over the
+// engine's own DOM listeners); what is Calc's alone is the two things
+// Handsontable demands before it will listen:
+//
+//   - `table.listen()`. Clicking a menu takes the grid out of "listening",
+//     and the plugin drops every clipboard event while it is out.
+//   - document.body as the target. The plugin ignores an event whose
+//     target is neither the body nor inside its own root - and a menu
+//     button is neither.
+//
+// The styles are not Handsontable's to carry (they live in
+// `activeSheet.cellStyles`); grid.js rides them along on the plugin's own
+// hooks - see CLIPBOARD STYLES there.
 
-function selectionText()
+function clipReady()
 {
-    if( ! table || ! lastSelection ) return '';
+    if( ! table ) return null;
 
-    const rows = table.getData( lastSelection.r1, lastSelection.c1, lastSelection.r2, lastSelection.c2 );
-
-    return rows.map( function( row )
-    {
-        return row.map( function( v ) { return v === null || v === undefined ? '' : String( v ); } ).join( '\t' );
-    } ).join( '\n' );
+    table.listen();
+    return document.body;
 }
 
 async function clipCopy( andCut )
 {
-    const text = selectionText();
-    if( ! text && text !== '0' ) return;
+    const node = clipReady();
+    if( ! node ) return;
 
-    try { await navigator.clipboard.writeText( text ); }
-    catch( _ ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
-
-    if( andCut ) table.emptySelectedCells();
+    if( await O.clip.out( node, andCut === true ? 'cut' : 'copy' ) === 'blocked' )
+        NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
 }
 
 function clipCut() { clipCopy( true ); }
 
 async function clipPaste()
 {
-    if( ! table || ! lastSelection ) return;
+    const node = clipReady();
+    if( ! node ) return;
 
-    let text = '';
+    if( await O.clip.into( node ) === 'blocked' )
+        NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
+}
 
-    try { text = await navigator.clipboard.readText(); }
-    catch( _ ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
+// Ctrl+Shift+V: the values, naked. Only the plain text reaches Handsontable
+// (so nothing of the source's own HTML survives) and grid.js is told to let
+// this one paste through without laying the copied styles down.
+async function clipPastePlain()
+{
+    const node = clipReady();
+    if( ! node ) return;
 
-    if( ! text ) return;
+    pasteWithoutStyles( true );
 
-    const rows = text.replace( /\r\n?/g, '\n' ).replace( /\n$/, '' )
-                     .split( '\n' ).map( function( line ) { return line.split( '\t' ); } );
-
-    table.populateFromArray( lastSelection.r1, lastSelection.c1, rows );
+    try
+    {
+        if( await O.clip.into( node, true ) === 'blocked' )
+            NayiveUI.toast( T( 'ui.clipboardBlocked' ) );
+    }
+    finally { pasteWithoutStyles( false ); }
 }
 
 // Insertar > Comentario. The same plugin call Handsontable's own
@@ -1033,6 +1156,7 @@ const MENUS =
         { key: 'ui.cut',   run: clipCut,   sc: 'cut',   enabled: haveSelection, icon: 'cut'   },
         { key: 'ui.copy',  run: clipCopy,  sc: 'copy',  enabled: haveSelection, icon: 'copy'  },
         { key: 'ui.paste', run: clipPaste, sc: 'paste', enabled: haveSelection, icon: 'paste' },
+        { key: 'ui.pastePlain', run: clipPastePlain, sc: 'pastePlain', enabled: haveSelection, icon: 'paste' },
         { sep: true },
         { key: 'calc.selectAll', run: function() { table.selectAll(); } },
         { sep: true },
@@ -1109,11 +1233,7 @@ const MENUS =
 },
 {
     key: 'ui.menu.help',
-    items:
-    [
-        { key: 'write.shortcuts', el: 'scBtn' },
-        { key: 'ui.quickGuide', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
-    ]
+    items: HELP_ITEMS
 }
 ];
 
@@ -1174,5 +1294,5 @@ export
 {
     NF_SAMPLE_DATE, borderWeight, borderColorValue, T, PHONE, fold, HT_LOCALE,
     refreshNameBox, gotoReference, refreshFormulaBar, mirrorEditorToBar, refreshSelStats,
-    FUNCTIONS, fxRowsHtml, scheduleAutosave, menus, CHROME
+    FUNCTIONS, fxRowsHtml, scheduleAutosave, menus, CHROME, syncGroupTriggers
 };

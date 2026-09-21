@@ -55,6 +55,14 @@ ACCENT = "#16A085"
 # glyph = the inner markup of each app's favicon SVG (24x24 viewBox), with the
 # stroke/fill colour dropped so we can set it uniformly here.
 GLYPHS = {
+    "chat": {
+        "dir": APPS / "chat" / "icons",
+        "svg": (
+            "<path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21"
+            "l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5"
+            "a8.48 8.48 0 0 1 8 8v.5z'></path>"
+        ),
+    },
     "tasks": {
         "dir": APPS / "tasks" / "icons",
         "svg": (

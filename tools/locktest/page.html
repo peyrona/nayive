@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>lock harness</title>
+<script src="shared/i18n.js"></script>
+<link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="shared/app.css">
+<script>
+window.SRV = {};
+window.BIN = [];
+var binSeq = 0;
+window.CALLS = [];
+function clone( b ) { return typeof b === "string" ? b : new Uint8Array( b ); }
+
+window.GumApi = {
+    API_FILES: "/api/files",
+    fileUrl:   function ( p ) { return "/api/files?file=" + p; },
+    readFileBytes: async function ( p )
+    {
+        CALLS.push( [ "read", p ] );
+        if( !( p in SRV ) ) throw new Error( "404 " + p );
+        var b = SRV[ p ];
+        return typeof b === "string" ? new TextEncoder().encode( b ) : clone( b );
+    },
+    writeFileBytes: async function ( p, bytes ) { CALLS.push( [ "write", p ] ); SRV[ p ] = clone( bytes ); },
+    makeDir:  async function () {},
+    rename:   async function ( a, b ) { SRV[ b ] = SRV[ a ]; delete SRV[ a ]; },
+    listDir:  async function () { return []; },
+    deletePaths: async function ( ps )
+    {
+        ps.forEach( function ( p )
+        {
+            if( !( p in SRV ) ) throw new Error( "404 " + p );
+            BIN.push( { id: "e" + ( ++binSeq ), name: p.split( "/" ).pop(), orig: p, body: SRV[ p ] } );
+            delete SRV[ p ];
+        } );
+        return "{}";
+    },
+    trashList:   async function () { return BIN.map( function ( it ) { return { id: it.id, name: it.name, orig: it.orig }; } ); },
+    trashDelete: async function ( ids ) { BIN = BIN.filter( function ( it ) { return ids.indexOf( it.id ) === -1; } ); return {}; },
+    probeAccess: async function () { return { user: "t", role: "user" }; }
+};
+
+window.makeStore = function ( binary )
+{
+    return {
+        binary: binary,
+        read:   async function ( p )
+        {
+            if( !( p in SRV ) ) return { body: null, source: "empty" };
+            var b = SRV[ p ];
+            if( binary ) return { body: typeof b === "string" ? new TextEncoder().encode( b ) : clone( b ), source: "net" };
+            return { body: typeof b === "string" ? b : new TextDecoder().decode( b ), source: "net" };
+        },
+        write:  async function ( p, body ) { CALLS.push( [ "store", p ] ); SRV[ p ] = clone( body ); return { ok: true }; },
+        flush:      async function () {},
+        forget:     async function ( p ) { CALLS.push( [ "forget", p ] ); },
+        conflicted: async function () { return false; },
+        listCached: async function () { return []; },
+        resting:    function () {},
+        onState:    function () {},
+        onConflict: function () {}
+    };
+};
+</script>
+<script src="shared/ui.js" defer></script>
+<script src="shared/crypt.js" defer></script>
+<script src="shared/office.js" defer></script>
+</head>
+<body>
+<div id="app">
+  <span id="syncIndicator"></span>
+  <span id="fileLabel"></span><input id="fileNameInput" hidden>
+  <span id="savedAt"></span>
+  <button id="newBtn"></button><button id="openBtn"></button>
+  <button id="importBtn"></button><input id="importInput" type="file" hidden>
+  <button id="saveAsBtn"></button><button id="restoreBtn"></button>
+  <button id="lockBtn"><svg></svg></button>
+  <div id="toast"></div>
+  <div id="openBackdrop" class="sheet-backdrop"><div class="sheet">
+    <div id="openRecent"></div><div id="openCrumb"></div><ul id="openList"></ul></div></div>
+  <div id="saveAsBackdrop" class="sheet-backdrop"><div class="sheet">
+    <input id="saveName"><button id="saveDirBtn"><span id="saveDirName"></span></button>
+    <button id="saveAsConfirmBtn"></button><button id="saveAsDeleteBtn"></button></div></div>
+</div>
+<script>
+window.DOC = { body: null, how: null, name: null };
+
+window.WIRED = [ "newBtn", "openBtn", "importBtn", "importInput", "saveAsBtn", "restoreBtn",
+                 "lockBtn", "saveAsConfirmBtn", "saveAsDeleteBtn", "saveName", "fileLabel", "fileNameInput" ];
+
+window.newSession = function ( app, binary )
+{
+    WIRED.forEach( function ( id )
+    {
+        var el = document.getElementById( id );
+        if( el ) el.replaceWith( el.cloneNode( true ) );
+    } );
+
+    return NayiveOffice.session( {
+        app: app, store: makeStore( binary ), appDir: "files", openRoot: "files",
+        defaultName: binary ? "doc.docx" : "nota.txt",
+        encode: async function () { return DOC.body; },
+        load:   async function ( body, name, how ) { DOC = { body: body, how: how, name: name }; },
+        blank:  async function () { DOC = { body: binary ? new Uint8Array( 0 ) : "", how: "blank", name: null }; }
+    } );
+};
+
+window.typePassword = async function ( pw, repeat )
+{
+    for( var i = 0; i < 60; i++ )
+    {
+        var one = document.getElementById( "askPw1" );
+        if( one )
+        {
+            one.value = pw;
+            var two = document.getElementById( "askPw2" );
+            if( two ) two.value = repeat === undefined ? pw : repeat;
+            one.closest( ".sheet" ).querySelector( ".sheet-actions button:last-child" ).click();
+            return true;
+        }
+        await new Promise( function ( r ) { setTimeout( r, 25 ); } );
+    }
+    return false;
+};
+
+window.cancelSheet = async function ()
+{
+    for( var i = 0; i < 60; i++ )
+    {
+        var s = document.querySelector( ".sheet-backdrop.open .sheet" );
+        if( s ) { document.dispatchEvent( new KeyboardEvent( "keydown", { key: "Escape", bubbles: true } ) ); return true; }
+        await new Promise( function ( r ) { setTimeout( r, 25 ); } );
+    }
+    return false;
+};
+
+window.clickConfirm = async function ( which )
+{
+    for( var i = 0; i < 60; i++ )
+    {
+        var s = document.querySelector( ".sheet-backdrop.open .sheet" );
+        var row = s && s.querySelector( ".sheet-actions" );
+        if( row && row.children.length >= 2 )
+        {
+            row.children[ which === "cancel" ? 0 : row.children.length - 1 ].click();
+            return true;
+        }
+        await new Promise( function ( r ) { setTimeout( r, 25 ); } );
+    }
+    return false;
+};
+
+// NOT deleteDatabase(): office.js keeps its connection open, so a delete
+// blocks and never settles once a test has kept a draft. Clearing the store
+// through an ordinary transaction is what "start from nothing" needs anyway.
+window.dropDrafts = function ()
+{
+    return new Promise( function ( resolve )
+    {
+        var q = indexedDB.open( "nayive-drafts", 1 );
+        q.onupgradeneeded = function () { q.result.createObjectStore( "drafts", { keyPath: "app" } ); };
+        q.onerror = q.onblocked = function () { resolve(); };
+        q.onsuccess = function ()
+        {
+            var db = q.result;
+            try
+            {
+                var tx = db.transaction( "drafts", "readwrite" );
+                tx.objectStore( "drafts" ).clear();
+                tx.oncomplete = tx.onerror = tx.onabort = function () { db.close(); resolve(); };
+            }
+            catch ( e ) { db.close(); resolve(); }
+        };
+    } );
+};
+
+// Wait for a CONDITION, never for a guessed number of milliseconds: deriving a
+// key is 600 000 PBKDF2 rounds, and how long that takes depends on the machine
+// and on what else the run has just done.
+window.until = async function ( test, ms )
+{
+    var end = Date.now() + ( ms || 10000 );
+    while( Date.now() < end )
+    {
+        try { if( test() ) return true; } catch ( e ) {}
+        await new Promise( function ( r ) { setTimeout( r, 40 ); } );
+    }
+    return false;
+};
+
+// The document has been written to the fake server in its sealed form.
+window.untilSealed = function ( path )
+{
+    return until( function ()
+    {
+        var b = SRV[ path ];
+        if( b == null ) return false;
+        var head = typeof b === "string" ? b.slice( 0, 16 ) : new TextDecoder().decode( b.slice( 0, 16 ) );
+        return head === "NAYIVE-LOCK-BIN\n" || head === "NAYIVE-LOCK-B64\n";
+    } );
+};
+
+window.HARNESS = true;
+</script>
+</body></html>

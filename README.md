@@ -30,6 +30,24 @@ cd server/go
 go run . -config ../../store/config/server.json   # http://localhost:4343/nayive/
 ```
 
+## Write's editor bundle
+
+Write is built on [docx-editor.dev](https://github.com/eigenpal/docx-editor)
+(`@docx-editor.dev/core`, Apache-2.0, with metric-compatible OFL fonts). The bundle
+**is** in this repository, so a clone needs nothing extra. To rebuild it, or move to
+a newer release (needs `node` + `npm`; nothing is installed globally):
+
+```sh
+tools/build-docx-editor.sh            # rebuild the pinned version
+tools/build-docx-editor.sh 2.21.0     # bump
+tools/build-docx-editor.sh --restore  # put the previous build back
+```
+
+The version, every bundled package and a sha256 per file live in
+`client/apps/write/lib/docx-editor/docx-editor.lock.json`;
+`tools/check-docx-editor` holds the folder to it on every deploy. See
+`client/apps/write/lib/docx-editor/BUILD.md`.
+
 ## Deploy to your own server
 
 ```sh

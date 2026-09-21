@@ -14,6 +14,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,6 +47,9 @@ type adminRequest struct {
 	NeverExt  []string `json:"never_ext"`
 	MinMB     *float64 `json:"min_mb"`
 
+	// set-sites
+	SitesDir string `json:"sites_dir"`
+
 	// raw keeps the object as it arrived, so "was this key present at all?" can
 	// still be asked - encoding/json cannot tell an absent key from a null one
 	// for a non-pointer field, and cannot tell either from a pointer that was
@@ -74,13 +78,14 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		var adminName string
+		var adminName, sitesDir string
 		var ext *ExternalStorage
 		s.cfg.Read(func(c *ServerConfig) {
 			if c.Admin != nil {
 				adminName = c.Admin.Name
 			}
 			ext = c.ExternalStorage
+			sitesDir = c.SitesDir
 		})
 		// An UNSET block answers as {} - not as a fully-populated object with
 		// empty fields. The panel tells the two apart: {} means "never
@@ -97,6 +102,7 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 			"configured":       configured,
 			"admin":            map[string]string{"name": adminName},
 			"external_storage": extOut,
+			"sites_dir":        sitesDir,
 			"users":            s.users.ListUsers(),
 		})
 		return
@@ -125,6 +131,10 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 	case "set-extstore":
 		if s.needAdmin(w, r, isAdmin) {
 			s.adminSetExtStore(w, r, &body)
+		}
+	case "set-sites":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminSetSites(w, r, &body)
 		}
 	case "create-user", "update-user":
 		if s.needAdmin(w, r, isAdmin) {
@@ -244,6 +254,33 @@ func (s *Server) adminSetExtStore(w http.ResponseWriter, r *http.Request, body *
 	})
 }
 
+// adminSetSites stores the folder of plain web sites (sites.go). It applies at
+// once - SitesPath reads it on every request. "" turns the sites off.
+func (s *Server) adminSetSites(w http.ResponseWriter, r *http.Request, body *adminRequest) {
+	raw := strings.TrimSpace(body.SitesDir)
+	if raw != "" {
+		dir, err := s.cfg.resolveSitesDir(raw)
+		if errors.Is(err, errSitesOverlap) {
+			sendError(w, r, http.StatusBadRequest,
+				"esa carpeta contiene datos de Nayive; elige otra")
+			return
+		}
+		if info, statErr := os.Stat(dir); err != nil || statErr != nil || !info.IsDir() {
+			sendError(w, r, http.StatusBadRequest, "no existe esa carpeta")
+			return
+		}
+	}
+	if err := s.cfg.Update(func(c *ServerConfig) { c.SitesDir = raw }); err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar la configuración")
+		return
+	}
+	s.log.Info("web sites folder set", "sites_dir", raw)
+	sendJSON(w, r, http.StatusOK, map[string]any{
+		"message":   "carpeta de sitios web guardada",
+		"sites_dir": raw,
+	})
+}
+
 // normaliseExts lowercases, de-duplicates and dot-prefixes a list of file
 // extensions, keeping the order the admin typed them in.
 func normaliseExts(list []string) []string {
@@ -281,6 +318,11 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 	opts := SaveAccountOptions{
 		Password:  derefString(body.Password),
 		MustExist: &mustExist,
+	}
+	// "password": null on an existing user removes it (the panel's in-field
+	// trash); an absent key, or "", keeps it.
+	if mustExist && body.has("password") && body.Password == nil {
+		opts.ClearPassword = true
 	}
 	// Only pass a field through when the caller actually sent it. The raw JSON
 	// goes down untouched: what "null", "0" and "abc" each mean is decided in
@@ -362,6 +404,8 @@ func (s *Server) adminRenameUser(w http.ResponseWriter, r *http.Request, body *a
 			"no se pudo renombrar la carpeta del usuario")
 	default:
 		s.trackers.RenameUser(oldName, newName) // their location URL keeps working
+		s.chat.RenameUser(oldName, newName)     // read again under the new name; others' contacts follow
+		s.devices.RenameUser(oldName, newName)  // their phones keep working
 		s.log.Info("user renamed", "from", oldName, "to", newName)
 		sendJSON(w, r, http.StatusOK,
 			map[string]string{"message": "usuario renombrado", "name": newName})
@@ -390,6 +434,8 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 	s.users.ForgetUsage(name)
 	s.shares.DropUser(name)   // anything they shared, or was shared with them
 	s.trackers.DropUser(name) // their location URL
+	s.chat.DeleteUser(name)   // their chat links; others' chats with them end
+	s.devices.DropUser(name)  // their phones' tokens die
 
 	s.log.Info("user deleted", "name", name)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "usuario eliminado"})

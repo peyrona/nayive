@@ -35,6 +35,13 @@ import (
 // UI - every grant is a plain read-only file or folder whatever this says.
 var Apps = []string{"folder", "file", "photos", "trips", "split"}
 
+// Everyone is the recipient of a grant made to EVERY user of this server -
+// Nayive is a family-and-friends server, so "everybody" is a natural choice.
+// It covers people who get an account later too. "*" can never be a real
+// name: ValidUsername allows letters, digits and . _ - only. The owner never
+// sees their own "everybody" grant under shared/.
+const Everyone = "*"
+
 // ExtraSeg is the path segment that asks for one of a shared TRIP's outside
 // files:  shared/<slug>/~/<the owner's own path>  . See ExtraPath at the bottom.
 const ExtraSeg = "~"
@@ -201,11 +208,13 @@ func Slugify(text string) string {
 }
 
 // uniqueSlug returns a slug not already used by anything shared with `to`.
+// An "everybody" grant shows up in every user's shared/, so its slug must be
+// free for all of them, and a person's grant must never take one of its slugs.
 // Caller holds mu.
 func (s *Shares) uniqueSlug(to, base string) string {
 	taken := make(map[string]bool)
 	for _, g := range s.grants {
-		if g.To == to {
+		if to == Everyone || g.To == to || g.To == Everyone {
 			taken[g.Slug] = true
 		}
 	}
@@ -259,6 +268,15 @@ func (s *Shares) RootPath(g *Grant) string {
 // lookups
 // -----------------------------------------------------------------------------
 
+// sharedWith reports whether `user` is a recipient of this grant: named in
+// it, or - for an "everybody" grant - anyone but its owner.
+func sharedWith(g *Grant, user string) bool {
+	if g.Token != "" || user == "" {
+		return false
+	}
+	return g.To == user || (g.To == Everyone && g.Owner != user)
+}
+
 // Find is the grant shared WITH `user` under `slug`, or nil. THE hot path:
 // ResolvePath calls this on every request for a shared/... file.
 //
@@ -269,7 +287,7 @@ func (s *Shares) Find(user, slug string) *Grant {
 	defer s.mu.Unlock()
 	s.ensureLoaded()
 	for i := range s.grants {
-		if s.grants[i].Token == "" && s.grants[i].To == user && s.grants[i].Slug == slug {
+		if s.grants[i].Slug == slug && sharedWith(&s.grants[i], user) {
 			g := s.grants[i]
 			return &g
 		}
@@ -279,7 +297,7 @@ func (s *Shares) Find(user, slug string) *Grant {
 
 // ForUser is everything shared WITH `user`, newest first.
 func (s *Shares) ForUser(user string) []Grant {
-	return s.filter(func(g *Grant) bool { return g.Token == "" && g.To == user })
+	return s.filter(func(g *Grant) bool { return sharedWith(g, user) })
 }
 
 // FindToken is the public link with this token, or nil.
@@ -342,8 +360,12 @@ func CanAdd(g *Grant) bool {
 }
 
 // Create adds a grant. The caller has already checked that `root` is a real
-// path inside `owner`'s home and that `to` is a real user - this only stores it.
-// Returns nil when that exact share already exists (the caller answers 409).
+// path inside `owner`'s home and that `to` is a real user (or Everyone) - this
+// only stores it. Returns nil when that exact share already exists, or when
+// everybody has it already (the caller answers 409).
+//
+// Sharing with Everyone takes the place of the owner's grants to single people
+// for the same item: they would only show it to them twice.
 func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 	if !contains(Apps, app) {
 		app = "folder"
@@ -360,10 +382,23 @@ func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 	s.mu.Lock()
 	s.ensureLoaded()
 	for i := range s.grants {
-		if s.grants[i].Owner == owner && s.grants[i].To == to && s.grants[i].Root == root {
+		g := &s.grants[i]
+		if g.Token == "" && g.Owner == owner && g.Root == root && (g.To == to || g.To == Everyone) {
 			s.mu.Unlock()
 			return nil // already shared
 		}
+	}
+	replaced := 0
+	if to == Everyone {
+		kept := s.grants[:0:0] // a fresh slice; never alias the one we are filtering
+		for _, g := range s.grants {
+			if g.Token == "" && g.Owner == owner && g.Root == root {
+				replaced++
+			} else {
+				kept = append(kept, g)
+			}
+		}
+		s.grants = kept
 	}
 	grant := Grant{
 		ID:      newShareID(),
@@ -381,6 +416,9 @@ func (s *Shares) Create(owner, to, root, app, title, mode string) *Grant {
 	s.mu.Unlock()
 
 	s.log.Info("share created", "owner", owner, "to", to, "root", root)
+	if replaced > 0 {
+		s.log.Info("shared with everybody - person grants dropped", "count", replaced, "root", root)
+	}
 	return &grant
 }
 

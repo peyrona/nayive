@@ -66,6 +66,16 @@ function updateToolbarState()
     dlBtn.title    = (n > 0) ? T( 'drive.downloadSelection' ) : T( 'drive.downloadFolder' );
 
 
+    // The six above act on WHAT IS SELECTED: the ticked rows, or (nothing
+    // ticked) the folder open in the tree. So the group - rule included, see
+    // #selActions in index.html and drive.css - leaves the bar only when
+    // there is no target at all (the Drive root, nothing ticked). With just
+    // the open folder, Link, Share and Delete show; Rename, Move and Copy
+    // wait for a tick.
+    document.getElementById( 'selActions' ).hidden = ! nT;
+    for( const id of [ 'renameBtn', 'moveToBtn', 'copyToBtn' ] )
+        document.getElementById( id ).hidden = ! n;
+
     // Several of the titles above were just rewritten from scratch, so the
     // "· Ctrl+D" hints go back on last.
     applyKeyHints();
@@ -177,7 +187,7 @@ async function reload()
 
         selectedPaths.clear();
         await loadListing( currentFolder );      // refetch the open folder + render
-        if( searchQuery.trim() ) runSearch();    // keep an active search live
+        if( isSearching() ) runSearch();         // keep an active search live
         setSyncStatus( true );
         setStatus( '' );
         refreshDiskGauge();          // keep the server-HD bar current on manual refresh

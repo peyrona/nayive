@@ -1,0 +1,9 @@
+# Copy to local.properties (never committed) and fill in.
+sdk.dir=/home/you/sdk/android
+
+# Where Nayive is served. The app opens <origin>/nayive/ and talks to <origin>/api/device/.
+nayive.origin=https://example.com
+
+# The release signing key: a .properties file with storeFile, storePassword,
+# keyAlias, keyPassword. Keep it (and the keystore) OUT of the repo - in store/config/.
+nayive.signing=../store/config/nayive-release.properties

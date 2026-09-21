@@ -63,13 +63,19 @@ function wireStaticUI()
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );
+    document.getElementById( 'bigFilesBtn'       ).addEventListener( 'click', function() { bigMode ? endAdvSearch() : openBigFiles(); } );
 
     wireTopMenu();      // the header's ⋮ (phone) — see B6b in the phone block
+
+    // The "space almost full" card (shared/ui.js) asks for the list here
+    // instead of reloading Drive with ?big=1.
+    document.addEventListener( 'nayive:bigfiles', function( e ) { e.preventDefault(); openBigFiles(); } );
     initPaneResizer();
 
     document.getElementById( 'searchInput' ).addEventListener( 'input', function( e )
     {
         searchQuery = e.target.value;
+        bigMode     = false;                   // typing a name ends the "Biggest files" list
         selectedPaths.clear();
         if( searchTimer ) clearTimeout( searchTimer );
 
@@ -114,6 +120,24 @@ function wireStaticUI()
         if( on ) document.getElementById( 'searchInput' ).focus();
         else     { clearSearch(); selectedPaths.clear(); render(); }
     });
+
+    // The magnifier inside the box: the advanced search dialog (advsearch.js).
+    // While one is in force, the button standing in for the box reopens it,
+    // and Escape on that button ends it.
+    document.getElementById( 'searchBuilderBtn' ).addEventListener( 'click', openSearchBuilder );
+    document.getElementById( 'advChip'          ).addEventListener( 'click', openSearchBuilder );
+    document.getElementById( 'advChip'          ).addEventListener( 'keydown', function( e )
+    {
+        if( e.key !== 'Escape' ) return;
+        e.stopPropagation();
+        endAdvSearch();
+    });
+    document.getElementById( 'sbCancelBtn' ).addEventListener( 'click', function() { setBackdrop( 'searchBuilderBackdrop', false ); } );
+    document.getElementById( 'sbSearchBtn' ).addEventListener( 'click', applySearchBuilder );
+    document.getElementById( 'sbClearBtn'  ).addEventListener( 'click', clearSearchBuilder );
+    document.getElementById( 'sbAddRule'   ).addEventListener( 'click', addBuilderRule );
+    document.getElementById( 'sbFrom'      ).addEventListener( 'input', onBuilderDate );
+    document.getElementById( 'sbTo'        ).addEventListener( 'input', onBuilderDate );
 
     document.getElementById( 'treeBackdrop' ).addEventListener( 'click', closeTreeSheet );
     PHONE.addEventListener( 'change', function() { closeTreeSheet(); render(); } );

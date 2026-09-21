@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <!--
+    ===========================================================================
+     chat/guest.html - a person's chat with a Nayive user, behind their secret
+     link /c/<token>/. No account, no app: the link is who they are.
+
+     The Go server sends this file for /c/<token>/ (server/go/api_chat.go) and
+     puts the owner's name where {{OWNER}} is, so a phone saves the icon under
+     it. The page's own URL is /c/<token>/, so every asset below is an absolute
+     /nayive/ URL - except the manifest and the service worker, which live
+     under the link on purpose (their scope carries the token). No session,
+     no GumApi: everything goes to /api/c/<token>.
+    ===========================================================================
+    -->
+    <script src="/nayive/shared/i18n.js"></script>
+    <title>{{OWNER}}</title>
+    <meta name="apple-mobile-web-app-title" content="{{OWNER}}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="/nayive/chat/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/nayive/chat/icons/icon-192.png">
+    <link rel="stylesheet" href="/nayive/shared/theme.css">
+    <link rel="stylesheet" href="/nayive/shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="/nayive/shared/theme.js" defer></script>
+    <link rel="stylesheet" href="/nayive/trips/lib/leaflet_v1.9.4/leaflet.css">
+    <link rel="stylesheet" href="/nayive/chat/chat.css">
+</head>
+<body>
+    <div id="app"></div>
+
+    <script src="/nayive/trips/lib/leaflet_v1.9.4/leaflet.js" defer></script>
+    <script src="/nayive/shared/basemap.js" defer></script>
+    <script src="/nayive/shared/ui.js" defer></script>
+    <script src="/nayive/shared/photo.js" defer></script>
+    <script src="/nayive/chat/core.js" defer></script>
+    <script src="/nayive/chat/list.js" defer></script>
+    <script src="/nayive/chat/conv.js" defer></script>
+    <script src="/nayive/chat/compose.js" defer></script>
+    <script src="/nayive/chat/media.js" defer></script>
+    <script src="/nayive/chat/info.js" defer></script>
+    <script src="/nayive/chat/guest.js" defer></script>
+    <script src="/nayive/chat/call.js" defer></script>
+    <script src="/nayive/chat/chat.js" defer></script>
+    <script>
+        document.addEventListener( 'DOMContentLoaded', function ()
+        {
+            // /c/<token>/ - the token is base64url, already safe inside a URL path.
+            var m = location.pathname.match( /^\/c\/([A-Za-z0-9_-]+)\/?$/ );
+            NayiveI18n.ready.then( function ()
+            {
+                if( ! m ) { NayiveChat.showGone(); return; }
+                NayiveChat.start( { mode: 'guest', api: '/api/c/' + m[ 1 ], token: m[ 1 ] } );
+            } );
+        } );
+    </script>
+</body>
+</html>

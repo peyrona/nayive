@@ -147,12 +147,15 @@ function buildJourneyMap( trip, j, mapDiv, sWhich )
     const map = L.map( mapDiv, { zoomControl: true, attributionControl: true } );
     NayiveBaseMap.add( map );
 
-    const css    = getComputedStyle( document.documentElement );
+    const css   = getComputedStyle( document.documentElement );
     const cv     = function( sName, sFallback ) { return css.getPropertyValue( sName ).trim() || sFallback; };
     const accent = cv( '--accent', '#16A085' );
     const blue   = cv( '--link',   '#5B9DF9' );
     const gold   = cv( '--warn',   '#E0A21E' );
     const red    = cv( '--danger', '#D9707D' );
+    // A photo spot: a tiny camera, in the marker pane above every route dot.
+    const photoIcon = L.divIcon( { className: '', iconSize: [ 18, 18 ], iconAnchor: [ 9, 9 ], popupAnchor: [ 0, -9 ], tooltipAnchor: [ 0, -9 ],
+                                    html: '<svg width="18" height="18" viewBox="0 0 24 24" style="display:block;filter:drop-shadow(0 0 1px rgba(0,0,0,.6))"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="' + gold + '" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="#fff" stroke-width="2"/></svg>' } );
     const bounds = [];
 
     if( j.route.length > 1 )
@@ -182,7 +185,7 @@ function buildJourneyMap( trip, j, mapDiv, sWhich )
     });
     spots.forEach( function( s )
     {
-        L.circleMarker( [ s.lat, s.lon ], { radius: 6, color: gold, weight: 2, fillColor: gold, fillOpacity: 0.55 } )
+        L.marker( [ s.lat, s.lon ], { icon: photoIcon } )
             .bindTooltip( TF( 'trips.pub.photoCount', { n: s.photos.length } ), { direction: 'top' } )
             .bindPopup( function() { return journeyPhotoPopup( trip, s.photos ); } )
             .addTo( map );

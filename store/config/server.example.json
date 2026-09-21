@@ -3,6 +3,8 @@
     "port": 4343,
     "base_dir": ".",
     "apps_dir": "../client/apps",
+    "sites_dir": "",
+    "turn_uris": [],
     "session_hours": 12,
     "log_level": "error",
     "tls": {

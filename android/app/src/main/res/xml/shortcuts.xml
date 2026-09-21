@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press on the icon: back to the permissions screen. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="setup"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_setup"
+        android:shortcutLongLabel="@string/shortcut_setup_long">
+        <intent
+            android:action="org.nayive.app.SETUP"
+            android:targetPackage="org.nayive.app"
+            android:targetClass="org.nayive.app.MainActivity" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Nayive" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/nayive_bg</item>
+        <item name="android:statusBarColor">@color/nayive_bg</item>
+        <item name="android:navigationBarColor">@color/nayive_bg</item>
+        <item name="android:colorAccent">@color/nayive_accent</item>
+        <item name="android:textColorPrimary">@color/nayive_text</item>
+    </style>
+    <!-- The router shows nothing of its own when it only hands over to the TWA. -->
+    <style name="Theme.Nayive.Router" parent="Theme.Nayive">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

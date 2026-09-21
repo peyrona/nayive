@@ -65,6 +65,8 @@
     <script src="../shared/gum-api.js" defer></script>
     <!-- Shared UI helpers: sheets, toast, sync plug, i18n. -->
     <script src="../shared/ui.js" defer></script>
+    <!-- A document locked with a password: AES-GCM, the key never leaves the tab. -->
+    <script src="../shared/crypt.js" defer></script>
     <!-- What the three editors share: paths, the file label, the Open browser, the phone menu. -->
     <script src="../shared/office.js" defer></script>
     <!-- Offline-capable persistence: local cache + write outbox (see STATE). -->
@@ -82,6 +84,7 @@
                 { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
                 { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
                 { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
+                { sel: '#lockBtn',      text: NayiveUI.t( 'write.introLock' ) },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
                 { sel: '#mdViewBtn',    text: NayiveUI.t( 'text.introMdView' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
@@ -118,7 +121,8 @@
             cursor: pointer; padding: 0;
         }
         .tb-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
-        .tb-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+        .tb-btn.active,
+        .tb-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
         /* .tb-select is shared - see TOOLBAR SELECT in app.css. Nothing local. */
 
         /* Right-margin spinner: the same toolbar control as .tb-select (see TOOLBAR
@@ -218,11 +222,19 @@
             font-family: var(--font-mono);
             font-size: 13px; line-height: 1.5;
         }
-        /* Editor chrome is token-driven for both CodeMirror themes (dracula in dark,
-           default in light — set by cmThemeName() in JS and swapped on balata:themechange).
-           Scoped under #editorHost so it outranks the theme stylesheets' own .cm-s-* rules. */
+        /* Editor chrome is token-driven (cmThemeName() in JS picks dracula in dark,
+           default in light, and swaps them on balata:themechange). Scoped under
+           #editorHost so it outranks the theme stylesheets' own .cm-s-* rules -
+           except dracula's own background, which is !important and therefore wins:
+           in dark the sheet stays dracula's #282A36, a shade ABOVE the page. That
+           raised look is wanted, so light has to say it out loud: the 'default'
+           theme paints no background of its own, so without the rule below the
+           sheet would fall through to --bg and melt into the toolbar. --card2 is
+           the "text you type into" surface (it is Write's paper too), not white. */
         #editorHost .CodeMirror { background: var(--bg); color: var(--text); }
         #editorHost .CodeMirror-gutters { background: var(--bg); border-right: 1px solid var(--line); }
+        :root[data-theme="light"] #editorHost .CodeMirror,
+        :root[data-theme="light"] #editorHost .CodeMirror-gutters { background: var(--card2); }
         #editorHost .CodeMirror-linenumber { color: var(--text-dim); }
         #editorHost .CodeMirror-activeline-background { background: color-mix(in srgb, var(--text) 5%, transparent); }
         #editorHost .CodeMirror-foldgutter-open:after,
@@ -238,7 +250,7 @@
         .cm-searching { background: color-mix(in srgb, var(--accent) 35%, transparent) !important; }
 
         /* Light mode uses CodeMirror's built-in 'default' theme; darken its faintest tokens
-           so they stay legible on the muted grey editor background. */
+           so they stay legible on the warm off-white (--card2) editor sheet. */
         :root[data-theme="light"] .cm-s-default .cm-comment { color: #4E5259; }
         :root[data-theme="light"] .cm-s-default .cm-meta    { color: #5A4A00; }
         :root[data-theme="light"] .cm-s-default .cm-keyword { color: #7A1FA2; }
@@ -304,6 +316,16 @@
                  this one would sit right against the next divider. -->
             <div class="tb-sep edit-only"></div>
 
+            <!-- Cut / copy / paste. The keys already do this (CodeMirror's own);
+                 these are the same three for a phone or a tablet, where there is
+                 no Ctrl to hold. Glyphs are the shared ones (NayiveUI.icon), so
+                 they match the entries Write and Calc carry in their Edicion menu. -->
+            <button id="cutBtn"   class="tb-btn edit-only" data-i18n-attr="title:ui.cut"></button>
+            <button id="copyBtn"  class="tb-btn edit-only" data-i18n-attr="title:ui.copy"></button>
+            <button id="pasteBtn" class="tb-btn edit-only" data-i18n-attr="title:ui.paste"></button>
+
+            <div class="tb-sep edit-only"></div>
+
             <button id="wrapBtn" class="tb-btn edit-only" data-i18n-attr="title:text.wrap">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
@@ -342,18 +364,70 @@
             <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
             </button>
+            <button id="lockBtn" class="tb-btn" data-i18n-attr="title:lock.title">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </button>
 
             <div class="tb-sep"></div>
 
-            <button class="tb-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+            <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
+                 guide card: the card is one of the three entries. -->
+            <button id="helpBtn" class="tb-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
+
+            <!-- AYUDA: the three entries, none of which has a button of its own
+                 on the bar. Hidden, like Write's and Calc's #fileTools: the menu
+                 is built FROM these buttons (glyph and title cloned) and an entry
+                 clicks the one it came from, so there is one set of handlers. -->
+            <div id="helpTools" hidden>
+                <button id="statsBtn" class="tb-btn" type="button" data-i18n-attr="title:write.stats, aria-label:write.stats">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"></line><line x1="10" y1="20" x2="10" y2="4"></line><line x1="16" y1="20" x2="16" y2="9"></line><line x1="21" y1="20" x2="3" y2="20"></line></svg>
+                </button>
+                <button id="scBtn" class="tb-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>
+                </button>
+                <button id="guideBtn" class="tb-btn" type="button" data-i18n-attr="title:ui.toolbarButtons, aria-label:ui.toolbarButtons">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="8" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="7" y1="18" x2="17" y2="18"></line><line x1="7" y1="21" x2="13" y2="21"></line></svg>
+                </button>
+            </div>
         </div>
+
+        <!-- Ayuda menu - Estadísticas · Atajos de teclado · Botones de la barra.
+             Built by wireStaticUI() from #helpTools above (shared/office.js,
+             buttonMenu); .top-menu is position:fixed, so it is placed under the
+             "?" at open time wherever it sits in the source. -->
+        <div id="helpMenu" class="top-menu" hidden></div>
 
         <div id="editorHost"><textarea id="editor"></textarea></div>
         <!-- The rendered Markdown. Filled by renderPreview(); empty for every other language. -->
         <article id="preview" hidden><div class="md-doc"></div></article>
 
+    </div>
+
+    <!-- Keyboard shortcuts - Write's and Calc's sheet; openShortcuts() below
+         fills it through NayiveOffice.showShortcuts. -->
+    <div id="scBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.shortcuts"></h2>
+            <div id="scList" class="sc-list"></div>
+            <div class="sheet-actions">
+                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas - ditto, through NayiveOffice.showStats. Read on open,
+         not live. -->
+    <div id="statsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.stats"></h2>
+            <div id="stList" class="st-list"></div>
+            <p id="stNote" class="dialog-text st-note" hidden></p>
+            <div class="sheet-actions">
+                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
     </div>
 
     <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
@@ -485,7 +559,21 @@
         // conflicts: a save over a file changed on another device since it was
         // opened is refused (shared/store.js, CONFLICTS).
         const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true } );
-        let lineWrap        = window.matchMedia( '(max-width: 640px)' ).matches;   // phone: wrap by default - scrolling code sideways on a phone is miserable; the button still toggles it
+        // Wrap and indent are remembered TWICE, the way the language and the menu bar
+        // are: in localStorage, so this browser opens the same way with no network,
+        // and in the account (data/text/config.json), so the other device opens the
+        // way it was left. The device copy is the one that PAINTS - nothing waits on
+        // the network - and the account's copy wins as soon as it lands (syncCfg()).
+        // Only a first run on a brand-new browser falls back to the phone default:
+        // wrapping on, because scrolling code sideways on a phone is miserable.
+        const TEXT_CFG   = 'data/text/config.json';
+        const WRAP_KEY   = 'gum_text_wrap';
+        const INDENT_KEY = 'gum_text_indent';
+        const INDENTS    = [ '4', '2', 'tab' ];
+        const storedWrap = localStorage.getItem( WRAP_KEY );   // '0' is a real answer, so no `||` here
+        let   lineWrap   = ( storedWrap === null ? window.matchMedia( '( max-width: 640px )' ).matches : storedWrap === '1' );
+        const storedIdt  = localStorage.getItem( INDENT_KEY );
+        const indentPref = ( INDENTS.includes( storedIdt ) ? storedIdt : '4' );   // a stale value must never reach setIndent()
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
         // MARKDOWN READER (see that section below). Declared here with the rest of
@@ -543,6 +631,8 @@
                 if( editor ) editor.setOption( 'theme', cmThemeName() );
             } );
 
+            syncCfg();   // deliberately NOT awaited: the device's answer is already on screen
+
             // ?file= / ?import= / the untitled document kept on this device - or a blank one.
             await session.boot();
 
@@ -559,12 +649,24 @@
             // while writing, so it can never answer by hiding what was written.
             document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); setPreview( false ); editor.focus(); } );
             document.getElementById( 'mdViewBtn'  ).addEventListener( 'click',  function()    { setPreview( ! mdReading ); } );
-            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); editor.focus(); } );
+            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); writeTextCfg( { indent: e.target.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
-            document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the phone default
+            wireClipboard();
+            document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the remembered choice
+            document.getElementById( 'indentSelect' ).value = indentPref;                        // ditto (overrides the option's `selected`)
             syncMdUI();   // the button starts hidden: nothing is open yet
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
+
+            // Ayuda (see AYUDA below): the "?" opens a three-entry menu built
+            // from these three hidden buttons. setHelpMenu tells shared/ui.js to
+            // leave the click to that menu instead of opening the guide card -
+            // the card is the third entry.
+            document.getElementById( 'statsBtn' ).addEventListener( 'click', openStats );
+            document.getElementById( 'scBtn'    ).addEventListener( 'click', openShortcuts );
+            document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
+            O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: [ 'statsBtn', 'scBtn', 'guideBtn' ] } );
+            NayiveUI.setHelpMenu( true );
 
             const marginInput = document.getElementById( 'marginInput' );
             marginInput.value = String( marginCols );
@@ -576,6 +678,156 @@
             // min / max only bound the arrows; a typed 5 or 600 has to be put right in
             // the box too, or it would disagree with the line. 'change' = on blur/Enter.
             marginInput.addEventListener( 'change',  function( e ) { e.target.value = String( marginCols ); } );
+        }
+
+        //------------------------------------------------------------------------//
+        // AYUDA  -  the "?" menu: Estadisticas, Atajos de teclado, Botones de la barra
+        //
+        // The same three entries Write and Calc carry, and the same two sheets
+        // (shared/office.js, showStats / showShortcuts). Text writes no menu of
+        // its own: O.buttonMenu mirrors the hidden #helpTools buttons, exactly
+        // as the other two editors mirror their file buttons.
+
+        const IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || '' );
+        const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
+
+        // CodeMirror's own keys (its default keymap, the search and
+        // jump-to-line add-ons) plus the four bound by hand in extraKeys above.
+        // Only keys that really work here go in the sheet.
+        function shortcutRows()
+        {
+            const SHIFT   = IS_MAC ? '⇧' : T( 'ui.keyShift' ) + '+';
+            const replace = IS_MAC ? '⌘⌥F' : SHIFT + MOD + 'F';   // Cmd-Alt-F on a Mac
+
+            return [
+                [ 'write.sc.save',      MOD + 'S'        ],
+                [ 'text.sc.selectAll',  MOD + 'A'        ],
+                [ 'ui.undo',            MOD + 'Z'        ],
+                [ 'ui.redo',            MOD + 'Y'        ],
+                [ 'ui.cut',             MOD + 'X'        ],
+                [ 'ui.copy',            MOD + 'C'        ],
+                [ 'ui.paste',           MOD + 'V'        ],
+                [ 'write.sc.find',      MOD + 'F'        ],
+                [ 'text.sc.findNext',   MOD + 'G'        ],
+                [ 'text.sc.findPrev',   SHIFT + MOD + 'G' ],
+                [ 'write.sc.replace',   replace          ],
+                [ 'text.sc.goLine',     'Alt+G'          ],
+                [ 'text.sc.comment',    MOD + '/'        ],
+                // Bound as Ctrl-Q only, so it stays Ctrl even on a Mac.
+                [ 'text.sc.fold',       'Ctrl+Q'         ],
+                [ 'text.sc.zoomIn',     MOD + '+'        ],
+                [ 'text.sc.zoomOut',    MOD + '-'        ]
+            ].map( function( r ) { return { text: T( r[ 0 ] ), keys: r[ 1 ] }; } );
+        }
+
+        function openShortcuts() { O.showShortcuts( shortcutRows() ); }
+
+        // Read on open, not live: a counter that follows every keystroke would
+        // walk the whole document on each one.
+        function openStats()
+        {
+            const txt   = editor ? editor.getValue() : '';
+            const words = txt.trim() ? txt.trim().split( /\s+/ ).length : 0;
+            const n     = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
+
+            O.showStats( [
+                { text: T( 'text.statLines'       ), value: n( editor ? editor.lineCount() : 0 ) },
+                { text: T( 'write.statWords'      ), value: n( words ) },
+                { text: T( 'write.statChars'      ), value: n( txt.length ) },
+                { text: T( 'write.statCharsNoSp'  ), value: n( txt.replace( /\s/g, '' ).length ) }
+            ], T( 'text.statNote' ) );
+        }
+
+        //------------------------------------------------------------------------//
+        // THE ACCOUNT'S COPY
+        //
+        // Wrap and indent belong to the PERSON, not to the screen: pick two-space
+        // indenting on the PC and the tablet should follow. So beside the device
+        // copy in localStorage they are kept in data/text/config.json, exactly as
+        // Write and Calc keep theirs. Read-modify-write, so a key added to this
+        // file later (a default folder, say) is never clobbered.
+
+        async function readTextCfg()
+        {
+            try { return ( await GumApi.readJson( TEXT_CFG ) ) || {}; }
+            catch( _ ) { return {}; }   // offline, or nothing saved yet: the device copy stands
+        }
+
+        async function writeTextCfg( patch )
+        {
+            const cfg = await readTextCfg();
+            Object.assign( cfg, patch );
+            try { await GumApi.writeJson( TEXT_CFG, cfg ); } catch( _ ) {}
+        }
+
+        // Boot only, and one way: it APPLIES what the account says and never writes
+        // back, so two devices cannot push each other in circles.
+        async function syncCfg()
+        {
+            const cfg = await readTextCfg();
+
+            if( typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
+
+            if( INDENTS.includes( cfg.indent ) && cfg.indent !== document.getElementById( 'indentSelect' ).value )
+            {
+                document.getElementById( 'indentSelect' ).value = cfg.indent;
+                setIndent( cfg.indent );
+            }
+        }
+
+        //------------------------------------------------------------------------//
+        // THE CLIPBOARD
+        //
+        // Ctrl-X / Ctrl-C / Ctrl-V already work: CodeMirror keeps a hidden
+        // textarea behind the document and the browser's own clipboard acts on
+        // that. These three buttons are the same three actions for a phone or a
+        // tablet, where there is no Ctrl to hold.
+        //
+        // Plain text both ways, unlike Write and Calc: a .txt, a .js or a .md
+        // has no style to carry, so there is nothing for a rich format to keep.
+
+        function wireClipboard()
+        {
+            const btns = [ [ 'cutBtn', 'cut', () => clipCopy( true ) ],
+                           [ 'copyBtn', 'copy', () => clipCopy( false ) ],
+                           [ 'pasteBtn', 'paste', clipPaste ] ];
+
+            for( const [ id, ic, run ] of btns )
+            {
+                const b = document.getElementById( id );
+                b.innerHTML = NayiveUI.icon( ic );
+                b.querySelector( 'svg' ).setAttribute( 'width',  '17' );
+                b.querySelector( 'svg' ).setAttribute( 'height', '17' );
+                b.addEventListener( 'click', run );
+            }
+        }
+
+        async function clipCopy( andCut )
+        {
+            const sel = editor ? editor.getSelection() : '';
+
+            if( ! sel ) { NayiveUI.toast( T( 'write.selectTextFirst' ) ); return; }
+
+            if( ! await O.clip.write( sel ) ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
+
+            if( andCut ) editor.replaceSelection( '' );
+
+            editor.focus();
+        }
+
+        async function clipPaste()
+        {
+            if( ! editor ) return;
+
+            const text = await O.clip.text();
+
+            if( text === null ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
+            if( ! text ) return;
+
+            // 'end' leaves the caret after what was pasted, where the next
+            // keystroke belongs - CodeMirror's default is to select it instead.
+            editor.replaceSelection( text, 'end' );
+            editor.focus();
         }
 
         //------------------------------------------------------------------------//
@@ -634,6 +886,7 @@
             // paint, a theme swap - ends in a refresh, so the guide line is redrawn
             // from one place instead of from each of them.
             editor.on( 'refresh', updateRuler );
+            setIndent( indentPref );   // the options above are the first-run values; this is what was chosen last
             editor.setSize( '100%', '100%' );
             applyFontSize();
             updateRuler();
@@ -788,13 +1041,25 @@
                 editor.setOption( 'indentUnit', n );
                 editor.setOption( 'tabSize', n );
             }
+
+            try { localStorage.setItem( INDENT_KEY, value ); } catch( _ ) {}
+        }
+
+        // Apply + remember on this device. Says nothing to the account: syncCfg()
+        // calls this too, and that one must not write back.
+        function applyWrap( on )
+        {
+            lineWrap = on;
+            editor.setOption( 'lineWrapping', lineWrap );
+            document.getElementById( 'wrapBtn' ).classList.toggle( 'active', lineWrap );
+
+            try { localStorage.setItem( WRAP_KEY, lineWrap ? '1' : '0' ); } catch( _ ) {}
         }
 
         function toggleWrap()
         {
-            lineWrap = ! lineWrap;
-            editor.setOption( 'lineWrapping', lineWrap );
-            document.getElementById( 'wrapBtn' ).classList.toggle( 'active', lineWrap );
+            applyWrap( ! lineWrap );
+            writeTextCfg( { wrap: lineWrap } );
             editor.focus();
         }
 

@@ -260,7 +260,12 @@ let stageDocsCollapsed = true;   // the doc list starts folded when a stage has 
 
 function openAddStage()
 {
-    stageDraft = { id: null, location: '', startDate: '', startTime: '', endDate: '', endTime: '', transport: 'other', tz: null, tzLabel: '', tzStatus: 'idle', lat: null, lon: null, accommodation: '', notes: '', enabled: true, documents: [] };
+    // lat/lon start undefined, not null: undefined means "never resolved, retry later"
+    // (ensureRouteCoords picks it up on the next map render), while null means the
+    // geocoder gave a definite no-match and there is no point asking again. Seeding
+    // null here left a stage saved before its lookup returned - or saved offline -
+    // without a pin forever. JSON.stringify drops undefined keys, so it persists as absent.
+    stageDraft = { id: null, location: '', startDate: '', startTime: '', endDate: '', endTime: '', transport: 'other', tz: null, tzLabel: '', tzStatus: 'idle', lat: undefined, lon: undefined, accommodation: '', notes: '', enabled: true, documents: [] };
     editingStageId = null;
     stageSaveError = '';
     stageDocsCollapsed = true;

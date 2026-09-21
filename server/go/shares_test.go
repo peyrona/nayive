@@ -597,3 +597,110 @@ func TestUsersListIsNamesOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestShareWithEveryone - one grant, to "*", that every OTHER user sees,
+// including somebody whose account does not exist yet.
+func TestShareWithEveryone(t *testing.T) {
+	users, cfg, _ := newTestUsers(t)
+	album(t, cfg)
+	sh := users.shares
+
+	// A grant to one person first: sharing with everybody takes its place.
+	if sh.Create("ana", "beto", "files/album", "photos", "", "add") == nil {
+		t.Fatal("the person grant was refused")
+	}
+	all := sh.Create("ana", Everyone, "files/album", "photos", "", "ro")
+	if all == nil {
+		t.Fatal("sharing with everybody was refused")
+	}
+	if got := sh.ByOwner("ana"); len(got) != 1 || got[0].To != Everyone {
+		t.Errorf("the person grant was not replaced: %+v", got)
+	}
+	if got := sh.ForUser("beto"); len(got) != 1 {
+		t.Errorf("beto sees %d grants for one album, want 1", len(got))
+	}
+
+	// beto, and "carla" who has no account yet, both open it - read only.
+	for _, who := range []string{"beto", "carla"} {
+		got, writable := users.ResolvePath("user", who, "shared/"+all.Slug+"/foto.jpg")
+		if got == "" {
+			t.Errorf("%s cannot open a share made to everybody", who)
+		}
+		if writable {
+			t.Errorf("%s got a read-only share WRITABLE", who)
+		}
+	}
+	// The owner does not get her own album back under shared/.
+	if got, _ := users.ResolvePath("user", "ana", "shared/"+all.Slug); got != "" {
+		t.Errorf("the owner reached her own share through shared/: %q", got)
+	}
+	if sh.HasAny("ana") {
+		t.Error("the owner has a shared/ folder holding only her own album")
+	}
+
+	// Everybody has it: a grant to one person, or a second one to all, is a 409.
+	if sh.Create("ana", "beto", "files/album", "photos", "", "ro") != nil {
+		t.Error("a person grant was made on top of the everybody grant")
+	}
+	if sh.Create("ana", Everyone, "files/album", "photos", "", "ro") != nil {
+		t.Error("the everybody grant was made twice")
+	}
+
+	// Slugs: everybody's "album" is in beto's shared/ too, so a later grant to
+	// beto with the same title must not take it.
+	own := sh.Create("ana", "beto", "files/mio.txt", "file", "album", "ro")
+	if own == nil || own.Slug == all.Slug {
+		t.Fatalf("a person grant clashes with the everybody slug: %+v", own)
+	}
+	if got, _ := users.ResolvePath("user", "beto", "shared/"+all.Slug); !sharePointsAt(got, filepath.Join(cfg.HomesDir, "ana", "files", "album")) {
+		t.Errorf("the everybody slug now points at %q", got)
+	}
+
+	// "They can add files" works for everybody too.
+	sh.Create("ana", "beto", "files/add", "folder", "", "add") // replaced below
+	if g := sh.Create("ana", Everyone, "files/add", "folder", "", "add"); !CanAdd(g) {
+		t.Errorf("an everybody grant lost its add mode: %+v", g)
+	}
+
+	// Deleting a RECIPIENT keeps it for the rest; revoking ends it for all.
+	sh.DropUser("beto")
+	if got, _ := users.ResolvePath("user", "carla", "shared/"+all.Slug); got == "" {
+		t.Error("deleting one recipient ended the share for everybody")
+	}
+	if !sh.Revoke(all.ID, "ana") {
+		t.Fatal("the owner could not stop sharing with everybody")
+	}
+	if got, _ := users.ResolvePath("user", "carla", "shared/"+all.Slug); got != "" {
+		t.Errorf("a revoked everybody share still resolves: %q", got)
+	}
+}
+
+// TestShareWithEveryoneAPI - POST {"to":"*"} through the real handler.
+func TestShareWithEveryoneAPI(t *testing.T) {
+	_, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+
+	post := func(body string) int {
+		resp := do(t, client, "POST", ts.URL+"/api/shares", strings.NewReader(body),
+			map[string]string{"Content-Type": "application/json"})
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := post(`{"to":"*","root":"files/mio.txt","app":"file"}`); got != http.StatusCreated {
+		t.Fatalf("sharing with everybody = %d, want 201", got)
+	}
+	if got := post(`{"to":"*","root":"files/mio.txt","app":"file"}`); got != http.StatusConflict {
+		t.Errorf("sharing with everybody twice = %d, want 409", got)
+	}
+	if got := post(`{"to":"beto","root":"files/mio.txt","app":"file"}`); got != http.StatusConflict {
+		t.Errorf("sharing with beto what everybody has = %d, want 409", got)
+	}
+
+	beto := signedInClient(t, ts.URL, "beto", "xyz")
+	resp := do(t, beto, "GET", ts.URL+"/api/shares", nil, nil)
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(raw), `"path":"shared/mio-txt"`) || !strings.Contains(string(raw), `"by":"ana"`) {
+		t.Errorf("beto does not see what ana shared with everybody: %s", raw)
+	}
+}

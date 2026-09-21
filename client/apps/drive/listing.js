@@ -15,10 +15,12 @@ function buildPattern( raw )
     return (q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1) ? q : ('*' + q + '*');
 }
 
+// Runs whichever search is on: the "Biggest files" list, the advanced one
+// (advsearch.js) when it is in force, else the box's glob.
 async function runSearch()
 {
-    const pattern = buildPattern( searchQuery );
-    if( ! pattern )
+    const pattern = advSearch || bigMode ? null : buildPattern( searchQuery );
+    if( ! advSearch && ! bigMode && ! pattern )
     {
         searchHits = null;
         searchTruncated = false;
@@ -29,7 +31,9 @@ async function runSearch()
     const seq = ++searchSeq;
     try
     {
-        const r = await GumApi.find( pattern );
+        const r = bigMode   ? await GumApi.biggest( BIG_COUNT )
+                : advSearch ? await GumApi.search( advSearch.spec )
+                :             await GumApi.find( pattern );
         if( seq !== searchSeq ) return;          // a newer query already went out
         searchHits      = pruneNodes( r.nodes || [] );
         searchTruncated = !! r.truncated;
@@ -43,6 +47,34 @@ async function runSearch()
         render();
         NayiveUI.toast( T( 'drive.searchFailed' ) );
     }
+}
+
+// "Biggest files": the BIG_COUNT largest files of the whole Drive, biggest
+// first. The header's #bigFilesBtn opens and closes it, like the bin next to
+// it; the "space almost full" card (shared/ui.js) opens it too - with ?big=1,
+// or with its "nayive:bigfiles" event when Drive is already open. It rides on
+// the search view: a row shows its size and folder, and the toolbar acts on
+// the ticked rows as usual.
+const BIG_COUNT = 50;
+
+function openBigFiles()
+{
+    if( trashMode ) { trashMode = false; trashItems = []; }
+    clearSearch();
+    selectedPaths.clear();
+    bigMode = true;
+    document.querySelector( '.topbar' ).classList.remove( 'searching' );
+    render();                           // "Buscando…" until the server answers
+    runSearch();
+}
+
+// The breadcrumb: just "Biggest files" - the way out is the lit header
+// button, as with the bin. The reminder that a deleted file still takes
+// space in the bin sits over the rows (renderListing).
+function bigFilesCrumbs( host, info )
+{
+    info.textContent = T( 'drive.bigTitle' );
+    host.appendChild( info );
 }
 
 // Rows live in a .list-rows wrapper so the wrapper can grow to the widest
@@ -62,7 +94,7 @@ function renderListing()
 {
     const box = document.getElementById( 'listing' );
 
-    if( searchQuery.trim() )
+    if( isSearching() )
     {
         if( searchHits === null )                 // still waiting on the server
         {
@@ -70,24 +102,35 @@ function renderListing()
             return;
         }
 
-        const hits = searchHits.slice().sort( function( a, b )
-        {
-            const da = isDir( a ), db = isDir( b );
-            if( da !== db ) return da ? -1 : 1;                 // folders first
-            return a.path.localeCompare( b.path );
-        });
+        const hits = searchHits.slice().sort( bigMode
+            ? function( a, b ) { return ( b.size || 0 ) - ( a.size || 0 ); }   // biggest first
+            : function( a, b )
+            {
+                const da = isDir( a ), db = isDir( b );
+                if( da !== db ) return da ? -1 : 1;             // folders first
+                return a.path.localeCompare( b.path );
+            });
 
         if( ! hits.length )
         {
             box.innerHTML = '';
             const hint = document.createElement( 'div' );
             hint.className   = 'empty-hint';
-            hint.textContent = TF( 'drive.noResultsFor', { q: searchQuery.trim() } );
+            hint.textContent = bigMode   ? T( 'drive.bigNone' )
+                             : advSearch ? T( 'drive.sbNoResults' )
+                             :             TF( 'drive.noResultsFor', { q: searchQuery.trim() } );
             box.appendChild( hint );
             return;
         }
 
         const host = listRowsHost();
+        if( bigMode )
+        {
+            const note = document.createElement( 'div' );
+            note.className   = 'big-note';
+            note.textContent = T( 'drive.bigNote' );
+            box.insertBefore( note, host );
+        }
         if( searchTruncated )
         {
             const note = document.createElement( 'div' );
@@ -305,6 +348,21 @@ function buildListRow( node, showPath )
         const parent = node.path.indexOf( '/' ) !== -1 ? node.path.slice( 0, node.path.lastIndexOf( '/' ) ) : '';
         meta.textContent = fsRel( parent ) || 'Drive';
         meta.title       = node.path;
+
+        // The "Biggest files" list leads with the size - the one thing it is
+        // about - and keeps it on a phone, where the rest of the meta hides.
+        if( bigMode && node.size != null )
+        {
+            const size  = document.createElement( 'span' );
+            const where = document.createElement( 'span' );
+            size.textContent  = fmtSize( node.size );
+            where.className   = 'row-where';
+            where.textContent = ' · ' + meta.textContent;
+            meta.textContent  = '';
+            meta.appendChild( size );
+            meta.appendChild( where );
+            meta.classList.add( 'row-meta--big' );
+        }
     }
     else
     {

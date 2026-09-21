@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spanish is the default: the family's language. Same words as the web where
+     the web already says it (client/apps/shared/i18n/es.json). -->
+<resources>
+    <string name="app_name">Nayive</string>
+
+    <string name="setup_title">Bienvenido a Nayive</string>
+    <string name="setup_lead">Para funcionar bien en este móvil, Nayive necesita unos permisos. Solo se piden una vez.</string>
+    <string name="step_notif_title">Avisos</string>
+    <string name="step_notif_why">Para que suenen las llamadas y veas lo que tienes pendiente.</string>
+    <string name="step_loc_title">Ubicación</string>
+    <string name="step_loc_why">Para guardar por dónde vas durante tus viajes. Elige «Permitir siempre».</string>
+    <string name="step_loc_bg">Falta «Permitir siempre»: toca Permitir y elígelo en la pantalla que se abre.</string>
+    <string name="step_batt_title">Batería</string>
+    <string name="step_batt_why">Para que Nayive siga despierto con la pantalla apagada. Elige «Permitir».</string>
+    <string name="step_full_title">Pantalla completa</string>
+    <string name="step_full_why">Para que una llamada se vea aunque el móvil esté bloqueado.</string>
+    <string name="step_do">Permitir</string>
+    <string name="step_ok">Hecho</string>
+    <string name="setup_continue">Continuar</string>
+    <string name="setup_missing">Sin todos los permisos, algunas cosas no funcionarán. Para volver aquí, mantén pulsado el icono de Nayive.</string>
+
+    <string name="chan_link">Conexión</string>
+    <string name="chan_calls">Llamadas</string>
+    <string name="chan_find">Buscar mi móvil</string>
+    <string name="chan_pending">Pendientes</string>
+    <string name="chan_updates">Actualizaciones</string>
+
+    <string name="link_on">Nayive está conectado</string>
+    <string name="link_tracking">Nayive guarda tu posición del viaje</string>
+    <string name="link_enrol">Abre Nayive y entra con tu usuario para activar este móvil</string>
+    <string name="link_offline">Sin conexión: Nayive lo volverá a intentar</string>
+    <string name="link_fix">Falta un permiso. Toca para arreglarlo.</string>
+
+    <string name="call_voice">Llamada de voz entrante</string>
+    <string name="call_video">Videollamada entrante</string>
+    <string name="call_answer">Contestar</string>
+    <string name="call_decline">Rechazar</string>
+
+    <string name="find_title">Nayive te está buscando</string>
+    <string name="find_text">Alguien ha pulsado «Buscar mi móvil».</string>
+    <string name="find_stop">Parar</string>
+
+    <plurals name="pending_chat">
+        <item quantity="one">Tienes 1 mensaje sin leer</item>
+        <item quantity="other">Tienes %d mensajes sin leer</item>
+    </plurals>
+
+    <string name="update_title">Hay una versión nueva de Nayive</string>
+    <string name="update_text">Toca para descargarla.</string>
+
+    <string name="shortcut_setup">Permisos</string>
+    <string name="shortcut_setup_long">Permisos de Nayive</string>
+</resources>

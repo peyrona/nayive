@@ -143,7 +143,7 @@ PREBUILD_STEPS=(
     "cd server/go && go vet ./..."                  # the built-in static analyser
     "cd server/go && go test -count=1 ./..."        # the whole suite, incl. the RFC 8291 push vector
     "go -C tools run ./check-i18n"              # every dictionary must agree with es.json
-    "go -C tools run ./check-superdoc-worker"   # write/index.html's pinned worker hash vs the file on disk
+    "go -C tools run ./check-docx-editor"       # the docx-editor.dev engine vs docx-editor.lock.json, and the refs to it
     "go -C tools run ./build-precache"          # refresh apps/sw.js: precache file list + CACHE_VERSION
     "go -C tools run ./build-gzip"              # .gz sidecar beside every text asset (server sends them as-is)
 )

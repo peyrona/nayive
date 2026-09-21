@@ -52,6 +52,14 @@ var publicStatic = map[string]bool{
 	// The vendored map libraries under trips/lib/ are public too (isPublicStatic).
 	"trips/public.html": true,
 	"shared/basemap.js": true,
+	// A Chat link (/c/<token>/, api_chat.go): the page is served there, but its
+	// scripts, look and photo shrinking come from here. No messages live in
+	// them - those come from /api/c/<token>, token-checked. chat/*.js,
+	// chat/*.css and chat/icons/ are public too (isPublicStatic).
+	"shared/photo.js": true,
+	// The Android app's first step (devices.go): it only moves the phone's token
+	// from the URL's #fragment into this browser, then goes to the launcher.
+	"device.html": true,
 }
 
 // publicStaticNames are served without a session wherever they sit under apps/,
@@ -176,7 +184,14 @@ func isPublicStatic(parts []string) bool {
 		return true
 	}
 	if len(parts) > 2 && parts[0] == "trips" && parts[1] == "lib" {
-		return true // Leaflet + MapLibre, for the public trip page
+		return true // Leaflet + MapLibre, for the public trip page (and a Chat link's maps)
+	}
+	if len(parts) == 3 && parts[0] == "chat" && parts[1] == "icons" {
+		return true // a Chat link's home-screen icon
+	}
+	if len(parts) == 2 && parts[0] == "chat" &&
+		(strings.HasSuffix(parts[1], ".js") || strings.HasSuffix(parts[1], ".css")) {
+		return true // a Chat link's scripts and look (no data in them)
 	}
 	return parts[0] == "icons"
 }

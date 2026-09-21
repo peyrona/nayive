@@ -26,6 +26,10 @@
  * would be lost. copyExif() splices the original Exif back into the new file.
  * That is only possible when the source is itself a JPEG; a PNG or a HEIC has
  * no Exif to copy, and those photos arrive without a position.
+ *
+ * It also holds what the three image editors (Drive, Photos, Chat) share:
+ * keepExif(), the editor's words in the user's language (editorLocale,
+ * localizeEditor) and the thumbnail an edit leaves behind (thumbOf, dropThumb).
  */
 ( function ()
 {
@@ -289,6 +293,117 @@
         catch ( e ) { return jpegBlob; }
     }
 
+    /* The image editors (Drive, Photos, Chat) save what their canvas holds,
+     * and a canvas export has no Exif either: an edited photo would lose its
+     * date and GPS, so Photos would move it to today and off the map.
+     * `srcPath` is the file the editor opened - read it BEFORE it is
+     * overwritten; `bytes` is the export. When both are JPEG the original's
+     * Exif goes into the export. Best effort: any problem hands `bytes` back
+     * untouched. */
+    async function keepExif( srcPath, bytes, newW, newH )
+    {
+        if ( ! /\.jpe?g$/i.test( srcPath ) ) return bytes;
+        try
+        {
+            var src = new Blob( [ await GumApi.readFileBytes( srcPath ) ] );
+            var out = await copyExif( src, new Blob( [ bytes ], { type: "image/jpeg" } ), newW, newH );
+            return new Uint8Array( await out.arrayBuffer() );
+        }
+        catch ( e ) { return bytes; }
+    }
+
+    /* The editor's own words are English. Its `locale` option swaps them:
+     * each English word it asks for -> our key, imgEd.<slug>. The lower-case
+     * and joined-up words (flip, addShape, RemoveWhite...) are what it writes
+     * in its History list. */
+    var EDITOR_WORDS =
+    {
+        "Crop": "crop", "Flip": "flip", "Rotate": "rotate", "Draw": "draw", "Shape": "shape",
+        "Icon": "icon", "Text": "text", "Mask": "mask", "Filter": "filter",
+        "ZoomIn": "zoomIn", "ZoomOut": "zoomOut", "Hand": "hand", "History": "history",
+        "Undo": "undo", "Redo": "redo", "Reset": "reset", "Delete": "delete", "DeleteAll": "deleteAll",
+        "Custom": "custom", "Square": "square", "Apply": "apply", "Cancel": "cancel",
+        "Flip X": "flipX", "Flip Y": "flipY", "Range": "range",
+        "Free": "free", "Straight": "straight", "Color": "color",
+        "Rectangle": "rectangle", "Circle": "circle", "Triangle": "triangle", "Fill": "fill", "Stroke": "stroke",
+        "Arrow": "arrow", "Arrow-2": "arrow2", "Arrow-3": "arrow3", "Star-1": "star1", "Star-2": "star2",
+        "Polygon": "polygon", "Location": "location", "Heart": "heart", "Bubble": "bubble", "Custom icon": "customIcon",
+        "Bold": "bold", "Italic": "italic", "Underline": "underline",
+        "Left": "left", "Center": "center", "Right": "right", "Text size": "textSize",
+        "Load Mask Image": "loadMask",
+        "Grayscale": "grayscale", "Invert": "invert", "Sepia": "sepia", "Sepia2": "sepia2", "Blur": "blur",
+        "Sharpen": "sharpen", "Emboss": "emboss", "Remove White": "removeWhite", "Distance": "distance",
+        "Brightness": "brightness", "Noise": "noise", "Pixelate": "pixelate", "Color Filter": "colorFilter",
+        "Threshold": "threshold", "Tint": "tint", "Multiply": "multiply", "Blend": "blend",
+        // History
+        "Load": "open", "Add": "added", "Remove": "removed", "Change": "changed", "All": "all",
+        "flip": "flip", "rotate": "rotate", "addShape": "shape", "addIcon": "icon", "addObject": "draw",
+        "addText": "text", "RemoveWhite": "removeWhite", "ColorFilter": "colorFilter",
+        "Diff": "diff", "Subtract": "subtract", "Screen": "screen", "Lighten": "lighten", "Darken": "darken"
+    };
+    // Written straight into the page, past the locale: the blend modes
+    // (option value -> key) and the tint's "Opacity".
+    var EDITOR_BLEND = { add: "blendAdd", diff: "diff", subtract: "subtract", multiply: "multiply",
+                         screen: "screen", lighten: "lighten", darken: "darken" };
+
+    function editorWord( slug )
+    {
+        var key = "imgEd." + slug;
+        var s = window.NayiveUI ? NayiveUI.t( key ) : key;
+        return s === key ? null : s;              // dictionary not in: keep the English
+    }
+
+    /* For `includeUI.locale` in new tui.ImageEditor(...). */
+    function editorLocale()
+    {
+        var out = {};
+        Object.keys( EDITOR_WORDS ).forEach( function ( en )
+        {
+            var s = editorWord( EDITOR_WORDS[ en ] );
+            if ( s ) out[ en ] = s;
+        } );
+        return out;
+    }
+
+    /* The few words the locale cannot reach. Call it right after
+     * new tui.ImageEditor( host, ... ) - the menus are built by then. */
+    function localizeEditor( host )
+    {
+        host.querySelectorAll( ".tui-image-editor-selectlist-wrap option, .tui-image-editor-selectlist li" ).forEach( function ( el )
+        {
+            var slug = EDITOR_BLEND[ el.value || el.getAttribute( "data-item" ) ];
+            var s = slug && editorWord( slug );
+            if ( s ) el.textContent = s;
+        } );
+        var range = host.querySelector( "#tie-filter-tint-opacity" );
+        var label = range && range.previousElementSibling;
+        var word  = editorWord( "opacity" );
+        if ( label && word ) label.textContent = word;
+    }
+
+    /* Photos keeps a thumbnail of each picture, named after the file's size
+     * and mtime (data/photos/thumbs/<size>_<mtime>.jpg). When an editor
+     * rewrites a file, nothing asks for the old one again. thumbOf() names
+     * it - call it BEFORE the write, while the listing still shows the old
+     * file - and dropThumb() deletes it after. Best effort both: a leftover
+     * only costs disk, and Photos' daily sweep would take it in the end. */
+    async function thumbOf( path )
+    {
+        try
+        {
+            var dir = path.slice( 0, path.lastIndexOf( "/" ) );
+            var n = ( ( await GumApi.listDir( dir ) ).nodes || [] ).filter( function ( x ) { return x.path === path; } )[ 0 ];
+            return n && n.size && n.mtime ? "data/photos/thumbs/" + n.size + "_" + n.mtime + ".jpg" : null;
+        }
+        catch ( e ) { return null; }
+    }
+
+    function dropThumb( thumb )
+    {
+        if ( ! thumb ) return Promise.resolve();
+        return GumApi.purgePaths( [ thumb ] ).catch( function () {} );
+    }
+
     //------------------------------------------------------------------------//
     //  The one call the apps make
     //------------------------------------------------------------------------//
@@ -350,6 +465,12 @@
         limit:        limit,
         prepare:      prepare,
         shrinkToJpeg: shrinkToJpeg,
+        keepExif:     keepExif,
+        editorLocale: editorLocale,
+        localizeEditor: localizeEditor,
+        thumbOf:      thumbOf,
+        dropThumb:    dropThumb,
+        copyExif:     copyExif,
         jpegName:     jpegName,
         isImage:      isImage,
         isJpeg:       isJpeg

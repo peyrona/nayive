@@ -172,7 +172,7 @@ function anyCtxMenuOpen()
 // there is still exactly one set of handlers, one enabled/disabled rule
 // and one set of titles to keep up to date.
 
-const TOP_MENU_BTNS = [ 'shareBtn', 'trashViewBtn' ];
+const TOP_MENU_BTNS = [ 'shareBtn', 'bigFilesBtn', 'trashViewBtn' ];
 
 function wireTopMenu()
 {

@@ -20,7 +20,8 @@
  *      theme.css. No custom scheme -> theme.css's built-in palette is used.
  *   6. AUTOMATIC mode: follow the real sun. When "balata-theme-auto" is "1"
  *      this script works out sunrise and sunset for the device's coordinates
- *      and flips the theme at each of them, on a timer. See AUTOMATIC below.
+ *      (or its time zone's main city) and flips the theme at each of them,
+ *      on a timer. See AUTOMATIC below.
  *
  * The choice is stored in localStorage under "balata-theme" with value
  * "light" or "dark". Light is the default; only an explicit "dark" is dark.
@@ -78,17 +79,30 @@
     // are right now is a fact about this device. They are rounded to one
     // decimal (~10 km) - all a sunrise needs, and not a home address.
     //
-    // No coordinates (permission refused, old browser, kiosk) is not a
-    // failure: auto mode falls back to a plain FALLBACK_RISE-FALLBACK_SET
-    // window on the device's own clock.
+    // No coordinates (permission refused, old browser, a desktop browser that
+    // cannot locate itself) is not a failure: auto mode then uses the main
+    // city of the device's time zone (shared/tz-geo.json, from the tz
+    // database's zone.tab). A fixed clock window is NOT good enough: Spain's
+    // clock runs about two hours ahead of its sun, so "7 to 19" went light in
+    // the dark and dark in daylight. Only a zone the table does not know
+    // (UTC, Etc/GMT+3) falls back to FALLBACK_RISE-FALLBACK_SET.
     // ----------------------------------------------------------------- //
 
     var RAD      = Math.PI / 180;
-    var FALLBACK_RISE = 7;                 // hours, local, used when we have no coordinates
+    var FALLBACK_RISE = 7;                 // hours, local, used when even the time zone gives no place
     var FALLBACK_SET  = 19;
     var MAX_WAIT = 6 * 3600 * 1000;        // never sleep longer than this before looking again
 
     var timer = null;                      // the pending "flip at the next boundary" timeout
+
+    // Resolved NOW, while this script runs: currentScript is gone by the time
+    // the table is wanted, and the launcher and the apps load theme.js from
+    // different depths.
+    var TZ_URL = document.currentScript && document.currentScript.src
+               ? new URL( "tz-geo.json", document.currentScript.src ).href : null;
+
+    var tzTable   = null;                  // { "Europe/Madrid": [ lat, lon ], ... } once loaded
+    var tzLoading = false;
 
     function isAuto()
     {
@@ -106,6 +120,39 @@
         catch ( e ) { /* ignore */ }
 
         return null;
+    }
+
+    // The time zone's main city: { lat, lon }, null when the zone is not in the
+    // table, or undefined while the table is still on its way. It is fetched
+    // only when a device in auto mode has no coordinates of its own, and it
+    // is NEVER written to GKEY - that key means "this device's real place",
+    // and the launcher's dialog says so.
+    function zoneGeo()
+    {
+        if( ! tzTable )
+        {
+            if( ! TZ_URL || tzLoading === "failed" ) return null;
+
+            if( ! tzLoading )
+            {
+                tzLoading = true;
+
+                fetch( TZ_URL )
+                    .then( function ( r ) { if( ! r.ok ) throw new Error( "tz-geo" ); return r.json(); } )
+                    .then( function ( t ) { tzTable = t; } )
+                    .catch( function () { tzLoading = "failed"; } )
+                    .then( tick );
+            }
+
+            return undefined;
+        }
+
+        var zone;
+        try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; }
+        catch ( e ) { return null; }
+
+        var c = zone && tzTable[ zone ];
+        return c ? { lat: c[ 0 ], lon: c[ 1 ] } : null;
     }
 
     // NOAA's sunrise equation in its short form - about a minute of error, which
@@ -154,10 +201,14 @@
 
     // Which mode it should be right now, and when that stops being true.
     // `next` is null when there is no boundary to wait for (polar day/night),
-    // and the caller then just looks again later.
+    // and the caller then just looks again later. Returns null while the time
+    // zone table is loading: guessing from the clock meanwhile could flip the
+    // theme the wrong way for a moment (tick() runs again once it lands).
     function autoState( now )
     {
-        var g = geo();
+        var g = geo() || zoneGeo();
+
+        if( g === undefined ) return null;
 
         if( ! g )
         {
@@ -211,6 +262,8 @@
         if( ! isAuto() ) return;
 
         var st = autoState( new Date() );
+        if( ! st ) return;                         // the zone table is loading; it calls tick() back
+
         if( st.mode !== saved() ) set( st.mode );  // set() writes KEY, so other tabs follow
         schedule( st.next );
     }

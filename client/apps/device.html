@@ -1,0 +1,33 @@
+<!-- device.html - the Android app's first step (android/, server/go/devices.go).
+     The app opens this page with its device token in the #fragment - a fragment
+     never reaches the server, so it is never logged. The page keeps it in this
+     browser and goes on to the launcher at once; the launcher hands it to
+     POST /api/device/enrol once somebody is signed in (after the login, if
+     needed - the login does not carry a URL through, localStorage does).
+     Public: it must work before the sign-in. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1E1F23">
+    <meta name="referrer" content="no-referrer">
+    <title>Nayive</title>
+    <style>html, body { margin: 0; height: 100%; background: #1E1F23; }</style>
+    <script>
+    ( function () {
+        var p = new URLSearchParams( location.hash.slice( 1 ) );
+        var t = p.get( "t" ) || "";
+        // Off the address bar and out of the history at once.
+        history.replaceState( null, "", location.pathname );
+        if( /^[A-Za-z0-9_-]{32,128}$/.test( t ) )
+        {
+            try { localStorage.setItem( "nayive-enrol", JSON.stringify( { t: t, n: ( p.get( "n" ) || "" ).slice( 0, 60 ) } ) ); }
+            catch( e ) {}
+        }
+        location.replace( "./" );
+    } )();
+    </script>
+</head>
+<body></body>
+</html>

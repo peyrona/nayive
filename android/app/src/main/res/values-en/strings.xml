@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Welcome to Nayive</string>
+    <string name="setup_lead">To work properly on this phone, Nayive needs a few permissions. You are only asked once.</string>
+    <string name="step_notif_title">Notifications</string>
+    <string name="step_notif_why">So calls ring and you see what is waiting for you.</string>
+    <string name="step_loc_title">Location</string>
+    <string name="step_loc_why">To keep where you go during your trips. Choose “Allow all the time”.</string>
+    <string name="step_loc_bg">“Allow all the time” is missing: tap Allow and choose it on the screen that opens.</string>
+    <string name="step_batt_title">Battery</string>
+    <string name="step_batt_why">So Nayive stays awake with the screen off. Choose “Allow”.</string>
+    <string name="step_full_title">Full screen</string>
+    <string name="step_full_why">So a call shows even when the phone is locked.</string>
+    <string name="step_do">Allow</string>
+    <string name="step_ok">Done</string>
+    <string name="setup_continue">Continue</string>
+    <string name="setup_missing">Without every permission some things will not work. To come back here, long-press the Nayive icon.</string>
+    <string name="chan_link">Connection</string>
+    <string name="chan_calls">Calls</string>
+    <string name="chan_find">Find my phone</string>
+    <string name="chan_pending">Unread</string>
+    <string name="chan_updates">Updates</string>
+    <string name="link_on">Nayive is connected</string>
+    <string name="link_tracking">Nayive is keeping your trip position</string>
+    <string name="link_enrol">Open Nayive and sign in to activate this phone</string>
+    <string name="link_offline">No connection: Nayive will try again</string>
+    <string name="link_fix">A permission is missing. Tap to fix it.</string>
+    <string name="call_voice">Incoming voice call</string>
+    <string name="call_video">Incoming video call</string>
+    <string name="call_answer">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="find_title">Nayive is looking for you</string>
+    <string name="find_text">Someone pressed “Find my phone”.</string>
+    <string name="find_stop">Stop</string>
+    <plurals name="pending_chat">
+        <item quantity="one">You have 1 unread message</item>
+        <item quantity="other">You have %d unread messages</item>
+    </plurals>
+    <string name="update_title">A new version of Nayive is out</string>
+    <string name="update_text">Tap to download it.</string>
+    <string name="shortcut_setup">Permissions</string>
+    <string name="shortcut_setup_long">Nayive permissions</string>
+</resources>

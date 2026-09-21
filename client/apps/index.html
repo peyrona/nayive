@@ -1,17 +1,17 @@
-<!-- index.html - Launcher for the Balata single-page apps. A 3-column grid of the twelve
-     apps (the last three - Photos / Music / Movies - are folder viewers: opened from here
-     they use the folder each remembers in its own data/<app>/config.json, asking once via
-     NayiveUI.pickFolder the first time),
+<!-- index.html - Launcher for the Balata single-page apps. A 3-column grid of the
+     apps (Photos / Music / Movies are folder viewers: opened from here they use the
+     folder each remembers in its own data/<app>/config.json, asking once via
+     NayiveUI.pickFolder the first time; Text has no tile: its files open from Drive),
      centred in the viewport, with a settings row below: a gear button that, when pressed,
      rolls from the centre to the left edge while the other tool buttons unfold into place
      to its right, one after another (right-to-left as the gear rolls out, mirrored on the
-     way back) - the shared colour-scheme (dark / light) toggle, the
-     palette button that opens the "Esquemas de color" dialog (create / edit custom dark +
-     light schemes; shared/theme.js applies the active one everywhere), an account button
-     (opens the "Mi cuenta" dialog: change the sign-in password, the trash /
-     trip reminder periods and this device's notifications), and the "Cerrar sesión"
-     button. Pressing the gear again - or clicking anything else in the launcher - plays it
-     all in reverse. -->
+     way back) - the shared colour-scheme (dark / light) toggle, an account button
+     (opens the "Mi cuenta" dialog: change the sign-in password, the trash / trip
+     reminder periods, this device's notifications and automatic theme; its bottom
+     row, on the left, holds the palette button that opens the "Esquemas de color"
+     dialog - create / edit custom dark + light schemes; shared/theme.js applies the
+     active one everywhere), the install button and the "Cerrar sesión" button. Pressing the gear again - or clicking
+     anything else in the launcher - plays it all in reverse. -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -38,12 +38,13 @@
             autoShow:    true,
             dismissible: true,
             buttons: [
+                { sel: '#chatBtn',           name: 'Chat', text: NayiveUI.t( 'launcher.introChat' ) },
                 { sel: '#gearBtn',           text: NayiveUI.t( 'launcher.introGear' ) },
                 { sel: '[data-theme-toggle]', name: NayiveUI.t( 'ui.theme' ), text: NayiveUI.t( 'launcher.introTheme' ) },
-                { sel: '#schemesBtn',        text: NayiveUI.t( 'launcher.introSchemes' ) },
                 { sel: '#accountBtn',        text: NayiveUI.t( 'launcher.introAccount' ) },
                 { sel: '#installBtn',        text: NayiveUI.t( 'launcher.introInstall' ) },
-                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ) }
+                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ) },
+                { sel: '#findBtn',           text: NayiveUI.t( 'launcher.introFind' ) }
             ],
             tip: NayiveUI.t( 'launcher.introTip' )
         } );
@@ -139,13 +140,43 @@
 
         .grid
         {
+            position: relative;               /* holds the engraved logo */
+            isolation: isolate;               /* ...which sits under the tiles */
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 18px 24px;
+            --engrave-groove: color-mix(in srgb, var(--card) 55%, #000);
+            --engrave-lit:    color-mix(in srgb, var(--card) 88%, #fff);
         }
+        :root[data-theme="light"] .grid
+        {
+            --engrave-groove: color-mix(in srgb, var(--card) 87%, #000);
+            --engrave-lit:    color-mix(in srgb, var(--card) 40%, #fff);
+        }
+
+        /* The logo behind the apps, as if engraved in the panel (2026-09-21):
+           its lines only (icons/logo-lines.svg) - a groove a shade darker than
+           the card, with its lower edge catching the light 1px below. Mixed
+           from --card, so a custom scheme gets the same faint depth. Nothing
+           moves, nothing takes a click. */
+        .grid::before,
+        .grid::after
+        {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            -webkit-mask: url(icons/logo-lines.svg) center / contain no-repeat;
+                    mask: url(icons/logo-lines.svg) center / contain no-repeat;
+        }
+        .grid::before { background: var(--engrave-lit); transform: translateY(1px); }
+        .grid::after  { background: var(--engrave-groove); }
+        @media (forced-colors: active) { .grid::before, .grid::after { display: none; } }
 
         .tile
         {
+            position: relative;               /* holds Chat's unread badge */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -191,8 +222,9 @@
 
         /* Settings row: the gear sits dead-centre on its own. Pressing it rolls the gear
            along to the left border - it spins the whole way - while the other tool
-           buttons (theme, palette, account, logout) unfold into place to its
-           right, one after another. Pressing it again plays the whole thing in reverse. */
+           buttons (theme, account, install, logout) unfold into place to its
+           right, one after another. Colour schemes live in the account
+           dialog's bottom row (2026-09-19). Pressing it again plays the whole thing in reverse. */
         .tools
         {
             position: relative;               /* containing block for the absolutely-placed gear */
@@ -245,9 +277,9 @@
             min-width: 0;                     /* let it actually collapse to nothing */
             /* The gap gives way before the row does. 10px when there is room; on a narrow
                viewport (Android "Display size" / Chrome page zoom shrink it to ~320 CSS px
-               or less) it tightens to 4px, which keeps all five buttons on one line.
+               or less) it tightens to 4px, which keeps all the buttons on one line.
                cqw is the row's content box, so the gear's 42px slot is already excluded. */
-            margin-left: clamp(4px, calc((100cqw - 5 * 42px) / 5), 10px);
+            margin-left: clamp(4px, calc((100cqw - 4 * 42px) / 4), 10px);
             overflow: hidden;
             transition: width .24s ease, margin-left .24s ease, opacity .2s ease, visibility .24s;
         }
@@ -265,20 +297,51 @@
            revealed on the left of the gear before the gear has rolled past its
            slot. On CLOSE the gear rolls left-to-right and the order is mirrored: the
            left-most button leaves first, the right-most last.
-           nth-child counts the gear as child 1, so the five extras are 2..6. */
-        .tools.open       .tool-extra:nth-child(6) { transition-delay: 0s;   }
-        .tools.open       .tool-extra:nth-child(5) { transition-delay: .08s; }
-        .tools.open       .tool-extra:nth-child(4) { transition-delay: .16s; }
-        .tools.open       .tool-extra:nth-child(3) { transition-delay: .24s; }
+           nth-child counts the gear as child 1, so the four extras are 2..5. */
+        .tools.open       .tool-extra:nth-child(5) { transition-delay: 0s;   }
+        .tools.open       .tool-extra:nth-child(4) { transition-delay: .11s; }
+        .tools.open       .tool-extra:nth-child(3) { transition-delay: .21s; }
         .tools.open       .tool-extra:nth-child(2) { transition-delay: .32s; }
         .tools:not(.open) .tool-extra:nth-child(2) { transition-delay: 0s;   }
-        .tools:not(.open) .tool-extra:nth-child(3) { transition-delay: .08s; }
-        .tools:not(.open) .tool-extra:nth-child(4) { transition-delay: .16s; }
-        .tools:not(.open) .tool-extra:nth-child(5) { transition-delay: .24s; }
-        .tools:not(.open) .tool-extra:nth-child(6) { transition-delay: .32s; }
+        .tools:not(.open) .tool-extra:nth-child(3) { transition-delay: .11s; }
+        .tools:not(.open) .tool-extra:nth-child(4) { transition-delay: .21s; }
+        .tools:not(.open) .tool-extra:nth-child(5) { transition-delay: .32s; }
 
         .tool-extra svg { width: 20px; height: 20px; }
 
+        /* Chat's unread count: a red disc on the tile's icon, top-right. */
+        .chat-badge
+        {
+            position: absolute; top: 6px; right: calc(50% - 32px);
+            min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.72rem; font-weight: 700;
+            color: var(--on-accent); background: var(--danger); border: 2px solid var(--card);
+        }
+
+
+        /* "Buscar mi móvil" (2026-09-21, his ask: the panel's bottom-right corner).
+           The settings row's own round .theme-btn, on that row's line at the right
+           edge - not a floating button over the content. It is only there when
+           there is something to find (a phone with the Android app, or a last
+           known position), and it steps aside while the settings row is open:
+           the row's buttons need that end of the line. */
+        .find-btn { position: absolute; right: 30px; bottom: 26px; transition: opacity .2s ease, visibility .2s; }
+        .find-btn svg { width: 20px; height: 20px; }
+        .panel:has(.tools.open) .find-btn { opacity: 0; visibility: hidden; }
+
+        /* Its dialog, and Mi cuenta's list of phones: rows like .scm-row, not buttons. */
+        .find-row
+        {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
+            padding: 8px 6px 8px 12px; font-size: 0.88rem;
+        }
+        .find-row .find-txt { flex: 1 1 auto; min-width: 0; }
+        .find-row b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .find-row small { display: block; color: var(--text-dim); font-size: 0.8rem; }
+        .find-row small.find-live { color: var(--accent); }
+        .find-note { font-size: 0.8rem; color: var(--text-dim); margin: 10px 0 0; }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
            width - 30px padding + 24px column gaps + 27vw tiles made it 426px wide
@@ -290,6 +353,7 @@
             .panel    { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
             .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
             .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
+            .find-btn { right: 12px; }
         }
 
         /* ---- eye toggle inside a password field (Mi cuenta dialog) ---- */
@@ -321,6 +385,7 @@
             background: var(--scrim);
         }
         .sheet-backdrop[hidden] { display: none; }
+        #scmBackdrop { z-index: 101; }   /* opened from "Mi cuenta": it must sit on top of it */
 
         .sheet
         {
@@ -418,7 +483,7 @@
       <div class="panel">
 
         <div class="grid">
-            <!-- 4 rows of 3 (2026-09-08): Drive+Planner+Contacts / Write+Calc+Text / Photos+Music+Movies / Trips+Split+Games -->
+            <!-- 4 rows of 3 (2026-09-19): Drive+Planner+Chat / Write+Calc+Contacts / Photos+Music+Movies / Trips+Split+Games -->
             <a class="tile" href="drive/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
                 <span>Drive</span>
@@ -428,11 +493,16 @@
                 <span>Planner</span>
             </a>
             <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
-            <a class="tile" href="contact/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
-                <span>Contacts</span>
+            <!-- Chat (2026-09-19): the unread count rides on its icon. The admin has
+                 no chat: the script below hides the tile but keeps its slot. -->
+            <a class="tile" id="chatBtn" href="chat/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                <span>Chat</span>
+                <b class="chat-badge" hidden></b>
             </a>
 
+            <!-- Write and Calc have their tiles back (2026-09-19; the Office tile that held
+                 them is gone). Text has none: its files open from Drive. -->
             <a class="tile" href="write/index.html">
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
                 <span>Write</span>
@@ -441,9 +511,9 @@
                 <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
                 <span>Calc</span>
             </a>
-            <a class="tile" href="text/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                <span>Text</span>
+            <a class="tile" href="contact/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
+                <span>Contacts</span>
             </a>
 
             <a class="tile" href="photos/index.html">
@@ -485,16 +555,6 @@
             </button>
 
             <button class="theme-btn tool-extra" data-theme-toggle type="button" data-i18n-attr="title:ui.theme, aria-label:ui.themeToggle"></button>
-
-            <button class="theme-btn tool-extra" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
-                    <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
-                </svg>
-            </button>
 
             <button class="theme-btn tool-extra" id="accountBtn" type="button" data-i18n-attr="title:ui.account, aria-label:ui.account">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -653,14 +713,87 @@
             </label>
             <p class="scm-msg" id="pushMsg" hidden></p>
 
+            <!-- Phones with the Android app (server/go/devices.go); only when there is one. -->
+            <div id="devWrap" hidden>
+                <p class="scm-h" data-i18n="dev.title"></p>
+                <div class="scm-list" id="devList"></div>
+            </div>
+
             <div class="sheet-actions">
+                <!-- Colour schemes (2026-09-19; was in the settings row). A round
+                     .btn disc like the rest of the row, pinned to the left. -->
+                <div class="sheet-actions-left">
+                    <button class="btn btn-secondary" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                            <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                            <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                            <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
+                            <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
+                        </svg>
+                    </button>
+                </div>
                 <button id="pwCancel" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button id="pwSave"   type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>
         </div>
     </div>
 
+    <!-- "Buscar mi móvil" (server/go/devices.go): ring a phone that has the
+         Android app, see where the owner was last seen (from every source), and
+         ask the other devices "¿Dónde estás?". Filled by the script below. -->
+    <div class="sheet-backdrop" id="findBackdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:find.title">
+            <h2 data-i18n="find.title"></h2>
+            <div id="findPhonesWrap" hidden>
+                <p class="scm-h" data-i18n="find.phones"></p>
+                <div class="scm-list" id="findPhones"></div>
+            </div>
+            <p class="scm-h" data-i18n="find.last"></p>
+            <div class="scm-list" id="findLast"></div>
+            <div id="findAskWrap" hidden>
+                <p class="scm-h" data-i18n="find.others"></p>
+                <div class="scm-list" id="findAsk"></div>
+                <p class="find-note" data-i18n="find.iphone"></p>
+            </div>
+            <div class="sheet-actions">
+                <button id="findClose" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast"></div>
+
+    <script>
+        // The Chat tile's unread count (all chats not muted), now and whenever
+        // the launcher comes back on screen. The admin has no chat: the tile
+        // goes invisible but keeps its slot, so the grid does not shift.
+        ( function ()
+        {
+            var btn = document.getElementById( 'chatBtn' );
+            if( ! btn ) return;
+            var badge = btn.querySelector( '.chat-badge' );
+            function refresh()
+            {
+                fetch( '/api/chat/unread', { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
+                    .then( function ( r )
+                    {
+                        if( r.status === 403 ) { btn.style.visibility = 'hidden'; return null; }
+                        return r.ok ? r.json() : null;
+                    } )
+                    .then( function ( j )
+                    {
+                        if( ! j ) return;
+                        var n = j.n || 0;
+                        badge.textContent = n > 99 ? '99+' : String( n );
+                        badge.hidden = ! n;
+                    } )
+                    .catch( function () {} );
+            }
+            refresh();
+            document.addEventListener( 'visibilitychange', function () { if( ! document.hidden ) refresh(); } );
+        } )();
+    </script>
 
     <script>
         ( function ()
@@ -943,7 +1076,8 @@
 
             openBtn.addEventListener( 'click', openDialog );
             closeBtn.addEventListener( 'click', closeDialog );
-            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! scmBack.hidden ) closeDialog(); } );
+            // preventDefault: "Mi cuenta", open underneath, must not close on the same key.
+            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! scmBack.hidden ) { e.preventDefault(); closeDialog(); } } );
 
             listEl.addEventListener( 'click', function ( e )
             {
@@ -1291,8 +1425,8 @@
                     function ()
                     {
                         // Refused, or the device simply does not know where it
-                        // is. Auto mode stays ON: theme.js falls back to a plain
-                        // 7-19 window, which is better than nothing.
+                        // is. Auto mode stays ON: theme.js falls back to the
+                        // sun of the time zone's main city.
                         amsg( NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
                     },
                     { timeout: 10000, maximumAge: 24 * 3600 * 1000 } );
@@ -1317,15 +1451,31 @@
                 } ).catch( function () { /* browser without the geolocation permission name */ } );
             }
 
+            // The first time this device opens the dialog, automatic starts ON
+            // (his call, 2026-09-19). No location prompt for that: it needs a
+            // tick on the box, so until then the time zone's sun drives it.
+            var AUTO_OFFERED = 'balata-theme-auto-offered';
+
             function loadAuto()
             {
                 if( ! window.BalataTheme ) { autoWrap().hidden = true; return; }
 
+                var first = false;
+                try
+                {
+                    first = localStorage.getItem( AUTO_OFFERED ) !== '1';
+                    localStorage.setItem( AUTO_OFFERED, '1' );
+                }
+                catch ( e ) { /* no storage: leave the mode as it is */ }
+                if( first && ! window.BalataTheme.isAuto() ) window.BalataTheme.setAuto( true );
+
                 var on = window.BalataTheme.isAuto();
                 autoChk.checked = on;
 
+                // Turned on by us just now: the time-zone fallback is the
+                // expected state, not a failure, so it is not shown in red.
                 var key = autoState();
-                amsg( key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' );
+                amsg( key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' || first );
 
                 if( on && window.BalataTheme.hasGeo() ) refreshGeoQuietly();
             }
@@ -1376,7 +1526,7 @@
             // the user turns this on once on each phone, tablet and PC. The
             // server only ever sees an endpoint + two keys (see /api/push).
             var pushState = {
-                vapid: '', window_minutes: 30, subscribed: false, sub: null,
+                vapid: '', why: '', window_minutes: 30, subscribed: false, sub: null,
                 supported: ( 'serviceWorker' in navigator ) && ( 'PushManager' in window )
                            && ( 'Notification' in window )
             };
@@ -1449,7 +1599,8 @@
                     if( ! first.ok )
                     {
                         pushState.vapid = '';
-                        pushmsg( first.data.error || '' );
+                        pushState.why   = first.data.error || '';
+                        pushmsg( pushState.why );
                         renderPush();
                         return;
                     }
@@ -1533,7 +1684,7 @@
                 if( Notification.permission === 'denied' )
                     { renderPush(); return; }
                 if( ! pushState.vapid )
-                    { pushmsg( NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
+                    { pushmsg( pushState.why || NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
 
                 // requestPermission MUST be the first await in this handler. Any
                 // await before it spends the user activation and the browser
@@ -1556,7 +1707,13 @@
                         pushmsg( res.data.error || NayiveUI.t( 'ui.saveFailed' ) );
                     }
                 }
-                catch ( e ) { pushmsg( NayiveUI.t( 'ui.saveFailed' ) ); }
+                // Say what the browser said: "No se pudo guardar." alone left
+                // nothing to go on when a phone refused (2026-09-19).
+                catch ( e )
+                {
+                    var why = e && e.name ? ' (' + e.name + ( e.message ? ': ' + e.message : '' ) + ')' : '';
+                    pushmsg( NayiveUI.t( 'ui.saveFailed' ) + why );
+                }
                 renderPush();
             }
 
@@ -1666,6 +1823,7 @@
                 loadDays();
                 loadTripDays();
                 loadPush();
+                if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
                 back.hidden = false;
 
                 // Normally the password field, the top of the dialog. Reopened
@@ -1752,12 +1910,77 @@
                 pushmsg( NayiveUI.t( 'acct.notifsAsk' ), true );
             }
 
-            // Read by the boot script at the end of this file.
-            window.nudgePushAfterInstall = nudgePush;
+            // ---- after each login: are notifications on HERE? ------------//
+            // login.html leaves this note on every sign-in. Push is per device,
+            // so a sign-in on a new phone, or after the browser dropped the
+            // subscription, is when to ask. The note stays until the check has
+            // run, so a language reload or the mandatory password on the way
+            // does not lose it.
+            var JUST_IN = 'nayive-just-in';
+
+            function justIn()
+            {
+                try { return sessionStorage.getItem( JUST_IN ) === '1'; }
+                catch ( e ) { return false; }
+            }
+            function clearJustIn()
+            {
+                try { sessionStorage.removeItem( JUST_IN ); } catch ( e ) {}
+            }
+
+            // Only when one tap in Mi cuenta can switch them on. An iPhone tab
+            // (the install offer covers it), a browser without push, or one
+            // that blocked it (only its own settings undo that) is a dead end.
+            // No VAPID key back = the server did not answer: never nag on that.
+            async function pushFixable()
+            {
+                if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' ) return false;
+                if( ! pushState.supported ) return false;
+                if( Notification.permission === 'denied' ) return false;
+                await loadPush();                 // also self-heals a forgotten subscription
+                return !! pushState.vapid;
+            }
+
+            // Wait behind any open dialog - the welcome card, the install
+            // sheet, the mandatory password - for as long as the user reads it.
+            function whenClear( fn )
+            {
+                if( sheetUp() ) setTimeout( function (){ whenClear( fn ); }, 800 );
+                else fn();
+            }
+
+            function askAfterLogin()
+            {
+                whenClear( async function ()
+                {
+                    if( ! await pushFixable() ) { clearJustIn(); return; }
+                    // Again: the install sheet may have opened during loadPush.
+                    whenClear( async function ()
+                    {
+                        clearJustIn();
+                        if( pushState.subscribed ) return;
+                        var go = await NayiveUI.confirm( {
+                            title:   NayiveUI.t( 'acct.pushOffTitle' ),
+                            body:    NayiveUI.t( 'acct.pushOffBody' ),
+                            confirm: NayiveUI.t( 'ui.account' ),
+                            cancel:  NayiveUI.t( 'ui.notNow' ) } );
+                        if( go ) open( { focus: pushChk } );
+                    } );
+                } );
+            }
+
+            // Read by the boot script at the end of this file. The install
+            // nudge wins: it already opens Mi cuenta on the notifications row,
+            // so the login question would only ask the same thing twice.
+            window.checkPushOnBoot = function ()
+            {
+                if( nudgeDue() ) { clearJustIn(); nudgePush(); return; }
+                if( justIn() ) askAfterLogin();
+            };
 
             openBtn.addEventListener( 'click', function (){ open(); } );
             cancel.addEventListener( 'click', close );
-            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! back.hidden ) close(); } );
+            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! e.defaultPrevented && ! back.hidden ) close(); } );
 
             saveBtn.addEventListener( 'click', async function ()
             {
@@ -1866,12 +2089,325 @@
                     window.openAccountDialog( { focus: document.getElementById( 'langSel' ) } );
                 }
 
-                // Installed app, notifications never asked for: offer them.
+                // Installed app, notifications never asked for: offer them. Or,
+                // right after a sign-in, ask if they are off on this device.
                 // Waits its turn behind anything opened just above.
-                if( window.nudgePushAfterInstall )
-                    setTimeout( window.nudgePushAfterInstall, 1500 );
+                if( window.checkPushOnBoot )
+                    setTimeout( window.checkPushOnBoot, 1500 );
             } )
             .catch( function () {} );
+    </script>
+
+    <script>
+        // ---- The Android app, and "Buscar mi móvil" (server/go/devices.go) --
+        //
+        // 1. Enrolment. The app opened device.html, which left the phone's token
+        //    in this browser; once somebody is signed in (here), it is handed
+        //    over - with this browser's own push endpoint, so the server stops
+        //    ringing a call twice on that phone (the app rings it). Sent again
+        //    only when that endpoint changes.
+        // 2. "?here=<find>": the answer to a "¿Dónde estás?" push (the iPhone
+        //    path) - send where this device is, once, and clean the address.
+        // 3. The round button in the panel's bottom-right corner and its dialog.
+        //    Only there when there is something to find: a phone with the app,
+        //    or a last known position. Without either the launcher is exactly
+        //    what it was.
+        // 4. Mi cuenta's list of phones (NayiveDevices.loadAccount).
+        ( function ()
+        {
+            function T( k )     { return window.NayiveUI ? NayiveUI.t( k ) : k; }
+            function TF( k, o ) { return window.NayiveUI ? NayiveUI.tf( k, o ) : k; }
+            function esc( v )   { return window.NayiveUI ? NayiveUI.escapeHtml( String( v ) ) : String( v ); }
+            function toast( m, ms ) { if( window.NayiveUI ) NayiveUI.toast( m, { ms: ms || 2500 } ); }
+            function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
+            function put( k, v ) { try { if( v == null ) localStorage.removeItem( k ); else localStorage.setItem( k, v ); } catch ( e ) {} }
+            function parse( k )  { try { return JSON.parse( get( k ) || 'null' ); } catch ( e ) { return null; } }
+
+            function api( method, path, body )
+            {
+                var o = { method: method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
+                if( body ) { o.headers[ 'Content-Type' ] = 'application/json'; o.body = JSON.stringify( body ); }
+                return fetch( '/api/device' + path, o ).then( function ( r )
+                {
+                    return r.json().catch( function () { return {}; } ).then( function ( j ) { j._status = r.status; return j; } );
+                } );
+            }
+
+            // This browser's web-push endpoint, or "" (no notifications here).
+            function myEndpoint()
+            {
+                if( ! ( 'serviceWorker' in navigator ) ) return Promise.resolve( '' );
+                return navigator.serviceWorker.getRegistration()
+                    .then( function ( reg ) { return reg && reg.pushManager ? reg.pushManager.getSubscription() : null; } )
+                    .then( function ( sub ) { return sub ? sub.endpoint : ''; } )
+                    .catch( function () { return ''; } );
+            }
+
+            var SVG = function ( body ) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>'; };
+            var ICON = {
+                find: SVG( '<rect x="7" y="3" width="10" height="18" rx="2"></rect><line x1="12" y1="17" x2="12.01" y2="17"></line><path d="M20.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M3.5 9a4.5 4.5 0 0 0 0 6"></path>' ),
+                ring: SVG( '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>' ),
+                stop: SVG( '<rect x="6" y="6" width="12" height="12" rx="2"></rect>' ),
+                map:  SVG( '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>' ),
+                ask:  SVG( '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>' )
+            };
+
+            // ---- 1. enrolment ------------------------------------------------
+            function enrol()
+            {
+                var pending = parse( 'nayive-enrol' );     // device.html, just now
+                var known   = parse( 'nayive-device' );    // enrolled before, from this browser
+                var mine    = pending || known;
+                if( ! mine || ! mine.t ) return;
+                myEndpoint().then( function ( ep )
+                {
+                    if( ! pending && known.ep === ep ) return;   // nothing new to say
+                    return api( 'POST', '/enrol', { t: mine.t, name: mine.n || '', endpoint: ep } ).then( function ( j )
+                    {
+                        if( j._status === 200 )
+                        {
+                            put( 'nayive-enrol', null );
+                            put( 'nayive-device', JSON.stringify( { t: mine.t, n: mine.n || '', ep: ep, id: j.id } ) );
+                            if( pending ) toast( T( 'dev.enrolled' ), 3500 );
+                            refreshButton();
+                        }
+                        else if( j._status === 400 ) put( 'nayive-enrol', null );   // not a token at all
+                    } );
+                } ).catch( function () {} );
+            }
+
+            // ---- 2. "?here=<find>" -------------------------------------------
+            function answerHere()
+            {
+                var q = new URLSearchParams( location.search );
+                var fid = q.get( 'here' );
+                if( ! fid ) return;
+                q.delete( 'here' );
+                var rest = q.toString();
+                history.replaceState( null, '', location.pathname + ( rest ? '?' + rest : '' ) + location.hash );
+                if( ! navigator.geolocation ) { toast( T( 'find.noGeo' ) ); return; }
+                navigator.geolocation.getCurrentPosition( function ( p )
+                {
+                    api( 'POST', '/here', { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, find: fid } )
+                        .then( function ( j ) { toast( j._status === 200 ? T( 'find.sent' ) : T( 'find.noGeo' ) ); } )
+                        .catch( function () { toast( T( 'find.noGeo' ) ); } );
+                }, function () { toast( T( 'find.noGeo' ), 3500 ); },
+                   { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 } );
+            }
+
+            // ---- words -----------------------------------------------------
+            function ago( sec )
+            {
+                var d = Math.max( 0, Date.now() / 1000 - sec );
+                if( d < 60 )    return T( 'find.agoNow' );
+                if( d < 3600 )  return TF( 'find.agoMin',  { n: Math.floor( d / 60 ) } );
+                if( d < 86400 ) return TF( 'find.agoHour', { n: Math.floor( d / 3600 ) } );
+                return TF( 'find.agoDay', { n: Math.floor( d / 86400 ) } );
+            }
+            var SRC = { nayive: 'find.srcNayive', gpslogger: 'find.srcGpslogger', overland: 'find.srcOverland',
+                        owntracks: 'find.srcOwntracks', photo: 'find.srcPhoto', browser: 'find.srcBrowser', phone: 'find.srcBrowser' };
+            function where( p, withSource )
+            {
+                var bits = [ ago( p.at ) ];
+                if( withSource && SRC[ p.source ] ) bits.push( T( SRC[ p.source ] ) );
+                if( p.acc ) bits.push( TF( 'find.acc', { m: Math.round( p.acc ) } ) );
+                return bits.join( ' · ' );
+            }
+            function mapLink( p )
+            {
+                var u = 'https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lon + '#map=17/' + p.lat + '/' + p.lon;
+                return '<a class="icon-btn" target="_blank" rel="noopener noreferrer" href="' + esc( u ) +
+                       '" title="' + esc( T( 'find.map' ) ) + '" aria-label="' + esc( T( 'find.map' ) ) + '">' + ICON.map + '</a>';
+            }
+            function btn( act, id, icon, label, danger )
+            {
+                return '<button type="button" class="icon-btn' + ( danger ? ' danger' : '' ) + '" data-act-find="' + act +
+                       '" data-id="' + esc( id ) + '" title="' + esc( label ) + '" aria-label="' + esc( label ) + '">' + icon + '</button>';
+            }
+            function row( title, lines, actions )
+            {
+                return '<div class="find-row"><div class="find-txt"><b>' + esc( title ) + '</b>' +
+                       lines.map( function ( l ) { return '<small' + ( l.live ? ' class="find-live"' : '' ) + '>' + esc( l.t ) + '</small>'; } ).join( '' ) +
+                       '</div>' + ( actions || '' ) + '</div>';
+            }
+            function seenLine( d ) { return d.online ? T( 'find.online' ) : TF( 'find.seen', { ago: ago( d.seen ) } ); }
+
+            // ---- 3. the button and its dialog --------------------------------
+            var state   = null;       // the last GET /api/device
+            var others  = 0;          // devices with notifications, this one aside
+            var findBtn = null;
+            var back    = document.getElementById( 'findBackdrop' );
+            var pollT   = 0;
+
+            function worthIt( s ) { return !! ( s && ( ( s.devices && s.devices.length ) || s.last ) ); }
+
+            function refreshButton()
+            {
+                return api( 'GET', '' ).then( function ( j )
+                {
+                    if( j._status !== 200 ) return;          // the admin (403), or signed out
+                    state = j;
+                    if( worthIt( j ) && ! findBtn )
+                    {
+                        findBtn = document.createElement( 'button' );
+                        findBtn.type = 'button';
+                        findBtn.id = 'findBtn';
+                        findBtn.className = 'theme-btn find-btn';
+                        findBtn.title = T( 'find.title' );
+                        findBtn.setAttribute( 'aria-label', T( 'find.title' ) );
+                        findBtn.innerHTML = ICON.find;
+                        findBtn.addEventListener( 'click', openFind );
+                        document.querySelector( '.panel' ).appendChild( findBtn );
+                    }
+                    else if( ! worthIt( j ) && findBtn ) { findBtn.remove(); findBtn = null; }
+                    if( ! back.hidden ) render();
+                } ).catch( function () {} );
+            }
+
+            function latestFind( device )
+            {
+                var fs = ( state && state.finds ) || [];
+                for( var i = 0; i < fs.length; i++ ) if( fs[ i ].device === device ) return fs[ i ];   // newest first
+                return null;
+            }
+
+            function render()
+            {
+                if( ! state ) return;
+                var phones = state.devices || [];
+                document.getElementById( 'findPhonesWrap' ).hidden = ! phones.length;
+                document.getElementById( 'findPhones' ).innerHTML = phones.map( function ( d )
+                {
+                    var f = latestFind( d.id ), lines = [ { t: seenLine( d ) } ], acts = '';
+                    if( f && f.state === 'ringing' )
+                    {
+                        lines.push( { t: T( 'find.ringing' ), live: true } );
+                        acts = btn( 'stop', f.id, ICON.stop, T( 'find.stop' ) );
+                    }
+                    else
+                    {
+                        if( f ) lines.push( { t: T( { stopped: 'find.stopped', cancelled: 'find.cancelled', timeout: 'find.timeout' }[ f.state ] || 'find.stopped' ) + ' · ' + ago( ( f.ended || f.since ) / 1000 ) } );
+                        acts = btn( 'ring', d.id, ICON.ring, T( 'find.ring' ) );
+                    }
+                    if( f && f.pos )
+                    {
+                        lines.push( { t: T( 'find.here' ) + ' · ' + where( f.pos, false ), live: true } );
+                        acts = mapLink( f.pos ) + acts;
+                    }
+                    return row( d.name, lines, acts );
+                } ).join( '' );
+
+                var last = state.last;
+                document.getElementById( 'findLast' ).innerHTML = last
+                    ? row( ago( last.at ), [ { t: where( last, true ).split( ' · ' ).slice( 1 ).join( ' · ' ) || ' ' } ], mapLink( last ) )
+                    : '<p class="find-note">' + esc( T( 'find.none' ) ) + '</p>';
+
+                document.getElementById( 'findAskWrap' ).hidden = others <= 0;
+                var asked = null, fs = state.finds || [];
+                for( var i = 0; i < fs.length; i++ ) if( fs[ i ].state === 'asked' ) { asked = fs[ i ]; break; }
+                var askLines = [];
+                if( asked && asked.pos ) askLines.push( { t: T( 'find.answered' ) + ' · ' + where( asked.pos, false ), live: true } );
+                else if( asked )         askLines.push( { t: T( 'find.asked' ) } );
+                document.getElementById( 'findAsk' ).innerHTML =
+                    row( T( 'find.ask' ), askLines, ( asked && asked.pos ? mapLink( asked.pos ) : '' ) + btn( 'ask', '', ICON.ask, T( 'find.ask' ) ) );
+            }
+
+            // Poll only while something is moving: a phone ringing, a question
+            // not answered yet. Otherwise the dialog is still.
+            function busy()
+            {
+                var fs = ( state && state.finds ) || [];
+                var now = Date.now();
+                return fs.some( function ( f )
+                {
+                    return f.state === 'ringing' || ( ! f.pos && now - f.since < 10 * 60 * 1000 &&
+                        ( f.state === 'asked' || now - ( f.ended || f.since ) < 60 * 1000 ) );
+                } );
+            }
+            function poll()
+            {
+                clearTimeout( pollT );
+                if( back.hidden ) return;
+                refreshButton().then( function () { if( ! back.hidden && busy() ) pollT = setTimeout( poll, 3000 ); } );
+            }
+
+            function openFind()
+            {
+                myEndpoint().then( function ( ep )
+                {
+                    others = ( state && state.push ) || 0;
+                    if( ep ) others--;                      // this browser is not "another device"
+                    render();
+                    back.hidden = false;
+                    poll();
+                } );
+            }
+            function closeFind() { back.hidden = true; clearTimeout( pollT ); }
+
+            document.getElementById( 'findClose' ).addEventListener( 'click', closeFind );
+            back.addEventListener( 'click', function ( e ) { if( e.target === back ) closeFind(); } );
+            document.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' && ! back.hidden ) closeFind(); } );
+
+            back.addEventListener( 'click', function ( e )
+            {
+                var b = e.target.closest( '[data-act-find]' );
+                if( ! b ) return;
+                var act = b.getAttribute( 'data-act-find' ), id = b.getAttribute( 'data-id' );
+                b.disabled = true;
+                var req = act === 'ring' ? api( 'POST', '/find', { id: id } )
+                        : act === 'stop' ? api( 'POST', '/find/' + encodeURIComponent( id ) + '/stop' )
+                        : myEndpoint().then( function ( ep ) { return api( 'POST', '/find', { ask: true, endpoint: ep } ); } );
+                req.then( function ( j )
+                {
+                    if( act === 'ask' && j._status === 200 && ! j.asked ) toast( T( 'find.askedNone' ), 3500 );
+                    else if( j._status !== 200 ) toast( j.error || T( 'ui.saveFailed' ) );
+                    poll();
+                } ).catch( function () { toast( T( 'login.noServer' ) ); b.disabled = false; } );
+            } );
+
+            // ---- 4. Mi cuenta ----------------------------------------------
+            var devWrap = document.getElementById( 'devWrap' );
+            var devList = document.getElementById( 'devList' );
+            function loadAccount()
+            {
+                api( 'GET', '' ).then( function ( j )
+                {
+                    var ds = ( j._status === 200 && j.devices ) || [];
+                    devWrap.hidden = ! ds.length;
+                    devList.innerHTML = ds.map( function ( d )
+                    {
+                        return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) );
+                    } ).join( '' );
+                } ).catch( function () {} );
+            }
+            // A delete inside a dialog acts at once: no second question.
+            devList.addEventListener( 'click', function ( e )
+            {
+                var b = e.target.closest( '[data-act-find="remove"]' );
+                if( ! b ) return;
+                var id = b.getAttribute( 'data-id' );
+                b.disabled = true;
+                api( 'DELETE', '/' + encodeURIComponent( id ) ).then( function ( j )
+                {
+                    if( j._status !== 204 && j._status !== 404 ) { b.disabled = false; toast( j.error || T( 'ui.saveFailed' ) ); return; }
+                    var mine = parse( 'nayive-device' );
+                    if( mine && mine.id === id ) put( 'nayive-device', null );
+                    toast( T( 'dev.removed' ) );
+                    loadAccount();
+                    refreshButton();
+                } ).catch( function () { b.disabled = false; toast( T( 'login.noServer' ) ); } );
+            } );
+            window.NayiveDevices = { loadAccount: loadAccount };
+
+            // ---- start -----------------------------------------------------
+            ( window.NayiveI18n ? NayiveI18n.ready : Promise.resolve() ).then( function ()
+            {
+                enrol();
+                answerHere();
+                refreshButton();
+            } );
+            document.addEventListener( 'visibilitychange', function () { if( ! document.hidden ) refreshButton(); } );
+        } )();
     </script>
 </body>
 </html>

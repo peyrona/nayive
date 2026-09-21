@@ -1,4 +1,4 @@
-<!-- asteroids.html - Asteroids, one of the six games of index.html.
+<!-- asteroids.html - Asteroids, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -154,7 +154,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -166,7 +166,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // ASTEROIDS
@@ -364,7 +365,7 @@
                     // A beat, and then the next ship - but only once the middle
                     // is clear, or it is broken the instant it appears.
                     respawn -= TICK;
-                    if( respawn <= 0 && clearMiddle() ) launch();
+                    if( respawn <= 0 && clearMiddle() ) { launch(); sfx.play( 'warp' ); }
                 }
 
                 for( i = 0; i < rocks.length; i++ ) { move( rocks[ i ] ); rocks[ i ].ang += rocks[ i ].spin * TICK; }
@@ -378,7 +379,7 @@
 
                 hits();
 
-                if( ! rocks.length ) deal();
+                if( ! rocks.length ) { deal(); sfx.play( 'rocks' ); }
             }
 
             function fly()
@@ -397,6 +398,7 @@
                     if( sp > MAXV ) { ship.vx = ship.vx / sp * MAXV; ship.vy = ship.vy / sp * MAXV; }
 
                     flame += TICK;
+                    sfx.hold( 'thrust' );              // the rumble lasts exactly as long as these calls do
                 }
 
                 // Space is not quite empty here. Without a little drag the only
@@ -425,6 +427,7 @@
                               vx: ship.vx + Math.cos( ship.ang ) * SHOT,
                               vy: ship.vy + Math.sin( ship.ang ) * SHOT,
                               r: 2, t: RANGE } );
+                sfx.play( 'pew' );
             }
 
             function hits()
@@ -463,6 +466,7 @@
                 score += POINTS[ r.gen ];
                 rocks.splice( at, 1 );
                 burst( r.x, r.y, 5 + r.gen * 2 );
+                sfx.play( 'rock', r.gen );
 
                 if( r.gen < SIZES.length - 1 )
                     for( i = 0; i < 2; i++ )
@@ -477,7 +481,7 @@
                         rocks.push( piece );
                     }
 
-                while( score >= nextLife ) { nextLife += EXTRA; lives++; paintLives(); }
+                while( score >= nextLife ) { nextLife += EXTRA; lives++; paintLives(); sfx.play( 'life', null, 0.2 ); }
                 if( score > best ) { best = score; dirty = true; }
 
                 paint();
@@ -492,8 +496,9 @@
                 lives--;
                 paintLives();
                 flush();                       // a life lost is a pause: a good moment to put the record up
+                sfx.play( 'crash' );
 
-                if( lives <= 0 ) { state = 'over'; A.overlay(); }
+                if( lives <= 0 ) { state = 'over'; A.overlay(); sfx.play( 'over', null, 0.8 ); }
             }
 
             function launch()

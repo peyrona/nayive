@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docx-editor smoke</title>
+<!-- page.js links the engine's stylesheet itself, by the name in the lock file. -->
+<style>
+html, body   { height: 100%; margin: 0; }
+body         { display: flex; flex-direction: column; font: 14px system-ui, sans-serif; }
+#bar         { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #ccc; }
+#readout     { flex: 1; color: #444; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#readout.warn { color: #b00; }
+
+/* The engine lays out and paints its own pages inside #host; the well is only
+   the grey around them and the scroller. */
+#well        { flex: 1 1 auto; min-height: 0; overflow: auto; background: #d9d9dd; }
+#host        { min-height: 100%; }
+
+/* The engine leaves the sheet itself transparent (its React adapter paints it
+   with a class not used here), so the page is white here. */
+.docx-page   { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+
+/* PRINTING. The pages are real DOM with real text, so paper gets type, not
+   pictures. Everything that is not a page goes; the scroller stops scrolling
+   so every page is in the flow; @page has no margin because each painted page
+   already carries the document's own margins. page.js sets the paper size
+   from the document before printing. */
+@media print
+{
+    #bar                          { display: none !important; }
+    html, body, #well, #host      { height: auto !important; overflow: visible !important;
+                                    background: #fff !important; display: block !important; }
+
+    /* On screen the engine stacks its pages absolutely, 32 px of grey apart.
+       On paper that gap adds up and pushes the last page onto an extra sheet,
+       so the pages go back into the flow, one per sheet. */
+    .docx-pages, .docx-pages-host,
+    #host > div                   { height: auto !important; }
+    .docx-page                    { position: relative !important; top: auto !important; left: auto !important;
+                                    margin: 0 !important; box-shadow: none !important;
+                                    break-after: page; break-inside: avoid; }
+    .docx-page:last-of-type       { break-after: auto; }
+
+    /* The caret, the selection and the editing furniture are not the document. */
+    .docx-editor-one-surface__caret, .docx-selection-overlay, .docx-remote-selection-overlay,
+    .docx-comment-overlay, .docx-table-furniture, .docx-text-form-status,
+    .docx-hf-edit-hint            { display: none !important; }
+}
+</style>
+<style id="pageRule">@page { size: A4; margin: 0; }</style>
+</head>
+<body>
+
+<div id="bar">
+    <button id="btnOpen">Open .docx</button>
+    <button id="btnSave">Save .docx</button>
+    <button id="btnPrint">Print</button>
+    <span id="readout">Loading the engine…</span>
+</div>
+
+<!-- The two engine classes are not decoration: the core finds its viewport with
+     closest(".docx-editor__scroll-container") - without it "fit to width" has
+     nothing to measure and a phone gets a 100% page cut in half - and
+     .docx-editor carries the colour tokens. -->
+<div id="well" class="docx-editor docx-editor__scroll-container"><div id="host"></div></div>
+
+<input type="file" id="file" accept=".docx" hidden>
+
+<script type="module" src="page.js"></script>
+</body>
+</html>

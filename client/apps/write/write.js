@@ -1,19 +1,32 @@
 /*
- * write.js - Personal single-user word processor, on SuperDoc 2.
+ * write.js - Personal single-user word processor, on the docx-editor.dev engine.
  *
  * .docx is the native format. A document lives wherever the user put it in
  * Drive - "Guardar como" asks for the folder on the first save - and a copy of
  * the previous version is kept in a .bak/ beside it. Loaded as a module by
  * index.html AFTER shared/gum-api.js, shared/ui.js and shared/office.js
- * (classic scripts) have set window.GumApi / NayiveUI / NayiveOffice, and
- * AFTER the inline script in <head> pinned __SUPERDOC_V2_BROWSER_WORKER_URL__.
+ * (classic scripts) have set window.GumApi / NayiveUI / NayiveOffice.
  *
- * The SuperDoc bundle under lib/superdoc/ is vendored and pinned; see
- * lib/superdoc/BUILD.md. SuperDoc's DOCX engine is proprietary (self-host only,
- * no redistribution) — that trade was accepted for this private tool.
+ * The engine under lib/docx-editor/ is vendored and pinned (Apache-2.0, its
+ * fonts OFL); see lib/docx-editor/BUILD.md. Only its PUBLIC API is used here -
+ * createDocxEditor, load / save / exec / snapshot / on and the toolbar helpers -
+ * which is what keeps a version bump one command (docs/write-docx-editor-plan.md).
+ *
+ * The toolbar is ours (toolbar.js), and so are the menus, the dialogs, the
+ * find bar (find.js), the right-click menu, the spelling underlines
+ * (proofing-overlay.js) and the correct-as-you-type rules: the engine paints
+ * the pages and owns the document, nothing else.
  */
-import { SuperDoc, BlankDOCX } from './lib/superdoc/superdoc.min.js';
-import { makeSpellProvider, PROOF_LANGS, setPersonalWords, isPersonalWord, fillSuggestions } from './proofing.js';
+import { createDocxEditor, packagedFonts, runToolbarCommand, toolbarCommandState, toolbarCommandStates,
+         blankDocumentBytes, executeImageCommand, unzipSync, zipSync, strFromU8, strToU8 }
+    from './lib/docx-editor/docx-editor_v2.21.0.min.js';
+import { createToolbar } from './toolbar.js';
+import { createPatcher } from './docx-patch.js';
+import { createFindBar } from './find.js';
+import { PROOF_LANGS, setPersonalWords, isPersonalWord, makeSpellProvider, suggestionsFor } from './proofing.js';
+import { createSpellOverlay } from './proofing-overlay.js';
+// Every place Write works around the engine, as data - see quirks.js.
+import { Q } from './quirks.js';
 
 //----------------------------------------------------------------------------//
 // STATE
@@ -32,14 +45,16 @@ const DOC_DIR = ( function() {
 const OPEN_ROOT = DOC_DIR.split( '/' )[ 0 ] || 'files';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-// SuperDoc's sections API takes inches. Page sizes here are portrait, inches.
+// Page sizes, portrait, in inches (the engine takes twips: x 1440).
+// Five decimals, so that x 1440 rounds to the twips Word itself writes (A4 is
+// 11906 x 16838; four decimals gave 11905).
 const PAGE_SIZES = {
-    A4     : { w:  8.2677, h: 11.6929 },
-    Letter : { w:  8.5,    h: 11      },
-    Legal  : { w:  8.5,    h: 14      },
-    A3     : { w: 11.6929, h: 16.5354 },
-    A5     : { w:  5.8268, h:  8.2677 },
-    B5     : { w:  6.9291, h:  9.8425 }
+    A4     : { w:  8.26772, h: 11.69291 },
+    Letter : { w:  8.5,     h: 11       },
+    Legal  : { w:  8.5,     h: 14       },
+    A3     : { w: 11.69291, h: 16.53543 },
+    A5     : { w:  5.82677, h:  8.26772 },
+    B5     : { w:  6.92913, h:  9.84252 }
 };
 
 // Which named size is this page? Used to fill the dialog from the document.
@@ -62,139 +77,13 @@ function sizeNameFor( w, h )
 // over a file changed on another device since it was opened is refused.
 const store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, binary: true, conflicts: true } );
 
-let sd            = null;    // the SuperDoc instance
-let bootSource    = null;    // the File boot() builds SuperDoc on (see loadBody)
+let editor = null;    // the docx-editor.dev instance, made once in boot()
 
-// Phone (see TWO LAYOUT MODES in shared/app.css): the A4 page is 794px wide at
-// 100 %, twice a phone screen, so the zoom is set to make it fit the editor box
-// (~45 % on a 390px screen), and set again when the phone is turned. SuperDoc
-// has a "fit-width" zoom mode of its own, but in this build it measures the
-// container instead of the page and lands on 100 % - so the fit is computed
-// here. `offsetWidth` is the page's unscaled width (the zoom is a transform on
-// its parent), which keeps the maths stable across repeated calls. The fit is
-// only redone when the editor's WIDTH changes (turning the phone) - the on-screen
-// keyboard fires resize too, and must not undo a zoom the user picked from the
-// toolbar's zoom menu. PC / tablet keep the usual 100 %.
+// Phone (see TWO LAYOUT MODES in shared/app.css). The engine shrinks the page
+// towards the width by itself (its zoom mode 'auto') but never below 50 % - an
+// A4 is then ~397 px, a little wider than a 390 px phone - and the viewport
+// allows pinch zoom for the rest (his call). No phone fit of our own any more.
 const PHONE = window.matchMedia( '(max-width: 640px)' );
-
-let phoneZoomOn = false;   // true while the phone fit is what set the zoom
-let phoneFitW   = 0;       // editor width the last fit was computed for
-
-// Two ways to fit a page on a 390px screen:
-//   'page' — the whole sheet, margins included: ~46 %, and the text is tiny.
-//   'text' — only the text column, so the words are as big as the screen allows
-//            and the margins fall off the sides. Better for reading, which is
-//            what a phone is mostly used for here.
-// The suite pins `user-scalable=no` in all four apps' viewport meta, so pinch is
-// not an option; this is the readable alternative that does not break that.
-const PHONE_FIT_KEY = 'nayive-write-phonefit';
-
-let phoneFit = readPhoneFit();
-
-function readPhoneFit()
-{
-    try { return localStorage.getItem( PHONE_FIT_KEY ) === 'page' ? 'page' : 'text'; }
-    catch( _ ) { return 'text'; }
-}
-
-function setPhoneFit( mode )
-{
-    phoneFit = mode === 'page' ? 'page' : 'text';
-    try { localStorage.setItem( PHONE_FIT_KEY, phoneFit ); } catch( _ ) {}
-
-    phoneFitW = 0;            // force a recompute
-    fitPhoneZoom();
-    syncPhoneFitBtn();
-}
-
-function togglePhoneFit() { setPhoneFit( phoneFit === 'text' ? 'page' : 'text' ); }
-
-function syncPhoneFitBtn()
-{
-    const b = document.getElementById( 'fitBtn' );
-    if( ! b ) return;
-
-    b.classList.toggle( 'is-active', phoneFit === 'text' );
-    b.setAttribute( 'aria-pressed', String( phoneFit === 'text' ) );
-}
-
-function fitPhoneZoom( tries )
-{
-    if( ! sd || typeof sd.setZoom !== 'function' ) return;
-
-    if( ! PHONE.matches )                       // wide again (phone turned sideways, or a PC)
-    {
-        if( phoneZoomOn ) { phoneZoomOn = false; phoneFitW = 0; sd.setZoom( 100 ); }
-        return;
-    }
-
-    const box  = document.getElementById( 'editor' );
-    const page = box && box.querySelector( '.superdoc-page' );
-
-    if( ! page || ! page.offsetWidth )          // the page mounts a moment after onReady
-    {
-        if( ( tries || 0 ) < 20 ) setTimeout( function() { fitPhoneZoom( ( tries || 0 ) + 1 ); }, 250 );
-        return;
-    }
-
-    if( box.clientWidth === phoneFitW ) return;   // same width as last time (keyboard, not rotation)
-    phoneFitW = box.clientWidth;
-
-    // 'text' fits the text column instead of the whole sheet: take the page's
-    // own margins off first. They come from the section, so any page setup works.
-    let fitTo = page.offsetWidth;
-
-    if( phoneFit === 'text' )
-    {
-        const m = phoneTextWidthPx( page );
-        if( m > 0 ) fitTo = m;
-    }
-
-    const zoom = Math.floor( ( box.clientWidth - 12 ) / fitTo * 100 );
-    if( zoom <= 0 || zoom >= 300 ) return;
-
-    phoneZoomOn = true;
-    if( zoom !== sd.getZoom() ) sd.setZoom( zoom );
-}
-
-// The width of the text column in unscaled page pixels: the sheet minus its left
-// and right margins, read from the section (cached, so no await in the fit path).
-let phoneMarginsIn = null;
-
-function phoneTextWidthPx( page )
-{
-    if( ! phoneMarginsIn ) { readPhoneMargins(); return 0; }
-
-    const secW = phoneMarginsIn.width;
-    if( ! secW ) return 0;
-
-    const pxPerIn = page.offsetWidth / secW;
-    const text    = secW - phoneMarginsIn.left - phoneMarginsIn.right;
-
-    return text > 0 ? text * pxPerIn : 0;
-}
-
-async function readPhoneMargins()
-{
-    try
-    {
-        const sec = ( await sd.activeEditor.doc.sections.list() ).items[ 0 ];
-        const ps  = sec.pageSetup || {};
-        const mg  = sec.margins   || {};
-
-        phoneMarginsIn = { width: ps.width || 0, left: mg.left || 0, right: mg.right || 0 };
-
-        phoneFitW = 0;
-        fitPhoneZoom();
-    }
-    catch( _ ) {}
-}
-
-( function()
-{
-    let t = null;
-    window.addEventListener( 'resize', function() { clearTimeout( t ); t = setTimeout( fitPhoneZoom, 150 ); } );
-} )();
 
 
 //----------------------------------------------------------------------------//
@@ -211,10 +100,37 @@ async function readPhoneMargins()
 //      button brings it back. Formatting costs one extra tap, the document
 //      gets the whole screen.
 //
-// Folding sets height:0, never display:none: SuperDoc watches #toolbar's width
-// and re-lays its items out on every change, so the width must stay steady.
+// Folding sets height:0, never display:none, so the real buttons stay in the
+// DOM for the menu entries that click them.
 
-const MENU_BTNS = [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'printBtn', 'pdfBtn', 'tplBtn', 'restoreBtn', 'commentsBtn', 'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn', 'statsBtn', 'settingsBtn' ];
+// The header's "⋮" menu, built by shared/office.js from the REAL buttons -
+// glyph and title cloned, an entry clicks the button it came from - so there
+// is one set of handlers and the menu can never drift from them.
+//
+// `ids` is everything a phone needs, because at <=640px #writeTools is gone
+// whole. `phoneOnly` names the ones a PC still has on the row (or inside one
+// of its group cards), and app.css drops those entries above 640px, so a PC
+// is never offered the same thing twice. What is left on a PC is the file
+// block: the eight buttons that are on no bar at all (#fileTools).
+const MENU_IDS =
+[
+    'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'settingsBtn', 'scBtn',
+    'tplBtn', 'printBtn', 'pdfBtn',
+    'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn'
+];
+const MENU_PHONE_ONLY =
+[
+    'tplBtn', 'printBtn', 'pdfBtn',
+    'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn'
+];
+
+let fileMenu = null;    // set in wireStaticUI, once the DOM is there
+let helpMenu = null;    // the "?" menu, ditto
+
+// The tool row's group cards: print / PDF, and the four page ones. The buttons
+// in them are the real ones, wired below exactly as when they sat on the row.
+let groups = [];
+function closeGroupPopups() { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // `fold.isOpen()` is the truth now; this stays only for readability at call sites.
 function toolbarOpen() { return fold ? fold.isOpen() : true; }
@@ -223,89 +139,15 @@ function toolbarOpen() { return fold ? fold.isOpen() : true; }
 // Folding also closes the "⋮" expansion — coming back to a four-row toolbar
 // would undo the whole point of folding it away.
 // shared/office.js's foldingToolbar does all of this: the "is-folded" height-0
-// fold (never display:none — SuperDoc watches #toolbar's width), the "⋮"
-// expansion, and both buttons' aria state. Write kept its own copy only because
-// it predated the shared one.
+// fold, the "⋮" expansion, and both buttons' aria state.
 let fold = null;   // set in wireStaticUI, once the DOM is there
 
 function setToolbarOpen( open ) { if( fold ) fold.setOpen( open ); }
 
 // The "⋮" at the end of the row: show every toolbar item (it wraps onto a few
-// lines) or just the nine the phone keeps. index.html does the hiding; this only
+// lines) or just the ones the phone keeps. index.html does the hiding; this only
 // flips the class and the button's own pressed look.
 function setMoreTools( open ) { if( fold ) fold.setMore( open ); }
-
-// One entry per app button, with that button's own glyph and title cloned, so
-// the menu never drifts from the toolbar. Clicking an entry clicks the real
-// (hidden) button — wireStaticUI keeps the only set of handlers.
-function buildTopMenu()
-{
-    const menu = document.getElementById( 'topMenu' );
-
-    for( const id of MENU_BTNS )
-    {
-        const src = document.getElementById( id );
-        const svg = src && src.querySelector( 'svg' );
-        if( ! svg ) continue;
-
-        const item = document.createElement( 'button' );
-        item.type            = 'button';
-        item.className       = 'menu-item';
-        item.dataset.menu    = id;
-        item.appendChild( svg.cloneNode( true ) );
-        item.appendChild( document.createTextNode( src.getAttribute( 'title' ) || id ) );
-        menu.appendChild( item );
-    }
-}
-
-function closeTopMenu()
-{
-    const menu = document.getElementById( 'topMenu' );
-    if( menu.hidden ) return;
-
-    menu.hidden = true;
-    document.getElementById( 'moreBtn' ).setAttribute( 'aria-expanded', 'false' );
-}
-
-function openTopMenu()
-{
-    const btn  = document.getElementById( 'moreBtn' );
-    const menu = document.getElementById( 'topMenu' );
-    const r    = btn.getBoundingClientRect();
-
-    // Anchored under the button, like this app's own #tbPopup: .topbar carries
-    // overflow-x, so an absolutely positioned child of it would be clipped.
-    menu.style.top   = ( r.bottom + 4 ) + 'px';
-    menu.style.right = Math.max( 6, window.innerWidth - r.right ) + 'px';
-    menu.hidden      = false;
-    btn.setAttribute( 'aria-expanded', 'true' );
-}
-
-function wireTopMenu()
-{
-    const btn  = document.getElementById( 'moreBtn' );
-    const menu = document.getElementById( 'topMenu' );
-
-    btn.addEventListener( 'click', function( e )
-    {
-        e.stopPropagation();                       // else the document handler below closes it again
-        if( menu.hidden ) openTopMenu(); else closeTopMenu();
-    } );
-
-    menu.addEventListener( 'click', function( e )
-    {
-        const item = e.target.closest( 'button[data-menu]' );
-        if( ! item ) return;
-
-        closeTopMenu();
-        document.getElementById( item.dataset.menu ).click();
-    } );
-
-    document.addEventListener( 'click', function( e )
-    {
-        if( ! menu.contains( e.target ) && ! btn.contains( e.target ) ) closeTopMenu();
-    } );
-}
 
 // The "?" is the SAME button in both layouts — on a phone it moves into the
 // header, because the row it normally sits in folds away. A second copy would
@@ -321,17 +163,25 @@ function applyPhoneChrome()
     // Never in the header in MENU mode, on a phone or not: the Ayuda menu is
     // right there, and one "?" in two places at once is one too many.
     NayiveOffice.placeHelpButton( PHONE.matches && ! CHROME.on(), 'topActions', 'writeTools', null, 'savedAt' );
-    closeTopMenu();
+    if( fileMenu ) fileMenu.close();
+    if( helpMenu ) helpMenu.close();
+    closeGroupPopups();
     setMoreTools( false );
     if( ! PHONE.matches ) setToolbarOpen( true );
 }
-let ready         = false;   // SuperDoc mounted; edits after this are the user's
+let ready         = false;   // a document is on screen; edits after this are the user's
+
+// A load() fires one 'change' of its own (revision 0) before it returns - not an
+// edit. So ready is false across every load, and a change whose revision is not
+// past the one the document was loaded at is not an edit either.
+let loadedRevision = 0;
+let lastGood       = null;   // the bytes last put on screen: a failed open goes back to them
 
 // The open document - its path, whether it is someone else's, its name, the
 // top-bar label, New / Import / "Guardar como" / rename / Restore, start-up,
 // the header plug and the autosave - is the one Calc and Text use
 // (shared/office.js, THE OPEN DOCUMENT). Write only says how a .docx gets into
-// and out of SuperDoc, and that its files are always .docx.
+// and out of the engine, and that its files are always .docx.
 const session = NayiveOffice.session( {
     app        : 'write',
     store      : store,
@@ -347,17 +197,14 @@ const session = NayiveOffice.session( {
     onPick     : function( path ) { openPickedFile( path ); },   // a foreign format is converted first
     emptyKey   : 'write.noDocs',
     ready      : function() { return ready; },
-    focus      : function() { try { sd && sd.focus(); } catch( _ ) {} }   // the caret stays where it was
+    focus      : function() { focusEditor(); }                        // the caret stays where it was
 } );
 
-// Page setup for this session. A new blank document is created with these
-// margins; the dialog also pre-fills from here. SuperDoc's browser build can't
-// read a section back (its query API is Node-only), so we just remember.
+// Nayive's page setup for a NEW document (centimetres). An opened document
+// keeps its own; the dialog reads the document itself (getPageSetup).
 let pageSetup = { size: 'A4', orientation: 'portrait', top: 2, bottom: 1.6, left: 2, right: 1.6 };
 
-let applyingDefaults = false;   // true while boot() pushes the default page setup onto a new doc
-
-// Spell-check languages. Persisted; the provider reads this live.
+// Spell-check languages. Persisted; the spell check reads this live (plan Phase 4).
 const PROOF_LANG_KEY = 'nayive-write-prooflang';
 let proofLangs = readProofLangs();
 
@@ -398,40 +245,30 @@ NayiveI18n.ready.then( function()
     NayiveUI.bootWithStore( store, boot );
 });
 
-// bootWithStore hands us whoever /api/whoami reported. SuperDoc needs it AT
-// CONSTRUCTION: its engine refuses authored edits (comments, tracked changes)
-// with "set user.name ... and reopen the document" when it is missing, and
-// setting it afterwards does not count.
-let whoAmI = null;
-
 async function boot( who )
 {
-    whoAmI = who;
-
-    loadPersonalWords();          // best effort; the provider reads it live
+    loadPersonalWords();          // best effort; the spell check reads it live
 
     // Toolbar or pull-down menus, from the account. Awaited here, before
-    // anything is drawn into #toolbar, so a correction cannot flash.
+    // anything is drawn, so a correction cannot flash.
     await CHROME.sync();
 
-    // ?file= / ?import= / the untitled document kept on this device - or a
-    // blank one (shared/office.js). SuperDoc is not up yet, so loadBody() only
-    // puts the file aside for initEditor below.
+    // The engine first, empty: every way a document arrives - ?file=, ?import=,
+    // the untitled one kept on this device, a blank one - goes through load()
+    // from here on, and a file that cannot be opened is refused the same way
+    // whichever it was (loadBody throws; the session says so).
+    initEditor( who );
+
     await session.boot();
 
-    await initEditor( bootSource || BlankDOCX );
-
-    // A brand-new document opens with Nayive's default page setup. Opened /
-    // imported files keep their own.
-    if( ! bootSource && ready ) await applyDefaultPageSetup();
+    document.getElementById( 'editor' ).classList.add( 'is-ready' );
+    focusEditor();
 }
 
 function wireStaticUI()
 {
     // New, Import, "Guardar como" and Restore are wired by the session (shared/office.js).
     document.getElementById( 'printBtn'         ).addEventListener( 'click', function() { printDocument( false ); } );
-    document.getElementById( 'commentsBtn'      ).addEventListener( 'click', toggleComments );
-    document.getElementById( 'commentsCloseBtn' ).addEventListener( 'click', function() { setComments( false ); } );
     document.getElementById( 'tplBtn'           ).addEventListener( 'click', openTemplates );
     document.getElementById( 'tplCloseBtn'      ).addEventListener( 'click', function() { setBackdrop( 'tplBackdrop', false ); } );
     document.getElementById( 'tplChangeBtn'     ).addEventListener( 'click', changeTemplatesDir );
@@ -440,12 +277,13 @@ function wireStaticUI()
     document.getElementById( 'paraConfirmBtn'   ).addEventListener( 'click', confirmParagraph );
 
     // Any change in the dialog marks its GROUP, so Apply only touches what the
-    // user actually looked at (there is no way to read the current values back).
+    // user actually changed (see PARRAFO).
     for( const g in PARA_GROUPS )
         for( const id of PARA_GROUPS[ g ] )
             document.getElementById( id ).addEventListener( 'change', function( e )
             {
                 markParagraphTouched( e.target.id );
+                if( e.target.id === 'paListLevel' ) showListFormat();
                 syncParagraphRows();
             } );
 
@@ -454,67 +292,16 @@ function wireStaticUI()
     document.getElementById( 'scBtn'            ).addEventListener( 'click', openShortcuts );
     document.getElementById( 'scCloseBtn'       ).addEventListener( 'click', function() { setBackdrop( 'scBackdrop', false ); } );
     document.getElementById( 'pdfBtn'           ).addEventListener( 'click', function() { printDocument( true ); } );
-    window.addEventListener( 'afterprint', restoreZoom );
     document.getElementById( 'saveAsCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'saveAsBackdrop', false ); } );
     document.getElementById( 'pageSetupBtn'        ).addEventListener( 'click', openPageSetup );
     document.getElementById( 'headerBtn'           ).addEventListener( 'click', function() { toggleHeaderFooter( 'header' ); } );
     document.getElementById( 'footerBtn'           ).addEventListener( 'click', function() { toggleHeaderFooter( 'footer' ); } );
-    document.getElementById( 'pageNumBtn'          ).addEventListener( 'click', insertPageNumber );
-
-    // Leaving the header/footer overlay can happen by clicking in the body, not
-    // only through these buttons — so follow the editor, not just our handlers.
-    new MutationObserver( function()
-    {
-        updatePageNumBtn();
-        if( ! hfExitButton() ) hfOpenKind = null;
-    } ).observe( document.getElementById( 'editor' ), { childList: true, subtree: true } );
-
-    // SuperDoc's find bar is a Vue render, rebuilt on every open inside a
-    // .sd-surface-host it adds to <body> the first time. Its ‹ › × are local
-    // look-alikes (28px rounded squares), so each mount swaps them for the shared
-    // .icon-btn.sm - the chevrons are Calendar's pager glyphs, the × the shared
-    // one. Vue only ever patches their disabled / title / aria-label, so the new
-    // class and icons stay put.
-    const surfaceHosts = new WeakSet();
-    function chevron( points )
-    {
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-               '<polyline points="' + points + '"></polyline></svg>';
-    }
-    const FIND_NAV_ICONS = [ chevron( '15 18 9 12 15 6' ), chevron( '9 18 15 12 9 6' ), NayiveUI.icon( 'x' ) ];   // prev, next, close
-    function standardFindNav()
-    {
-        // The chevron before the field (show / hide Replace) too. ITS class is
-        // bound to the open state, so Vue writes it back on every toggle - the
-        // host observer watches class, and this puts .icon-btn.sm back each
-        // time. The open state still shows through aria-expanded (index.html).
-        const x = document.querySelector( '.sd-find-replace__btn--expander' );
-        if( x )
-        {
-            x.className = 'icon-btn sm';
-            if( ! x.querySelector( 'polyline' ) ) x.innerHTML = chevron( '9 18 15 12 9 6' );
-        }
-
-        const nav = document.querySelector( '.sd-find-replace__nav:not(.sd-find-replace__nav--actions)' );
-        if( ! nav || nav.querySelector( '.icon-btn' ) ) return;
-
-        nav.querySelectorAll( ':scope > button' ).forEach( function( b, i )
-        {
-            if( ! FIND_NAV_ICONS[ i ] ) return;
-
-            b.className = 'icon-btn sm';
-            b.innerHTML = FIND_NAV_ICONS[ i ];
-        } );
-    }
-    new MutationObserver( function()
-    {
-        const host = document.querySelector( 'body > .sd-surface-host' );
-        if( ! host || surfaceHosts.has( host ) ) return;
-
-        surfaceHosts.add( host );
-        new MutationObserver( standardFindNav ).observe( host, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'class' ] } );
-        standardFindNav();
-    } ).observe( document.body, { childList: true } );
+    document.getElementById( 'pageNumBtn'          ).addEventListener( 'click', function() { runSlot( 'insert.pageNumber' ); } );
+    document.getElementById( 'symbolsBtn'          ).addEventListener( 'click', openSymbols );
+    document.getElementById( 'linkBtn'             ).addEventListener( 'click', openLinkDialog );
+    document.getElementById( 'imageBtn'            ).addEventListener( 'click', pickImage );
+    document.getElementById( 'tableBordersBtn'     ).addEventListener( 'click', openTableBorders );
+    document.getElementById( 'findBtn'             ).addEventListener( 'click', function() { openFind( false ); } );
 
     wireTableBorders();
     restoreTbStyle();
@@ -526,9 +313,23 @@ function wireStaticUI()
     document.getElementById( 'pageSetupConfirmBtn' ).addEventListener( 'click', confirmPageSetup );
     document.getElementById( 'psSize'              ).addEventListener( 'change', syncPageSizeRows );
 
+    // ---- the header menu and the group cards ----
+    fileMenu = NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
+                                        ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
+
+    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds.
+    // setHelpMenu tells shared/ui.js to leave the click to this menu instead of
+    // opening the guide card itself (the card is the third entry).
+    document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
+    helpMenu = NayiveOffice.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: HELP_IDS } );
+    NayiveUI.setHelpMenu( true );
+    groups =
+    [
+        NayiveOffice.groupPopup( { btn: 'wrOutputBtn', popup: 'outputPopup' } ),
+        NayiveOffice.groupPopup( { btn: 'wrPageBtn',   popup: 'pagePopup'   } )
+    ];
+
     // ---- phone chrome (see PHONE CHROME above) ----
-    buildTopMenu();
-    wireTopMenu();
     applyPhoneChrome();
     applyKeyHints();
     PHONE.addEventListener( 'change', applyPhoneChrome );
@@ -543,19 +344,68 @@ function wireStaticUI()
     CHROME.wire();
     CHROME.apply();
 
+    // ---- the formatting strip (toolbar.js) ----
+    toolbar = createToolbar(
+    {
+        states   : function( slots ) { return editor ? toolbarCommandStates( editor, slots ) : null; },
+        run      : runSlot,
+        painter  : togglePainter,
+        blocked  : slotBlocked,
+        menus    : MENUBAR,
+        dropdowns: TOOLBAR_DROPDOWNS,
+        fonts    : MENU_FONTS,
+        sizes    : MENU_SIZES,
+        after    : paintOwnButtons
+    } );
+
+    // ---- the spell check (proofing-overlay.js) ----
+    spell = createSpellOverlay(
+    {
+        editor    : function() { return editor; },
+        check     : function( segments ) { return spellProvider.check( { segments: segments } ).then( function( r ) { return r.issues; } ); },
+        suggest   : suggestionsFor,
+        langs     : function() { return proofLangs; },
+        isPersonal: isPersonalWord,
+        addWord   : addPersonalWord,
+        replace   : replaceMatch
+    } );
+
+    // ---- the right-click menu: spelling first, then the clipboard ----
+    document.getElementById( 'editor' ).addEventListener( 'contextmenu', onContextMenu, true );
+
+    // Tab in a table: the next cell, as in Word (see TABLE CELLS).
+    document.getElementById( 'editor' ).addEventListener( 'keydown', onTableTab, true );
+
+    // Ctrl+V is the engine's; only where the caret ends up is ours (caretAfterPaste).
+    document.getElementById( 'editor' ).addEventListener( 'paste', function( e )
+    {
+        const dt = e.clipboardData;
+        if( ready && dt && [ ...dt.types ].indexOf( 'text/html' ) >= 0 ) caretAfterPaste( dt.getData( 'text/plain' ) );
+    }, true );
+
+    // Autocorreccion, when it is on: the typed character passes through Write
+    // first (see AUTOCORRECCION). Capture, above the engine's own listeners.
+    document.getElementById( 'editor' ).addEventListener( 'beforeinput', onBeforeInput, true );
+
+    // ---- the find / replace bar (find.js) ----
+    find = createFindBar(
+    {
+        editor: function() { return editor; },
+        ready : function() { return ready; },
+        focus : focusEditor
+    } );
+
     document.getElementById( 'imgInput'      ).addEventListener( 'change', function( e ) { insertPickedImage( e.target.files[0] ); e.target.value = ''; } );
     document.getElementById( 'linkCancelBtn' ).addEventListener( 'click', function() { setBackdrop( 'linkBackdrop', false ); } );
     document.getElementById( 'linkConfirmBtn' ).addEventListener( 'click', confirmLink );
     document.getElementById( 'linkHref'      ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmLink(); } );
 
-    document.getElementById( 'fitBtn'       ).addEventListener( 'click', togglePhoneFit );
-    syncPhoneFitBtn();
     // Tapping into the document folds the row away — the keyboard is about to
     // take half the screen. Only a tap INSIDE #editor: a toolbar button also
     // puts focus back in the text, and must not fold the row under your finger.
-    // Capture phase, so SuperDoc cannot swallow it first. isTrusted keeps
-    // placeInitialCaret()'s synthetic tap from folding the row on load — the
-    // bar has to be seen once before it can hide.
+    // Capture phase, so the engine cannot swallow it first. isTrusted keeps a
+    // synthetic tap from folding the row - the bar has to be seen once before
+    // it can hide.
     document.getElementById( 'editor' ).addEventListener( 'pointerdown', function( e )
     {
         if( e.isTrusted && PHONE.matches && toolbarOpen() ) setToolbarOpen( false );
@@ -569,12 +419,14 @@ function wireStaticUI()
     {
         if( e.key === 'Escape' )
         {
-            if( ! document.getElementById( 'topMenu' ).hidden ) { closeTopMenu(); return; }
+            if( fileMenu && fileMenu.isOpen() ) { fileMenu.close(); return; }
             if( document.getElementById( 'tbPopup'  ).classList.contains( 'open' ) ) { closeTbPopup();  return; }
             if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { closeSymPopup(); return; }
 
             const open = document.querySelector( '.sheet-backdrop.open' );
-            if( open ) setBackdrop( open.id, false );
+            if( open ) { setBackdrop( open.id, false ); return; }
+
+            if( find && find.isOpen() ) { find.close(); return; }
         }
     });
 }
@@ -584,212 +436,130 @@ function setBackdrop( id, open ) { NayiveUI.setOpen( id, open ); }   // impl in 
 //----------------------------------------------------------------------------//
 // EDITOR
 
-function initEditor( source )
+function initEditor( who )
 {
-    return new Promise( function( resolve )
+    editor = createDocxEditor(
     {
-        // SuperDoc's mount can silently never fire onReady (bad bundle, worker
-        // 404, unsupported browser). Don't let boot() hang forever on it.
-        let settled  = false;
-        const finish = function() { if( ! settled ) { settled = true; clearTimeout( watchdog ); resolve(); } };
+        container: document.getElementById( 'editorHost' ),
 
-        const watchdog = setTimeout( function()
-        {
-            if( ! ready ) NayiveUI.toast( NayiveUI.t( 'write.editorSlow' ) );
-            document.getElementById( 'editor' ).classList.add( 'is-ready' );   // never leave the overlay up
-            finish();
-        }, 30000 );
+        // On demand: only the families a document names are fetched (Calibri ->
+        // Carlito, Times New Roman -> Liberation Serif ...), from the vendored
+        // fonts_v<ver>/ folder. They are NOT in the offline precache (his call,
+        // 2026-09-18): offline, a document whose fonts were never fetched lays
+        // out on the engine's estimate until the connection is back.
+        fonts    : packagedFonts(),
 
-        sd = new SuperDoc(
-        {
-            selector     : '#editor',
-            documentMode : 'editing',
-            document     : source,
+        locale   : NayiveUI.locale(),
+        author   : ( who && ( who.user || who.name ) ) || NayiveUI.t( 'write.meAuthor' ),
+        mode     : 'edit'
+    } );
 
-            // Without a name the engine writes comments as "Default SuperDoc
-            // user"; with one they carry the person who wrote them.
-            user         : { id   : ( whoAmI && ( whoAmI.user || whoAmI.id ) ) || null,
-                             name : ( whoAmI && ( whoAmI.user || whoAmI.name ) ) || NayiveUI.t( 'write.meAuthor' ),
-                             email: ( whoAmI && whoAmI.email ) || null },
-            measurementUnit : 'cm',   // ruler / page-setup / margin inputs in cm, not inches
+    editor.on( 'change', onChange );
+    editor.on( 'selectionChange', refreshToolbar );
+    editor.on( 'error', function( e ) { console.error( 'Write: engine', e ); } );
 
-            // Contained mode: SuperDoc lives in our fixed-height #editor box and
-            // runs its OWN scroll container inside it (centres the page, shows a
-            // vertical scrollbar, keeps the caret hit-testing aligned). Without
-            // it SuperDoc assumes the whole page scrolls and the paper sticks to
-            // the top-left with no scrollbar.
-            contained    : true,
+    // A click on a link shows what it points at (and open / edit / remove);
+    // Ctrl+K asks for one. The engine draws the link, Write the sheet and menu.
+    editor.setHyperlinkChrome( { onPopover: showLinkMenu, onRequest: openLinkDialog } );
 
-            // ui.search: off by default — turn it on so the toolbar find button
-            // (and Ctrl+F) work. 'ai' phones home. The two tracked-change buttons
-            // used to be excluded as dead weight, which left "Sugerir" mode in
-            // Settings with no way to FINISH a review; they are built now and CSS
-            // hides them unless the mode is actually 'suggesting' (excludeItems is
-            // read once at construction, so hiding is the only runtime lever).
-            // 'ruler' / 'measurementUnit' / 'documentMode' are pulled out of the
-            // toolbar into the app's own Settings dialog (the gear button) —
-            // driven there via sd.toggleRuler() / sd.setMeasurementUnit() /
-            // sd.setDocumentMode().
-            // overflow:'wrap' + responsiveTo:'container' — the toolbar reflows
-            // onto more lines as it narrows instead of hiding items in a menu.
-            // Its own 'overflow' (⋮) button stays excluded: it can only cut the
-            // TAIL of SuperDoc's fixed item order (the sole item it will pin is
-            // hard-coded, `te = ["search"]`), so it would bury common things
-            // like the alignment or the lists just for being late in that order.
-            // The phone's one-row split is done in index.html instead, by name
-            // — see PHONE CHROME below.
-            ui           : { // SuperDoc's own "Opening document..." overlay is permanently
-                             // English (its normalizer drops any texts we pass), so it is
-                             // off and index.html's #editorLoading stands in.
-                             loading: false,
-                             search: { strings: textsFrom( FIND_TEXT_KEYS, 'write.find.' ) },
-                             contextMenu : { menuProvider: function( ctx, sections )
-                                             {
-                                                 fillSuggestions( misspelledWordAt( ctx, sections ), sections );
-                                                 addDictionaryItem( ctx, sections );
-                                                 return localizeMenu( sections );
-                                             } },
-                             toolbar: { container    : '#toolbar',
-                                        texts        : textsFrom( TB_TEXT_KEYS, 'write.tb.' ),
-                                        overflow     : 'wrap',
-                                        responsiveTo : 'container',
-                                        excludeItems : [ 'ai', 'overflow',
-                                                         'ruler', 'measurementUnit', 'documentMode' ],
-                                        // A "table borders" button SuperDoc lacks. It renders at the
-                                        // toolbar end; index.html CSS `order`s it next to table options.
-                                        // Every item needs an explicit `attributes.ariaLabel`: SuperDoc
-                                        // otherwise derives one from the (absent) `label` and a screen
-                                        // reader is read "undefined" plus whatever text the icon holds.
-                                        // Buttons SuperDoc has commands for but builds no item for.
-                                        // Their position in the row is CSS `order` (index.html) —
-                                        // custom items always render at the end otherwise.
-                                        customItems  : [ { id: 'tableBorders', type: 'button', tooltip: NayiveUI.t( 'write.tableBorders' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.tableBorders' ) },
-                                                           icon: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" stroke-width="2.2"></rect><line x1="3.5" y1="12" x2="20.5" y2="12" stroke-width="1.3"></line><line x1="12" y1="3.5" x2="12" y2="20.5" stroke-width="1.3"></line></svg>',
-                                                           command: function() { openTableBorders(); } },
-
-                                                         { id: 'superScript', type: 'button', tooltip: NayiveUI.t( 'write.superscript' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.superscript' ) },
-                                                           icon: '<svg viewBox="0 0 24 24"><text x="0.5" y="21" font-size="24" font-weight="600" font-family="serif" fill="currentColor">x</text><text x="13.5" y="11" font-size="14" font-weight="600" font-family="serif" fill="currentColor">2</text></svg>',
-                                                           command: function() { setVertAlign( 'superscript' ); } },
-
-                                                         { id: 'subScript', type: 'button', tooltip: NayiveUI.t( 'write.subscript' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.subscript' ) },
-                                                           icon: '<svg viewBox="0 0 24 24"><text x="0.5" y="17" font-size="24" font-weight="600" font-family="serif" fill="currentColor">x</text><text x="13.5" y="23" font-size="14" font-weight="600" font-family="serif" fill="currentColor">2</text></svg>',
-                                                           command: function() { setVertAlign( 'subscript' ); } },
-
-                                                         { id: 'pageBreak', type: 'button', tooltip: NayiveUI.t( 'write.pageBreak' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.pageBreak' ) },
-                                                           icon: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v3"></path><path d="M19 14v7H6a1 1 0 0 1-1-1v-6"></path><line x1="2.5" y1="12" x2="21.5" y2="12" stroke-dasharray="3 2.5"></line></svg>',
-                                                           command: function() { insertPageBreak(); } },
-
-                                                         { id: 'footNote', type: 'button', tooltip: NayiveUI.t( 'write.footnote' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.footnote' ) },
-                                                           icon: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3.5" y1="5" x2="14" y2="5"></line><line x1="3.5" y1="9.5" x2="11" y2="9.5"></line><line x1="3.5" y1="18" x2="12" y2="18"></line><line x1="3.5" y1="21" x2="9" y2="21"></line><line x1="3.5" y1="13.8" x2="9" y2="13.8" stroke-width="1.4"></line><text x="15" y="10" font-size="9" font-family="serif" fill="currentColor" stroke="none">1</text></svg>',
-                                                           command: function() { insertFootnote(); } },
-
-                                                         { id: 'insertToc', type: 'button', tooltip: NayiveUI.t( 'write.toc' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.toc' ) },
-                                                           icon: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="6" y2="6"></line><line x1="9" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="6" y2="12"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="6" y2="18"></line><line x1="9" y1="18" x2="21" y2="18"></line></svg>',
-                                                           command: function() { runSdCommand( 'table-of-contents-insert' ); } },
-
-                                                         { id: 'symbols', type: 'button', tooltip: NayiveUI.t( 'write.symbols' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.symbols' ) },
-                                                           icon: '<svg viewBox="0 0 24 24"><text x="12" y="21" font-size="26" font-weight="600" font-family="serif" text-anchor="middle" fill="currentColor">Ω</text></svg>',
-                                                           command: function() { openSymbols(); } },
-
-                                                         { id: 'showMarks', type: 'button', tooltip: NayiveUI.t( 'write.formattingMarks' ),
-                                                           attributes: { ariaLabel: NayiveUI.t( 'write.formattingMarks' ) },
-                                                           icon: '<svg viewBox="0 0 24 24"><text x="12" y="21.5" font-size="27" font-weight="600" font-family="serif" text-anchor="middle" fill="currentColor">\u00b6</text></svg>',
-                                                           command: function() { runSdCommand( 'formatting-marks' ); } } ] } },
-
-            handleImageUpload : fileToDataUrl,   // keep images inline so the doc stays self-contained / offline-safe
-            proofing     :
-            {
-                enabled        : true,
-                provider       : makeSpellProvider( () => proofLangs ),
-                defaultLanguage : proofLangs[0] || 'es',
-                debounceMs      : 600
-            },
-
-            onReady        : function()
-            {
-                ready = true; window.superdoc = sd;   // window.superdoc: handy for the browser console
-                document.getElementById( 'editor' ).classList.add( 'is-ready' );
-                applyModeChrome( sd.config && sd.config.documentMode );
-                wireAutocorrect();
-                sd.on( 'document-mode-change', function( p ) { applyModeChrome( ( p && p.documentMode ) || ( sd.config && sd.config.documentMode ) ); } );
-                finish(); focusEditor(); fitPhoneZoom();
-            },
-            onEditorUpdate : onEdit,
-            onPaginationUpdate : function( p ) { if( p && p.totalPages ) pageTotal = p.totalPages; },
-            onContentError : function( p ) { console.error( 'Write: content error', p && p.error ); NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); },
-            onException    : function( p )
-            {
-                console.error( 'Write: exception', p );
-                if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.editorStartFailed' ) ); finish(); }
-            }
-        });
-    });
+    window.__write = editor;   // handy for the browser console, and for the checks
+    window.__spell = spell;
 }
 
-// Swap the open document without tearing down the editor (stable identity).
-async function loadIntoEditor( file )
+// Resolves once the document just handed to load() is on screen: parsed, laid
+// out, at least one page. Throws when the engine refused it. The fonts may
+// still be arriving - the page is shown on the engine's estimate and
+// re-paginates by itself when they land, which beats a blank wait.
+function whenOpen()
+{
+    const t0 = Date.now();
+
+    return new Promise( function( resolve, reject )
+    {
+        ( function poll()
+        {
+            const s = editor.snapshot();
+
+            if( s.parseError ) { reject( new Error( s.parseError ) ); return; }
+            if( ! s.isLoading && ! s.isOpening && s.page.total > 0 ) { resolve(); return; }
+
+            if( Date.now() - t0 > OPEN_SLOW_MS )
+            {
+                NayiveUI.toast( NayiveUI.t( 'write.editorSlow' ) );
+                resolve();
+                return;
+            }
+            setTimeout( poll, 30 );
+        } )();
+    } );
+}
+
+const OPEN_SLOW_MS = 30000;
+
+// The .docx changes the engine has no command for (docx-patch.js).
+const patcher = createPatcher( { unzipSync: unzipSync, zipSync: zipSync, strFromU8: strFromU8,
+                                 strToU8: strToU8, blank: blankDocumentBytes } );
+
+// Word's Heading 1-3 added to a file that lacks them, the way Word does when
+// one is used (docx-patch.js). If anything about that goes wrong, the file goes
+// on screen as it came - the headings are then simply greyed.
+function withHeadings( bytes )
+{
+    try { return patcher.withHeadingStyles( bytes ); }
+    catch( e ) { console.error( 'Write: heading styles -', e ); return bytes; }
+}
+
+// Put .docx bytes on screen. A file the engine refuses throws - and the
+// document that was there before goes back on screen first, so the session
+// (which keeps the old path when an open fails) and the page still agree.
+async function loadIntoEditor( bytes )
 {
     ready = false;
+    bytes = withHeadings( bytes );
 
     try
     {
-        await sd.replaceFile( file );
+        editor.load( bytes );
+        await whenOpen();
+        lastGood = bytes;
+    }
+    catch( e )
+    {
+        console.error( 'Write: the engine refused the document -', e.message );
+
+        if( lastGood )
+        {
+            editor.load( lastGood );
+            await whenOpen().catch( function() {} );
+        }
+        throw e;
     }
     finally
     {
+        loadedRevision = editor.getDocumentHandle().revision;
         ready = true;
-        focusEditor();
+        refreshToolbar();
+        if( spell ) spell.reset();       // another document: nothing it knew applies
     }
+
+    focusEditor();
 }
 
-// Put the caret in the page so the user can type straight away, after the
-// initial mount and after every document swap. sd.focus() only focuses the
-// hidden input — the document itself still has no caret until it's clicked,
-// so we synthesise that first click near the top of the first page.
+// Give the editor the focus back after an action that took it (a menu, a
+// dialog, a toolbar button). A freshly loaded document already has its caret at
+// the start, so there is nothing to synthesise.
 function focusEditor()
 {
-    setTimeout( function()
-    {
-        try { sd && sd.focus(); } catch( _ ) {}
-        placeInitialCaret();
-    }, 30 );
+    try { editor && editor.focus(); } catch( _ ) {}
 }
 
-function placeInitialCaret()
+function onChange( change )
 {
-    try
-    {
-        const page = document.querySelector( '#editor .superdoc-page' );
-        if( ! page ) return;
+    refreshToolbar();
+    if( spell ) spell.changed();
 
-        const box = page.getBoundingClientRect();
-        const cx  = box.left + 100;                 // ~1st line, inside the page margin
-        const cy  = box.top  + 100;
-        const el  = document.elementFromPoint( cx, cy );
-        if( ! el || ! page.contains( el ) ) return;
-
-        const base = { bubbles: true, cancelable: true, composed: true, view: window,
-                       clientX: cx, clientY: cy, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true };
-
-        el.dispatchEvent( new PointerEvent( 'pointerdown', { ...base, buttons: 1 } ) );
-        el.dispatchEvent( new MouseEvent(   'mousedown',   { ...base, buttons: 1 } ) );
-        el.dispatchEvent( new PointerEvent( 'pointerup',   { ...base, buttons: 0 } ) );
-        el.dispatchEvent( new MouseEvent(   'mouseup',     { ...base, buttons: 0 } ) );
-        el.dispatchEvent( new MouseEvent(   'click',       { ...base, buttons: 0 } ) );
-    }
-    catch( _ ) {}
-}
-
-function onEdit()
-{
-    if( ! ready || applyingDefaults ) return;
+    if( ! ready ) return;
+    if( Q.loadFiresChange && change && typeof change.revision === 'number' && change.revision <= loadedRevision ) return;
 
     session.edited();
 }
@@ -797,272 +567,67 @@ function onEdit()
 //----------------------------------------------------------------------------//
 // SETTINGS  (gear button)
 //
-// Four controls that used to live in the toolbar: SuperDoc's own document-mode /
-// ruler / measurement-unit widgets (removed via excludeItems) plus the app's
-// proofing-language <select>. SuperDoc holds the live state, so the dialog reads
-// it back each time it opens and only pushes the deltas on "Aplicar":
-//   sd.config.documentMode     'editing' | 'suggesting' | 'viewing'
-//   sd.config.rulers           bool  (sd.toggleRuler() flips it)
-//   sd.getMeasurementUnit()    'cm' | 'in'
-// The language change still goes through changeProofLangs() (which reloads the
-// document so the whole text is re-checked) — run last, as it rebuilds the editor.
+// Editing or read-only, the proofing languages and autocorrect. The engine
+// holds the mode, so the dialog reads it back each time it opens and only
+// pushes what changed on "Aplicar". (Suggesting, the ruler and the unit are
+// gone with the old engine - his decision, 2026-09-18.)
 
-const DOC_MODES = [ 'editing', 'suggesting', 'viewing' ];
-
-function currentMeasurementUnit()
+function docMode()
 {
-    try { return sd && sd.getMeasurementUnit() === 'in' ? 'in' : 'cm'; }
-    catch( _ ) { return 'cm'; }
+    try { return editor && editor.getEditingMode() === 'viewing' ? 'viewing' : 'editing'; }
+    catch( _ ) { return 'editing'; }
+}
+
+function setDocMode( mode )
+{
+    if( ! editor || docMode() === mode ) return;
+
+    const r = editor.setEditingMode( mode === 'viewing' ? 'viewing' : 'editing' );
+    if( r && r.ok === false ) console.error( 'Write: editing mode -', r.reason );
+    refreshToolbar();          // read-only greys the buttons at once, not at the next caret move
 }
 
 function openSettings()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    const mode = ( sd && sd.config && sd.config.documentMode ) || 'editing';
-    document.getElementById( 'setMode'   ).value   = DOC_MODES.indexOf( mode ) >= 0 ? mode : 'editing';
-    document.getElementById( 'setUnit'   ).value   = currentMeasurementUnit();
-    document.getElementById( 'setRuler'  ).checked = !! ( sd && sd.config && sd.config.rulers );
+    document.getElementById( 'setMode' ).value = docMode();
     renderProofLangs();
     document.getElementById( 'setAutocorrect' ).checked = autocorrectOn;
 
     setBackdrop( 'settingsBackdrop', true );
 }
 
-async function confirmSettings()
+function confirmSettings()
 {
-    const mode  = document.getElementById( 'setMode'  ).value;
-    const unit  = document.getElementById( 'setUnit'  ).value === 'in' ? 'in' : 'cm';
-    const ruler = document.getElementById( 'setRuler' ).checked;
-    const lang  = [ ...document.querySelectorAll( '#proofLangs input:checked' ) ]
-                      .map( function( i ) { return i.value; } ).join( ',' );
+    const lang = [ ...document.querySelectorAll( '#proofLangs input:checked' ) ]
+                     .map( function( i ) { return i.value; } ).join( ',' );
 
     setBackdrop( 'settingsBackdrop', false );
 
-    try
-    {
-        if( DOC_MODES.indexOf( mode ) >= 0 && sd.config && sd.config.documentMode !== mode )
-            sd.setDocumentMode( mode );
-    }
-    catch( e ) { console.error( 'Write: document mode', e ); }
-
-    try
-    {
-        if( currentMeasurementUnit() !== unit ) sd.setMeasurementUnit( unit );
-    }
-    catch( e ) { console.error( 'Write: measurement unit', e ); }
-
-    try
-    {
-        if( !! ( sd.config && sd.config.rulers ) !== ruler ) sd.toggleRuler();
-    }
-    catch( e ) { console.error( 'Write: ruler', e ); }
-
+    setDocMode( document.getElementById( 'setMode' ).value );
     setAutocorrect( document.getElementById( 'setAutocorrect' ).checked );
 
-    if( lang !== proofLangs.join( ',' ) ) await changeProofLangs( lang );
+    if( lang !== proofLangs.join( ',' ) ) changeProofLangs( lang );
+    focusEditor();
 }
 
 //----------------------------------------------------------------------------//
 // PROOFING LANGUAGE
 //
-// The provider reads `proofLangs` live, but SuperDoc only re-checks text that
-// changes — so switching language re-runs the whole document by reloading its
-// own bytes (a byte-identical round-trip; see BUILD.md fidelity notes).
+// The spell check (proofing-overlay.js over proofing.js) reads `proofLangs`
+// live; a change throws away what it had checked, so the page is read again in
+// the new languages. No language at all = no red lines.
 
-async function changeProofLangs( raw )
+const spellProvider = makeSpellProvider( function() { return proofLangs; } );
+let   spell         = null;     // proofing-overlay.js, made in wireStaticUI
+
+function changeProofLangs( raw )
 {
     proofLangs = raw ? raw.split( ',' ) : [];
 
     try { localStorage.setItem( PROOF_LANG_KEY, proofLangs.join( ',' ) ); } catch( _ ) {}
-
-    if( ! ready ) return;
-
-    await session.flush();      // land any waiting autosave before we tear the doc down and reload it
-
-    try
-    {
-        const bytes = await exportBytes();
-        await loadIntoEditor( new File( [ bytes ], baseName( session.path() || session.name() || 'documento.docx' ), { type: DOCX_MIME } ) );
-    }
-    catch( _ ) { /* leave the editor as is; the new language applies on the next edit */ }
-}
-
-//----------------------------------------------------------------------------//
-// HEADER / FOOTER
-//
-// SuperDoc has full native header/footer editing (type in the top/bottom page
-// margin, "Options ▾" for different-first-page / odd-even / distances) — you
-// just enter it by double-clicking the margin, which is not discoverable. This
-// button synthesises that double-click on the first page's header band, and
-// clicks the overlay's own "×" to leave again. (Automatic page-number FIELDS
-// can't be inserted yet — SuperDoc's browser build has no working selection API
-// for doc.fields.insert — so header/footer text is manual for now.)
-
-// Are we inside the header/footer overlay right now?
-function hfExitButton() { return document.querySelector( '#editor [data-sd-hf-exit]' ); }
-
-let hfOpenKind = null;   // which band the overlay is showing, or null
-
-// `kind` is 'header' or 'footer'. Clicking the button for the band you are
-// already in leaves it; clicking the other one leaves and enters that one.
-function toggleHeaderFooter( kind )
-{
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
-
-    const exit = hfExitButton();
-
-    if( exit )
-    {
-        const was = hfOpenKind;
-        exit.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true, cancelable: true } ) );
-        hfOpenKind = null;
-        focusEditor();
-
-        if( was === kind ) return;                                    // that was a "leave"
-        setTimeout( function() { enterHeaderFooter( kind ); }, 300 );  // swap bands
-        return;
-    }
-
-    enterHeaderFooter( kind );
-}
-
-async function enterHeaderFooter( kind )
-{
-    try
-    {
-        // Ask SuperDoc whether the band is really there before faking a click at
-        // it: it answers { status: 'ready' | 'unavailable' | 'pending' }, so a
-        // page that cannot take one fails with a message instead of a dead click.
-        const t = sd.activeEditor.host.resolveHeaderFooterEditTarget( { pageIndex: 0, kind: kind } );
-        if( ! t || t.status !== 'ready' ) { NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) ); return; }
-
-        if( ! ( await dblClickBand( kind ) ) ) { NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) ); return; }
-
-        setTimeout( function()
-        {
-            if( hfExitButton() ) { hfOpenKind = kind; updatePageNumBtn(); }
-            else NayiveUI.toast( NayiveUI.t( 'write.dblClickMargin' ) );
-        }, 250 );
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) ); }
-}
-
-//----------------------------------------------------------------------------//
-// PAGE NUMBER
-//
-// A real Word field, not typed text, so it counts itself on every page.
-// A comment here used to say this was impossible ("no working selection API for
-// doc.fields.insert"). Half true: SuperDoc's own Mod+Shift+Alt+P route IS dead in
-// this build - its guard wants a synchronous selection and the browser adapter
-// forces async - but doc.fields.insert itself works, given the caret.
-//
-// The caret has to be IN a header or footer: a page number in the body would
-// simply print once, wherever it landed.
-
-async function insertPageNumber()
-{
-    if( ! ready || ! sd ) return;
-
-    try
-    {
-        const doc = sd.activeEditor.doc;
-
-        // Gate on where the CARET is, not on the overlay's close button: that
-        // button is briefly detached whenever SuperDoc re-renders the band, so a
-        // click landing in that window would be refused for no visible reason.
-        // The story is what fields.insert actually needs anyway.
-        let sel = await doc.selection.current( { includeText: false } );
-
-        // Entering the band opens the overlay but does not always leave a caret
-        // in it: the first double-click is what switches SuperDoc into
-        // header/footer editing, and the band only becomes clickable text once
-        // that has re-rendered. A second click, now that it has, lands properly.
-        if( ! inHeaderFooterStory( sel ) )
-        {
-            await dblClickBand( hfOpenKind || 'header' );
-            await new Promise( function( r ) { setTimeout( r, 700 ); } );
-            sel = await doc.selection.current( { includeText: false } );
-        }
-
-        if( ! inHeaderFooterStory( sel ) )
-        { NayiveUI.toast( NayiveUI.t( 'write.pageNumInHeader' ) ); return; }
-
-        await doc.fields.insert( { at: sel.target, instruction: 'PAGE', mode: 'raw' } );   // mode is required
-
-        // Deliberately NOT focusEditor(): that puts the caret back in the body,
-        // which throws you out of the header the moment you number it.
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-function inHeaderFooterStory( sel )
-{
-    const st = sel && sel.target && sel.target.story;
-    return !! st && st.storyType === 'headerFooterPart';
-}
-
-// The button only does anything inside a header or footer - grey it out
-// everywhere else rather than letting it toast.
-function updatePageNumBtn()
-{
-    const b = document.getElementById( 'pageNumBtn' );
-    if( b ) b.disabled = ! hfExitButton();
-}
-
-// The pointer dance that puts the caret in the header or footer band. A single
-// click does NOT do it - only the double-click SuperDoc listens for - so this is
-// shared by entering the band and by the page-number fallback.
-//
-// Where to aim used to be "3.5 % of the page height from the top", which only
-// happened to work on A4: the header box sits at the section's header margin
-// (half an inch by default), so on a shorter page 3.5 % lands ABOVE it, on bare
-// paper, and the double-click does nothing. Measure it properly instead - the
-// page's own height gives us pixels-per-inch, whatever the paper and the zoom.
-async function dblClickBand( kind )
-{
-    const page = document.querySelector( '#editor .superdoc-page' );
-    if( ! page ) return false;
-
-    page.scrollIntoView( { block: kind === 'footer' ? 'end' : 'start' } );
-    await new Promise( function( r ) { setTimeout( r, 120 ); } );
-
-    const box = page.getBoundingClientRect();
-
-    let inset = box.height * ( kind === 'footer' ? 0.035 : 0.035 );   // fallback
-
-    try
-    {
-        const sec = ( await sd.activeEditor.doc.sections.list() ).items[ 0 ];
-        const hIn = sec.pageSetup && sec.pageSetup.height;
-        const hf  = ( sec.headerFooterMargins || {} )[ kind ];
-
-        // A few pixels past the top of the band, so the click lands inside the
-        // text box and not on its very edge.
-        if( hIn > 0 && hf >= 0 ) inset = ( hf * ( box.height / hIn ) ) + 6;
-    }
-    catch( _ ) {}
-
-    const cx = box.left + box.width / 2;
-    const cy = kind === 'footer' ? box.bottom - inset : box.top + inset;
-    const el = document.elementFromPoint( cx, cy );
-
-    if( ! el || ! page.contains( el ) ) return false;
-
-    const o = { bubbles: true, cancelable: true, composed: true, view: window,
-                clientX: cx, clientY: cy, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true };
-
-    for( let i = 1; i <= 2; i++ )
-    {
-        el.dispatchEvent( new PointerEvent( 'pointerdown', { ...o, buttons: 1 } ) );
-        el.dispatchEvent( new MouseEvent(   'mousedown',   { ...o, buttons: 1, detail: i } ) );
-        el.dispatchEvent( new PointerEvent( 'pointerup',   { ...o, buttons: 0 } ) );
-        el.dispatchEvent( new MouseEvent(   'mouseup',     { ...o, buttons: 0, detail: i } ) );
-        el.dispatchEvent( new MouseEvent(   'click',       { ...o, buttons: 0, detail: i } ) );
-    }
-    el.dispatchEvent( new MouseEvent( 'dblclick', { ...o, buttons: 0, detail: 2 } ) );
-
-    return true;
+    if( spell ) spell.reset();
 }
 
 // One checkbox per vendored dictionary, built from proofing.js's own list so a
@@ -1090,105 +655,76 @@ function renderProofLangs()
     }
 }
 
-// "Añadir al diccionario", next to SuperDoc's own spelling entries. The word
-// comes from the misspelling the menu was opened on, so it only appears when
-// there is one.
-function addDictionaryItem( ctx, sections )
-{
-    if( ! Array.isArray( sections ) ) return;
-
-    const word = misspelledWordAt( ctx, sections );
-    if( ! word ) return;
-
-    sections.unshift( { items: [ {
-        id      : 'nayive-add-to-dictionary',
-        label   : NayiveUI.tf( 'write.addToDict', { word: word } ),
-        onSelect: function() { addPersonalWord( word ); },
-        action  : function() { addPersonalWord( word ); }
-    } ] } );
-}
-
-// Where the last right-click landed. SuperDoc 2.10 does NOT put the proofing
-// issue in the menu context - it keeps it to itself - so "Añadir al
-// diccionario" never found a word and never showed. Its proofing runtime still
-// answers "which misspelling is at this point", which is how its own menu finds
-// it. Capture phase: SuperDoc opens the menu from its own contextmenu handler.
-let lastMenuPoint = null;
-
-document.addEventListener( 'contextmenu', function( e )
-{
-    lastMenuPoint = { x: e.clientX, y: e.clientY, t: Date.now() };
-}, true );
-
-// Only when SuperDoc itself built a spelling section (so there IS a misspelling
-// under the pointer), and only for a right-click just now - a menu opened from
-// the keyboard must not pick up a word from an old click.
-function issueUnderMenu( sections )
-{
-    if( ! lastMenuPoint || Date.now() - lastMenuPoint.t > 2000 ) return null;
-    if( ! Array.isArray( sections ) || ! sections.some( function( s ) { return s && s.id === 'proofing'; } ) ) return null;
-
-    const rt = sd && sd.activeEditor && sd.activeEditor.host &&
-               sd.activeEditor.host.getProofingRuntime && sd.activeEditor.host.getProofingRuntime();
-
-    return ( rt && rt.getIssueFromPoint( lastMenuPoint.x, lastMenuPoint.y ) ) || null;
-}
-
-// SuperDoc may one day hand the menu context the issue it was opened on; the
-// shape has moved between versions, so read it defensively.
-function misspelledWordAt( ctx, sections )
-{
-    try
-    {
-        const issue = ( ctx && ( ctx.proofingIssue || ctx.issue ||
-                                 ( ctx.proofing && ctx.proofing.issue ) ) ) || issueUnderMenu( sections );
-
-        if( issue && issue.word ) return issue.word;
-
-        // Fall back to the text the message was built from: "«palabra» no está…"
-        const m = issue && issue.message && /[«"']([^«»"']+)[»"']/.exec( issue.message );
-        if( m ) return m[ 1 ];
-    }
-    catch( _ ) {}
-
-    return null;
-}
-
 //----------------------------------------------------------------------------//
-// COMENTARIOS
+// ENCABEZADO / PIE  (and the page number in them)
 //
-// SuperDoc's whole comment system is in the bundle and was simply never mounted:
-// the list needs an element to live in. This is that element, plus the toggle.
-// (The engine also wants a real user.name for authored edits - see boot().)
+// The buttons go in and out: "Encabezado" puts the caret in the page's header
+// (the engine makes one if the section has none), pressed again it goes back to
+// the body; "Pie" while in the header goes straight to the footer. Where the
+// caret is comes from the engine (getHeaderFooterState), not from us.
+//
+// The page number is a real PAGE field, and only in a header or a footer - in
+// the body it would print once, wherever it landed - so its button follows the
+// engine's insert.pageNumber slot: greyed anywhere else (refreshToolbar).
 
-let commentsOn = false;
-
-function toggleComments()
+function toggleHeaderFooter( kind )
 {
-    if( ! ready || ! sd ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    setComments( ! commentsOn );
+    const cmd = hfEditing() === kind ? { type: 'exitHeaderFooter' }
+                                     : { type: 'editHeaderFooter', position: kind };
+    let r;
+    try { r = editor.exec( cmd ); }
+    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
+
+    if( r && r.ok === false )
+    {
+        console.error( 'Write: ' + cmd.type + ' -', r.reason );
+        NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) );
+        return;
+    }
+    focusEditor();          // the engine keeps the caret in the header or footer
+    refreshToolbar();
 }
 
-function setComments( on )
+// The buttons that are not engine slots, painted with the toolbar (toolbar.js
+// calls this at the end of each paint): nothing that edits in read-only mode,
+// table borders only in a table, and the header / footer / page number below.
+function paintOwnButtons()
 {
-    const panel = document.getElementById( 'commentsPanel' );
-    const btn   = document.getElementById( 'commentsBtn' );
+    let snap = null;
+    try { snap = editor && editor.snapshot(); } catch( _ ) {}
+    const editable = !! snap && snap.editable !== false;
 
-    commentsOn = !! on;
-    panel.hidden = ! commentsOn;
-    btn.classList.toggle( 'is-active', commentsOn );
-    btn.setAttribute( 'aria-expanded', String( commentsOn ) );
+    for( const id of [ 'paraBtn', 'linkBtn', 'imageBtn', 'symbolsBtn', 'headerBtn', 'footerBtn' ] )
+        document.getElementById( id ).disabled = ! editable;
 
-    try
+    document.getElementById( 'tableBordersBtn' ).disabled = ! editable || ! ( snap && snap.table );
+
+    paintHeaderFooter();
+}
+
+// 'header', 'footer' or null: where the caret is.
+function hfEditing()
+{
+    try { const now = editor && editor.getHeaderFooterState(); return now ? now.editing : null; }
+    catch( _ ) { return null; }
+}
+
+// The Encabezado / Pie buttons look pressed while the caret is in theirs, and
+// the page number is usable only there.
+function paintHeaderFooter()
+{
+    const now = hfEditing();
+
+    for( const kind of [ 'header', 'footer' ] )
     {
-        if( commentsOn ) sd.addCommentsList( document.getElementById( 'commentsList' ) );
-        else if( sd.removeCommentsList ) sd.removeCommentsList();
+        const b  = document.getElementById( kind + 'Btn' );
+        const on = now === kind;
+        b.classList.toggle( 'is-active', on );
+        b.setAttribute( 'aria-pressed', String( on ) );
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-
-    // The editor box just changed width; SuperDoc re-measures on resize.
-    window.dispatchEvent( new Event( 'resize' ) );
+    document.getElementById( 'pageNumBtn' ).disabled = slotState( 'insert.pageNumber' ).enabled !== true;
 }
 
 //----------------------------------------------------------------------------//
@@ -1224,28 +760,16 @@ async function addPersonalWord( word )
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); }
 
     NayiveUI.toast( NayiveUI.tf( 'write.wordAdded', { word: word } ) );
-    reproofDocument();
-}
-
-// SuperDoc only re-checks text it thinks changed, so nudge it: turning proofing
-// off and on again re-runs the provider over the whole document.
-function reproofDocument()
-{
-    try
-    {
-        if( ! sd || ! sd.setProofingEnabled ) return;
-        sd.setProofingEnabled( false );
-        setTimeout( function() { sd.setProofingEnabled( true ); }, 60 );
-    }
-    catch( _ ) {}
+    if( spell ) spell.forget( word );        // its red lines go at once
 }
 
 //----------------------------------------------------------------------------//
 // AUTOCORRECCION  (smart quotes and friends)
 //
 // Off by default: it fights with file names, code and anything typed literally.
-// One checkbox in Settings turns it on. It runs on the text as it is typed, by
-// watching what goes through the editing input handle.
+// One checkbox in Settings turns it on. It corrects the character as it is
+// typed (onBeforeInput below) - not a paste, and not a symbol picked from the
+// popup, which are meant to arrive exactly as they are.
 
 const AUTOCORRECT_KEY = 'nayive-write-autocorrect';
 let   autocorrectOn   = readAutocorrect();
@@ -1262,7 +786,7 @@ function setAutocorrect( on )
 }
 
 // The replacements, applied to the text about to be inserted plus the character
-// just before it (which is why the caret's line is read first).
+// just before it (read off the page by the caller, for the quotes).
 function autocorrectText( text, before )
 {
     if( ! autocorrectOn || ! text ) return text;
@@ -1288,42 +812,83 @@ function autocorrectText( text, before )
     return out;
 }
 
-// Wrap the editing input handle once the editor is up, so every insertText goes
-// through the replacements. Wrapping (rather than a keydown listener) keeps it
-// working for paste and for the symbols popup alike.
-function wireAutocorrect()
+// The only characters that can start a rule: the two quotes, the third dot, the
+// space after --. Keep it in step with the rules above and below - a keystroke
+// that cannot correct anything must not pay for reading the page.
+const AUTOCORRECT_TRIGGERS = /["'.\s]/;
+
+// Nothing public sees a character before it goes in, so the typing is caught in
+// the DOM: the engine owns an ordinary contenteditable (.docx-pages, inside
+// #editorHost), every character reaches it as a beforeinput of inputType
+// "insertText", and Write listens in the CAPTURE phase of the scroller above it
+// (quirks.js, noTypingHook). An event a rule does not touch is left completely
+// alone - the engine's handlers must still see it.
+function onBeforeInput( e )
 {
-    try
+    if( ! Q.noTypingHook || ! autocorrectOn || ! ready || ! editor ) return;
+    if( e.inputType !== 'insertText' || ! e.data || e.isComposing ) return;
+    if( ! AUTOCORRECT_TRIGGERS.test( e.data ) ) return;
+
+    // Read-only, or a caret the engine cannot place text at: not ours to take.
+    if( ! canExec( { type: 'insertText', text: e.data } ) ) return;
+
+    const sel = caretNow();
+    if( ! sel || ! sel.anchor || ! sel.head ) return;
+
+    const pid  = sel.anchor.paragraphId;
+    const text = paintedText( pid );
+
+    // The dots and the dashes need the characters already typed, which only a
+    // plain caret on one paragraph has: with something selected - about to be
+    // replaced - only the quote rule runs, on the character before it.
+    const same  = sel.head.paragraphId === pid;
+    const start = same ? Math.min( sel.anchor.offset, sel.head.offset ) : sel.anchor.offset;
+    const caret = same && sel.anchor.offset === sel.head.offset;
+    const two   = caret ? ( text[ start - 2 ] || '' ) + ( text[ start - 1 ] || '' ) : '';
+
+    let over = 0, out = null;
+
+    if( caret && two === '..' && e.data === '.' )                       // a third dot
     {
-        const inp = sd.activeEditor.host.getHandles().editing.input;
-        if( ! inp || inp.__nayiveWrapped ) return;
-
-        const original = inp.insertText.bind( inp );
-
-        inp.insertText = function( text )
-        {
-            return original( autocorrectText( text, lastTypedContext() ) );
-        };
-
-        inp.__nayiveWrapped = true;
+        over = 2;  out = '…';
     }
-    catch( _ ) {}
+    else if( caret && two === '--' && /\s/.test( e.data ) &&            // a space after --
+             ( start === 2 || /\s/.test( text[ start - 3 ] || '' ) ) )
+    {
+        over = 2;  out = '—' + e.data;
+    }
+    else
+    {
+        const fixed = autocorrectText( e.data, text[ start - 1 ] || '' );
+        if( fixed !== e.data ) out = fixed;
+    }
+
+    if( out === null ) return;
+
+    // Taken over: preventDefault, or the browser writes the raw character into
+    // the painted page; stopPropagation, or the engine puts it in as well.
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Swallow the characters the correction replaces. If the engine will not
+    // take that selection, the character simply goes in as it was typed.
+    if( over && ! selectBack( pid, start - over, start ) ) out = e.data;
+
+    runExec( { type: 'insertText', text: out } );
 }
 
-// The character before the caret, for deciding whether a quote opens or closes.
-function lastTypedContext()
+// The `over` characters before the caret, selected so the next insert replaces
+// them. True when the engine took it.
+function selectBack( pid, from, to )
 {
     try
     {
-        const caret = document.querySelector( '#editor .sd-v2-local-selection-caret' );
-        if( ! caret ) return '';
-
-        const r  = caret.getBoundingClientRect();
-        const el = document.elementFromPoint( Math.max( 0, r.left - 2 ), r.top + r.height / 2 );
-
-        return el && el.textContent ? el.textContent.slice( -1 ) : '';
+        const r = editor.exec( { type: 'setSelection',
+                                 range: { anchor: { paragraphId: pid, offset: from },
+                                          head  : { paragraphId: pid, offset: to   } } } );
+        return ! r || r.ok !== false;
     }
-    catch( _ ) { return ''; }
+    catch( _ ) { return false; }
 }
 
 //----------------------------------------------------------------------------//
@@ -1411,8 +976,7 @@ async function useTemplate( path )
     {
         await session.flush();
 
-        const file = await fetchAsFile( path );
-        await loadIntoEditor( file );
+        await loadIntoEditor( await fetchBytes( path ) );
 
         session.untitled( baseName( path ), { dirty: true } );
     }
@@ -1433,9 +997,9 @@ async function changeTemplatesDir()
 //----------------------------------------------------------------------------//
 // SIMBOLOS  (special characters)
 //
-// An anchored popup off a custom toolbar button, the same trio as the table
-// borders one: open / close / pointerdown-outside. Characters go in through the
-// editing input handle - there is no contenteditable to type into.
+// An anchored popup off a toolbar button, the same trio as the table borders
+// one: open / close / pointerdown-outside. A character goes in at the caret
+// (over the selection, as typing would) and the popup stays open for the next.
 
 const SYMBOL_SETS = [
     { key: 'punct',    chars: '¡¿…–—·•«»“”‘’„†‡§¶©®™°′″‰&@#*/\\|~^_' },
@@ -1490,15 +1054,7 @@ function renderSymbols()
     }
 }
 
-async function insertSymbol( ch )
-{
-    try
-    {
-        await sd.activeEditor.host.getHandles().editing.input.insertText( ch );
-        onEdit();
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
+function insertSymbol( ch ) { runExec( { type: 'insertText', text: ch } ); }
 
 function openSymPopup()
 {
@@ -1506,7 +1062,7 @@ function openSymPopup()
 
     pop.classList.add( 'open' );   // lay it out before measuring
 
-    const r  = anchorRect( '#toolbar [data-item="btn-symbols"]' );
+    const r  = anchorRect( '#symbolsBtn' );
     const vw = document.documentElement.clientWidth;
 
     let left = Math.min( r.left, vw - pop.offsetWidth - 8 );
@@ -1535,51 +1091,149 @@ function onSymOutside( e )
     if( pop.contains( e.target ) ) return;
 
     // Let the trigger's own click through, so the button can toggle it shut.
-    const ctn = e.target.closest && e.target.closest( '.superdoc-toolbar .sd-toolbar-item-ctn' );
-    if( ctn && ctn.querySelector( '[data-item="btn-symbols"]' ) ) return;
+    if( e.target.closest && e.target.closest( '#symbolsBtn' ) ) return;
 
     closeSymPopup();
 }
 
 //----------------------------------------------------------------------------//
-// PARRAFO  (spacing, indents, tab stops, borders, shading, keep-together)
+// PARRAFO  (spacing, indents, keep-together, tab stops, list number format)
 //
-// Everything here exists in doc.format.paragraph; none of it had a UI.
+// Filled from the caret's paragraph (snapshot().formatting reads it back) and
+// applied with ONE setParagraphFormat - one undo step. Still, only the GROUPS
+// the user touched are sent: over several paragraphs that disagree a field
+// shows blank, and applying the whole form would flatten what nobody looked
+// at. Borders and shading are gone with the old engine (his call, 2026-09-18).
 //
-// There is NO read-back for paragraph properties in this build (format.get is an
-// unsupported operation, and extract only returns text), so the dialog cannot
-// show what the paragraph currently has. That makes "apply everything on the
-// form" dangerous: it would silently reset whatever the user did not look at -
-// the same trap page setup used to fall into. So each GROUP is applied only if
-// something in it was touched this time round.
+// The list number format has no engine command: it is written into
+// numbering.xml (docx-patch.js) and the document reloaded, which clears the
+// undo history - the dialog says so.
 
 const PARA_GROUPS = {
     paSpacing : [ 'paBefore', 'paAfter', 'paLine' ],
     paIndent  : [ 'paLeft', 'paRight', 'paSpecial', 'paSpecialBy' ],
     paKeep    : [ 'paKeepNext', 'paKeepLines' ],
-    paShading : [ 'paShade' ],
-    paBorder  : [ 'paBorderSide', 'paBorderStyle', 'paBorderSize', 'paBorderColor' ],
     paTabs    : [ 'paTabPos', 'paTabAlign' ],
     paList    : [ 'paListLevel', 'paListFormat' ]
 };
 
-// What each numbering format's marker looks like. `lvlText` is required whenever
-// numFmt is set - "%1" is "the number for level 1".
-const LIST_LVL_TEXT = '%1.';
-
 let paraTouched = new Set();
+let paraFmt     = null;     // snapshot().formatting when the dialog opened
+let paraList    = null;     // { paraId, numId, ilvl, formats } when the caret is in a numbered list
 
-// pt -> twentieths of a point, and cm -> twips (1 inch = 1440 twips).
-function ptToTwips( v ) { return Math.round( ( v || 0 ) * 20 ); }
 function cmToTwips( v ) { return Math.round( ( v || 0 ) * 1440 / CM_PER_IN ); }
+
+// "1,5" in Spanish, "1.5" in English - the dialog's own numbers.
+function fmtNum( v ) { return ( Math.round( v * 100 ) / 100 ).toLocaleString( NayiveUI.locale(), { maximumFractionDigits: 2 } ); }
+function parseNum( raw ) { const n = parseFloat( String( raw ).replace( ',', '.' ) ); return Number.isFinite( n ) ? n : null; }
 
 function openParagraph()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+
+    let f = null;
+    try { f = editor.snapshot().formatting; } catch( _ ) {}
+    paraFmt = f || {};
+
+    const val = function( id, v ) { document.getElementById( id ).value = v; };
+    const has = function( v ) { return v !== null && v !== undefined; };
+    const ind = paraFmt.indent || null;
+
+    val( 'paBefore', has( paraFmt.spaceBeforePt ) ? fmtNum( paraFmt.spaceBeforePt ) : ( paraFmt.disagrees && paraFmt.disagrees.spaceBeforePt ? '' : '0' ) );
+    val( 'paAfter',  has( paraFmt.spaceAfterPt  ) ? fmtNum( paraFmt.spaceAfterPt  ) : ( paraFmt.disagrees && paraFmt.disagrees.spaceAfterPt  ? '' : '0' ) );
+    showLineSpacing( paraFmt.lineSpacing || null );
+
+    val( 'paLeft',  ind && ! ind.mixed.left  ? fmtNum( twipsToCm( ind.left  ) ) : ( ind ? '' : '0' ) );
+    val( 'paRight', ind && ! ind.mixed.right ? fmtNum( twipsToCm( ind.right ) ) : ( ind ? '' : '0' ) );
+
+    const first = ind && ! ind.mixed.firstLine ? ind.firstLine : 0;
+    val( 'paSpecial',   first > 0 ? 'first' : first < 0 ? 'hanging' : 'none' );
+    val( 'paSpecialBy', fmtNum( first ? twipsToCm( Math.abs( first ) ) : 1.25 ) );
+
+    const flags = paraFmt.paragraphFlags || {};
+    document.getElementById( 'paKeepNext'  ).checked = flags.keepNext  === true;
+    document.getElementById( 'paKeepLines' ).checked = flags.keepLines === true;
+
+    val( 'paTabPos', '0' );
+    val( 'paTabAlign', 'left' );
 
     paraTouched = new Set();
+    paraList    = null;
+    fillParagraphList();
     syncParagraphRows();
     setBackdrop( 'paraBackdrop', true );
+}
+
+// The line spacing list holds Word's multiples; a value it does not name (1,08,
+// "exactly 12 pt") is added for the moment, so the dialog shows the truth and
+// applying it without touching it changes nothing.
+function showLineSpacing( ls )
+{
+    const sel   = document.getElementById( 'paLine' );
+    const extra = sel.querySelector( 'option[data-extra]' );
+    if( extra ) extra.remove();
+
+    if( ! ls ) { sel.value = ''; return; }
+
+    const v = ls.rule === 'multiple' ? String( Math.round( ls.value * 100 ) / 100 ) : ls.rule + ':' + ls.value;
+
+    if( ! [ ...sel.options ].some( function( o ) { return o.value === v; } ) )
+    {
+        const op = new Option( ls.rule === 'multiple' ? fmtNum( ls.value ) : fmtNum( ls.value ) + ' pt', v );
+        op.dataset.extra = '1';
+        sel.appendChild( op );
+    }
+    sel.value = v;
+}
+
+// The list part: which level of the caret's list, and how it is numbered. The
+// numbering lives in the saved package, so it is read from there (a save is a
+// few milliseconds) and the fields fill in when it answers.
+async function fillParagraphList()
+{
+    const note  = document.getElementById( 'paListNote' );
+    const level = document.getElementById( 'paListLevel' );
+    const fmt   = document.getElementById( 'paListFormat' );
+
+    level.value = '1';
+    fmt.value   = 'decimal';
+    note.hidden = true;
+
+    let paraId = null;
+    try { const sel = editor.snapshot().selection; paraId = sel && sel.from && sel.from.paraId; } catch( _ ) {}
+    if( ! paraId || ! slotState( 'list.numbered' ).active ) return;
+
+    try
+    {
+        const info = patcher.listInfo( new Uint8Array( await editor.save() ), paraId );
+        if( ! info ) return;
+
+        paraList    = Object.assign( { paraId: paraId }, info );
+        level.value = String( Math.min( info.ilvl + 1, level.options.length ) );
+        note.hidden = false;
+        showListFormat();
+    }
+    catch( e ) { console.error( 'Write: list format -', e ); }
+}
+
+// The format select follows the level select: level 2 of a "1, 2, 3" list may
+// well be "a, b, c".
+function showListFormat()
+{
+    if( ! paraList ) return;
+
+    const sel   = document.getElementById( 'paListFormat' );
+    const want  = paraList.formats[ parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1 ] || 'decimal';
+    const extra = sel.querySelector( 'option[data-extra]' );
+    if( extra ) extra.remove();
+
+    if( ! [ ...sel.options ].some( function( o ) { return o.value === want; } ) )
+    {
+        const op = new Option( want === 'bullet' ? '•' : want, want );
+        op.dataset.extra = '1';
+        sel.appendChild( op );
+    }
+    sel.value = want;
 }
 
 // "Primera línea" / "Francesa" need an amount; "Ninguna" does not. Same
@@ -1588,9 +1242,6 @@ function syncParagraphRows()
 {
     const sp = document.getElementById( 'paSpecial' ).value;
     document.getElementById( 'paSpecialByField' ).hidden = sp === 'none';
-
-    const side = document.getElementById( 'paBorderSide' ).value;
-    document.getElementById( 'paBorderHow' ).hidden = side === 'none';
 }
 
 function markParagraphTouched( id )
@@ -1598,118 +1249,112 @@ function markParagraphTouched( id )
     for( const g in PARA_GROUPS ) if( PARA_GROUPS[ g ].indexOf( id ) >= 0 ) paraTouched.add( g );
 }
 
+// The command for the touched groups. A blank field (the selection disagreed
+// and the user left it so) is left out, not zeroed.
+function paragraphCommand()
+{
+    const val = function( id ) { return document.getElementById( id ).value; };
+    const cmd = { type: 'setParagraphFormat' };
+
+    if( paraTouched.has( 'paSpacing' ) )
+    {
+        const b = parseNum( val( 'paBefore' ) ), a = parseNum( val( 'paAfter' ) );
+        if( b !== null ) cmd.spaceBeforePt = Math.max( 0, b );
+        if( a !== null ) cmd.spaceAfterPt  = Math.max( 0, a );
+
+        const line = val( 'paLine' );
+        const m    = /^(exact|atLeast):(.+)$/.exec( line );
+        if( m ) cmd.lineSpacing = { rule: m[1], value: parseFloat( m[2] ) };
+        else if( parseNum( line ) ) cmd.lineSpacing = { rule: 'multiple', value: parseNum( line ) };
+    }
+
+    if( paraTouched.has( 'paIndent' ) )
+    {
+        const l = parseCm( val( 'paLeft' ), 20 ), r = parseCm( val( 'paRight' ), 20 );
+        if( l !== null ) cmd.indentLeftTwips  = cmToTwips( l );
+        if( r !== null ) cmd.indentRightTwips = cmToTwips( r );
+
+        const special = val( 'paSpecial' );
+        const by      = cmToTwips( parseCm( val( 'paSpecialBy' ), 20 ) ?? 0 );
+        cmd.indentFirstLineTwips = special === 'first' ? by : special === 'hanging' ? -by : 0;
+    }
+
+    if( paraTouched.has( 'paKeep' ) )
+    {
+        cmd.keepNext  = document.getElementById( 'paKeepNext'  ).checked;
+        cmd.keepLines = document.getElementById( 'paKeepLines' ).checked;
+    }
+
+    // One stop per apply, as before: 0 clears them all, anything else is added
+    // to (or replaces, at the same place) the ones the paragraph has.
+    if( paraTouched.has( 'paTabs' ) )
+    {
+        const pos = parseCm( val( 'paTabPos' ), 50 );
+        cmd.tabStops = pos === null || pos <= 0 ? [] : tabStopsWith( cmToTwips( pos ), val( 'paTabAlign' ) );
+    }
+
+    return Object.keys( cmd ).length > 1 ? cmd : null;
+}
+
+// The paragraph's own stops plus the new one. The engine's read-back also lists
+// the stop Word implies at a hanging indent, which is not in the file - it is
+// left out, or applying would write it for real.
+function tabStopsWith( twips, alignment )
+{
+    const ind  = paraFmt && paraFmt.indent;
+    const have = ( paraFmt && paraFmt.tabStops ) || [];
+
+    const own = have.filter( function( t )
+    {
+        if( ind && ind.firstLine < 0 && t.positionTwips === ind.left && t.alignment === 'left' ) return false;
+        return Math.abs( t.positionTwips - twips ) > 10;
+    } );
+
+    return own.concat( [ { positionTwips: twips, alignment: alignment } ] )
+              .sort( function( a, b ) { return a.positionTwips - b.positionTwips; } );
+}
+
 async function confirmParagraph()
 {
     setBackdrop( 'paraBackdrop', false );
 
-    if( ! paraTouched.size ) return;   // nothing was touched: change nothing
+    if( ! ready || ! editor || ! paraTouched.size ) { focusEditor(); return; }   // nothing touched: change nothing
 
-    const val = function( id ) { return document.getElementById( id ).value; };
-    const on  = function( id ) { return document.getElementById( id ).checked; };
+    const cmd = paragraphCommand();
+    if( cmd ) runExec( cmd );
+
+    if( paraTouched.has( 'paList' ) ) await applyListFormat();
+}
+
+// Level n of the caret's list numbered the chosen way (docx-patch.js), then the
+// document back on screen with the caret where it was. load() starts a fresh
+// undo history (the dialog says so) and is not an edit, so the session is told.
+async function applyListFormat()
+{
+    if( ! paraList ) { NayiveUI.toast( NayiveUI.t( 'write.notInList' ) ); return; }
+
+    const ilvl = parseInt( document.getElementById( 'paListLevel' ).value, 10 ) - 1;
+    const fmt  = document.getElementById( 'paListFormat' ).value;
+    if( paraList.formats[ ilvl ] === fmt ) return;
+
+    const scroller = document.getElementById( 'editor' );
+    const top      = scroller.scrollTop;
 
     try
     {
-        const doc = sd.activeEditor.doc;
-        const sel = await doc.selection.current( { includeText: false } );
-        const blk = ( await doc.extract( { target: sel.selectionTarget } ) ).blocks[ 0 ];
+        const bytes = patcher.withListFormat( new Uint8Array( await editor.save() ), paraList, ilvl, fmt );
+        if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
 
-        if( ! blk ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
+        await loadIntoEditor( bytes );
 
-        const target = { kind: 'block', nodeType: blk.type, nodeId: blk.nodeId };
-        const P      = doc.format.paragraph;
-
-        if( paraTouched.has( 'paSpacing' ) )
-        {
-            const mult = parseFloat( String( val( 'paLine' ) ).replace( ',', '.' ) ) || 1;
-
-            // `line` is in twentieths of a point and `lineRule` is REQUIRED
-            // whenever it is given; 240 twips is one single-spaced line.
-            await P.setSpacing( { target: target,
-                                  before  : ptToTwips( parseFloat( String( val( 'paBefore' ) ).replace( ',', '.' ) ) ),
-                                  after   : ptToTwips( parseFloat( String( val( 'paAfter'  ) ).replace( ',', '.' ) ) ),
-                                  line    : Math.round( mult * 240 ),
-                                  lineRule: 'auto' } );
-        }
-
-        if( paraTouched.has( 'paIndent' ) )
-        {
-            const special = val( 'paSpecial' );
-            const by      = cmToTwips( parseCm( val( 'paSpecialBy' ), 20 ) ?? 0 );
-
-            // firstLine and hanging are mutually exclusive - sending both throws.
-            const ind = { target: target,
-                          left : cmToTwips( parseCm( val( 'paLeft'  ), 20 ) ?? 0 ),
-                          right: cmToTwips( parseCm( val( 'paRight' ), 20 ) ?? 0 ) };
-
-            if( special === 'first'   ) ind.firstLine = by;
-            if( special === 'hanging' ) ind.hanging   = by;
-
-            await P.setIndentation( ind );
-        }
-
-        if( paraTouched.has( 'paKeep' ) )
-            await P.setKeepOptions( { target: target, keepNext: on( 'paKeepNext' ), keepLines: on( 'paKeepLines' ) } );
-
-        if( paraTouched.has( 'paShading' ) )
-        {
-            const fill = val( 'paShade' ).replace( '#', '' ).toUpperCase();
-            await P.setShading( { target: target, fill: fill } );
-        }
-
-        if( paraTouched.has( 'paBorder' ) )
-        {
-            const side = val( 'paBorderSide' );
-
-            // setBorder takes ONE side per call: { target, side, style, color, size, space }.
-            if( side === 'none' )
-            {
-                await P.clearBorder( { target: target } );
-            }
-            else
-            {
-                const sides = side === 'all' ? [ 'top', 'bottom', 'left', 'right' ] : [ side ];
-
-                for( const one of sides )
-                    await P.setBorder( { target: target, side: one,
-                                         style: val( 'paBorderStyle' ),
-                                         color: val( 'paBorderColor' ).replace( '#', '' ).toUpperCase(),
-                                         size : Math.round( parseFloat( val( 'paBorderSize' ) ) * 8 ) } );   // eighths of a point
-            }
-        }
-
-        if( paraTouched.has( 'paList' ) )
-        {
-            // Only meaningful inside a list; the level comes from the dialog so
-            // an outer level can be restyled without moving the caret.
-            const items = ( await doc.lists.list( {} ) ).items || [];
-            const item  = items.find( function( i ) { return i.address.nodeId === blk.nodeId; } ) || items[ 0 ];
-
-            if( ! item ) NayiveUI.toast( NayiveUI.t( 'write.notInList' ) );
-            else
-            {
-                // No "start at" here on purpose: doc.lists.setLevelStart reports
-                // success in this build and changes nothing - neither the marker
-                // nor numbering.xml's w:start. A control that lies is worse than
-                // no control.
-                await doc.lists.setLevelNumbering( { target: item.address,
-                                                     level : parseInt( val( 'paListLevel' ), 10 ) - 1,
-                                                     numFmt: val( 'paListFormat' ), lvlText: LIST_LVL_TEXT } );
-            }
-        }
-
-        if( paraTouched.has( 'paTabs' ) )
-        {
-            const pos = parseCm( val( 'paTabPos' ), 50 );
-
-            if( pos === null || pos <= 0 ) await P.clearAllTabStops( { target: target } );
-            else await P.setTabStop( { target: target, position: cmToTwips( pos ), alignment: val( 'paTabAlign' ) } );
-        }
-
+        editor.exec( { type: 'setSelection', anchor: { paraId: paraList.paraId } } );
+        scroller.scrollTop = top;
+        session.edited();
         focusEditor();
     }
     catch( e )
     {
-        console.error( 'Write: paragraph', e );
+        console.error( 'Write: list format -', e );
         NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
     }
 }
@@ -1717,44 +1362,24 @@ async function confirmParagraph()
 //----------------------------------------------------------------------------//
 // ESTADISTICAS  (word count)
 //
-// Read when the dialog opens, not live: SuperDoc's `editor-update` is only a
-// "something changed" ping with no payload, so a live counter would mean
-// re-reading the whole document on every keystroke.
-//
-// doc.getText() is NOT usable here: it concatenates the blocks with no
-// separator, so the last word of one paragraph and the first of the next become
-// one word ("seis" + "siete" -> "seissiete"). doc.extract({}) returns the blocks
-// one by one, which also gives an honest paragraph count.
-//
-// Body only - headers, footers and footnotes are not in it. That matches what
-// people mean by a word count.
-
-// The page total arrives on its own event; cache it so the dialog opens at once.
-let pageTotal = 1;
+// Read when the dialog opens, not live. The body's paragraphs, one by one (so
+// the last word of one and the first of the next never run together) - headers,
+// footers and footnotes are not in it, which matches what people mean by a
+// word count.
 
 async function openStats()
 {
-    if( ! ready || ! sd ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    const set = function( id, n ) { document.getElementById( id ).textContent = fmtCount( n ); };
-
-    // Show the dialog at once with the page count we already have, and fill the
-    // rest in after - reading the document is a worker round trip.
-    set( 'stPages', pageTotal );
-    for( const id of [ 'stWords', 'stChars', 'stCharsNs', 'stParas' ] )
-        document.getElementById( id ).textContent = '…';
-
-    setBackdrop( 'statsBackdrop', true );
-
-    let blocks;
-    try { blocks = ( await sd.activeEditor.doc.extract( {} ) ).blocks || []; }
+    let paras;
+    try { paras = editor.query( { type: 'paragraphs' } ) || []; }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
 
-    let words = 0, chars = 0, noSpaces = 0, paras = 0;
+    let words = 0, chars = 0, noSpaces = 0, count = 0;
 
-    for( const b of blocks )
+    for( const p of paras )
     {
-        const t = ( b && b.text ) || '';
+        const t = ( p && p.text ) || '';
 
         chars    += t.length;
         noSpaces += t.replace( /\s/g, '' ).length;
@@ -1762,17 +1387,17 @@ async function openStats()
         const trimmed = t.trim();
         if( ! trimmed ) continue;
 
-        paras += 1;
+        count += 1;
         words += trimmed.split( /\s+/ ).length;
     }
 
-    set( 'stWords',   words );
-    set( 'stChars',   chars );
-    set( 'stCharsNs', noSpaces );
-    set( 'stParas',   paras );
-
-    try { pageTotal = sd.activeEditor.host.getPageMetricsSnapshot().pages.length; } catch( _ ) {}
-    set( 'stPages', pageTotal );
+    NayiveOffice.showStats( [
+        { text: NayiveUI.t( 'write.statWords'      ), value: fmtCount( words )    },
+        { text: NayiveUI.t( 'write.statChars'      ), value: fmtCount( chars )    },
+        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: fmtCount( noSpaces ) },
+        { text: NayiveUI.t( 'write.statParagraphs' ), value: fmtCount( count )    },
+        { text: NayiveUI.t( 'write.statPages'      ), value: fmtCount( editor.getTotalPages() ) }
+    ], NayiveUI.t( 'write.statNote' ) );
 }
 
 // Thousands separators in the reader's own locale.
@@ -1796,8 +1421,9 @@ function fmtCount( n )
 
 const IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || '' );
 
-function kMod() { return IS_MAC ? '⌘' : NayiveUI.t( 'ui.keyCtrl' ); }
-function kAlt() { return IS_MAC ? '⌥' : NayiveUI.t( 'ui.keyAlt'  ); }
+function kMod()   { return IS_MAC ? '⌘' : NayiveUI.t( 'ui.keyCtrl'  ); }
+function kAlt()   { return IS_MAC ? '⌥' : NayiveUI.t( 'ui.keyAlt'   ); }
+function kShift() { return IS_MAC ? '⇧' : NayiveUI.t( 'ui.keyShift' ); }
 function combo( parts ) { return parts.join( IS_MAC ? '' : '+' ); }
 
 function modOnly( e )
@@ -1809,6 +1435,12 @@ function modOnly( e )
 function modAlt( e )
 {
     return ( IS_MAC ? e.metaKey : e.ctrlKey ) && e.altKey && ! e.shiftKey;
+}
+
+function modShift( e )
+{
+    return ( IS_MAC ? ( e.metaKey && ! e.ctrlKey ) : ( e.ctrlKey && ! e.metaKey ) )
+           && e.shiftKey && ! e.altKey;
 }
 
 const SHORTCUTS = [
@@ -1824,70 +1456,197 @@ const SHORTCUTS = [
     { el: 'newBtn',    key: 'write.newDoc',    label: () => combo( [ kAlt(), 'N' ] ),
       match: e => e.altKey && ! e.ctrlKey && ! e.metaKey && ! e.shiftKey && e.code === 'KeyN' },
 
+    // Cut, copy and paste are the ENGINE's (the old engine's stale-copy
+    // workaround is gone with it). Listed for the help sheet, never matched.
+    // Paste without formatting is ours, as before: the clipboard's text alone.
+    { key: 'ui.cut',   label: () => combo( [ kMod(), 'X' ] ), match: () => false },
+    { key: 'ui.copy',  label: () => combo( [ kMod(), 'C' ] ), match: () => false },
+    { key: 'ui.paste', label: () => combo( [ kMod(), 'V' ] ), match: () => false },
+    { key: 'ui.pastePlain', label: () => combo( [ kMod(), kShift(), 'V' ] ),
+      match: e => modShift( e ) && e.code === 'KeyV', run: () => clipPaste( true ) },
+
+    // Ctrl+K reaches the engine first, which asks for the link sheet itself
+    // (setHyperlinkChrome, onRequest); matched here too so the browser's own
+    // Ctrl+K never opens.
     { key: 'write.sc.link',    label: () => combo( [ kMod(), 'K' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyK', run: () => clickToolbarItem( 'btn-link' ) },
-
+      match: e => modOnly( e ) && e.code === 'KeyK', run: () => openLinkDialog() },
     { key: 'write.sc.find',    label: () => combo( [ kMod(), 'F' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyF', run: () => clickToolbarItem( 'btn-search' ) },
-
+      match: e => modOnly( e ) && e.code === 'KeyF', run: () => openFind( false ) },
     { key: 'write.sc.replace', label: () => combo( [ kMod(), 'H' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyH', run: () => clickToolbarItem( 'btn-search' ) },
+      match: e => modOnly( e ) && e.code === 'KeyH', run: () => openFind( true ) },
 
     { key: 'write.sc.alignLeft',    label: () => combo( [ kMod(), 'L' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyL', run: () => runSdCommand( 'text-align', 'left' ) },
+      match: e => modOnly( e ) && e.code === 'KeyL', run: () => runSlot( 'alignment.left' ) },
     { key: 'write.sc.alignCenter',  label: () => combo( [ kMod(), 'E' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyE', run: () => runSdCommand( 'text-align', 'center' ) },
+      match: e => modOnly( e ) && e.code === 'KeyE', run: () => runSlot( 'alignment.center' ) },
     { key: 'write.sc.alignRight',   label: () => combo( [ kMod(), 'R' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyR', run: () => runSdCommand( 'text-align', 'right' ) },
+      match: e => modOnly( e ) && e.code === 'KeyR', run: () => runSlot( 'alignment.right' ) },
     { key: 'write.sc.alignJustify', label: () => combo( [ kMod(), 'J' ] ),
-      match: e => modOnly( e ) && e.code === 'KeyJ', run: () => runSdCommand( 'text-align', 'justify' ) },
+      match: e => modOnly( e ) && e.code === 'KeyJ', run: () => runSlot( 'alignment.justify' ) },
 
     { key: 'write.sc.normal',   label: () => combo( [ kMod(), kAlt(), '0' ] ),
-      match: e => modAlt( e ) && e.code === 'Digit0', run: () => setParagraphStyle( 'Normal' ) },
+      match: e => modAlt( e ) && e.code === 'Digit0', run: () => setStyle( 'Normal' ) },
     { key: 'write.sc.heading1', label: () => combo( [ kMod(), kAlt(), '1' ] ),
-      match: e => modAlt( e ) && e.code === 'Digit1', run: () => setParagraphStyle( 'Heading1' ) },
+      match: e => modAlt( e ) && e.code === 'Digit1', run: () => setStyle( 'Heading1' ) },
     { key: 'write.sc.heading2', label: () => combo( [ kMod(), kAlt(), '2' ] ),
-      match: e => modAlt( e ) && e.code === 'Digit2', run: () => setParagraphStyle( 'Heading2' ) },
+      match: e => modAlt( e ) && e.code === 'Digit2', run: () => setStyle( 'Heading2' ) },
     { key: 'write.sc.heading3', label: () => combo( [ kMod(), kAlt(), '3' ] ),
-      match: e => modAlt( e ) && e.code === 'Digit3', run: () => setParagraphStyle( 'Heading3' ) },
+      match: e => modAlt( e ) && e.code === 'Digit3', run: () => setStyle( 'Heading3' ) },
 
     { el: 'settingsBtn', key: 'ui.settings', label: () => combo( [ kMod(), ',' ] ),
       match: e => modOnly( e ) && e.code === 'Comma' }
 ];
 
-// Click a SuperDoc toolbar item the way a person would. SuperDoc wraps each item
-// in a div; the clickable node inside it is what carries the handler.
-function clickToolbarItem( name )
-{
-    const ctn = document.querySelector( '#toolbar [data-item="' + name + '"]' );
-    if( ! ctn ) return;
+let toolbar = null;    // toolbar.js, made in wireStaticUI
 
-    ( ctn.querySelector( 'button' ) || ctn )
-        .dispatchEvent( new MouseEvent( 'click', { bubbles: true, cancelable: true, view: window } ) );
+function refreshToolbar() { if( toolbar ) toolbar.refresh(); }
+
+// A toolbar slot of the engine's own chrome vocabulary ('alignment.left',
+// 'styles.style' + a style id ...): the same call the toolbar's buttons will
+// make (plan Phase 2), so a shortcut and its button can never disagree.
+function runSlot( slot, value )
+{
+    if( ! ready || ! editor || slotBlocked( slot ) ) return;
+
+    let r;
+    try { r = value === undefined ? runToolbarCommand( editor, slot ) : runToolbarCommand( editor, slot, value ); }
+    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
+
+    if( r && r.ok === false )
+    {
+        console.error( 'Write: ' + slot + ' -', r.reason );
+        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+        return;
+    }
+    focusEditor();
 }
 
-// Heading 1/2/3 and back to Normal. The obvious route - SuperDoc's `linked-style`
-// command - silently does nothing when handed a style name, and the doc API wants
-// a BLOCK target (kind/nodeType/nodeId), not the selection target every other call
-// takes. So: read the caret's block, then set the style by its id.
-async function setParagraphStyle( styleId )
+// A slot the engine would run but Write holds back. A footnote with text
+// selected REPLACES that text with the note's mark (Word keeps the text and
+// puts the mark after it), and it takes two undos to get the text back - so it
+// waits for a plain caret (quirks.js, footnoteReplacesSelection).
+function slotBlocked( slot )
 {
-    if( ! ready || ! sd ) return;
+    if( slot !== 'insert.footnote' || ! editor ) return false;
+    try { return ! editor.snapshot().selectionCollapsed; } catch( _ ) { return false; }
+}
 
-    try
+// The format painter is on / off, from the button and the menu alike: a press
+// arms it for one paste, the next press puts it away. (The engine's own cycle is
+// off -> once -> locked -> off; the locked step is skipped, so the button and
+// the tick read as the on / off they look like.)
+function togglePainter()
+{
+    const armed = function() { return ( slotState( 'format.painter' ).value || 'off' ) !== 'off'; };
+
+    if( ! armed() ) { runSlot( 'format.painter' ); return; }
+    for( let i = 0; i < 2 && armed(); i++ ) runSlot( 'format.painter' );
+}
+
+// Replace one found word (a TextMatch from findMatches) with `text`. The engine's
+// own replaceMatch is refused in 2.21.0 ("not supported by the tree editor"),
+// so: select the match, then insert the text over the selection - one undo
+// step, and the new word takes the old one's formatting, as typing would
+// (quirks.js, replaceMatchUnsupported).
+function replaceMatch( match, text )
+{
+    if( ! ready || ! editor ) return;
+
+    const sel = match ? editor.selectMatch( match ) : null;
+    if( ! sel || sel.ok === false ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+
+    runExec( { type: 'insertText', text: text } );
+}
+
+// An engine command that is not a toolbar slot (the table's rows and columns).
+function runExec( cmd )
+{
+    if( ! ready || ! editor ) return;
+
+    let r;
+    try { r = editor.exec( cmd ); }
+    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
+
+    if( r && r.ok === false )
     {
-        const doc = sd.activeEditor.doc;
-        const sel = await doc.selection.current( { includeText: false } );
-        const blk = ( await doc.extract( { target: sel.selectionTarget } ) ).blocks[ 0 ];
-
-        if( ! blk ) return;
-
-        await doc.styles.paragraph.setStyle(
-            { target: { kind: 'block', nodeType: blk.type, nodeId: blk.nodeId }, styleId: styleId } );
-
-        focusEditor();
+        console.error( 'Write: ' + cmd.type + ' -', r.reason );
+        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+        return;
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
+    focusEditor();
+}
+
+//---- TABLE CELLS: Tab and Shift+Tab ------------------------------------------//
+//
+// In a table Tab goes to the next cell and Shift+Tab to the one before, as in
+// Word, and Tab in the last cell adds a row. The engine types a tab character
+// there instead (quirks.js, tabInTable). The cells' paragraphs come in reading
+// order from the paragraphs query; the caret walks them until the engine's
+// table context names another cell.
+
+function onTableTab( e )
+{
+    if( e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey || ! Q.tabInTable || ! ready || ! editor ) return;
+
+    let snap = null;
+    try { snap = editor.snapshot(); } catch( _ ) { return; }
+    if( ! snap || ! snap.table || ! snap.selection || snap.editable === false ) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    moveCell( e.shiftKey ? -1 : 1, snap.table, snap.selection.from.paraId );
+}
+
+function moveCell( dir, from, here, grown )
+{
+    let paras = [];
+    try { paras = editor.query( { type: 'paragraphs' } ) || []; } catch( _ ) {}
+
+    const put = function( id ) { editor.exec( { type: 'setSelection', anchor: { paraId: id } } ); };
+    let i = paras.findIndex( function( p ) { return p.paraId === here; } );
+    if( i < 0 ) return;
+
+    for( i += dir; i >= 0 && i < paras.length; i += dir )
+    {
+        put( paras[ i ].paraId );
+        const t = editor.snapshot().table;
+        if( ! t ) break;                                               // out of the table
+        if( t.rowIndex !== from.rowIndex || t.columnIndex !== from.columnIndex ) { focusEditor(); return; }
+    }
+
+    // Past the first or the last cell: the caret stays; Tab in the last one
+    // adds a row below and goes on into it.
+    put( here );
+    if( dir > 0 && ! grown && from.rowIndex === from.rows - 1 && from.columnIndex === from.columns - 1 )
+    {
+        const r = editor.exec( { type: 'insertRow', where: 'below' } );
+        if( r && r.ok !== false ) { moveCell( 1, from, here, true ); return; }
+    }
+    focusEditor();
+}
+
+// A new table at the caret. The engine lands it after the caret's paragraph
+// and puts the caret in its first cell.
+function tableCommand( rows, cols )
+{
+    return { type: 'insertTable', target: editor && editor.snapshot().selection, rows: rows, cols: cols };
+}
+
+// The zoom: a fixed percentage, or 'fit' - the engine's own fit to the width
+// (never below 50 %), which is what every document opens with.
+function setZoom( z )
+{
+    if( ! editor ) return;
+
+    const r = z === 'fit' ? editor.setZoomMode( 'auto' ) : editor.setZoom( z / 100 );
+    if( r && r.ok === false ) console.error( 'Write: zoom -', r.reason );
+    focusEditor();
+}
+
+function zoomFixed()
+{
+    try { return editor.getZoomMode().type === 'fixed'; }
+    catch( _ ) { return false; }
 }
 
 // A shortcut must not fire while a dialog owns the screen, or while the user is
@@ -1949,48 +1708,27 @@ function openShortcuts()
 //----------------------------------------------------------------------------//
 // PRINT  /  SAVE AS PDF
 //
-// SuperDoc ships no print API, so this is the browser's own dialog over the
-// @media print block in index.html. Two things have to happen first:
+// The browser's own dialog over the @media print block in index.html: the
+// pages are real DOM with real text, so paper gets type. "Guardar como PDF" is
+// the SAME dialog - the browser writes a very good PDF - and the only
+// difference is a line telling you where to pick it.
 //
-//   1. zoom back to 100 %. The zoom is a transform on the page's wrapper, and a
-//      phone opens at ~46 % - printing that would shrink the paper to a third.
-//   2. leave header/footer edit mode, or its overlay prints with the document.
-//
-// "Guardar como PDF" is the SAME dialog: everything here is client-side, there
-// is no converter to call, and the browser's print dialog already writes a very
-// good PDF. The only difference is a line telling you where to pick it.
+// The printed sheet has to be the DOCUMENT's page, not the printer's default:
+// without an @page size the browser prints on Letter, an A4 page is taller than
+// that, and every page spills onto two sheets. The size is read from the
+// document (twips) just before printing.
 
-let zoomBeforePrint = null;
-
-// The printed sheet has to be the DOCUMENT's page, not the printer's default.
-// Without this the browser prints on Letter (8.5 x 11 in), an A4 page is taller
-// than that, and every single page of the document spills onto two sheets - the
-// bug this was caught doing: a 2-page document came out as a 4-page PDF.
-// Read the real page box (it already reflects size AND orientation) and write it
-// into an @page rule just before printing.
 function applyPrintPageSize()
 {
     let css = '@page { margin: 0; }';
 
     try
     {
-        const base = sd.activeEditor.host.getPageMetricsSnapshot().pages[ 0 ].base;
-
-        if( base && base.widthPx && base.heightPx )
+        const ps = editor.getPageSetup();
+        if( ps && ps.pageWidthTwips && ps.pageHeightTwips )
         {
-            // getPageMetricsSnapshot reports CSS pixels, and 96 px is one CSS inch
-            // by definition. The sheet and the page box are written from the SAME
-            // rounded numbers on purpose: a page box even a fraction taller than
-            // the sheet spills a sliver onto an extra sheet, and the PDF comes out
-            // one page too long (a 4-page document printed as 5 before this).
-            const w = ( base.widthPx  / 96 ).toFixed( 6 ) + 'in';
-            const h = ( base.heightPx / 96 ).toFixed( 6 ) + 'in';
-
-            css = '@page { size: ' + w + ' ' + h + '; margin: 0; }\n' +
-                  '@media print { #editor .superdoc-page {' +
-                  ' box-sizing: border-box !important;' +
-                  ' width: ' + w + ' !important; height: ' + h + ' !important;' +
-                  ' max-height: ' + h + ' !important; } }';
+            const mm = function( t ) { return ( t / 1440 * 25.4 ).toFixed( 2 ) + 'mm'; };
+            css = '@page { size: ' + mm( ps.pageWidthTwips ) + ' ' + mm( ps.pageHeightTwips ) + '; margin: 0; }';
         }
     }
     catch( _ ) { /* fall back to the plain margin:0 rule */ }
@@ -2000,228 +1738,16 @@ function applyPrintPageSize()
     el.textContent = css;
 }
 
-async function preparePrint()
+function printDocument( pdfHint )
 {
-    if( ! ready || ! sd ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return false; }
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    // leave header/footer editing if we are in it
-    const exit = document.querySelector( '#editor [data-sd-hf-exit]' );
-    if( exit ) exit.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true, cancelable: true } ) );
-
-    try
-    {
-        const z = sd.activeEditor.host.getPageMetricsSnapshot().zoom;
-        zoomBeforePrint = z && z.percent;
-
-        if( zoomBeforePrint && zoomBeforePrint !== 100 )
-        {
-            await sd.ui.commands.executeAsync( 'zoom', 100 );
-            await new Promise( function( r ) { setTimeout( r, 400 ); } );   // let the relayout land
-        }
-    }
-    catch( _ ) { zoomBeforePrint = null; }
-
-    applyPrintPageSize();   // after the zoom reset: the metrics are read at 100 %
-
-    return true;
-}
-
-// Put the zoom back. 'afterprint' fires on cancel too, which is what we want.
-function restoreZoom()
-{
-    if( ! zoomBeforePrint || zoomBeforePrint === 100 ) { zoomBeforePrint = null; return; }
-
-    const z = zoomBeforePrint;
-    zoomBeforePrint = null;
-    try { sd.ui.commands.executeAsync( 'zoom', z ); } catch( _ ) {}
-}
-
-async function printDocument( pdfHint )
-{
-    if( ! ( await preparePrint() ) ) return;
+    applyPrintPageSize();
 
     if( pdfHint ) NayiveUI.toast( NayiveUI.t( 'write.pdfHint' ), { ms: 5000 } );
 
     // A tick, so the toast paints before the modal print dialog freezes the page.
     setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
-}
-
-//----------------------------------------------------------------------------//
-// SUPERDOC IN SPANISH (and the other six)
-//
-// Every string SuperDoc paints is hard-coded English, which made a Spanish app
-// with an English toolbar. Three separate hooks fix three separate surfaces:
-//
-//   ui.toolbar.texts        the toolbar tooltips + the table-options menu
-//   ui.search.strings       the find / replace bar
-//   ui.contextMenu.menuProvider   the right-click menu (it has no string table,
-//                           so the labels are rewritten on the way out)
-//
-// Two things stay English and cannot be fixed from here: the loading overlay
-// ("Opening document...") — its normalizer ignores any texts we pass — and the
-// per-item `aria-label`s, which are baked into each item's definition. Both are
-// SuperDoc-internal; changing them would mean forking the vendored bundle.
-
-// Toolbar item name -> our key. SuperDoc's own key list is longer; these are the
-// items this app actually builds.
-const TB_TEXT_KEYS = [ 'bold', 'italic', 'underline', 'strikethrough', 'color', 'highlight',
-                       'fontFamily', 'fontSize', 'link', 'image', 'table', 'tableActions',
-                       'textAlign', 'bulletList', 'numberedList', 'indentLeft', 'indentRight',
-                       'lineHeight', 'linkedStyles', 'formatText', 'copyFormat', 'clearFormatting',
-                       'search', 'undo', 'redo', 'zoom', 'formattingMarks', 'tableOfContents',
-                       'pageBreak', 'trackChangesAccept', 'trackChangesReject',
-                       'addRowBefore', 'addRowAfter', 'addColumnBefore', 'addColumnAfter',
-                       'deleteRow', 'deleteColumn', 'deleteTable', 'mergeCells', 'splitCell',
-                       'fixTables' ];
-
-const FIND_TEXT_KEYS = [ 'findPlaceholder', 'replacePlaceholder', 'noResults',
-                         'previousMatchTitle', 'nextMatchTitle', 'closeTitle',
-                         'replace', 'replaceAll', 'toggleReplaceTitle',
-                         'matchCase', 'ignoreDiacritics', 'regex', 'invalidPattern' ];
-
-function textsFrom( keys, prefix )
-{
-    const out = {};
-    for( const k of keys ) out[ k ] = NayiveUI.t( prefix + k );
-    return out;
-}
-
-// The context menu carries no string table, so match on what SuperDoc wrote:
-// first the item id, then - for items whose id we have not seen - the English
-// label. Anything unmatched is left exactly as it was.
-const CM_BY_ID = {
-    'cut': 'cut', 'copy': 'copy', 'paste': 'paste', 'undo': 'undo', 'redo': 'redo',
-    'insert-link': 'insertLink', 'insert-table': 'insertTable', 'insert-footnote': 'insertFootnote',
-    'insert-text': 'insertText', 'comment': 'comment', 'add-comment': 'comment',
-    'accept-change': 'acceptChange', 'reject-change': 'rejectChange',
-    'update-toc': 'updateToc', 'edit-table': 'editTable',
-    'table-properties': 'tableProperties', 'cell-background': 'cellBackground',
-    'restart-numbering': 'restartNumbering', 'continue-numbering': 'continueNumbering',
-    'increase-indent': 'increaseIndent', 'decrease-indent': 'decreaseIndent'
-};
-
-const CM_BY_LABEL = {
-    'cut': 'cut', 'copy': 'copy', 'paste': 'paste', 'undo': 'undo', 'redo': 'redo',
-    'insert link': 'insertLink', 'insert table': 'insertTable', 'insert footnote': 'insertFootnote',
-    'insert text': 'insertText', 'comment': 'comment',
-    'accept change': 'acceptChange', 'reject change': 'rejectChange',
-    'update table of contents': 'updateToc', 'edit table': 'editTable',
-    'table properties': 'tableProperties', 'table properties…': 'tableProperties',
-    'cell background': 'cellBackground',
-    'restart numbering': 'restartNumbering', 'continue numbering': 'continueNumbering',
-    'increase indent': 'increaseIndent', 'decrease indent': 'decreaseIndent'
-};
-
-function localizeMenu( sections )
-{
-    if( ! Array.isArray( sections ) ) return sections;
-
-    for( const sec of sections )
-    {
-        const items = ( sec && sec.items ) || [];
-
-        for( const it of items )
-        {
-            if( ! it ) continue;
-
-            const suffix = CM_BY_ID[ it.id ] ||
-                           CM_BY_LABEL[ String( it.label || '' ).trim().toLowerCase() ];
-
-            if( suffix ) it.label = NayiveUI.t( 'write.cm.' + suffix );
-
-            if( Array.isArray( it.items ) ) localizeMenu( [ { items: it.items } ] );
-        }
-    }
-
-    return sections;
-}
-
-//----------------------------------------------------------------------------//
-// EDITOR EXTRAS - page break, super/subscript, footnote, table of contents,
-// formatting marks
-//
-// SuperDoc ships no toolbar button for any of these, but every command exists:
-// the structural / footnote session handles for the first two, doc.format for
-// vertAlign, and SuperDoc's own controller registry for the last two. They are
-// added through `customItems` (the same route as the table-borders button) and
-// placed by CSS `order` in index.html.
-
-function sdEditing()
-{
-    try { return sd.activeEditor.host.getHandles().editing; } catch( _ ) { return null; }
-}
-
-async function insertPageBreak()
-{
-    const ed = ready && sdEditing();
-    if( ! ed ) return;
-
-    try { await ed.structural.insertPageBreakAtSelection(); focusEditor(); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-async function insertFootnote()
-{
-    const ed = ready && sdEditing();
-    if( ! ed ) return;
-
-    try
-    {
-        if( ! ( await ed.footnotes.canInsertFootnote() ) )
-        { NayiveUI.toast( NayiveUI.t( 'write.noFootnoteHere' ) ); return; }
-
-        await ed.footnotes.insertFootnoteAtSelection( { type: 'footnote' } );
-        focusEditor();
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-// vertAlign cannot be read back in this build (format.get is an unsupported
-// operation), so a SECOND click on the same selection is what turns it off:
-// the value we last applied is remembered against a signature of the selection
-// it went to, and a repeat of the same pair sends 'baseline' instead.
-let lastVert = { sig: null, value: null };
-
-async function setVertAlign( want )
-{
-    if( ! ready || ! sd ) return;
-
-    try
-    {
-        const sel = await sd.activeEditor.doc.selection.current( { includeText: false } );
-
-        // A collapsed caret takes the format without complaining and nothing
-        // visible happens - say so instead of looking broken.
-        if( ! sel || sel.empty ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
-
-        const sig   = JSON.stringify( sel.selectionTarget );
-        const value = ( lastVert.sig === sig && lastVert.value === want ) ? 'baseline' : want;
-
-        await sd.activeEditor.doc.format.vertAlign( { value: value, target: sel.selectionTarget } );
-
-        lastVert = { sig: sig, value: value };
-        focusEditor();
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-// SuperDoc's own controller registry, for commands it knows but builds no
-// button for (table of contents, formatting marks) and for the ones the
-// keyboard shortcuts drive (text-align).
-async function runSdCommand( id, arg )
-{
-    if( ! ready || ! sd ) return;
-
-    try { await sd.ui.commands.executeAsync( id, arg ); focusEditor(); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-// Suggesting mode is offered in Settings, so the accept / reject buttons have to
-// be reachable - but they are noise in a document nobody is reviewing. They are
-// built every time now and CSS hides them unless the mode is 'suggesting'.
-function applyModeChrome( mode )
-{
-    document.getElementById( 'toolbarRow' ).classList.toggle( 'is-suggesting', mode === 'suggesting' );
 }
 
 //----------------------------------------------------------------------------//
@@ -2242,27 +1768,23 @@ function applyModeChrome( mode )
 // with too. The server copy wins at boot; localStorage is only the fast cache.
 //
 // Neither is a second implementation of anything. A menu entry either CLICKS the
-// real button in #writeTools (`el`), or issues the same SuperDoc controller
-// command the toolbar item issues (`cmd`), or calls the very function the button
-// is wired to (`run`). So there is still one set of handlers, exactly as the
-// phone's "..." menu does it (buildTopMenu above).
+// real button in #writeTools (`el`), or runs the same engine command the toolbar
+// button runs (`cmd`), or calls the very function the button is wired to
+// (`run`). So there is still one set of handlers, exactly as the phone's "..."
+// menu does it (MENU_IDS above).
 //
-// Menu mode collapses #toolbarRow to height 0 with visibility:hidden - never
-// display:none. SuperDoc watches #toolbar's width and re-measures on every
-// change, and Ctrl+F / SHORTCUTS still reach the invisible items by click (the
-// find bar itself renders in SuperDoc's floating surface at body level, so it is
-// visible either way).
+// Menu mode collapses #toolbarRow to height 0 with visibility:hidden, so the
+// real buttons stay in the DOM for the entries that click them.
 //
-// Ticks and greying are read from SuperDoc at the moment a panel opens -
-// `sd.ui.commands.get( id ).getState()` is synchronous and returns
-// { enabled, active, value } - so a panel is built fresh on every open and
-// nothing has to be kept in sync.
+// An entry that formats names the engine's toolbar SLOT (`slot`, the same call
+// the toolbar's button makes) and its tick and greying come from the engine's
+// toolbarCommandState() at the moment the panel opens.
 //
 // THE MACHINERY IS NOT HERE. The bar, the panels, the hover-to-slide behaviour
 // and the toolbar/menus switch all live in shared/menubar.js, which Calc uses
 // too; the item vocabulary is documented at the top of that file. What is left
-// below is Write's own: the table of menus, and the four small hooks that read
-// and drive SuperDoc.
+// below is Write's own: the table of menus, and the small hooks that read and
+// drive the engine.
 
 //---- the table ------------------------------------------------------------//
 //
@@ -2271,20 +1793,30 @@ function applyModeChrome( mode )
 //   { key }                   label (an i18n key)
 //   { el:'saveAsBtn' }        click that button - and grey the entry out when
 //                             the button itself is disabled
-//   { cmd:'bold', arg }       sd.ui.commands.executeAsync( cmd, arg )
+//   { slot:'text.bold' }      run that toolbar slot; tick while it is on
+//   { slot, value }           a value slot (a size, a colour): tick while it is the one
+//   { exec:{ type:... } }     an engine command; grey while a dry run says no
 //   { run: fn }               call it
 //   { sub: [...] | fn }       a submenu (a function is called at open time)
 //   { sep: true }             a hairline
-//   { check:'active' }        tick when getState().active
-//   { check:'value' }         tick when getState().value is truthy (a toggle)
-//   { radio: v }             tick when getState().value === v
 //   { checked: fn }           tick when fn() says so
 //   { enabled: fn }           grey out when fn() says no
 //   { sc:'write.sc.save' }    show that SHORTCUTS entry's key combo on the right
 //   { swatch:'#c00' }         a colour chip before the label
-//   { iconOf: sdIcon('bold') } the glyph before the label, cloned from the
+//   { iconOf: '#x svg' }      the glyph before the label, cloned from the
 //                             toolbar (an `el` entry gets its button's by itself)
 //   { icon:'cut' }            ... or a NayiveUI.icon() name, for no-button entries
+
+// AYUDA, wherever it is asked for: the pull-down menu below and the toolbar's
+// "?" show the SAME three entries, each clicking its own real button - so the
+// two chromes cannot drift and there is still one set of handlers.
+const HELP_ITEMS =
+[
+    { key: 'write.stats',        el: 'statsBtn' },
+    { key: 'write.shortcuts',    el: 'scBtn'    },
+    { key: 'ui.toolbarButtons',  el: 'guideBtn' }
+];
+const HELP_IDS = HELP_ITEMS.map( function( it ) { return it.el; } );
 
 const MENU_FONTS  = [ 'Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia',
                       'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana' ];
@@ -2293,51 +1825,67 @@ const MENU_ZOOMS  = [ 50, 75, 100, 125, 150, 200 ];
 const MENU_LINES  = [ 1, 1.15, 1.5, 2 ];
 const MENU_GRIDS  = [ [ 2, 2 ], [ 2, 3 ], [ 3, 3 ], [ 4, 4 ], [ 5, 5 ] ];
 
-// Word's own first row of text colours, plus white. The names are keys because
+// Word's own first row of text colours, plus white: [ swatch, name key ]. The
+// engine takes the six hex digits without the '#'. The names are keys because
 // no interface string lives in the source (docs/i18n.md).
 const MENU_COLORS = [ [ '#000000', 'black'  ], [ '#808080', 'gray'   ], [ '#C00000', 'red'    ],
                       [ '#E36C0A', 'orange' ], [ '#FFC000', 'yellow' ], [ '#00B050', 'green'  ],
                       [ '#0070C0', 'blue'   ], [ '#7030A0', 'purple' ], [ '#FFFFFF', 'white'  ] ];
 
-const MENU_MARKS  = [ [ '#FFFF00', 'yellow' ], [ '#00FF00', 'green'  ], [ '#00FFFF', 'cyan'   ],
-                      [ '#FF66FF', 'pink'   ], [ '#FF9900', 'orange' ], [ '#BFBFBF', 'gray'   ] ];
+// Highlighting is Word's fixed set of named colours (ST_HighlightColor), not
+// any hex: [ swatch, name key, the engine's name ]. Word calls magenta "Pink".
+const MENU_MARKS  = [ [ '#FFFF00', 'yellow', 'yellow'    ], [ '#00FF00', 'green', 'green'     ],
+                      [ '#00FFFF', 'cyan',   'cyan'      ], [ '#FF00FF', 'pink',  'magenta'   ],
+                      [ '#FF0000', 'red',    'red'       ], [ '#C0C0C0', 'gray',  'lightGray' ] ];
 
+// Cell fills: the pale tones Word's shading palette starts with, [ swatch, name key ].
+const MENU_FILLS  = [ [ '#D9D9D9', 'gray'   ], [ '#FFF2CC', 'yellow' ], [ '#E2EFD9', 'green'  ],
+                      [ '#DEEAF6', 'blue'   ], [ '#FBE4D5', 'orange' ], [ '#F2DCDB', 'red'    ],
+                      [ '#E5DFEC', 'purple' ] ];
+
+// An entry is one of the engine's toolbar SLOTS - the very call the toolbar's
+// button makes - or an engine command (`exec`), or a function of ours (`run`).
+//   { slot:'text.bold' }                 a toggle: ticked while it is on
+//   { slot:'font.size', value: 24 }      a value: ticked while it is the one
+//   { exec:{ type:'insertRow', ... } }   greyed while the engine would refuse it
+// iconOf clones the toolbar button's glyph, so a row and its button look alike.
 function fontItems()
 {
-    return MENU_FONTS.map( function( f )
-    {
-        return { text: f, cmd: 'font-family', arg: f, radio: f };
-    } );
+    return MENU_FONTS.map( function( f ) { return { text: f, slot: 'font.family', value: f }; } );
 }
 
 function sizeItems()
 {
-    return MENU_SIZES.map( function( s )
+    return MENU_SIZES.map( function( s ) { return { text: s, slot: 'font.size', value: Number( s ) * 2 }; } );
+}
+
+function textColorItems()
+{
+    return MENU_COLORS.map( function( c )
     {
-        return { text: s, cmd: 'font-size', arg: s, radio: s };
+        return { key: 'ui.color.' + c[1], swatch: c[0], slot: 'text.color', value: c[0].slice( 1 ) };
     } );
 }
 
-function colorItems( cmd, table, noneKey )
+function highlightItems()
 {
-    const out = table.map( function( c )
+    return MENU_MARKS.map( function( c )
     {
-        return { key: 'ui.color.' + c[1], swatch: c[0], cmd: cmd, arg: c[0], radio: c[0] };
-    } );
-
-    if( noneKey ) out.push( { sep: true }, { key: noneKey, cmd: cmd, arg: null } );
-
-    return out;
+        return { key: 'ui.color.' + c[1], swatch: c[0], slot: 'text.highlight', value: c[2] };
+    } ).concat( [ { sep: true }, { key: 'write.noHighlight', slot: 'text.highlight', value: 'none' } ] );
 }
 
 function zoomItems()
 {
     const out = MENU_ZOOMS.map( function( z )
     {
-        return { text: z + ' %', cmd: 'zoom', arg: z, radio: z };
+        return { text: z + ' %', run: function() { setZoom( z ); },
+                 checked: function() { return zoomFixed() && Math.round( editor.getZoom() * 100 ) === z; } };
     } );
 
-    out.push( { sep: true }, { key: 'write.zoomFitWidth', cmd: 'zoom-fit-width' } );
+    out.push( { sep: true },
+              { key: 'write.zoomFitWidth', run: function() { setZoom( 'fit' ); },
+                checked: function() { return ! zoomFixed(); } } );
 
     return out;
 }
@@ -2347,8 +1895,103 @@ function gridItems()
     return MENU_GRIDS.map( function( g )
     {
         return { text: g[0] + ' × ' + g[1],
-                 run: function() { runSdCommand( 'table-insert', { rows: g[0], cols: g[1] } ); } };
+                 run    : function() { runExec( tableCommand( g[0], g[1] ) ); },
+                 enabled: function() { return canExec( tableCommand( g[0], g[1] ) ); } };
     } );
+}
+
+// Normal and Heading 1-3, found by their BUILT-IN NAME ("heading 1"), not by
+// id: Word writes the id in the document's language ("Ttulo1" in a Spanish
+// file). A file that lacks them gets Word's own definitions as it opens
+// (withHeadings); should that fail, the missing ones are greyed here.
+const STYLE_KEYS = [ [ 'Normal', 'write.sc.normal' ], [ 'Heading1', 'write.sc.heading1' ],
+                     [ 'Heading2', 'write.sc.heading2' ], [ 'Heading3', 'write.sc.heading3' ] ];
+
+function styleIdFor( want )
+{
+    const name = want === 'Normal' ? 'normal' : want.replace( /^Heading(\d)$/, 'heading $1' );
+    let list = [];
+    try { list = editor.getDocumentStyles().filter( function( s ) { return s.type === 'paragraph'; } ); }
+    catch( _ ) { return null; }
+
+    const hit = list.find( function( s ) { return s.styleId === want; } ) ||
+                list.find( function( s ) { return String( s.name ).toLowerCase() === name; } );
+    return hit ? hit.styleId : null;
+}
+
+function styleItems()
+{
+    return STYLE_KEYS.map( function( k )
+    {
+        const id = styleIdFor( k[0] );
+        return { key: k[1], slot: 'styles.style', value: id || k[0], sc: k[1],
+                 enabled: function() { return !! id && slotState( 'styles.style' ).enabled === true; } };
+    } );
+}
+
+// The Ctrl+Alt+0..3 shortcuts: the same lookup.
+function setStyle( want )
+{
+    const id = styleIdFor( want );
+    if( ! id ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+    runSlot( 'styles.style', id );
+}
+
+const ALIGN_ITEMS =
+[
+    { key: 'write.sc.alignLeft',    slot: 'alignment.left',    sc: 'write.sc.alignLeft',    icon: matIcon( 'M120-120v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Zm0-160v-80h480v80H120Zm0-160v-80h720v80H120Z' ) },
+    { key: 'write.sc.alignCenter',  slot: 'alignment.center',  sc: 'write.sc.alignCenter',  icon: matIcon( 'M120-120v-80h720v80H120Zm160-160v-80h400v80H280ZM120-440v-80h720v80H120Zm160-160v-80h400v80H280ZM120-760v-80h720v80H120Z' ) },
+    { key: 'write.sc.alignRight',   slot: 'alignment.right',   sc: 'write.sc.alignRight',   icon: matIcon( 'M120-760v-80h720v80H120Zm240 160v-80h480v80H360ZM120-440v-80h720v80H120Zm240 160v-80h480v80H360ZM120-120v-80h720v80H120Z' ) },
+    { key: 'write.sc.alignJustify', slot: 'alignment.justify', sc: 'write.sc.alignJustify', icon: matIcon( 'M120-120v-80h720v80H120Zm0-160v-80h720v80H120Zm0-160v-80h720v80H120Zm0-160v-80h720v80H120Zm0-160v-80h720v80H120Z' ) }
+];
+
+// The line-spacing multiples: 1,15 in Spanish, 1.15 in English.
+function lineItems()
+{
+    return MENU_LINES.map( function( n )
+    {
+        return { text: n.toLocaleString( NayiveUI.locale() ), slot: 'list.lineSpacing', value: n };
+    } );
+}
+
+// Rows and columns act on the cell the caret is in; merging and splitting are
+// greyed while the engine says it cannot yet (2.21.0: "not supported yet").
+const TABLE_EDIT_ITEMS =
+[
+    { key: 'write.tb.addRowBefore',    exec: { type: 'insertRow', where: 'above' } },
+    { key: 'write.tb.addRowAfter',     exec: { type: 'insertRow', where: 'below' } },
+    { key: 'write.tb.deleteRow',       exec: { type: 'deleteRow' } },
+    { sep: true },
+    { key: 'write.tb.addColumnBefore', exec: { type: 'insertColumn', where: 'left'  } },
+    { key: 'write.tb.addColumnAfter',  exec: { type: 'insertColumn', where: 'right' } },
+    { key: 'write.tb.deleteColumn',    exec: { type: 'deleteColumn' } },
+    { sep: true },
+    { key: 'write.tb.mergeCells', exec: { type: 'mergeCells' } },
+    { key: 'write.tb.splitCell',  exec: { type: 'splitCell', rows: 1, cols: 2 } },
+    { sep: true },
+    { key: 'write.tb.deleteTable', exec: { type: 'deleteTable' } }
+];
+
+// Tabla > Relleno de celda: the selected cells (the caret's alone when none are).
+function fillItems()
+{
+    return MENU_FILLS.map( function( c )
+    {
+        return { key: 'ui.color.' + c[1], swatch: c[0],
+                 exec: { type: 'setCellFill', color: { kind: 'hex', value: c[0].slice( 1 ) } } };
+    } ).concat( [ { sep: true }, { key: 'write.noFill', exec: { type: 'setCellFill', color: null } } ] );
+}
+
+// The toolbar's table button: insert one, or change the one the caret is in.
+function tableItems()
+{
+    return [ { key: 'write.cm.insertTable', sub: gridItems }, { sep: true } ].concat( TABLE_EDIT_ITEMS );
+}
+
+// A Material glyph for a menu row that has no toolbar button of its own.
+function matIcon( d )
+{
+    return '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="' + d + '"></path></svg>';
 }
 
 // "Recientes": the same ten paths the Open dialog lists (shared/office.js keeps
@@ -2366,6 +2009,18 @@ function recentItems()
         return { text: baseName( p ), run: function() { openPickedFile( p ); } };
     } );
 }
+
+// Cortar / Copiar / Pegar / Pegar sin formato: the Edicion menu's and the
+// right-click menu's (see EDICION > CORTAR / COPIAR / PEGAR).
+const CLIP_ITEMS =
+[
+    { key: 'ui.cut',        exec: { type: 'cut' },  sc: 'ui.cut',  icon: 'cut'  },
+    { key: 'ui.copy',       exec: { type: 'copy' }, sc: 'ui.copy', icon: 'copy' },
+    { key: 'ui.paste',      run: function() { clipPaste( false ); }, sc: 'ui.paste', icon: 'paste',
+      enabled: function() { return canExec( { type: 'paste', text: ' ' } ); } },
+    { key: 'ui.pastePlain', run: function() { clipPaste( true ); }, sc: 'ui.pastePlain', icon: 'paste',
+      enabled: function() { return canExec( { type: 'pasteWithoutFormatting', text: ' ' } ); } }
+];
 
 const MENUS = [
 {
@@ -2391,16 +2046,13 @@ const MENUS = [
     key: 'ui.menu.edit',
     items:
     [
-        { key: 'ui.undo', cmd: 'undo', iconOf: sdIcon( 'undo' ) },
-        { key: 'ui.redo', cmd: 'redo', iconOf: sdIcon( 'redo' ) },
+        { key: 'ui.undo', slot: 'history.undo', iconOf: '#undoBtn' },
+        { key: 'ui.redo', slot: 'history.redo', iconOf: '#redoBtn' },
+        { sep: true }
+    ].concat( CLIP_ITEMS, [
         { sep: true },
-        { key: 'ui.cut',   run: clipCut,   icon: 'cut'   },
-        { key: 'ui.copy',  run: clipCopy,  icon: 'copy'  },
-        { key: 'ui.paste', run: clipPaste, icon: 'paste' },
-        { sep: true },
-        { key: 'write.sc.find',    run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.find',    iconOf: sdIcon( 'search' ) },
-        { key: 'write.sc.replace', run: function() { clickToolbarItem( 'btn-search' ); }, sc: 'write.sc.replace', iconOf: sdIcon( 'search' ) }
-    ]
+        { key: 'write.sc.find',    run: function() { openFind( false ); }, sc: 'write.sc.find',    iconOf: '#findBtn' },
+        { key: 'write.sc.replace', run: function() { openFind( true );  }, sc: 'write.sc.replace', iconOf: '#findBtn' } ] )
 },
 {
     key: 'ui.menu.view',
@@ -2412,168 +2064,134 @@ const MENUS = [
               { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); }, iconOf: '#chromeMenusBtn',
                 checked: menusOn } ] },
         { sep: true },
-        { key: 'write.showRuler',       cmd: 'ruler',            check: 'value' },
-        { key: 'write.formattingMarks', cmd: 'formatting-marks', check: 'value', iconOf: sdIcon( 'showMarks' ) },
-        { key: 'write.comments',        el:  'commentsBtn',      checked: function() { return commentsOn; } },
+        { key: 'write.formattingMarks', slot: 'review.paragraphMarks', iconOf: '#marksBtn' },
         { sep: true },
-        { key: 'write.header', el: 'headerBtn' },
-        { key: 'write.footer', el: 'footerBtn' },
+        { key: 'write.header', el: 'headerBtn', checked: function() { return hfEditing() === 'header'; } },
+        { key: 'write.footer', el: 'footerBtn', checked: function() { return hfEditing() === 'footer'; } },
         { sep: true },
-        { key: 'write.tb.zoom', sub: zoomItems },
+        { key: 'write.tb.zoom', sub: zoomItems, iconOf: '#zoomBtn' },
         { key: 'write.mode', sub:
-            [ { key: 'write.modeEdit',    run: function() { setDocMode( 'editing'    ); }, checked: function() { return docMode() === 'editing';    } },
-              { key: 'write.modeSuggest', run: function() { setDocMode( 'suggesting' ); }, checked: function() { return docMode() === 'suggesting'; } },
-              { key: 'write.modeRead',    run: function() { setDocMode( 'viewing'    ); }, checked: function() { return docMode() === 'viewing';    } } ] }
+            [ { key: 'write.modeEdit',    run: function() { setDocMode( 'editing' ); }, checked: function() { return docMode() === 'editing'; } },
+              { key: 'write.modeRead',    run: function() { setDocMode( 'viewing' ); }, checked: function() { return docMode() === 'viewing'; } } ] }
     ]
 },
 {
     key: 'ui.menu.insert',
     items:
     [
-        { key: 'write.pageBreak',  run: insertPageBreak, iconOf: sdIcon( 'pageBreak' ) },
+        { key: 'write.pageBreak',  slot: 'insert.pageBreak', iconOf: '#pageBreakBtn' },
         { key: 'write.pageNumber', el:  'pageNumBtn' },
         { sep: true },
-        { key: 'write.tb.image', run: pickImage,  iconOf: sdIcon( 'image' ) },
-        { key: 'write.tb.table', sub: gridItems,  iconOf: sdIcon( 'table' ) },
-        { key: 'write.sc.link',  run: openLinkDialog, sc: 'write.sc.link', iconOf: sdIcon( 'link' ) },
+        { key: 'write.tb.image', el: 'imageBtn' },
+        { key: 'write.tb.table', sub: gridItems, iconOf: '#tableBtn' },
+        { key: 'write.sc.link',  el: 'linkBtn', sc: 'write.sc.link' },
         { sep: true },
-        { key: 'write.footnote', run: insertFootnote,                  iconOf: sdIcon( 'footNote' )  },
-        { key: 'write.toc',      cmd: 'table-of-contents-insert',      iconOf: sdIcon( 'insertToc' ) },
-        { key: 'write.symbols',  run: openSymbols,                     iconOf: sdIcon( 'symbols' )   }
+        { key: 'write.footnote', slot: 'insert.footnote', iconOf: '#footnoteBtn' },
+        { key: 'write.toc',      slot: 'insert.toc',      iconOf: '#tocBtn' },
+        { key: 'write.symbols',  el: 'symbolsBtn' }
     ]
 },
 {
     key: 'ui.menu.format',
     items:
     [
-        { key: 'write.tb.bold',          cmd: 'bold',          check: 'active', iconOf: sdIcon( 'bold' )      },
-        { key: 'write.tb.italic',        cmd: 'italic',        check: 'active', iconOf: sdIcon( 'italic' )    },
-        { key: 'write.tb.underline',     cmd: 'underline',     check: 'active', iconOf: sdIcon( 'underline' ) },
-        { key: 'write.tb.strikethrough', cmd: 'strikethrough', check: 'active', iconOf: sdIcon( 'strike' )    },
-        { key: 'write.superscript', run: function() { setVertAlign( 'superscript' ); }, iconOf: sdIcon( 'superScript' ) },
-        { key: 'write.subscript',   run: function() { setVertAlign( 'subscript'   ); }, iconOf: sdIcon( 'subScript' )   },
+        { key: 'write.tb.bold',          slot: 'text.bold',      iconOf: '#boldBtn' },
+        { key: 'write.tb.italic',        slot: 'text.italic',    iconOf: '#italicBtn' },
+        { key: 'write.tb.underline',     slot: 'text.underline', iconOf: '#underlineBtn' },
+        { key: 'write.tb.strikethrough', slot: 'text.strike',    iconOf: '#strikeBtn' },
+        { key: 'write.superscript',      slot: 'script.super',   iconOf: '#superBtn' },
+        { key: 'write.subscript',        slot: 'script.sub',     iconOf: '#subBtn' },
         { sep: true },
         { key: 'write.tb.fontFamily', sub: fontItems },
         { key: 'write.tb.fontSize',   sub: sizeItems },
-        { key: 'write.tb.color',      sub: function() { return colorItems( 'text-color', MENU_COLORS, null ); },                     iconOf: sdIcon( 'color' )     },
-        { key: 'write.tb.highlight',  sub: function() { return colorItems( 'highlight-color', MENU_MARKS, 'write.noHighlight' ); }, iconOf: sdIcon( 'highlight' ) },
+        { key: 'write.tb.color',      sub: textColorItems, iconOf: '#colorBtn' },
+        { key: 'write.tb.highlight',  sub: highlightItems, iconOf: '#highlightBtn' },
         { sep: true },
-        { key: 'write.tb.linkedStyles', iconOf: sdIcon( 'linkedStyles' ), sub:
-            [ { key: 'write.sc.normal',   cmd: 'linked-style', arg: 'Normal',   radio: 'Normal',   sc: 'write.sc.normal'   },
-              { key: 'write.sc.heading1', cmd: 'linked-style', arg: 'Heading1', radio: 'Heading1', sc: 'write.sc.heading1' },
-              { key: 'write.sc.heading2', cmd: 'linked-style', arg: 'Heading2', radio: 'Heading2', sc: 'write.sc.heading2' },
-              { key: 'write.sc.heading3', cmd: 'linked-style', arg: 'Heading3', radio: 'Heading3', sc: 'write.sc.heading3' } ] },
-        { key: 'write.tb.textAlign', iconOf: sdIcon( 'textAlign' ), sub:
-            [ { key: 'write.sc.alignLeft',    cmd: 'text-align', arg: 'left',    radio: 'left',    sc: 'write.sc.alignLeft'    },
-              { key: 'write.sc.alignCenter',  cmd: 'text-align', arg: 'center',  radio: 'center',  sc: 'write.sc.alignCenter'  },
-              { key: 'write.sc.alignRight',   cmd: 'text-align', arg: 'right',   radio: 'right',   sc: 'write.sc.alignRight'   },
-              { key: 'write.sc.alignJustify', cmd: 'text-align', arg: 'justify', radio: 'justify', sc: 'write.sc.alignJustify' } ] },
-        // line-height wants a NUMBER; the string form comes back NO_OP.
-        { key: 'write.tb.lineHeight', iconOf: sdIcon( 'lineHeight' ), sub: MENU_LINES.map( function( n )
-            { return { text: String( n ).replace( '.', ',' ), cmd: 'line-height', arg: n }; } ) },
+        { key: 'write.tb.linkedStyles', sub: styleItems, iconOf: '#stylesBtn' },
+        { key: 'write.tb.textAlign',    sub: ALIGN_ITEMS, iconOf: '#alignBtn' },
+        { key: 'write.tb.lineHeight',   sub: lineItems,   iconOf: '#lineSpacingBtn' },
         { sep: true },
-        { key: 'write.tb.bulletList',   cmd: 'bullet-list',   check: 'active', iconOf: sdIcon( 'list' )         },
-        { key: 'write.tb.numberedList', cmd: 'numbered-list', check: 'active', iconOf: sdIcon( 'numberedlist' ) },
-        { key: 'write.tb.indentRight',  cmd: 'indent-increase',                iconOf: sdIcon( 'indentright' )  },
-        { key: 'write.tb.indentLeft',   cmd: 'indent-decrease',                iconOf: sdIcon( 'indentleft' )   },
+        { key: 'write.tb.bulletList',   slot: 'list.bullet',   iconOf: '#bulletBtn' },
+        { key: 'write.tb.numberedList', slot: 'list.numbered', iconOf: '#numberedBtn' },
+        { key: 'write.tb.indentRight',  slot: 'list.indent',   iconOf: '#indentBtn' },
+        { key: 'write.tb.indentLeft',   slot: 'list.outdent',  iconOf: '#outdentBtn' },
         { sep: true },
-        { key: 'write.paragraph',        el:  'paraBtn' },
-        { key: 'write.tb.copyFormat',    cmd: 'copy-format', check: 'active', iconOf: sdIcon( 'copyFormat' )      },
-        { key: 'write.tb.clearFormatting', cmd: 'clear-formatting',          iconOf: sdIcon( 'clearFormatting' ) }
+        { key: 'write.paragraph',          el:   'paraBtn' },
+        { key: 'write.tb.copyFormat',      slot: 'format.painter', run: togglePainter, iconOf: '#painterBtn' },
+        { key: 'write.tb.clearFormatting', slot: 'format.clear',   iconOf: '#clearBtn' }
     ]
 },
 {
     key: 'ui.menu.table',
     items:
     [
-        { key: 'write.cm.insertTable', sub: gridItems, iconOf: sdIcon( 'table' ) },
-        { sep: true },
-        { key: 'write.tb.addRowBefore',    cmd: 'table-add-row-before'    },
-        { key: 'write.tb.addRowAfter',     cmd: 'table-add-row-after'     },
-        { key: 'write.tb.deleteRow',       cmd: 'table-delete-row'        },
-        { sep: true },
-        { key: 'write.tb.addColumnBefore', cmd: 'table-add-column-before' },
-        { key: 'write.tb.addColumnAfter',  cmd: 'table-add-column-after'  },
-        { key: 'write.tb.deleteColumn',    cmd: 'table-delete-column'     },
-        { sep: true },
-        { key: 'write.tb.mergeCells', cmd: 'table-merge-cells' },
-        { key: 'write.tb.splitCell',  cmd: 'table-split-cell'  },
-        { sep: true },
-        { key: 'write.tableBorders',   run: openTableBorders, iconOf: sdIcon( 'tableBorders' ) },
-        { key: 'write.tb.deleteTable', cmd: 'table-delete' }
-    ]
+        { key: 'write.cm.insertTable', sub: gridItems, iconOf: '#tableBtn' },
+        { sep: true }
+    ].concat( TABLE_EDIT_ITEMS.slice( 0, -1 ),
+              [ { key: 'write.tableBorders', el: 'tableBordersBtn' },
+                { key: 'write.cellFill', sub: fillItems } ],
+              TABLE_EDIT_ITEMS.slice( -1 ) )
 },
 {
     key: 'ui.menu.tools',
     items:
     [
-        { key: 'write.stats', el: 'statsBtn' },
-        { sep: true },
         { key: 'write.autocorrect', run: function() { setAutocorrect( ! autocorrectOn ); },
           checked: function() { return autocorrectOn; } },
-        { sep: true },
-        { key: 'write.tb.trackChangesAccept', cmd: 'track-changes-accept-selection', iconOf: sdIcon( 'acceptTrackedChangeBySelection' ) },
-        { key: 'write.tb.trackChangesReject', cmd: 'track-changes-reject-selection', iconOf: sdIcon( 'rejectTrackedChangeOnSelection' ) },
-        { key: 'write.acceptAll', cmd: 'acceptAllChanges', iconOf: sdIcon( 'acceptTrackedChangeBySelection' ) },
-        { key: 'write.rejectAll', cmd: 'rejectAllChanges', iconOf: sdIcon( 'rejectTrackedChangeOnSelection' ) },
         { sep: true },
         { key: 'ui.settings', el: 'settingsBtn', sc: 'ui.settings' }
     ]
 },
 {
     key: 'ui.menu.help',
-    items:
-    [
-        { key: 'write.shortcuts', el: 'scBtn' },
-        { key: 'ui.quickGuide', run: function() { NayiveUI.showIntro(); }, iconOf: '[data-intro-open]' }
-    ]
+    items: HELP_ITEMS
 } ];
 
-// The glyph SuperDoc draws for one of its toolbar items - its icon only, never
-// the dropdown caret beside it. shared/menubar.js clones it when a panel opens,
-// so a menu row shows the very icon its toolbar button shows.
-function sdIcon( name ) { return '#toolbar .sd-toolbar-icon__icon--' + name + ' svg'; }
-
-//---- reading SuperDoc's state --------------------------------------------//
-
-function cmdState( id )
+// What the toolbar's drop-downs open (toolbar.js): the same tables.
+const TOOLBAR_DROPDOWNS =
 {
-    try { return sd.ui.commands.get( id ).getState() || {}; }
+    stylesBtn     : styleItems,
+    colorBtn      : textColorItems,
+    highlightBtn  : highlightItems,
+    tableBtn      : tableItems,
+    alignBtn      : ALIGN_ITEMS,
+    lineSpacingBtn: lineItems,
+    zoomBtn       : zoomItems
+};
+
+
+//---- reading the engine's state ------------------------------------------//
+
+function slotState( slot )
+{
+    try { return toolbarCommandState( editor, slot ) || {}; }
     catch( _ ) { return {}; }
 }
 
-function docMode() { return ( sd && sd.config && sd.config.documentMode ) || 'editing'; }
-
-function setDocMode( mode )
+function canExec( cmd )
 {
-    try { if( docMode() !== mode ) sd.setDocumentMode( mode ); }
-    catch( e ) { console.error( 'Write: document mode', e ); }
+    try { return !! editor && editor.can( cmd ).ok; }
+    catch( _ ) { return false; }
 }
 
-// linked-style reports { styleId, styleName }; everything else a plain value.
-function radioHit( value, want )
-{
-    if( value && typeof value === 'object' ) return value.styleId === want;
-    return String( value ) === String( want );
-}
-
+// A slot is usable when the engine says so; an engine command when a dry run
+// would apply.
 function itemEnabled( it )
 {
-    if( it.cmd ) return cmdState( it.cmd ).enabled !== false;
+    if( it.slot  ) return slotState( it.slot ).enabled === true && ! slotBlocked( it.slot );
+    if( it.exec  ) return canExec( it.exec );
     return undefined;                        // let shared/menubar.js decide
 }
 
+// A value entry is ticked when it is the selection's value; a toggle while it
+// is on (bold, a list, the alignment it has).
 function itemChecked( it )
 {
-    if( ! it.cmd ) return undefined;
+    if( ! it.slot ) return undefined;
 
-    const st = cmdState( it.cmd );
-
-    if( it.radio !== undefined ) return radioHit( st.value, it.radio );
-    if( it.check === 'active'  ) return !! st.active;
-    if( it.check === 'value'   ) return !! st.value;
-
-    return false;
+    const s = slotState( it.slot );
+    if( it.value !== undefined ) return s.value !== undefined && s.value !== null && String( s.value ) === String( it.value );
+    return !! s.active;
 }
 
 // The key combo shown on the right of an entry, taken from the SHORTCUTS table
@@ -2593,7 +2211,7 @@ const MENUBAR = NayiveMenus.create(
     hint    : hintFor,
     enabled : itemEnabled,
     checked : itemChecked,
-    exec    : function( it ) { runSdCommand( it.cmd, it.arg ); }
+    exec    : function( it ) { if( it.slot ) runSlot( it.slot, it.value ); else if( it.exec ) runExec( it.exec ); }
 } );
 
 const CHROME = NayiveMenus.chrome(
@@ -2624,145 +2242,282 @@ function anchorRect( selector )
     return MENUBAR.anchorRect( selector, menusOn(), 'toolbar' );
 }
 
-//---- the entries the toolbar has no button for ---------------------------//
+//----------------------------------------------------------------------------//
+// EDICION > CORTAR / COPIAR / PEGAR, and the right-click menu
+//
+// Ctrl+X / C / V are the engine's own. The menu entries run the same engine
+// commands: cut and copy put the selection on the system clipboard (greyed at a
+// bare caret: nothing to take); paste is a command that takes the clipboard's
+// text and HTML, so they are read here, in the click (Chrome asks once); paste
+// without formatting hands over the text alone, which takes the look of wherever
+// the caret is.
 
-// Insertar > Imagen. The toolbar's own image button is unreachable with the
-// strip collapsed, so the menu picks the file and hands the engine a data URL -
-// through fileToDataUrl, which is the same 1600 px shrink SuperDoc's own button
-// gets (handleImageUpload).
+
+// (CLIP_ITEMS, the four entries, sits with the menu table: MENUS uses it.)
+
+async function clipPaste( plain )
+{
+    if( ! ready || ! editor ) return;
+
+    const dt = await NayiveOffice.clip.read();
+    if( ! dt ) { NayiveUI.toast( NayiveUI.t( 'ui.clipboardBlocked' ) ); return; }
+
+    const text = dt.getData( 'text/plain' ) || '';
+    const html = plain ? '' : dt.getData( 'text/html' ) || '';
+    if( ! text && ! html ) return;
+
+    if( html ) caretAfterPaste( text );
+    runExec( plain ? { type: 'pasteWithoutFormatting', text: text }
+                   : html ? { type: 'paste', text: text, html: html } : { type: 'paste', text: text } );
+}
+
+// A paste that carries HTML - the engine's own copy, a web page - leaves the
+// caret BEFORE what it put in, from the keyboard and the menu alike (quirks.js,
+// pasteCaretBefore); Word leaves it after, and the next word typed would land in
+// front of the paste. Called just before a paste: once the engine has put the
+// text in, and only if the caret is still at the paste's start and the text
+// really sits there on the page, the caret goes to its end. A paste over
+// several paragraphs is left as the engine leaves it.
+function caretAfterPaste( text )
+{
+    if( ! Q.pasteCaretBefore || ! editor || ! text || /[\r\n]/.test( text ) ) return;
+
+    const before = caretNow();
+    if( ! before || before.anchor.paragraphId !== before.head.paragraphId ) return;
+
+    const pid   = before.anchor.paragraphId;
+    const start = Math.min( before.anchor.offset, before.head.offset );
+    const rev   = revisionNow();
+    const t0    = Date.now();
+
+    ( function wait()
+    {
+        if( revisionNow() === rev ) { if( Date.now() - t0 < 1000 ) setTimeout( wait, 20 ); return; }
+
+        requestAnimationFrame( function() { requestAnimationFrame( function()     // painted
+        {
+            const now = caretNow();
+            if( ! now || now.anchor.paragraphId !== pid || now.anchor.offset !== start || now.head.offset !== start ) return;
+            if( paintedText( pid ).slice( start, start + text.length ).join( '' ) !== text ) return;
+
+            const at = { paragraphId: pid, offset: start + text.length };
+            try { editor.exec( { type: 'setSelection', range: { anchor: at, head: at } } ); } catch( _ ) {}
+        } ); } );
+    } )();
+}
+
+// The caret with offsets. The command contract's selection names paragraphs
+// only; the surface's has the offsets (the same seam the links use).
+function caretNow()    { try { return editor.surface.state().selection; } catch( _ ) { return null; } }
+function revisionNow() { try { return editor.getDocumentHandle().revision; } catch( _ ) { return -1; } }
+
+// One paragraph's text as painted, character by character (a gap stays empty).
+function paintedText( pid )
+{
+    const out = [];
+    for( const span of document.querySelectorAll( '#editor .layout-run-text[data-paragraph-id][data-start]' ) )
+    {
+        if( span.getAttribute( 'data-paragraph-id' ) !== pid ) continue;
+        const at = Number( span.getAttribute( 'data-start' ) ), t = span.textContent;
+        for( let i = 0; i < t.length; i++ ) out[ at + i ] = t[ i ];
+    }
+    return out;
+}
+
+// The core has no menu of its own. On a page, ours: the spelling rows first when
+// the word under the pointer is flagged (proofing-overlay.js), then the
+// clipboard. Off the pages, the browser's.
+async function onContextMenu( e )
+{
+    if( ! ready || ! editor || ! e.target.closest || ! e.target.closest( '.docx-page' ) ) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const at    = { left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0, height: 0 };
+    const words = spell ? await spell.itemsAt( e.clientX, e.clientY ) : null;
+
+    MENUBAR.openItems( ( words ? words.concat( [ { sep: true } ] ) : [] ).concat( CLIP_ITEMS ), at );
+}
+
+//----------------------------------------------------------------------------//
+// BUSCAR / REEMPLAZAR  (find.js draws the bar; Ctrl+F, Ctrl+H, Edicion)
+
+let find = null;     // made in wireStaticUI
+
+function openFind( replace )
+{
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( find ) find.open( replace );
+}
+
+//----------------------------------------------------------------------------//
+// HIPERVINCULO  (Ctrl+K, the toolbar, Insertar; a click on a link)
+//
+// The engine draws links and says when one is clicked or asked for
+// (setHyperlinkChrome) but has no command that makes one: the text.link slot is
+// not wired and insertHyperlink refuses a target (2.21.0). What works is the
+// link API on editor.surface - typed and exported, though the engine calls
+// `surface` its seam for hosts that need more than the command contract
+// (quirks.js, hyperlinkOnSurface).
+//
+// The sheet makes a link of the selected text, or changes the one the caret is
+// in; an empty address takes the link off. A click on a link opens a small menu
+// under it: where it goes, open it, edit it, remove it.
+
+function links() { return editor && editor.surface && editor.surface.hyperlinks; }
+
+let linkEditing = null;     // the link the sheet was opened on, or null for a new one
+
+function openLinkDialog()
+{
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    if( document.getElementById( 'linkBackdrop' ).classList.contains( 'open' ) ) return;   // Ctrl+K: engine and table both ask
+
+    const L = links();
+    let at = null;
+    try { at = L && L.linkAtCaret(); } catch( _ ) {}
+
+    let collapsed = true;
+    try { collapsed = editor.snapshot().selectionCollapsed; } catch( _ ) {}
+
+    if( ! at && collapsed ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
+
+    linkEditing = at;
+    document.getElementById( 'linkHref' ).value = at ? at.authored || at.href || '' : '';
+    setBackdrop( 'linkBackdrop', true );
+    setTimeout( function() { const f = document.getElementById( 'linkHref' ); f.focus(); f.select(); }, 50 );
+}
+
+function confirmLink()
+{
+    const raw = document.getElementById( 'linkHref' ).value.trim();
+    setBackdrop( 'linkBackdrop', false );
+
+    const L = links();
+    if( ! L || ! ready ) return;
+
+    let ok;
+    try
+    {
+        if( ! raw ) ok = linkEditing ? L.removeHyperlink( linkEditing.id ) : true;
+        else        ok = L.applyHyperlink( { url: withScheme( raw ) } );
+    }
+    catch( e ) { console.error( 'Write: link -', e ); ok = false; }
+
+    if( ! ok ) NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+    focusEditor();
+}
+
+// "nayive.org" is a web address, not a file beside the document.
+function withScheme( url )
+{
+    return /^[a-z][a-z0-9+.-]*:/i.test( url ) || url.charAt( 0 ) === '#' ? url
+         : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( url ) ? 'mailto:' + url
+         : 'https://' + url;
+}
+
+// A click on a link (the engine refused to navigate and tells us where it was).
+function showLinkMenu( act )
+{
+    const link = act && act.link;
+    if( ! link ) return;
+
+    const items = [ { text: link.href || link.authored || '', enabled: function() { return false; } }, { sep: true } ];
+
+    if( link.href && link.kind === 'external' )
+        items.push( { key: 'write.linkOpen', run: function() { window.open( link.href, '_blank', 'noopener' ); } } );
+
+    items.push( { key: 'write.linkEdit',   run: openLinkDialog },
+                { key: 'write.linkRemove', run: function()
+                  {
+                      const L = links();
+                      let ok = false;
+                      try { ok = !! L && L.removeHyperlink( link.id ); } catch( _ ) {}
+                      if( ! ok ) NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+                      focusEditor();
+                  } } );
+
+    const r = act.rect;
+    MENUBAR.openItems( items, { left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+                                width: r.right - r.left, height: r.bottom - r.top } );
+}
+
+//----------------------------------------------------------------------------//
+// IMAGEN  (Insertar > Imagen, the toolbar)
+//
+// Put in at the caret, as it would come out of Word: inline, at its own size
+// but never wider than the text. Shrunk first to 1600 px on the long side (the
+// shared NayivePhoto step Photos and Drive use), because it travels inside the
+// .docx for good. The engine's insert is asynchronous (it decodes the picture),
+// so it goes through executeImageCommand, not exec.
+
+const IMAGE_MIMES = [ 'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/webp' ];
+
 function pickImage()
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
-
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
     document.getElementById( 'imgInput' ).click();
 }
 
 async function insertPickedImage( file )
 {
-    if( ! file ) return;
+    if( ! file || ! ready || ! editor ) return;
 
     try
     {
-        const src = await fileToDataUrl( file );
-        const res = await sd.ui.commands.executeAsync( 'image', { src: src } );
+        const blob = await shrinkImage( file );
+        const mime = blob.type === 'image/jpg' ? 'image/jpeg' : blob.type;
+        if( IMAGE_MIMES.indexOf( mime ) < 0 ) { NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) ); return; }
 
-        if( res === false || ( res && res.success === false ) ) throw new Error( 'image' );
-
+        const size = await imagePoints( blob );
+        const r = await executeImageCommand( editor, { type: 'insertImage', data: new Uint8Array( await blob.arrayBuffer() ),
+                                                       mime: mime, widthPoints: size.w, heightPoints: size.h } );
+        if( r && r.ok === false ) throw new Error( r.reason );
         focusEditor();
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
+    catch( e )
+    {
+        console.error( 'Write: image -', e );
+        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+    }
 }
 
-// Insertar > Hipervinculo. `link` takes { href } and wraps the SELECTION, so an
-// empty one has nothing to turn into a link - say so instead of failing quietly.
-function openLinkDialog()
+// The picture's size in points (96 px to the inch, 72 points), scaled down to
+// the width between the margins when it is wider.
+async function imagePoints( blob )
 {
-    if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+    const bmp = await createImageBitmap( blob );
+    let w = bmp.width * 0.75, h = bmp.height * 0.75;
+    if( bmp.close ) bmp.close();
 
-    document.getElementById( 'linkHref' ).value = '';
-    setBackdrop( 'linkBackdrop', true );
-    setTimeout( function() { document.getElementById( 'linkHref' ).focus(); }, 50 );
-}
-
-async function confirmLink()
-{
-    const href = document.getElementById( 'linkHref' ).value.trim();
-
-    setBackdrop( 'linkBackdrop', false );
-    if( ! href ) return;
-
+    let max = 450;                                                // points: a Letter page's text width, as a fallback
     try
     {
-        const sel = await sd.activeEditor.doc.selection.current( { includeText: true } );
-
-        if( ! sel || ! sel.text ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
-
-        const res = await sd.ui.commands.executeAsync( 'link', { href: href } );
-        if( res === false || ( res && res.success === false ) ) throw new Error( 'link' );
-
-        focusEditor();
+        const ps = editor.getPageSetup(), m = ps.marginsTwips || {};
+        max = ( ps.pageWidthTwips - ( m.left || 0 ) - ( m.right || 0 ) ) / 20;
     }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
+    catch( _ ) {}
 
-//---- Edicion > cortar / copiar / pegar ------------------------------------//
-//
-// The engine's own clipboard API is not built into the browser bundle
-// (`clipboard.copy is not a supported v2 browser Document API operation`) and
-// document.execCommand reports success while doing nothing to the document. So
-// these three go through the system clipboard: the selection's TEXT out, and
-// pastePlainText (which takes a bare string) back in.
-//
-// That means the menu entries move PLAIN TEXT. Ctrl+X / Ctrl+C / Ctrl+V and the
-// right-click menu are the browser's own path and keep the formatting - the
-// shortcut hint on each row points at them.
-
-async function currentSelection()
-{
-    try { return await sd.activeEditor.doc.selection.current( { includeText: true } ); }
-    catch( _ ) { return null; }
-}
-
-async function clipCopy( andCut )
-{
-    if( ! ready ) return;
-
-    const sel = await currentSelection();
-
-    if( ! sel || ! sel.text ) { NayiveUI.toast( NayiveUI.t( 'write.selectTextFirst' ) ); return; }
-
-    try { await navigator.clipboard.writeText( sel.text ); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'ui.clipboardBlocked' ) ); return; }
-
-    if( ! andCut ) return;
-
-    try
-    {
-        await sd.activeEditor.doc.delete( { target: sel.selectionTarget } );
-        focusEditor();
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
-}
-
-function clipCut() { clipCopy( true ); }
-
-async function clipPaste()
-{
-    if( ! ready ) return;
-
-    let text = '';
-
-    try { text = await navigator.clipboard.readText(); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'ui.clipboardBlocked' ) ); return; }
-
-    if( ! text ) return;
-
-    try
-    {
-        await sd.activeEditor.host.getHandles().editing.input.pastePlainText( text );
-        focusEditor();
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); }
+    if( w > max ) { h = h * max / w; w = max; }
+    return { w: Math.round( w * 100 ) / 100, h: Math.round( h * 100 ) / 100 };
 }
 
 //----------------------------------------------------------------------------//
 // TABLE BORDERS
 //
-// A custom toolbar button (see the SuperDoc config) opens a Word-style border
-// picker anchored under it (#tbPopup): pick a preset plus weight / line style /
-// colour, then click the ✓ (the shared round accent button) — nothing touches
-// the table until then. While the popup is open the pending selection lives in
-// `tbDraft`; the ✓ copies it into the sticky `tbState` and issues the borders.
-// The picked weight / style / colour are sticky (remembered after a successful
-// apply). SuperDoc's own tableActions menu only offers "remove borders".
+// A toolbar button opens a Word-style border picker anchored under it
+// (#tbPopup): pick a preset plus weight / line style / colour, then click the ✓
+// (the shared round accent button) — nothing touches the table until then.
+// While the popup is open the pending selection lives in `tbDraft`; the ✓
+// copies it into the sticky `tbState` and issues the borders. The picked
+// weight / style / colour are sticky (remembered after a successful apply).
 //
-// A preset acts on the SELECTION, like Word:
-//   - caret inside one cell        -> that cell's own edges
-//   - several cells selected       -> the selection block; "box" is its outer
-//                                     perimeter, "inside" its interior grid, etc.
-//   - selection can't be resolved  -> the whole table (fallback)
-// tbTarget() resolves which, then setBorders({ nodeId, mode:'edges', edges })
-// is issued per target cell (so a multi-cell apply is several undo steps).
+// A preset acts on the SELECTED CELLS, like Word - the caret's cell alone when
+// nothing is selected (the engine's setTableBorders; it cannot select a whole
+// table for you, quirks.js selectTableRegionUnsupported). "Inside" needs
+// several cells. The engine has one inside target, so the separate inside-
+// horizontal / inside-vertical presets are gone.
 
 const TB_STYLE_KEY = 'nayive-write-tbstyle';
 
@@ -2775,147 +2530,6 @@ const tbState = { lineStyle: 'single', lineWeightPt: 1, color: '000000' };
 // committed to it by the ✓ button.
 const tbDraft = { preset: null, lineStyle: 'single', lineWeightPt: 1, color: '000000' };
 
-async function currentTableNodeId()
-{
-    let tables = [];
-    try
-    {
-        const l = await sd.activeEditor.doc.tables.list();
-        tables = ( l.stories || [] ).flatMap( function( s ) { return s.tables || []; } );
-    }
-    catch( _ ) { return null; }
-
-    if( tables.length === 0 ) return null;
-    if( tables.length === 1 ) return tables[0].tableNodeId;
-
-    // Several tables: each rendered cell carries data-layout-fragment-id
-    // "body|<n>/table/<k>/…"; the distinct "<n>/table/<k>" keys, top-to-bottom,
-    // line up with tables.list()'s document order. Find the caret's.
-    try
-    {
-        const caret = document.querySelector( '#editor .sd-v2-local-selection-caret' );
-        if( ! caret ) return tables[0].tableNodeId;
-
-        const keyOf = function( s ) { const m = ( s || '' ).match( /\|(\d+\/table\/\d+)/ ); return m ? m[1] : s; };
-
-        const r = caret.getBoundingClientRect();
-        let el  = document.elementFromPoint( r.left, r.top + r.height / 2 );
-        let mine = null;
-        while( el && ! mine )
-        {
-            const f = el.getAttribute && el.getAttribute( 'data-layout-fragment-id' );
-            if( f && /\/table\//.test( f ) ) mine = keyOf( f );
-            el = el.parentElement;
-        }
-        if( ! mine ) return tables[0].tableNodeId;
-
-        const seen = [];
-        document.querySelectorAll( '#editor [data-layout-fragment-id*="/table/"]' ).forEach( function( c )
-        {
-            const k = keyOf( c.getAttribute( 'data-layout-fragment-id' ) );
-            const y = c.getBoundingClientRect().top;
-            const hit = seen.find( function( o ) { return o.k === k; } );
-            if( hit ) hit.y = Math.min( hit.y, y );
-            else seen.push( { k: k, y: y } );
-        } );
-        seen.sort( function( a, b ) { return a.y - b.y; } );
-
-        const idx = seen.findIndex( function( o ) { return o.k === mine; } );
-        return ( tables[ idx ] || tables[0] ).tableNodeId;
-    }
-    catch( _ ) { return tables[0].tableNodeId; }
-}
-
-// The toolbar button's command. Toggles the popup; a click while it is open is
-// let through by onTbOutside() and lands here to close it again.
-async function openTableBorders()
-{
-    if( ! ready ) return;
-
-    if( document.getElementById( 'tbPopup' ).classList.contains( 'open' ) ) { closeTbPopup(); return; }
-
-    if( ! ( await tbTarget() ) ) { NayiveUI.toast( NayiveUI.t( 'write.cursorInTable' ) ); return; }
-
-    openTbPopup();
-}
-
-// The caret's paragraph block id, read from the DOM node under the caret.
-function caretBlockId()
-{
-    const caret = document.querySelector( '#editor .sd-v2-local-selection-caret' );
-    if( ! caret ) return null;
-
-    const r  = caret.getBoundingClientRect();
-    const el = document.elementFromPoint( r.left, r.top + r.height / 2 );
-    const bl = el && el.closest && el.closest( '#editor [data-sd-block-id]' );
-    return bl ? bl.getAttribute( 'data-sd-block-id' ) : null;
-}
-
-// Every cell whose grid span overlaps the [start..end] rectangle.
-async function cellsInRange( tableNodeId, range )
-{
-    const r0 = Math.min( range.start.rowIndex,    range.end.rowIndex );
-    const r1 = Math.max( range.start.rowIndex,    range.end.rowIndex );
-    const c0 = Math.min( range.start.columnIndex, range.end.columnIndex );
-    const c1 = Math.max( range.start.columnIndex, range.end.columnIndex );
-
-    let cells = [];
-    try { cells = ( await sd.activeEditor.doc.tables.getCells( { nodeId: tableNodeId } ) ).cells || []; }
-    catch( _ ) { return []; }
-
-    const overlaps = function( start, span, lo, hi ) { return start <= hi && lo <= start + Math.max( 1, span ) - 1; };
-
-    return cells.filter( function( c )
-    {
-        return overlaps( c.rowIndex, c.rowspan, r0, r1 ) && overlaps( c.columnIndex, c.colspan, c0, c1 );
-    } );
-}
-
-// Resolve what the presets act on:
-//   { scope:'cell',  cells:[{nodeId}] }
-//   { scope:'cells', tableNodeId, cells:[{nodeId,rowIndex,columnIndex,rowspan,colspan}, …] }
-//   { scope:'table', tableNodeId }
-// or null when the caret is not in a table.
-async function tbTarget()
-{
-    // 1. SuperDoc's own selection -> table context (covers multi-cell selection).
-    try
-    {
-        const host = sd.activeEditor && sd.activeEditor.host;
-        const ctx  = host && host.getTableContextAsync ? await host.getTableContextAsync() : null;
-
-        if( ctx && ctx.inTable && ctx.table && ctx.table.nodeId )
-        {
-            if( ctx.cell && ctx.cell.nodeId )
-                return { scope: 'cell', cells: [ { nodeId: ctx.cell.nodeId } ] };
-
-            if( ctx.cellRange )
-            {
-                const cells = await cellsInRange( ctx.table.nodeId, ctx.cellRange );
-                if( cells.length ) return { scope: 'cells', tableNodeId: ctx.table.nodeId, cells: cells };
-            }
-        }
-    }
-    catch( _ ) {}
-
-    // 2. Just the caret's cell, via its DOM block id.
-    try
-    {
-        const blockId = caretBlockId();
-        if( blockId )
-        {
-            const ctx = await sd.activeEditor.doc.tables.contextAtSelection( { blockIds: [ blockId ] } );
-            if( ctx && ctx.inTable && ctx.cell && ctx.cell.nodeId )
-                return { scope: 'cell', cells: [ { nodeId: ctx.cell.nodeId } ] };
-        }
-    }
-    catch( _ ) {}
-
-    // 3. The whole table, located from the caret position.
-    const tableNodeId = await currentTableNodeId();
-    return tableNodeId ? { scope: 'table', tableNodeId: tableNodeId } : null;
-}
-
 // The sticky line style / weight / colour, as setBorders() wants them.
 function tbSpec()
 {
@@ -2926,110 +2540,39 @@ function tbSpec()
     };
 }
 
-// Which of one cell's four edges a preset touches, given the selection's
-// bounding box (bbox null => a lone cell, so it is on every side of itself).
-// Interior lines are drawn as a cell's bottom / right edge (borders collapse,
-// so one side is enough).
-function borderEdgesForCell( which, cell, bbox, S )
+async function openTableBorders()
 {
-    const rBot   = cell.rowIndex    + ( cell.rowspan || 1 ) - 1;
-    const cRight = cell.columnIndex + ( cell.colspan || 1 ) - 1;
+    if( ! ready ) return;
 
-    const atTop    = ! bbox || cell.rowIndex    === bbox.r0;
-    const atBottom = ! bbox || rBot             === bbox.r1;
-    const atLeft   = ! bbox || cell.columnIndex === bbox.c0;
-    const atRight  = ! bbox || cRight           === bbox.c1;
+    if( document.getElementById( 'tbPopup' ).classList.contains( 'open' ) ) { closeTbPopup(); return; }
 
-    const e = {};
-    switch( which )
-    {
-        case 'all':     e.top = e.bottom = e.left = e.right = S;    break;
-        case 'none':    e.top = e.bottom = e.left = e.right = null; break;
-        case 'box':
-            if( atTop )    e.top    = S;
-            if( atBottom ) e.bottom = S;
-            if( atLeft )   e.left   = S;
-            if( atRight )  e.right  = S;
-            break;
-        case 'inside':
-            if( ! atBottom ) e.bottom = S;
-            if( ! atRight )  e.right  = S;
-            break;
-        case 'insideH': if( ! atBottom ) e.bottom = S; break;
-        case 'insideV': if( ! atRight )  e.right  = S; break;
-        case 'top':     if( atTop )    e.top    = S; break;
-        case 'bottom':  if( atBottom ) e.bottom = S; break;
-        case 'left':    if( atLeft )   e.left   = S; break;
-        case 'right':   if( atRight )  e.right  = S; break;
-    }
-    return e;
+    openTbPopup();
 }
 
-async function applyTableBorderPreset( which )
+// Popup preset -> the engine's border target.
+const TB_TARGETS = { all: 'all', box: 'outside', inside: 'inside', top: 'top', bottom: 'bottom', left: 'left', right: 'right' };
+
+function applyTableBorderPreset( which )
 {
-    const target = await tbTarget();
-    if( ! target ) { NayiveUI.toast( NayiveUI.t( 'write.cursorInTable' ) ); return; }
+    if( ! ready || ! editor ) return;
 
-    if( target.scope === 'cell' && ( which === 'inside' || which === 'insideH' || which === 'insideV' ) )
-    {
-        NayiveUI.toast( NayiveUI.t( 'write.selectCells' ) );
-        return;
-    }
+    let snap = null;
+    try { snap = editor.snapshot(); } catch( _ ) {}
+    if( ! snap || ! snap.table ) { NayiveUI.toast( NayiveUI.t( 'write.cursorInTable' ) ); return; }
 
-    const b = tbSpec();
-    const S = { lineStyle: b.lineStyle, lineWeightPt: b.lineWeightPt, color: b.color };
+    const one = ! snap.selection || snap.selection.from.paraId === snap.selection.to.paraId;
+    if( which === 'inside' && one ) { NayiveUI.toast( NayiveUI.t( 'write.selectCells' ) ); return; }
 
-    try
-    {
-        if( target.scope === 'table' )
-        {
-            const N = null;
-            const edges = {
-                all     : { top: S, bottom: S, left: S, right: S, insideH: S, insideV: S },
-                box     : { top: S, bottom: S, left: S, right: S },
-                inside  : { insideH: S, insideV: S },
-                none    : { top: N, bottom: N, left: N, right: N, insideH: N, insideV: N },
-                top     : { top: S },    bottom  : { bottom: S },
-                left    : { left: S },   right   : { right: S },
-                insideH : { insideH: S }, insideV : { insideV: S }
-            }[ which ];
+    const b   = tbSpec();
+    const cmd = which === 'none'
+        ? { type: 'setTableBorders', scope: 'none', target: 'all' }
+        : { type: 'setTableBorders', scope: TB_TARGETS[ which ],
+            spec: { style: b.lineStyle, size: Math.round( b.lineWeightPt * 8 ), color: { kind: 'hex', value: b.color.toUpperCase() } } };
 
-            if( edges )
-                await sd.activeEditor.doc.tables.setBorders( { nodeId: target.tableNodeId, mode: 'edges', edges: edges } );
-        }
-        else
-        {
-            const cells = target.cells;
+    if( ! cmd.scope ) return;
 
-            let bbox = null;
-            if( cells[0].rowIndex != null )
-            {
-                bbox = { r0: Infinity, r1: -Infinity, c0: Infinity, c1: -Infinity };
-                for( const c of cells )
-                {
-                    bbox.r0 = Math.min( bbox.r0, c.rowIndex );
-                    bbox.r1 = Math.max( bbox.r1, c.rowIndex    + ( c.rowspan || 1 ) - 1 );
-                    bbox.c0 = Math.min( bbox.c0, c.columnIndex );
-                    bbox.c1 = Math.max( bbox.c1, c.columnIndex + ( c.colspan || 1 ) - 1 );
-                }
-            }
-
-            for( const c of cells )
-            {
-                const edges = borderEdgesForCell( which, c, bbox, S );
-                if( Object.keys( edges ).length )
-                    await sd.activeEditor.doc.tables.setBorders( { nodeId: c.nodeId, mode: 'edges', edges: edges } );
-            }
-        }
-
-        onEdit();
-        persistTbState();
-    }
-    catch( e )
-    {
-        console.error( 'Write: table borders', e );
-        NayiveUI.toast( NayiveUI.t( 'write.borderFailed' ) );
-    }
+    runExec( cmd );
+    persistTbState();
 }
 
 function persistTbState()
@@ -3157,7 +2700,7 @@ function openTbPopup()
 
     pop.classList.add( 'open' );   // must be laid out before we can measure it
 
-    const r  = anchorRect( '#toolbar [data-item="btn-tableBorders"]' );
+    const r  = anchorRect( '#tableBordersBtn' );
     const vw = document.documentElement.clientWidth;
     let   left = Math.min( r.left, vw - pop.offsetWidth - 8 );
     if( left < 8 ) left = 8;
@@ -3187,8 +2730,7 @@ function onTbOutside( e )
     const pop = document.getElementById( 'tbPopup' );
     if( pop.contains( e.target ) ) return;
 
-    const ctn = e.target.closest && e.target.closest( '.superdoc-toolbar .sd-toolbar-item-ctn' );
-    if( ctn && ctn.querySelector( '[data-item="btn-tableBorders"]' ) ) return;
+    if( e.target.closest && e.target.closest( '#tableBordersBtn' ) ) return;
 
     closeTbPopup();
 }
@@ -3196,17 +2738,13 @@ function onTbOutside( e )
 //----------------------------------------------------------------------------//
 // PAGE SETUP  (size / orientation / margins)
 //
-// This used to act on a hard-coded "section-0" and NEVER read the document: the
-// dialog always showed Nayive's defaults, so opening a Letter/landscape file and
-// pressing "Aplicar" silently overwrote its real page setup. Both halves are
-// fixed here - the section is the one the caret is in, and the dialog is filled
-// from doc.sections.list(), which does work in the browser build (a comment here
-// used to say its query API was Node-only; it is not).
-//
-// One gotcha worth keeping: READS take { address: { kind, sectionId } }, WRITES
-// take { target: { kind, sectionId } }. They are not interchangeable.
+// Read from the DOCUMENT (getPageSetup, twips) and written back with the
+// setPageSetup command, on the section the caret is in. Columns and line
+// numbers are gone with the old engine (his call, 2026-09-18) until an engine
+// release draws them.
 
 const CM_PER_IN = 2.54;
+const TWIPS_PER_IN = 1440;
 
 function fmtCm( v ) { return ( Math.round( v * 100 ) / 100 ).toString().replace( '.', ',' ); }
 
@@ -3218,14 +2756,18 @@ function parseCm( raw, max )
     return Number.isFinite( n ) ? Math.min( Math.max( n, 0 ), max === undefined ? 10 : max ) : null;
 }
 
-async function openPageSetup()
+function twipsToCm( t ) { return ( t || 0 ) / TWIPS_PER_IN * CM_PER_IN; }
+function cmToTw( cm )   { return Math.round( ( cm || 0 ) / CM_PER_IN * TWIPS_PER_IN ); }
+function inToTw( i )    { return Math.round( ( i || 0 ) * TWIPS_PER_IN ); }
+
+function openPageSetup()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    // Fill from the DOCUMENT, not from this session's defaults. If the read
-    // fails, fall back to the defaults rather than showing nothing.
+    // Fill from the DOCUMENT, not from Nayive's defaults. If the read fails,
+    // fall back to the defaults rather than showing nothing.
     let cur = null;
-    try { cur = await readPageSetup(); } catch( _ ) {}
+    try { cur = readPageSetup(); } catch( _ ) {}
 
     const v = cur || pageSetup;
 
@@ -3237,19 +2779,8 @@ async function openPageSetup()
     document.getElementById( 'psRight'  ).value = fmtCm( v.right );
     document.getElementById( 'psWidth'  ).value = fmtCm( ( v.width  || 0 ) * CM_PER_IN );
     document.getElementById( 'psHeight' ).value = fmtCm( ( v.height || 0 ) * CM_PER_IN );
-    document.getElementById( 'psColumns' ).value = String( ( cur && cur.columns ) || 1 );
 
-    // Line numbering is written but not reported back by sections.list(), so the
-    // box shows what this session last set rather than the document's own state.
-    document.getElementById( 'psLineNumbers' ).checked = !! lineNumbersOn;
-
-    // Say which section is being changed, but only when there is more than one -
-    // otherwise the line is noise.
-    const note = document.getElementById( 'psSection' );
-    const many = cur && cur.sectionCount > 1;
-    note.hidden = ! many;
-    if( many ) note.textContent = NayiveUI.tf( 'write.psSection',
-                                               { n: cur.sectionIndex + 1, total: cur.sectionCount } );
+    document.getElementById( 'psSection' ).hidden = true;   // the engine reports the caret's section only
 
     syncPageSizeRows();
     setBackdrop( 'pageSetupBackdrop', true );
@@ -3262,95 +2793,53 @@ function syncPageSizeRows()
         document.getElementById( 'psSize' ).value !== 'custom';
 }
 
-// The section the caret sits in, falling back to the first one (a fresh document
-// has no caret yet, and boot() applies the defaults before anyone has clicked).
-async function caretSectionId()
+// The open document's page setup, in the dialog's units: centimetres for the
+// margins, inches for the sheet (PAGE_SIZES).
+function readPageSetup()
 {
-    try
-    {
-        const ctx = sd.activeEditor.host.pageLayout.getActiveRulerContext();
-        if( ctx && ctx.sectionId ) return ctx.sectionId;
-    }
-    catch( _ ) {}
+    const ps = editor.getPageSetup();
+    if( ! ps ) return null;
 
-    try { return ( await sd.activeEditor.doc.sections.list() ).items[ 0 ].address.sectionId; }
-    catch( _ ) { return 'section-0'; }
-}
-
-// Read the open document's real page setup. Everything the API hands back is in
-// inches; the dialog works in centimetres.
-async function readPageSetup()
-{
-    const list = await sd.activeEditor.doc.sections.list();
-    const id   = await caretSectionId();
-    const sec  = list.items.find( function( i ) { return i.address.sectionId === id; } ) || list.items[ 0 ];
-
-    if( ! sec ) return null;
-
-    const ps   = sec.pageSetup || {};
-    const mg   = sec.margins   || {};
     const land = ps.orientation === 'landscape';
+    const m    = ps.marginsTwips || {};
 
     // width/height are as laid out, so undo the rotation before naming the size.
-    const w = land ? ps.height : ps.width;
-    const h = land ? ps.width  : ps.height;
+    const w = ( land ? ps.pageHeightTwips : ps.pageWidthTwips  ) / TWIPS_PER_IN;
+    const h = ( land ? ps.pageWidthTwips  : ps.pageHeightTwips ) / TWIPS_PER_IN;
 
     return {
         size        : sizeNameFor( w, h ),
         orientation : land ? 'landscape' : 'portrait',
         width       : w,
         height      : h,
-        top         : ( mg.top    || 0 ) * CM_PER_IN,
-        bottom      : ( mg.bottom || 0 ) * CM_PER_IN,
-        left        : ( mg.left   || 0 ) * CM_PER_IN,
-        right       : ( mg.right  || 0 ) * CM_PER_IN,
-        columns     : ( sec.columns && sec.columns.count ) || 1,
-        sectionId   : sec.address.sectionId,
-        sectionCount: list.items.length,
-        sectionIndex: sec.index
+        top         : twipsToCm( m.top ),
+        bottom      : twipsToCm( m.bottom ),
+        left        : twipsToCm( m.left ),
+        right       : twipsToCm( m.right )
     };
 }
 
-// Push a page setup (size / orientation / cm margins) onto the section the caret
-// is in. SuperDoc's sections API takes INCHES.
-async function applyPageSetup( setup, sectionId )
+// The setPageSetup command for a page setup in the dialog's units. `scope`
+// 'section' is Word's "Apply to: this section".
+function pageSetupCommand( setup, scope )
 {
-    const size = setup.size === 'custom' ? { w: setup.width, h: setup.height }
-                                         : PAGE_SIZES[ setup.size ];
-    const land   = setup.orientation === 'landscape';
-    const doc    = sd.activeEditor.doc;
-    const target = { kind: 'section', sectionId: sectionId || ( await caretSectionId() ) };
+    const size = setup.size === 'custom' ? { w: setup.width, h: setup.height } : PAGE_SIZES[ setup.size ];
+    const land = setup.orientation === 'landscape';
 
-    await doc.sections.setPageSetup(
-    {
-        target      : target,
-        width       : land ? size.h : size.w,
-        height      : land ? size.w : size.h,
-        orientation : setup.orientation
-    } );
-
-    await doc.sections.setPageMargins(
-    {
-        target : target,
-        top    : setup.top    / CM_PER_IN,
-        bottom : setup.bottom / CM_PER_IN,
-        left   : setup.left   / CM_PER_IN,
-        right  : setup.right  / CM_PER_IN
-    } );
-
-    if( setup.columns ) await doc.sections.setColumns( { target: target, count: setup.columns, gap: 0.5 } );
-
-    // `enabled` is required — without it the call is rejected outright.
-    if( setup.lineNumbers !== undefined )
-        await doc.sections.setLineNumbering( setup.lineNumbers
-                                             ? { target: target, enabled: true, countBy: 1, restart: 'newPage' }
-                                             : { target: target, enabled: false } );
+    return {
+        type        : 'setPageSetup',
+        pageWidth   : inToTw( land ? size.h : size.w ),
+        pageHeight  : inToTw( land ? size.w : size.h ),
+        orientation : land ? 'landscape' : 'portrait',
+        marginTop   : cmToTw( setup.top ),
+        marginBottom: cmToTw( setup.bottom ),
+        marginLeft  : cmToTw( setup.left ),
+        marginRight : cmToTw( setup.right ),
+        scope       : scope || 'section'
+    };
 }
 
-// Not reported by sections.list(), so remembered for the dialog's checkbox.
-let lineNumbersOn = false;
-
-async function confirmPageSetup()
+function confirmPageSetup()
 {
     const chosen = document.getElementById( 'psSize' ).value;
 
@@ -3360,8 +2849,6 @@ async function confirmPageSetup()
         // A page, not a margin: 200 cm is a generous ceiling, 1 cm a sane floor.
         width       : Math.max( parseCm( document.getElementById( 'psWidth'  ).value, 200 ) ?? 21,   1 ) / CM_PER_IN,
         height      : Math.max( parseCm( document.getElementById( 'psHeight' ).value, 200 ) ?? 29.7, 1 ) / CM_PER_IN,
-        columns     : parseInt( document.getElementById( 'psColumns' ).value, 10 ) || 1,
-        lineNumbers : document.getElementById( 'psLineNumbers' ).checked,
         top         : parseCm( document.getElementById( 'psTop'    ).value ) ?? pageSetup.top,
         bottom      : parseCm( document.getElementById( 'psBottom' ).value ) ?? pageSetup.bottom,
         left        : parseCm( document.getElementById( 'psLeft'   ).value ) ?? pageSetup.left,
@@ -3370,19 +2857,14 @@ async function confirmPageSetup()
 
     setBackdrop( 'pageSetupBackdrop', false );
 
-    try
+    const r = editor.exec( pageSetupCommand( next ) );
+    if( r && r.ok === false )
     {
-        await applyPageSetup( next );
-        phoneMarginsIn = null;   // margins may have moved: the phone fit re-reads them
-        pageSetup     = next;
-        lineNumbersOn = next.lineNumbers;
-        onEdit();   // mark dirty / schedule the save
-    }
-    catch( e )
-    {
-        console.error( 'Write: page setup', e );
+        console.error( 'Write: page setup -', r.reason );
         NayiveUI.toast( NayiveUI.t( 'write.pageSetupFailed' ) );
+        return;
     }
+    focusEditor();          // the change event marks it dirty
 }
 
 //----------------------------------------------------------------------------//
@@ -3390,8 +2872,7 @@ async function confirmPageSetup()
 
 async function exportBytes()
 {
-    const blob = await sd.export( { exportType: [ 'docx' ], triggerDownload: false } );
-    return new Uint8Array( await blob.arrayBuffer() );
+    return new Uint8Array( await editor.save() );
 }
 
 // Ctrl-S / the menu: save now. An untitled or someone else's document goes to
@@ -3449,39 +2930,44 @@ async function convertToDocx( path )
 }
 
 //----------------------------------------------------------------------------//
-// THE DOCUMENT IN SUPERDOC  (what the session in shared/office.js needs from Write)
+// THE DOCUMENT IN THE ENGINE  (what the session in shared/office.js needs from Write)
 
 // A .docx body on screen: opened, imported, the device draft or the .bak copy.
-// At start-up SuperDoc does not exist yet - boot() builds it on this file.
-async function loadBody( body, name )
+// Throws when the engine refuses it - the session says "could not be opened".
+async function loadBody( body )
 {
-    const file = new File( [ body ], baseName( name || 'documento.docx' ), { type: DOCX_MIME } );
-
-    if( ! sd ) { bootSource = file; return; }
-    await loadIntoEditor( file );
+    await loadIntoEditor( await toBytes( body ) );
 }
 
-// A blank document. BlankDOCX is a data: URL, not bytes - SuperDoc takes it as
-// it is. At start-up there is nothing to do: boot() starts on BlankDOCX.
+// A blank document with Nayive's page setup (A4, the margins above). Made once
+// per visit: Word's blank template, the page setup written into it, saved, and
+// those bytes are what every New loads. Loading them - rather than applying the
+// page setup to a fresh blank - is what keeps Ctrl+Z on a new document from
+// taking the page back to Letter.
+let blankBytes = null;
+
 async function loadBlank()
 {
-    if( ! sd ) return;
+    if( ! blankBytes )
+    {
+        ready = false;
+        editor.load( 'blank' );
 
-    // As a File, like any other document: replaceFile() given the data: URL
-    // itself resolves but keeps the old text once a File was loaded (a draft
-    // reopened at start-up), so New and "Guardar como"'s bin did nothing.
-    const blob = await ( await fetch( BlankDOCX ) ).blob();
-    await loadIntoEditor( new File( [ blob ], 'documento.docx', { type: DOCX_MIME } ) );
-    lastVert = { sig: null, value: null };
-    await applyDefaultPageSetup();
+        const r = editor.exec( pageSetupCommand( pageSetup, 'document' ) );
+        if( r && r.ok === false ) console.error( 'Write: default page setup -', r.reason );
+
+        blankBytes = new Uint8Array( await editor.save() );
+    }
+
+    await loadIntoEditor( blankBytes );
 }
 
-// A brand-new document gets Nayive's default page setup; opened files keep their own.
-async function applyDefaultPageSetup()
+async function toBytes( body )
 {
-    applyingDefaults = true;
-    try { await applyPageSetup( pageSetup ); } catch( _ ) {}
-    applyingDefaults = false;
+    if( body instanceof Uint8Array ) return body;
+    if( body instanceof ArrayBuffer ) return new Uint8Array( body );
+    if( body && typeof body.arrayBuffer === 'function' ) return new Uint8Array( await body.arrayBuffer() );
+    return new Uint8Array( body );
 }
 
 //----------------------------------------------------------------------------//
@@ -3495,39 +2981,27 @@ function dirName( path )  { return NayiveOffice.dirName( path ); }
 // Write's file-name rule, for "Guardar como" and a rename: always .docx.
 function docxName( name ) { return /\.docx$/i.test( name ) ? name : name + '.docx'; }
 
-async function fetchAsFile( path )
+async function fetchBytes( path )
 {
-    const bytes = await GumApi.readFileBytes( path );
-    return new File( [ bytes ], baseName( path ), { type: DOCX_MIME } );
+    return toBytes( await GumApi.readFileBytes( path ) );
 }
 
-// SuperDoc stores images inline in the .docx as data URLs, so whatever comes out
-// of here is carried in the document for good. A phone photo is 3-6 MB and turns
-// a two-page letter into a file nobody can e-mail, so it goes through the same
-// shrink Photos and Drive use (shared/photo.js) first. Handing back a resized
-// data: URL is the supported contract for handleImageUpload.
+// An image is stored inside the .docx, so whatever comes out of here is carried
+// in the document for good. A phone photo is 3-6 MB and turns a two-page letter
+// into a file nobody can e-mail, so it goes through the same shrink Photos and
+// Drive use (shared/photo.js) first.
 const IMAGE_MAX_EDGE = 1600;   // px on the long side - plenty at 100 % on paper
 
-async function fileToDataUrl( file )
+async function shrinkImage( file )
 {
-    let out = file;
-
     try
     {
         if( window.NayivePhoto )
         {
             const prepared = await NayivePhoto.prepare( file, IMAGE_MAX_EDGE );
-            if( prepared && prepared.blob ) out = prepared.blob;
+            if( prepared && prepared.blob ) return prepared.blob;
         }
     }
-    catch( _ ) { out = file; }   // undecodable (HEIC on some Androids): use it as it came
-
-    return new Promise( function( resolve, reject )
-    {
-        const fr = new FileReader();
-        fr.onload  = function() { resolve( fr.result ); };
-        fr.onerror = function() { reject( fr.error ); };
-        fr.readAsDataURL( out );
-    });
+    catch( _ ) {}   // undecodable (HEIC on some Androids): use it as it came
+    return file;
 }
-

@@ -21,13 +21,58 @@ function queuedNominatimSearch( sQuery )
 {
     const run = function()
     {
-        return fetch( 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=' + encodeURIComponent( sQuery ) )
+        return fetch( 'https://nominatim.openstreetmap.org/search?format=json&limit=3&addressdetails=1&accept-language=en&q=' + encodeURIComponent( sQuery ) )
             .then( function( res ) { return new Promise( function( resolve ) { setTimeout( function() { resolve( res ); }, 1100 ); } ); } );
     };
 
     const result = nominatimQueue.then( run, run );
     nominatimQueue = result.catch( function() {} );
     return result;
+}
+
+// Which of the (up to 3) hits is the actual place. Normally Nominatim links a town's
+// place-node into its administrative boundary and the boundary then reports the node's
+// position, so hit [0] is already right (Nerja, Madrid, Paris...). When that link is
+// missing, the boundary keeps its raw polygon centroid instead - for Marbella that is
+// 7.2 km east of the town, out by Las Chapas, because the municipality runs from San
+// Pedro to Cabopino and the town sits in its western half. The unlinked town node then
+// shows up as a separate, lower-ranked hit, which is what this picks up.
+//
+// Only boundaries are second-guessed, so a stage typed as a hotel, an airport or a
+// landmark always keeps hit [0]. The same-name + inside-the-bounding-box guard is what
+// stops us jumping to a namesake abroad (searching "Marbella" also returns one in
+// Colombia).
+function pickHit( aHits )
+{
+    const top = aHits[ 0 ];
+
+    if( ! top || top.class !== 'boundary' )
+        return top;
+
+    const bbox = ( top.boundingbox || [] ).map( parseFloat );   // [ south, north, west, east ]
+
+    if( bbox.length !== 4 || bbox.some( function( n ) { return ! isFinite( n ); } ) )
+        return top;
+
+    const sName = ( top.name || '' ).toLowerCase();
+
+    if( ! sName )
+        return top;
+
+    const town = aHits.slice( 1 ).find( function( h )
+    {
+        if( h.class !== 'place' || ( h.name || '' ).toLowerCase() !== sName )
+            return false;
+
+        const lat = parseFloat( h.lat );
+        const lon = parseFloat( h.lon );
+
+        return isFinite( lat ) && isFinite( lon )
+            && lat >= bbox[ 0 ] && lat <= bbox[ 1 ]
+            && lon >= bbox[ 2 ] && lon <= bbox[ 3 ];
+    });
+
+    return town || top;
 }
 
 // Returns one of:
@@ -51,7 +96,7 @@ async function geocodeLocation( sQuery )
         if( ! Array.isArray( geoData ) )
             return { unreachable: true };
 
-        const hit = geoData[ 0 ];
+        const hit = pickHit( geoData );
 
         if( ! hit )
             return null;   // reachable, genuinely no match

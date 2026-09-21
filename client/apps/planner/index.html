@@ -443,6 +443,24 @@
                 } );
             } );
 
+            // The calendar checks which day is today when ITS window gets focus. Planner
+            // passes on the rest: the whole window, the other two panes and, on a phone,
+            // the Calendar tab. The check is a date compare, so extra calls cost nothing.
+            function checkCalToday()
+            {
+                try { calPane.contentWindow && calPane.contentWindow.nayiveCheckToday && calPane.contentWindow.nayiveCheckToday(); }
+                catch( e ) { /* a frame mid-navigation */ }
+            }
+
+            window.addEventListener( 'focus', checkCalToday );
+            [ taskPane, habitPane ].forEach( function( f )
+            {
+                f.addEventListener( 'load', function()
+                {
+                    try { f.contentWindow.addEventListener( 'focus', checkCalToday ); } catch( e ) {}
+                } );
+            } );
+
             frames.forEach( function( f )
             {
                 f.addEventListener( 'load', function()
@@ -473,6 +491,7 @@
                     b.setAttribute( 'aria-selected', String( on ) );
                 } );
                 try { localStorage.setItem( TABKEY, id ); } catch( e ) {}
+                if( id === 'calendarPane' ) checkCalToday();
             }
 
             tabs.addEventListener( 'click', function( e )

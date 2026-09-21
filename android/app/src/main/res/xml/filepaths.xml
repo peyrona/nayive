@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The TWA's splash picture is handed to Chrome through this provider. -->
+<paths>
+    <files-path name="twa_splash" path="twa_splash/" />
+</paths>

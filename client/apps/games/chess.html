@@ -1,0 +1,1319 @@
+<!-- chess.html - Chess, one of the nine games of index.html.
+
+     Not a page of its own: index.html fetches this file at boot and takes
+     out its three parts: the style goes into its head, the pane into
+     #gameHost, and the script runs, reaching the helpers the games share
+     through window.NayiveGames.
+
+     It is the one game with an opponent in it. The rules and the machine
+     that plays them are the two halves of the script below, and they are
+     written to be read in that order: what a move IS, and then how one is
+     chosen. -->
+    <style>
+        /* ---- Chess --------------------------------------------------------
+           An 8x8 board and a machine on the other side of it. Like 2048 it is
+           turn-based - there is no canvas and no loop - but unlike 2048 the
+           answer to a move is not instant, so there is one state the other
+           games have no name for: "thinking", which is a turn the player may
+           look at but not touch.
+
+           The board is sized off ONE length, --board, the way 2048's is, and
+           every measurement inside it - the glyphs, the rings, the dots - is a
+           fraction of that, so the whole game scales with the window and the
+           host never has to scroll. */
+        .chess
+        {
+            --board: max( 200px, min( 100cqw, 100cqh ) );
+            /* The two square colours are a wood pair mixed INTO the theme's own
+               card colour, so the dark scheme dims both by itself and there is
+               no second set of colours to keep in step with it. */
+            --sq-light: color-mix( in srgb, #E8D6B8 76%, var(--card2) );
+            --sq-dark:  color-mix( in srgb, #9A7B54 76%, var(--card2) );
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; height: 100%; padding: 16px; box-sizing: border-box;
+        }
+        /* NOTHING but the board goes in here: anything else inside a size
+           container eats into the very height the board is measured against
+           (see 2048, where the hint had to move out for the same reason). */
+        .chess-area
+        {
+            flex: 1 1 auto; min-height: 0; align-self: stretch; overflow: auto;
+            display: flex; container-type: size;
+        }
+
+        .chess-board
+        {
+            position: relative; box-sizing: border-box; margin: auto;
+            width: var(--board); aspect-ratio: 1;
+            display: grid;
+            grid-template-columns: repeat( 8, 1fr );
+            grid-template-rows:    repeat( 8, 1fr );
+            border-radius: var(--radius-m); overflow: hidden;
+            -webkit-user-select: none; user-select: none;
+        }
+
+        /* A square is a <button>, so a keyboard and a screen reader get the
+           board for nothing. `touch-action: manipulation` is what takes the
+           300 ms wait off a tap on a phone without also stopping the page from
+           scrolling around it. */
+        .chess-sq
+        {
+            position: relative; z-index: 0; display: flex; align-items: center; justify-content: center;
+            border: 0; padding: 0; margin: 0; cursor: pointer;
+            background: var(--sq-light); color: inherit;
+            font-family: inherit; font-size: calc( var(--board) * 0.1 ); line-height: 1;
+            touch-action: manipulation;
+        }
+        .chess-sq.dark { background: var(--sq-dark); }
+
+        /* ONE set of glyphs for both sides - the solid ones - painted white or
+           black and outlined the other way round. The outlined Unicode set
+           (U+2654..) is a different weight from the solid one, so a board using
+           both has two sizes of piece on it; and a white king drawn as an
+           outline all but vanishes against a light square. */
+        .chess-sq[data-c="w"] { color: #FCFAF5; text-shadow: 0 0 2px #3B332A, 0 0 1px #3B332A, 0 1px 1px rgba( 0, 0, 0, 0.35 ); }
+        .chess-sq[data-c="b"] { color: #2A2620; text-shadow: 0 0 2px #EFE6D6, 0 0 1px #EFE6D6, 0 1px 1px rgba( 0, 0, 0, 0.25 ); }
+
+        /* Where the last move came from and went to, so the machine's answer
+           can be read off the board instead of looked for. */
+        .chess-sq.is-last::before
+        {
+            content: ''; position: absolute; inset: 0;
+            background: color-mix( in srgb, var(--accent) 28%, transparent );
+        }
+        /* The piece the player has picked up, and the squares it may go to: a
+           dot on an empty one, a ring on one with something to take - the shape
+           says whether a move is a capture before the piece moves. */
+        .chess-sq.is-from { box-shadow: inset 0 0 0 calc( var(--board) * 0.0075 ) var(--accent); }
+        .chess-sq.is-move::after
+        {
+            content: ''; position: absolute; width: 30%; aspect-ratio: 1; border-radius: 50%;
+            background: color-mix( in srgb, var(--accent) 60%, transparent );
+        }
+        .chess-sq.is-take::after
+        {
+            content: ''; position: absolute; inset: 7%; border-radius: 50%;
+            border: calc( var(--board) * 0.0075 ) solid color-mix( in srgb, var(--accent) 70%, transparent );
+        }
+        /* A king in check. It is the one thing on the board that is not said in
+           the accent colour, because it is the one thing that is not a choice. */
+        .chess-sq.is-check::before
+        {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient( circle at 50% 50%, #D9534F 0%, color-mix( in srgb, #D9534F 45%, transparent ) 55%, transparent 72% );
+        }
+        /* The piece sits OVER all three marks, and this is the whole of what
+           makes it so: a positioned pseudo-element paints after its element's
+           own text, so without it a king in check would be a red disc with a
+           crown poking out from under it. The negative z-index puts the marks
+           back between the square's background and its glyph - and it needs the
+           `z-index: 0` on every square above, not only the ones with a piece on
+           them, or a mark on an empty square would fall behind the board
+           itself. */
+        .chess-sq::before, .chess-sq::after { z-index: -1; }
+
+        /* The four pieces a pawn may become, as the cover's own row. They are
+           glyphs and not icons, so they are the same drawing as the piece that
+           lands on the board. */
+        .chess-promo-row      { display: flex; gap: 10px; }
+        .chess-promo-row .text-btn { font-size: 1.9rem; line-height: 1; padding: 4px 12px; }
+
+        /* Whose turn it is, or how the game ended: one line under the board,
+           where a player looks anyway. The height is held so the board does not
+           step up and down as the words change. */
+        .chess-status { margin: 0; text-align: center; font-size: 0.85rem; color: var(--text-dim); min-height: 1.25em; }
+        .chess-hint   { margin: 0; text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+    </style>
+
+            <!-- Chess. The 64 squares are built in JS - they are all the same
+                 and only what stands on them changes - so the board opens empty
+                 here; the two covers sit over the board and not over the header,
+                 so the game's name (the way back) and its toolbar stay live. -->
+            <section class="game-pane" data-pane="chess">
+                <div class="chess">
+                    <div class="view-bar" data-options="chess">
+                        <!-- How deep the machine looks. The three bars are the
+                             suite's difficulty icon (Sudoku's own). -->
+                        <div class="tb-modes">
+                            <button class="icon-btn sm" data-chess-level="easy" type="button" data-i18n-attr="title:games.chessEasy, aria-label:games.chessEasy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="20" x2="12" y2="13"></line></svg>
+                            </button>
+                            <button class="icon-btn sm is-active" data-chess-level="medium" type="button" data-i18n-attr="title:games.chessMedium, aria-label:games.chessMedium">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="9" y1="20" x2="9" y2="13"></line><line x1="15" y1="20" x2="15" y2="8.5"></line></svg>
+                            </button>
+                            <button class="icon-btn sm" data-chess-level="hard" type="button" data-i18n-attr="title:games.chessHard, aria-label:games.chessHard">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="20" x2="6" y2="13"></line><line x1="12" y1="20" x2="12" y2="8.5"></line><line x1="18" y1="20" x2="18" y2="4"></line></svg>
+                            </button>
+                        </div>
+
+                        <div class="game-stats">
+                            <span class="game-stat" data-i18n-attr="title:games.chessMoves">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><line x1="4" y1="6" x2="4.01" y2="6"></line><line x1="4" y1="12" x2="4.01" y2="12"></line><line x1="4" y1="18" x2="4.01" y2="18"></line></svg>
+                                <b id="chessMoves">1</b>
+                            </span>
+                            <span class="game-stat" data-i18n-attr="title:games.chessMaterial">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"></line><line x1="5" y1="7" x2="19" y2="7"></line><path d="M2.5 14 5.5 8l3 6a3 3 0 0 1-6 0z"></path><path d="M15.5 14l3-6 3 6a3 3 0 0 1-6 0z"></path><line x1="8" y1="20" x2="16" y2="20"></line></svg>
+                                <b id="chessMaterial">0</b>
+                            </span>
+                        </div>
+
+                        <div class="tb-actions">
+                            <button class="icon-btn sm" id="chessPause" type="button" data-i18n-attr="title:games.pause, aria-label:games.pause">
+                                <svg data-ic="pause" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"></rect><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"></rect></svg>
+                                <svg data-ic="play" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M8 5.5a1 1 0 0 1 1.5-.87l9 6.5a1 1 0 0 1 0 1.74l-9 6.5A1 1 0 0 1 8 18.5z"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="chessUndo" type="button" data-i18n-attr="title:games.chessUndo, aria-label:games.chessUndo">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-6a5 5 0 0 0-5-5H4"></path></svg>
+                            </button>
+                            <button class="icon-btn sm" id="chessNew" type="button" data-i18n-attr="title:games.newGame, aria-label:games.newGame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"></path><polyline points="3 21 3 16 8 16"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="chess-area">
+                        <div class="chess-board" id="chessBoard">
+                            <!-- How the game ended, or that it is paused. A
+                                 paused board is covered SOLIDLY and a finished
+                                 one is not: there is nothing left to work out
+                                 from a board that is over, and everything to
+                                 work out from one that is only waiting. -->
+                            <div class="game-cover chess-over" id="chessOver" hidden>
+                                <p class="game-cover-t" id="chessOverTitle"></p>
+                                <p class="game-cover-s" id="chessOverSub"></p>
+                                <button class="text-btn" id="chessOverBtn" type="button"></button>
+                            </div>
+
+                            <!-- A pawn that reached the far rank, waiting to be
+                                 told what it became. -->
+                            <div class="game-cover chess-promo" id="chessPromo" hidden>
+                                <p class="game-cover-t" data-i18n="games.chessPromote"></p>
+                                <div class="chess-promo-row">
+                                    <button class="text-btn" type="button" data-promo="5" data-i18n-attr="title:games.chessQueen, aria-label:games.chessQueen">&#9819;</button>
+                                    <button class="text-btn" type="button" data-promo="4" data-i18n-attr="title:games.chessRook, aria-label:games.chessRook">&#9820;</button>
+                                    <button class="text-btn" type="button" data-promo="3" data-i18n-attr="title:games.chessBishop, aria-label:games.chessBishop">&#9821;</button>
+                                    <button class="text-btn" type="button" data-promo="2" data-i18n-attr="title:games.chessKnight, aria-label:games.chessKnight">&#9822;</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="chess-status" id="chessStatus"></p>
+                    <p class="chess-hint" data-i18n="games.hintChess"></p>
+                </div>
+            </section>
+
+    <script>
+    ( function ()
+    {
+        'use strict';
+
+        // The shell's helpers (index.html, "THE GAMES"): the same twelve in
+        // every game, whether it uses them all or not.
+        var T           = NayiveGames.T,
+            TF          = NayiveGames.TF,
+            STEP        = NayiveGames.STEP,
+            clock       = NayiveGames.clock,
+            keyBusy     = NayiveGames.keyBusy,
+            pauseButton = NayiveGames.pauseButton,
+            keepBest    = NayiveGames.keepBest,
+            gameLoop    = NayiveGames.gameLoop,
+            arcade      = NayiveGames.arcade,
+            saveBest    = NayiveGames.saveBest,
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
+
+        //------------------------------------------------------------------------//
+        // CHESS
+        //
+        // Three parts, in the order they are best read: the RULES (what a move
+        // is, and which of them may be played), the MACHINE (which of them it
+        // chooses) and the GAME (the board on screen and the turns going round).
+        //
+        // It keeps no record. The other six games end with a number - a score
+        // or a time - and chess ends with a result, which is not a thing to
+        // beat, so there is no line for it in games.json and nothing for the
+        // shell's loadData() to merge.
+
+        var Chess = ( function ()
+        {
+
+            //---- the rules ---------------------------------------------------
+            //
+            // A 0x88 board: 128 squares, and a square is on the real board
+            // exactly when ( sq & 0x88 ) is zero - which is the whole
+            // "did we fall off the edge?" test, so a rook's ray is walked
+            // without ever taking a file or a rank apart. The index is
+            // rank * 16 + file with rank 0 as White's back rank, so a white
+            // pawn moves +16 and promotes on rank 7.
+            //
+            // A piece is a small number, positive for White and negative for
+            // Black, so the sign IS the colour and the absolute value the kind.
+
+            var P = 1, N = 2, B = 3, R = 4, Q = 5, K = 6;
+            var WHITE = 1, BLACK = -1;
+
+            var STEP_N = [  33,  31,  18,  14, -14, -18, -31, -33 ];
+            var STEP_B = [  17,  15, -15, -17 ];
+            var STEP_R = [  16,   1,  -1, -16 ];
+            var STEP_Q = [  17,  16,  15,   1,  -1, -15, -16, -17 ];
+
+            // The four castling rights, as bits of one number.
+            var W_K = 1, W_Q = 2, B_K = 4, B_Q = 8;
+
+            var E1 = 0x04, H1 = 0x07, A1 = 0x00;
+            var E8 = 0x74, H8 = 0x77, A8 = 0x70;
+
+            function kind( p )  { return p < 0 ? -p : p; }
+            function side( p )  { return p < 0 ? BLACK : WHITE; }
+            function onBoard( sq ) { return ( sq & 0x88 ) === 0; }
+
+            // The starting position. `b` is the board, `cast` the four rights,
+            // `ep` the square a pawn may be taken on in passing (-1 for none),
+            // `half` the fifty-move counter and `wk`/`bk` where the kings are
+            // (kept as we go, because every legality test asks).
+            function startPos()
+            {
+                var b = new Int8Array( 128 ), back = [ R, N, B, Q, K, B, N, R ], i;
+
+                for( i = 0; i < 8; i++ )
+                {
+                    b[ i ]        =  back[ i ];
+                    b[ 0x10 + i ] =  P;
+                    b[ 0x60 + i ] = -P;
+                    b[ 0x70 + i ] = -back[ i ];
+                }
+
+                return { b: b, turn: WHITE, cast: W_K | W_Q | B_K | B_Q, ep: -1,
+                         half: 0, full: 1, wk: E1, bk: E8 };
+            }
+
+            // Is `sq` attacked by `by`? Asked from the square outwards rather
+            // than by generating the other side's moves: the king's safety is
+            // tested after every single pseudo-legal move, and a generator
+            // inside a generator is what turns a search of thousands of
+            // positions into one of millions.
+            function attacked( pos, sq, by )
+            {
+                var b = pos.b, i, to, p;
+
+                // A pawn of `by` stands one diagonal step BACK from what it
+                // attacks: White's are below the square, Black's above.
+                to = sq - by * 16;
+                if( onBoard( to + 1 ) && b[ to + 1 ] === by * P ) return true;
+                if( onBoard( to - 1 ) && b[ to - 1 ] === by * P ) return true;
+
+                for( i = 0; i < 8; i++ )
+                {
+                    to = sq + STEP_N[ i ];
+                    if( onBoard( to ) && b[ to ] === by * N ) return true;
+
+                    to = sq + STEP_Q[ i ];
+                    if( onBoard( to ) && b[ to ] === by * K ) return true;
+                }
+
+                for( i = 0; i < 4; i++ )
+                {
+                    for( to = sq + STEP_B[ i ]; onBoard( to ); to += STEP_B[ i ] )
+                    {
+                        p = b[ to ];
+                        if( p ) { if( side( p ) === by && ( kind( p ) === B || kind( p ) === Q ) ) return true; break; }
+                    }
+                    for( to = sq + STEP_R[ i ]; onBoard( to ); to += STEP_R[ i ] )
+                    {
+                        p = b[ to ];
+                        if( p ) { if( side( p ) === by && ( kind( p ) === R || kind( p ) === Q ) ) return true; break; }
+                    }
+                }
+                return false;
+            }
+
+            function kingSq( pos, who ) { return who === WHITE ? pos.wk : pos.bk; }
+
+            function inCheck( pos, who ) { return attacked( pos, kingSq( pos, who ), -who ); }
+
+            // A move is a plain object: where from, where to, what it takes
+            // (the piece itself, so unmake can put it back), what a pawn turns
+            // into, and the two special moves that touch a second square.
+            function mv( from, to, cap, promo, ep, castle )
+            {
+                return { from: from, to: to, cap: cap || 0, promo: promo || 0,
+                         ep: !! ep, castle: castle || 0 };
+            }
+
+            // Every move the pieces CAN make, check or no check. legal() is
+            // what sifts them; keeping the two apart is what lets the search
+            // throw a move away the moment it is refuted, without ever having
+            // paid for the rest.
+            function pseudo( pos, capsOnly )
+            {
+                var out = [], b = pos.b, me = pos.turn, fwd = me * 16;
+                var from, p, i, to, step, one, two, rank, last;
+
+                for( from = 0; from < 128; from++ )
+                {
+                    if( from & 0x88 ) { from += 7; continue; }
+
+                    p = b[ from ];
+                    if( ! p || side( p ) !== me ) continue;
+
+                    rank = from >> 4;
+                    last = me === WHITE ? 6 : 1;       // one rank short of promotion
+
+                    switch( kind( p ) )
+                    {
+                        case P:
+                            // The two captures come first because they are what
+                            // a capture-only search (the quiet one, see quiesce)
+                            // asks for.
+                            for( i = -1; i <= 1; i += 2 )
+                            {
+                                to = from + fwd + i;
+                                if( ! onBoard( to ) ) continue;
+
+                                if( b[ to ] && side( b[ to ] ) !== me )
+                                {
+                                    if( rank === last ) promos( out, from, to, b[ to ], me );
+                                    else out.push( mv( from, to, b[ to ] ) );
+                                }
+                                // In passing: the pawn that ran past is taken on
+                                // the square it CROSSED, not the one it is on.
+                                else if( to === pos.ep ) out.push( mv( from, to, -me * P, 0, true ) );
+                            }
+                            if( capsOnly ) break;
+
+                            one = from + fwd;
+                            if( ! b[ one ] )
+                            {
+                                if( rank === last ) promos( out, from, one, 0, me );
+                                else
+                                {
+                                    out.push( mv( from, one ) );
+
+                                    two = one + fwd;
+                                    if( rank === ( me === WHITE ? 1 : 6 ) && ! b[ two ] ) out.push( mv( from, two ) );
+                                }
+                            }
+                            break;
+
+                        case N: case K:
+                            step = kind( p ) === N ? STEP_N : STEP_Q;
+                            for( i = 0; i < step.length; i++ )
+                            {
+                                to = from + step[ i ];
+                                if( ! onBoard( to ) ) continue;
+                                if( b[ to ] )
+                                {
+                                    if( side( b[ to ] ) !== me ) out.push( mv( from, to, b[ to ] ) );
+                                }
+                                else if( ! capsOnly ) out.push( mv( from, to ) );
+                            }
+                            break;
+
+                        default:
+                            step = kind( p ) === B ? STEP_B : kind( p ) === R ? STEP_R : STEP_Q;
+                            for( i = 0; i < step.length; i++ )
+                                for( to = from + step[ i ]; onBoard( to ); to += step[ i ] )
+                                {
+                                    if( b[ to ] )
+                                    {
+                                        if( side( b[ to ] ) !== me ) out.push( mv( from, to, b[ to ] ) );
+                                        break;
+                                    }
+                                    if( ! capsOnly ) out.push( mv( from, to ) );
+                                }
+                            break;
+                    }
+                }
+
+                if( ! capsOnly ) castles( pos, out );
+                return out;
+            }
+
+            function promos( out, from, to, cap, me )
+            {
+                [ Q, R, B, N ].forEach( function ( k ) { out.push( mv( from, to, cap, k ) ); } );
+            }
+
+            // Castling is the one move with three squares to say no: the king
+            // may not start in check, cross an attacked square or land on one.
+            // The last of the three would be caught by legal() anyway; it is
+            // asked here as well so the rule reads whole.
+            function castles( pos, out )
+            {
+                var b = pos.b, me = pos.turn, you = -me;
+                var home = me === WHITE ? E1 : E8;
+                var kBit = me === WHITE ? W_K : B_K;
+                var qBit = me === WHITE ? W_Q : B_Q;
+
+                if( b[ home ] !== me * K ) return;
+                if( ! ( pos.cast & ( kBit | qBit ) ) ) return;
+                if( attacked( pos, home, you ) ) return;
+
+                if( ( pos.cast & kBit ) && ! b[ home + 1 ] && ! b[ home + 2 ]
+                    && b[ home + 3 ] === me * R
+                    && ! attacked( pos, home + 1, you ) && ! attacked( pos, home + 2, you ) )
+                    out.push( mv( home, home + 2, 0, 0, false, kBit ) );
+
+                if( ( pos.cast & qBit ) && ! b[ home - 1 ] && ! b[ home - 2 ] && ! b[ home - 3 ]
+                    && b[ home - 4 ] === me * R
+                    && ! attacked( pos, home - 1, you ) && ! attacked( pos, home - 2, you ) )
+                    out.push( mv( home, home - 2, 0, 0, false, qBit ) );
+            }
+
+            // Which rights a move spends: a king that moves gives up both, and
+            // a rook that leaves its corner - or is taken on it - gives up that
+            // side's. Reading it off the two SQUARES catches both at once.
+            var RIGHTS = {};
+            RIGHTS[ E1 ] = W_K | W_Q;   RIGHTS[ H1 ] = W_K;   RIGHTS[ A1 ] = W_Q;
+            RIGHTS[ E8 ] = B_K | B_Q;   RIGHTS[ H8 ] = B_K;   RIGHTS[ A8 ] = B_Q;
+
+            // Plays `m` and hands back everything needed to take it back. The
+            // position is changed in place: the search walks tens of thousands
+            // of them, and copying a board each time is the one thing that
+            // would make it too slow to run on a phone.
+            function make( pos, m )
+            {
+                var b = pos.b, me = pos.turn, p = b[ m.from ];
+                var undo = { m: m, cast: pos.cast, ep: pos.ep, half: pos.half, full: pos.full };
+                var capSq = m.ep ? m.to - me * 16 : m.to;
+
+                if( m.cap ) b[ capSq ] = 0;
+
+                b[ m.from ] = 0;
+                b[ m.to ]   = m.promo ? me * m.promo : p;
+
+                if( m.castle )
+                {
+                    if( m.castle === W_K || m.castle === B_K ) { b[ m.to - 1 ] = b[ m.to + 1 ]; b[ m.to + 1 ] = 0; }
+                    else                                       { b[ m.to + 1 ] = b[ m.to - 2 ]; b[ m.to - 2 ] = 0; }
+                }
+
+                if( kind( p ) === K ) { if( me === WHITE ) pos.wk = m.to; else pos.bk = m.to; }
+
+                pos.cast &= ~( ( RIGHTS[ m.from ] || 0 ) | ( RIGHTS[ m.to ] || 0 ) );
+                pos.ep    = ( kind( p ) === P && ( m.to - m.from ) === me * 32 ) ? m.from + me * 16 : -1;
+                pos.half  = ( kind( p ) === P || m.cap ) ? 0 : pos.half + 1;
+                if( me === BLACK ) pos.full++;
+                pos.turn  = -me;
+
+                return undo;
+            }
+
+            function unmake( pos, undo )
+            {
+                var m = undo.m, b = pos.b, me = -pos.turn, p = b[ m.to ];
+                var capSq = m.ep ? m.to - me * 16 : m.to;
+
+                b[ m.from ] = m.promo ? me * P : p;
+                b[ m.to ]   = 0;
+                if( m.cap ) b[ capSq ] = m.cap;
+
+                if( m.castle )
+                {
+                    if( m.castle === W_K || m.castle === B_K ) { b[ m.to + 1 ] = b[ m.to - 1 ]; b[ m.to - 1 ] = 0; }
+                    else                                       { b[ m.to - 2 ] = b[ m.to + 1 ]; b[ m.to + 1 ] = 0; }
+                }
+
+                if( kind( p ) === K ) { if( me === WHITE ) pos.wk = m.from; else pos.bk = m.from; }
+
+                pos.cast = undo.cast;
+                pos.ep   = undo.ep;
+                pos.half = undo.half;
+                pos.full = undo.full;
+                pos.turn = me;
+            }
+
+            // The moves that may really be played: a pseudo-legal move is made,
+            // the mover's king is asked whether it is in check, and the move is
+            // taken back. It is the one place the pin, the discovered check and
+            // the king walking into an attack are all answered, and by the same
+            // question.
+            function legal( pos, capsOnly )
+            {
+                var list = pseudo( pos, capsOnly ), out = [], me = pos.turn, i, u;
+
+                for( i = 0; i < list.length; i++ )
+                {
+                    u = make( pos, list[ i ] );
+                    if( ! inCheck( pos, me ) ) out.push( list[ i ] );
+                    unmake( pos, u );
+                }
+                return out;
+            }
+
+            //---- the machine -------------------------------------------------
+            //
+            // What a piece is worth, and where it would rather stand. The
+            // tables are read from White's side, rank 8 first, and a black
+            // piece reads the same table upside down - which is the whole
+            // difference between the two colours in here.
+            //
+            // They are not a chess engine's opinions so much as its manners: a
+            // knight towards the middle, a rook on an open file's worth of
+            // seventh rank, a king tucked behind its pawns while the queens are
+            // on and out in the open once they are off. Enough to play a game
+            // that feels like chess without a book, a hash table or an endgame
+            // of its own.
+
+            var VALUE = [ 0, 100, 320, 330, 500, 900, 0 ];
+
+            var PST = {};
+
+            PST[ P ] = [   0,  0,  0,  0,  0,  0,  0,  0,
+                          50, 50, 50, 50, 50, 50, 50, 50,
+                          10, 10, 20, 30, 30, 20, 10, 10,
+                           5,  5, 10, 25, 25, 10,  5,  5,
+                           0,  0,  0, 20, 20,  0,  0,  0,
+                           5, -5,-10,  0,  0,-10, -5,  5,
+                           5, 10, 10,-20,-20, 10, 10,  5,
+                           0,  0,  0,  0,  0,  0,  0,  0 ];
+
+            PST[ N ] = [ -50,-40,-30,-30,-30,-30,-40,-50,
+                         -40,-20,  0,  0,  0,  0,-20,-40,
+                         -30,  0, 10, 15, 15, 10,  0,-30,
+                         -30,  5, 15, 20, 20, 15,  5,-30,
+                         -30,  0, 15, 20, 20, 15,  0,-30,
+                         -30,  5, 10, 15, 15, 10,  5,-30,
+                         -40,-20,  0,  5,  5,  0,-20,-40,
+                         -50,-40,-30,-30,-30,-30,-40,-50 ];
+
+            PST[ B ] = [ -20,-10,-10,-10,-10,-10,-10,-20,
+                         -10,  0,  0,  0,  0,  0,  0,-10,
+                         -10,  0,  5, 10, 10,  5,  0,-10,
+                         -10,  5,  5, 10, 10,  5,  5,-10,
+                         -10,  0, 10, 10, 10, 10,  0,-10,
+                         -10, 10, 10, 10, 10, 10, 10,-10,
+                         -10,  5,  0,  0,  0,  0,  5,-10,
+                         -20,-10,-10,-10,-10,-10,-10,-20 ];
+
+            PST[ R ] = [   0,  0,  0,  0,  0,  0,  0,  0,
+                           5, 10, 10, 10, 10, 10, 10,  5,
+                          -5,  0,  0,  0,  0,  0,  0, -5,
+                          -5,  0,  0,  0,  0,  0,  0, -5,
+                          -5,  0,  0,  0,  0,  0,  0, -5,
+                          -5,  0,  0,  0,  0,  0,  0, -5,
+                          -5,  0,  0,  0,  0,  0,  0, -5,
+                           0,  0,  0,  5,  5,  0,  0,  0 ];
+
+            PST[ Q ] = [ -20,-10,-10, -5, -5,-10,-10,-20,
+                         -10,  0,  0,  0,  0,  0,  0,-10,
+                         -10,  0,  5,  5,  5,  5,  0,-10,
+                          -5,  0,  5,  5,  5,  5,  0, -5,
+                           0,  0,  5,  5,  5,  5,  0, -5,
+                         -10,  5,  5,  5,  5,  5,  0,-10,
+                         -10,  0,  5,  0,  0,  0,  0,-10,
+                         -20,-10,-10, -5, -5,-10,-10,-20 ];
+
+            // The king has two, and which one is read is the only thing in here
+            // that knows what part of the game it is: behind the pawns while
+            // there is still a queen or a rook about, out into the middle once
+            // the board has emptied - without which it would sit in its corner
+            // through an endgame it should be walking into.
+            var KING_MID = [ -30,-40,-40,-50,-50,-40,-40,-30,
+                             -30,-40,-40,-50,-50,-40,-40,-30,
+                             -30,-40,-40,-50,-50,-40,-40,-30,
+                             -30,-40,-40,-50,-50,-40,-40,-30,
+                             -20,-30,-30,-40,-40,-30,-30,-20,
+                             -10,-20,-20,-20,-20,-20,-20,-10,
+                              20, 20,  0,  0,  0,  0, 20, 20,
+                              20, 30, 10,  0,  0, 10, 30, 20 ];
+
+            var KING_END = [ -50,-40,-30,-20,-20,-30,-40,-50,
+                             -30,-20,-10,  0,  0,-10,-20,-30,
+                             -30,-10, 20, 30, 30, 20,-10,-30,
+                             -30,-10, 30, 40, 40, 30,-10,-30,
+                             -30,-10, 30, 40, 40, 30,-10,-30,
+                             -30,-10, 20, 30, 30, 20,-10,-30,
+                             -30,-30,  0,  0,  0,  0,-30,-30,
+                             -50,-30,-30,-30,-30,-30,-30,-50 ];
+
+            var MATE = 100000;                 // a mate found `ply` moves from here scores MATE - ply
+
+            // The board in one number, always from the point of view of the
+            // side to move - which is what lets the search below negate a score
+            // instead of carrying a colour around with it.
+            function evaluate( pos )
+            {
+                var b = pos.b, score = 0, heavy = 0, sq, p, k, w;
+
+                function seat( at, who ) { return who === WHITE ? ( 7 - ( at >> 4 ) ) * 8 + ( at & 7 )
+                                                                : ( at >> 4 ) * 8 + ( at & 7 ); }
+
+                for( sq = 0; sq < 128; sq++ )
+                {
+                    if( sq & 0x88 ) { sq += 7; continue; }
+
+                    p = b[ sq ];
+                    if( ! p ) continue;
+
+                    k = kind( p );
+                    if( k === K ) continue;                      // the two kings are added below
+                    w = side( p );
+
+                    if( k === R || k === Q ) heavy++;
+                    score += w * ( VALUE[ k ] + PST[ k ][ seat( sq, w ) ] );
+                }
+
+                // ...once it is known which of the king's two tables to read.
+                score += ( heavy ? KING_MID : KING_END )[ seat( pos.wk, WHITE ) ];
+                score -= ( heavy ? KING_MID : KING_END )[ seat( pos.bk, BLACK ) ];
+
+                return score * pos.turn;
+            }
+
+            // Take the fattest piece with the thinnest one first. A capture
+            // that wins material is the move most likely to refute whatever the
+            // other side just tried, and alpha-beta only pays for the moves it
+            // looks at BEFORE the refutation - so the order is most of the
+            // speed.
+            function order( list, b )
+            {
+                list.forEach( function ( m )
+                {
+                    m.gain = m.cap ? VALUE[ kind( m.cap ) ] * 10 - VALUE[ kind( b[ m.from ] ) ]
+                           : m.promo ? VALUE[ m.promo ]
+                           : 0;
+                } );
+
+                return list.sort( function ( x, y ) { return y.gain - x.gain; } );
+            }
+
+            var nodes = 0, deadline = 0, stopped = false;
+
+            // The quiet search: at the bottom of the tree, keep taking. Without
+            // it the machine stops counting in the middle of an exchange and
+            // "wins" a queen it is about to lose back - the one blunder a
+            // fixed-depth search makes over and over.
+            function quiesce( pos, alpha, beta, ply )
+            {
+                var stand = evaluate( pos ), list, i, u, score, best;
+
+                if( ( ++nodes & 1023 ) === 0 && Date.now() > deadline ) stopped = true;
+                if( stopped || ply > 8 ) return stand;
+
+                best = stand;
+                if( best >= beta ) return best;
+                if( best > alpha ) alpha = best;
+
+                list = order( legal( pos, true ), pos.b );
+
+                for( i = 0; i < list.length; i++ )
+                {
+                    u     = make( pos, list[ i ] );
+                    score = -quiesce( pos, -beta, -alpha, ply + 1 );
+                    unmake( pos, u );
+
+                    if( stopped ) return best;
+                    if( score > best ) best = score;
+                    if( best > alpha ) alpha = best;
+                    if( alpha >= beta ) break;
+                }
+                return best;
+            }
+
+            // Negamax with alpha-beta: one side's best is the other's worst, so
+            // the same four lines serve both and the score only changes sign.
+            // Beta is "the other side would never allow this": the moment one
+            // reply beats it, the rest of this branch is never looked at, which
+            // is what buys the fourth move of depth.
+            //
+            // Fail-SOFT - it hands back the best score it actually saw rather
+            // than the edge of its window - because think() reads those scores
+            // back, and a clamped one would make every good move look the same.
+            function search( pos, depth, alpha, beta, ply, quiet )
+            {
+                var list, i, u, score, best;
+
+                if( ( ++nodes & 1023 ) === 0 && Date.now() > deadline ) stopped = true;
+                if( stopped ) return evaluate( pos );
+
+                if( pos.half >= 100 ) return 0;                  // the fifty-move draw, seen from inside
+                if( depth <= 0 ) return quiet ? quiesce( pos, alpha, beta, 0 ) : evaluate( pos );
+
+                list = legal( pos );
+
+                // No move at all is the end of the game, and the two endings are
+                // as far apart as a game gets: mate is worth everything, a
+                // stalemate exactly nothing. `- ply` is what makes the machine
+                // prefer the mate it can give SOONER - and, mated itself, the
+                // one that is furthest off.
+                if( ! list.length ) return inCheck( pos, pos.turn ) ? -MATE + ply : 0;
+
+                order( list, pos.b );
+                best = -MATE - 1;
+
+                for( i = 0; i < list.length; i++ )
+                {
+                    u     = make( pos, list[ i ] );
+                    score = -search( pos, depth - 1, -beta, -alpha, ply + 1, quiet );
+                    unmake( pos, u );
+
+                    if( stopped ) break;
+                    if( score > best ) best = score;
+                    if( best > alpha ) alpha = best;
+                    if( alpha >= beta ) break;
+                }
+                return best;
+            }
+
+            // The three levels, and what each of them is:
+            //
+            //   easy    one move deep and no quiet search, so it takes what is
+            //           there and misses what comes next - it can be beaten by
+            //           a two-move trick, which is the point of it;
+            //   medium  two moves and a quiet search: it will not hand a piece
+            //           over, and it punishes one that is handed to it;
+            //   hard    as deep as it can get inside its second, four at most.
+            //
+            // `slop` is how much worse than the best a move may be and still be
+            // played. It is what keeps the easy and medium games from being the
+            // same game twice: with it at zero the machine answers an opening
+            // move with the same reply for ever.
+            var LEVELS = {
+                easy:   { depth: 1, quiet: false, slop: 70, ms: 250 },
+                medium: { depth: 2, quiet: true,  slop: 25, ms: 500 },
+                hard:   { depth: 5, quiet: true,  slop:  0, ms: 1200 }
+            };
+
+            // Picks the machine's move. It is one straight call and not a
+            // worker: at these depths it is tens of milliseconds, and the board
+            // is painted before it is asked (see machineMove), so the move the
+            // player just made is on screen while it thinks.
+            function think( pos, level )
+            {
+                var cfg   = LEVELS[ level ] || LEVELS.medium;
+                var list  = legal( pos );
+                var best  = [], scored = [], depth, alpha, i, u, over, score, top;
+
+                if( ! list.length ) return null;
+
+                nodes    = 0;
+                stopped  = false;
+                deadline = Date.now() + cfg.ms;
+
+                // Deeper and deeper until the time is up, keeping the last depth
+                // that FINISHED: a half-searched depth has only looked at the
+                // moves the order happened to put first, and its "best" is an
+                // accident of where it was cut off.
+                for( depth = 1; depth <= cfg.depth; depth++ )
+                {
+                    scored = [];
+                    alpha  = -MATE;
+
+                    for( i = 0; i < list.length; i++ )
+                    {
+                        u    = make( pos, list[ i ] );
+                        over = legal( pos ).length === 0;
+
+                        // The move that ENDS the game is scored here rather
+                        // than in the search, which only looks for an ending
+                        // one move further down than it has been asked to go -
+                        // so the easy level, which goes exactly one move, would
+                        // never see the mate it has in hand.
+                        //
+                        // With slop, every root move is searched through its own
+                        // full window, because a move cut off against alpha only
+                        // ever reports "not better" and slop needs real scores.
+                        // Without it, only the best move matters, so the window
+                        // closes behind it and the deeper levels come in time.
+                        score = over ? ( inCheck( pos, pos.turn ) ? MATE - 1 : 0 )
+                              : -search( pos, depth - 1, -MATE, cfg.slop ? MATE : -alpha, 1, cfg.quiet );
+                        unmake( pos, u );
+
+                        if( stopped ) break;
+
+                        scored.push( { m: list[ i ], score: score } );
+                        if( ! cfg.slop && score > alpha ) alpha = score;
+                    }
+
+                    if( stopped ) break;
+
+                    best = scored;
+                    // The next depth starts from this one's order, which is what
+                    // makes searching twice cheaper than searching once deep.
+                    list = scored.sort( function ( x, y ) { return y.score - x.score; } )
+                                 .map( function ( s ) { return s.m; } );
+                }
+
+                if( ! best.length ) return list[ 0 ];
+
+                best.sort( function ( x, y ) { return y.score - x.score; } );
+                top = best[ 0 ].score;
+
+                // Mate is never thrown away for the sake of variety.
+                if( top > MATE - 100 ) return best[ 0 ].m;
+
+                scored = best.filter( function ( s ) { return s.score >= top - cfg.slop; } );
+
+                return scored[ Math.floor( Math.random() * scored.length ) ].m;
+            }
+
+            //---- the game ----------------------------------------------------
+            //
+            // The player is White and so moves first. The machine answers from
+            // a setTimeout rather than on the spot, and not for effect: the
+            // search takes the one thread there is, so without it the player's
+            // own move would not be painted until the answer to it was ready.
+            //
+            // That timer is the one thing leave() has to cancel. Left running
+            // it would go on playing behind the Games screen - this game's
+            // version of the loop the three canvas games stop when their pane
+            // goes away.
+
+            var HUMAN = WHITE;
+            var WAIT  = 180;                   // ms between the player's move being painted and the machine starting
+
+            // ONE set of glyphs for both colours - the solid ones - painted
+            // white or black by the style. The outlined set is a different
+            // weight, so a board using both has two sizes of piece on it.
+            var GLYPH = [ '', '♟', '♞', '♝', '♜', '♛', '♚' ];
+
+            // Cell 0 of the grid is a8, so the board is laid out the way White
+            // sees it, and SQ is the only place the screen and the 0x88 board
+            // have to agree.
+            var SQ = [], cell;
+            for( cell = 0; cell < 64; cell++ ) SQ.push( ( 7 - ( cell >> 3 ) ) * 16 + ( cell & 7 ) );
+
+            var pos     = startPos();
+            var level   = 'medium';
+            var state   = 'playing';           // playing | thinking | paused | over
+            var ending  = '';                  // the dictionary key of how it ended
+            var history = [];                  // one undo record per move played
+            var keys    = [];                  // the position after each of them, and the one before the first
+            var seen    = {};                  // position key -> how often it has stood (the threefold rule)
+            var picked  = -1;                  // the square the player has tapped, -1 for none
+            var targets = [];                  // the moves out of `picked`
+            var promoM  = null;                // the promotions waiting for a piece to be chosen
+            var lastMv  = null;
+            var timer   = 0;                   // the machine's pending turn
+
+            var squares = [];
+            var boardEl, overEl, overTitleEl, overSubEl, overBtnEl, promoEl, statusEl;
+            var movesEl, matEl, pauseBtn, undoBtn;
+
+            //---- a turn ------------------------------------------------------
+
+            // Plays a move, whoever it belongs to, and hands the turn on. Every
+            // move in the game goes through here - the player's tap, the
+            // machine's answer and the piece a pawn was promoted to - so the
+            // history, the sound and the endings are written once.
+            function play( m )
+            {
+                var end;
+
+                history.push( make( pos, m ) );
+                keys.push( remember() );
+                lastMv  = m;
+                picked  = -1;
+                targets = [];
+                promoM  = null;
+
+                voice( m );
+                end = endOf();
+
+                if( end ) finish( end );
+                else if( pos.turn === HUMAN ) { state = 'playing'; paint(); }
+                else machineTurn();
+            }
+
+            function machineTurn()
+            {
+                state = 'thinking';
+                paint();
+
+                timer = setTimeout( function ()
+                {
+                    var m;
+
+                    timer = 0;
+                    m = think( pos, level );
+                    if( m ) play( m );
+                }, WAIT );
+            }
+
+            // The sounds are the other games'. A piece put down is Minesweeper's
+            // dry click, a piece taken is Tetris's knock, a check is Sudoku's
+            // buzz - the same noise it makes for a digit that cannot stand where
+            // it is - and a pawn that became a queen is its chime. A board only
+            // ever makes four noises, and none of them had to be written.
+            function voice( m )
+            {
+                if     ( inCheck( pos, pos.turn ) ) sfx.play( 'clash' );
+                else if( m.promo )                  sfx.play( 'unit' );
+                else if( m.cap )                    sfx.play( 'lock' );
+                else                                sfx.play( 'open' );
+            }
+
+            function finish( key )
+            {
+                state  = 'over';
+                ending = key;
+                paint();
+
+                sfx.play( key === 'games.chessYouWin'  ? 'win'
+                        : key === 'games.chessYouLose' ? 'over'
+                        :                                'unit', null, 0.2 );
+            }
+
+            // How the game ended, as the dictionary key that says it - or ''
+            // while it has not. The five draws are all here, because a game that
+            // cannot be won has to END rather than be played on out of politeness.
+            function endOf()
+            {
+                if( ! legal( pos ).length )
+                    return inCheck( pos, pos.turn )
+                         ? ( pos.turn === HUMAN ? 'games.chessYouLose' : 'games.chessYouWin' )
+                         : 'games.chessStalemate';
+
+                if( thin() )                                return 'games.chessNoMate';
+                if( pos.half >= 100 )                       return 'games.chessFifty';
+                if( seen[ keys[ keys.length - 1 ] ] >= 3 )  return 'games.chessRepeat';
+
+                return '';
+            }
+
+            // Neither side has anything left to mate with: bare kings, or a king
+            // and one knight or bishop against a bare one. A pawn, a rook or a
+            // queen anywhere on the board ends the question at once - any of the
+            // three can still become a mate.
+            function thin()
+            {
+                var b = pos.b, mine = 0, yours = 0, sq, p, k;
+
+                for( sq = 0; sq < 128; sq++ )
+                {
+                    if( sq & 0x88 ) { sq += 7; continue; }
+
+                    p = b[ sq ];
+                    if( ! p ) continue;
+
+                    k = kind( p );
+                    if( k === P || k === R || k === Q ) return false;
+                    if( k === N || k === B ) { if( p > 0 ) mine++; else yours++; }
+                }
+                return mine <= 1 && yours <= 1;
+            }
+
+            // What "the same position" means for the threefold rule: the
+            // pieces, whose turn it is, what may still be castled and where a
+            // pawn may be taken in passing. Not the clock, and not how the
+            // position was reached.
+            function remember()
+            {
+                var k = Array.prototype.join.call( pos.b, ',' ) + '|' + pos.turn + '|' + pos.cast + '|' + pos.ep;
+
+                seen[ k ] = ( seen[ k ] || 0 ) + 1;
+                return k;
+            }
+
+            //---- taking it back ----------------------------------------------
+
+            function takeBack()
+            {
+                var k = keys.pop();
+
+                if( k ) seen[ k ]--;
+                unmake( pos, history.pop() );
+                lastMv = history.length ? history[ history.length - 1 ].m : null;
+            }
+
+            // Back to the player's own turn: one move if the machine has not
+            // answered yet, two if it has. It is also how a finished game is
+            // carried on, since the move that ended it is the one taken back.
+            function undo()
+            {
+                if( ! history.length || state === 'thinking' || state === 'paused' ) return;
+
+                takeBack();
+                while( history.length && pos.turn !== HUMAN ) takeBack();
+
+                state   = 'playing';
+                ending  = '';
+                picked  = -1;
+                targets = [];
+                promoM  = null;
+                paint();
+            }
+
+            function newGame()
+            {
+                if( timer ) { clearTimeout( timer ); timer = 0; }
+
+                pos     = startPos();
+                history = [];
+                keys    = [];
+                seen    = {};
+                lastMv  = null;
+                picked  = -1;
+                targets = [];
+                promoM  = null;
+                ending  = '';
+                state   = 'playing';
+
+                keys.push( remember() );       // the starting position counts towards the threefold rule too
+                paint();
+                sfx.play( 'start' );           // silent at boot: nothing sounds before the first press
+            }
+
+            //---- pausing -----------------------------------------------------
+            //
+            // There is no clock here to stop, so a pause only COVERS the board -
+            // which is the whole of what it is for: a game left in the middle
+            // is a position anyone walking past can read and think about. It is
+            // in the toolbar for the reason 2048's is, too: a button that is
+            // there in six games of seven and missing in the seventh reads as a
+            // bug rather than as a decision.
+
+            function pause()
+            {
+                if( state !== 'playing' ) return;
+
+                state = 'paused';
+                paint();
+                sfx.play( 'pause' );
+            }
+
+            function resume()
+            {
+                if( state !== 'paused' ) return;
+
+                state = 'playing';
+                paint();
+                sfx.play( 'resume' );
+            }
+
+            //---- input -------------------------------------------------------
+
+            function tap( sq )
+            {
+                var here = pos.b[ sq ], hits = [], i;
+
+                if( state !== 'playing' || promoM ) return;
+
+                for( i = 0; i < targets.length; i++ ) if( targets[ i ].to === sq ) hits.push( targets[ i ] );
+
+                // The four promotions share a from and a to, so a pawn arriving
+                // at the far rank is the one move that asks a question first.
+                if( hits.length > 1  ) { promoM = hits; paint(); return; }
+                if( hits.length === 1 ) { play( hits[ 0 ] ); return; }
+
+                // Tapping one of your own pieces picks it up, even with another
+                // already in hand: that is how a mis-tap is taken back without a
+                // move being made. Anything else puts the piece down again.
+                if( here && side( here ) === HUMAN && sq !== picked )
+                {
+                    picked  = sq;
+                    targets = legal( pos ).filter( function ( m ) { return m.from === sq; } );
+                }
+                else { picked = -1; targets = []; }
+
+                paint();
+            }
+
+            function chose( k )
+            {
+                var i;
+
+                if( ! promoM ) return;
+
+                for( i = 0; i < promoM.length; i++ )
+                    if( promoM[ i ].promo === k ) { play( promoM[ i ] ); return; }
+            }
+
+            //---- the screen --------------------------------------------------
+
+            function moveTo( sq )
+            {
+                var i;
+
+                for( i = 0; i < targets.length; i++ ) if( targets[ i ].to === sq ) return targets[ i ];
+                return null;
+            }
+
+            function render()
+            {
+                var check = inCheck( pos, pos.turn ) ? kingSq( pos, pos.turn ) : -1;
+                var i, sq, el, p, cls, m;
+
+                for( i = 0; i < 64; i++ )
+                {
+                    sq  = SQ[ i ];
+                    el  = squares[ i ];
+                    p   = pos.b[ sq ];
+                    cls = 'chess-sq' + ( ( ( sq >> 4 ) + ( sq & 7 ) ) % 2 ? '' : ' dark' );
+                    m   = moveTo( sq );
+
+                    if( sq === picked ) cls += ' is-from';
+                    if( sq === check  ) cls += ' is-check';
+                    if( lastMv && ( sq === lastMv.from || sq === lastMv.to ) ) cls += ' is-last';
+                    if( m ) cls += m.cap ? ' is-take' : ' is-move';
+
+                    el.className   = cls;
+                    el.textContent = p ? GLYPH[ kind( p ) ] : '';
+
+                    if( p ) el.dataset.c = p > 0 ? 'w' : 'b';
+                    else    el.removeAttribute( 'data-c' );
+                }
+
+                movesEl.textContent  = String( pos.full );
+                matEl.textContent    = balance();
+                statusEl.textContent = says();
+            }
+
+            // The material, in pawns and from the player's side: +3 is a piece
+            // up. The kings are left out of it (they are never taken) and so is
+            // where anything stands - it is the one number a player counts
+            // anyway, and the machine's own opinion of the position is not it.
+            function balance()
+            {
+                var b = pos.b, n = 0, sq, p, k;
+
+                for( sq = 0; sq < 128; sq++ )
+                {
+                    if( sq & 0x88 ) { sq += 7; continue; }
+
+                    p = b[ sq ];
+                    if( ! p ) continue;
+
+                    k = kind( p );
+                    if( k !== K ) n += ( side( p ) === HUMAN ? 1 : -1 ) * VALUE[ k ];
+                }
+
+                n = Math.round( n / 100 );
+                return n > 0 ? '+' + n : String( n );
+            }
+
+            function says()
+            {
+                if( state === 'over'     ) return T( ending );
+                if( state === 'paused'   ) return T( 'games.paused' );
+                if( state === 'thinking' ) return T( 'games.chessThinking' );
+
+                return inCheck( pos, HUMAN ) ? T( 'games.chessCheck' ) : T( 'games.chessYourTurn' );
+            }
+
+            // The two covers. Only one of them is ever up: the promotion asks
+            // its question in the middle of a turn, and the other two states
+            // are ends of one.
+            function cover()
+            {
+                var show = state === 'over' || state === 'paused';
+
+                promoEl.hidden = ! promoM;
+                overEl.hidden  = ! show || !! promoM;
+                overEl.classList.toggle( 'solid', state === 'paused' );
+
+                if( ! show ) return;
+
+                overTitleEl.textContent = state === 'paused' ? T( 'games.paused' ) : T( ending );
+                overSubEl.hidden        = state === 'paused';
+                overSubEl.textContent   = state === 'paused' ? '' : TF( 'games.chessInMoves', { n: pos.full } );
+                overBtnEl.textContent   = T( state === 'paused' ? 'games.resume' : 'games.newGame' );
+                overBtnEl.dataset.kind  = state;
+            }
+
+            function paint()
+            {
+                render();
+                cover();
+                pauseButton( pauseBtn, state === 'paused', !! promoM || ( state !== 'playing' && state !== 'paused' ) );
+                undoBtn.disabled = ! history.length || !! promoM || state === 'thinking' || state === 'paused';
+            }
+
+            //---- mounting ----------------------------------------------------
+
+            function enter()
+            {
+                paint();
+
+                // The machine was thinking when the pane went away, and leave()
+                // took its turn off the table. This is where it gets it back.
+                if( state === 'thinking' && ! timer ) machineTurn();
+            }
+
+            function leave()
+            {
+                if( timer ) { clearTimeout( timer ); timer = 0; }
+            }
+
+            function init()
+            {
+                var i, el;
+
+                boardEl     = document.getElementById( 'chessBoard' );
+                overEl      = document.getElementById( 'chessOver' );
+                overTitleEl = document.getElementById( 'chessOverTitle' );
+                overSubEl   = document.getElementById( 'chessOverSub' );
+                overBtnEl   = document.getElementById( 'chessOverBtn' );
+                promoEl     = document.getElementById( 'chessPromo' );
+                statusEl    = document.getElementById( 'chessStatus' );
+                movesEl     = document.getElementById( 'chessMoves' );
+                matEl       = document.getElementById( 'chessMaterial' );
+                pauseBtn    = document.getElementById( 'chessPause' );
+                undoBtn     = document.getElementById( 'chessUndo' );
+
+                // Sixty-four identical squares: they belong to the board, not to
+                // the markup, so they are built here and only what stands on
+                // them changes.
+                for( i = 0; i < 64; i++ )
+                {
+                    el = document.createElement( 'button' );
+                    el.type      = 'button';
+                    el.className = 'chess-sq';
+                    el.dataset.i = i;
+                    boardEl.insertBefore( el, overEl );
+                    squares.push( el );
+                }
+
+                // One listener on the board rather than sixty-four on the
+                // squares - and it reads the square off the button, so it does
+                // not care that a glyph was what the finger actually landed on.
+                boardEl.addEventListener( 'click', function ( e )
+                {
+                    var btn = e.target.closest( '.chess-sq' );
+
+                    if( btn ) tap( SQ[ Number( btn.dataset.i ) ] );
+                } );
+
+                // The level takes effect on the machine's NEXT move and does not
+                // start a new game, which is where this parts company with
+                // Minesweeper and Sudoku: their level is the size of the board,
+                // and this one is only how hard the opponent is trying. Losing a
+                // game twenty moves in because a button was tapped would be the
+                // worse surprise of the two.
+                Array.prototype.slice.call( document.querySelectorAll( '[data-chess-level]' ) ).forEach( function ( b )
+                {
+                    b.addEventListener( 'click', function ()
+                    {
+                        level = b.dataset.chessLevel;
+                        Array.prototype.slice.call( document.querySelectorAll( '[data-chess-level]' ) )
+                             .forEach( function ( o ) { o.classList.toggle( 'is-active', o === b ); } );
+                    } );
+                } );
+
+                Array.prototype.slice.call( promoEl.querySelectorAll( '[data-promo]' ) ).forEach( function ( b )
+                {
+                    b.addEventListener( 'click', function () { chose( Number( b.dataset.promo ) ); } );
+                } );
+
+                pauseBtn.addEventListener( 'click', function () { if( state === 'paused' ) resume(); else pause(); } );
+                undoBtn.addEventListener( 'click', undo );
+                document.getElementById( 'chessNew' ).addEventListener( 'click', newGame );
+
+                overBtnEl.addEventListener( 'click', function ()
+                {
+                    if( overBtnEl.dataset.kind === 'paused' ) resume();
+                    else newGame();
+                } );
+
+                newGame();
+                return { enter: enter, leave: leave };
+            }
+
+            return { init: init };
+        } )();
+
+        NayiveGames.add( 'chess', Chess );
+    } )();
+    </script>

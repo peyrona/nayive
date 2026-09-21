@@ -21,6 +21,9 @@ package main
 // reaches you with every app closed. Both are keyed on the trip's id, so
 // neither doubles up on itself.
 //
+// And, every tick, the LOCATION alerts: "turn the location app on" before a
+// trip and "you can turn it off" after it (reminders_location.go).
+//
 // ONE NOTIFICATION PER DEVICE
 // -----------------------------------------------------------------------------
 // A user can have several devices - phone, tablet, laptop - each with its own
@@ -42,7 +45,8 @@ package main
 //
 //	homes/<user>/data/reminders.json     {"trips": ["<device>|<id>@<epoch>", ...]}
 //
-// (no user part - the file already belongs to one). The epoch is midnight AFTER
+// (no user part - the file already belongs to one; "location" sits beside
+// "trips" in the same file). The epoch is midnight AFTER
 // the trip's start day, so the pruning rule ("drop keys whose epoch is past")
 // keeps the key for the whole of that day.
 //
@@ -97,6 +101,8 @@ type Reminders struct {
 	trash    *Trash
 	sessions *SessionStore
 	push     *VapidStore
+	trackers *Trackers // whose location URL is on (location.go)
+	devices  *Devices  // the Android app's phones (devices.go); nil in tests
 	log      Logger
 
 	sent      map[string]int64     // "<user>|<device>|<uid>@<epoch>" -> the epoch
@@ -115,9 +121,9 @@ type cachedICS struct {
 }
 
 func NewReminders(cfg *Config, users *Users, trash *Trash, sessions *SessionStore,
-	push *VapidStore, log Logger) *Reminders {
+	push *VapidStore, trackers *Trackers, log Logger) *Reminders {
 	return &Reminders{
-		cfg: cfg, users: users, trash: trash, sessions: sessions, push: push, log: log,
+		cfg: cfg, users: users, trash: trash, sessions: sessions, push: push, trackers: trackers, log: log,
 		sent:    make(map[string]int64),
 		fails:   make(map[string]int),
 		events:  make(map[string]cachedICS),
@@ -197,6 +203,7 @@ func (r *Reminders) tick() {
 
 		// Trips first: a user with no calendar file at all still gets these.
 		r.tripTick(user, cfg.Subs, loc)
+		r.locationTick(user, cfg.Subs, loc)
 
 		events, ok := r.eventsFor(user, tzName, loc)
 		if !ok {
@@ -326,7 +333,7 @@ type dueTrip struct {
 // never even gets the file.
 func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, loc *time.Location) {
 	path := filepath.Join(r.cfg.HomesDir, user, "data", "reminders.json")
-	saved := loadTripKeys(path)
+	saved := loadSentKeys(path, "trips")
 
 	keys := make(map[string]bool, len(saved))
 	for k := range saved {
@@ -364,7 +371,7 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 		}
 	}
 	if !sameKeySet(keep, saved) { // nothing new and nothing stale -> no write
-		saveTripKeys(path, keep, r.log)
+		saveSentKeys(path, "trips", keep, r.log)
 	}
 }
 
@@ -574,30 +581,31 @@ func formatHHMM(t time.Time, loc *time.Location) string {
 // the saved trip keys
 // -----------------------------------------------------------------------------
 
-// loadTripKeys reads one user's saved keys. Tolerant on read: a missing,
-// malformed or hand-edited reminders.json is "nothing sent yet".
-func loadTripKeys(path string) map[string]bool {
+// loadSentKeys reads one user's saved keys, from one field of reminders.json
+// ("trips", "location"). Tolerant on read: a missing, malformed or hand-edited
+// file is "nothing sent yet".
+func loadSentKeys(path, field string) map[string]bool {
 	out := make(map[string]bool)
-	raw, found := loadOrderedJSON(path).Get("trips")
+	raw, found := loadOrderedJSON(path).Get(field)
 	if !found {
 		return out
 	}
-	var trips []string
-	if json.Unmarshal(raw, &trips) != nil {
+	var keys []string
+	if json.Unmarshal(raw, &keys) != nil {
 		return out // a stray {"trips": 7} must not be iterated
 	}
-	for _, k := range trips {
+	for _, k := range keys {
 		out[k] = true
 	}
 	return out
 }
 
-// saveTripKeys writes those keys back, KEEPING every other field the file may
-// hold - it is this loop's own state file and may grow later.
+// saveSentKeys writes those keys back into `field`, KEEPING every other field
+// the file holds - "trips" and "location" share it.
 //
 // No lock: this goroutine is their only writer. atomicWriteJSON still means a
 // reader never catches the file half-written.
-func saveTripKeys(path string, keys map[string]bool, log Logger) {
+func saveSentKeys(path, field string, keys map[string]bool, log Logger) {
 	sorted := make([]string, 0, len(keys))
 	for k := range keys {
 		sorted = append(sorted, k)
@@ -605,12 +613,12 @@ func saveTripKeys(path string, keys map[string]bool, log Logger) {
 	sort.Strings(sorted) // a stable, diffable file
 
 	file := loadOrderedJSON(path)
-	file.Put("trips", sorted)
+	file.Put(field, sorted)
 
 	if err := atomicWriteJSON(path, file, 4); err != nil {
 		// A full disk must not stop the pushes; it only means the next restart
-		// may repeat today's trip reminder.
-		log.Error("reminders: cannot save trip keys", "path", path, "err", err)
+		// may repeat one reminder.
+		log.Error("reminders: cannot save sent keys", "path", path, "err", err)
 	}
 }
 

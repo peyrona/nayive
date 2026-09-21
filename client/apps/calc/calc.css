@@ -222,15 +222,16 @@ html, body { height: 100%; overflow: hidden; }
 /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar wraps onto
    more rows instead of scrolling sideways - a scrolling bar hides half its
    buttons with no hint they exist - and its buttons grow to finger size. */
-/* ---- Phone-only header controls ------------------------------------
-   Both live in the .topbar-actions group and only show at <=640px.
-     "Aa"  #fmtBtn   - folds the toolbar away while you type.
-     "⋮"   #moreBtn  - the file buttons, which leave the toolbar.
+/* ---- Header controls ------------------------------------------------
+     "⋮"   #moreBtn  - the file buttons. ALWAYS there, phone or not: they
+                       are not on the toolbar at all any more (#fileTools
+                       in the HTML), so this is the only way to them.
+     "Aa"  #fmtBtn   - phone only; folds the toolbar away while you type.
    #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
    glance. (Note it is the HEADER toggle - not one of the .fmt-btn
    toolbar buttons, in spite of the name.) .is-active (shared app.css)
    marks it while the toolbar is showing. */
-#fmtBtn, #moreBtn { display: none; }
+#fmtBtn { display: none; }
 #fmtBtn
 {
     font-family: var(--font-sans);
@@ -275,15 +276,16 @@ html, body { height: 100%; overflow: hidden; }
 /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar was FOUR
    rows - 159px, a fifth of the screen before the keyboard is even up.
    Now it is ONE row that folds away.
-     - the row keeps the six controls a phone actually reaches for
+     - the row keeps the seven controls a phone actually reaches for
        (the .fmt-keep ones, listed in the markup); everything else waits
        behind "⋮" (#moreToolsBtn), which opens the WHOLE toolbar in place
        and closes again. Chosen by how often a thing is used, not by
        where it sits in the bar. Rows, columns, merge and freeze are
        safe back there: a long press on the grid opens Handsontable's
        own menu with all of them.
-     - the file buttons (import / open / save-as) move to the header's
-       "⋮" menu, and the "?" is MOVED into the header by wireStaticUI()
+     - the file buttons are not in this bar on any screen; the header's
+       "⋮" menu is where they live. The "?" is MOVED into the header by
+       wireStaticUI()
        so help stays reachable while the toolbar is folded (one single
        [data-intro-open] on the page - a second copy would misdirect
        the coach marks).
@@ -291,8 +293,8 @@ html, body { height: 100%; overflow: hidden; }
        moment a cell editor opens, which is when the keyboard arrives. */
 @media (max-width: 640px)
 {
-    #fmtBtn, #moreBtn { display: flex; }
-    #moreToolsBtn     { display: inline-flex; }
+    #fmtBtn       { display: flex; }
+    #moreToolsBtn { display: inline-flex; }
 
     #fmtToolbar { padding: 4px 2px; }
     #fmtToolbar .fmt-sep { margin: 4px 2px; }
@@ -332,9 +334,13 @@ html, body { height: 100%; overflow: hidden; }
 
      .top-menu   the "⋮" popup AND the pull-down panels (#menuPanel,
                  #menuSub). At 150 a panel was drawn BEHIND A, B, C.
+     .popup      the toolbar's group cards and the border picker. At the
+                 shared 200 a card opened low enough to fall behind a
+                 resize guide.
      others      a dialog reaching the row-number column had its left
                  edge covered on a phone. */
 .top-menu              { z-index: 400; }
+.popup                 { z-index: 400; }
 .sheet-backdrop        { z-index: 500; }
 .info-popup, .toast    { z-index: 600; }
 .coach-overlay         { z-index: 700; }
@@ -358,26 +364,9 @@ html, body { height: 100%; overflow: hidden; }
 
 /* Open dialog: .open-crumb / .open-list from app.css; the file label too. */
 
-/* Anchored popup (border picker) — floats over the grid, not a modal */
-.popup
-{
-    position: fixed; z-index: 200; display: none;
-    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
-    padding: 6px; box-shadow: var(--elev-dialog);
-}
-.popup.open { display: block; }
-.popup-row { display: flex; gap: 2px; }
-.popup-row + .popup-row { margin-top: 2px; }
-.popup-row-sep { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
-.pop-btn
-{
-    display: flex; align-items: center; justify-content: center;
-    width: 32px; height: 32px; flex: 0 0 auto; position: relative;
-    border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
-    cursor: pointer; padding: 0;
-}
-.pop-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
-.pop-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+/* The anchored popup itself — .popup / .popup-row / .pop-btn — is shared now
+   (TOOLBAR GROUP POPUP in app.css): the border picker was the first of five
+   cards this sheet opens. Only the colour swatch inside one is Calc's. */
 .pop-btn input[type=color]
 {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;

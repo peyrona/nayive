@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The PWA's own dark tokens (client/apps/shared/theme.css). -->
+    <color name="nayive_bg">#1E1F23</color>
+    <color name="nayive_card">#25272B</color>
+    <color name="nayive_text">#E7E7E9</color>
+    <color name="nayive_dim">#93959F</color>
+    <color name="nayive_accent">#16A085</color>
+    <color name="nayive_on_accent">#0D0F17</color>
+    <color name="nayive_danger">#D9707D</color>
+    <color name="ic_launcher_background">#1E1F23</color>
+</resources>

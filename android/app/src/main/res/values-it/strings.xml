@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Benvenuto in Nayive</string>
+    <string name="setup_lead">Per funzionare bene su questo cellulare, Nayive ha bisogno di alcuni permessi. Te li chiede una volta sola.</string>
+    <string name="step_notif_title">Notifiche</string>
+    <string name="step_notif_why">Perché le chiamate squillino e tu veda cosa ti aspetta.</string>
+    <string name="step_loc_title">Posizione</string>
+    <string name="step_loc_why">Per salvare dove vai durante i tuoi viaggi. Scegli «Consenti sempre».</string>
+    <string name="step_loc_bg">Manca «Consenti sempre»: tocca Consenti e sceglilo nella schermata che si apre.</string>
+    <string name="step_batt_title">Batteria</string>
+    <string name="step_batt_why">Perché Nayive resti sveglio a schermo spento. Scegli «Consenti».</string>
+    <string name="step_full_title">Schermo intero</string>
+    <string name="step_full_why">Perché una chiamata si veda anche a cellulare bloccato.</string>
+    <string name="step_do">Consenti</string>
+    <string name="step_ok">Fatto</string>
+    <string name="setup_continue">Continua</string>
+    <string name="setup_missing">Senza tutti i permessi alcune cose non funzioneranno. Per tornare qui, tieni premuta l’icona di Nayive.</string>
+    <string name="chan_link">Connessione</string>
+    <string name="chan_calls">Chiamate</string>
+    <string name="chan_find">Trova il mio cellulare</string>
+    <string name="chan_pending">Da leggere</string>
+    <string name="chan_updates">Aggiornamenti</string>
+    <string name="link_on">Nayive è connesso</string>
+    <string name="link_tracking">Nayive salva la tua posizione di viaggio</string>
+    <string name="link_enrol">Apri Nayive ed entra con il tuo utente per attivare questo cellulare</string>
+    <string name="link_offline">Nessuna connessione: Nayive riproverà</string>
+    <string name="link_fix">Manca un permesso. Tocca per sistemarlo.</string>
+    <string name="call_voice">Chiamata vocale in arrivo</string>
+    <string name="call_video">Videochiamata in arrivo</string>
+    <string name="call_answer">Rispondi</string>
+    <string name="call_decline">Rifiuta</string>
+    <string name="find_title">Nayive ti sta cercando</string>
+    <string name="find_text">Qualcuno ha premuto «Trova il mio cellulare».</string>
+    <string name="find_stop">Ferma</string>
+    <plurals name="pending_chat">
+        <item quantity="one">Hai 1 messaggio da leggere</item>
+        <item quantity="other">Hai %d messaggi da leggere</item>
+    </plurals>
+    <string name="update_title">C’è una nuova versione di Nayive</string>
+    <string name="update_text">Tocca per scaricarla.</string>
+    <string name="shortcut_setup">Permessi</string>
+    <string name="shortcut_setup_long">Permessi di Nayive</string>
+</resources>

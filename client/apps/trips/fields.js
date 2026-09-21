@@ -57,33 +57,10 @@ function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
     input.value = sValue;
     input.addEventListener( 'input', function() { fnOnChange( input.value ); } );
 
-    const mapBtn = document.createElement( 'button' );
-    mapBtn.type = 'button';
-    mapBtn.className = 'icon-btn sm loc-map-btn';
-    mapBtn.title = T( 'trips.seeOnMap' );
-    mapBtn.appendChild( svgIcon( ICON_MAP, 15 ) );
-    mapBtn.addEventListener( 'click', function()
-    {
-        if( ! wideMql.matches )
-            return;   // no route map at this size (button is CSS-hidden too)
-
-        const lat   = stageDraft && stageDraft.lat;
-        const lon   = stageDraft && stageDraft.lon;
-        const label = (stageDraft && stageDraft.location || '').trim() || T( 'trips.stage' );
-
-        if( typeof lat !== 'number' || typeof lon !== 'number' )
-        {
-            NayiveUI.toast( T( 'trips.notLocated' ) );
-            return;
-        }
-
-        // Close the dialog so the map is fully visible, then fly to the city.
-        closeStageSheet();
-        highlightStageOnMap( lat, lon, label );
-    });
-
+    // No "see it on the map" button in here: it could only work by closing the
+    // stage dialog to uncover the route panel, which threw away the draft with
+    // no way back. The route map is the header's own map button instead.
     inputWrap.appendChild( input );
-    inputWrap.appendChild( mapBtn );
 
     const calBtn = document.createElement( 'button' );
     calBtn.type = 'button';

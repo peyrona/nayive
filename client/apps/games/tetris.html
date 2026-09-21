@@ -1,4 +1,4 @@
-<!-- tetris.html - Tetris, one of the six games of index.html.
+<!-- tetris.html - Tetris, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -249,7 +249,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -261,7 +261,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // TETRIS
@@ -507,6 +508,7 @@
 
                 piece.x += dx;
                 touched();
+                sfx.play( 'shift' );
                 return true;
             }
 
@@ -545,6 +547,7 @@
                         piece.x   = kx;
                         piece.y   = ky;
                         touched();
+                        sfx.play( 'turn' );
                         return;
                     }
                 }
@@ -573,6 +576,7 @@
 
                 score += n * 2;                // the arcade rate: two a square for dropping it yourself
                 paint();
+                sfx.play( 'drop' );            // the swoosh; settle() adds the knock
                 settle();
             }
 
@@ -603,6 +607,10 @@
                     if( x === COLS ) full.push( y );
                 }
 
+                // The rows ring as they start to flash, not when they go.
+                sfx.play( 'lock' );
+                if( full.length ) sfx.play( 'lines', full.length );
+
                 if( full.length ) clearing = { rows: full, t: FLASH };
                 else spawn();
             }
@@ -613,7 +621,7 @@
             // instead of clearing every row as it fills.
             function collapse()
             {
-                var rows = clearing.rows, i, y, x, cleared = rows.length;
+                var rows = clearing.rows, i, y, x, cleared = rows.length, was = level;
 
                 clearing = null;
 
@@ -628,6 +636,7 @@
                 score += LINES[ cleared ] * level;
                 lines += cleared;
                 level  = 1 + Math.floor( lines / 10 );
+                if( level > was ) sfx.play( 'level' );
 
                 paint();
                 spawn();
@@ -913,6 +922,7 @@
                 flush();
                 A.overlay();
                 draw();
+                sfx.play( 'over' );
             }
 
             // The record is put up at every PAUSE in the game and not the moment

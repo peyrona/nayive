@@ -177,6 +177,10 @@
                     if( res.ok )
                     {
                         var info = await res.json().catch( function () { return {}; } );
+                        // The launcher checks this device's notifications once
+                        // after each sign-in (see "after each login" there).
+                        if( info.role !== 'admin' )
+                            try { sessionStorage.setItem( 'nayive-just-in', '1' ); } catch ( e ) {}
                         location.href = returnTo( info.role );
                         return;
                     }

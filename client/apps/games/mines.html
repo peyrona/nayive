@@ -1,4 +1,4 @@
-<!-- mines.html - Minesweeper, one of the six games of index.html.
+<!-- mines.html - Minesweeper, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -207,7 +207,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -219,7 +219,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // MINESWEEPER
@@ -350,6 +351,7 @@
 
                 levelBtns.forEach( function ( b ) { b.classList.toggle( 'is-active', b.dataset.minesLevel === level ); } );
                 paint();
+                sfx.play( 'start' );               // silent at boot: there is no sound before the first press
             }
 
             //---- the screen --------------------------------------------------
@@ -433,6 +435,9 @@
                 stopClock();
                 coverEl.hidden = false;
                 paintPause();
+                // Heard only when the player pressed it: leave() gets here with
+                // `live` already false, and a hidden tab with document.hidden.
+                if( live && ! document.hidden ) sfx.play( 'pause' );
             }
 
             function resume()
@@ -446,6 +451,7 @@
                 runClock();
                 paintPause();
                 if( cells[ cursor ] ) cells[ cursor ].focus();
+                sfx.play( 'resume' );
             }
 
             function unpause()                        // a new game: no pause to come back from
@@ -459,6 +465,8 @@
 
             function open( i )
             {
+                var was = opened;
+
                 if( over || paused || state[ i ] !== 0 ) return;
 
                 if( ! laid ) { lay( i ); startedAt = Date.now(); runClock(); paintPause(); }
@@ -467,6 +475,12 @@
 
                 flood( i );
                 paint();
+
+                // One click for one square, a ripple for a field - played once
+                // per open(), never per square: the first move on hard opens 300.
+                if( opened - was > 1 ) sfx.play( 'flood', opened - was );
+                else                   sfx.play( 'open' );
+
                 if( opened === total - count ) finish( true, -1 );
             }
 
@@ -501,6 +515,7 @@
 
                 paintCell( i );
                 paint();
+                sfx.play( state[ i ] === 2 ? 'flag' : 'unflag' );
                 return true;
             }
 
@@ -557,11 +572,13 @@
 
                 paint();
 
-                if( ! won ) { NayiveUI.toast( T( 'games.minesLost' ) ); return; }
+                if( ! won ) { NayiveUI.toast( T( 'games.minesLost' ) ); sfx.play( 'mine' ); return; }
 
                 secs = seconds();
                 var record = ! has( level ) || secs < times[ level ];
                 if( record ) { times[ level ] = secs; saveTime( level, secs ); bestEl.textContent = clock( secs ); }
+
+                sfx.play( record ? 'record' : 'win', null, 0.15 );   // after the last square's own click
 
                 NayiveUI.toast( TF( record ? 'games.minesRecord' : 'games.minesWon', { time: clock( secs ) } ) );
             }

@@ -29,7 +29,11 @@ function renderTripSheet()
         sheet.appendChild( err );
     }
 
-    sheet.appendChild( textField( T( 'trips.description' ), T( 'trips.descriptionPh' ), tripDraft.destination, function( v ) { tripDraft.destination = v; refreshTripDocPaths(); } ) );
+    // The label reads "Descripcion" now, but the key and the stored field stay
+    // `destination`: that is what names the trip's folder (resolveNewTripDirName)
+    // and what the currency lookup geocodes, so renaming it would be a data
+    // migration, not a wording change.
+    sheet.appendChild( textField( T( 'trips.destination' ), T( 'trips.destinationPh' ), tripDraft.destination, function( v ) { tripDraft.destination = v; refreshTripDocPaths(); } ) );
 
     const dateRow = document.createElement( 'div' );
     dateRow.className = 'field-row';
@@ -145,8 +149,8 @@ function scheduleStageTzLookup()
         stageDraft.tz = null;
         stageDraft.tzLabel = '';
         stageDraft.tzStatus = 'idle';
-        stageDraft.lat = null;
-        stageDraft.lon = null;
+        stageDraft.lat = undefined;   // nothing to look up yet - not the same as "no match"
+        stageDraft.lon = undefined;
         refreshTzStatusDisplay();
         return;
     }
@@ -171,6 +175,15 @@ async function runStageTzLookup()
         // Offline / service down: keep whatever tz the stage already had,
         // don't wipe it to "not-found".
         stageDraft.tzStatus = 'offline';
+
+        // Same for the coordinates - real ones are kept - but a stage that never had any
+        // must be left at undefined ("retry later"), never null, or saving it now would
+        // pin it as unlocatable forever: ensureRouteCoords only retries lat === undefined.
+        if( typeof stageDraft.lat !== 'number' || typeof stageDraft.lon !== 'number' )
+        {
+            stageDraft.lat = undefined;
+            stageDraft.lon = undefined;
+        }
     }
     else if( result )
     {

@@ -12,8 +12,9 @@
 //
 // Rules:
 //   - only the text-ish types (html css js mjs json svg ics vcf vtt txt md
-//     webmanifest, plus the Write app's .aff/.dic dictionaries) of at least
-//     minBytes - a tiny file gains nothing from compression;
+//     webmanifest, plus the Write app's .aff/.dic dictionaries, its engine's
+//     .wasm and its .ttf/.otf fonts) of at least minBytes - a tiny file gains
+//     nothing from compression;
 //   - a sidecar is rewritten only when missing or older than its source, so
 //     re-running is cheap and leaves untouched files' mtimes alone;
 //   - a sidecar whose source is gone is deleted.
@@ -37,13 +38,15 @@ import (
 	"nayive/tools/internal/repo"
 )
 
-// Compressible suffixes. Everything else (images, fonts, audio, wasm) is either
-// already compressed or not worth it. `sw.js` is included: it is small but
-// fetched on every visit.
+// Compressible suffixes. Everything else (images, woff2, audio) is already
+// compressed. `sw.js` is included: it is small but fetched on every visit.
+// .wasm, .ttf and .otf are NOT compressed formats: Write's HarfBuzz wasm halves
+// (417 -> 169 KB) and its fonts too (7.9 -> 4 MB).
 var suffixes = map[string]bool{
 	".html": true, ".css": true, ".js": true, ".mjs": true, ".json": true, ".svg": true,
 	".ics": true, ".vcf": true, ".vtt": true, ".txt": true, ".md": true,
 	".webmanifest": true, ".aff": true, ".dic": true,
+	".wasm": true, ".ttf": true, ".otf": true,
 }
 
 const minBytes = 1400 // below ~one packet, gzip is a net loss

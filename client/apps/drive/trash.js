@@ -46,18 +46,15 @@ function renderTrashBar()
     const bar = document.createElement( 'div' );
     bar.className = 'trash-bar';
 
-    // "Back to Drive" - the left arrow every Nayive app uses to leave a screen.
-    const back = document.createElement( 'button' );
-    back.className = 'icon-btn';
-    back.title     = T( 'drive.backToDrive' );
-    back.setAttribute( 'aria-label', T( 'drive.backToDrive' ) );
-    back.innerHTML = NayiveUI.icon( 'back' );
-    back.addEventListener( 'click', closeTrash );
-    bar.appendChild( back );
+    // No "<-" here: the lit bin in the header is the way back (see render).
+
+    // The bin shows the disk space it is holding, not how many rows: what
+    // matters is the room emptying it would give back.
+    const held = trashItems.reduce( function( sum, it ) { return sum + ( it.size || 0 ); }, 0 );
 
     const title = document.createElement( 'span' );
     title.className   = 'trash-title';
-    title.textContent = T( 'acct.trash' ) + ( trashItems.length ? ' (' + trashItems.length + ')' : '' );
+    title.textContent = T( 'acct.trash' ) + ( trashItems.length ? ' (' + fmtSize( held ) + ')' : '' );
     bar.appendChild( title );
 
     if( trashDays != null )

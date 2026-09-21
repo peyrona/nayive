@@ -15,6 +15,8 @@ package main
 //	       ?dir=<path>[&recursive=1]   one folder, or its whole subtree
 //	       ?tree=dirs                  the folders-only tree
 //	       ?find=<glob>                a flat name search
+//	       ?search=1&name=&ext=...     the advanced search (search.go)
+//	       ?big=<n>                    the n biggest files (the "space almost full" warning)
 //	       ?file=<path>                the file itself
 //	       (nothing)                   the whole tree
 //	POST   ?old=&new=                  rename / move
@@ -29,12 +31,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
 
-// searchLimit caps a ?find= walk. `truncated` in the answer says it stopped early.
+// searchLimit caps a ?find= / ?search= walk. `truncated` in the answer says it stopped early.
 const searchLimit = 500
+
+// bigLimit caps ?big=<n>: a list to pick from, not a report.
+const bigLimit = 200
 
 func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	sess, ok := s.requireSession(w, r)
@@ -114,6 +120,35 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{
 			"pattern": pat, "role": role, "user": user,
 			"nodes": nodes, "truncated": truncated,
+		})
+		return
+	}
+
+	// ---- GET ?search=1&name=&ext=&folders=&since=&until=  -> the advanced search
+	if r.Method == http.MethodGet && q.Has("search") {
+		spec, err := parseSearchSpec(q)
+		if err != nil {
+			sendError(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		nodes, truncated := SearchBy(s.searchRoots(role, user), searchLimit, spec.keep)
+		sendJSON(w, r, http.StatusOK, map[string]any{
+			"role": role, "user": user,
+			"nodes": nodes, "truncated": truncated,
+		})
+		return
+	}
+
+	// ---- GET ?big=<n>  -> the n biggest files, biggest first ---------------
+	if r.Method == http.MethodGet && q.Has("big") {
+		n, err := strconv.Atoi(q.Get("big"))
+		if err != nil || n < 1 {
+			sendError(w, r, http.StatusBadRequest, "bad big")
+			return
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{
+			"role": role, "user": user,
+			"nodes": Biggest(s.searchRoots(role, user), min(n, bigLimit)), "truncated": false,
 		})
 		return
 	}
@@ -259,21 +294,19 @@ func (s *Server) rootChildren(role, user string) []Node {
 	return out
 }
 
-// searchRoots are the (directory, prefix) pairs ?find= walks - the same ground
-// UserTree covers. The client hides data/ hits, same as it hides the data/ node
-// from the tree.
+// searchRoots are the (directory, prefix) pairs ?find= and ?search= walk. For
+// a regular user that is files/ only: Drive never shows the data/ folder (the
+// apps' own files), and walking it first let its photo thumbnails fill the
+// searchLimit, so a search for images came back with nothing to show.
 func (s *Server) searchRoots(role, user string) []SearchRoot {
 	if role == "admin" {
 		return []SearchRoot{{Dir: s.cfg.BaseDir, Prefix: ""}}
 	}
-	out := []SearchRoot{}
-	for _, sub := range []string{"data", "files"} {
-		p := filepath.Join(s.cfg.HomesDir, user, sub)
-		if info, err := os.Stat(p); err == nil && info.IsDir() {
-			out = append(out, SearchRoot{Dir: p, Prefix: sub})
-		}
+	p := filepath.Join(s.cfg.HomesDir, user, "files")
+	if info, err := os.Stat(p); err == nil && info.IsDir() {
+		return []SearchRoot{{Dir: p, Prefix: "files"}}
 	}
-	return out
+	return []SearchRoot{}
 }
 
 // -----------------------------------------------------------------------------
@@ -284,7 +317,8 @@ func (s *Server) searchRoots(role, user string) []SearchRoot {
 //
 // "trash" is the bytes the papelera is holding. They are part of "used", so
 // emptying it is the quickest way to make room, and the apps offer exactly that
-// when an upload does not fit.
+// when an upload does not fit. "user" is the caller's own name: the "space
+// almost full" warning remembers per account that it has been shown.
 func (s *Server) filesStat(w http.ResponseWriter, r *http.Request, role, user string) {
 	held := s.trash.Size(role, user)
 
@@ -295,7 +329,7 @@ func (s *Server) filesStat(w http.ResponseWriter, r *http.Request, role, user st
 	if quota == nil { // admin, or no quota set: the real disk
 		total, free := diskUsage(s.cfg.BaseDir)
 		sendJSON(w, r, http.StatusOK,
-			map[string]any{"total": total, "usable": free, "trash": held})
+			map[string]any{"total": total, "usable": free, "trash": held, "user": user})
 		return
 	}
 	used := s.users.UserUsageBytes(user)
@@ -304,7 +338,7 @@ func (s *Server) filesStat(w http.ResponseWriter, r *http.Request, role, user st
 		usable = 0
 	}
 	sendJSON(w, r, http.StatusOK,
-		map[string]any{"total": *quota, "usable": usable, "trash": held})
+		map[string]any{"total": *quota, "usable": usable, "trash": held, "user": user})
 }
 
 // diskUsage is shutil.disk_usage: (total bytes, bytes free to a non-root user).
@@ -638,7 +672,7 @@ func (s *Server) isStructuralDir(role, user, target string) bool {
 	if err != nil {
 		return true // cannot tell -> refuse, the safe default
 	}
-	if s.isAccountFile(t) {
+	if s.isAccountFile(t) || s.isChatData(t) {
 		return true // for the admin as much as for the user
 	}
 
@@ -692,7 +726,24 @@ func (s *Server) isAccountFile(t string) bool {
 // config.json (a user who could write it could lift their own quota). The
 // admin panel is the way to change it. `t` must already be resolved.
 func (s *Server) isProtectedFile(role, t string) bool {
-	return role != "admin" && s.isAccountFile(t)
+	return (role != "admin" && s.isAccountFile(t)) || s.isChatData(t)
+}
+
+// isChatData is anything under homes/<someone>/data/chat: the Chat server
+// keeps it in memory and writes it itself (chat.go), so a copy written, moved
+// or trashed from Drive would only be overwritten - or lose a conversation.
+// `t` must already be resolved.
+func (s *Server) isChatData(t string) bool {
+	owner := homeOwner(s.cfg.HomesDir, t)
+	if owner == "" {
+		return false
+	}
+	home, err := resolveExisting(filepath.Join(s.cfg.HomesDir, owner))
+	if err != nil {
+		return false
+	}
+	chat := filepath.Join(home, "data", "chat")
+	return t == chat || isInside(chat, t)
 }
 
 // purgeable is the one folder whose files may be deleted for good, skipping

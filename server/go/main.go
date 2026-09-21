@@ -152,8 +152,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	go NewReminders(cfg, server.users, server.trash, server.sessions,
-		server.push, log).Run(ctx)
+	reminders := NewReminders(cfg, server.users, server.trash, server.sessions,
+		server.push, server.trackers, log)
+	reminders.devices = server.devices // a phone with the app needs no "turn location on" alert
+	go reminders.Run(ctx)
+
+	// Chat's auto-delete: messages older than each owner's "delete after N days".
+	go server.chat.RunExpiry(ctx)
+	// Chat's scheduled texts ("Schedule message"), sent when their time comes.
+	go server.chat.RunLater(ctx)
 
 	// Converting uploaded videos needs ffmpeg + ffprobe on the machine
 	// (`sudo apt install ffmpeg`). Without them Drive simply never offers it.

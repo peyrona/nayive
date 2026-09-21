@@ -138,19 +138,26 @@ async function openImageEditor( path )
     if( imageEditor ) { try { imageEditor.destroy(); } catch( _ ) {} imageEditor = null; }
     host.innerHTML = '';
 
+    // The library puts the picture between its own two 64px rows (tools
+    // below, zoom / undo above), so it gets the host minus both. Asking for
+    // the whole window left a portrait photo running off the bottom.
+    const box = host.getBoundingClientRect();
+
     imageEditor = new tui.ImageEditor( host, {
         includeUI: {
             loadImage: { path: GumApi.fileUrl( path ), name: name },
             menu: [ 'crop', 'flip', 'rotate', 'draw', 'shape', 'icon', 'text', 'mask', 'filter' ],
             initMenu: '',
             menuBarPosition: 'bottom',
-            uiSize: { width: '100%', height: '100%' }
+            uiSize: { width: '100%', height: '100%' },
+            locale: NayivePhoto.editorLocale()      // its words in the user's language
         },
-        cssMaxWidth:  window.innerWidth,
-        cssMaxHeight: window.innerHeight - 44,
+        cssMaxWidth:  Math.max( 160, box.width - 16 ),
+        cssMaxHeight: Math.max( 160, box.height - 136 ),
         selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
         usageStatistics: false   // the library pings Google Analytics unless this is off
     });
+    NayivePhoto.localizeEditor( host );
 
     imageEditor.on( 'undoStackChanged', function( len ) { editorDirty = len > 0; } );
 }
@@ -166,6 +173,10 @@ function editorFormatFor( name )
 
 function dataUrlToBytes( dataUrl )
 {
+    // "data:," is a canvas with no picture - what a device hands back for a
+    // canvas bigger than it allows (an iPhone stops near 16.7 MP). Saving it
+    // would leave an empty file where the photo was.
+    if( ! /^data:image\//.test( dataUrl ) ) throw new Error( 'empty render' );
     const bin = atob( dataUrl.slice( dataUrl.indexOf( ',' ) + 1 ) );
     const out = new Uint8Array( bin.length );
     for( let i = 0; i < bin.length; i++ ) out[i] = bin.charCodeAt( i );
@@ -176,6 +187,15 @@ async function saveEditorTo( destPath )
 {
     if( ! imageEditor ) return;
 
+    // Only the note changed: the picture on disk is already right, and
+    // encoding it again would only lose quality.
+    if( ! editorDirty && destPath === editorPath )
+    {
+        await savePhotoComment( destPath );
+        NayiveUI.toast( T( 'drive.imageSaved' ) );
+        return;
+    }
+
     const fmt  = editorFormatFor( destPath );
     const opts = { format: fmt };
     if( fmt !== 'png' ) opts.quality = 0.92;
@@ -183,11 +203,15 @@ async function saveEditorTo( destPath )
     let bytes;
     try { bytes = dataUrlToBytes( imageEditor.toDataURL( opts ) ); }
     catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return; }
+    const size = imageEditor.getCanvasSize();
 
     setStatus( T( 'ui.sync.saving' ) );
     try
     {
+        bytes = await NayivePhoto.keepExif( editorPath, bytes, size.width, size.height );
+        const oldThumb = await NayivePhoto.thumbOf( destPath );   // a file being rewritten
         await withBusy( GumApi.writeFileBytes( destPath, bytes ) );
+        NayivePhoto.dropThumb( oldThumb );
         editorDirty = false;
 
         // "Guardar copia" → keep editing the copy from now on.
@@ -215,7 +239,8 @@ function saveEditorAs()
 
     const cur = editorPath.split( '/' ).pop();
     const dot = cur.lastIndexOf( '.' );
-    const seed = dot > 0 ? cur.slice( 0, dot ) + '-editado' + cur.slice( dot ) : cur + '-editado';
+    const tag = '-' + T( 'ui.editedSuffix' );
+    const seed = dot > 0 ? cur.slice( 0, dot ) + tag + cur.slice( dot ) : cur + tag;
 
     const inp = document.getElementById( 'saveCopyName' );
     inp.value = seed;
@@ -252,6 +277,7 @@ async function confirmSaveCopy()
 
         try { await withBusy( GumApi.deletePaths( [ dest ] ) ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.moveExistingFailed' ) ); return; }
+        await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
     }
 
     saveEditorTo( dest );

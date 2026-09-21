@@ -41,6 +41,8 @@ type Server struct {
 	convert  *Converter
 	office   *Office
 	static   *StaticFiles
+	chat     *ChatHub // the Chat app's messenger (chat.go)
+	devices  *Devices // the Android app's phones (devices.go)
 
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
@@ -84,8 +86,11 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		convert:  NewConverter(cfg, users, trash, push, log),
 		office:   NewOffice(log),
 		static:   static,
+		chat:     NewChatHub(cfg, users, push, log),
+		devices:  NewDevices(cfg.ConfigDir, cfg.HomesDir, log),
 		scheme:   "http",
 	}
+	s.chat.Hook(s.devices)
 
 	// TIMEOUTS. ReadHeaderTimeout is the one that matters: it stops a client
 	// that opens a socket and dribbles headers forever (Slowloris). IdleTimeout
@@ -118,6 +123,10 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		IdleTimeout:       90 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 	}
+	// The chat's long-polls wait up to 25 s; a shutdown ends them at once
+	// instead of sitting out its 10-second grace (chat.go).
+	s.httpd.RegisterOnShutdown(s.chat.Close)
+	s.httpd.RegisterOnShutdown(s.devices.Close) // the phones' waits, held minutes
 
 	if err := s.configureTLS(); err != nil {
 		// Missing file, unreadable key (letsencrypt directories are root-only),
@@ -192,6 +201,8 @@ func (s *Server) Start(ctx context.Context) error {
 // Close releases what the server owns.
 func (s *Server) Close() error {
 	s.office.Close()
+	s.chat.Close()
+	s.devices.Close()
 	return s.static.Close()
 }
 
@@ -232,6 +243,21 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/location/{key}/{app}", s.apiLocationReport) // the app itself: no session
 	mux.HandleFunc("/api/journey", s.apiJourney)                     // a trip's Journey map, for its owner
 	mux.HandleFunc("/api/journey/{kind}/{name}", s.apiJourneyFile)   // ...and its photos
+
+	// --- the Android app's phones (devices.go) ------------------------------
+	mux.HandleFunc("/api/device", s.apiDevice)
+	mux.HandleFunc("/api/device/{rest...}", s.apiDevice)
+	mux.HandleFunc("/.well-known/assetlinks.json", s.assetLinks) // lets the app show Nayive full screen
+
+	// --- Chat: the owner signed in, a person by link (see api_chat.go) ----
+	mux.HandleFunc("/api/chat", s.apiChatOwner)
+	mux.HandleFunc("/api/chat/{rest...}", s.apiChatOwner)
+	mux.HandleFunc("/api/chat/via/{owner}", s.apiChatVia) // another user's home, where I am a contact
+	mux.HandleFunc("/api/chat/via/{owner}/{rest...}", s.apiChatVia)
+	mux.HandleFunc("/api/c/{token}", s.apiChatGuest)
+	mux.HandleFunc("/api/c/{token}/{rest...}", s.apiChatGuest)
+	mux.HandleFunc("/c/{token}", s.chatGuestRedirect)
+	mux.HandleFunc("/c/{token}/{rest...}", s.chatGuestPage)
 
 	// --- the file API ------------------------------------------------------
 	mux.HandleFunc("/api/files", s.apiFiles)
@@ -293,9 +319,13 @@ func (s *Server) routes() http.Handler {
 	return h
 }
 
-// handleRoot sends a visitor to the launcher, or to the login page.
+// handleRoot sends a visitor to the launcher, or to the login page. Any other
+// URL that reaches it is a static web site's (sites.go), or a 404.
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
+		if s.serveSite(w, r) {
+			return
+		}
 		sendText(w, r, http.StatusNotFound, "Not found.\n")
 		return
 	}

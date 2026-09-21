@@ -268,6 +268,31 @@
         return JSON.parse( await fetchText( API_FILES + "?" + q ) );
     }
 
+    // Drive's advanced search. `spec` = { rules: [ { op, text } ], any,
+    // folders, exts: [ ... ], since, until }, every part optional: op is
+    // has | not | starts | ends | is on the basename, `any` = one rule is
+    // enough, `folders` / `exts` = the kinds wanted, since / until = modified
+    // in [since, until) in Unix seconds. Same answer as find().
+    // GET ?search=1&name=<op>:<text>&any=1&folders=1&ext=pdf&since=&until=
+    async function search( spec )
+    {
+        var q = new URLSearchParams( { search: "1" } );
+        ( spec.rules || [] ).forEach( function ( r ) { q.append( "name", r.op + ":" + r.text ); } );
+        if( spec.any )     q.append( "any", "1" );
+        if( spec.folders ) q.append( "folders", "1" );
+        ( spec.exts || [] ).forEach( function ( e ) { q.append( "ext", e ); } );
+        if( spec.since )   q.append( "since", String( spec.since ) );
+        if( spec.until )   q.append( "until", String( spec.until ) );
+        return JSON.parse( await fetchText( API_FILES + "?" + q.toString() ) );
+    }
+
+    // The `n` biggest files, biggest first (Drive's "Biggest files", which the
+    // "space almost full" warning opens). Same answer as find(). GET ?big=<n>
+    async function biggest( n )
+    {
+        return JSON.parse( await fetchText( API_FILES + "?big=" + ( n || 50 ) ) );
+    }
+
     // Create a directory `name` under `parent` (a path relative to the served
     // root). PUT ?type=dir&name=&parent=
     function makeDir( parent, name )
@@ -409,6 +434,8 @@
         listDirRecursive: listDirRecursive,
         dirTree:         dirTree,
         find:            find,
+        search:          search,
+        biggest:         biggest,
         makeDir:         makeDir,
         deletePaths:     deletePaths,
         purgePaths:      purgePaths,

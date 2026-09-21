@@ -75,10 +75,7 @@
                 { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
                   text: NayiveUI.t( 'calendar.introSync' ) } ] )
             .concat( window.matchMedia( '(max-width: 640px)' ).matches
-                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] ),
-            // The tasks app fills a task with today's events once a day (see its
-            // CALENDAR SYNC): worth saying here, where the events are written.
-            tip:  NayiveUI.t( 'calendar.introTasksLink' )
+                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] )
         } );
     } );
     </script>
@@ -797,8 +794,14 @@
                     if( dragBusy ) refetchHeld = true;
                     else           refetchAll();
                 },
-                guard: function() { return ! calendar || anyBackdropOpen(); }
+                guard: function() { return ! calendar || anyBackdropOpen(); },
+                // FullCalendar has already re-read the clock on this same event.
+                onVisible: function() { checkToday( false ); }
             } );
+
+            window.addEventListener( 'focus',    function() { checkToday( true ); } );
+            window.addEventListener( 'pageshow', function() { checkToday( true ); } );
+            window.nayiveCheckToday = function() { checkToday( true ); };   // Planner calls it
 
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
@@ -980,6 +983,7 @@
             });
 
             calendar.render();
+            lastToday = DateTime.now().toISODate();
 
             // The hold starts at the PRESS, not at eventDragStart: see the read in wireRefresh.
             host.addEventListener( 'pointerdown', function( e )
@@ -988,6 +992,51 @@
             }, true );
             document.addEventListener( 'pointerup',     releasePress, true );
             document.addEventListener( 'pointercancel', releasePress, true );
+        }
+
+        // TODAY FOLLOWS THE CLOCK
+        //
+        // A calendar left open overnight kept YESTERDAY as today. FullCalendar moves its
+        // today tint on a setTimeout up to a day long, and that timer stops while the
+        // machine sleeps (the trap theme.js answers the same way); a Planner pane never
+        // fires visibilitychange either. So every focus / pageshow / return to the front
+        // (and Planner, see nayiveCheckToday) checks the date. When it moved, a view
+        // that sat on the old today moves to the new one: Semana re-centres, Día steps,
+        // Mes turns the page at a month's end, the phone's picked day follows.
+        let lastToday = null;   // the day the grid last showed as today
+
+        function checkToday( pokeFc )
+        {
+            if( ! calendar ) return;
+
+            const now = DateTime.now().toISODate();
+            if( now === lastToday ) return;
+
+            if( dragBusy ) return;   // never mid-drag: the next focus tries again
+
+            // FullCalendar has no call to re-read the clock; its own visibilitychange
+            // listener is the only way in. (The app's listeners hear it too: one more
+            // re-read of calendar.ics, once a day.)
+            if( pokeFc ) document.dispatchEvent( new Event( 'visibilitychange' ) );
+
+            // The tint has moved; the view waits until no sheet is open.
+            if( anyBackdropOpen() ) return;
+
+            const prev = lastToday;
+            lastToday  = now;
+
+            const view  = calendar.view;
+            const start = DateTime.fromJSDate( view.currentStart ).toISODate();
+            const end   = DateTime.fromJSDate( view.currentEnd ).toISODate();     // exclusive
+            const shows = function( iso ) { return iso >= start && iso < end; };
+
+            if( phoneDay === prev ) phoneDay = now;
+
+            if( view.type === 'dayGridMonth' ? ( shows( prev ) && ! shows( now ) )
+                                             : DateTime.fromJSDate( calendar.getDate() ).toISODate() === prev )
+                calendar.today();
+
+            refreshPhoneMonth();   // FullCalendar's repaint drops the picked mark and the dots
         }
 
         function earlyOfDayHint() { return '07:00:00'; }

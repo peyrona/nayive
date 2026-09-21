@@ -725,6 +725,18 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     eyeBtn.appendChild( svgIcon( enabled ? ICON_EYE : ICON_EYE_OFF, 15 ) );
     eyeBtn.addEventListener( 'click', function() { toggleStage( st.id ); } );
 
+    // "Que hay aqui": the chooser, then the device's own browser (discover.js).
+    // Deliberately outside the read-only gate below - looking a city up changes
+    // nothing, so a trip somebody shared with us gets it too.
+    const discBtn = document.createElement( 'button' );
+    discBtn.className = 'icon-btn';
+    discBtn.title = T( 'trips.disc.btn' );
+    discBtn.appendChild( svgIcon( ICON_COMPASS, 15 ) );
+    discBtn.addEventListener( 'click', function() { openDiscover( st ); } );
+
+    if( enabled && ( st.location || '' ).trim() )
+        actions.appendChild( discBtn );
+
     // Edit + delete + eye all live in the top row (reordering is the drag handle
     // before the title). A disabled stage collapses to just grip + title + eye.
     if( ! tripIsRO( trip ) )

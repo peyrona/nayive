@@ -72,7 +72,6 @@ find "$STAGE" \( -name '*~' -o -name '*.swp' -o -name '*.swo' -o -name '.DS_Stor
 find "$STAGE/$SRC/apps" \( -name 'calendar.ics' -o -name 'contacts.vcf' \
         -o -name 'contacts-meta.json' -o -name 'tasks.json' \) -delete
 find "$STAGE" -type d -name '.bak' -exec rm -rf {} + 2>/dev/null || true
-
 OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 rm -f "$OUT_ABS"
 ( cd "$STAGE" && zip -qr "$OUT_ABS" . -x '.*' )

@@ -414,7 +414,8 @@ func updateUserConfig(path string, change func(*UserConfig)) bool {
 // object. Go signals it with nil: a nil pointer here is "not supplied", and a
 // pointer to the zero value is "remove it".
 type SaveAccountOptions struct {
-	Password string // "" keeps the current one
+	Password      string // "" keeps the current one
+	ClearPassword bool   // removes it: the person picks a new one at sign-in
 
 	// Quota and PhotoMax arrive as RAW JSON, because the three cases the panel
 	// can send are not three values of one type:
@@ -480,7 +481,9 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 		cfg = readUserConfig(path)
 	}
 
-	if opts.Password != "" {
+	if opts.ClearPassword {
+		cfg.Password = ""
+	} else if opts.Password != "" {
 		cfg.Password = opts.Password
 	}
 	// No password given = keep the current one. An account may also have none

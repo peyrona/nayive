@@ -20,6 +20,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -82,6 +83,8 @@ type ServerConfig struct {
 	LogLevel         string           `json:"log_level"`
 	BaseDir          string           `json:"base_dir"`
 	AppsDir          string           `json:"apps_dir"`
+	SitesDir         string           `json:"sites_dir"`
+	TurnURIs         []string         `json:"turn_uris"` // Chat calls: coturn (chat_call.go); the secret is config/turn_secret
 	TLS              TLSConfig        `json:"tls"`
 	Admin            *AdminAccount    `json:"admin"`
 	AdminLang        *string          `json:"admin_lang"`
@@ -180,6 +183,8 @@ func LoadConfig(path string) (*Config, error) {
 		readField(cfg.raw.Fields(), "log_level", &cfg.Server.LogLevel)
 		readField(cfg.raw.Fields(), "base_dir", &cfg.Server.BaseDir)
 		readField(cfg.raw.Fields(), "apps_dir", &cfg.Server.AppsDir)
+		readField(cfg.raw.Fields(), "sites_dir", &cfg.Server.SitesDir)
+		readField(cfg.raw.Fields(), "turn_uris", &cfg.Server.TurnURIs)
 		readField(cfg.raw.Fields(), "push_contact", &cfg.Server.PushContact)
 		readField(cfg.raw.Fields(), "tls", &cfg.Server.TLS)
 		if port := readNumber[int](cfg.raw.Fields(), "port"); port != nil {
@@ -223,6 +228,51 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.TrashDays = intOr(cfg.Server.TrashDays, 30)
 	return cfg, nil
 }
+
+// SitesPath is the folder of plain web sites (sites.go), or "" when there are
+// none. Resolved on every call: the admin panel can change "sites_dir" at runtime.
+func (c *Config) SitesPath() string {
+	var raw string
+	c.Read(func(s *ServerConfig) { raw = s.SitesDir })
+	dir, _ := c.resolveSitesDir(raw)
+	return dir
+}
+
+// resolveSitesDir turns a "sites_dir" value into an absolute folder: "~/" is
+// the home of the user the server runs as, a relative path hangs off the
+// run-root. "" is off. A folder that is, holds or sits inside the run-root or
+// the base dir is refused - it would publish Nayive's config and users' files.
+func (c *Config) resolveSitesDir(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	var dir string
+	switch {
+	case raw == "":
+		return "", nil
+	case raw == "~" || strings.HasPrefix(raw, "~/"):
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, raw[1:])
+	case filepath.IsAbs(raw):
+		dir = filepath.Clean(raw)
+	default:
+		dir = filepath.Join(c.Here, raw)
+	}
+	real, err := resolveExisting(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, private := range []string{c.Here, c.BaseDir} {
+		if p, err := resolveExisting(private); err != nil ||
+			isInside(real, p) || isInside(p, real) {
+			return "", errSitesOverlap
+		}
+	}
+	return dir, nil
+}
+
+var errSitesOverlap = errors.New("sites_dir overlaps Nayive's own data")
 
 // Addr is the "host:port" net/http wants.
 func (c *Config) Addr() string {
@@ -288,6 +338,14 @@ func (c *Config) merged() *orderedJSON {
 	put("base_dir", s.BaseDir)
 	if s.AppsDir != "" {
 		put("apps_dir", s.AppsDir)
+	}
+	if s.SitesDir != "" {
+		put("sites_dir", s.SitesDir)
+	} else {
+		out.Remove("sites_dir") // cleared in the admin panel
+	}
+	if len(s.TurnURIs) > 0 {
+		put("turn_uris", s.TurnURIs)
 	}
 	put("tls", s.TLS)
 	if s.Admin != nil {

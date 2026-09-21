@@ -8,7 +8,7 @@
  * What it does:
  *   - install : precache the SHELL (each app's HTML + shared/ + icons) so the
  *               pages load with no connection. The heavier PRECACHE_REST
- *               (vendored lib/, dictionaries, the SuperDoc bundle) is warmed in
+ *               (vendored lib/, dictionaries, the editor bundle) is warmed in
  *               the background after activation, so a post-deploy update never
  *               starves the page that triggered it.
  *   - fetch   : HTML          -> stale-while-revalidate (instant, self-updating)
@@ -27,7 +27,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-a5b11d76cfa3";
+var CACHE_VERSION = "nayive-0fab476850c5";
 /* @end */
 
 /* @generated:precache */
@@ -41,11 +41,23 @@ var PRECACHE_SHELL = [
     "calendar/icons/icon-512.png",
     "calendar/index.html",
     "calendar/manifest.json",
+    "chat/call.js",
+    "chat/chat.css",
+    "chat/chat.js",
+    "chat/compose.js",
+    "chat/conv.js",
+    "chat/core.js",
+    "chat/guest-sw.js",
+    "chat/guest.js",
+    "chat/info.js",
+    "chat/list.js",
+    "chat/media.js",
     "contact/icons/icon-192.png",
     "contact/icons/icon-512.png",
     "contact/index.html",
     "contact/manifest.json",
     "drive/actions.js",
+    "drive/advsearch.js",
     "drive/dragdrop.js",
     "drive/drive.css",
     "drive/init.js",
@@ -62,6 +74,8 @@ var PRECACHE_SHELL = [
     "drive/upload.js",
     "drive/viewers.js",
     "games/asteroids.html",
+    "games/checkers.html",
+    "games/chess.html",
     "games/g2048.html",
     "games/icons/icon-192.png",
     "games/icons/icon-512.png",
@@ -69,6 +83,7 @@ var PRECACHE_SHELL = [
     "games/invaders.html",
     "games/manifest.json",
     "games/mines.html",
+    "games/solitaire.html",
     "games/sudoku.html",
     "games/tetris.html",
     "habits/habits.js",
@@ -78,6 +93,7 @@ var PRECACHE_SHELL = [
     "habits/manifest.json",
     "icons/icon-192.png",
     "icons/icon-512.png",
+    "icons/logo-lines.svg",
     "index.html",
     "login.html",
     "manifest.json",
@@ -87,6 +103,7 @@ var PRECACHE_SHELL = [
     "planner/manifest.json",
     "shared/app.css",
     "shared/basemap.js",
+    "shared/crypt.js",
     "shared/gum-api.js",
     "shared/i18n.js",
     "shared/i18n/de.json",
@@ -104,6 +121,7 @@ var PRECACHE_SHELL = [
     "shared/store.js",
     "shared/theme.css",
     "shared/theme.js",
+    "shared/tz-geo.json",
     "shared/ui.js",
     "split/icons/icon-192.png",
     "split/icons/icon-512.png",
@@ -118,6 +136,7 @@ var PRECACHE_SHELL = [
     "trips/converter.js",
     "trips/currency-sheet.js",
     "trips/currency.js",
+    "trips/discover.js",
     "trips/drag.js",
     "trips/fields.js",
     "trips/file-picker.js",
@@ -139,13 +158,18 @@ var PRECACHE_SHELL = [
     "trips/sheets.js",
     "trips/state.js",
     "trips/trips.css",
+    "write/docx-patch.js",
+    "write/find.js",
     "write/icons/icon-192.png",
     "write/icons/icon-512.png",
     "write/icons/logo.svg",
     "write/index.html",
     "write/manifest.json",
+    "write/proofing-overlay.js",
     "write/proofing-worker.js",
     "write/proofing.js",
+    "write/quirks.js",
+    "write/toolbar.js",
     "write/write.js"
 ];
 
@@ -175,6 +199,9 @@ var PRECACHE_REST = [
     "trips/lib/maplibre-gl_v5.24.0/LICENSE.txt",
     "trips/lib/maplibre-gl_v5.24.0/maplibre-gl.css",
     "trips/lib/maplibre-gl_v5.24.0/maplibre-gl.js",
+    "write/lib/docx-editor/docx-editor_v2.21.0.css",
+    "write/lib/docx-editor/docx-editor_v2.21.0.min.js",
+    "write/lib/docx-editor/harfbuzz_v2.21.0.wasm",
     "write/lib/proofing/de.aff",
     "write/lib/proofing/de.dic",
     "write/lib/proofing/en.aff",
@@ -187,13 +214,7 @@ var PRECACHE_REST = [
     "write/lib/proofing/it.dic",
     "write/lib/proofing/pt.aff",
     "write/lib/proofing/pt.dic",
-    "write/lib/proofing/typo.js",
-    "write/lib/superdoc/@superdoc/docx-engine/style.css",
-    "write/lib/superdoc/assets/browser-worker-entry-Jt3Z1Jtz.js",
-    "write/lib/superdoc/assets/review-index-worker-entry--TnQQT8x.js",
-    "write/lib/superdoc/engine.css",
-    "write/lib/superdoc/superdoc.css",
-    "write/lib/superdoc/superdoc.min.js"
+    "write/lib/proofing/typo.js"
 ];
 /* @end */
 
@@ -244,11 +265,13 @@ async function precacheList( rels )
 }
 
 // Stricter than the server's Cache-Control rule on purpose: only a path with
-// a version in it (luxon_v3.7.2.min.js, trips/lib/leaflet_v1.9.4/...) or an
-// icon is copied over - a change there means a new name. An unversioned lib
-// file (write/lib/superdoc/superdoc.min.js, the proofing dictionaries) is
-// still re-validated with the server on every install (a 304 = headers only),
-// so an in-place upgrade of one of those is picked up as before.
+// a version in it (luxon_v3.7.2.min.js, trips/lib/leaflet_v1.9.4/...,
+// write/lib/docx-editor/docx-editor_v<ver>.min.js) or an icon is copied over -
+// a change there means a new name, so the 2.5 MB editor bundle is carried
+// cache-to-cache instead of being re-fetched on every install. An unversioned
+// lib file (the proofing dictionaries) is still re-validated with the server
+// on every install (a 304 = headers only), so an in-place upgrade of one of
+// those is picked up as before.
 function isImmutable( rel )
 {
     var parts = rel.split( "/" );
@@ -358,7 +381,7 @@ self.addEventListener( "fetch", function ( event )
     // Trips documents: answered from the trips-managed cache (active trip only).
     if( url.pathname.indexOf( SCOPE_PATH + "trips/" ) === 0 && /\.pdf$/i.test( url.pathname ) )
         event.respondWith( tripDocStrategy( req ) );
-    // ...and a page's own fetch() of an .html file: Games loads its six games that
+    // ...and a page's own fetch() of an .html file: Games loads its nine games that
     // way, and cache-first would keep serving an edited game's OLD file.
     else if( req.mode === "navigate" || req.destination === "document" || /\.html$/i.test( url.pathname ) )
         event.respondWith( htmlStrategy( req, url ) );
@@ -555,14 +578,27 @@ async function showPush( event )
     var body  = d.body  || await swText( null, "push.eventTitle" ) || "";
     var icon  = new URL( "icons/icon-192.png", self.registration.scope ).toString();
 
-    return self.registration.showNotification( title, {
-        body:     body,
+    // A Chat call (server/go/chat_call.go) rings until answered; "quiet"
+    // replaces the ringing one without a sound (answered or declined on
+    // another device); a ring that arrives after its deadline (push order is
+    // not guaranteed) says "missed" instead. Same rules in chat/guest-sw.js.
+    var late = d.kind === "call" && d.until && Date.now() > d.until;
+    var opts = {
+        body:     ( late && d.late ) || body,
         icon:     icon,
         badge:    icon,
         tag:      d.tag || "nayive-event",   // same event re-sent -> replace, don't stack
-        renotify: true,                      // ...but still buzz for the replacement
+        renotify: ! d.quiet,                 // ...but still buzz for the replacement
         data:     { url: d.url || SCOPE_PATH }
-    } );
+    };
+    if( d.kind === "call" && ! d.quiet && ! late && d.until )
+    {
+        opts.requireInteraction = true;
+        opts.vibrate = [ 500, 250, 500, 250, 500 ];
+    }
+    if( d.quiet ) opts.silent = true;
+
+    return self.registration.showNotification( title, opts );
 }
 
 self.addEventListener( "notificationclick", function ( event )
@@ -585,9 +621,26 @@ async function openTarget( url )
         if( all[ i ].url === target )   return all[ i ].focus();
     }
 
+    // The Chat page is never navigated away: it may be in a call. A chat
+    // notification tells it which chat to show (chat/chat.js); any other one
+    // uses another window, or a new one.
+    var chat = SCOPE_PATH + "chat/";
+    var isChat = function ( u ) { return new URL( u ).pathname.indexOf( chat ) === 0; };
+    if( isChat( target ) )
+    {
+        for( var k = 0; k < all.length; k++ )
+        {
+            if( isChat( all[ k ].url ) )
+            {
+                all[ k ].postMessage( { open: target } );
+                return all[ k ].focus();
+            }
+        }
+    }
+
     for( var j = 0; j < all.length; j++ )
     {
-        if( all[ j ].url.indexOf( SCOPE_PATH ) !== -1 && "navigate" in all[ j ] )
+        if( all[ j ].url.indexOf( SCOPE_PATH ) !== -1 && ! isChat( all[ j ].url ) && "navigate" in all[ j ] )
         {
             await all[ j ].navigate( target );
             return all[ j ].focus();

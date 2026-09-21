@@ -18,10 +18,74 @@ html, body { height: 100%; overflow: hidden; }
    that empties it (see offerEmptyTrash). */
 .disk-bar--offer { cursor: pointer; box-shadow: 0 0 0 2px color-mix( in srgb, var(--danger) 35%, transparent ); }
 .topbar .sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); flex: 0 0 auto; }
+
+/* The selection group. display: contents so its rule and its six buttons go on
+   laying themselves out as children of the .topbar - nothing moves by a pixel
+   when it comes and goes. The hidden attribute wins over this (app.css) and
+   takes the whole group, rule included, in one go. */
+#selActions { display: contents; }
 .status-label { flex: 1 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
 
-/* Look from app.css (FORM FIELD); only the width is Drive's. */
-.topbar-search { flex: 0 0 auto; width: 190px; }
+/* "Moved to the bin" used to be words in the status slot. Now the papelera
+   itself answers: two slow gulps (swell, settle, duck, settle) tinted
+   --danger, lasting the same three seconds the message used to sit there.
+   On a phone the bin hides inside the "⋮" menu, so that button gulps
+   instead (see flashBin in actions.js). */
+@keyframes bin-gulp
+{
+      0% { transform: scale(1);    color: var(--text-dim); }
+     15% { transform: scale(1.25); color: var(--danger);   }
+     35% { transform: scale(1);    color: var(--danger);   }
+     55% { transform: scale(0.8);  color: var(--danger);   }
+     80% { transform: scale(1);    color: var(--text-dim); }
+    100% { transform: scale(1);    color: var(--text-dim); }
+}
+.icon-btn.bin-gulp { animation: bin-gulp 1.5s ease-in-out 2; }
+
+/* Look from app.css (FORM FIELD); only the width is Drive's. The wrapper
+   carries it, so the advanced-search magnifier can sit inside the right end. */
+.search-wrap { position: relative; flex: 0 0 auto; width: 190px; }
+.search-wrap .topbar-search { width: 100%; padding-right: 32px; }   /* clears the magnifier */
+.search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
+/* Shared .icon-btn.sm, one size down so it fits inside the field's height. */
+.search-wrap .icon-btn.sm { width: 26px; height: 26px; }
+.search-wrap .icon-btn.sm svg { width: 15px; height: 15px; }
+
+/* While an advanced search is in force this button stands in for the box
+   (advsearch.js): the field's own look with an accent edge, so it reads as
+   "a search is on"; a click reopens the dialog. A one-app state, kept here. */
+.adv-chip
+{
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    padding: 7px 32px 7px 10px;
+    font: inherit; font-size: var(--field-fs); text-align: left;
+    color: var(--accent); background: var(--card2);
+    border: 1px solid var(--accent); border-radius: var(--radius-s);
+    cursor: pointer;
+}
+.adv-chip svg  { flex: 0 0 auto; }
+.adv-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-wrap.adv-on .icon-btn { color: var(--accent); }
+
+/* Advanced search dialog. Layout only: every control in it is a shared one
+   (.field, .pill, .text-btn, .icon-btn, .dt-field). */
+.sb-rules    { display: flex; flex-direction: column; gap: 8px; }
+.sb-rule     { display: flex; align-items: center; gap: 8px; }
+.sb-rule select { flex: 0 0 auto; width: 150px; }
+.sb-rule input  { flex: 1 1 auto; min-width: 0; }
+.sb-rule-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
+.sb-rule-bar .text-btn.dashed { width: auto; }      /* the shared "add" button, as wide as its words */
+.sb-mode     { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.8rem; color: var(--text-dim); }
+.sb-pills    { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb-hint     { color: var(--text-faint); }
+.sb-range    { margin-top: 10px; }
+.sb-range .field { margin-bottom: 0; }
+/* The live count and the search in words, just above the buttons: an inset
+   --card2 box (the look of a field), so the answer reads apart from the choices. */
+.sb-result   { padding: 10px 12px; background: var(--card2); border-radius: var(--radius-m); }
+.sb-result .share-note { margin: 3px 0 0; }
+.sb-count    { font-weight: 700; color: var(--accent); }
+.sb-count.none { color: var(--danger); }
 
 /* Body: tree + listing */
 .body-row { flex: 1 1 auto; min-height: 0; display: flex; }
@@ -34,13 +98,7 @@ html, body { height: 100%; overflow: hidden; }
 /* The inner tree grows to its widest row so .tree-pane can scroll it sideways. */
 #treePane > .tree-node { min-width: max-content; }
 
-/* Drag handle between the tree and the file list (desktop only). */
-.pane-resizer
-{
-    flex: 0 0 auto; width: 5px; cursor: col-resize; background: var(--line);
-    touch-action: none;
-}
-.pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
+/* The drag handle (.pane-resizer) between the tree and the file list is in app.css. */
 
 .tree-node .tree-row
 {
@@ -73,12 +131,18 @@ html, body { height: 100%; overflow: hidden; }
 .breadcrumb .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
 .breadcrumb .crumb.current:hover { background: none; }
 .breadcrumb .crumb-sep { color: var(--text-dim); padding: 0 1px; }
+/* An advanced search: its words after "Resultados (n)", then the shared
+   .pill that ends it. */
+.breadcrumb .crumb-summary { flex: 1 1 auto; min-width: 0; padding: 0 6px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb .crumb-clear   { flex: 0 0 auto; }
 
 .listing { flex: 1 1 auto; overflow: auto; padding: 4px 0; }
 /* Wrapper around the rows: as wide as the widest row, so .listing scrolls it
    sideways while each row's border / hover still spans the full width. */
 .list-rows { min-width: 100%; width: max-content; }
 .empty-hint { padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+/* "Biggest files" (listing.js): the bin reminder over the rows. */
+.big-note { padding: 8px 14px 10px; color: var(--text-dim); font-size: 0.85rem; }
 
 .row
 {
@@ -332,12 +396,13 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
 /* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
    toolbar buttons are hidden while it is open. */
 #moreBtn { display: none; }   /* phone only — see B6b in the phone block */
-body.trash-mode .topbar-search,
+body.trash-mode .search-wrap,
 body.trash-mode #searchToggleBtn,
 body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
 body.trash-mode #renameBtn,  body.trash-mode #moveToBtn,
 body.trash-mode #copyToBtn,  body.trash-mode #copyLinkBtn,
 body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
+body.trash-mode #shareBtn,   body.trash-mode #bigFilesBtn,
 body.trash-mode .topbar .sep,
 body.trash-mode .tree-pane { display: none; }
 
@@ -372,8 +437,14 @@ body.trash-mode .tree-pane { display: none; }
 
     /* B2 — search collapses behind a magnifier button */
     #searchToggleBtn { display: flex; }
-    .topbar-search { display: none; }
-    .topbar.searching .topbar-search { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
+    .search-wrap { display: none; }
+    .topbar.searching .search-wrap { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
+    /* Fingers: the magnifier inside grows as far as the taller field allows. */
+    .search-wrap .topbar-search,
+    .adv-chip { padding-right: 38px; }
+    .adv-chip { font-size: 16px; }      /* the same height as the 16px phone field it stands in for */
+    .sb-rule select { width: 128px; }
+    .search-wrap .icon-btn.sm { width: 32px; height: 32px; }
 
     /* B4 — the folder tree becomes a slide-in sheet */
     .tree-pane
@@ -400,11 +471,11 @@ body.trash-mode .tree-pane { display: none; }
     /* B6b — of what is left, the ones a phone reaches for LEAST move
        into the header's own "⋮" (#topMenu, built in wireTopMenu from
        these very buttons). Compartir is here because it is the one
-       per-file action the row menu does not carry; la papelera is
-       once-in-a-while. What stays is what you came to Drive to do:
+       per-file action the row menu does not carry; la papelera and
+       "Biggest files" are once-in-a-while. What stays is what you came to Drive to do:
        buscar, nueva carpeta, subir, descargar — six buttons, one row,
        even with something selected. */
-    #shareBtn, #trashViewBtn { display: none; }
+    #shareBtn, #bigFilesBtn, #trashViewBtn { display: none; }
     #moreBtn { display: flex; }
 
     /* B7 — roomier rows, ⋮ action button, no size/date column */
@@ -412,6 +483,8 @@ body.trash-mode .tree-pane { display: none; }
     .row .row-menu { display: flex; }
     .tree-node .tree-row .row-menu { display: flex; }
     .row .row-meta { display: none; }
+    .row .row-meta.row-meta--big { display: block; padding-left: 8px; }   /* "Biggest files": the size stays */
+    .row .row-meta--big .row-where { display: none; }
     .breadcrumb { padding: 8px 10px; }
     .breadcrumb .crumb { padding: 5px 6px; }
 

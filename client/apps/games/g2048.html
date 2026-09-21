@@ -1,4 +1,4 @@
-<!-- g2048.html - 2048, one of the six games of index.html.
+<!-- g2048.html - 2048, one of the nine games of index.html.
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
@@ -156,7 +156,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same eleven
+        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -168,7 +168,8 @@
             gameLoop    = NayiveGames.gameLoop,
             arcade      = NayiveGames.arcade,
             saveBest    = NayiveGames.saveBest,
-            saveTime    = NayiveGames.saveTime;
+            saveTime    = NayiveGames.saveTime,
+            sfx         = NayiveGames.sfx;
 
         //------------------------------------------------------------------------//
         // 2048
@@ -296,19 +297,36 @@
                     moved   = moved || r.moved;
                 } );
 
-                if( ! moved ) return;              // a move that changes nothing deals no tile
+                if( ! moved ) { sfx.play( 'bump' ); return; }   // a move that changes nothing deals no tile
 
                 grid   = next;
                 score += gained;
                 if( score > best ) { best = score; saveBest( 'g2048', best ); }
 
+                // Heard before the new tile is dealt, so `merged` still points at
+                // the tiles it made.
+                sound( merged );
                 render( [ spawn() ], merged );
 
                 // The goal is shown once and then the game carries on. Checking
                 // it first can hide a board that is also finished, so hideOver()
                 // asks again when the player taps through.
-                if( ! won && grid.indexOf( GOAL ) !== -1 ) { won = true; showOver( 'win' ); }
-                else if( ! canMove() ) { over = true; showOver( 'lost' ); }
+                if( ! won && grid.indexOf( GOAL ) !== -1 ) { won = true; showOver( 'win' ); sfx.play( 'win', null, 0.15 ); }
+                else if( ! canMove() ) { over = true; showOver( 'lost' ); sfx.play( 'over', null, 0.15 ); }
+            }
+
+            // A swish for a move that only slides; one that merges pops once for
+            // each value it made - the three biggest, lowest first - and the
+            // note climbs with the tile (see "merge" in THE SOUNDS).
+            function sound( merged )
+            {
+                var vals = [];
+
+                merged.forEach( function ( i ) { if( vals.indexOf( grid[ i ] ) < 0 ) vals.push( grid[ i ] ); } );
+                vals.sort( function ( a, b ) { return a - b; } );
+
+                if( vals.length ) sfx.play( 'merge', vals.slice( -3 ) );
+                else              sfx.play( 'slide' );
             }
 
             function newGame()
@@ -325,6 +343,7 @@
                 overEl.hidden = true;
                 paintPause();
                 render( [ spawn(), spawn() ], [] );
+                sfx.play( 'start' );               // silent at boot: there is no sound before the first press
             }
 
             //---- the screen --------------------------------------------------
@@ -375,6 +394,7 @@
                 overBtnEl.dataset.kind  = 'paused';
                 overEl.hidden = false;
                 paintPause();
+                sfx.play( 'pause' );
             }
 
             function resume()
@@ -384,6 +404,7 @@
                 paused = false;
                 overEl.hidden = true;
                 paintPause();
+                sfx.play( 'resume' );
             }
 
             function showOver( kind )

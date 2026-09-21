@@ -1,17 +1,18 @@
 /*
- * proofing.js - Spell-check provider for SuperDoc's proofing API.
+ * proofing.js - the spell checker, as Write's pages ask it.
  *
- * Client-side, offline. Typo.js (Hunspell) with the Spanish and English
- * dictionaries vendored in lib/proofing/. SuperDoc owns segment extraction and
- * draws the red underline + the right-click "corregir / ignorar" menu; this just
- * answers "is this word spelled right, and if not, what are the suggestions".
+ * Client-side, offline. Typo.js (Hunspell) with the dictionaries vendored in
+ * lib/proofing/. proofing-overlay.js hands it the text of the paragraphs on
+ * screen and draws the red underline + the right-click menu itself (the
+ * engine has no spell-check hook); this just answers "which words are not
+ * right, and what are the suggestions".
  *
  * The dictionaries and all the checking live in proofing-worker.js. Finding a
  * misspelling is instant; finding what you meant costs about a second a word,
  * and doing that here froze the document after every file opened (see the
  * worker's header). So a check answers straight away with whatever suggestions
  * are already known, and the rest arrive in the background - the next check
- * and the right-click menu (fillSuggestions) pick them up.
+ * and the right-click menu (suggestionsFor) pick them up.
  *
  * Grammar (kind: 'grammar' / 'style') is not covered yet — English-only grammar
  * via Harper is a later add. See lib/proofing/README.txt.
@@ -52,6 +53,7 @@ export function isPersonalWord( w )
 // "es,en|palabra" -> [ suggestions ], filled as the worker posts them.
 const sugg    = new Map();
 const pending = new Map();   // check id -> resolve
+const waiting = new Map();   // "es,en|palabra" -> [ resolve ], for suggestionsFor
 let   nextId  = 1;
 let   worker  = null;
 let   getLangsFn = null;
@@ -78,7 +80,13 @@ function startWorker()
     {
         const m = e.data || {};
 
-        if( m.type === 'sugg' ) { sugg.set( m.key, m.list ); return; }
+        if( m.type === 'sugg' )
+        {
+            sugg.set( m.key, m.list );
+            for( const done of waiting.get( m.key ) || [] ) done( m.list );
+            waiting.delete( m.key );
+            return;
+        }
 
         if( m.type === 'result' )
         {
@@ -87,12 +95,14 @@ function startWorker()
         }
     };
 
-    // A worker that cannot start (a 404 offline, say) must not leave SuperDoc
+    // A worker that cannot start (a 404 offline, say) must not leave the page
     // waiting on every check: answer "nothing found" and stop trying.
     worker.onerror = function()
     {
         for( const done of pending.values() ) done( [] );
         pending.clear();
+        for( const list of waiting.values() ) for( const done of list ) done( [] );
+        waiting.clear();
     };
 
     return worker;
@@ -118,8 +128,8 @@ export function makeSpellProvider( getLangs )
             const id    = nextId++;
             const lk    = langs.join( ',' );
 
-            // SuperDoc starts a new check on almost every repaint and aborts the
-            // old one; drop it here, the worker's late answer is simply ignored.
+            // A newer check can make this one pointless and abort it; drop it
+            // here, the worker's late answer is simply ignored.
             signal?.addEventListener( 'abort', function()
             {
                 if( pending.delete( id ) ) reject( signal.reason );
@@ -146,31 +156,19 @@ export function makeSpellProvider( getLangs )
     };
 }
 
-// The right-click menu is built from the issue as it stood at the last check,
-// which may predate the word's suggestions. Put in what we know now; if we
-// know nothing yet, move the word to the head of the worker's queue so the
-// next right-click has them.
-export function fillSuggestions( word, sections )
+// A word's suggestions, for the right-click menu: at once when the worker has
+// already got to it, else as soon as it does - and it is asked to do this word
+// next. Resolves [] when there are none (or the worker cannot run).
+export function suggestionsFor( word )
 {
-    if( ! word || ! Array.isArray( sections ) ) return;
-
-    const sec = sections.find( s => s && s.id === 'proofing' );
-    if( ! sec || ! Array.isArray( sec.items ) ) return;
-    if( sec.items.some( it => it && /^proofing-replace-/.test( it.id ) ) ) return;
-
     const key  = suggKey( word );
     const list = sugg.get( key );
+    if( list ) return Promise.resolve( list );
 
-    if( ! list )
+    return new Promise( function( resolve )
     {
-        if( worker ) worker.postMessage( { type: 'first', key, word, langs: langsNow() } );
-        return;
-    }
-
-    if( ! list.length ) return;
-
-    sec.items = list.slice( 0, 5 ).map( function( r, i )
-    {
-        return { id: 'proofing-replace-' + i, label: r, intent: { kind: 'proofing.replace', replacement: r } };
-    } ).concat( sec.items.filter( it => it && it.id !== 'proofing-no-suggestions' ) );
+        if( ! waiting.has( key ) ) waiting.set( key, [] );
+        waiting.get( key ).push( resolve );
+        startWorker().postMessage( { type: 'first', key, word, langs: langsNow() } );
+    } );
 }

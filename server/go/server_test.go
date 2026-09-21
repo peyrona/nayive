@@ -624,3 +624,42 @@ func TestOddPathShapesAreNotRedirects(t *testing.T) {
 		}
 	}
 }
+
+// TestAdminClearPassword - the panel's in-field trash: "password": null removes
+// it, so the person signs in blank and must pick a new one; an absent key keeps it.
+func TestAdminClearPassword(t *testing.T) {
+	_, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "jefe", "secreto")
+	post := func(body string) {
+		t.Helper()
+		resp := do(t, client, "POST", ts.URL+"/api/admin", strings.NewReader(body),
+			map[string]string{"Content-Type": "application/json"})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s = %d", body, resp.StatusCode)
+		}
+	}
+
+	post(`{"action":"update-user","name":"ana","quota":"5"}`)
+	signIn(t, &http.Client{}, ts.URL, "ana", "abc") // key absent = kept
+
+	post(`{"action":"update-user","name":"ana","password":null}`)
+	resp := do(t, &http.Client{}, "POST", ts.URL+"/api/login",
+		strings.NewReader(`{"user":"ana","password":"abc"}`),
+		map[string]string{"Content-Type": "application/json"})
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Errorf("the old password still signs in")
+	}
+
+	fresh, _ := cookiejar.New(nil)
+	ana := &http.Client{Jar: fresh}
+	signIn(t, ana, ts.URL, "ana", "")
+	resp = do(t, ana, "GET", ts.URL+"/api/whoami", nil, nil)
+	var me map[string]any
+	json.NewDecoder(resp.Body).Decode(&me)
+	resp.Body.Close()
+	if me["must_set_password"] != true {
+		t.Errorf("whoami after clearing = %v, want must_set_password", me)
+	}
+}
