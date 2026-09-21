@@ -19,7 +19,7 @@ import
 from './calc.js';
 import
 {
-    table, activeSheet, lastSelection
+    table, activeSheet, lastSelection, localMarks
 }
 from './grid.js';
 
@@ -407,7 +407,7 @@ function updateNumFmtPreview()
                  : ( nfCategory === 'porcentaje' ) ? -0.1256
                                                    : -1234.56;
 
-    try        { el.textContent = formatNumber( code, sample ); }
+    try        { el.textContent = localMarks( formatNumber( code, sample ), code ); }   // the language's marks, as in the grid
     catch( _ ) { el.textContent = code; }
 
     const redNeg = document.getElementById( 'nfRedNeg' ).checked && ( nfCategory === 'numero' || nfCategory === 'moneda' );

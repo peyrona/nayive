@@ -1011,6 +1011,12 @@
             {
                 await flush();                // what is waiting goes to the OLD place first
                 var from = path();
+
+                // Another document's file is about to be written over (the user
+                // said "replace"): what it holds now gets its own .bak, even when
+                // that name was already saved to earlier in this session.
+                if( from !== p ) backedUp.delete( p );
+
                 var res  = await writeTo( p );
 
                 if( ! res || failed ) return res;
@@ -1120,6 +1126,7 @@
     //       encode:      async function ( path ) {...},             // the body to save (path null = the draft)
     //       load:        async function ( body, name, how ) {...},  // put a body on screen; throw if it can't
     //                                             // how: "open" | "import" | "draft" | "restore"
+    //                                             // an error with .said = true: the app already said why
     //       blank:       async function () {...},                   // put an empty document on screen
     //       // optional:
     //       canOpen:     function ( path ) {...},       // which files the Open dialog lists (default: all)
@@ -1141,6 +1148,7 @@
     //   session.open( path )                   a file from the server; resolves true when it is on screen
     //   session.untitled( name, o )            the app put a new untitled document on screen (o.dirty, o.pristine)
     //   session.edited()  .flush()  .saveNow()  .openSaveAs()  .dirty()
+    //   session.dropDraft()                    the untitled document was thrown away (Write: a template over it)
     //   session.openDialog()  .recent()        the "Abrir documento" sheet
     //   session.locked()                       it is written encrypted
     //
@@ -1327,7 +1335,7 @@
             catch ( e )
             {
                 sync( "error" );
-                toast( "ui.openFailed" );
+                if( ! ( e && e.said ) ) toast( "ui.openFailed" );   // said: the app told why already (Text: not text)
                 return false;
             }
 
@@ -1350,7 +1358,7 @@
             }
 
             try { await o.load( bytes, name, "import" ); }
-            catch ( e ) { toast( "text.importFailed" ); return false; }
+            catch ( e ) { if( ! ( e && e.said ) ) toast( "text.importFailed" ); return false; }
 
             // `pristine` is the plain original on purpose: autosave seals
             // whatever goes to .bak/ while a password is on.
@@ -1574,6 +1582,39 @@
             name = o.finishName ? o.finishName( name, fmt ) : withExt( name, fmt );
             if( ! name ) return;
 
+            var p = dirField.get() + "/" + name;
+
+            // The app's own gate (Calc: what the file would lose there) is asked
+            // FIRST, before anything changes: a "no" leaves the sheet open and
+            // the document keeps its name. Asked only at the write, it left the
+            // document pointing at a .csv that was never written.
+            if( o.blocked && o.blocked( p ) ) return;
+
+            // A file the app will not write under its own name (Text: not UTF-8)
+            // needs ANOTHER name: say so, keep the sheet open, write nothing.
+            if( p === path && o.store.isBlocked && o.store.isBlocked( p ) === "bad" )
+            {
+                NayiveUI.toast( o.sameNameRefused ? o.sameNameRefused( name ) : t( "ui.store.badFile" ), { ms: 6000 } );
+                return;
+            }
+
+            // Another file of that name is written over only when the user says
+            // so - once. A "no" leaves the sheet open: another name, or ✗.
+            if( p !== path )
+            {
+                if( checkingName ) return;             // Enter held down: one question, not two
+                checkingName = true;
+                try
+                {
+                    if( await nameTaken( p ) &&
+                        ! await NayiveUI.confirm( { title:   t( "drive.nameExistsTitle" ),
+                                                    body:    tf( "ui.saveAsExists", { name: name } ),
+                                                    confirm: t( "drive.replace" ),
+                                                    danger:  true } ) ) return;
+                }
+                finally { checkingName = false; }
+            }
+
             // Taken BEFORE the sheet closes: closing clears it (a "Copia
             // limpia" the user backed out of must not wipe anything later).
             var wipeThis = wipeAfter;
@@ -1583,8 +1624,16 @@
 
             // saveTo lands any waiting autosave under the OLD name first, then
             // writes here - and a new destination gets its own .bak copy.
-            var p   = dirField.get() + "/" + name;
             var res = await saver.saveTo( p );
+
+            // Refused - nothing went there (the app's gate, a store that will
+            // not write it, the server saying no): the document stays what
+            // and where it was. Offline or queued is saved, from the user's side.
+            if( ! res || res.blocked || res.forbidden )
+            {
+                if( o.focus ) o.focus();
+                return;
+            }
 
             path     = p;
             readOnly = false;
@@ -1599,6 +1648,24 @@
 
             if( o.onSavedAs ) o.onSavedAs( p );
             if( o.focus ) o.focus();
+        }
+
+        var checkingName = false;    // confirmSaveAs is asking whether the name is taken
+
+        // Is there a file at p already? The folder's listing says; with no
+        // network, the copy this device keeps of it is all there is to go by.
+        async function nameTaken( p )
+        {
+            try
+            {
+                var list = await GumApi.listDir( dirName( p ) );
+                return ( ( list && list.nodes ) || [] ).some( function ( n ) { return n.path === p && ! Array.isArray( n.nodes ); } );
+            }
+            catch ( e )
+            {
+                if( e && e.status === 404 ) return false;          // no such folder yet: no such file
+                try { return await o.store.hasCache( p ); } catch ( e2 ) { return false; }
+            }
         }
 
         // ---- the file label: rename in place ----------------------------------
@@ -1635,6 +1702,12 @@
                 try { await o.store.forget( path ); } catch ( e ) {}   // only now is the old cache entry stale
 
                 saver.moved( path, to );
+
+                // A file the app would not write (Text: not UTF-8) is the same
+                // file under its new name.
+                var why = o.store.isBlocked ? o.store.isBlocked( path ) : "";
+                if( why && why !== "loading" ) o.store.block( to, why );
+
                 path = to;
                 showLabel();
                 sync( "synced" );
@@ -1849,6 +1922,7 @@
             flush:      saver.flush,
             saveNow:    saver.saveNow,
             dirty:      saver.dirty,
+            dropDraft:  saver.dropDraft,
             openSaveAs: openSaveAs,
             openDialog: openDialog,
             recent:     recent.list,

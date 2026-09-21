@@ -20,7 +20,7 @@ from './lib/xlsx-format_v2.4.1.js';
 import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
-    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles
+    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText
 }
 from './grid.js';
 import
@@ -103,9 +103,9 @@ const session = O.session( {
     renameName : keepExt,
     // THE LOSS GATE's hard stop, checked on every edit AND every write -
     // Ctrl+S and the pagehide flush never pass through an edit. Writing
-    // somewhere NEW is always let through: that is the "save a copy" way
-    // out of the dialog.
-    blocked    : function( path ) { return path === session.path() && lossyBlocked(); },
+    // somewhere NEW is let through (the "save a copy" way out of the
+    // dialog) unless it is a .csv, which loses things wherever it goes.
+    blocked    : function( path ) { return lossyBlocked( path ); },
     onSavedAs  : sheetSavedAs,
     // a cell half typed (maybe a formula picked with the mouse): the name can wait
     busy       : function() { const ed = table && table.getActiveEditor(); return !! ( ed && ed.isOpened() ); },
@@ -289,8 +289,9 @@ function wireStaticUI()
         }
     });
 
-    document.getElementById( 'undoBtn'  ).addEventListener( 'click', function() { table.undo(); } );
-    document.getElementById( 'redoBtn'  ).addEventListener( 'click', function() { table.redo(); } );
+    // The plugin's own calls: Handsontable 18 has no table.undo() / redo().
+    document.getElementById( 'undoBtn'  ).addEventListener( 'click', function() { table.getPlugin( 'undoRedo' ).undo(); } );
+    document.getElementById( 'redoBtn'  ).addEventListener( 'click', function() { table.getPlugin( 'undoRedo' ).redo(); } );
 
     document.getElementById( 'fxBtn'        ).addEventListener( 'click', openFxPicker );
     document.getElementById( 'fxSearch'     ).addEventListener( 'input', function( e ) { renderFxList( e.target.value ); } );
@@ -302,9 +303,16 @@ function wireStaticUI()
     // save. So only the other two need a handler here.
     document.getElementById( 'lossyAnywayBtn' ).addEventListener( 'click', function()
     {
-        doc.lossyAck = true;                 // for this file, until it is closed
+        // For this file, until it is closed - or for the .csv it was about.
+        if( gateHeld === session.path() )               doc.lossyAck = true;
+        if( gateHeld && O.extOf( gateHeld ) === 'csv' ) doc.csvOk    = gateHeld;
         NayiveUI.close( 'lossyBackdrop' );
-        saveNow();
+
+        // Asked from "Guardar como" (office.js asks the gate before it
+        // writes, the sheet still open under it): that save goes on.
+        const saveAs = document.getElementById( 'saveAsBackdrop' );
+        if( saveAs && saveAs.classList.contains( 'open' ) ) document.getElementById( 'saveAsConfirmBtn' ).click();
+        else                                                saveNow();
     } );
     document.getElementById( 'lossyCopyBtn' ).addEventListener( 'click', function()
     {
@@ -433,8 +441,6 @@ function registerUiLocale()
         'Cut'                 : T( 'ui.cut' ),
         'Merge cells'         : T( 'calc.mergeCells' ),
         'Unmerge cells'       : T( 'calc.ht.unmerge' ),
-        'Freeze column'       : T( 'calc.ht.freezeCol' ),
-        'Unfreeze column'     : T( 'calc.ht.unfreezeCol' ),
         'Borders'             : T( 'calc.borders' ),
         'Top'                 : T( 'calc.ht.top' ),
         'Right'               : T( 'calc.ht.right' ),
@@ -473,6 +479,17 @@ function registerUiLocale()
 async function loadSheet( body, name, how )
 {
     initGrid( await decodeToDoc( body, how === 'draft' ? 'xlsx' : O.extOf( name ) ) );
+
+    // A sheet the codec could not read opens EMPTY (codec.js, sh.unread), and
+    // a save would write it empty over the real one. That file is read-only:
+    // the store refuses every write to it, and says why, and the loss gate
+    // offers no "Guardar igualmente" (lossyBlocked). A copy under another
+    // name can still be made. `name` is the file's path for these two.
+    if( how === 'open' || how === 'restore' )
+    {
+        if( doc.sheets.some( function( sh ) { return sh.unread; } ) ) store.block( name );
+        else if( store.isBlocked( name ) === 'bad' )                   store.unblock( name );
+    }
 }
 
 // A rename keeps the file's own extension whatever was typed, so a stray
@@ -486,8 +503,16 @@ function keepExt( typed, path )
 
 // What "Guardar como" just wrote came out of Calc's own model, so it holds
 // nothing the next save could destroy. The original keeps its charts.
-function sheetSavedAs()
+//
+// Only when it went to ANOTHER file, though. "Guardar como" under the same
+// name is refused by the gate like any save there - and clearing the list
+// then let the next autosave write over the pivots without asking.
+// lossyBlocked() records which file was open when the save-as write was
+// checked: by the time this runs, the save-as has made `path` the open one.
+function sheetSavedAs( path )
 {
+    if( ! ( path in gateFrom ) || gateFrom[ path ] === path ) return;
+
     doc.lossy    = [];
     doc.lossyAck = false;
 }
@@ -572,11 +597,13 @@ let barCell  = null;    // the cell it was filled from — the only cell a commi
 
 // What the cell HOLDS. getSourceDataAtCell reads the very store the file is
 // saved from (see stashActiveSheet), so the bar and the file always agree;
-// getDataAtCell would hand back HyperFormula's answer instead.
+// getDataAtCell would hand back HyperFormula's answer instead. It is written
+// as it is edited (grid.js, editText): a number with the language's decimal
+// mark, text that looks like a number with its apostrophe - so Enter in the
+// bar stores each as what it was.
 function cellSourceText( r, c )
 {
-    const v = table ? table.getSourceDataAtCell( r, c ) : null;
-    return ( v === null || v === undefined ) ? '' : String( v );
+    return table ? editText( table.getSourceDataAtCell( r, c ), r, c ) : '';
 }
 
 function refreshFormulaBar()
@@ -733,21 +760,49 @@ function fxRowsHtml( rows )
     return rows.map( function( f ) { return '<button type="button" class="fx-item" data-fn="' + f.name + '"><b>' + f.name + '</b><span>' + f.desc + '</span></button>'; } ).join( '' );
 }
 
-// Wraps the current selection as the function's argument when it spans more than
-// one cell (mirrors a common range like SUM(A1:A10)); a single-cell selection
-// just inserts empty parentheses for the user to fill in by hand.
+// A selection of several cells becomes the function's argument, SUM(A1:A10),
+// and the formula goes BELOW it: in the first empty cell of its first column
+// under the range. Written into the range's own first cell, as it was, the
+// formula was its own argument (a circular reference) and that cell's value
+// was gone. On ONE cell nothing is written: the cell editor opens with
+// "=SUM(" in it, for the cells to be typed or pointed at (POINTING in
+// grid.js), and Escape leaves the cell as it was.
 function insertFunction( name )
 {
     if( ! lastSelection ) return;
 
-    const isRange = lastSelection.r1 !== lastSelection.r2 || lastSelection.c1 !== lastSelection.c2;
-    const arg     = isRange
-        ? encodeCell( { r: lastSelection.r1, c: lastSelection.c1 } ) + ':' + encodeCell( { r: lastSelection.r2, c: lastSelection.c2 } )
-        : '';
-
-    table.setDataAtCell( lastSelection.r1, lastSelection.c1, '=' + name + '(' + arg + ')' );
+    const s = lastSelection;
 
     NayiveUI.close( 'fxBackdrop' );
+
+    if( s.r1 === s.r2 && s.c1 === s.c2 )
+    {
+        table.selectCell( s.r1, s.c1 );
+        table.listen();
+
+        // Opened the way a keystroke opens it, then "typed" into: a text
+        // handed to beginEditing() would open it in F2 mode, where the arrow
+        // keys move the caret instead of pointing at cells.
+        const ed = table.getActiveEditor();
+        const ta = ed && ed.TEXTAREA;
+        if( ! ta ) return;
+
+        ed.beginEditing();
+        ta.value = '=' + name + '(';
+        ta.setSelectionRange( ta.value.length, ta.value.length );
+        ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+        return;
+    }
+
+    const arg = encodeCell( { r: s.r1, c: s.c1 } ) + ':' + encodeCell( { r: s.r2, c: s.c2 } );
+
+    let r = s.r2 + 1;
+    while( r < table.countRows() && cellSourceText( r, s.c1 ) !== '' ) r++;
+    if( r >= table.countRows() ) table.alter( 'insert_row_below', table.countRows() - 1 );
+
+    table.setDataAtCell( r, s.c1, '=' + name + '(' + arg + ')' );
+    table.selectCell( r, s.c1 );
+    table.listen();
 }
 
 //------------------------------------------------------------------------//
@@ -765,15 +820,66 @@ function lossyDialogIsOpen()
     return !! el && el.classList.contains( 'open' );
 }
 
-// True = "do not write". Opens the dialog the first time it says so.
-function lossyBlocked()
+// What a .csv cannot hold of what is on screen: it keeps the values of one
+// sheet and nothing else. Each entry is an i18n key, like doc.lossy's.
+function csvLosses()
 {
-    if( ! doc.lossy.length || doc.lossyAck ) return false;
+    const out = [];
+    if( ! table ) return out;
+
+    if( doc.sheets.length > 1 ) out.push( 'calc.lossyCsvSheets' );
+
+    const formula = function( v ) { return typeof v === 'string' && v.length > 1 && v.charAt( 0 ) === '='; };
+    if( table.getSourceData().some( function( row ) { return row && row.some( formula ); } ) )
+        out.push( 'calc.lossyCsvFormulas' );
+
+    // Only a look that shows. Not the number format (a date or an amount is
+    // written out the way it shows), nor the font a file puts on every cell,
+    // nor plain black text.
+    const looks = Object.keys( activeSheet.cellStyles ).some( function( addr )
+    {
+        const st = activeSheet.cellStyles[ addr ] || {};
+        return !! ( st.bold || st.italic || st.underline || st.bg || st.border || ( st.align && st.align !== 'general' ) ||
+                    ( st.color && st.color !== '000000' ) );
+    } );
+    const notes = ( table.getCellsMeta() || [] ).some( function( m ) { return m && m.comment && m.comment.value; } );
+
+    if( looks || notes || activeSheet.merges.length || Object.keys( activeSheet.links ).length )
+        out.push( 'calc.lossyCsvFormat' );
+
+    return out;
+}
+
+// For each path the gate was asked about, the file open at the time. The
+// save-as write is checked BEFORE the save-as makes its path the open one,
+// so sheetSavedAs can tell a copy from a save over the file itself.
+const gateFrom = {};
+
+let gateHeld = null;   // the path the loss dialog was opened for
+
+// True = "do not write" `path`. Opens the dialog the first time it says so.
+// What this file has that Calc cannot write counts only for the file itself;
+// what a .csv cannot hold counts wherever the .csv goes.
+function lossyBlocked( path )
+{
+    gateFrom[ path ] = session.path();
+
+    // "Guardar igualmente" counts for what it was said about: the open file
+    // (lossyAck), or one .csv (csvOk) - not for a .csv copy made later.
+    const list = ( path === session.path() && ! doc.lossyAck ? doc.lossy : [] )
+                 .concat( O.extOf( path ) === 'csv' && doc.csvOk !== path ? csvLosses() : [] );
+
+    if( ! list.length ) return false;
 
     if( ! lossyDialogIsOpen() )
     {
-        const list = document.getElementById( 'lossyList' );
-        list.innerHTML = doc.lossy.map( function( k )
+        gateHeld = path;
+
+        // A sheet that could not be read would be saved EMPTY: no "anyway".
+        document.getElementById( 'lossyAnywayBtn' ).hidden = list.indexOf( 'calc.lossyUnread' ) !== -1;
+
+        const ul = document.getElementById( 'lossyList' );
+        ul.innerHTML = list.map( function( k )
         {
             const li = document.createElement( 'li' );
             li.textContent = T( k );
@@ -857,15 +963,29 @@ async function convertForOpen( path )
 
 const CALC_CFG = 'data/calc/config.json';
 
+let cfgToldUnread = false;   // "your settings could not be read" was said once already
+
+// Only a missing file (a fresh account) reads as empty - readJson gives null
+// on a 404 alone. Any other failure (offline, a 5xx, bad JSON) throws, and
+// the caller must not treat it as "nothing there".
 async function readCalcCfg()
 {
-    try { return ( await GumApi.readJson( CALC_CFG ) ) || {}; }
-    catch( _ ) { return {}; }
+    return ( await GumApi.readJson( CALC_CFG ) ) || {};
 }
 
+// The patch goes over what is on the server. When that cannot be read, it
+// is not written at all: an empty {} plus the patch would be saved over
+// whatever else the file holds.
 async function writeCalcCfg( patch )
 {
-    const cfg = await readCalcCfg();
+    let cfg;
+    try { cfg = await readCalcCfg(); }
+    catch( _ )
+    {
+        if( ! cfgToldUnread ) { cfgToldUnread = true; NayiveUI.toast( T( 'ui.settingsNotRead' ) ); }
+        return null;
+    }
+
     Object.assign( cfg, patch );
     try { await GumApi.writeJson( CALC_CFG, cfg ); } catch( _ ) {}
     return cfg;

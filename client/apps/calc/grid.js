@@ -66,7 +66,9 @@ function newSheet( name )
         hiddenRows : [],
         hiddenCols : [],
         comments   : {},                 // { "A1": "text" }
+        noteAuthors: null,               // { "note text": "author" } from the file (codec.js)
         links      : {},                 // { "A1": { target, tooltip } }
+        unread     : false,              // the codec could not read it: it opened EMPTY (calc.js, loadSheet)
         raw        : null                // xlsx fragments Calc cannot model, kept verbatim
     };
 }
@@ -79,6 +81,8 @@ function newDoc()
         names    : null,     // workbook-level defined names (cross-sheet ranges)
         lossy    : [],       // what THIS file has that a save would destroy
         lossyAck : false,    // the user chose "continue anyway" for this file
+        csvOk    : null,     // ... or for this .csv path: what a .csv drops (calc.js, csvLosses)
+        date1904 : false,    // the file counts its dates from 1904 (codec.js reads and writes it)
         srcZip   : null      // the bytes we opened, for the parts we cannot rebuild
     };
 }
@@ -137,8 +141,6 @@ const CM_ICONS =
     redo            : cmIcon( '<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h6"/>' ),
     cut             : cmIcon( '<circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>' ),
     copy            : cmIcon( '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' ),
-    freeze_column   : cmIcon( '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18" stroke-width="3"/>' ),
-    unfreeze_column : cmIcon( '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18" stroke-width="3" stroke-dasharray="2.5 3"/>' ),
     commentsAddEdit : cmIcon( '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6M9 10h6"/>' ),
     commentsRemove  : cmIcon( '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 10h6"/>' )
 };
@@ -205,7 +207,9 @@ function switchToSheet( i )
     stashActiveSheet();          // the sheet being left keeps everything it had
     setActiveSheet( i );
 
-    gridBooting = true;          // redrawing is not editing
+    gridBooting  = true;         // redrawing is not editing
+    removedStash = [];           // loadData wipes the undo history
+    typedFormats = {};
 
     // The engine has to know the new sheet's name before its rows arrive.
     table.updateSettings( {
@@ -251,7 +255,7 @@ function switchToSheet( i )
 // the VIEW and leaves the source data alone, so a sheet sorted, saved and
 // reopened comes back in its old order — the sort silently does not stick.
 // This moves the rows themselves, and everything addressed by row number
-// (styles, notes, heights, hidden flags) moves with them.
+// (styles, links, notes, heights, hidden flags) moves with them.
 //
 // Two things it refuses rather than get wrong: a range with merged cells,
 // and a range with formulas — moving a row changes what =B2*2 points at,
@@ -353,6 +357,16 @@ function applyRowOrder( first, last, order )
     });
     activeSheet.cellStyles = styles;
 
+    // Links are addressed the same way, and belong to the row's text.
+    const links = {};
+    Object.keys( activeSheet.links ).forEach( function( addr )
+    {
+        const rc = decodeCell( addr );
+        const to = ( rc.r >= first && rc.r <= last ) ? moveTo[ rc.r ] : rc.r;
+        links[ encodeCell( { r: to, c: rc.c } ) ] = activeSheet.links[ addr ];
+    });
+    activeSheet.links = links;
+
     // Notes live in cell meta while the sheet is on screen, so they are read
     // from there rather than from the last stash.
     const notes = {};
@@ -382,7 +396,13 @@ function applyRowOrder( first, last, order )
     activeSheet.rowsSrc    = heightsSrc;
     activeSheet.hiddenRows = hidden;
 
-    gridBooting = true;                  // redrawing is not editing
+    // loadData shows every column again: read the hidden ones off the plugin
+    // (the sheet entry only catches up at the next stash) and hide them after.
+    const hiddenCols = ( table.getPlugin( 'hiddenColumns' ).getHiddenColumns() || [] ).slice();
+
+    gridBooting  = true;                 // redrawing is not editing
+    removedStash = [];                   // loadData wipes the undo history
+    typedFormats = {};
 
     table.loadData( rows );
 
@@ -396,12 +416,509 @@ function applyRowOrder( first, last, order )
     hr.showRows( hr.getHiddenRows() || [] );
     if( hidden.length ) hr.hideRows( hidden.slice() );
 
+    const hc = table.getPlugin( 'hiddenColumns' );
+    hc.showColumns( hc.getHiddenColumns() || [] );
+    if( hiddenCols.length ) hc.hideColumns( hiddenCols );
+    activeSheet.hiddenCols = hiddenCols;
+
     table.render();
 
     gridBooting = false;
 
     // loadData is not an undoable edit, so the save has to be asked for.
     scheduleAutosave();
+}
+
+//------------------------------------------------------------------------//
+// INSERTED AND REMOVED ROWS AND COLUMNS
+//
+// Handsontable moves the cells, their notes (cell meta), the hidden flags
+// and its own copy of the merges. Everything else addressed by row or
+// column number is this app's, and moves here, from the four hooks in
+// initGrid: the styles and links ("B7"), the widths and heights, the merge
+// list the file is written from, the filter buttons' range, and the ranges
+// of the conditional formats and validations kept verbatim from the file -
+// with the cell references in their rules, as Excel moves them. Left
+// alone, the look of row 7 stayed on row 7 when a row went in above it,
+// and was saved so.
+//
+// A removal keeps what it took: Handsontable's undo puts the rows back,
+// and their styles, links and sizes come back with them.
+
+const REMOVED_KEEP = 100;   // removals remembered for undo
+let removedStash   = [];    // [{ axis, at, n, styles, links, sizes, sizesSrc, merges, raw, autofilter }]
+
+// Where row/column i ends up when n of them go in at `at` (n > 0) or come
+// out from there (n < 0); -1 = it was one of those removed.
+function shiftIndex( i, at, n )
+{
+    if( i < at ) return i;
+    if( n > 0 )  return i + n;
+    return i < at - n ? -1 : i + n;
+}
+
+// A run lo..hi after the same move, or null when none of it is left. A run
+// the insertion falls inside grows, and a removal inside it shrinks it.
+function shiftSpan( lo, hi, at, n )
+{
+    if( n > 0 ) return [ lo >= at ? lo + n : lo, hi >= at ? hi + n : hi ];
+
+    const end = at - n;                     // the first index after the removed ones
+    const a   = lo < at ? lo : ( lo < end ? at     : lo + n );
+    const b   = hi < at ? hi : ( hi < end ? at - 1 : hi + n );
+    return b < a ? null : [ a, b ];
+}
+
+// "$C$8" -> its parts, or null for anything that is not one cell.
+function parseRef( text )
+{
+    const m = /^(\$?)([A-Z]{1,3})(\$?)(\d+)$/.exec( text );
+    if( ! m ) return null;
+
+    const rc = decodeCell( m[ 2 ] + m[ 4 ] );
+    if( ! ( rc.c >= 0 && rc.c < 16384 && rc.r >= 0 ) ) return null;     // "TAX2020" is a name
+    return { r: rc.r, c: rc.c, colAbs: m[ 1 ], rowAbs: m[ 3 ] };
+}
+
+function refText( p )
+{
+    return p.colAbs + colLetters( p.c ) + p.rowAbs + ( p.r + 1 );
+}
+
+// "B3", "$B$3" or "B3:D9" after the move, the "$" kept; null = all of it
+// was removed. Anything else (a whole column, a name) is left as it is.
+function shiftRef( text, axis, at, n )
+{
+    const parts = text.split( ':' );
+    if( parts.length > 2 ) return text;
+
+    const a = parseRef( parts[ 0 ] );
+    const b = parts.length === 2 ? parseRef( parts[ 1 ] ) : a;
+    if( ! a || ! b ) return text;
+
+    const k    = axis === 'row' ? 'r' : 'c';
+    const flip = a[ k ] > b[ k ];
+    const span = shiftSpan( Math.min( a[ k ], b[ k ] ), Math.max( a[ k ], b[ k ] ), at, n );
+    if( ! span ) return null;
+
+    const a2 = Object.assign( {}, a ), b2 = Object.assign( {}, b );
+    a2[ k ] = flip ? span[ 1 ] : span[ 0 ];
+    b2[ k ] = flip ? span[ 0 ] : span[ 1 ];
+
+    return parts.length === 2 ? refText( a2 ) + ':' + refText( b2 ) : refText( a2 );
+}
+
+// Every reference to this sheet in a rule's formula, moved; one whose cells
+// were all removed becomes #REF!, as in Excel. Text in quotes and
+// references to another sheet are left alone. Works on the XML text as it
+// is, so a quote may also be written &quot;.
+const FORMULA_REF = /("(?:[^"]|"")*"|&quot;(?:(?!&quot;)[\s\S])*&quot;)|((?:'[^']*'|[A-Za-z_][\w.]*)!)?(\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)(?![\w(!])/g;
+
+function shiftFormulaRefs( f, axis, at, n )
+{
+    return f.replace( FORMULA_REF, function( all, quoted, sheet, ref, off, whole )
+    {
+        if( quoted || sheet ) return all;
+        if( /[\w.$]/.test( whole.charAt( off - 1 ) ) ) return all;     // the tail of a longer name
+
+        const moved = shiftRef( ref, axis, at, n );
+        return moved === null ? '#REF!' : moved;
+    } );
+}
+
+// The conditional formats / validations kept verbatim (sheet.raw): every
+// sqref and every formula in them. A block left with no cells goes.
+function shiftRawXml( xml, axis, at, n )
+{
+    if( ! xml ) return xml;
+
+    let out = xml.replace( /(\bsqref=")([^"]*)(")/g, function( all, open, list, close )
+    {
+        const kept = list.split( /\s+/ ).filter( Boolean )
+                         .map( function( r ) { return shiftRef( r, axis, at, n ); } )
+                         .filter( function( r ) { return r !== null; } );
+        return open + kept.join( ' ' ) + close;
+    } );
+
+    out = out.replace( /(<(formula|formula1|formula2)>)([\s\S]*?)(<\/\2>)/g, function( all, open, tag, body, close )
+    {
+        return open + shiftFormulaRefs( body, axis, at, n ) + close;
+    } );
+
+    out = out.replace( /<conditionalFormatting\b[^>]*\bsqref=""[^>]*>[\s\S]*?<\/conditionalFormatting>/g, '' );
+    out = out.replace( /<dataValidation\b[^>]*\bsqref=""[^>]*?(?:\/>|>[\s\S]*?<\/dataValidation>)/g, '' );
+
+    // <dataValidations count="N"> has to agree with what is left in it.
+    if( out.indexOf( '<dataValidations' ) !== -1 )
+    {
+        const k = ( out.match( /<dataValidation\b/g ) || [] ).length;
+        out = k ? out.replace( /(<dataValidations\b[^>]*\bcount=")\d+(")/, '$1' + k + '$2' ) : '';
+    }
+
+    return out;
+}
+
+// A "B7"-keyed map after the move; what was removed goes into `taken`.
+function shiftAddrMap( map, axis, at, n, taken )
+{
+    const out = {};
+
+    Object.keys( map ).forEach( function( addr )
+    {
+        const rc = decodeCell( addr );
+        const i  = shiftIndex( axis === 'row' ? rc.r : rc.c, at, n );
+
+        if( i < 0 ) { taken[ addr ] = map[ addr ]; return; }
+        out[ encodeCell( axis === 'row' ? { r: i, c: rc.c } : { r: rc.r, c: i } ) ] = map[ addr ];
+    });
+
+    return out;
+}
+
+// A sparse width/height array after the move.
+function shiftSizes( list, at, n, taken )
+{
+    const out = [];
+
+    list.forEach( function( v, k )
+    {
+        if( v == null ) return;
+
+        const i = shiftIndex( k, at, n );
+        if( i < 0 ) taken[ k ] = v;
+        else        out[ i ] = v;
+    });
+
+    return out;
+}
+
+// The merges, moved the way Handsontable moves its own copy (MergedCellCoords
+// .shift), so the file and the screen agree. One left a single cell is no merge.
+function shiftMerges( list, axis, at, n )
+{
+    const pos  = axis === 'row' ? 'row'     : 'col';
+    const len  = axis === 'row' ? 'rowspan' : 'colspan';
+    const out  = [];
+
+    list.forEach( function( m )
+    {
+        const span = shiftSpan( m[ pos ], m[ pos ] + m[ len ] - 1, at, n );
+        if( ! span ) return;
+
+        const e = { row: m.row, col: m.col, rowspan: m.rowspan, colspan: m.colspan };
+        e[ pos ] = span[ 0 ];
+        e[ len ] = span[ 1 ] - span[ 0 ] + 1;
+        if( e.rowspan > 1 || e.colspan > 1 ) out.push( e );
+    });
+
+    return out;
+}
+
+// The one place a structural edit reaches the sheet entry: `n` rows or
+// columns (axis 'row' / 'col') went in at `at` (n > 0) or came out (n < 0).
+function moveRowsOrCols( axis, at, n, source )
+{
+    const sizesKey = axis === 'row' ? 'rows'    : 'cols';
+    const srcKey   = axis === 'row' ? 'rowsSrc' : 'colsSrc';
+    const raw      = activeSheet.raw;
+    const taken    = { axis: axis, at: at, n: -n, styles: {}, links: {}, sizes: {}, sizesSrc: {},
+                       merges:     activeSheet.merges,
+                       raw:        raw ? { cf: raw.cf, dv: raw.dv } : null,
+                       autofilter: activeSheet.autofilter };
+
+    activeSheet.cellStyles  = shiftAddrMap( activeSheet.cellStyles, axis, at, n, taken.styles );
+    activeSheet.links       = shiftAddrMap( activeSheet.links,      axis, at, n, taken.links );
+    activeSheet[ sizesKey ] = shiftSizes( activeSheet[ sizesKey ], at, n, taken.sizes );
+    activeSheet[ srcKey ]   = shiftSizes( activeSheet[ srcKey ],   at, n, taken.sizesSrc );
+    activeSheet.merges      = shiftMerges( activeSheet.merges, axis, at, n );
+
+    if( raw ) { raw.cf = shiftRawXml( raw.cf, axis, at, n ); raw.dv = shiftRawXml( raw.dv, axis, at, n ); }
+
+    if( activeSheet.autofilter && activeSheet.autofilter.ref )
+    {
+        const ref = shiftRef( activeSheet.autofilter.ref, axis, at, n );
+        activeSheet.autofilter = ref ? Object.assign( {}, activeSheet.autofilter, { ref: ref } ) : null;
+    }
+
+    if( n < 0 )
+    {
+        if( source === 'UndoRedo.undo' ) return;     // the undo of an insert: nothing to give back later
+        removedStash.push( taken );
+        if( removedStash.length > REMOVED_KEEP ) removedStash.shift();
+        return;
+    }
+
+    // Undo of a removal: the same rows are back where they were, so what
+    // they took goes back on them. What is not keyed by one cell - the
+    // merges, the kept ranges, the filter - is put back as it was: nothing
+    // else can change those between a removal and its undo.
+    if( source !== 'UndoRedo.undo' ) return;
+
+    for( let i = removedStash.length - 1; i >= 0; i-- )
+    {
+        const s = removedStash[ i ];
+        if( s.axis !== axis || s.at !== at || s.n !== n ) continue;
+
+        removedStash.splice( i, 1 );
+
+        Object.assign( activeSheet.cellStyles, s.styles );
+        Object.assign( activeSheet.links,      s.links );
+        Object.keys( s.sizes    ).forEach( function( k ) { activeSheet[ sizesKey ][ k ] = s.sizes[ k ]; } );
+        Object.keys( s.sizesSrc ).forEach( function( k ) { activeSheet[ srcKey ][ k ]   = s.sizesSrc[ k ]; } );
+        activeSheet.merges     = s.merges;
+        activeSheet.autofilter = s.autofilter;
+        if( raw && s.raw ) { raw.cf = s.raw.cf; raw.dv = s.raw.dv; }
+        return;
+    }
+}
+
+//------------------------------------------------------------------------//
+// TYPED NUMBERS AND DATES
+//
+// The cell editor hands back text, always: "12" arrived as the string "12".
+// The formula engine read it as a number, so the sheet looked right, but it
+// was saved as text - Excel's SUM skipped it and no number format applied.
+// What is typed or pasted is stored as what it is:
+//   - a number: "12", "-7", "1,5e-7", and a decimal written with the
+//     interface language's own mark ("3.5" in English, "3,5" in Spanish).
+//     Text it stays when a number would change it: a leading zero ("08001"
+//     is a postcode), a "+" ("+34600123456" is a phone), more than 15
+//     digits (an account number - a number keeps only 15), and a cell
+//     formatted as text ("@");
+//   - a date written yyyy-mm-dd: its serial number, shown yyyy-mm-dd unless
+//     the cell already has a date format - as a date read from a file.
+// A leading apostrophe says "this is text", as in Excel: '123 is stored as
+// the text 123, and F2 or the formula bar show it with the apostrophe again
+// so it stays text when it goes back. ('= is left as it is: codec.js keeps
+// text that begins with "=" that way.) Ctrl+Z takes back a date's format
+// with the date.
+
+function decimalComma()
+{
+    const m = numberMarks();
+    return !! m && m.dec === ',';
+}
+
+//------------------------------------------------------------------------//
+// NUMBERS ON SCREEN
+//
+// A number is stored as a number; it is SHOWN with the interface language's
+// own marks - "3,5" and "1.234,50" in Spanish, "3.5" and "1,234.50" in
+// English - in the grid, in the cell editor and the formula bar (so what is
+// edited comes back as a number, see TYPED NUMBERS AND DATES), in the
+// formula editor's answer and in the number-format preview. Formulas keep
+// the engine's own syntax, with "." whatever the language. The file format
+// library only knows the English marks, so its output is translated here.
+// A plain number shows at most 15 significant digits, as in Excel: 0.1+0.2
+// is 0.3, not 0.30000000000000004.
+
+let marksFor = null;     // the locale numberMarks() last looked at
+let marks    = null;     // its { dec, group }, or null where they are "." and ","
+
+function numberMarks()
+{
+    const loc = NayiveI18n.locale();
+    if( loc === marksFor ) return marks;
+
+    let dec = '.', group = ',';
+    try
+    {
+        new Intl.NumberFormat( loc ).formatToParts( 12345.6 ).forEach( function( p )
+        {
+            if( p.type === 'decimal' ) dec   = p.value;
+            if( p.type === 'group' )   group = p.value;
+        });
+    }
+    catch( _ ) {}
+
+    marksFor = loc;
+    marks    = ( dec === '.' && group === ',' ) ? null : { dec: dec, group: group };
+    return marks;
+}
+
+// A date or time format shows no decimal mark to translate ("dd.mm.yyyy"
+// keeps its dots): what is left of the code once the quoted text, [colours]
+// and escaped characters are out still has a y, m, d, h or s in it.
+function isDateFormat( fmt )
+{
+    const f = String( fmt ).replace( /"[^"]*"/g, '' ).replace( /\[[^\]]*\]/g, '' ).replace( /[\\_*]./g, '' );
+    return /[ymdhs]/i.test( f.replace( /general/ig, '' ) );
+}
+
+// The marks of a number the library formatted the English way, swapped for
+// the language's. Only a mark with a digit after it is one.
+function localMarks( text, fmt )
+{
+    const m = numberMarks();
+    if( ! m || ( fmt && isDateFormat( fmt ) ) ) return text;
+
+    return String( text ).replace( /[.,](?=\d)/g, function( ch ) { return ch === '.' ? m.dec : m.group; } );
+}
+
+// A number as the grid shows it: through its number format, or plain - a
+// whole number exactly, a fraction without the float noise.
+function showNumber( v, fmt )
+{
+    if( fmt )
+    {
+        try { return localMarks( formatNumber( fmt, v, { date1904: !! doc.date1904 } ), fmt ); }
+        catch( _ ) { /* a format the library cannot read: shown plain */ }
+    }
+
+    return editNumber( Number.isInteger( v ) ? v : Number( v.toPrecision( 15 ) ) );
+}
+
+// A number as it is edited: every digit it has, the language's decimal mark
+// and no thousands - "1234,5" or "1,5e-7", which typedValues reads back.
+function editNumber( v )
+{
+    const m = numberMarks();
+    const s = String( v );
+    return m ? s.replace( '.', m.dec ) : s;
+}
+
+// What a cell holds, written the way it is edited: a number with the
+// language's marks, and text that would be read back as a number or a date
+// with the apostrophe that keeps it text. The formula bar shows the same.
+function editText( v, r, c )
+{
+    if( typeof v === 'number' ) return editNumber( v );
+    if( v === null || v === undefined ) return '';
+
+    // A leading apostrophe of its own needs one more ('=, see codec.js, does not).
+    const s     = String( v );
+    const quote = ( s.charAt( 0 ) === "'" && s.charAt( 1 ) !== '=' ) ||
+                  !! typedValue( s, activeSheet.cellStyles[ encodeCell( { r: r, c: c } ) ] );
+    return quote ? "'" + s : s;
+}
+
+// F2, Enter or a double-click put the cell's own value in the editor
+// (typing into it starts from nothing): it goes in the way it is edited.
+function editorShowsNumber()
+{
+    const ed = table && table.getActiveEditor();
+    if( ! ed || ! ed.TEXTAREA || ! ed.isInFullEditMode() ) return;
+
+    const v = table.getSourceDataAtCell( ed.row, ed.col );
+    if( v !== null && v !== undefined && ed.TEXTAREA.value === String( v ) ) ed.TEXTAREA.value = editText( v, ed.row, ed.col );
+}
+
+// A copy or a cut carries numbers the way they are edited too, so a paste
+// here reads them back as numbers - and one into another program in the
+// same language does as well.
+function copiedNumbers( data )
+{
+    if( ! numberMarks() || ! data ) return;
+
+    data.forEach( function( row )
+    {
+        if( row ) row.forEach( function( v, i ) { if( typeof v === 'number' && isFinite( v ) ) row[ i ] = editNumber( v ); } );
+    });
+}
+
+// Excel's serial number for a day: days since 1899-12-30, or since 1904-01-01
+// in a workbook on the 1904 system. null = no such day, or one before either.
+function dateSerial( y, mo, d )
+{
+    const t    = Date.UTC( y, mo - 1, d );
+    const back = new Date( t );
+    if( back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d ) return null;
+
+    const n = Math.round( ( t - ( doc.date1904 ? Date.UTC( 1904, 0, 1 ) : Date.UTC( 1899, 11, 30 ) ) ) / 86400000 );
+    return n < ( doc.date1904 ? 0 : 1 ) ? null : n;
+}
+
+// The number or date typed text stands for: { value } or { value, date: true },
+// null when it is to stay text (see TYPED NUMBERS AND DATES).
+function typedValue( s, style )
+{
+    if( style && style.numFmt === '@' ) return null;
+
+    const text = s.trim();
+
+    let m = /^(-?)(\d+)(?:([.,])(\d+))?(?:[eE]([-+]?\d+))?$/.exec( text );
+    if( m )
+    {
+        // Only the language's own decimal mark: "1,000" in English and
+        // "1.500" in Spanish are thousands, not 1 and 1.5 - left as text.
+        if( m[ 3 ] && ( m[ 3 ] === ',' ) !== decimalComma() ) return null;
+        if( m[ 2 ].length > 1 && m[ 2 ].charAt( 0 ) === '0' ) return null;
+        if( m[ 2 ].length + ( m[ 4 ] || '' ).length > 15 )    return null;
+
+        const n = Number( m[ 1 ] + m[ 2 ] + ( m[ 4 ] ? '.' + m[ 4 ] : '' ) + ( m[ 5 ] ? 'e' + m[ 5 ] : '' ) );
+        return isFinite( n ) ? { value: n } : null;
+    }
+
+    m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( text );
+    if( m )
+    {
+        const n = dateSerial( +m[ 1 ], +m[ 2 ], +m[ 3 ] );
+        return n === null ? null : { value: n, date: true };
+    }
+
+    return null;
+}
+
+// The date formats typing put on a cell, so Ctrl+Z can take them back:
+// { "B7": { value, was, set } } - the serial, the format before, the one set.
+let typedFormats = {};
+
+// beforeChange: only what the user typed, pasted or dragged in. An undo puts
+// back what was there, and loading a file is not typing.
+function typedValues( changes, source )
+{
+    if( [ 'edit', 'CopyPaste.paste', 'Autofill.fill', 'autofill.fill' ].indexOf( source ) === -1 ) return;
+    if( ! changes ) return;
+
+    changes.forEach( function( ch )
+    {
+        if( ! ch || typeof ch[ 3 ] !== 'string' || typeof ch[ 1 ] !== 'number' ) return;
+
+        // '08001: the text 08001. ('= stays: codec.js reads it as text.)
+        if( ch[ 3 ].charAt( 0 ) === "'" && ch[ 3 ].charAt( 1 ) !== '=' ) { ch[ 3 ] = ch[ 3 ].slice( 1 ); return; }
+
+        const addr  = encodeCell( { r: ch[ 0 ], c: ch[ 1 ] } );
+        const style = activeSheet.cellStyles[ addr ];
+        const got   = typedValue( ch[ 3 ], style );
+        if( ! got ) return;
+
+        ch[ 3 ] = got.value;
+
+        // A date shows as one: in its own date format if the cell has one,
+        // else yyyy-mm-dd - over a currency or number format too, as in Excel.
+        if( got.date && ! ( style && style.numFmt && isDateFormat( style.numFmt ) ) )
+        {
+            typedFormats[ addr ] = { value: got.value, was: style ? style.numFmt : undefined, set: 'yyyy-mm-dd' };
+            activeSheet.cellStyles[ addr ] = Object.assign( {}, style, { numFmt: 'yyyy-mm-dd' } );
+        }
+    });
+}
+
+// afterUndo / afterRedo: a date's format goes and comes back with the edit
+// that typed it - and only that edit, while the cell still has that format.
+function undoTypedFormats( action, redo )
+{
+    if( ! action || action.actionType !== 'change' || ! action.changes ) return;
+
+    action.changes.forEach( function( ch )
+    {
+        const addr = encodeCell( { r: ch[ 0 ], c: ch[ 1 ] } );
+        const t    = typedFormats[ addr ];
+        if( ! t || ch[ 3 ] !== t.value ) return;
+
+        const style = activeSheet.cellStyles[ addr ];
+
+        if( ! redo && style && style.numFmt === t.set )
+        {
+            if( t.was === undefined ) delete style.numFmt;
+            else                      style.numFmt = t.was;
+            if( ! Object.keys( style ).length ) delete activeSheet.cellStyles[ addr ];
+        }
+        if( redo && ( ! style || style.numFmt === t.was ) )
+            activeSheet.cellStyles[ addr ] = Object.assign( {}, style, { numFmt: t.set } );
+    });
+
+    table.render();
 }
 
 // The active sheet's notes, in the shape Handsontable's `cell` setting wants.
@@ -433,6 +950,8 @@ function initGrid( d )
 
     lastSelection = null;
     point         = null;
+    removedStash  = [];      // a new grid starts a new undo history
+    typedFormats  = {};
 
     table = new Handsontable( el,
     {
@@ -451,6 +970,13 @@ function initGrid( d )
         // the CustomBorders plugin isn't enabled (calc has its own border picker), so
         // both rendered as dead, un-actioned rows. Object form + cmItem() so every
         // remaining entry carries an icon (see CM_ICONS above).
+        // No Freeze / Unfreeze column here, nor the manualColumnFreeze plugin
+        // behind them: that plugin MOVES the column to the frozen edge, and
+        // styles, widths, links and notes are all keyed by position, so the
+        // file came back with the wrong column frozen and everything beside it
+        // shifted. The toolbar's freeze (toggleFreezeColumns) only moves the
+        // edge. It also keeps a column's place on screen = its place in the
+        // file, which the row/column hooks below rely on.
         contextMenu : { items : {
                          row_above       : cmItem( 'row_above' ),
                          row_below       : cmItem( 'row_below' ),
@@ -467,9 +993,6 @@ function initGrid( d )
                          sep4            : '---------',
                          cut             : cmItem( 'cut' ),
                          copy            : cmItem( 'copy' ),
-                         sep5            : '---------',
-                         freeze_column   : cmItem( 'freeze_column' ),
-                         unfreeze_column : cmItem( 'unfreeze_column' ),
                          sep6            : '---------',
                          commentsAddEdit : cmItem( 'commentsAddEdit' ),
                          commentsRemove  : cmItem( 'commentsRemove' )
@@ -478,7 +1001,6 @@ function initGrid( d )
         // Keep the selection (and its green highlight) visible while the user works
         // the external toolbar / border popup — otherwise clicking any control blurs it.
         outsideClickDeselects: false,
-        manualColumnFreeze: true,
         manualColumnResize: true,
         manualRowResize   : true,
         // Widths/heights come off the sheet entry, so a file opens at the
@@ -499,15 +1021,24 @@ function initGrid( d )
         mergeCells  : activeSheet.merges,
         renderer    : styledRenderer,
         // The engine's sheet carries the real name, so a formula written as
-        // ='Ventas'!B2 matches whichever sheet is on the grid.
-        formulas    : { engine: HyperFormula, sheetName: activeSheet.name || 'Hoja1' },
+        // ='Ventas'!B2 matches whichever sheet is on the grid. A workbook that
+        // counts its dates from 1904 has the engine count from there too, or
+        // DATE(), YEAR() and friends would be four years out.
+        formulas    : { engine: doc.date1904 ? { hyperformula: HyperFormula, nullDate: { year: 1904, month: 1, day: 1 } }
+                                             : HyperFormula,
+                        sheetName: activeSheet.name || 'Hoja1' },
         width       : '100%',
         height      : '100%',
         // The cell's look is this app's, not Handsontable's - see CLIPBOARD
         // STYLES below.
+        beforeCopy        : copiedNumbers,
+        beforeCut         : copiedNumbers,
         afterCopy         : stashClipStyles,
         afterCut          : cutClipStyles,
         afterPaste        : applyClipStyles,
+        // A number or date typed as text is stored as one (see TYPED
+        // NUMBERS AND DATES above).
+        beforeChange      : typedValues,
         // The formula bar follows the cell under the cursor even when the
         // cursor does not move: undo, redo, paste, fill and fx all change
         // it in place.
@@ -520,7 +1051,7 @@ function initGrid( d )
         // arriving — give the grid the toolbar's 159px back. Selecting
         // a cell does NOT fold it, so formatting a selection stays one
         // tap. "Aa" in the header brings it back.
-        afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); pointEditorOpened(); mirrorEditorToBar(); syncFormulaPanel(); },
+        afterBeginEditing : function() { if( PHONE.matches && fold.isOpen() ) fold.setOpen( false ); editorShowsNumber(); pointEditorOpened(); mirrorEditorToBar(); syncFormulaPanel(); },
         // A formula being typed takes clicks, drags and arrow keys as
         // references to other cells (see POINTING below).
         beforeOnCellMouseDown : pointMouseDown,
@@ -534,12 +1065,14 @@ function initGrid( d )
         // typed a thing. Every save-time loss (other sheets, column widths,
         // charts…) therefore fired on mere OPEN. A real insert — the toolbar's
         // alter() calls and the context menu alike — carries no source at all.
-        afterCreateRow    : function( i, n, source ) { if( source !== 'auto' ) scheduleAutosave(); },
-        afterRemoveRow    : scheduleAutosave,
-        afterCreateCol    : function( i, n, source ) { if( source !== 'auto' ) scheduleAutosave(); },
-        afterRemoveCol    : scheduleAutosave,
-        afterUndo         : scheduleAutosave,
-        afterRedo         : scheduleAutosave,
+        // What is keyed by row or column number moves with the cells (see
+        // INSERTED AND REMOVED ROWS AND COLUMNS) - padding is not an insert.
+        afterCreateRow    : function( i, n, source ) { if( source !== 'auto' ) { moveRowsOrCols( 'row', i,  n, source ); scheduleAutosave(); } },
+        afterRemoveRow    : function( i, n, rows, source ) { moveRowsOrCols( 'row', i, -n, source ); scheduleAutosave(); },
+        afterCreateCol    : function( i, n, source ) { if( source !== 'auto' ) { moveRowsOrCols( 'col', i,  n, source ); scheduleAutosave(); } },
+        afterRemoveCol    : function( i, n, cols, source ) { moveRowsOrCols( 'col', i, -n, source ); scheduleAutosave(); },
+        afterUndo         : function( action ) { undoTypedFormats( action, false ); scheduleAutosave(); },
+        afterRedo         : function( action ) { undoTypedFormats( action, true );  scheduleAutosave(); },
         // A dragged column edge is a real edit now that widths are saved.
         // Writing or clearing a note only ever touches cell meta — without this
         // a comment could be typed and would never reach the file.
@@ -760,10 +1293,9 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
     td.style.borderBottom = ( bObj && bObj.bottom ) ? ( bw + ' solid ' + bc ) : '';
     td.style.borderLeft   = ( bObj && bObj.left )   ? ( bw + ' solid ' + bc ) : '';
 
-    if( style && style.numFmt && typeof value === 'number' && isFinite( value ) )
-    {
-        try { td.textContent = formatNumber( style.numFmt, value ); } catch( _ ) { /* keep raw text */ }
-    }
+    // A number shows through its format, with the language's marks (see
+    // NUMBERS ON SCREEN).
+    if( typeof value === 'number' && isFinite( value ) ) td.textContent = showNumber( value, style && style.numFmt );
 
     // Mark a linked cell. Cells are recycled DOM nodes, so this has to be
     // set AND cleared on every render like every other style above.
@@ -1319,8 +1851,7 @@ function feShow( v, ed )
     if( typeof v === 'number' )
     {
         const style = activeSheet.cellStyles[ encodeCell( { r: ed.row, c: ed.col } ) ];
-        if( style && style.numFmt ) try { return formatNumber( style.numFmt, v ); } catch( _ ) {}
-        return v.toLocaleString( NayiveI18n.locale(), { maximumFractionDigits: 10 } );
+        return showNumber( v, style && style.numFmt );
     }
 
     return '"' + v + '"';
@@ -1418,5 +1949,6 @@ function wireFormulaPanel()
 export
 {
     table, newSheet, newDoc, doc, activeSheet, gridBooting, lastSelection, htThemeName,
-    CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles
+    CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
+    editText, localMarks
 };

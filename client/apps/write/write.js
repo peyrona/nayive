@@ -175,7 +175,7 @@ let ready         = false;   // a document is on screen; edits after this are th
 // edit. So ready is false across every load, and a change whose revision is not
 // past the one the document was loaded at is not an edit either.
 let loadedRevision = 0;
-let lastGood       = null;   // the bytes last put on screen: a failed open goes back to them
+let lastGood       = null;   // what is on screen, as bytes - retaken before every load: a failed open goes back to it
 
 // The open document - its path, whether it is someone else's, its name, the
 // top-bar label, New / Import / "Guardar como" / rename / Restore, start-up,
@@ -514,6 +514,12 @@ function withHeadings( bytes )
 // (which keeps the old path when an open fails) and the page still agree.
 async function loadIntoEditor( bytes )
 {
+    // What is on screen NOW, edits and all - not the bytes it was loaded
+    // from: the session keeps the old path when an open fails, so whatever
+    // goes back on screen is what the next keystroke saves there. If it
+    // cannot be taken, nothing is loaded over it (the caller says so).
+    if( ready && lastGood ) lastGood = new Uint8Array( await editor.save() );
+
     ready = false;
     bytes = withHeadings( bytes );
 
@@ -735,15 +741,21 @@ function paintHeaderFooter()
 
 const PERSONAL_DICT = 'data/write/dict.json';
 let   personalWords = [];
+let   dictRead      = false;   // the list was read (or there is none yet): only then may it be written
 
+// None yet (a 404) is an empty list. Any other failure - a 5xx, a timeout, bad
+// JSON, a shape that is not ours - leaves it UNKNOWN, and an unknown list is
+// never written over (addPersonalWord): it would keep one word.
 async function loadPersonalWords()
 {
     try
     {
         const j = await GumApi.readJson( PERSONAL_DICT );
-        personalWords = Array.isArray( j && j.words ) ? j.words : [];
+        if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
+        personalWords = j ? j.words : [];
+        dictRead      = true;
     }
-    catch( _ ) { personalWords = []; }
+    catch( e ) { console.error( 'Write: my dictionary -', e.message ); }
 
     setPersonalWords( personalWords );
 }
@@ -751,15 +763,21 @@ async function loadPersonalWords()
 async function addPersonalWord( word )
 {
     word = String( word || '' ).trim();
-    if( ! word || isPersonalWord( word ) ) return;
+    if( ! word ) return;
+
+    if( ! dictRead ) await loadPersonalWords();       // it failed at start-up: once more
+    if( ! dictRead ) { NayiveUI.toast( NayiveUI.tf( 'write.dictUnread', { word: word } ) ); return; }
+
+    if( isPersonalWord( word ) ) return;
 
     personalWords.push( word );
     setPersonalWords( personalWords );
 
+    let saved = true;
     try { await GumApi.writeJson( PERSONAL_DICT, { words: personalWords } ); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); }
+    catch( _ ) { saved = false; }
 
-    NayiveUI.toast( NayiveUI.tf( 'write.wordAdded', { word: word } ) );
+    NayiveUI.toast( saved ? NayiveUI.tf( 'write.wordAdded', { word: word } ) : NayiveUI.t( 'write.dictSaveFailed' ) );
     if( spell ) spell.forget( word );        // its red lines go at once
 }
 
@@ -899,16 +917,27 @@ function selectBack( pid, from, to )
 // data/write/config.json, NOT the launcher-folder slot, so a future "open Write
 // in folder X" cannot collide with it.
 const WRITE_CFG = 'data/write/config.json';
+let   cfgWarned = false;   // "your saved settings could not be read" is said once
 
+// Nothing saved yet (a 404) is {}. Any other failure - offline, a 5xx, bad
+// JSON - throws: a file that could not be read must never be written over
+// with just the key being changed (the templates folder, the menu bar).
 async function readWriteCfg()
 {
-    try { return ( await GumApi.readJson( WRITE_CFG ) ) || {}; }
-    catch( _ ) { return {}; }
+    const cfg = await GumApi.readJson( WRITE_CFG );
+    if( cfg !== null && ( typeof cfg !== 'object' || Array.isArray( cfg ) ) ) throw new Error( WRITE_CFG + ' is not an object' );
+    return cfg || {};
 }
 
 async function writeWriteCfg( patch )
 {
-    const cfg = await readWriteCfg();
+    let cfg;
+    try { cfg = await readWriteCfg(); }
+    catch( _ )
+    {
+        if( ! cfgWarned ) { cfgWarned = true; NayiveUI.toast( NayiveUI.t( 'ui.prefsUnread' ) ); }
+        return null;
+    }
     Object.assign( cfg, patch );
     try { await GumApi.writeJson( WRITE_CFG, cfg ); } catch( _ ) {}
     return cfg;
@@ -918,8 +947,11 @@ async function openTemplates()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    const cfg = await readWriteCfg();
-    let   dir = cfg.templatesDir;
+    let cfg;
+    try { cfg = await readWriteCfg(); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
+
+    let dir = cfg.templatesDir;
 
     if( ! dir )
     {
@@ -967,9 +999,15 @@ async function renderTemplates( dir )
 }
 
 // A template opens as an UNTITLED document, so the first save asks where it goes
-// - the template itself is never overwritten.
+// - the template itself is never overwritten. An untitled document with edits
+// is only in the device draft, and the template takes its place: the question
+// New asks comes first, while the list is still open (a "no" stays in it).
 async function useTemplate( path )
 {
+    const dropping = session.dirty() && ! session.path();
+    if( dropping && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
+                                                confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
+
     setBackdrop( 'tplBackdrop', false );
 
     try
@@ -978,6 +1016,7 @@ async function useTemplate( path )
 
         await loadIntoEditor( await fetchBytes( path ) );
 
+        if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
         session.untitled( baseName( path ), { dirty: true } );
     }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
@@ -2950,6 +2989,7 @@ async function loadBlank()
 {
     if( ! blankBytes )
     {
+        if( ready && lastGood ) lastGood = new Uint8Array( await editor.save() );   // the edits on screen (loadIntoEditor)
         ready = false;
         editor.load( 'blank' );
 

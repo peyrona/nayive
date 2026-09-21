@@ -20,7 +20,9 @@
  * Single user, one file per app: the outbox holds at most one pending write per
  * path and newer replaces older (last-write-wins). By default there is no
  * conflict resolution - if the same file is edited on another device while this
- * one is offline, the offline device wins on reconnect.
+ * one is offline, the offline device wins on reconnect. The outbox is shared by
+ * every store on the origin, so each entry records how it must be sent (bytes
+ * or text, with or without If-Unmodified-Since) and any page can flush it.
  *
  * CONFLICTS  (opt-in: createStore( { conflicts: true } ) - the office editors)
  * The store remembers the server's own time for each file (`srv`, taken ONLY
@@ -64,8 +66,8 @@
  * you. netPut() now gzips the body itself and sets Content-Encoding: gzip -
  * measured 23410 -> 2455 bytes on a real 108-event calendar, ~9x.
  *
- * It is a transport detail and nothing else: the server inflates the body in
- * lib/handler.py _write_file() and stores exactly the same bytes on disk, so
+ * It is a transport detail and nothing else: the server inflates the body
+ * (server/go/upload.go) and stores exactly the same bytes on disk, so
  * calendar.ics stays a plain .ics the reminder service can read. A body that is
  * small, binary, or on a browser without CompressionStream just goes up raw -
  * see gzipBody().
@@ -91,12 +93,29 @@
     var GZIP_MIN          = 1400;   // same cutoff the server uses on the way down:
                                     // below ~one packet, compression is a net loss
 
+    // Page-wide, shared by every store on the page (the outbox is shared too):
+    var inflight = {};   // path -> the PUT being sent for it; one at a time per path
+    var writeSeq = {};   // path -> count of write() calls, so a read can see one land mid-GET
+    var writing  = {};   // path -> the cache/outbox update of the latest write()
+    var blocked  = {};   // path -> "unread" | "bad": writes refused (see block())
+    var loaded   = {};   // path -> a read() of it has succeeded on this page
+    var firstOut = {};   // path -> reads out before the first success: writes refused
+    var toastAt  = 0;
+
     //------------------------------------------------------------------------//
     // TINY INDEXEDDB PROMISE WRAPPER
     //
     // Every call resolves even when IndexedDB is missing or blocked (private
     // mode, storage disabled): openDb() resolves to null and the helpers below
-    // no-op, so the store falls back to plain online-only behaviour.
+    // keep the records in memory instead, for this page only. (They used to
+    // no-op, and a write then found no outbox entry to send: it was dropped.)
+
+    var mem = {};   // storeName -> Map( key -> record ), when there is no IndexedDB
+
+    function memStore( storeName )
+    {
+        return mem[ storeName ] || ( mem[ storeName ] = new Map() );
+    }
 
     function openDb()
     {
@@ -142,7 +161,7 @@
 
     function idbGet( db, storeName, key )
     {
-        if( ! db ) return Promise.resolve( undefined );
+        if( ! db ) return Promise.resolve( memStore( storeName ).get( key ) );
 
         try
         {
@@ -153,7 +172,7 @@
 
     function idbGetAll( db, storeName )
     {
-        if( ! db ) return Promise.resolve( [] );
+        if( ! db ) return Promise.resolve( Array.from( memStore( storeName ).values() ) );
 
         try
         {
@@ -164,7 +183,7 @@
 
     function idbPut( db, storeName, record )
     {
-        if( ! db ) return Promise.resolve();
+        if( ! db ) { memStore( storeName ).set( record.path, record ); return Promise.resolve(); }
 
         try
         {
@@ -179,7 +198,14 @@
     // to put, null to delete it, or undefined to leave it alone.
     function idbUpdate( db, storeName, key, fn )
     {
-        if( ! db ) return Promise.resolve();
+        if( ! db )
+        {
+            var m    = memStore( storeName );
+            var next = fn( m.get( key ) );
+            if( next === null ) m.delete( key );
+            else if( next )     m.set( key, next );
+            return Promise.resolve();
+        }
 
         return new Promise( function ( resolve )
         {
@@ -204,7 +230,7 @@
 
     function idbDelete( db, storeName, key )
     {
-        if( ! db ) return Promise.resolve();
+        if( ! db ) { memStore( storeName ).delete( key ); return Promise.resolve(); }
 
         try
         {
@@ -379,13 +405,13 @@
         // refuses chunked requests outright (it sizes every body from
         // Content-Length). A Uint8Array lets fetch set that header itself.
         //
-        // Returns null - meaning "send it raw" - for a binary store (.docx is
+        // Returns null - meaning "send it raw" - for a binary body (.docx is
         // already a zip), for a body too small to be worth a packet's overhead,
         // on a browser with no CompressionStream, and on any unexpected error.
         // A save must never be lost just because compressing it failed.
-        async function gzipBody( body )
+        async function gzipBody( body, bin )
         {
-            if( binary || typeof CompressionStream !== "function" ) return null;
+            if( bin || typeof body !== "string" || typeof CompressionStream !== "function" ) return null;
 
             try
             {
@@ -407,11 +433,11 @@
         // `since` (ms, the server's own time for this file) becomes
         // If-Unmodified-Since - see CONFLICTS above. The answer's Last-Modified
         // comes back as `srv`, the base for the next save.
-        async function netPut( path, body, since )
+        async function netPut( path, body, since, bin )
         {
             try
             {
-                var packed  = await gzipBody( body );
+                var packed  = await gzipBody( body, bin );
                 var headers = {};
 
                 if( packed ) headers[ "Content-Encoding" ] = "gzip";
@@ -450,8 +476,44 @@
         // 'empty'   real 404 from a reachable server - safe to treat as first run
         // 'unknown' fetch failed and there is nothing cached - caller MUST NOT
         //           treat this as empty (that is the old data-loss bug)
+        //
+        // An 'unknown' or 'unauth' answer also BLOCKS the path: write() refuses
+        // it until a later read succeeds, so an app that shows the empty view
+        // anyway can never save that emptiness over the real file.
+        //
+        // Until the FIRST read of a path on this page has answered, write()
+        // refuses it too ("loading"): whatever the app would save then was built
+        // before it knew the file - an add pressed during a slow first GET would
+        // otherwise replace a 716-card address book with the one new card.
         async function read( path )
         {
+            var first = ! loaded[ path ];
+            var res;
+
+            if( first ) firstOut[ path ] = ( firstOut[ path ] || 0 ) + 1;
+
+            try { res = await readNow( path ); }
+            finally
+            {
+                if( first && --firstOut[ path ] <= 0 ) delete firstOut[ path ];
+            }
+
+            if( res.source === "unknown" || res.source === "unauth" ) blocked[ path ] = "unread";
+            else
+            {
+                delete blocked[ path ];
+                loaded[ path ] = true;
+            }
+
+            return res;
+        }
+
+        async function readNow( path )
+        {
+            // A write() from here on is seen after the GET (writeSeq); one that
+            // started just before is waited for, so its outbox entry is found.
+            var seq    = writeSeq[ path ] || 0;
+            if( writing[ path ] ) { try { await writing[ path ]; } catch ( e ) {} }
             var db     = await dbPromise;
             var cached = await idbGet( db, DOCS, path );
             var queued = await idbGet( db, OUTBOX, path );
@@ -476,11 +538,35 @@
                 emit( "loading" );                 // a GET is in flight - retrieving data
                 var res = await netGet( path );
 
+                // A write() landed while the GET was out: the user's edit is the
+                // truth, not the older server body that just came back.
+                if( ( writeSeq[ path ] || 0 ) !== seq )
+                {
+                    try { await writing[ path ]; } catch ( e ) {}
+                    var mine = await idbGet( db, DOCS, path );
+                    scheduleFlush();
+                    if( mine ) return { body: mine.body, source: "cache", mtime: mine.mtime };
+                }
+
                 if( res.ok )
                 {
-                    await idbPut( db, DOCS,
-                                  { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false,
-                                    srv: res.srv } );
+                    // Checked again INSIDE the cache transaction: a write() that
+                    // lands now must not have its edit replaced by this body.
+                    await idbUpdate( db, DOCS, path, function ()
+                    {
+                        if( ( writeSeq[ path ] || 0 ) !== seq ) return undefined;
+                        return { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false,
+                                 srv: res.srv };
+                    } );
+
+                    if( ( writeSeq[ path ] || 0 ) !== seq )
+                    {
+                        try { await writing[ path ]; } catch ( e ) {}
+                        var newer = await idbGet( db, DOCS, path );
+                        scheduleFlush();
+                        if( newer ) return { body: newer.body, source: "cache", mtime: newer.mtime };
+                    }
+
                     scheduleFlush();               // other paths may still be queued
                     emit( "synced" );
                     return { body: res.body, source: "network", mtime: res.mtime };
@@ -540,19 +626,43 @@
         // them goes up until the app has resolved it.
         async function write( path, body )
         {
-            var db  = await dbPromise;
+            var refused = isBlocked( path );
+
+            if( refused )
+            {
+                refusedToast( refused );
+                emit( "error" );
+                return { ok: false, blocked: refused };
+            }
+
+            loaded[ path ] = true;   // this page now holds the file's content: later reads are RE-reads
+
             var now = Date.now();
             var conflicted = false;
 
-            await idbUpdate( db, DOCS, path, function ( old )
+            // Each entry says how it must be sent (bytes or text, with or without
+            // If-Unmodified-Since): the outbox is shared by every store, and a
+            // Calendar page flushing Write's queued .docx must send it as Write would.
+            // Counted and started in the same tick, so a read() whose GET is out
+            // sees this write and waits for it (see readNow).
+            writeSeq[ path ] = ( writeSeq[ path ] || 0 ) + 1;
+            var queued = ( async function ()
             {
-                return { path: path, body: body, mtime: now, cachedAt: now, dirty: true, srv: old ? old.srv : null };
-            } );
-            await idbUpdate( db, OUTBOX, path, function ( old )
-            {
-                conflicted = !! ( old && old.conflict );
-                return { path: path, body: body, queuedAt: now, conflict: conflicted };
-            } );
+                var db = await dbPromise;
+                await idbUpdate( db, DOCS, path, function ( old )
+                {
+                    return { path: path, body: body, mtime: now, cachedAt: now, dirty: true, srv: old ? old.srv : null };
+                } );
+                await idbUpdate( db, OUTBOX, path, function ( old )
+                {
+                    conflicted = !! ( old && old.conflict );
+                    return { path: path, body: body, queuedAt: now, conflict: conflicted,
+                             bin: binary || body instanceof Uint8Array, ius: conflicts };
+                } );
+            } )();
+
+            writing[ path ] = queued;
+            await queued;
 
             if( conflicted )
             {
@@ -567,7 +677,25 @@
         //--------------------------------------------------------------------//
         // FLUSH
 
+        // One PUT per path at a time on this page: two in flight would both carry
+        // the same If-Unmodified-Since, and the second would come back 412 - a
+        // false "saved on another device". The next one waits, then re-reads the
+        // outbox and the new server time.
         async function flushPath( path )
+        {
+            while( inflight[ path ] )
+            {
+                try { await inflight[ path ]; } catch ( e ) {}
+            }
+
+            var p = flushPathNow( path );
+            inflight[ path ] = p;
+
+            try { return await p; }
+            finally { if( inflight[ path ] === p ) delete inflight[ path ]; }
+        }
+
+        async function flushPathNow( path )
         {
             var db    = await dbPromise;
             var entry = await idbGet( db, OUTBOX, path );
@@ -581,10 +709,15 @@
                 return { ok: false, offline: true };
             }
 
-            var known = conflicts ? await idbGet( db, DOCS, path ) : null;
+            // Sent the way the store that queued it would send it. Entries from
+            // before `bin`/`ius` existed: bytes are Write/Calc's, which use
+            // If-Unmodified-Since; text never did, bar Text's own.
+            var bin   = entry.bin != null ? !! entry.bin : ( entry.body instanceof Uint8Array );
+            var ius   = entry.ius != null ? !! entry.ius : bin;
+            var known = ius ? await idbGet( db, DOCS, path ) : null;
 
             emit( "saving" );                      // a PUT is in flight - sending data
-            var res = await netPut( path, entry.body, known && known.srv );
+            var res = await netPut( path, entry.body, known && known.srv, bin );
 
             // Only the entry that was sent is settled: a newer one queued while
             // the PUT was in flight stays for the next flush.
@@ -732,6 +865,26 @@
         // fn( path ) - a flush found `path` saved from another device since.
         function onConflict( fn ) { conflictFns.push( fn ); }
 
+        // BLOCKED PATHS - "never save over what we could not read".
+        // read() blocks a path it could not read ('unknown' / 'unauth'); an app
+        // blocks one it read but cannot understand (a bad line in an .ics, JSON
+        // that does not parse): block( path ), reason "bad". write() then
+        // refuses that path, says why in a toast, and changes nothing - not the
+        // cache, not the outbox. The next read() that succeeds lifts it; the app
+        // blocks again if the file is still bad.
+        function block( path, reason ) { blocked[ path ] = reason || "bad"; }
+        function unblock( path )       { delete blocked[ path ]; }
+        function isBlocked( path )     { return blocked[ path ] || ( firstOut[ path ] && ! loaded[ path ] ? "loading" : "" ); }
+
+        function refusedToast( reason )
+        {
+            var now = Date.now();
+            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! NayiveUI.t ) return;
+            toastAt = now;
+            NayiveUI.toast( NayiveUI.t( reason === "bad"     ? "ui.store.badFile"
+                                      : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ), { ms: 6000 } );
+        }
+
         //--------------------------------------------------------------------//
 
         return {
@@ -745,6 +898,9 @@
             pendingCount: pendingCount,
             conflicted:   conflicted,
             onConflict:   onConflict,
+            block:        block,
+            unblock:      unblock,
+            isBlocked:    isBlocked,
             onState:      onState,
             resting:      settle,
             get state() { return state; }

@@ -453,6 +453,7 @@
         let loaded = false;     // true once the file (or a real "no file yet") has been read;
                                 // until then nothing may be written, or an offline first
                                 // load would upload an empty list over the real file
+        let loadSeq = 0;        // bumped by every load() and save() - see load()
         let view   = 'today';
         let month  = H.monthOf( H.todayIso() );   // the month the grid shows, "yyyy-mm"
         let hs     = null;      // the habit sheet's working state (see openSheet)
@@ -618,7 +619,13 @@
 
         async function load()
         {
+            const my  = ++loadSeq;
             const res = await store.read( FILE );
+
+            // A tap (save) or a newer read came in while this GET was out: what
+            // it brought back is older than the list on screen, and taking it
+            // would drop the tick - which the next tap would then upload.
+            if( my !== loadSeq ) return;
 
             if( res.source === 'empty' )
             {
@@ -653,6 +660,7 @@
         // immediately, on reconnect, or on tab focus. Fire-and-forget.
         function save()
         {
+            loadSeq++;          // a read already out is now stale
             store.write( FILE, JSON.stringify( habits, null, 2 ) );
         }
 

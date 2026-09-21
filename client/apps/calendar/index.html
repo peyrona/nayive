@@ -694,7 +694,7 @@
         await NayiveI18n.ready;
 
         // ICS model + DST-safe recurrence engine — shared with the tasks app (see ../shared/ical.js).
-        import { makeEventDef, icsToEventDefs, eventDefsToIcs,
+        import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, eventDefsToIcs,
                  expandEventDef, instantiate, pad2 } from '../shared/ical.js';
 
         //------------------------------------------------------------------------//
@@ -757,10 +757,12 @@
         })();
 
         let eventDefs   = [];   // source of truth: array of event definitions (see makeEventDef)
+        let calFile     = null;    // calendar.ics as read, so a save keeps what eventDefs does not model (null: no file yet)
+        let calBadSaid  = false;   // the "cannot understand this file" toast was shown for this bad spell
         let dragBusy    = false;   // a finger / mouse is down on an event (press through drop)
         let dragMoving  = false;   // ...and FullCalendar has started dragging / resizing it
         let refetchHeld = false;   // a re-read landed meanwhile; repaint once the drop is done
-        let editingUid   = null;   // uid of the event being edited in the sheet, or null when adding
+        let editingKey   = null;   // key (uid + recurrence-id) of the event being edited in the sheet, or null when adding
         let calendar     = null;
 
         //------------------------------------------------------------------------//
@@ -823,14 +825,41 @@
             if( res.source === 'empty' )
             {
                 eventDefs = [];   // genuinely no calendar.ics on the server yet — safe first run
+                calFile   = null;
             }
             else if( res.body !== null )
             {
-                eventDefs = icsToEventDefs( res.body );
+                const cal = icsToCalendar( res.body );
+                eventDefs = cal.defs;
+                calFile   = cal.file;
+
+                // A line that does not parse used to make the WHOLE file [] - an empty
+                // calendar the next edit saved over. Now the events that parse show, and
+                // the file is READ-ONLY until a read finds it whole (store.read lifts it).
+                if( cal.bad )
+                {
+                    store.block( CAL_FILE );
+                    if( ! calBadSaid ) NayiveUI.toast( T( 'ui.store.badFile' ), { ms: 6000 } );
+                }
+                calBadSaid = cal.bad;
             }
             // else: server unreachable AND nothing cached (res.source === 'unknown').
             // Leave `eventDefs` untouched — treating that as an empty calendar is
-            // exactly the bug that let the next save overwrite the real file.
+            // exactly the bug that let the next save overwrite the real file. The
+            // store blocks the path meanwhile, and refuseEdit() keeps the app from
+            // pretending an edit worked.
+        }
+
+        // A calendar.ics this tab could not read (offline with nothing cached, signed
+        // out) or could not understand is READ-ONLY: every edit stops here, before it
+        // touches the model, so nothing on screen pretends it was saved.
+        function refuseEdit()
+        {
+            const why = store.isBlocked( CAL_FILE );
+            if( ! why ) return false;
+
+            NayiveUI.toast( T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ), { ms: 6000 } );
+            return true;
         }
 
         // AUTO RE-READ
@@ -839,13 +868,16 @@
         {
             // Writes the local cache now and queues the upload; the store flushes
             // it immediately, on reconnect, or on tab focus. Fire-and-forget.
-            store.write( CAL_FILE, eventDefsToIcs( eventDefs ) );
+            // calendarToIcs writes the file as it was read with only the edited
+            // events changed: alarms, attendees, time zones, to-dos... all stay.
+            store.write( CAL_FILE, calendarToIcs( calFile, eventDefs ) );
         }
 
         //------------------------------------------------------------------------//
         // The event model + recurrence engine now live in ../shared/ical.js.
 
-        function findDef( uid ) { return eventDefs.find( d => d.uid === uid ); }
+        // By key, not uid: a moved occurrence (RECURRENCE-ID) shares its series' uid.
+        function findDef( key ) { return eventDefs.find( d => d.key === key ); }
 
         //------------------------------------------------------------------------//
         // FULLCALENDAR WIRING
@@ -971,15 +1003,15 @@
                     openSheetForNew( arg.start, arg.allDay, arg.end );
                 },
 
-                eventClick: function( arg ) { openSheetForEdit( arg.event.extendedProps.uid ); },
+                eventClick: function( arg ) { openSheetForEdit( arg.event.extendedProps.key ); },
 
                 eventDragStart:   function() { dragBusy = dragMoving = true; },
                 eventResizeStart: function() { dragBusy = dragMoving = true; },
                 eventDragStop:    endDrag,
                 eventResizeStop:  endDrag,
 
-                eventDrop: function( arg ) { applyDragOrResize( arg.event ); },
-                eventResize: function( arg ) { applyDragOrResize( arg.event ); }
+                eventDrop: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event ); },
+                eventResize: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event ); }
             });
 
             calendar.render();
@@ -1060,14 +1092,14 @@
             const showTag     = ! inst.allDay && zone !== VIEWER_TZ;
 
             return {
-                id: inst.uid + '::' + inst.start,
+                id: inst.def.key + '::' + inst.start,
                 title: inst.def.title || T( 'calendar.untitledEvent' ),
                 start: inst.start,
                 end: inst.end,
                 allDay: inst.allDay,
                 startEditable: ! isRecurring,
                 durationEditable: ! isRecurring,
-                extendedProps: { uid: inst.uid, showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
+                extendedProps: { key: inst.def.key, showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
             };
         }
 
@@ -1119,7 +1151,7 @@
 
         function applyDragOrResize( fcEvent )
         {
-            const def = findDef( fcEvent.extendedProps.uid );
+            const def = findDef( fcEvent.extendedProps.key );
             if( ! def ) return;
 
             const zone = def.floating ? VIEWER_TZ : def.tzid;
@@ -1477,7 +1509,7 @@
                 btn.type      = 'button';
                 btn.className = 'dl-row';
                 btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
-                btn.addEventListener( 'click', () => openSheetForEdit( inst.uid ) );
+                btn.addEventListener( 'click', () => openSheetForEdit( inst.def.key ) );
                 box.appendChild( btn );
             }
         }
@@ -1554,25 +1586,13 @@
                 if( e.key === 'Enter' ) { e.preventDefault(); commitSheet(); }
             });
 
-            document.addEventListener( 'keydown', function( e )
-            {
-                if( e.key !== 'Escape' )
-                    return;
+            // Escape: shared/ui.js closes the top-most sheet only (and wireMenu the menu).
+            // A handler of our own here closed the event sheet UNDER the help sheet too,
+            // losing the unsaved event.
 
-                const tm = document.getElementById( 'topMenu' );
-                if( tm && ! tm.hidden ) { tm.hidden = true; return; }
-
-                if( document.getElementById( 'sheetBackdrop' ).classList.contains( 'open' ) )
-                    closeSheet();
-                else if( document.getElementById( 'helpBackdrop' ).classList.contains( 'open' ) )
-                    closeHelp();
-                else if( document.getElementById( 'goToBackdrop' ).classList.contains( 'open' ) )
-                    closeGoTo();
-                else if( document.getElementById( 'searchBackdrop' ).classList.contains( 'open' ) )
-                    closeSearch();
-                else if( document.getElementById( 'exportBackdrop' ).classList.contains( 'open' ) )
-                    closeExport();
-            });
+            // Moving the start moves the end along, so the event keeps its length.
+            document.getElementById( 'fStartDate' ).addEventListener( 'input', startMoved );
+            document.getElementById( 'fStartTime' ).addEventListener( 'input', startMoved );
 
             document.getElementById( 'helpBtn' ).addEventListener( 'click', function()
             {
@@ -1733,7 +1753,7 @@
                 if( occ && calendar )
                     calendar.gotoDate( new Date( occ.startMs ) );
 
-                openSheetForEdit( def.uid );
+                openSheetForEdit( def.key );
             });
 
             return row;
@@ -2024,7 +2044,9 @@
 
         function openSheetForNew( date, allDay, endDate )
         {
-            editingUid = null;
+            if( refuseEdit() ) return;
+
+            editingKey = null;
 
             const d  = DateTime.fromJSDate( date );
             const e  = endDate ? DateTime.fromJSDate( endDate ) : d.plus( allDay ? { days: 1 } : { minutes: 30 } );
@@ -2043,15 +2065,18 @@
 
             updateSheetVisibility();
             refreshAllDtDisplays();
+            sheetStart  = sheetStartDt();
+            sheetRepeat = repeatSignature();
+            sheetDates  = datesSignature();
             openSheet();
         }
 
-        function openSheetForEdit( uid )
+        function openSheetForEdit( key )
         {
-            const def = findDef( uid );
+            const def = findDef( key );
             if( ! def ) return;
 
-            editingUid = uid;
+            editingKey = key;
 
             resetSheet();
             document.getElementById( 'sheetTitle' ).textContent = T( 'calendar.editEvent' );
@@ -2068,7 +2093,11 @@
             document.getElementById( 'fFloating' ).value = def.floating ? '1' : '0';
             document.getElementById( 'fTzid' ).value = def.tzid || VIEWER_TZ;
 
-            if( def.rrule )
+            if( def.rrule && def.rrule.custom )
+            {
+                setRepeatCustom( true );
+            }
+            else if( def.rrule )
             {
                 document.getElementById( 'fRepeat' ).value = def.rrule.freq.toLowerCase();
                 document.getElementById( 'fInterval' ).value = def.rrule.interval || 1;
@@ -2093,7 +2122,93 @@
             updateSheetVisibility();
             updateRepeatDetails();
             refreshAllDtDisplays();
+            sheetStart  = sheetStartDt();
+            sheetRepeat = repeatSignature();
+            sheetDates  = datesSignature();
             openSheet();
+        }
+
+        // A repeat rule the sheet cannot show (FREQ=HOURLY, BYDAY=2TU, BYSETPOS...,
+        // made in another app): the select reads "Custom" and stays shut, and
+        // commitSheet leaves the rule exactly as it came. Rewriting it from the
+        // sheet wrote "RRULE:FREQ=;" or a plain "every Tuesday".
+        function setRepeatCustom( on )
+        {
+            const sel = document.getElementById( 'fRepeat' );
+            let   opt = sel.querySelector( 'option[value=custom]' );
+
+            if( on && ! opt )
+            {
+                opt = document.createElement( 'option' );
+                opt.value       = 'custom';
+                opt.textContent = T( 'calendar.repeatCustom' );
+                sel.appendChild( opt );
+            }
+            else if( ! on && opt )
+                opt.remove();
+
+            sel.disabled = on;
+            if( on ) sel.value = 'custom';
+        }
+
+        // The repeat controls as one string: equal at open and at save means the
+        // user did not touch the repeat, and the rule is kept as it was (WKST, the
+        // BYDAY order... everything the controls do not hold).
+        function repeatSignature()
+        {
+            return [ document.getElementById( 'fRepeat' ).value,
+                     document.getElementById( 'fInterval' ).value,
+                     Array.from( document.querySelectorAll( '.dow-btn.active' ) ).map( b => b.dataset.dow ).join( ',' ),
+                     document.querySelector( 'input[name=endMode]:checked' ).value,
+                     document.getElementById( 'fUntil' ).value,
+                     document.getElementById( 'fCount' ).value ].join( '|' );
+        }
+
+        // MOVING THE START MOVES THE END: the event keeps its length. The start the
+        // sheet showed last is the reference; while a field is cleared nothing moves.
+        let sheetStart  = null;   // luxon, wall clock as naive UTC (no DST jumps)
+        let sheetRepeat = '';     // repeatSignature() when the sheet opened
+        let sheetDates  = '';     // datesSignature() when the sheet opened
+
+        // The date + time fields as one string: equal at open and at save means the
+        // user did not touch them, and they are not checked (an imported event may
+        // already end before it starts; renaming it must still work).
+        function datesSignature()
+        {
+            return [ document.getElementById( 'fAllDay' ).checked,
+                     document.getElementById( 'fStartDate' ).value, document.getElementById( 'fStartTime' ).value,
+                     document.getElementById( 'fEndDate' ).value,   document.getElementById( 'fEndTime' ).value ].join( '|' );
+        }
+
+        function sheetStartDt()
+        {
+            const d = document.getElementById( 'fStartDate' ).value;
+            if( ! d ) return null;
+
+            const dt = DateTime.fromISO( d + 'T' + ( document.getElementById( 'fStartTime' ).value || '00:00' ), { zone: 'utc' } );
+            return dt.isValid ? dt : null;
+        }
+
+        function startMoved()
+        {
+            const now = sheetStartDt();
+            if( ! now ) return;
+
+            const endDate = document.getElementById( 'fEndDate' );
+            const endTime = document.getElementById( 'fEndTime' );
+            const end     = endDate.value
+                          ? DateTime.fromISO( endDate.value + 'T' + ( endTime.value || '00:00' ), { zone: 'utc' } ) : null;
+
+            if( sheetStart && end && end.isValid )
+            {
+                const moved = end.plus( now.diff( sheetStart ) );
+                endDate.value = moved.toISODate();
+                endTime.value = moved.toFormat( 'HH:mm' );
+                refreshDtDisplay( endDate );
+                refreshDtDisplay( endTime );
+            }
+
+            sheetStart = now;
         }
 
         function resetSheet()
@@ -2101,6 +2216,7 @@
             document.getElementById( 'fTitle' ).value = '';
             document.getElementById( 'fLocation' ).value = '';
             document.getElementById( 'fNotes' ).value = '';
+            setRepeatCustom( false );
             document.getElementById( 'fRepeat' ).value = 'none';
             document.getElementById( 'fInterval' ).value = 1;
             document.querySelectorAll( '.dow-btn' ).forEach( b => b.classList.remove( 'active' ) );
@@ -2137,7 +2253,7 @@
         function updateRepeatDetails()
         {
             const freq = document.getElementById( 'fRepeat' ).value;
-            const show = freq !== 'none';
+            const show = freq !== 'none' && freq !== 'custom';
 
             document.getElementById( 'repeatDetails' ).style.display = show ? '' : 'none';
             document.getElementById( 'dowField' ).style.display = (freq === 'weekly') ? '' : 'none';
@@ -2155,6 +2271,8 @@
 
         function commitSheet()
         {
+            if( refuseEdit() ) return;
+
             const title = document.getElementById( 'fTitle' ).value.trim();
             if( ! title ) { flashToast( T( 'calendar.needTitle' ) ); return; }
 
@@ -2168,12 +2286,28 @@
                 return;
             }
 
-            const def = editingUid ? findDef( editingUid ) : makeEventDef();
-            if( ! editingUid ) eventDefs.push( def );
+            // An empty date saved as "0-NaN-NaN" (the event vanished on the next
+            // read), and an end before the start was taken as it came.
+            const sDate = document.getElementById( 'fStartDate' ).value;
+            const eDate = document.getElementById( 'fEndDate' ).value;
+            const sAt   = sDate + ( allDay ? '' : 'T' + ( document.getElementById( 'fStartTime' ).value || '00:00' ) );
+            const eAt   = eDate + ( allDay ? '' : 'T' + ( document.getElementById( 'fEndTime' ).value || '00:00' ) );
 
-            def.title    = title;
-            def.location = document.getElementById( 'fLocation' ).value.trim();
-            def.notes    = document.getElementById( 'fNotes' ).value.trim();
+            const datesTouched = ! editingKey || datesSignature() !== sheetDates;
+
+            if( datesTouched && ( ! sDate || ! eDate ) ) { setMoreOpen( true ); flashToast( T( 'calendar.needDates' ) );      return; }
+            if( datesTouched && eAt < sAt )              { setMoreOpen( true ); flashToast( T( 'calendar.endBeforeStart' ) ); return; }
+
+            const def = editingKey ? findDef( editingKey ) : makeEventDef();
+            if( ! editingKey ) eventDefs.push( def );
+
+            // A field left as it was keeps its exact text (an imported note that ends
+            // in a newline is not an edit): only edited fields are rewritten in the file.
+            const keep = ( typed, old ) => typed === String( old || '' ).trim() ? old : typed;
+
+            def.title    = keep( title, def.title );
+            def.location = keep( document.getElementById( 'fLocation' ).value.trim(), def.location );
+            def.notes    = keep( document.getElementById( 'fNotes' ).value.trim(), def.notes );
             def.allDay   = allDay;
             def.floating = floating;
             def.tzid     = floating ? VIEWER_TZ : (typedTzid || VIEWER_TZ);
@@ -2185,7 +2319,11 @@
 
             const freq = document.getElementById( 'fRepeat' ).value;
 
-            if( freq === 'none' )
+            if( freq === 'custom' || ( editingKey && repeatSignature() === sheetRepeat ) )
+            {
+                // Repeat not touched (or one the sheet cannot show): the rule stays as it came.
+            }
+            else if( freq === 'none' )
             {
                 def.rrule = null;
             }
@@ -2193,6 +2331,7 @@
             {
                 const byweekday = Array.from( document.querySelectorAll( '.dow-btn.active' ) ).map( b => b.dataset.dow );
                 const endMode = document.querySelector( 'input[name=endMode]:checked' ).value;
+                const wkst    = def.rrule && def.rrule.wkst;   // the file's week start, which the sheet does not show
 
                 def.rrule =
                 {
@@ -2202,6 +2341,7 @@
                     until: endMode === 'on' ? document.getElementById( 'fUntil' ).value || null : null,
                     count: endMode === 'after' ? (parseInt( document.getElementById( 'fCount' ).value, 10 ) || null) : null
                 };
+                if( wkst ) def.rrule.wkst = wkst;
             }
 
             closeSheet();
@@ -2209,11 +2349,21 @@
             saveCalendar();
         }
 
+        // By key: a moved occurrence (RECURRENCE-ID) goes on its own. Deleting the
+        // series itself also takes its moved occurrences, as before.
         function deleteFromSheet()
         {
-            if( ! editingUid ) return;
+            if( ! editingKey ) return;
+            if( refuseEdit() ) return;
 
-            eventDefs = eventDefs.filter( d => d.uid !== editingUid );
+            const gone = findDef( editingKey );
+
+            // A moved occurrence goes for good: its series gets an EXDATE for it, or the
+            // series would bring that occurrence back at its old time.
+            if( gone && gone.rid )
+                excludeOccurrence( eventDefs.find( d => d.uid === gone.uid && ! d.rid ), gone );
+
+            eventDefs = eventDefs.filter( d => d.key !== editingKey && ! ( gone && ! gone.rid && d.uid === gone.uid ) );
             closeSheet();
             refetchAll();
             saveCalendar();

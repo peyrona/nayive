@@ -27,7 +27,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-0fab476850c5";
+var CACHE_VERSION = "nayive-c2646e34c470";
 /* @end */
 
 /* @generated:precache */
@@ -405,31 +405,52 @@ async function handleShare( req )
 
         var cache = await caches.open( SHARE_INBOX );
 
-        // clear anything left from a previous share
-        var old = await cache.keys();
-        await Promise.all( old.map( function ( k ) { return cache.delete( k ); } ) );
-
+        // Photos kept after a failed upload (share-target marks them `kept`)
+        // stay, and the new ones go AFTER them. Anything else left from an
+        // earlier share - a page closed without Upload or Cancel - is cleared.
         var names = [];
-        for( var i = 0; i < files.length; i++ )
+        var start = 0;
+        try
         {
-            var f = files[ i ];
-            names.push( f.name || ( "foto-" + ( i + 1 ) + ".jpg" ) );
+            var prev = await cache.match( base + "inbox/manifest.json" );
+            prev = prev ? await prev.json() : null;
+            if( prev && prev.kept )
+            {
+                start = prev.count || 0;
+                names = ( prev.names || [] ).slice( 0, start );
+            }
+        }
+        catch ( e ) { start = 0; names = []; }
+
+        if( ! start )
+        {
+            var old = await cache.keys();
+            await Promise.all( old.map( function ( k ) { return cache.delete( k ); } ) );
+        }
+
+        while( names.length < start ) names.push( "" );
+
+        for( var j = 0; j < files.length; j++ )
+        {
+            var f = files[ j ];
+            var i = start + j;
+            names.push( f.name || ( "foto-" + ( j + 1 ) + ".jpg" ) );
             await cache.put(
                 new Request( base + "inbox/" + i ),
                 new Response( f, { headers: {
                     "Content-Type":  f.type || "application/octet-stream",
-                    "X-File-Name":   encodeURIComponent( f.name || ( "foto-" + ( i + 1 ) + ".jpg" ) )
+                    "X-File-Name":   encodeURIComponent( f.name || ( "foto-" + ( j + 1 ) + ".jpg" ) )
                 } } )
             );
         }
 
         await cache.put(
             new Request( base + "inbox/manifest.json" ),
-            new Response( JSON.stringify( { count: files.length, names: names, at: Date.now() } ),
+            new Response( JSON.stringify( { count: start + files.length, names: names, at: Date.now() } ),
                           { headers: { "Content-Type": "application/json" } } )
         );
 
-        return Response.redirect( base + "?n=" + files.length, 303 );
+        return Response.redirect( base + "?n=" + ( start + files.length ), 303 );
     }
     catch ( e )
     {

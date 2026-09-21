@@ -14,6 +14,7 @@ package main
 // grants that do not exist. These are those curl cases, written down.
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -702,5 +703,115 @@ func TestShareWithEveryoneAPI(t *testing.T) {
 	resp.Body.Close()
 	if !strings.Contains(string(raw), `"path":"shared/mio-txt"`) || !strings.Contains(string(raw), `"by":"ana"`) {
 		t.Errorf("beto does not see what ana shared with everybody: %s", raw)
+	}
+}
+
+// TestRenameUserKeepsShares - the admin renames a person: every share they
+// made, every share made to them, and their trip's public link follow the new
+// name. Before, shares.json kept the old one and all of it turned "gone".
+func TestRenameUserKeepsShares(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	album(t, srv.cfg)
+	trip := filepath.Join(srv.cfg.HomesDir, "ana", "files", "viaje")
+	os.MkdirAll(trip, 0o755)
+	os.WriteFile(filepath.Join(trip, "trip.json"), []byte(`{}`), 0o644)
+
+	toBeto := srv.shares.Create("ana", "beto", "files/album", "photos", "", "ro")
+	toAll := srv.shares.Create("ana", Everyone, "files/mio.txt", "file", "", "ro")
+	fromBeto := srv.shares.Create("beto", "ana", "files/suyo.txt", "file", "", "ro")
+	link, _ := srv.shares.CreateLink("ana", "files/viaje", "")
+	if toBeto == nil || toAll == nil || fromBeto == nil || link == nil {
+		t.Fatal("the fixture's shares were refused")
+	}
+
+	signIn(t, client, ts.URL, "jefe", "secreto")
+	rename := func(from, to string) {
+		t.Helper()
+		resp := do(t, client, "POST", ts.URL+"/api/admin",
+			strings.NewReader(`{"action":"rename-user","name":"`+from+`","new_name":"`+to+`"}`),
+			map[string]string{"Content-Type": "application/json"})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("rename %s -> %s = %d", from, to, resp.StatusCode)
+		}
+	}
+	type listing struct {
+		Mine   []shareOut `json:"mine"`
+		WithMe []shareOut `json:"with_me"`
+	}
+	sharesOf := func(who *http.Client) listing {
+		t.Helper()
+		resp := do(t, who, "GET", ts.URL+"/api/shares", nil, nil)
+		defer resp.Body.Close()
+		var l listing
+		if err := json.NewDecoder(resp.Body).Decode(&l); err != nil {
+			t.Fatalf("GET /api/shares: %v", err)
+		}
+		return l
+	}
+
+	// THE OWNER is renamed: ana -> anabel.
+	rename("ana", "anabel")
+
+	beto := signedInClient(t, ts.URL, "beto", "xyz")
+	got := sharesOf(beto)
+	if len(got.WithMe) != 2 {
+		t.Fatalf("beto sees %d shares, want 2 (the album and the everybody file): %+v",
+			len(got.WithMe), got.WithMe)
+	}
+	for _, sh := range got.WithMe {
+		if sh.Gone || sh.By != "anabel" {
+			t.Errorf("beto's share %q: gone=%v by=%q, want live and by anabel", sh.Title, sh.Gone, sh.By)
+		}
+	}
+	resp := do(t, beto, "GET", ts.URL+"/api/files?file=shared/"+toBeto.Slug+"/foto.jpg", nil, nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || string(body) != "jpg" {
+		t.Errorf("beto opening the album's photo = %d %q, want 200 \"jpg\"", resp.StatusCode, body)
+	}
+
+	anabel := signedInClient(t, ts.URL, "anabel", "abc")
+	got = sharesOf(anabel)
+	if len(got.Mine) != 3 {
+		t.Errorf("anabel's own shares = %d, want 3 (album, everybody, link): %+v", len(got.Mine), got.Mine)
+	}
+	for _, sh := range got.Mine {
+		if sh.Gone {
+			t.Errorf("anabel's own share %q is gone", sh.Title)
+		}
+	}
+	if len(got.WithMe) != 1 || got.WithMe[0].Gone || got.WithMe[0].By != "beto" {
+		t.Errorf("what beto lent ana did not follow her to anabel: %+v", got.WithMe)
+	}
+
+	resp = do(t, anonymous(), "GET", ts.URL+"/api/public/"+link.Token, nil, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("the public trip link after the rename = %d, want 200", resp.StatusCode)
+	}
+
+	// THE RECIPIENT is renamed: beto -> bruno.
+	rename("beto", "bruno")
+	for _, g := range srv.shares.ForUser("beto") {
+		if g.To != Everyone {
+			t.Errorf("the old name beto still receives %q", g.Title)
+		}
+	}
+	bruno := signedInClient(t, ts.URL, "bruno", "xyz")
+	got = sharesOf(bruno)
+	if len(got.WithMe) != 2 {
+		t.Errorf("bruno sees %d shares, want 2: %+v", len(got.WithMe), got.WithMe)
+	}
+	if len(got.Mine) != 1 || got.Mine[0].Gone || got.Mine[0].To != "anabel" {
+		t.Errorf("bruno's own share = %+v, want one live grant to anabel", got.Mine)
+	}
+
+	// And on disk: a fresh read of shares.json knows neither old name.
+	raw, _ := os.ReadFile(filepath.Join(srv.cfg.ConfigDir, "shares.json"))
+	for _, old := range []string{`"ana"`, `"beto"`} {
+		if strings.Contains(string(raw), old) {
+			t.Errorf("shares.json still names %s:\n%s", old, raw)
+		}
 	}
 }

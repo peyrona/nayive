@@ -181,6 +181,28 @@ func (c *Converter) Status(user string) []ConvertStatus {
 	return out
 }
 
+// RenameUser follows an account the admin renamed: its jobs now run under the
+// new name, where its files are. Under the old one each would fail "forbidden".
+//
+// The job RUNNING right now is renamed too, on purpose: Run pops a finished job
+// only when it is still the very same value, so this one is not popped and runs
+// once more under the new name. Its first run has almost surely failed - the
+// folder its paths point into moved away mid-way - and the push for that
+// failure went to the old name, which has no devices any more.
+func (c *Converter) RenameUser(oldName, newName string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	moved := false
+	for i := range c.queue {
+		if c.queue[i].User == oldName {
+			c.queue[i].User, moved = newName, true
+		}
+	}
+	if moved {
+		c.saveLocked()
+	}
+}
+
 func (c *Converter) saveLocked() {
 	if err := atomicWriteJSON(c.file, map[string]any{"queue": c.queue}, 1); err != nil {
 		c.log.Error("convert: could not save the queue", "file", c.file, "err", err)

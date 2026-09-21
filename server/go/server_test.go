@@ -10,13 +10,16 @@ package main
 // silently: the static sandbox, and the gzip tiers.
 
 import (
+	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -372,31 +375,97 @@ func TestPutIfUnmodifiedSince(t *testing.T) {
 	}
 }
 
-// TestPutWithoutContentLength is the 0-byte-file bug the Python grew a 411 for:
-// a client that sends no body and no length must NOT wipe the target.
+// TestPutWithoutContentLength is the 0-byte-file bug: a PUT that carries no
+// bytes must NOT wipe a document. Go reads "no Content-Length at all" as a
+// length of 0, so the old `ContentLength < 0` guard never saw it (only a
+// chunked body, which refuseChunked answers first - TestChunkedBodyIsRefused).
+// No length, "Content-Length: 0" and a gzip stream that inflates to nothing
+// are all refused over a document with content; plain text may still be
+// emptied on purpose, and a new document may start empty.
 func TestPutWithoutContentLength(t *testing.T) {
-	_, ts, client := newTestServer(t)
+	srv, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "ana", "abc")
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
 
-	// java: an io.Reader body of unknown length makes net/http use chunked
-	// encoding, so ContentLength arrives as -1 - the same shape as "absent".
-	req, _ := http.NewRequest("PUT", ts.URL+"/api/files?file=files/mio.txt",
-		io.NopCloser(strings.NewReader("")))
-	req.ContentLength = -1
-	resp, err := client.Do(req)
+	const doc = `{"tareas":[1,2,3]}`
+	seed := func(name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(files, name), []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	intact := func(name, how string) {
+		t.Helper()
+		if raw, _ := os.ReadFile(filepath.Join(files, name)); string(raw) != doc {
+			t.Errorf("%s %s changed it to %q", how, name, raw)
+		}
+	}
+	put := func(name string, body []byte, headers map[string]string) int {
+		t.Helper()
+		resp := do(t, client, "PUT", ts.URL+"/api/files?file=files/"+name,
+			strings.NewReader(string(body)), headers)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	emptyGzip, _ := gzipBytes(nil) // ~20 bytes on the wire, 0 once inflated
+	gz := map[string]string{"Content-Encoding": "gzip"}
+
+	// NO Content-Length AT ALL. net/http's client always sends one on a PUT,
+	// so this one goes over a raw socket, with ana's cookie.
+	seed("tareas.json")
+	base, _ := neturl.Parse(ts.URL)
+	cookie := ""
+	for _, c := range client.Jar.Cookies(base) {
+		cookie += c.Name + "=" + c.Value + "; "
+	}
+	conn, err := net.Dial("tcp", base.Host)
 	if err != nil {
-		t.Fatalf("PUT: %v", err)
+		t.Fatal(err)
+	}
+	conn.Write([]byte("PUT /api/files?file=files/tareas.json HTTP/1.1\r\nHost: " + base.Host +
+		"\r\nCookie: " + cookie + "\r\nConnection: close\r\n\r\n"))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("raw PUT: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusLengthRequired {
-		t.Errorf("PUT with no length = %d, want 411", resp.StatusCode)
+	conn.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("PUT with no Content-Length = %d, want 409", resp.StatusCode)
+	}
+	intact("tareas.json", "a PUT with no Content-Length")
+
+	// "Content-Length: 0" and an empty gzip stream, on every document kind.
+	for _, name := range []string{"tareas.json", "carta.docx", "cuentas.xlsx",
+		"calendar.ics", "contacts.vcf", "MAYUS.JSON"} {
+		seed(name)
+		if got := put(name, nil, nil); got != http.StatusConflict {
+			t.Errorf("0-byte PUT over %s = %d, want 409", name, got)
+		}
+		intact(name, "a 0-byte PUT")
+		if got := put(name, emptyGzip, gz); got != http.StatusConflict {
+			t.Errorf("empty gzipped PUT over %s = %d, want 409", name, got)
+		}
+		intact(name, "an empty gzipped PUT")
 	}
 
-	resp = do(t, client, "GET", ts.URL+"/api/files?file=files/mio.txt", nil, nil)
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if string(body) != "mío\n" {
-		t.Errorf("the existing file was damaged: %q", body)
+	// What must still work: plain text emptied on purpose, a new document that
+	// starts empty, and a real gzipped save over the document.
+	if got := put("mio.txt", nil, nil); got != http.StatusOK {
+		t.Errorf("emptying a .txt = %d, want 200", got)
+	}
+	if info, err := os.Stat(filepath.Join(files, "mio.txt")); err != nil || info.Size() != 0 {
+		t.Errorf("the .txt was not emptied: %v", err)
+	}
+	if got := put("nuevo.json", nil, nil); got != http.StatusOK {
+		t.Errorf("a new empty .json = %d, want 200", got)
+	}
+	packed, _ := gzipBytes([]byte(`{"tareas":[]}`))
+	if got := put("tareas.json", packed, gz); got != http.StatusOK {
+		t.Errorf("a real gzipped save = %d, want 200", got)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(files, "tareas.json")); string(raw) != `{"tareas":[]}` {
+		t.Errorf("the real save wrote %q", raw)
 	}
 }
 

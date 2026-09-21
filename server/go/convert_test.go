@@ -197,6 +197,73 @@ func TestConvertFailureKeepsOriginal(t *testing.T) {
 	}
 }
 
+// A job still waiting when the admin renames its owner follows the new name:
+// it shows in their Drive, it is saved so, and it converts the moved file.
+func TestConvertQueueFollowsRename(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	pelis := filepath.Join(srv.cfg.HomesDir, "ana", "files", "Pelis")
+	os.MkdirAll(pelis, 0o755)
+	withFFmpeg := true
+	for _, bin := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			withFFmpeg = false
+		}
+	}
+	if withFFmpeg {
+		os.WriteFile(filepath.Join(pelis, "prueba.avi"), makeAVI(t), 0o644)
+	}
+
+	// Straight into the queue: Enqueue needs ffmpeg, the rename does not.
+	job := ConvertJob{User: "ana", Path: "files/Pelis/prueba.avi", Added: time.Now().Unix()}
+	srv.convert.mu.Lock()
+	srv.convert.queue = append(srv.convert.queue, job)
+	srv.convert.saveLocked()
+	srv.convert.mu.Unlock()
+
+	signIn(t, client, ts.URL, "jefe", "secreto")
+	resp := do(t, client, "POST", ts.URL+"/api/admin",
+		strings.NewReader(`{"action":"rename-user","name":"ana","new_name":"anabel"}`),
+		map[string]string{"Content-Type": "application/json"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("rename = %d", resp.StatusCode)
+	}
+
+	if jobs := srv.convert.Status("anabel"); len(jobs) != 1 || jobs[0].Path != job.Path {
+		t.Fatalf("anabel's queue = %+v, want the one job", jobs)
+	}
+	if jobs := srv.convert.Status("ana"); len(jobs) != 0 {
+		t.Errorf("the old name still has %d jobs", len(jobs))
+	}
+	var saved struct {
+		Queue []ConvertJob `json:"queue"`
+	}
+	loadJSONFile(filepath.Join(srv.cfg.ConfigDir, "convert.json"), &saved)
+	if len(saved.Queue) != 1 || saved.Queue[0].User != "anabel" {
+		t.Errorf("convert.json = %+v, want the job under anabel", saved.Queue)
+	}
+
+	if !withFFmpeg {
+		return // the rest runs the job: it needs the real tools
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { srv.convert.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	deadline := time.Now().Add(60 * time.Second)
+	for len(srv.convert.Status("anabel")) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the conversion did not finish in 60 s")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	moved := filepath.Join(srv.cfg.HomesDir, "anabel", "files", "Pelis")
+	if _, err := os.Stat(filepath.Join(moved, "prueba.mp4")); err != nil {
+		t.Fatalf("no mp4 in anabel's folder: %v", err)
+	}
+}
+
 func TestConvertibleAndTempNames(t *testing.T) {
 	for name, want := range map[string]bool{
 		"a.avi": true, "B.AVI": true, "c.mkv": true, "d.MOV": true, "e.wmv": true,

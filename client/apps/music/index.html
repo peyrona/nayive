@@ -382,6 +382,9 @@
         </div>
     </div>
 
+    <!-- NayiveUI.toast() writes here: without it every Music toast was silent. -->
+    <div id="toast" class="toast"></div>
+
 </div>
 
 <script src="../shared/media.js"></script>
@@ -421,6 +424,7 @@ var st = {
     isPlaying: false,
     shuffle: false,
     playlists: [],          // [{id, name, paths:[...]}]
+    playlistsBlocked: "",   // "unread" / "bad": the file could not be read, so it is never written
     queueWidth: 360,
     dragPayload: null       // { type:'library', song } | { type:'queue', index }
 };
@@ -1159,14 +1163,34 @@ function updateMediaSession( song )
  * PLAYLISTS - data/music/playlists.json, an array of {id, name, paths}.
  * Paths are real file paths - a real file's path is already a stable id.
  * -------------------------------------------------------------------------*/
+// Only a missing file (404) is "no lists yet". Any other failure - offline, a
+// 5xx, a file that is not a list - shows no lists but blocks every write: the
+// next "Guardar lista" would otherwise put one list over all of them.
 async function loadPlaylists()
 {
-    try { st.playlists = JSON.parse( await GumApi.readFile( PLAYLISTS_PATH ) ) || []; }
-    catch( e ) { st.playlists = []; }
+    var list;
+    try { list = await GumApi.readJson( PLAYLISTS_PATH ); }
+    catch( e )
+    {
+        st.playlists = [];
+        st.playlistsBlocked = e instanceof SyntaxError ? "bad" : "unread";
+        NayiveUI.toast( NayiveUI.t( st.playlistsBlocked === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+        return;
+    }
+    if( list !== null && ! Array.isArray( list ) )
+    {
+        st.playlists = [];
+        st.playlistsBlocked = "bad";
+        NayiveUI.toast( NayiveUI.t( 'ui.store.badFile' ) );
+        return;
+    }
+    st.playlists = list || [];
+    st.playlistsBlocked = "";
 }
 
 async function writePlaylists()
 {
+    if( st.playlistsBlocked ) throw new Error( "playlists not read" );
     await GumApi.writeFileBytes( PLAYLISTS_PATH,
         new TextEncoder().encode( JSON.stringify( st.playlists, null, 1 ) ) );
 }
@@ -1184,6 +1208,8 @@ async function confirmSave()
 {
     var name = $( "#playlistName" ).value.trim();
     if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
+    if( st.playlistsBlocked ) await loadPlaylists();     // try again; it says why if it still fails
+    if( st.playlistsBlocked ) return;                    // sheet stays open, name kept
     st.playlists.push( { id: "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) } );
     NayiveUI.setOpen( "saveBackdrop", false );
     try { await writePlaylists(); NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); }

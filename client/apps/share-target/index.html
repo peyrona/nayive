@@ -157,8 +157,9 @@ async function readInbox()
 
     for( let i = 0; i < n; i++ )
     {
-        const res = await cache.match( new URL( "inbox/" + i, location.href ).toString() );
-        if( ! res ) continue;
+        const key = new URL( "inbox/" + i, location.href ).toString();
+        const res = await cache.match( key );
+        if( ! res ) continue;               // uploaded already, by an earlier try (see upload)
         const blob = await res.blob();
         let name = ( manifest.names && manifest.names[ i ] ) || "";
         if( ! name )
@@ -166,9 +167,34 @@ async function readInbox()
             const h = res.headers.get( "X-File-Name" );
             name = h ? decodeURIComponent( h ) : ( "foto-" + ( i + 1 ) + ".jpg" );
         }
-        out.push( { name: name, blob: blob } );
+        out.push( { name: name, blob: blob, key: key } );
     }
     return out;
+}
+
+// One photo is saved: out of the inbox now, so a retry (or a page closed half
+// way) never uploads it twice. The manifest stays: readInbox skips the gap.
+async function dropFromInbox( it )
+{
+    try { await ( await caches.open( INBOX ) ).delete( it.key ); }
+    catch ( _ ) {}
+}
+
+// Photos left after a failed upload are KEPT on purpose: the service worker
+// adds the next share after them instead of clearing the inbox (sw.js
+// handleShare). A share merely left open is not kept.
+async function markKept()
+{
+    try
+    {
+        const cache = await caches.open( INBOX );
+        const key   = new URL( "inbox/manifest.json", location.href ).toString();
+        const res   = await cache.match( key );
+        const m     = res ? await res.json() : { count: 0, names: [] };
+        m.kept = true;
+        await cache.put( key, new Response( JSON.stringify( m ), { headers: { "Content-Type": "application/json" } } ) );
+    }
+    catch ( _ ) {}
 }
 
 async function clearInbox()
@@ -242,10 +268,14 @@ async function upload()
     }
     catch ( _ ) {}
 
-    let done = 0;
+    let done  = 0;
+    let quota = false;       // a 507: nothing after it fits either
+    const failed = [];       // [{ it, why }] - they stay in the inbox, to try again
     for( let i = 0; i < ITEMS.length; i++ )
     {
         const it    = ITEMS[ i ];
+        if( quota ) { failed.push( { it: it, why: "" } ); continue; }
+
         const ready = await NayivePhoto.prepare(
                           it.blob && ! it.blob.name ? new File( [ it.blob ], it.name || "foto.jpg",
                                                                 { type: it.blob.type } )
@@ -260,18 +290,40 @@ async function upload()
             const bytes = new Uint8Array( await ready.blob.arrayBuffer() );
             await GumApi.writeFileBytes( DEST + "/" + name, bytes );
             done++;
+            await dropFromInbox( it );
         }
         catch ( err )
         {
             const msg = String( err && err.message || err );
             if( msg.indexOf( "401" ) !== -1 ) { GumApi.loginRedirect(); return; }
-            if( msg.indexOf( "507" ) !== -1 )
-            {
-                NayiveUI.toast( NayiveUI.t( 'ui.quotaExceeded' ) );
-                break;
-            }
+            if( msg.indexOf( "507" ) !== -1 ) quota = true;
+            failed.push( { it: it, why: quota ? "" : err && err.status ? "HTTP " + err.status : NayiveUI.t( 'st.noConnection' ) } );
         }
         $( "#barFill" ).style.width = Math.round( ( ( i + 1 ) / ITEMS.length ) * 100 ) + "%";
+    }
+
+    // What did not get saved stays in the inbox and on screen, named, to try
+    // again (or Cancel): never cleared as if it had been uploaded.
+    if( failed.length )
+    {
+        if( done ) NayiveUI.toast( NayiveUI.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
+
+        ITEMS = failed.map( f => f.it );
+        await markKept();
+        renderStrip();
+        $( "#bar" ).hidden = true;
+        $( "#barFill" ).style.width = "0";
+        $( "#cancelBtn" ).disabled = false;
+        $( "#changeDest" ).disabled = false;
+        setDest( DEST );
+
+        NayiveUI.alert( {
+            title: NayiveUI.tf( 'st.notUploaded', { n: failed.length } ),
+            body:  ( quota ? NayiveUI.t( 'ui.quotaExceeded' ) + "\n\n" : "" ) +
+                   failed.map( f => f.it.name + ( f.why ? " (" + f.why + ")" : "" ) ).join( "\n" ) +
+                   "\n\n" + NayiveUI.t( 'st.keptToRetry' )
+        } );
+        return;
     }
 
     await clearInbox();

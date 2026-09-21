@@ -32,6 +32,14 @@ import (
 // which is tighter; this is the backstop for an admin, who has no quota.
 const maxGzipOut = 64 << 20 // 64 MiB
 
+// emptyRefused are the kinds a 0-byte body may never replace when the file has
+// content (see streamToFile). None of them is ever legitimately empty: docx and
+// xlsx are zips, and the apps never write an empty .ics, .json or .vcf -
+// Contacts' empty list is still "\r\n".
+var emptyRefused = map[string]bool{
+	".docx": true, ".xlsx": true, ".ics": true, ".json": true, ".vcf": true,
+}
+
 // errTooBig is the sentinel a capped writer returns past its ceiling.
 //
 // java: a package-level error value compared with errors.Is is the Go way to
@@ -152,20 +160,13 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	target Resolved, budget int64) (int64, error) {
 
-	// NO Content-Length at all -> refuse, do not treat it as "zero bytes".
+	// A body that cannot be sized -> 411.
 	//
-	// By the letter of HTTP a missing length with no Transfer-Encoding does mean
-	// an empty body, but taking it literally silently REPLACED the target with a
-	// 0-byte file and answered "200 saved". The realistic way in is an app
-	// calling writeFileBytes(path, undefined) after a failed read: fetch then
-	// sends no body and no length, and tasks.json / calendar.ics / contacts.vcf
-	// are whole-document single files, so that one request wipes the app. A loud
-	// 411 makes the client bug obvious.
-	//
-	// java: r.ContentLength is -1 for both "absent" and "chunked". Go de-chunks
-	// a chunked body correctly - the request-smuggling hazard the Python guards
-	// against does not exist here - but a chunked PUT still cannot be sized, so
-	// the same 411 is the right answer and the two servers agree.
+	// java: r.ContentLength is -1 only for a CHUNKED body (refuseChunked answers
+	// those first). A request with NO Content-Length at all arrives here as 0,
+	// exactly like "Content-Length: 0" - by the letter of HTTP both mean an
+	// empty body - so this check does not see them. The 0-byte guard after the
+	// copy below is what keeps an empty body off a document.
 	if r.ContentLength < 0 {
 		w.Header().Set("Connection", "close")
 		sendError(w, r, http.StatusLengthRequired, "falta Content-Length")
@@ -265,6 +266,22 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		s.log.Warn("upload aborted", "path", target.Abs, "got", written, "want", r.ContentLength)
 		sendError(w, r, http.StatusBadRequest, "subida incompleta (conexión interrumpida)")
 		return 0, errors.New("short body")
+	}
+
+	// ZERO BYTES NEVER REPLACE A DOCUMENT. The realistic way in is an app that
+	// lost what it read - writeFileBytes(path, undefined): fetch then sends no
+	// body and no length - and tasks.json / calendar.ics / contacts.vcf are
+	// whole-document single files, so that one request wipes the app. Counted
+	// AFTER the copy, so a gzipped body is judged by what it inflated to (an
+	// empty gzip stream is ~20 bytes on the wire). 409, not 400: store.js drops
+	// a 409 for good instead of re-sending it forever. Plain text may still be
+	// emptied on purpose, and a new or already-empty document may start empty.
+	if written == 0 && emptyRefused[strings.ToLower(filepath.Ext(target.Rel))] {
+		if info, err := target.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			s.log.Warn("0-byte PUT over a document refused", "path", target.Abs, "size", info.Size())
+			sendError(w, r, http.StatusConflict, "cuerpo vacío: el documento no se cambia")
+			return 0, errors.New("empty body over a document")
+		}
 	}
 
 	if err := tmp.Chmod(0o644); err != nil {

@@ -9,7 +9,7 @@
 import
 {
     read, write, createWorkbook, appendSheet, decodeRange, encodeRange, encodeCell,
-    decodeCell
+    decodeCell, decodeCol, encodeCol
 }
 from './lib/xlsx-format_v2.4.1.js';
 import
@@ -70,7 +70,70 @@ function detectLossy( wb )
 
     if( sheetXml.indexOf( '<sheetProtection' ) !== -1 ) lossy.push( 'calc.lossyProtection' );
 
+    // The next four the library can neither read nor write (theme-coloured
+    // fills, the sheet's default column width, the height of an empty row
+    // and a note's author ARE carried, see readStyleParts and friends).
+    // Each counts only when it would change what the user sees or prints:
+    // LibreOffice writes a default page set-up, <strike val="0"/> and
+    // one-colour "rich" text into ordinary files, and a warning for those
+    // would train him to click through the dialog.
+    const styles = zip.files[ 'xl/styles.xml' ] ? dec.decode( zip.files[ 'xl/styles.xml' ] ) : '';
+    const sst    = zip.files[ 'xl/sharedStrings.xml' ] ? dec.decode( zip.files[ 'xl/sharedStrings.xml' ] ) : '';
+
+    if( hasRichText( sst ) ) lossy.push( 'calc.lossyRich' );
+
+    const fonts = /<(?:\w+:)?fonts\b[^>]*>([\s\S]*?)<\/(?:\w+:)?fonts>/.exec( styles );
+    if( fonts && isOn( fonts[ 1 ], 'strike' ) ) lossy.push( 'calc.lossyStrike' );
+
+    // Only thin and medium lines are written; the rest become the nearest.
+    const borders = /<(?:\w+:)?borders\b[^>]*>([\s\S]*?)<\/(?:\w+:)?borders>/.exec( styles );
+    if( borders && /\bstyle="(?!thin"|medium"|none")\w+"/.test( borders[ 1 ] ) ) lossy.push( 'calc.lossyBorders' );
+
+    if( /<(?:\w+:)?pageSetup\b[^>]*\borientation="landscape"/.test( sheetXml )                               ||
+        /<(?:\w+:)?pageSetup\b[^>]*\bscale="(?!100")\d+"/.test( sheetXml )                                   ||
+        /<(?:\w+:)?pageSetUpPr\b[^>]*\bfitToPage="(?:1|true)"/.test( sheetXml )                              ||
+        /<(?:\w+:)?printOptions\b[^>]*\b(?:gridLines|headings|horizontalCentered|verticalCentered)="(?:1|true)"/.test( sheetXml ) ||
+        /<(?:\w+:)?(?:odd|even|first)(?:Header|Footer)>[^<]/.test( sheetXml )                                ||
+        /<(?:\w+:)?(?:rowBreaks|colBreaks)\b[^>]*>\s*<(?:\w+:)?brk\b/.test( sheetXml ) )
+        lossy.push( 'calc.lossyPage' );
+
     return lossy;
+}
+
+// Is <tag> (b, strike, …) present and switched on anywhere in `xml`?
+// <b/> and <b val="1"/> are on; <b val="0"/> is off.
+function isOn( xml, tag )
+{
+    const re = new RegExp( '<(?:\\w+:)?' + tag + '\\b([^>]*?)\\/?>', 'g' );
+    let m;
+    while( ( m = re.exec( xml ) ) !== null )
+        if( ! /\bval="(?:0|false|none|baseline)"/.test( m[ 1 ] ) ) return true;
+    return false;
+}
+
+// Text in one cell with more than one look - a red word, a bold one - which
+// the model keeps as plain text. Runs that differ in nothing a reader would
+// see (a font name, an explicit black) do not count.
+function hasRichText( sst )
+{
+    return ( sst.match( /<(?:\w+:)?si>[\s\S]*?<\/(?:\w+:)?si>/g ) || [] ).some( function( si )
+    {
+        if( ! /<(?:\w+:)?r>/.test( si ) ) return false;
+
+        const sizes = new Set();
+        const loud  = ( si.match( /<(?:\w+:)?rPr>[\s\S]*?<\/(?:\w+:)?rPr>/g ) || [] ).some( function( p )
+        {
+            const sz = /<(?:\w+:)?sz\b[^>]*\bval="([\d.]+)"/.exec( p );
+            if( sz ) sizes.add( sz[ 1 ] );
+
+            const cl = /<(?:\w+:)?color\b[^>]*>/.exec( p );
+            const plainColor = ! cl || /\brgb="(?:[0-9A-Fa-f]{2})?000000"|\btheme="1"|\bindexed="(?:8|64)"|\bauto="(?:1|true)"/.test( cl[ 0 ] );
+
+            return ! plainColor || [ 'b', 'i', 'u', 'strike', 'vertAlign' ].some( function( t ) { return isOn( p, t ); } );
+        });
+
+        return loud || sizes.size > 1;
+    });
 }
 
 // Excel and the grid measure the same things in different units, so every
@@ -127,6 +190,8 @@ function decodeXmlText( t )
 {
     return String( t ).replace( /&lt;/g, '<' ).replace( /&gt;/g, '>' )
                       .replace( /&quot;/g, '"' ).replace( /&apos;/g, "'" )
+                      .replace( /&#x([0-9a-fA-F]+);/g, function( _, h ) { return String.fromCodePoint( parseInt( h, 16 ) ); } )
+                      .replace( /&#(\d+);/g,           function( _, d ) { return String.fromCodePoint( parseInt( d, 10 ) ); } )
                       .replace( /&amp;/g, '&' );
 }
 
@@ -209,8 +274,377 @@ function captureRawSheet( zip, partPath )
     return ( raw.cf || raw.dv || raw.refs.length ) ? raw : null;
 }
 
+// A formula moved by ( dr, dc ) cells, the way a copy moves it: every
+// relative reference shifts, every $-anchored part stays put. Text in
+// quotes, quoted sheet names and [table] references are passed over, and
+// a name that only looks like a reference (LOG10( , a sheet called AB1!)
+// is told apart by what touches it on either side.
+const REF_AT = /(\$?)([A-Z]{1,3})(\$?)(\d{1,7})(?![A-Za-z0-9_(!.])|(\$?)([A-Z]{1,3}):(\$?)([A-Z]{1,3})(?![A-Za-z0-9_(!.])|(\$?)(\d{1,7}):(\$?)(\d{1,7})(?![A-Za-z0-9_(!.])/y;
+
+function shiftFormula( f, dr, dc )
+{
+    if( ! dr && ! dc ) return f;
+
+    // null = not a reference after all (past XFD / row 1048576), '' = moved off the sheet
+    const col = function( abs, letters )
+    {
+        const c = decodeCol( letters );
+        if( c > 16383 ) return null;
+        const to = c + ( abs ? 0 : dc );
+        return ( to < 0 || to > 16383 ) ? '' : abs + encodeCol( to );
+    };
+    const row = function( abs, digits )
+    {
+        const r = parseInt( digits, 10 );
+        if( r < 1 || r > 1048576 ) return null;
+        const to = r + ( abs ? 0 : dr );
+        return ( to < 1 || to > 1048576 ) ? '' : abs + to;
+    };
+
+    let out = '';
+    let i   = 0;
+
+    while( i < f.length )
+    {
+        const ch = f.charAt( i );
+
+        if( ch === '"' || ch === "'" )
+        {
+            let j = i + 1;
+            for( ; j < f.length; j++ )
+            {
+                if( f.charAt( j ) !== ch ) continue;
+                if( f.charAt( j + 1 ) === ch ) { j++; continue; }     // "" / '' inside
+                break;
+            }
+            out += f.slice( i, j + 1 );
+            i = j + 1;
+            continue;
+        }
+
+        if( ch === '[' )
+        {
+            let depth = 0;
+            let j     = i;
+            for( ; j < f.length; j++ )
+            {
+                if( f.charAt( j ) === '[' ) depth++;
+                else if( f.charAt( j ) === ']' && --depth === 0 ) break;
+            }
+            out += f.slice( i, j + 1 );
+            i = j + 1;
+            continue;
+        }
+
+        REF_AT.lastIndex = i;
+        const m = /[A-Za-z0-9_.]/.test( f.charAt( i - 1 ) ) ? null : REF_AT.exec( f );
+
+        let a = null, b = null;
+        if( m && m[ 2 ] !== undefined ) { a = col( m[ 1 ], m[ 2 ] );  b = row( m[ 3 ], m[ 4 ] ); }
+        else if( m && m[ 6 ] !== undefined ) { a = col( m[ 5 ], m[ 6 ] );  b = col( m[ 7 ], m[ 8 ] ); }
+        else if( m ) { a = row( m[ 9 ], m[ 10 ] ); b = row( m[ 11 ], m[ 12 ] ); }
+
+        if( a === null || b === null ) { out += ch; i++; continue; }
+
+        if( a === '' || b === '' ) out += '#REF!';
+        else out += ( m[ 2 ] !== undefined ) ? a + b : a + ':' + b;
+        i = REF_AT.lastIndex;
+    }
+
+    return out;
+}
+
+// What the library's parse leaves out of the cells, read straight from the
+// sheet's XML: each cell's style number (for the style parts the library
+// cannot read, see readStyleParts), the text of a t="d" date, the
+// formulas of a shared-formula group, and the sheet's default column width.
+//
+// A shared formula is written ONCE, on the first cell of its group
+// (<f t="shared" ref="D6:D19" si="0">E6/C6</f>); every other cell of the
+// group carries only <f t="shared" si="0"/>, and the library read those
+// as plain values - the first save froze them (79 formulas became 5 in one
+// of his files). Each is rebuilt here from the group's formula, moved by
+// the distance between the two cells, the way Excel expands the group.
+function scanSheetXml( zip, partPath )
+{
+    const out = { xf: {}, dates: {}, shared: {}, rows: [], hiddenRows: [], hiddenCols: [], colWidth: null, rowHeight: null };
+    if( ! zip || ! zip.files || ! partPath || ! zip.files[ partPath ] ) return out;
+
+    const xml = new TextDecoder().decode( zip.files[ partPath ] );
+
+    // Whether the part holds any cell at all (see the unread check in decodeToDoc).
+    out.cells = /<(?:\w+:)?c\b[^>]*\br=["'][A-Z]+\d+["']/.test( xml );
+
+    // A column with no width of its own is drawn at the sheet's default,
+    // which the writer does not carry: each such column gets it as its own
+    // width instead. Given only a base width, Excel pads it by 5 pixels and
+    // rounds up to a multiple of 8 (a base of 8 is Excel's own default).
+    const fmt = /<(?:\w+:)?sheetFormatPr\b[^>]*>/.exec( xml );
+    if( fmt )
+    {
+        const dw = /\bdefaultColWidth="([\d.]+)"/.exec( fmt[ 0 ] );
+        const bw = /\bbaseColWidth="(\d+)"/.exec( fmt[ 0 ] );
+        if( dw && parseFloat( dw[ 1 ] ) > 0 ) out.colWidth = parseFloat( dw[ 1 ] );
+        else if( bw && +bw[ 1 ] !== 8 )       out.colWidth = Math.floor( Math.ceil( ( +bw[ 1 ] * 7 + 5 ) / 8 ) * 8 / 7 * 256 ) / 256;
+
+        // The default row height the same way, but only when it was fixed on
+        // purpose (customHeight="1"): the writer always puts out 15 points, so
+        // such a sheet at 15.75 had every row without a height of its own
+        // shrink. Each such row takes the file's figure instead - written as a
+        // custom height, which is what it was. A default that is not custom
+        // is left alone: Excel and LibreOffice size those rows themselves, and
+        // a custom height on each would stop wrapped rows from growing.
+        const dh = /\bdefaultRowHeight="([\d.]+)"/.exec( fmt[ 0 ] );
+        const ch = /\bcustomHeight="(?:1|true)"/.test( fmt[ 0 ] );
+        if( ch && dh && parseFloat( dh[ 1 ] ) > 0 && parseFloat( dh[ 1 ] ) !== 15 ) out.rowHeight = parseFloat( dh[ 1 ] );
+    }
+
+    const sd = /<(?:\w+:)?sheetData\b[^>]*>([\s\S]*?)<\/(?:\w+:)?sheetData>/.exec( xml );
+    if( ! sd ) return out;
+
+    // Row heights and hidden rows, read here as well: the library reads one
+    // <row> tag per </row>, so the row right after an empty one
+    // (<row r="13" … />) lost its height; and it knows hidden="1" but not
+    // LibreOffice's hidden="true" (1,300 filtered-out rows of one of his
+    // files came back visible). Hidden columns likewise.
+    sd[ 1 ].replace( /<(?:\w+:)?row\b([^>]*)>/g, function( tag, attrs )
+    {
+        const r  = /\br=["'](\d+)["']/.exec( attrs );
+        const ht = /\bht=["']([\d.]+)["']/.exec( attrs );
+        if( r && ht ) out.rows[ +r[ 1 ] - 1 ] = parseFloat( ht[ 1 ] );
+        if( r && /\bhidden=["'](?:1|true)["']/.test( attrs ) ) out.hiddenRows.push( +r[ 1 ] - 1 );
+        return tag;
+    } );
+    ( xml.match( /<(?:\w+:)?col\b[^>]*>/g ) || [] ).forEach( function( tag )
+    {
+        const min = /\bmin=["'](\d+)["']/.exec( tag ), max = /\bmax=["'](\d+)["']/.exec( tag );
+        if( ! min || ! max || ! /\bhidden=["'](?:1|true)["']/.test( tag ) ) return;
+        for( let c = +min[ 1 ] - 1; c < Math.min( +max[ 1 ], 16384 ); c++ ) out.hiddenCols.push( c );
+    });
+
+    const groups  = {};    // si -> the group's formula and the cell it is written on
+    const members = [];    // [ address, si ] of the cells that only point at a group
+
+    const re = /<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g;
+    let m;
+    while( ( m = re.exec( sd[ 1 ] ) ) !== null )
+    {
+        const ref = /\br=["']([A-Z]+\d+)["']/.exec( m[ 1 ] );
+        if( ! ref ) continue;
+
+        const addr = ref[ 1 ];
+        const s    = /\bs=["'](\d+)["']/.exec( m[ 1 ] );
+        if( s ) out.xf[ addr ] = +s[ 1 ];
+
+        const body = m[ 2 ];
+        if( ! body ) continue;
+
+        if( /\bt=["']d["']/.test( m[ 1 ] ) )
+        {
+            const v = /<(?:\w+:)?v>([^<]*)<\/(?:\w+:)?v>/.exec( body );
+            if( v ) out.dates[ addr ] = v[ 1 ];
+        }
+
+        const f = /<(?:\w+:)?f\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?f>)/.exec( body );
+        if( ! f || ! /\bt=["']shared["']/.test( f[ 1 ] ) ) continue;
+
+        const si = /\bsi=["'](\d+)["']/.exec( f[ 1 ] );
+        if( ! si ) continue;
+
+        if( f[ 2 ] ) groups[ si[ 1 ] ] = { f: decodeXmlText( f[ 2 ] ), at: decodeCell( addr ) };
+        else         members.push( [ addr, si[ 1 ] ] );
+    }
+
+    members.forEach( function( mb )
+    {
+        const g = groups[ mb[ 1 ] ];
+        if( ! g ) return;
+
+        const at = decodeCell( mb[ 0 ] );
+        out.shared[ mb[ 0 ] ] = shiftFormula( g.f, at.r - g.at.r, at.c - g.at.c );
+    });
+
+    return out;
+}
+
+// Excel's legacy palette, for a colour given as indexed="n" (64 and 65 are
+// the system's own "automatic" colours: no colour at all).
+const INDEXED_COLORS = (
+    '000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF ' +
+    '000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF ' +
+    '800000 008000 000080 808000 800080 008080 C0C0C0 808080 ' +
+    '9999FF 993366 FFFFCC CCFFFF 660066 FF8080 0066CC CCCCFF ' +
+    '000080 FF00FF FFFF00 00FFFF 800080 800000 008080 0000FF ' +
+    '00CCFF CCFFFF CCFFCC FFFF99 99CCFF FF99CC CC99FF FFCC99 ' +
+    '3366FF 33CCCC 99CC00 FFCC00 FF9900 FF6600 666699 969696 ' +
+    '003366 339966 003300 333300 993300 993366 333399 333333' ).split( ' ' );
+
+// A theme colour's tint: lighter ( > 0 ) or darker ( < 0 ) by moving its
+// luminance, Excel's own rule (ECMA-376, CT_Color/@tint).
+function applyTint( hex, tint )
+{
+    let r = parseInt( hex.slice( 0, 2 ), 16 ) / 255;
+    let g = parseInt( hex.slice( 2, 4 ), 16 ) / 255;
+    let b = parseInt( hex.slice( 4, 6 ), 16 ) / 255;
+
+    const max = Math.max( r, g, b ), min = Math.min( r, g, b );
+    let h = 0, s = 0, l = ( max + min ) / 2;
+    if( max !== min )
+    {
+        const d = max - min;
+        s = ( l > 0.5 ) ? d / ( 2 - max - min ) : d / ( max + min );
+        h = ( max === r ) ? ( g - b ) / d + ( g < b ? 6 : 0 ) : ( max === g ) ? ( b - r ) / d + 2 : ( r - g ) / d + 4;
+        h /= 6;
+    }
+
+    l = ( tint < 0 ) ? l * ( 1 + tint ) : l * ( 1 - tint ) + tint;
+
+    const hue = function( p, q, t )
+    {
+        if( t < 0 ) t += 1;
+        if( t > 1 ) t -= 1;
+        if( t < 1 / 6 ) return p + ( q - p ) * 6 * t;
+        if( t < 1 / 2 ) return q;
+        if( t < 2 / 3 ) return p + ( q - p ) * ( 2 / 3 - t ) * 6;
+        return p;
+    };
+
+    if( s === 0 ) r = g = b = l;
+    else
+    {
+        const q = ( l < 0.5 ) ? l * ( 1 + s ) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue( p, q, h + 1 / 3 );
+        g = hue( p, q, h );
+        b = hue( p, q, h - 1 / 3 );
+    }
+
+    return [ r, g, b ].map( function( v ) { return ( '0' + Math.round( v * 255 ).toString( 16 ) ).slice( -2 ); } ).join( '' ).toUpperCase();
+}
+
+// The parts of styles.xml the library reads only halfway, one entry per cell
+// format (the s= of a cell): a fill given as a theme colour with its tint or
+// as a palette number (the library keeps RGB fills only, so those cells lost
+// their colour), every border side with its own line and colour (the
+// library drops any line but thin/medium, and every colour but RGB), and
+// wrapText="true" (it only knows "1"). Colours come out as RGB, the only
+// kind Calc's model holds.
+function readStyleParts( zip )
+{
+    if( ! zip || ! zip.files || ! zip.files[ 'xl/styles.xml' ] ) return null;
+
+    const dec = new TextDecoder();
+    const xml = dec.decode( zip.files[ 'xl/styles.xml' ] );
+
+    const block = function( tag )
+    {
+        const m = new RegExp( '<(?:\\w+:)?' + tag + '\\b[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?' + tag + '>' ).exec( xml );
+        return m ? m[ 1 ] : '';
+    };
+    const items = function( body, tag )
+    {
+        return body.match( new RegExp( '<(?:\\w+:)?' + tag + '\\b[^>]*?(?:\\/>|>[\\s\\S]*?<\\/(?:\\w+:)?' + tag + '>)', 'g' ) ) || [];
+    };
+
+    // A file may bring its own palette; the theme's colours sit in
+    // theme1.xml in the order dk1 lt1 dk2 lt2 …, but theme="0" means lt1.
+    const own     = ( block( 'indexedColors' ).match( /\brgb="[0-9A-Fa-f]{6,8}"/g ) || [] ).map( function( a ) { return a.slice( -7, -1 ); } );
+    const indexed = own.length ? own : INDEXED_COLORS;
+
+    const tp = zip.files[ 'xl/theme/theme1.xml' ] ? 'xl/theme/theme1.xml'
+             : Object.keys( zip.files ).filter( function( n ) { return /^xl\/theme\/[^/]+\.xml$/.test( n ); } )[ 0 ];
+    const scheme = {};
+    if( tp ) dec.decode( zip.files[ tp ] ).replace( /<(?:\w+:)?(dk1|lt1|dk2|lt2|accent[1-6]|hlink|folHlink)>([\s\S]*?)<\/(?:\w+:)?\1>/g, function( all, name, body )
+    {
+        const c = /\blastClr="([0-9A-Fa-f]{6})"/.exec( body ) || /<(?:\w+:)?srgbClr\b[^>]*\bval="([0-9A-Fa-f]{6})"/.exec( body );
+        const hex = c ? c[ 1 ] : /\bval="window"/.test( body ) ? 'FFFFFF' : /\bval="windowText"/.test( body ) ? '000000' : null;
+        if( hex && ! scheme[ name ] ) scheme[ name ] = hex.toUpperCase();
+        return all;
+    } );
+    const theme = [ 'lt1', 'dk1', 'lt2', 'dk2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink' ]
+                  .map( function( k ) { return scheme[ k ] || null; } );
+
+    const colorOf = function( tag )
+    {
+        const at = function( n ) { const m = new RegExp( '\\b' + n + '="([^"]*)"' ).exec( tag ); return m ? m[ 1 ] : null; };
+
+        let hex = null;
+        if( at( 'rgb' ) )                   hex = at( 'rgb' ).slice( -6 );
+        else if( at( 'theme' ) !== null )   hex = theme[ +at( 'theme' ) ];
+        else if( at( 'indexed' ) !== null ) hex = indexed[ +at( 'indexed' ) ];
+        if( ! hex || ! /^[0-9A-Fa-f]{6}$/.test( hex ) ) return null;
+
+        const tint = parseFloat( at( 'tint' ) || '0' );
+        return tint ? applyTint( hex.toUpperCase(), tint ) : hex.toUpperCase();
+    };
+
+    const fills = items( block( 'fills' ), 'fill' ).map( function( fx )
+    {
+        if( ! /\bpatternType="solid"/.test( fx ) ) return null;
+        const fg = /<(?:\w+:)?fgColor\b[^>]*>/.exec( fx );
+        return fg ? colorOf( fg[ 0 ] ) : null;
+    });
+
+    const SIDE_TAGS = { top: 'top', right: 'right|end', bottom: 'bottom', left: 'left|start' };
+    const borders = items( block( 'borders' ), 'border' ).map( function( bx )
+    {
+        const b = {};
+        Object.keys( SIDE_TAGS ).forEach( function( side )
+        {
+            const t = SIDE_TAGS[ side ];
+            const m = new RegExp( '<(?:\\w+:)?(?:' + t + ')\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/(?:\\w+:)?(?:' + t + ')>)' ).exec( bx );
+            if( ! m ) return;
+
+            const st = /\bstyle="(\w+)"/.exec( m[ 1 ] );
+            if( ! st || st[ 1 ] === 'none' ) return;
+
+            const cl  = m[ 2 ] && /<(?:\w+:)?color\b[^>]*>/.exec( m[ 2 ] );
+            const hex = cl ? colorOf( cl[ 0 ] ) : null;
+            b[ side ] = hex ? { style: st[ 1 ], color: hex } : { style: st[ 1 ] };
+        });
+        return Object.keys( b ).length ? b : null;
+    });
+
+    const xfs = items( block( 'cellXfs' ), 'xf' ).map( function( x )
+    {
+        const id = function( n ) { const m = new RegExp( '\\b' + n + '="(\\d+)"' ).exec( x ); return m ? +m[ 1 ] : 0; };
+        return { fill: fills[ id( 'fillId' ) ] || null, border: borders[ id( 'borderId' ) ] || null,
+                 wrap: /\bwrapText="(?:1|true)"/.test( x ) };
+    });
+
+    return { xfs: xfs };
+}
+
+// Excel's error values: a cell holding one is an error, not text, both
+// ways - read as its text ("#N/A", the number behind it used to come out
+// as 0) and written back as t="e".
+const EXCEL_ERRORS = [ '#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A', '#GETTING_DATA' ];
+
+// Serial day numbers, the way Excel stores a date. Day 0 is 1899-12-30 in
+// the 1900 system (Excel counts a 29 Feb 1900 that never was, so from March
+// 1900 on this lands right) and 1904-01-01 in the 1904 one.
+function serialFromParts( y, mo, d, h, mi, s, date1904 )
+{
+    let n = ( Date.UTC( y, mo - 1, d, h || 0, mi || 0, s || 0 ) - Date.UTC( 1899, 11, 30 ) ) / 86400000;
+    if( date1904 )  n -= 1462;
+    else if( n < 61 ) n -= 1;          // before the phantom 29 Feb 1900
+    return n;
+}
+
+// The text of a t="d" cell, an ISO 8601 date and maybe a time, as a serial.
+// Read off the digits, not through Date: "2024-01-15" parses as UTC and
+// "2024-01-15T10:00" as local time, and Excel means neither.
+function isoToSerial( text, date1904 )
+{
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec( String( text || '' ).trim() );
+    if( ! m ) return null;
+    return serialFromParts( +m[ 1 ], +m[ 2 ], +m[ 3 ], +( m[ 4 ] || 0 ), +( m[ 5 ] || 0 ), +( m[ 6 ] || 0 ), date1904 );
+}
+
 // Turn one parsed worksheet into a sheet entry (see THE OPEN WORKBOOK).
-function worksheetToSheet( ws, name )
+// `scan` is what scanSheetXml read off the sheet's own XML, `parts` the
+// file's readStyleParts; both may be missing (a .csv, a sheet with no part).
+function worksheetToSheet( ws, name, scan, parts, date1904 )
 {
     const sh    = newSheet( name );
     const range = ws[ '!ref' ] ? decodeRange( ws[ '!ref' ] ) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
@@ -236,15 +670,42 @@ function worksheetToSheet( ws, name )
         {
             const addr = encodeCell( { r: r, c: c } );
             const cell = ws[ addr ];
+            const xfN  = scan ? scan.xf[ addr ] : undefined;
 
-            row.push( cellToValue( cell ) );
+            // A cell of a shared-formula group gets its own formula back.
+            const value = ( scan && scan.shared[ addr ] ) ? '=' + scan.shared[ addr ]
+                                                          : cellToValue( cell, scan && scan.dates[ addr ], date1904 );
+            row.push( value );
 
-            const style = xlsxStyleToObj( cell && cell.s );
-            if( style ) sh.cellStyles[ addr ] = style;
+            let style = xlsxStyleToObj( cell && cell.s, ( parts && xfN > 0 ) ? parts.xfs[ xfN ] : null );
+
+            // A t="d" date is a serial number now; with no number format of
+            // its own it would show as one.
+            if( cell && cell.t === 'd' && typeof value === 'number' && ( ! style || ! style.numFmt || style.numFmt === 'General' ) )
+            {
+                style = style || {};
+                style.numFmt = ( value % 1 ) ? 'yyyy-mm-dd hh:mm' : 'yyyy-mm-dd';
+            }
+
+            // An empty cell (a stub, see decodeToDoc) keeps its look only when
+            // there is something to see - a fill or a box. The rest (a font,
+            // a number format waiting for a value) would only swell the file:
+            // one of his sheets has 28,000 such cells.
+            const bare = ! cell || cell.t === 'z';
+            if( style && ( ! bare || style.bg || style.border ) ) sh.cellStyles[ addr ] = style;
 
             // A note and a link are cell facts the grid can show, so they
             // belong on the sheet entry like everything else.
-            if( cell && cell.c && cell.c.length ) sh.comments[ addr ] = cell.c.map( function( n ) { return n.t || ''; } ).join( '\n' ).trim();
+            if( cell && cell.c && cell.c.length )
+            {
+                const text = cell.c.map( function( n ) { return n.t || ''; } ).join( '\n' ).trim();
+                sh.comments[ addr ] = text;
+
+                // Who wrote it, kept by the note's text so it follows the note
+                // wherever a sort or an insert moves it. A note edited here,
+                // or a new one, is Calc's (see sheetToWorksheet).
+                if( cell.c[ 0 ].a ) ( sh.noteAuthors || ( sh.noteAuthors = {} ) )[ text ] = cell.c[ 0 ].a;
+            }
             if( cell && cell.l && cell.l.Target ) sh.links[ addr ] = { target: cell.l.Target, tooltip: cell.l.Tooltip || '' };
         }
 
@@ -264,12 +725,48 @@ function worksheetToSheet( ws, name )
         if( col.hidden ) sh.hiddenCols.push( i );
     });
 
+    // The sheet's default width, on every column of the used range that has
+    // none of its own (see scanSheetXml): it goes back out as theirs.
+    if( scan && scan.colWidth )
+    {
+        for( let c = 0; c <= endCol; c++ )
+        {
+            if( sh.colsSrc[ c ] != null ) continue;
+            sh.cols[ c ]    = colCharsToPx( scan.colWidth );
+            sh.colsSrc[ c ] = scan.colWidth;
+        }
+    }
+
     ( ws[ '!rows' ] || [] ).forEach( function( row, r )
     {
         if( ! row ) return;
         if( row.hpt    ) { sh.rows[ r ] = rowPtToPx( row.hpt ); sh.rowsSrc[ r ] = row.hpt; }
         if( row.hidden ) sh.hiddenRows.push( r );
     });
+
+    // …and the heights and hidden rows/columns the library missed (see scanSheetXml).
+    if( scan )
+    {
+        scan.rows.forEach( function( hpt, r )
+        {
+            if( sh.rowsSrc[ r ] == null ) { sh.rows[ r ] = rowPtToPx( hpt ); sh.rowsSrc[ r ] = hpt; }
+        });
+        const hr = new Set( sh.hiddenRows ), hc = new Set( sh.hiddenCols );
+        scan.hiddenRows.forEach( function( r ) { if( ! hr.has( r ) ) { hr.add( r ); sh.hiddenRows.push( r ); } } );
+        scan.hiddenCols.forEach( function( c ) { if( ! hc.has( c ) ) { hc.add( c ); sh.hiddenCols.push( c ); } } );
+
+        // The sheet's default height, on every row of the used range that
+        // has none of its own (see scanSheetXml).
+        if( scan.rowHeight )
+        {
+            for( let r = 0; r <= endRow; r++ )
+            {
+                if( sh.rowsSrc[ r ] != null ) continue;
+                sh.rows[ r ]    = rowPtToPx( scan.rowHeight );
+                sh.rowsSrc[ r ] = scan.rowHeight;
+            }
+        }
+    }
 
     // A frozen pane is a split with state 'frozen'; xSplit/ySplit count the
     // columns/rows held still on the left/top.
@@ -289,7 +786,9 @@ function worksheetToSheet( ws, name )
 // are all in place from here on.
 async function decodeToDoc( buf, ext )
 {
-    const wb = await read( buf, { type: 'array', cellFormula: true, cellStyles: true, keepZip: true } );
+    // sheetStubs: a cell with a style and no value (a painted or boxed empty
+    // cell) is otherwise skipped by the parse, and its look lost.
+    const wb = await read( buf, { type: 'array', cellFormula: true, cellStyles: true, keepZip: true, sheetStubs: true } );
 
     const d = newDoc();
 
@@ -298,18 +797,36 @@ async function decodeToDoc( buf, ext )
 
     d.names = ( wb.Workbook && wb.Workbook.Names ) || null;
 
+    // A workbook counting its dates from 1904 (old Mac Excel) is written
+    // back so; written as 1900, every date in it moved four years.
+    d.date1904 = !! ( wb.Workbook && wb.Workbook.WBProps && wb.Workbook.WBProps.date1904 );
+
     const names = ( wb.SheetNames && wb.SheetNames.length ) ? wb.SheetNames : [ 'Hoja1' ];
     const state = ( wb.Workbook && wb.Workbook.Sheets ) || [];
 
-    const parts = sheetPartsByName( d.srcZip );
+    const parts  = sheetPartsByName( d.srcZip );
+    const styles = readStyleParts( d.srcZip );
 
     d.sheets = names.map( function( name, i )
     {
-        const sh = worksheetToSheet( wb.Sheets[ name ] || {}, name );
+        const ws   = wb.Sheets[ name ];
+        const scan = scanSheetXml( d.srcZip, parts[ name ] );
+        const sh   = worksheetToSheet( ws || {}, name, scan, styles, d.date1904 );
         sh.hidden = ( state[ i ] && state[ i ].Hidden ) || 0;
         sh.raw    = captureRawSheet( d.srcZip, parts[ name ] );
+
+        // A sheet the library could not read (a chart sheet, a part it
+        // choked on, one whose cells it could not find) opens empty - and
+        // the next save would write it empty over the real one. The loss
+        // gate asks first, and calc.js can hold the file read-only off
+        // this flag.
+        const listed = ( wb.SheetNames || [] ).indexOf( name ) !== -1;
+        const empty  = ! ws || ! Object.keys( ws ).some( function( k ) { return k.charAt( 0 ) !== '!'; } );
+        if( listed && ( ! ws || ( empty && scan.cells ) ) ) sh.unread = true;
         return sh;
     });
+
+    if( d.sheets.some( function( sh ) { return sh.unread; } ) ) d.lossy.push( 'calc.lossyUnread' );
 
     // Open on the first sheet the user can actually see.
     d.active = Math.max( 0, d.sheets.findIndex( function( sh ) { return ! sh.hidden; } ) );
@@ -379,8 +896,8 @@ function engineValues( sh )
 }
 
 // One sheet entry -> one worksheet. Reads nothing but `sh`, so the sheet
-// being written does not have to be the one on screen.
-function sheetToWorksheet( sh )
+// being written does not have to be the one on screen. `xlsx` false = a .csv.
+function sheetToWorksheet( sh, xlsx )
 {
     const aoa = sh.data || [];
     const out = sh.values || engineValues( sh ) || [];
@@ -407,6 +924,12 @@ function sheetToWorksheet( sh )
             // formula in the sheet without this.
             if( cell.f ) cacheFormulaResult( cell, out[ r ] && out[ r ][ c ] );
 
+            // No result to cache (an error, or no engine behind the sheet):
+            // the writer would put out <v>undefined</v>, a number Excel
+            // cannot read - it offers to repair the file, and a repair drops
+            // formulas. An empty text result is valid and recalculated anyway.
+            if( xlsx && cell.f && cell.v === undefined ) { cell.t = 's'; cell.v = ''; }
+
             if( style ) cell.s = style;
 
             ws[ addr ] = cell;
@@ -419,15 +942,18 @@ function sheetToWorksheet( sh )
     // A cell can hold nothing but a fill, a border or a merge anchor. The loop
     // above skips empty values, so those cells used to reach the file with no
     // style at all — the colours and boxes a user painted simply vanished.
-    Object.keys( sh.cellStyles ).forEach( function( addr )
+    // (Not in a .csv: it has no looks to keep, and every painted empty cell
+    // past the data would only add blank rows and columns to it.)
+    if( xlsx ) Object.keys( sh.cellStyles ).forEach( function( addr )
     {
         if( ws[ addr ] ) return;
 
         const style = objToXlsxStyle( sh.cellStyles[ addr ] );
         if( ! style ) return;
 
+        // t 'z': an empty cell, <c r=".." s=".."/> - not a text cell with no text.
         const rc = decodeCell( addr );
-        ws[ addr ] = { t: 's', v: '', s: style };
+        ws[ addr ] = { t: 'z', s: style };
 
         if( rc.r > maxRow ) maxRow = rc.r;
         if( rc.c > maxCol ) maxCol = rc.c;
@@ -449,9 +975,11 @@ function sheetToWorksheet( sh )
 
     // The file keeps notes as a list of [address, [note, …]] pairs, and the
     // '!legacy' flag is what makes the VML part Excel needs get written.
+    // A note keeps the author it came with (see worksheetToSheet).
     const notes = Object.keys( sh.comments ).map( function( addr )
     {
-        return [ addr, [ { t: sh.comments[ addr ], a: 'Calc' } ] ];
+        const author = ( sh.noteAuthors && sh.noteAuthors[ sh.comments[ addr ] ] ) || 'Calc';
+        return [ addr, [ { t: sh.comments[ addr ], a: author } ] ];
     });
 
     if( notes.length )
@@ -504,6 +1032,25 @@ function sheetToWorksheet( sh )
     if( cols.length ) ws[ '!cols' ] = cols;
     if( rows.length ) ws[ '!rows' ] = rows;
 
+    // A row with a height of its own (or hidden) and no cell in it: the
+    // writer puts out a <row> only around cells, so its height was lost.
+    // One empty cell in column A carries it (<c r="A5"/>, nothing more).
+    // Not in a .csv, where it would only add blank lines.
+    if( xlsx && rows.length )
+    {
+        const filled = new Set();
+        Object.keys( ws ).forEach( function( k ) { if( k.charAt( 0 ) !== '!' ) filled.add( decodeCell( k ).r ); } );
+
+        rows.forEach( function( rw, r )
+        {
+            if( filled.has( r ) ) return;
+            ws[ encodeCell( { r: r, c: 0 } ) ] = { t: 'z', z: 'General' };
+            if( r > maxRow ) maxRow = r;
+        });
+
+        ws[ '!ref' ] = encodeRange( { s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } } );
+    }
+
     const fr = sh.freeze.rows;
     const fc = sh.freeze.cols;
     if( fr || fc ) ws[ '!views' ] = [ { state: 'frozen', xSplit: fc, ySplit: fr } ];
@@ -511,6 +1058,18 @@ function sheetToWorksheet( sh )
     if( sh.autofilter ) ws[ '!autofilter' ] = sh.autofilter;
     if( sh.margins )    ws[ '!margins' ]    = sh.margins;
     if( sh.raw )        ws[ '!raw' ]        = sh.raw;
+
+    // A conditional-format rule that paints (dxfId="n") points into the
+    // <dxfs> of styles.xml, which the library rebuilds without them. It
+    // splices the source's block back in (carryDxfs) - but only while it is
+    // copying a part a sheet points at (a chart, a table). A sheet with such
+    // rules and neither left every dxfId dangling: openpyxl cannot open the
+    // file, Excel offers to repair it. Naming styles.xml as a part to keep,
+    // with no relationship type, makes the library do exactly that: no
+    // relationship is written, styles.xml is already in the output so it is
+    // not replaced, and the <dxfs> go back in, indices unchanged.
+    if( xlsx && sh.raw && /\bdxfId="/.test( sh.raw.cf ) )
+        ws[ '!raw' ] = Object.assign( {}, sh.raw, { refs: sh.raw.refs.concat( [ { target: '/xl/styles.xml' } ] ) } );
 
     // The sheet keeps the name it was opened with. createWorkbook used to be
     // handed a hard-coded 'Sheet1', so every file came back renamed.
@@ -526,15 +1085,20 @@ async function encodeFromGrid( ext )
     // rest are written straight out of the model.
     const wb = createWorkbook( null );
 
-    doc.sheets.forEach( function( sh )
+    const bookType = ( ext === 'csv' ) ? 'csv' : 'xlsx';
+
+    // A .csv holds one sheet, and it is the one on screen. The library's CSV
+    // writer takes the workbook's first sheet, so that is the only one handed
+    // to it - with every sheet in, a save from Hoja2 wrote Hoja1.
+    const sheets = ( bookType === 'csv' ) ? [ doc.sheets[ doc.active ] || doc.sheets[ 0 ] ] : doc.sheets;
+
+    sheets.forEach( function( sh )
     {
-        appendSheet( wb, sheetToWorksheet( sh ), sh.name || 'Hoja1' );
+        appendSheet( wb, sheetToWorksheet( sh, bookType === 'xlsx' ), sh.name || 'Hoja1' );
     });
 
     // A sheet hidden in the original stays hidden.
-    const sheetState = doc.sheets.map( function( sh ) { return { Hidden: sh.hidden || 0 }; } );
-
-    const bookType = ( ext === 'csv' ) ? 'csv' : 'xlsx';
+    const sheetState = sheets.map( function( sh ) { return { Hidden: sh.hidden || 0 }; } );
 
     // Named ranges are workbook-level, so they hang off the workbook, not
     // the sheet. A formula like =SUMA(Ventas) breaks without them.
@@ -554,18 +1118,45 @@ async function encodeFromGrid( ext )
     });
 
     wb.Workbook = { Sheets: sheetState };
-    if( names.length ) wb.Workbook.Names = names;
+    if( names.length )    wb.Workbook.Names   = names;
+    if( doc.date1904 )    wb.Workbook.WBProps = { date1904: true };     // see decodeToDoc
 
     return await write( wb, { type: 'array', bookType: bookType, cellStyles: true,
                               preserve: doc.srcZip } );
 }
 
-function cellToValue( cell )
+// `iso` is the cell's own text when it is a t="d" date (see scanSheetXml).
+function cellToValue( cell, iso, date1904 )
 {
     if( ! cell ) return '';
     if( cell.f ) return '=' + cell.f;
-    if( cell.t === 'd' && cell.w ) return cell.w;
-    return cell.v === undefined ? '' : cell.v;
+
+    // A date stored as a date: its serial number, like every other date in
+    // the sheet. The Date object used to reach the grid as "Thu Dec 31 …"
+    // and be saved back as that text.
+    if( cell.t === 'd' )
+    {
+        const n = isoToSerial( iso, date1904 );
+        if( n !== null ) return n;
+
+        const dt = cell.v;
+        return ( dt instanceof Date && ! isNaN( dt ) )
+             ? serialFromParts( dt.getFullYear(), dt.getMonth() + 1, dt.getDate(), dt.getHours(), dt.getMinutes(), dt.getSeconds(), date1904 )
+             : ( cell.w || '' );
+    }
+
+    // An error value keeps its text ("#N/A"); its number used to come out as 0.
+    if( cell.t === 'e' ) return cell.w || '';
+
+    const v = cell.v === undefined ? '' : cell.v;
+
+    // Text that begins with "=" is not a formula. It is escaped with an
+    // apostrophe, the grid's own way of saying so: it shows "=> total", the
+    // formula engine reads text, and valueToCell drops the apostrophe again.
+    // Unescaped, it reopened as a formula and was saved as one.
+    if( typeof v === 'string' && v.charAt( 0 ) === '=' ) return "'" + v;
+
+    return v;
 }
 
 // Put HyperFormula's answer into the cell as the cached <v>. Errors are left
@@ -593,12 +1184,25 @@ function valueToCell( raw )
     if( typeof raw === 'number'  ) return { t: 'n', v: raw };
     if( typeof raw === 'boolean' ) return { t: 'b', v: raw };
 
+    // A date handed back as a Date: its serial number, shown as a date.
+    if( raw instanceof Date && ! isNaN( raw ) )
+        return { t: 'n', z: 'yyyy-mm-dd',
+                 v: serialFromParts( raw.getFullYear(), raw.getMonth() + 1, raw.getDate(), raw.getHours(), raw.getMinutes(), raw.getSeconds(), doc.date1904 ) };
+
+    // "'=> total": text that begins with "=" (see cellToValue).
+    if( typeof raw === 'string' && raw.startsWith( "'=" ) ) return { t: 's', v: raw.slice( 1 ) };
+
+    if( typeof raw === 'string' && EXCEL_ERRORS.indexOf( raw ) !== -1 ) return { t: 'e', v: raw };
+
     return { t: 's', v: String( raw ) };
 }
 
-function xlsxStyleToObj( s )
+// `x` is the cell format's entry from readStyleParts, when the file has one:
+// it is the whole truth for the fill, the borders and wrapping.
+function xlsxStyleToObj( s, x )
 {
-    if( ! s ) return null;
+    if( ! s && ! x ) return null;
+    s = s || {};
 
     const o = {};
 
@@ -612,36 +1216,60 @@ function xlsxStyleToObj( s )
         if( s.font.color && s.font.color.rgb )  o.color      = s.font.color.rgb.slice( -6 ).toUpperCase();
     }
 
-    if( s.fill && s.fill.fgColor && s.fill.fgColor.rgb )
+    if( x ) { if( x.fill ) o.bg = x.fill; }
+    else if( s.fill && s.fill.fgColor && s.fill.fgColor.rgb )
         o.bg = s.fill.fgColor.rgb.slice( -6 ).toUpperCase();
 
     if( s.alignment && s.alignment.horizontal ) o.align  = s.alignment.horizontal;
     if( s.alignment && s.alignment.vertical )   o.valign = s.alignment.vertical;
-    if( s.alignment && s.alignment.wrapText )   o.wrap   = true;
+    if( ( s.alignment && s.alignment.wrapText ) || ( x && x.wrap ) ) o.wrap = true;
 
     if( s.numFmt ) o.numFmt = s.numFmt;
 
-    // Border round-trips per side, with a thin/medium weight and an optional colour —
-    // matching what the toolbar's border dialog can set. The vendored codec only
-    // handles 'thin'/'medium', so a heavier weight a source file carries is coerced.
-    if( s.border )
+    // Every side keeps its own line and colour, { style, color }, as the file
+    // has them: one weight and one colour for the whole cell (the last side
+    // read) moved 73 edges of one of his files. The flat style/color - what
+    // the grid draws and the border dialog sets - is still the last side's,
+    // as a thin/medium weight. The writer knows only those two, so dotted,
+    // double or hair lines go out as the nearest (the loss gate says so).
+    let sides = x ? x.border : null;
+    if( ! x && s.border )
+    {
+        sides = {};
+        SIDES.forEach( function( side )
+        {
+            const bs = s.border[ side ];
+            if( bs && bs.style ) sides[ side ] = ( bs.color && bs.color.rgb ) ? { style: bs.style, color: bs.color.rgb.slice( -6 ).toUpperCase() }
+                                                                              : { style: bs.style };
+        });
+    }
+
+    if( sides )
     {
         const b = {};
 
-        [ 'top', 'right', 'bottom', 'left' ].forEach( function( side )
+        SIDES.forEach( function( side )
         {
-            const bs = s.border[ side ];
+            const bs = sides[ side ];
             if( ! bs || ! bs.style ) return;
 
-            b[ side ] = true;
-            b.style   = ( bs.style === 'medium' ) ? 'medium' : 'thin';
-            if( bs.color && bs.color.rgb ) b.color = bs.color.rgb.slice( -6 ).toUpperCase();
+            b[ side ] = bs.color ? { style: bs.style, color: bs.color } : { style: bs.style };
+            b.style   = lineWeight( bs.style );
+            if( bs.color ) b.color = bs.color;
         });
 
         if( Object.keys( b ).length ) o.border = b;
     }
 
     return Object.keys( o ).length ? o : null;
+}
+
+const SIDES = [ 'top', 'right', 'bottom', 'left' ];
+
+// A file's border line as one of the two weights Calc draws and writes.
+function lineWeight( style )
+{
+    return /^(medium|thick|double|slantDashDot)/.test( style || '' ) ? 'medium' : 'thin';
 }
 
 function objToXlsxStyle( o )
@@ -673,16 +1301,24 @@ function objToXlsxStyle( o )
 
     if( o.numFmt ) style.numFmt = o.numFmt;
 
+    // A side set in the border dialog is `true` and takes the flat weight
+    // and colour; a side read from the file is its own { style, color }.
     if( o.border && typeof o.border === 'object' )
     {
-        const side = { style: o.border.style || 'thin' };
-        if( o.border.color ) side.color = { rgb: o.border.color };
-
         style.border = {};
-        if( o.border.top )    style.border.top    = side;
-        if( o.border.right )  style.border.right  = side;
-        if( o.border.bottom ) style.border.bottom = side;
-        if( o.border.left )   style.border.left   = side;
+
+        SIDES.forEach( function( s )
+        {
+            const v = o.border[ s ];
+            if( ! v ) return;
+
+            const own   = ( typeof v === 'object' ) ? v : null;
+            const color = own ? own.color : o.border.color;
+            const side  = { style: lineWeight( own ? own.style : o.border.style ) };
+            if( color ) side.color = { rgb: color };
+
+            style.border[ s ] = side;
+        });
     }
     else if( o.border )   // legacy boolean from an older save
     {

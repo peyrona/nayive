@@ -274,9 +274,11 @@
     // and the scan caches above (data/<app>/scan-cache.json). Whoever moves,
     // renames, copies or trashes a file has to keep them in step, or a note
     // ends up on the wrong photo and a shuffled folder is re-scanned from
-    // scratch. Drive is the only app that moves files, so it is the only caller
-    // today - but the layout of these files is ours, not Drive's, which is why
-    // the code lives here (moved out of drive/index.html 2026-09-07).
+    // scratch. Two callers move things: Drive, and the folder picker in
+    // shared/ui.js (rename / trash a folder), which loads this file on demand
+    // in the apps that do not have it. The layout of these files is ours, not
+    // theirs, which is why the code lives here (moved out of drive/index.html
+    // 2026-09-07).
     //
     //   await NayiveMedia.remapPaths( [ [ old, new ], ... ] );  // move / rename
     //   await NayiveMedia.copyPaths ( [ [ src, dst ], ... ] );  // copy
@@ -290,24 +292,17 @@
     var PHOTOS_SCAN   = "data/photos/scan-cache.json";
     var SCAN_CACHES   = [ PHOTOS_SCAN, "data/music/scan-cache.json" ];
 
-    var commentsMap = null;              // the whole map, loaded once per session
-
-    // The comment map, cached for the session. A file that is not there yet, or
-    // that we may not read (a shared album), is an empty map; ANY other error is
-    // thrown, because a network hiccup must not masquerade as "no comments" -
-    // the next write would wipe every one of them.
+    // The comment map, read afresh on every call - never cached: a Drive left
+    // open all day would otherwise write its old copy back and wipe the notes
+    // Photos added meanwhile, so every read-modify-write starts from the file.
+    // A file that is not there yet (404) is an empty map; ANY other error, or a
+    // file that is not a map, is thrown, because a network hiccup must not
+    // masquerade as "no comments" - the next write would wipe every one of them.
     async function readComments()
     {
-        if( ! commentsMap )
-        {
-            try { commentsMap = JSON.parse( await GumApi.readFile( COMMENTS_PATH ) ) || {}; }
-            catch( e )
-            {
-                if( ! /HTTP 40[34]/.test( String( e && e.message ) ) ) throw e;
-                commentsMap = {};
-            }
-        }
-        return commentsMap;
+        var map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {};
+        if( typeof map !== "object" || Array.isArray( map ) ) throw new Error( "comments.json is not a map" );
+        return map;
     }
 
     function writeComments( map ) { return GumApi.writeJson( COMMENTS_PATH, map ); }

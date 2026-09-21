@@ -321,6 +321,9 @@ function unfoldLines( text )
 }
 
 // Every top-level BEGIN:<name> … END:<name> block, returned as CRLF strings.
+// Lines are kept exactly as they are: a leading space or tab marks a folded
+// line (RFC 5545 / 6350), and trimming it cut every long line of the file -
+// a note, the rest of an address, a PHOTO. A folded line is never a BEGIN / END.
 function extractBlocks( rawText, name )
 {
     const up    = 'BEGIN:' + name.toUpperCase();
@@ -330,15 +333,15 @@ function extractBlocks( rawText, name )
 
     for( const line of lines )
     {
-        const t = line.trim().toUpperCase();
+        const t = /^[ \t]/.test( line ) ? '' : line.trim().toUpperCase();
 
         if( ! buf )
         {
-            if( t === up ) { buf = [ line.trim() ]; depth = 1; }
+            if( t === up ) { buf = [ line ]; depth = 1; }
             continue;
         }
 
-        buf.push( line.trim() );
+        buf.push( line );
         if( t.indexOf( 'BEGIN:' ) === 0 )      depth++;
         else if( t.indexOf( 'END:' ) === 0 )
         {
@@ -349,16 +352,29 @@ function extractBlocks( rawText, name )
     return out;
 }
 
-// The value of a simple property (UID, TZID) from inside a block.
+// The value of a simple property (UID, TZID, RECURRENCE-ID) of a block - its
+// own, not one of a component inside it (a VALARM may carry a UID too).
 function blockProp( block, prop )
 {
     const want = prop.toUpperCase();
+    let   depth = 0;
     for( const l of unfoldLines( block ).split( '\n' ) )
     {
         const m = l.match( /^([^:;]+)(?:;[^:]*)?:(.*)$/ );
-        if( m && m[ 1 ].trim().toUpperCase() === want ) return m[ 2 ].trim();
+        if( ! m ) continue;
+        const name = m[ 1 ].trim().toUpperCase();
+        if( name === 'BEGIN' ) { depth++; continue; }
+        if( name === 'END' )   { depth--; continue; }
+        if( depth === 1 && name === want ) return m[ 2 ].trim();
     }
     return '';
+}
+
+// An event's identity: its UID plus its RECURRENCE-ID. A moved occurrence of a
+// repeating event carries the series' UID; by UID alone it replaced the series.
+function eventKey( block )
+{
+    return blockProp( block, 'UID' ) + '\n' + blockProp( block, 'RECURRENCE-ID' );
 }
 
 async function mergeIntoContacts( incomingText )
@@ -392,39 +408,78 @@ async function mergeIntoCalendar( incomingText )
     if( ! /BEGIN:VCALENDAR/i.test( existing ) )
         existing = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mingle//Personal Calendar//EN\r\nEND:VCALENDAR\r\n';
 
-    const exEvents = extractBlocks( existing, 'VEVENT' );
-    const exZones  = extractBlocks( existing, 'VTIMEZONE' );
+    // The existing file stays as it is, line for line - its header, a VTODO,
+    // anything else Drive does not know: an event dropped again (same UID and
+    // RECURRENCE-ID) takes its old one's place, a new one goes in before the
+    // last END:VCALENDAR, a new VTIMEZONE before the first event.
+    const eol   = /\r\n/.test( existing ) ? '\r\n' : '\n';
+    const lines = existing.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' );
+    const at    = new Map();          // eventKey -> [ first, last ] line of an existing top-level VEVENT
+    const haveTz = new Set();
+    let   depth = 0, start = -1, kind = '', firstEvent = -1, calEnd = -1;
 
-    const byUid = new Map();
-    exEvents.forEach( function( b, i ) { const u = blockProp( b, 'UID' ); if( u ) byUid.set( u, i ); } );
+    for( let i = 0; i < lines.length; i++ )
+    {
+        const m = /^[ \t]/.test( lines[ i ] ) ? null : /^(BEGIN|END):\s*([^\s;:]+)\s*$/i.exec( lines[ i ].trim() );
+        if( ! m ) continue;
+
+        const tag = m[ 2 ].toUpperCase();
+        if( m[ 1 ].toUpperCase() === 'BEGIN' )
+        {
+            if( ++depth === 2 ) { start = i; kind = tag; if( tag === 'VEVENT' && firstEvent < 0 ) firstEvent = i; }
+            continue;
+        }
+
+        if( depth === 2 && start >= 0 )
+        {
+            const block = lines.slice( start, i + 1 ).join( '\n' );
+            if( kind === 'VEVENT' && blockProp( block, 'UID' ) && ! at.has( eventKey( block ) ) ) at.set( eventKey( block ), [ start, i ] );
+            if( kind === 'VTIMEZONE' ) haveTz.add( blockProp( block, 'TZID' ) );
+            start = -1;
+        }
+        if( depth === 1 && tag === 'VCALENDAR' ) calEnd = i;
+        depth--;
+    }
+
+    const replace = new Map();        // first line of an existing event -> { last, text }
+    const added   = [];
+    const addedAt = new Map();        // eventKey -> index in `added` (the same event twice in one file: the last wins)
     for( const b of events )
     {
-        const u = blockProp( b, 'UID' );
-        if( u && byUid.has( u ) ) exEvents[ byUid.get( u ) ] = b;
-        else { exEvents.push( b ); if( u ) byUid.set( u, exEvents.length - 1 ); }
+        const k = eventKey( b ), has = !! blockProp( b, 'UID' );
+        if( has && at.has( k ) )           replace.set( at.get( k )[ 0 ], { last: at.get( k )[ 1 ], text: b } );
+        else if( has && addedAt.has( k ) ) added[ addedAt.get( k ) ] = b;
+        else { if( has ) addedAt.set( k, added.length ); added.push( b ); }
     }
 
-    const haveTz = new Set( exZones.map( function( b ) { return blockProp( b, 'TZID' ); } ) );
-    for( const b of zones )
+    const newZones = zones.filter( function( b )
     {
         const id = blockProp( b, 'TZID' );
-        if( ! haveTz.has( id ) ) { exZones.push( b ); haveTz.add( id ); }
-    }
+        if( haveTz.has( id ) ) return false;
+        haveTz.add( id );
+        return true;
+    } );
 
-    // Keep the existing VCALENDAR header lines, replace the body.
-    const head = [];
-    for( const raw of existing.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' ) )
+    const out     = [];
+    const zonesAt = firstEvent >= 0 ? firstEvent : calEnd;
+    for( let i = 0; i < lines.length; i++ )
     {
-        const t = raw.trim().toUpperCase();
-        if( ! t ) continue;
-        if( t === 'BEGIN:VCALENDAR' ) { head.push( 'BEGIN:VCALENDAR' ); continue; }
-        if( t.indexOf( 'BEGIN:' ) === 0 || t.indexOf( 'END:' ) === 0 ) break;   // body / footer reached
-        if( head.length ) head.push( raw.trim() );
-    }
-    if( ! head.length ) head.push( 'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mingle//Personal Calendar//EN' );
+        if( i === zonesAt ) out.push( ...newZones );
+        if( i === calEnd )  out.push( ...added );
 
-    const out = head.concat( exZones, exEvents, [ 'END:VCALENDAR' ] ).join( '\r\n' ) + '\r\n';
-    await GumApi.writeFileBytes( 'data/calendar.ics', new TextEncoder().encode( out ) );
+        const r = replace.get( i );
+        if( r ) { out.push( r.text ); i = r.last; continue; }
+        out.push( lines[ i ] );
+    }
+    if( calEnd < 0 )                  // a file that never closed its VCALENDAR
+    {
+        while( out.length && out[ out.length - 1 ] === '' ) out.pop();
+        out.push( ...( zonesAt < 0 ? newZones : [] ), ...added, 'END:VCALENDAR', '' );
+    }
+
+    const text = out.join( '\n' ).replace( /\r\n/g, '\n' ).replace( /\n/g, eol );
+    await GumApi.writeFileBytes( 'data/calendar.ics',
+        new TextEncoder().encode( /\n$/.test( text ) ? text : text + eol ) );
     return events.length;
 }
 

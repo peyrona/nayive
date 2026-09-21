@@ -114,6 +114,9 @@
 
     <div id="printRoot"></div>
 
+    <!-- NayiveUI.toast() writes here: without it every Trips toast was silent. -->
+    <div id="toast" class="toast"></div>
+
     <!-- The app, in load order. Plain scripts - no defer, no module: they share one
          global scope and run here, before the deferred ../shared/*.js, as the
          inline script they came from did. -->

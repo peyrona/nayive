@@ -573,6 +573,10 @@
         const SEARCH_PLACEHOLDER = () => T( 'contact.searchPh' );   // shown after a "[<count>] " prefix
 
         let contacts   = [];      // source of truth: array of contact objects (see makeContact)
+        let unparsedCards = [];   // [{ pos, text }] cards of the file the parser could not read: written back untouched
+        let nextPos    = 0;       // the place in the file of the next card added (see contactsToVcf)
+        let bookRead   = false;   // the address book has been read once (or is not there yet): edits may be saved
+        let loadFailSaid = false; // the "could not be read" toast has been shown
         let query      = '';
         let editingUid = null;    // uid of the contact open in the edit form, or null when adding
         let dismissed  = new Set();   // dismissKey() strings for pairs the user marked "not a duplicate"
@@ -621,10 +625,43 @@
                 store.read( META_FILE )
             ]);
 
-            if( vcf.source === 'empty' )    contacts = [];                        // first run, file not created yet
-            else if( vcf.body !== null )    contacts = vcfToContacts( vcf.body );
+            if( vcf.source === 'empty' )                                          // first run, file not created yet
+            {
+                contacts      = [];
+                unparsedCards = [];
+                nextPos       = 0;
+            }
+            else if( vcf.body !== null )
+            {
+                const unparsed = [];
+                contacts      = vcfToContacts( vcf.body, unparsed );
+                unparsedCards = unparsed;
+                nextPos       = contacts.length + unparsed.length;   // an added card goes after the last one
+
+                // Text that holds no card at all is not an address book this page
+                // can edit: saving the empty list would write over it.
+                if( ! contacts.length && ! unparsed.length && vcf.body.trim() )
+                    store.block( CONTACTS_FILE );
+            }
             // else: server unreachable AND nothing cached — keep what we have,
             // never fall back to [] here (that is the save-over-real-data bug).
+            // The store refuses to save this file until a read succeeds, and
+            // canSave() keeps the list on screen from pretending otherwise.
+            else if( ! bookRead && ! loadFailSaid )
+            {
+                loadFailSaid = true;    // once: the focus re-reads would repeat it
+                flashToast( T( 'ui.store.notRead' ) );
+            }
+
+            if( vcf.body !== null || vcf.source === 'empty' )
+                bookRead = true;
+
+            // A card without a UID got one just now (parseVCard): write it once, so
+            // the "not duplicates" marks and the picks that hang on it stay put
+            // from one load to the next. Only on a fresh read from the server: a
+            // cached copy may be older than the file.
+            if( vcf.source === 'network' && contacts.some( c => c.src && ! c.src.uidRead ) )
+                saveContacts();
 
             dismissed = new Set();
 
@@ -666,6 +703,22 @@
             return store.write( CONTACTS_FILE, contactsToVcf( contacts ) );
         }
 
+        // Nothing may change on screen that cannot be saved. The store refuses to
+        // save a file it could not read ('unread') or that this page does not
+        // understand ('bad'), and until the first read is in, the list on screen
+        // is not the address book yet: an add then would upload a one-card book
+        // over the real one. Says why and answers false.
+        function canSave()
+        {
+            const why = store.isBlocked( CONTACTS_FILE );
+
+            if( bookRead && ! why )
+                return true;
+
+            flashToast( T( why === 'bad' ? 'ui.store.badFile' : why === 'unread' ? 'ui.store.notRead' : 'ui.store.loading' ) );
+            return false;
+        }
+
         //------------------------------------------------------------------------//
         // vCard 3.0  <->  contact MODEL
         //
@@ -679,8 +732,11 @@
         //   emails: [ { type, value } ],
         //   adrs:   [ { type, street, city, region, postal, country } ],
         //   urls:   [ { value } ],
-        //   bday,                                 // 'YYYY-MM-DD' or ''
-        //   note
+        //   bday,                                 // 'YYYY-MM-DD', '--MM-DD' (no year) or ''
+        //   note,
+        //   src,                                  // the card as read from the file, or null (see parseVCard)
+        //   pos,                                  // its place in the file (Infinity: not placed yet, goes last)
+        //   rev                                   // when it was last edited here ('' : not in this session)
         // }
 
         function makeContact()
@@ -691,56 +747,191 @@
                 n    : { family: '', given: '' },
                 org  : '', title: '',
                 tels : [], emails: [], adrs: [], urls: [],
-                bday : '', note: ''
+                bday : '', note: '',
+                src  : null, pos: Infinity, rev: ''
             };
         }
 
         // --- Parsing ---------------------------------------------------------
 
-        function vcfToContacts( text )
+        // `unparsed` (optional) collects, as { pos, text }, every card the parser
+        // could not read - one it choked on, or one cut short by a new BEGIN or the
+        // end of the file - so a save writes it back instead of dropping it. Every
+        // card gets its place in the file (c.pos): the list is sorted to be shown,
+        // the file is written back in its own order.
+        function vcfToContacts( text, unparsed )
         {
-            const unfolded = text.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).replace( /\n[ \t]/g, '' );
-            const lines    = unfolded.split( '\n' );
-            const out      = [];
-            let   block    = null;
+            const out   = [];
+            let   block = null;     // content lines of the card being read
+            let   begin = '';       // its BEGIN:VCARD line, as written
+            let   pos   = 0;        // cards met so far
 
-            for( const line of lines )
+            const keepRaw = extra =>
             {
-                const tag = line.trim().toUpperCase();
+                const text = [ begin ].concat( ...block.map( l => l.phys ), extra ).join( '\r\n' );
+                if( unparsed ) unparsed.push( { pos: pos, text: text } );
+                pos++;
+            };
 
-                if( tag === 'BEGIN:VCARD' ) { block = []; continue; }
+            for( const cl of contentLines( text ) )
+            {
+                const tag = cl.text.trim().toUpperCase();
+
+                if( tag === 'BEGIN:VCARD' )
+                {
+                    if( block ) keepRaw( [] );
+                    block = [];
+                    begin = cl.phys[ 0 ];
+                    continue;
+                }
 
                 if( tag === 'END:VCARD' )
                 {
                     if( block )
                     {
-                        try { out.push( normalizeContact( parseVCard( block ) ) ); }
-                        catch( _ ) { /* skip one malformed card rather than losing the whole file */ }
+                        try
+                        {
+                            const c = normalizeContact( parseVCard( block ) );
+
+                            c.src.begin = begin;
+                            c.src.end   = cl.phys[ 0 ];
+                            c.src.snap  = snapshot( c );
+
+                            if( ! c.src.uidRead )
+                                c.src.snap.uid = '';    // made up just now: to be written (see loadContacts)
+
+                            c.pos = pos++;
+                            out.push( c );
+                        }
+                        catch( _ ) { keepRaw( [ cl.phys[ 0 ] ] ); }   // one malformed card is kept as it is, not lost
                     }
                     block = null;
                     continue;
                 }
 
-                if( block && line.trim() !== '' )
-                    block.push( line );
+                if( block && cl.text.trim() !== '' )
+                    block.push( cl );
             }
+
+            if( block ) keepRaw( [] );
 
             return out.sort( byDisplayName );
         }
 
+        // Physical lines -> content lines. Each one keeps the physical lines it came
+        // from (so a card nobody edited is written back exactly as it was read) and
+        // its text: RFC folds (a line that starts with a space or a tab) joined, and
+        // so are vCard 2.1 QUOTED-PRINTABLE soft breaks (a line that ends in "=",
+        // as Android exports), that "=" dropped. A blank line rides along with the
+        // line above it: vCard 2.1 ends a base64 PHOTO with one.
+        function contentLines( text )
+        {
+            const out  = [];
+            let   cur  = null;
+            let   soft = false;     // `cur` ends in a QUOTED-PRINTABLE soft break
+
+            for( const p of text.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' ) )
+            {
+                if( cur && soft )
+                {
+                    cur.text = cur.text.slice( 0, -1 ) + p;
+                    cur.phys.push( p );
+                    soft = /=$/.test( p );
+                    continue;
+                }
+
+                if( cur && ( p === '' || /^[ \t]/.test( p ) ) )
+                {
+                    cur.text += p.slice( 1 );
+                    cur.phys.push( p );
+                    soft = /=$/.test( p ) && isQuotedPrintable( cur.text );
+                    continue;
+                }
+
+                cur  = { text: p, phys: [ p ] };
+                soft = /=$/.test( p ) && isQuotedPrintable( p );
+                out.push( cur );
+            }
+
+            return out;
+        }
+
+        // Does this content line say ENCODING=QUOTED-PRINTABLE (or 2.1's bare
+        // QUOTED-PRINTABLE) before its value?
+        function isQuotedPrintable( line )
+        {
+            const left = splitOnce( line, ':' )[ 0 ];
+            return left !== null && /;\s*(ENCODING\s*=\s*)?QUOTED-PRINTABLE\s*(;|$)/i.test( left );
+        }
+
+        // The value of a vCard 2.1 QUOTED-PRINTABLE line as text, in its CHARSET
+        // (UTF-8 when it names none, or one this browser does not know). Line
+        // breaks come back as "\n". Any other value is returned as it is.
+        function decodeValue( value, params )
+        {
+            if( ! params.some( p => p.val === 'QUOTED-PRINTABLE' ) )
+                return value;
+
+            const bytes = [];
+
+            for( let i = 0; i < value.length; i++ )
+            {
+                const hex = value.substr( i + 1, 2 );
+
+                if( value[ i ] === '=' && /^[0-9A-Fa-f]{2}$/.test( hex ) )
+                {
+                    bytes.push( parseInt( hex, 16 ) );
+                    i += 2;
+                }
+                else
+                {
+                    bytes.push( ...new TextEncoder().encode( value[ i ] ) );
+                }
+            }
+
+            const charset = ( params.find( p => p.key === 'CHARSET' ) || {} ).val;
+            let   dec;
+
+            try   { dec = new TextDecoder( charset || 'utf-8' ); }
+            catch { dec = new TextDecoder( 'utf-8' ); }
+
+            return dec.decode( new Uint8Array( bytes ) ).replace( /\r\n?/g, '\n' );
+        }
+
+        // The model field each vCard property feeds. Any other property is kept as
+        // its lines and written back untouched.
+        const FIELD_OF = { UID: 'uid', FN: 'fn', N: 'n', ORG: 'org', TITLE: 'title', TEL: 'tels', EMAIL: 'emails',
+                           ADR: 'adrs', URL: 'urls', BDAY: 'bday', NOTE: 'note' };
+
+        // Reads one card's content lines into a contact. Each line is labelled on
+        // the way (its group, its property name, the field it feeds and, for a
+        // phone / email / address / web, the key of the entry it made), and the
+        // card keeps them in c.src, so a save rewrites only what an edit changed
+        // (see contactToVCard).
         function parseVCard( blockLines )
         {
             const c = makeContact();
-            let   suffix = '';
+            let   suffix  = '';
+            let   nParts  = null;
+            let   uidRead = false;
 
-            for( const raw of blockLines )
+            for( const cl of blockLines )
             {
-                const [ left, value ] = splitOnce( raw, ':' );
+                const [ left, raw ] = splitOnce( cl.text, ':' );
                 if( left === null ) continue;
 
                 const segs   = splitOutsideQuotes( left, ';' );
-                const name   = segs[ 0 ].split( '.' ).pop().toUpperCase();   // drop any "groupN." prefix
+                const dot    = segs[ 0 ].lastIndexOf( '.' );             // any "groupN." prefix
+                const name   = segs[ 0 ].slice( dot + 1 ).toUpperCase();
                 const params = parseParams( segs.slice( 1 ) );
+                const value  = decodeValue( raw, params );
+
+                cl.group = dot === -1 ? '' : segs[ 0 ].slice( 0, dot );
+                cl.name  = name;
+                cl.field = FIELD_OF[ name ] || '';
+
+                // A phone / email / address / web: the entry it made, and its key.
+                const entry = ( field, e ) => { c[ field ].push( e ); cl.key = entryKey( field, e ); };
 
                 switch( name )
                 {
@@ -762,6 +953,7 @@
                         c.n = { family : [ p[ 2 ], p[ 0 ] ].filter( Boolean ).join( ' ' ).trim(),
                                 given  : ( p[ 1 ] || '' ).trim() };
                         suffix = ( p[ 4 ] || '' ).trim();
+                        nParts = p;                     // the prefix ("Dra.") is kept from here on a save
                         break;
                     }
 
@@ -774,18 +966,18 @@
                         break;
 
                     case 'TEL':
-                        c.tels.push( { type: pickType( params, 'CELL' ), value: unescapeText( value ).trim() } );
+                        entry( 'tels', { type: pickType( params, 'CELL' ), value: unescapeText( value ).trim() } );
                         break;
 
                     case 'EMAIL':
-                        c.emails.push( { type: pickType( params, 'HOME' ), value: unescapeText( value ).trim() } );
+                        entry( 'emails', { type: pickType( params, 'HOME' ), value: unescapeText( value ).trim() } );
                         break;
 
                     case 'ADR':
                     {
                         // ADR components: pobox ; ext ; street ; locality ; region ; postal ; country
                         const p = splitEscaped( value, ';' ).map( unescapeText );
-                        c.adrs.push(
+                        entry( 'adrs',
                         {
                             type   : pickType( params, 'HOME' ),
                             street : [ p[0], p[1], p[2] ].filter( Boolean ).join( ', ' ).trim(),
@@ -795,11 +987,11 @@
                     }
 
                     case 'URL':
-                        c.urls.push( { value: value.trim() } );
+                        entry( 'urls', { value: value.trim() } );
                         break;
 
                     case 'BDAY':
-                        c.bday = normalizeBday( value.trim() );
+                        c.bday = normalizeBday( value.trim(), params );
                         break;
 
                     case 'NOTE':
@@ -807,16 +999,20 @@
                         break;
 
                     case 'UID':
-                        if( value.trim() ) c.uid = value.trim();
+                        if( value.trim() ) { c.uid = value.trim(); uidRead = true; }
                         break;
                 }
             }
 
             // Real cards almost never put "Jr." in N's suffix: they put the note that tells
             // two people apart - "(peluo)", "(medico)". Keep it, where notes belong. The
-            // honorific prefix is the one part dropped outright; FN still shows it.
+            // honorific prefix is not shown; FN still shows it, and N keeps it on a save.
             if( suffix )
                 c.note = c.note ? c.note + '\n' + suffix : suffix;
+
+            // vcfToContacts adds begin / end (the card's own BEGIN and END lines) and
+            // snap (the fields as read, see snapshot).
+            c.src = { lines: blockLines, nParts: nParts, suffix: suffix, uidRead: uidRead };
 
             return c;
         }
@@ -914,67 +1110,263 @@
         // First meaningful TYPE value (ignoring transport/preference noise), else the fallback.
         function pickType( params, fallback )
         {
-            const skip  = new Set( [ 'VOICE', 'PREF', 'INTERNET', '' ] );
+            const skip  = new Set( [ 'VOICE', 'PREF', 'INTERNET', 'QUOTED-PRINTABLE', '' ] );   // the last: 2.1's bare encoding
             const types = params.filter( p => p.key === 'TYPE' ).map( p => p.val ).filter( v => ! skip.has( v ) );
 
             return types[ 0 ] || fallback;
         }
 
-        function normalizeBday( s )
+        // 'YYYY-MM-DD', or '--MM-DD' for a birthday without a year (the vCard 4.0
+        // form phones write; Tasks greets it too). Apple writes "no year" as 1604
+        // (and names it in X-APPLE-OMIT-YEAR): not a real year, so it reads as
+        // '--MM-DD' as well - the card's own BDAY line is left as it was.
+        function normalizeBday( s, params )
         {
-            if( /^\d{4}-\d{2}-\d{2}/.test( s ) ) return s.slice( 0, 10 );
-            if( /^\d{8}$/.test( s ) )            return s.slice( 0, 4 ) + '-' + s.slice( 4, 6 ) + '-' + s.slice( 6, 8 );
-            return '';   // 4.0-style "--MM-DD" (no year) and free text are dropped rather than shown wrong
+            let m = /^(\d{4})-?(\d{2})-?(\d{2})/.exec( s );
+
+            if( m )
+            {
+                const omit = ( ( params || [] ).find( p => p.key === 'X-APPLE-OMIT-YEAR' ) || {} ).val;
+                return ( m[ 1 ] === '1604' || m[ 1 ] === omit ? '--' : m[ 1 ] + '-' ) + m[ 2 ] + '-' + m[ 3 ];
+            }
+
+            m = /^--(\d{2})-?(\d{2})/.exec( s );
+            if( m ) return '--' + m[ 1 ] + '-' + m[ 2 ];
+
+            return '';   // free text is dropped rather than shown wrong (its BDAY line stays in the file)
         }
 
         // --- Serialization --------------------------------------------------
+        //
+        // A card read from the file keeps its lines (c.src) and goes back as it
+        // was: what Contacts does not model is never lost - a PHOTO, NICKNAME,
+        // CATEGORIES, an iPhone's item1.X-ABLabel, a second TYPE, the N prefix.
+        // Only the fields an edit changed are written anew; a card nobody touched
+        // goes back line for line. A new card (no c.src) is written whole.
 
+        // In the file's own order (c.pos), never the list's: that one is sorted by
+        // name in the reader's language, and a save must not shuffle the file.
         function contactsToVcf( list )
         {
-            return list.map( contactToVCard ).join( '\r\n' ) + '\r\n';
+            const at = x => Number.isFinite( x.pos ) ? x.pos : Number.MAX_SAFE_INTEGER;   // not placed yet: last
+
+            return list.map( c => ( { pos: c.pos, text: contactToVCard( c ) } ) )
+                       .concat( unparsedCards )
+                       .sort( ( a, b ) => at( a ) - at( b ) )
+                       .map( x => x.text ).join( '\r\n' ) + '\r\n';
+        }
+
+        const FIELDS = [ 'uid', 'fn', 'n', 'org', 'title', 'tels', 'emails', 'adrs', 'urls', 'bday', 'note' ];
+        const MULTI  = new Set( [ 'tels', 'emails', 'adrs', 'urls' ] );
+
+        // Each field of the model as one string, so a save can tell which ones an
+        // edit changed. Entries are keyed in a fixed order: the form builds its
+        // objects in another one.
+        function snapshot( c )
+        {
+            const s = { uid: c.uid, fn: c.fn, n: JSON.stringify( [ c.n.family, c.n.given ] ),
+                        org: c.org, title: c.title, bday: c.bday, note: c.note };
+
+            for( const f of MULTI )
+                s[ f ] = JSON.stringify( c[ f ].map( e => entryKey( f, e ) ) );
+
+            return s;
+        }
+
+        function entryKey( field, e )
+        {
+            if( field === 'adrs' ) return JSON.stringify( [ e.type, e.street, e.city, e.region, e.postal, e.country ] );
+            if( field === 'urls' ) return JSON.stringify( [ e.value ] );
+            return JSON.stringify( [ e.type, e.value ] );
         }
 
         function contactToVCard( c )
         {
-            const L = [];
+            const src = c.src;
 
-            L.push( 'BEGIN:VCARD' );
-            L.push( 'VERSION:3.0' );
-            L.push( 'UID:' + c.uid );
-            L.push( 'FN:' + escapeText( displayName( c ) ) );
-            L.push( 'N:' + [ c.n.family, c.n.given ].map( escapeText ).join( ';' ) + ';;;' );   // N always has five components
+            if( ! src )
+                return [ 'BEGIN:VCARD', 'VERSION:3.0' ]
+                    .concat( ...FIELDS.map( f => fieldLines( c, f, null ) ), [ revLine( c ), 'END:VCARD' ] )
+                    .map( foldLine ).join( '\r\n' );
 
-            if( c.org )   L.push( 'ORG:' + escapeText( c.org ) );
-            if( c.title ) L.push( 'TITLE:' + escapeText( c.title ) );
+            const now  = snapshot( c );
+            const redo = new Set( FIELDS.filter( f => now[ f ] !== src.snap[ f ] ) );
 
-            for( const t of c.tels )
-                if( t.value.trim() )
-                    L.push( 'TEL;TYPE=' + ( t.type || 'VOICE' ) + ':' + escapeText( t.value.trim() ) );
+            if( ! redo.size )
+                return [ src.begin ].concat( ...src.lines.map( l => l.phys ), [ src.end ] ).join( '\r\n' );
 
-            for( const e of c.emails )
-                if( e.value.trim() )
-                    L.push( 'EMAIL;TYPE=' + ( e.type || 'HOME' ) + ':' + escapeText( e.value.trim() ) );
+            // Only a uid added (see loadContacts): the card keeps its VERSION and REV.
+            // Anything else makes it a vCard 3.0 card, as the new lines are.
+            const whole = ! ( redo.size === 1 && redo.has( 'uid' ) );
 
-            for( const a of c.adrs )
+            // N's suffix is shown inside the note (see parseVCard): it stays in N only
+            // while the NOTE line goes back as it was.
+            if( src.suffix && redo.has( 'note' ) ) redo.add( 'n' );
+
+            // vCard 3.0 wants FN and N: a card without them gets them.
+            if( whole )
+                for( const f of [ 'fn', 'n' ] )
+                    if( ! src.lines.some( l => l.field === f ) ) redo.add( f );
+
+            // The new lines of each field. A phone / email / address / web the edit
+            // left as it was keeps its own line: its item group, its label, every TYPE.
+            const reused = new Set();
+            const fresh  = {};
+
+            for( const f of redo )
+                fresh[ f ] = freshLines( c, f, src, redo, reused, whole );
+
+            // An itemN.X-ABLabel (or X-ABADR...) goes with the line it labelled.
+            const gone = new Set(), kept = new Set();
+
+            for( const l of src.lines )
+                if( l.group && l.field )
+                    ( redo.has( l.field ) && ! reused.has( l ) ? gone : kept ).add( l.group );
+
+            // A field the card did not have goes on top, after VERSION.
+            let   head    = FIELDS.filter( f => redo.has( f ) && ! src.lines.some( l => l.field === f ) );
+            const putHead = () => { for( const f of head ) out.push( ...fresh[ f ] ); head = []; };
+            const done    = new Set();
+            const out     = [ src.begin ];
+
+            if( ! src.lines.some( l => l.name === 'VERSION' ) )
             {
-                if( ! ( a.street || a.city || a.region || a.postal || a.country ) )
-                    continue;
-
-                L.push( 'ADR;TYPE=' + ( a.type || 'HOME' ) + ':' +
-                        [ '', '', a.street, a.city, a.region, a.postal, a.country ].map( escapeText ).join( ';' ) );
+                if( whole ) out.push( 'VERSION:3.0' );
+                putHead();
             }
 
-            for( const u of c.urls )
-                if( u.value.trim() )
-                    L.push( 'URL:' + u.value.trim() );
+            for( const l of src.lines )
+            {
+                if( l.name === 'VERSION' )
+                {
+                    if( done.has( 'VERSION' ) ) continue;
+                    done.add( 'VERSION' );
+                    out.push( ...( whole ? [ 'VERSION:3.0' ] : l.phys ) );
+                    putHead();
+                    continue;
+                }
 
-            if( c.bday ) L.push( 'BDAY:' + c.bday );
-            if( c.note ) L.push( 'NOTE:' + escapeText( c.note ) );
+                if( l.name === 'REV' && whole ) continue;          // a new one goes at the end
 
-            L.push( 'REV:' + new Date().toISOString().replace( /\.\d+Z$/, 'Z' ) );
-            L.push( 'END:VCARD' );
+                if( l.field && redo.has( l.field ) )
+                {
+                    if( ! done.has( l.field ) ) out.push( ...fresh[ l.field ] );
+                    done.add( l.field );
+                    continue;
+                }
 
-            return L.map( foldLine ).join( '\r\n' );
+                if( l.group && gone.has( l.group ) && ! kept.has( l.group ) ) continue;
+
+                out.push( ...keptLines( l, whole ) );
+            }
+
+            if( whole ) out.push( revLine( c ) );
+            out.push( src.end );
+
+            return out.join( '\r\n' );
+        }
+
+        // One field's lines as the model says, vCard 3.0, folded. With the card's
+        // src: an entry of a multi-value field that is still as it was read reuses
+        // that line (added to `reused`), and N keeps what the model does not hold.
+        function freshLines( c, f, src, redo, reused, whole )
+        {
+            if( ! src || ! MULTI.has( f ) )
+                return fieldLines( c, f, src, redo ).map( foldLine );
+
+            const out = [];
+
+            for( const e of c[ f ] )
+            {
+                const line = entryLine( f, e );
+                if( ! line ) continue;
+
+                const k   = entryKey( f, e );
+                const old = src.lines.find( l => l.field === f && l.key === k && ! reused.has( l ) );
+
+                if( old ) { reused.add( old ); out.push( ...keptLines( old, whole ) ); }
+                else      out.push( foldLine( line ) );
+            }
+
+            return out;
+        }
+
+        // The unfolded lines of one field (`src` / `redo` only matter to N).
+        function fieldLines( c, f, src, redo )
+        {
+            switch( f )
+            {
+                case 'uid':   return [ 'UID:' + c.uid ];
+                case 'fn':    return [ 'FN:' + escapeText( displayName( c ) ) ];
+                case 'n':     return [ nLine( c, src, redo ) ];
+                case 'org':   return c.org   ? [ 'ORG:'   + escapeText( c.org ) ]   : [];
+                case 'title': return c.title ? [ 'TITLE:' + escapeText( c.title ) ] : [];
+                case 'bday':  return c.bday  ? [ 'BDAY:'  + c.bday ]                : [];
+                case 'note':  return c.note  ? [ 'NOTE:'  + escapeText( c.note ) ]  : [];
+            }
+
+            return c[ f ].map( e => entryLine( f, e ) ).filter( Boolean );
+        }
+
+        function entryLine( f, e )
+        {
+            if( f === 'tels' )
+                return e.value.trim() ? 'TEL;TYPE=' + ( e.type || 'VOICE' ) + ':' + escapeText( e.value.trim() ) : '';
+
+            if( f === 'emails' )
+                return e.value.trim() ? 'EMAIL;TYPE=' + ( e.type || 'HOME' ) + ':' + escapeText( e.value.trim() ) : '';
+
+            if( f === 'urls' )
+                return e.value.trim() ? 'URL:' + e.value.trim() : '';
+
+            if( ! ( e.street || e.city || e.region || e.postal || e.country ) )
+                return '';
+
+            return 'ADR;TYPE=' + ( e.type || 'HOME' ) + ':' +
+                   [ '', '', e.street, e.city, e.region, e.postal, e.country ].map( escapeText ).join( ';' );
+        }
+
+        // N always has five components: family ; given ; additional ; prefix ; suffix.
+        // A card read from the file keeps its prefix ("Dra."), its components as
+        // they were while the name is unchanged, and its suffix while the NOTE
+        // line goes back as it was (see parseVCard).
+        function nLine( c, src, redo )
+        {
+            const p     = ( src && src.nParts ) || [];
+            const same  = !! ( src && src.nParts ) && JSON.stringify( [ c.n.family, c.n.given ] ) === src.snap.n;
+            const parts = same ? [ p[ 0 ], p[ 1 ], p[ 2 ], p[ 3 ] ] : [ c.n.family, c.n.given, '', p[ 3 ] ];
+
+            parts.push( src && ! redo.has( 'note' ) ? src.suffix : '' );
+
+            return 'N:' + parts.map( s => escapeText( s || '' ) ).join( ';' );
+        }
+
+        // A kept line, as it was. When the card becomes vCard 3.0, a 2.1
+        // QUOTED-PRINTABLE line loses its soft breaks (3.0 has none: it is
+        // re-folded, still encoded) and a trailing blank line goes.
+        function keptLines( l, whole )
+        {
+            if( ! whole ) return l.phys;
+
+            if( l.phys.length > 1 && isQuotedPrintable( l.text ) )
+                return [ foldLine( l.text ) ];
+
+            const p = l.phys.slice();
+            while( p.length > 1 && p[ p.length - 1 ].trim() === '' ) p.pop();
+            return p;
+        }
+
+        // A card's REV is when it was last edited here (commitEdit / doMerge set
+        // c.rev), so saving the book again later - for another card - does not
+        // re-date it.
+        function revLine( c )
+        {
+            return 'REV:' + ( c.rev || revStamp() );
+        }
+
+        function revStamp()
+        {
+            return new Date().toISOString().replace( /\.\d+Z$/, 'Z' );
         }
 
         function escapeText( s )
@@ -1843,8 +2235,8 @@
                 .map( s => s.trim() ).filter( Boolean ).join( '\n' );
         }
 
-        // c.bday is always stored as ANSI yyyy-mm-dd (see normalizeBday), which is also
-        // how we show it — no locale-dependent reformatting.
+        // c.bday is always stored as ANSI yyyy-mm-dd, or --mm-dd without a year (see
+        // normalizeBday), which is also how we show it — no locale-dependent reformatting.
         function formatBday( sIso )
         {
             return sIso;
@@ -1861,6 +2253,8 @@
 
         function openEditForNew()
         {
+            if( ! canSave() ) return;     // nothing typed for a save that cannot happen
+
             editingUid = null;
             document.getElementById( 'editTitle' ).textContent = T( 'contact.newContact' );
 
@@ -1878,7 +2272,7 @@
         function openEditForExisting( uid )
         {
             const c = findContact( uid );
-            if( ! c ) return;
+            if( ! c || ! canSave() ) return;
 
             editingUid = uid;
             document.getElementById( 'editTitle' ).textContent = T( 'contact.editContact' );
@@ -1893,7 +2287,28 @@
             const hasMore = c.adrs.length || c.urls.length || c.bday || c.note;
             setMoreOpen( !! hasMore );
 
+            formWas = formState();
             openBackdrop( 'editBackdrop' );
+        }
+
+        // The form's fields as they stand, one string each. commitEdit writes back
+        // only those that differ from how openEditForExisting filled them.
+        let formWas = null;
+
+        function formState()
+        {
+            const v    = id => document.getElementById( id ).value;
+            const bday = document.getElementById( 'fBday' );
+
+            return {
+                given : v( 'fGiven' ), family: v( 'fFamily' ), org: v( 'fOrg' ), title: v( 'fJobTitle' ),
+                tels  : JSON.stringify( readMultiRows( 'telRows',   'tel' ) ),
+                emails: JSON.stringify( readMultiRows( 'emailRows', 'email' ) ),
+                adrs  : JSON.stringify( readMultiRows( 'adrRows',   'adr' ) ),
+                urls  : JSON.stringify( readMultiRows( 'urlRows',   'url' ) ),
+                bday  : bday.value + '|' + ( bday.dataset.noYear || '' ),
+                note  : v( 'fNote' )
+            };
         }
 
         function fillForm( c )
@@ -1902,8 +2317,13 @@
             document.getElementById( 'fFamily'   ).value = c.n.family;
             document.getElementById( 'fOrg'      ).value = c.org;
             document.getElementById( 'fJobTitle' ).value = c.title;
-            document.getElementById( 'fBday'     ).value = c.bday;
             document.getElementById( 'fNote'     ).value = c.note;
+
+            // <input type=date> cannot hold a birthday without a year ('--MM-DD'):
+            // it waits here, shown by the overlay, until a date is picked.
+            const bday = document.getElementById( 'fBday' );
+            bday.value          = /^--/.test( c.bday ) ? '' : c.bday;
+            bday.dataset.noYear = /^--/.test( c.bday ) ? c.bday : '';
             refreshBdayDisplay();
 
             [ 'telRows', 'emailRows', 'adrRows', 'urlRows' ].forEach( id =>
@@ -1918,8 +2338,9 @@
         {
             const el   = document.getElementById( 'fBday' );
             const disp = document.getElementById( 'fBdayDisplay' );
-            disp.textContent = el.value || T( 'ui.dateHint' );
-            disp.classList.toggle( 'placeholder', ! el.value );
+            const v    = el.value || el.dataset.noYear || '';
+            disp.textContent = v || T( 'ui.dateHint' );
+            disp.classList.toggle( 'placeholder', ! v );
         }
 
         function addMultiRow( kind, data )
@@ -2061,6 +2482,8 @@
 
         function commitEdit()
         {
+            if( ! canSave() ) return;     // the form stays open: nothing typed is lost
+
             const given  = document.getElementById( 'fGiven'  ).value.trim();
             const family = document.getElementById( 'fFamily' ).value.trim();
             const org    = document.getElementById( 'fOrg'    ).value.trim();
@@ -2075,28 +2498,37 @@
             }
 
             const c = editingUid ? findContact( editingUid ) : makeContact();
-            if( ! editingUid ) contacts.push( c );
+            if( ! editingUid ) { c.pos = nextPos++; contacts.push( c ); }
+
+            // Only the fields the user changed are written into the card: a field
+            // left alone keeps its value as read, so the save does not "tidy" it
+            // (trim a NOTE that ends in a newline) into a rewritten line.
+            const now     = formState();
+            const touched = f => ! editingUid || now[ f ] !== formWas[ f ];
 
             // FN is the card's own display name and may say more than the parts do
             // ("MAD Lola (Villaamil)"). Rebuild it only when the name really changed:
             // editing a phone or a birthday must leave it exactly as it was.
-            const nameChanged = given  !== c.n.given ||
-                                family !== c.n.family;
+            const nameChanged = ( touched( 'given' )  && given  !== c.n.given ) ||
+                                ( touched( 'family' ) && family !== c.n.family );
 
-            c.n.given  = given;
-            c.n.family = family;
+            if( touched( 'given' ) )  c.n.given  = given;
+            if( touched( 'family' ) ) c.n.family = family;
 
             if( nameChanged || ! c.fn.trim() )
-                c.fn = [ given, family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
+                c.fn = [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ).trim() || c.fn || org;
 
-            c.org      = org;
-            c.title    = document.getElementById( 'fJobTitle' ).value.trim();
-            c.tels     = tels;
-            c.emails   = emails;
-            c.adrs     = readMultiRows( 'adrRows', 'adr' );
-            c.urls     = readMultiRows( 'urlRows', 'url' );
-            c.bday     = document.getElementById( 'fBday' ).value;
-            c.note     = document.getElementById( 'fNote' ).value.trim();
+            if( touched( 'org' ) )    c.org    = org;
+            if( touched( 'title' ) )  c.title  = document.getElementById( 'fJobTitle' ).value.trim();
+            if( touched( 'tels' ) )   c.tels   = tels;
+            if( touched( 'emails' ) ) c.emails = emails;
+            if( touched( 'adrs' ) )   c.adrs   = readMultiRows( 'adrRows', 'adr' );
+            if( touched( 'urls' ) )   c.urls   = readMultiRows( 'urlRows', 'url' );
+            if( touched( 'bday' ) )   c.bday   = document.getElementById( 'fBday' ).value || document.getElementById( 'fBday' ).dataset.noYear || '';
+            if( touched( 'note' ) )   c.note   = document.getElementById( 'fNote' ).value.trim();
+
+            if( Object.keys( now ).some( touched ) )
+                c.rev = revStamp();   // its REV, kept by later saves of the book (see revLine)
 
             closeBackdrop( 'editBackdrop' );
             render();
@@ -2106,7 +2538,7 @@
 
         async function deleteCurrent()
         {
-            if( ! detailUid ) return;
+            if( ! detailUid || ! canSave() ) return;
 
             const uid = detailUid;
             const c   = contacts.find( x => x.uid === uid );
@@ -2154,7 +2586,7 @@
                 btn: 'moreBtn', menu: 'topMenu',
                 onPick: function( item )
                 {
-                    if(      item.dataset.menu === 'import' ) document.getElementById( 'importInput' ).click();
+                    if(      item.dataset.menu === 'import' ) { if( canSave() ) document.getElementById( 'importInput' ).click(); }
                     else if( item.dataset.menu === 'export' ) exportVcf();
                     else if( item.dataset.menu === 'dedup'  ) openDedupSheet();
                 }
@@ -2567,7 +2999,7 @@
         function doMerge()
         {
             const m = mergeModel;
-            if( ! m ) return;
+            if( ! m || ! canSave() ) return;
 
             const groupUids  = new Set( m.members.map( c => c.uid ) );
             const chosenName = ( document.getElementById( 'mergeName' ).value || '' ).trim();
@@ -2585,6 +3017,9 @@
             merged.urls   = collectChecked( 'url' );
             merged.bday   = m.bday;
             merged.note   = m.notes.join( '\n———\n' );
+            merged.src    = mergedSource( m.members, nameSrc );
+            merged.pos    = Math.min( ...m.members.map( c => c.pos ) );   // where its first member stood in the file
+            merged.rev    = revStamp();
 
             const hadDismissals = dismissed.size > 0;
 
@@ -2605,9 +3040,52 @@
             refreshDedupIfOpen();
         }
 
+        // The merged card keeps what its members held beyond the model (a PHOTO, a
+        // NICKNAME, CATEGORIES, labelled items): every member's lines go in, and an
+        // empty snapshot marks every field as changed, so the model's fields are
+        // written from the preview while a phone / email / address / web picked as
+        // it was keeps its member's own line (see contactToVCard). A later member's
+        // item group is renumbered when an earlier one used the name, so two
+        // members' "item1" never label each other's lines. Unmodelled lines that
+        // two members share are kept once.
+        function mergedSource( members, nameSrc )
+        {
+            const lines = [], seen = new Set(), used = new Set();
+
+            for( const c of members )
+            {
+                if( ! c.src ) continue;
+
+                const rename = {};
+
+                for( const l of c.src.lines )
+                {
+                    if( l.group && ! ( l.group in rename ) )
+                    {
+                        let g = l.group;
+                        for( let i = 1; used.has( g ); i++ ) g = 'item' + i;
+                        rename[ l.group ] = g;
+                        used.add( g );
+                    }
+
+                    const g = l.group ? rename[ l.group ] : '';
+                    const x = g === l.group ? l
+                            : { ...l, group: g, text: g + l.text.slice( l.group.length ),
+                                phys: [ g + l.phys[ 0 ].slice( l.group.length ) ].concat( l.phys.slice( 1 ) ) };
+
+                    if( ! x.field && seen.has( x.text ) ) continue;
+                    seen.add( x.text );
+                    lines.push( x );
+                }
+            }
+
+            return { begin: 'BEGIN:VCARD', end: 'END:VCARD', lines: lines, snap: {}, uidRead: true, suffix: '',
+                     nParts: nameSrc.src ? nameSrc.src.nParts : null };
+        }
+
         function undoMerge()
         {
-            if( ! undoState ) return;
+            if( ! undoState || ! canSave() ) return;
 
             contacts  = undoState.contacts;
             undoState = null;
@@ -2641,6 +3119,8 @@
 
         async function importVcf( file )
         {
+            if( ! canSave() ) return;
+
             let text;
             try   { text = await file.text(); }
             catch { flashToast( T( 'contact.readFailed' ) ); return; }
@@ -2656,15 +3136,19 @@
             const byUid = new Map( contacts.map( c => [ c.uid, c ] ) );
             let   added = 0, updated = 0;
 
-            for( const inc of incoming )
+            // In the imported file's order: a new card goes after the book's last
+            // one; an updated card keeps its place.
+            for( const inc of incoming.slice().sort( ( a, b ) => a.pos - b.pos ) )
             {
                 if( byUid.has( inc.uid ) )
                 {
-                    Object.assign( byUid.get( inc.uid ), inc );
+                    const old = byUid.get( inc.uid );
+                    Object.assign( old, inc, { pos: old.pos } );
                     updated++;
                 }
                 else
                 {
+                    inc.pos = nextPos++;
                     contacts.push( inc );
                     byUid.set( inc.uid, inc );
                     added++;
@@ -2696,7 +3180,7 @@
 
             document.getElementById( 'exportBtn' ).addEventListener( 'click', exportVcf );
 
-            document.getElementById( 'importBtn' ).addEventListener( 'click', () => document.getElementById( 'importInput' ).click() );
+            document.getElementById( 'importBtn' ).addEventListener( 'click', () => { if( canSave() ) document.getElementById( 'importInput' ).click(); } );
             document.getElementById( 'importInput' ).addEventListener( 'change', function()
             {
                 if( this.files && this.files[ 0 ] )
@@ -2736,7 +3220,11 @@
 
             document.getElementById( 'editCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'editBackdrop' ) );
             document.getElementById( 'editSaveBtn'   ).addEventListener( 'click', commitEdit );
-            document.getElementById( 'fBday'         ).addEventListener( 'input', refreshBdayDisplay );
+            document.getElementById( 'fBday'         ).addEventListener( 'input', function()
+            {
+                this.dataset.noYear = '';     // a date picked (or cleared) replaces a birthday without a year
+                refreshBdayDisplay();
+            });
 
             document.getElementById( 'dedupBtn'        ).addEventListener( 'click', openDedupSheet );
             wireTopMenu();

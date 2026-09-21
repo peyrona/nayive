@@ -86,9 +86,11 @@
         if( ! res.ok )
         {
             authLost( res );
-            // Message format is load-bearing: share-target, ui.launcherFolder and
-            // media.js sniff it for "401". Keep it as it is.
-            throw new Error( "HTTP " + res.status + ": " + res.statusText );
+            // Message format is load-bearing: older callers sniff it for "401" /
+            // "HTTP 404". Keep it as it is; new code reads err.status.
+            var err = new Error( "HTTP " + res.status + ": " + res.statusText );
+            err.status = res.status;
+            throw err;
         }
 
         return res;
@@ -203,7 +205,7 @@
         try { return JSON.parse( await readFile( path ) ); }
         catch ( e )
         {
-            if( String( e && e.message ).indexOf( "HTTP 404" ) !== -1 ) return null;
+            if( e && ( e.status === 404 || String( e.message ).indexOf( "HTTP 404" ) !== -1 ) ) return null;
             throw e;
         }
     }

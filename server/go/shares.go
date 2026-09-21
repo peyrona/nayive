@@ -510,6 +510,38 @@ func (s *Shares) DropUser(name string) int {
 	return gone
 }
 
+// RenameUser follows an account the admin renamed: every grant it owns (its
+// public trip links too) and every grant made to it now carry the new name.
+// Without this they all point at a home that is gone and read as "gone".
+// Returns how many changed.
+func (s *Shares) RenameUser(oldName, newName string) int {
+	s.mu.Lock()
+	s.ensureLoaded()
+	moved := 0
+	for i := range s.grants {
+		g := &s.grants[i]
+		if g.Owner != oldName && g.To != oldName {
+			continue
+		}
+		if g.Owner == oldName {
+			g.Owner = newName
+		}
+		if g.To == oldName {
+			g.To = newName
+		}
+		moved++
+	}
+	if moved > 0 {
+		s.save()
+	}
+	s.mu.Unlock()
+
+	if moved > 0 {
+		s.log.Info("shares follow a renamed user", "count", moved, "from", oldName, "to", newName)
+	}
+	return moved
+}
+
 // -----------------------------------------------------------------------------
 // the synthetic "Compartido conmigo" folder
 // -----------------------------------------------------------------------------

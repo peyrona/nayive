@@ -1522,36 +1522,58 @@ async function saveComment( id, text )
     {
         if( text ) COMMENTS[ id ] = text; else delete COMMENTS[ id ];
         try { localStorage.setItem( "photos-comments", JSON.stringify( COMMENTS ) ); } catch( _ ) {}
-        return;
+        return true;
     }
     // read-modify-write the whole sidecar, so a stale in-memory copy can't wipe
-    // a note added elsewhere (Drive's editor) since we loaded.
+    // a note added elsewhere (Drive's editor) since we loaded. Only a missing
+    // file (404) is an empty map: on any other read error, or a file that is
+    // not a map, nothing is written - it would put this one note over all.
+    // True when the note is on disk.
     let map;
-    try { map = JSON.parse( await GumApi.readFile( COMMENTS_PATH ) ) || {}; }
-    catch( _ ) { map = {}; }
+    try { map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {}; }
+    catch( _ ) { map = null; }
+    if( ! map || typeof map !== "object" || Array.isArray( map ) )
+    {
+        NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) );
+        return false;
+    }
     if( text ) map[ id ] = text; else delete map[ id ];
     COMMENTS = map;
     try { await GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( map, null, 1 ) ) ); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); return false; }
+    return true;
 }
 /* Drop notes for photos that no longer exist in THIS folder (deleted from disk,
  * or a trash-restore that landed under a new name - Drive re-keys move/rename/
  * copy but not those). Only ever touches keys that sit directly in DIR. */
-function sweepComments()
+async function sweepComments()
 {
     if( DEMO || ! PHOTOS.length ) return;
     const alive  = new Set( PHOTOS.map( p => p.name.toLowerCase() ) );
     const prefix = DIR ? ( DIR + "/" ) : "";
-    let removed = false;
+    const dead   = [];
     for( const key of Object.keys( COMMENTS ) )
     {
         if( prefix && key.indexOf( prefix ) !== 0 ) continue;
         const rest = key.slice( prefix.length );
         if( rest.indexOf( "/" ) !== -1 ) continue;             // inside a sub-folder
-        if( ! alive.has( rest.toLowerCase() ) ) { delete COMMENTS[ key ]; removed = true; }
+        if( ! alive.has( rest.toLowerCase() ) ) { delete COMMENTS[ key ]; dead.push( key ); }
     }
+    if( ! dead.length ) return;
+
+    // The removals go to a fresh read of the file - this page's copy is never
+    // written back, or a note added elsewhere since it was read would go with
+    // it. Only a missing file is empty; on any other read error nothing is
+    // written (the sweep runs again on the next load).
+    let map;
+    try { map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {}; }
+    catch( _ ) { return; }
+    if( typeof map !== "object" || Array.isArray( map ) ) return;
+    let removed = false;
+    for( const key of dead )
+        if( Object.prototype.hasOwnProperty.call( map, key ) ) { delete map[ key ]; removed = true; }
     if( removed )
-        GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( COMMENTS, null, 1 ) ) ).catch( () => {} );
+        GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( map, null, 1 ) ) ).catch( () => {} );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1922,6 +1944,7 @@ let imageEditor  = null;      // the live tui.ImageEditor, or null
 let editorPhoto  = null;      // the photo being edited
 let editorDirty  = false;     // an image edit is on the undo stack
 let commentBase  = "";        // the note as it was when the editor opened
+let editorSaving = false;     // the ✓ is writing; the editor stays up until it lands
 
 function editorChanged() { return editorDirty || $( "#editorComment" ).value.trim() !== commentBase; }
 
@@ -2005,6 +2028,7 @@ function dataUrlToBytes( u )
 // ask before dropping unsaved changes (a "no" keeps the editor open).
 async function closeImageEditor( save )
 {
+    if( editorSaving ) return;                  // the ✓ in flight decides
     const p = editorPhoto;
 
     if( ! save && p && editorChanged() &&
@@ -2022,7 +2046,37 @@ async function closeImageEditor( save )
     }
     const comment = p ? $( "#editorComment" ).value.trim() : "";
 
-    // tear the editor down first - the save round-trip shouldn't hold the UI
+    // Write BEFORE tearing the editor down: a save that fails leaves it open
+    // with the edit and the note, so nothing is lost and ✓ can try again.
+    if( save && p && ! DEMO )
+    {
+        editorSaving = true;
+        try
+        {
+            if( dataUrl )
+            {
+                try
+                {
+                    const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
+                    const old   = thumbPath( p );
+                    await GumApi.writeFileBytes( p.path, bytes );
+                    editorDirty = false;              // on disk: a retry only redoes the note
+                    try { imageEditor.clearUndoStack(); } catch( _ ) {}   // ...and an undo cannot un-save it
+                    p.bust = Date.now();
+                    await refreshStat( p );           // new size + mtime -> new thumbnail key
+                    if( thumbPath( p ) !== old ) NayivePhoto.dropThumb( old );   // nothing asks for it now
+                }
+                catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.saveImageFailed' ) ); return; }
+            }
+            if( comment !== commentBase )
+            {
+                if( ! await saveComment( p.id, comment ) ) return;   // it said why; the note stays in the box
+                commentBase = comment;
+            }
+        }
+        finally { editorSaving = false; }
+    }
+
     if( imageEditor ) { try { imageEditor.destroy(); } catch( _ ) {} imageEditor = null; }
     $( "#tuiEditor" ).innerHTML = "";
     editorPhoto = null;
@@ -2031,24 +2085,11 @@ async function closeImageEditor( save )
 
     if( ! p || ! save ) return;
 
-    if( dataUrl )
+    if( DEMO )
     {
-        if( DEMO ) EDITS[ p.id ] = dataUrl;
-        else
-        {
-            try
-            {
-                const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
-                const old   = thumbPath( p );
-                await GumApi.writeFileBytes( p.path, bytes );
-                p.bust = Date.now();
-                await refreshStat( p );           // new size + mtime -> new thumbnail key
-                if( thumbPath( p ) !== old ) NayivePhoto.dropThumb( old );   // nothing asks for it now
-            }
-            catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.saveImageFailed' ) ); }
-        }
+        if( dataUrl ) EDITS[ p.id ] = dataUrl;
+        await saveComment( p.id, comment );
     }
-    await saveComment( p.id, comment );
 
     renderGrid();
     if( st.cluster != null ) openCluster( st.cluster );
@@ -2089,6 +2130,7 @@ function saveImageEditorAs()
 
 async function confirmSaveAs()
 {
+    if( editorSaving ) return;                  // a write in flight decides
     const p    = editorPhoto;
     const name = ( $( "#saveAsName" ).value || "" ).trim();
     if( ! p || ! imageEditor || ! name ) return;
@@ -2121,7 +2163,21 @@ async function confirmSaveAs()
     const comment = $( "#editorComment" ).value.trim();
     const size    = imageEditor.getCanvasSize();
 
-    // tear the editor down first (same order as closeImageEditor)
+    // Write the copy BEFORE tearing the editor down (same order as
+    // closeImageEditor): a failed write leaves it open with the edits, so
+    // nothing is lost and the copy can be tried again.
+    if( ! DEMO )
+    {
+        editorSaving = true;
+        try
+        {
+            const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
+            await GumApi.writeFileBytes( dest, bytes );
+        }
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
+        finally { editorSaving = false; }
+    }
+
     try { imageEditor.destroy(); } catch( _ ) {}
     imageEditor = null;
     $( "#tuiEditor" ).innerHTML = "";
@@ -2131,18 +2187,12 @@ async function confirmSaveAs()
 
     if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoCreate' ) ); return; }
 
-    try
-    {
-        const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
-        await GumApi.writeFileBytes( dest, bytes );
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
-
     // a replaced file's note must not stick to the new picture
-    if( comment || COMMENTS[ dest ] ) await saveComment( dest, comment );
+    let noteOk = true;
+    if( comment || COMMENTS[ dest ] ) noteOk = await saveComment( dest, comment );
 
     await loadFolder();
-    NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) );
+    if( noteOk ) NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) );   // else saveComment's toast stands
 }
 
 /* ---------------------------------------------------------------------------

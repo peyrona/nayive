@@ -524,6 +524,7 @@
         // (b) not text at all — opening these as text is never useful.
         const BINARY_EXTS = new Set( [
             'zip', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'zst', '7z', 'rar',
+            'epub', 'mobi', 'azw3', 'apk', 'aab', 'ipa', 'deb', 'rpm', 'msi',
             'pdf', 'ppt', 'pptx', 'pps', 'ppsx', 'odp', 'odg',
             'heic', 'heif', 'tif', 'tiff', 'ico', 'psd', 'xcf', 'raw', 'cr2', 'nef', 'arw', 'dng',
             'wma', 'wmv', 'avi', 'flv', '3gp', 'mid', 'midi', 'aiff', 'aif', 'mpg', 'mpeg',
@@ -612,6 +613,8 @@
             load       : loadText,
             blank      : blankText,
             finishName : textSaveName,
+            onSavedAs  : function( p ) { if( editor && ! store.isBlocked( p ) ) editor.setOption( 'readOnly', false ); },   // a UTF-8 copy is ours to edit (WHAT IS IN THE FILE)
+            sameNameRefused: function( name ) { return NayiveUI.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the non-UTF-8 file itself
             onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
             focus      : function() { if( editor && ! mdReading ) editor.focus(); }
         } );
@@ -632,6 +635,17 @@
             } );
 
             syncCfg();   // deliberately NOT awaited: the device's answer is already on screen
+
+            // Drive's "Abrir con" offers Text for any file. One whose name says it
+            // is not text is refused before it is even downloaded, and start-up
+            // goes on as if it had not been asked for (the rest: loadText).
+            const q = new URLSearchParams( location.search );
+            if( q.get( 'file' ) && BINARY_EXTS.has( O.extOf( q.get( 'file' ) ) ) )
+            {
+                notText( q.get( 'file' ) );
+                q.delete( 'file' );
+                history.replaceState( null, '', location.pathname + ( q.toString() ? '?' + q : '' ) );
+            }
 
             // ?file= / ?import= / the untitled document kept on this device - or a blank one.
             await session.boot();
@@ -747,15 +761,28 @@
         // Write and Calc keep theirs. Read-modify-write, so a key added to this
         // file later (a default folder, say) is never clobbered.
 
+        let cfgWarned = false;   // "your saved settings could not be read" is said once
+
+        // Nothing saved yet (a 404) is {}. Any other failure - offline, a 5xx,
+        // bad JSON - throws: a file that could not be read must never be
+        // written over with just the one key being changed.
         async function readTextCfg()
         {
-            try { return ( await GumApi.readJson( TEXT_CFG ) ) || {}; }
-            catch( _ ) { return {}; }   // offline, or nothing saved yet: the device copy stands
+            const cfg = await GumApi.readJson( TEXT_CFG );
+            if( cfg !== null && ( typeof cfg !== 'object' || Array.isArray( cfg ) ) ) throw new Error( TEXT_CFG + ' is not an object' );
+            return cfg || {};
         }
 
         async function writeTextCfg( patch )
         {
-            const cfg = await readTextCfg();
+            let cfg;
+            try { cfg = await readTextCfg(); }
+            catch( _ )
+            {
+                // The device copy has it already; the account's is left alone.
+                if( ! cfgWarned ) { cfgWarned = true; NayiveUI.toast( T( 'ui.prefsUnread' ) ); }
+                return;
+            }
             Object.assign( cfg, patch );
             try { await GumApi.writeJson( TEXT_CFG, cfg ); } catch( _ ) {}
         }
@@ -764,7 +791,9 @@
         // back, so two devices cannot push each other in circles.
         async function syncCfg()
         {
-            const cfg = await readTextCfg();
+            let cfg;
+            try { cfg = await readTextCfg(); }
+            catch( _ ) { return; }   // offline, or unreadable: the device copy stands
 
             if( typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
 
@@ -810,14 +839,14 @@
 
             if( ! await O.clip.write( sel ) ) { NayiveUI.toast( T( 'ui.clipboardBlocked' ) ); return; }
 
-            if( andCut ) editor.replaceSelection( '' );
+            if( andCut && ! editor.getOption( 'readOnly' ) ) editor.replaceSelection( '' );   // the API edits even a read-only file
 
             editor.focus();
         }
 
         async function clipPaste()
         {
-            if( ! editor ) return;
+            if( ! editor || editor.getOption( 'readOnly' ) ) return;   // the API edits even a read-only file
 
             const text = await O.clip.text();
 
@@ -957,6 +986,7 @@
 
         function setEditorText( text )
         {
+            editor.setOption( 'readOnly', false );   // another document: only loadText says it is not ours to write
             suppressChange = true;
             editor.setValue( text || '' );
             editor.clearHistory();
@@ -1188,8 +1218,15 @@
             session.edited();
         }
 
-        // Ctrl-S. A shared (read-only) or untitled document goes to "Guardar como".
-        function saveNow() { session.saveNow(); }
+        // Ctrl-S. A shared (read-only) or untitled document goes to "Guardar como" -
+        // and so does one that is not UTF-8 (WHAT IS IN THE FILE): its UTF-8 copy.
+        function saveNow()
+        {
+            const why = store.isBlocked( session.path() );
+            if( why === 'loading' ) return;   // still being read: nothing to save yet
+            if( why ) { session.openSaveAs(); return; }
+            session.saveNow();
+        }
 
         //------------------------------------------------------------------------//
         // THE TEXT AS A FILE  (what the session in shared/office.js needs from Text)
@@ -1198,11 +1235,90 @@
         // an import or the .bak copy. `name` is the document's path or file name -
         // the session only sets session.path() after this returns, so the language
         // (and with it the Markdown reader) is decided from the name it hands over.
-        function loadText( body, name )
+        // Throws, with nothing on screen changed, for a file that is not text.
+        async function loadText( body, name, how )
         {
-            setEditorText( typeof body === 'string' ? body : new TextDecoder().decode( body ) );
+            if( BINARY_EXTS.has( O.extOf( name || '' ) ) ) throw notText( name );
+
+            let text = body, enc = 'UTF-8';
+
+            if( typeof body !== 'string' )
+            {
+                ( { text, enc } = decodeText( body instanceof Uint8Array ? body : new Uint8Array( body ), name ) );
+            }
+            else if( how === 'open' )
+            {
+                // Read by the store as UTF-8 (see WHAT IS IN THE FILE).
+                const nul = body.slice( 0, SNIFF_BYTES ).indexOf( '\u0000' ) !== -1;
+
+                if( body.indexOf( '\uFFFD' ) !== -1 )
+                {
+                    try { ( { text, enc } = decodeText( await GumApi.readFileBytes( name ), name ) ); }
+                    catch( e )
+                    {
+                        if( e.said ) throw e;                 // the bytes say it is not text
+                        if( nul )    throw notText( name );   // no bytes (offline), but the NUL says enough
+                        enc = '';                             // no bytes: no way to tell
+                    }
+                }
+                else if( nul ) throw notText( name );
+            }
+
+            setEditorText( text );
             setLanguage( detectMime( name || '' ) );
             setPreview( isMarkdown() );   // a .md file opens as a document, not as source
+
+            // Not UTF-8, or no way to tell: on screen as it really reads, but a
+            // save would write it back as UTF-8 - so it is not written at all.
+            if( how === 'open' && enc !== 'UTF-8' )
+            {
+                store.block( name );
+                editor.setOption( 'readOnly', true );
+                NayiveUI.toast( TF( 'text.notUtf8', { name: O.baseName( name ) } ), { ms: 5000 } );
+            }
+
+            // "Restaurar" has already put what was on screen into the .bak: the
+            // copy coming back must be saved, even over a file opened read-only.
+            if( how === 'restore' && store.isBlocked( name ) === 'bad' ) store.unblock( name );
+        }
+
+        //------------------------------------------------------------------------//
+        // WHAT IS IN THE FILE
+        //
+        // The store reads every file as UTF-8, and a byte that is not UTF-8 comes
+        // back as U+FFFD: "caña" in Windows-1252 arrives as "ca�a", and the first
+        // edit would save the loss for good. So a file that arrives with one is
+        // read again as bytes and decoded for what it is - UTF-16 by its BOM,
+        // UTF-8, or else Windows-1252 (Latin-1 and more: every byte is a
+        // character, so nothing is lost) - and opened READ-ONLY, because the
+        // store can only write UTF-8 back; "Guardar como" makes a UTF-8 copy.
+        // An import or a restored copy is new text, so it is simply decoded.
+        // Bytes that are not text at all - a NUL in the first 8 KB, the test git
+        // uses - are refused.
+
+        const SNIFF_BYTES = 8000;
+
+        // bytes -> { text, enc }; throws notText() for a binary file.
+        function decodeText( bytes, name )
+        {
+            if( bytes[ 0 ] === 0xFF && bytes[ 1 ] === 0xFE ) return { text: new TextDecoder( 'utf-16le' ).decode( bytes ), enc: 'UTF-16' };
+            if( bytes[ 0 ] === 0xFE && bytes[ 1 ] === 0xFF ) return { text: new TextDecoder( 'utf-16be' ).decode( bytes ), enc: 'UTF-16' };
+
+            if( bytes.subarray( 0, SNIFF_BYTES ).indexOf( 0 ) !== -1 ) throw notText( name );
+
+            try { return { text: new TextDecoder( 'utf-8', { fatal: true } ).decode( bytes ), enc: 'UTF-8' }; }
+            catch( _ ) { return { text: new TextDecoder( 'windows-1252' ).decode( bytes ), enc: 'Windows-1252' }; }
+        }
+
+        // Says so, and returns the error to throw. `said`: the session adds no
+        // "could not be opened" of its own on top (shared/office.js).
+        function notText( name )
+        {
+            NayiveUI.toast( TF( 'text.notText', { name: O.baseName( name ) } ), { ms: 5000 } );
+
+            const e = new Error( 'not a text file: ' + name );
+            e.said = true;
+            return e;
         }
 
         function blankText()

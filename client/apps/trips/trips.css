@@ -293,7 +293,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 {
     @page { margin: 14mm; }
     html, body { background: #fff !important; }
-    #app, .sheet-backdrop, #docUploadInput { display: none !important; }
+    #app, .sheet-backdrop, #docUploadInput, #toast { display: none !important; }
     /* On paper the sheet fills the page - undo the off-screen staging
        styles exportTripPdf() sets inline while the route map builds. */
     #printRoot { display: block !important; position: static !important; left: auto !important; top: auto !important; width: auto !important; }

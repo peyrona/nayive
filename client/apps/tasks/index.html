@@ -401,6 +401,9 @@
          what that row borrows its glyph from. -->
     <span id="planGlyph" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg></span>
 
+    <!-- NayiveUI.toast() writes here (styling in shared/theme.css): "this file opens read-only" and the like. -->
+    <div id="toast" class="toast"></div>
+
     <!-- Vendored date lib, for the once-a-day birthday and trip syncs. Shared with calendar (shared/lib/): one download, one cache entry. -->
     <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
 
@@ -465,6 +468,9 @@
         const TRIP_SYNC_DATE_KEY     = 'tasks_trip_sync_date';
 
         let tasks          = [];
+        let loadedTasks    = '[]';   // the list as last read (JSON): what a refused edit falls back to
+        let badSaid        = false;  // the "cannot understand this file" toast was shown for this bad spell
+        let readOnce       = false;  // the first read of tasks.json has answered (until then, no edit)
         let filter         = 'active';
         let editingId      = null;   // id of the task whose text is being edited
         let editingSubtask = null;   // { taskId, subtaskId } of the sub-task being edited
@@ -576,6 +582,7 @@
         async function loadTasks()
         {
             const res = await store.read( TASKS_FILE );
+            readOnce  = true;
 
             if( res.source === 'empty' )
             {
@@ -583,26 +590,61 @@
             }
             else if( res.body !== null )
             {
-                try
+                // A file this app cannot understand - JSON that does not parse, not a
+                // list, a null item - used to load as [] and the next add or birthday
+                // sync saved over it. Now it opens READ-ONLY (the store refuses the
+                // path until a read finds it whole), showing the items it can.
+                let parsed = res.body.trim() ? null : [];   // a 0-byte file holds nothing to lose
+                try { if( ! parsed ) parsed = JSON.parse( res.body ); } catch( _ ) {}
+
+                const list = Array.isArray( parsed ) ? parsed : [];
+                const good = list.filter( isTaskShape );
+
+                if( ! Array.isArray( parsed ) || good.length !== list.length )
                 {
-                    const parsed = JSON.parse( res.body );
-                    // Sanitised here, not only on save: a file written by hand, by
-                    // an older build or by a newer one must not be able to hand the
-                    // renderer a 100000-day duration or a dangling dependency.
-                    tasks = sanitizePlan( Array.isArray( parsed ) ? parsed : [] );
+                    store.block( TASKS_FILE );
+                    if( ! badSaid ) NayiveUI.toast( T( 'ui.store.badFile' ), { ms: 6000 } );
+                    badSaid = true;
                 }
-                catch( _ )
-                {
-                    tasks = [];
-                }
+                else
+                    badSaid = false;
+
+                // Sanitised here, not only on save: a file written by hand, by
+                // an older build or by a newer one must not be able to hand the
+                // renderer a 100000-day duration or a dangling dependency.
+                tasks = sanitizePlan( good );
             }
             // else: the server was unreachable AND nothing is cached (res.source
             // === 'unknown'). Leave `tasks` untouched — treating that as an empty
             // list is exactly the bug that let the next save overwrite the real
-            // file. The store drives the indicator, which shows the problem.
+            // file. The store blocks the path meanwhile and saveTasks() refuses.
 
+            loadedTasks = JSON.stringify( tasks );
             dropCalendarTask();
             render();
+        }
+
+        // A task as this app writes it: an object, its sub-tasks (if any) a list of objects.
+        function isTaskShape( t )
+        {
+            const isObj = function( o ) { return !! o && typeof o === 'object' && ! Array.isArray( o ); };
+
+            return isObj( t ) && ( t.subtasks == null || ( Array.isArray( t.subtasks ) && t.subtasks.every( isObj ) ) );
+        }
+
+        // A tasks.json this tab could not read (offline with nothing cached, signed
+        // out) or could not understand is READ-ONLY: say why, once per try. So is
+        // one not read yet: the list and the add field are up while the sign-in
+        // probe and the first GET are still out, and an add there would save the
+        // one new task over the whole file. Every edit asks here FIRST, before it
+        // touches the list or the field.
+        function refuseEdit()
+        {
+            const why = store.isBlocked( TASKS_FILE ) || ( readOnce ? '' : 'loading' );
+            if( ! why ) return false;
+
+            NayiveUI.toast( T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ), { ms: 6000 } );
+            return true;
         }
 
         // ONE-OFF CLEAN-UP, safe to delete once every device has re-synced.
@@ -625,6 +667,16 @@
 
         function saveTasks()
         {
+            // Read-only (see refuseEdit): the edit on screen is undone, back to the
+            // list as read - the store would refuse the write, and the screen must
+            // not pretend it was saved.
+            if( refuseEdit() )
+            {
+                tasks = JSON.parse( loadedTasks );
+                render();
+                return;
+            }
+
             // A sub-task added via [+] but not yet named is only a UI placeholder —
             // strip those blanks so a save mid-typing can't persist an empty row.
             const clean = sanitizePlan( tasks.map( function( t )
@@ -678,6 +730,9 @@
             {
                 return;   // no contacts.vcf yet, or the fetch failed — retry on the next load
             }
+
+            if( store.isBlocked( TASKS_FILE ) || ! readOnce )
+                return;   // tasks.json not read, or not understood: it could not be saved - retry on the next load
 
             localStorage.setItem( BIRTHDAY_SYNC_DATE_KEY, today );
 
@@ -746,6 +801,9 @@
             {
                 return;   // offline, or the fetch failed — retry on the next load
             }
+
+            if( store.isBlocked( TASKS_FILE ) || ! readOnce )
+                return;   // tasks.json not read, or not understood: it could not be saved - retry on the next load
 
             localStorage.setItem( TRIP_SYNC_DATE_KEY, today );
 
@@ -986,6 +1044,9 @@
             if( ! sText )
                 return;
 
+            if( refuseEdit() )
+                return;   // read-only: the typed text stays in the field
+
             addTask( sText );
 
             if( PINNED )        // stay in add mode: clear, keep the keyboard here for the next one
@@ -1007,6 +1068,8 @@
 
         function toggleTask( id )
         {
+            if( refuseEdit() ) return;
+
             tasks = tasks.map( function( t ) { return t.id === id ? { ...t, done: ! t.done } : t; } );
             render();
             saveTasks();
@@ -1014,6 +1077,8 @@
 
         function deleteTask( id )
         {
+            if( refuseEdit() ) return;
+
             tasks = tasks.filter( function( t ) { return t.id !== id; } );
             render();
             saveTasks();
@@ -1028,6 +1093,9 @@
         function commitEdit( id, sNewText )
         {
             const sText = sNewText.trim();
+
+            if( sText && refuseEdit() )
+                return;   // read-only: the field stays open with what was typed
 
             if( sText )
             {
@@ -1058,6 +1126,8 @@
 
         function startNewSubtask( taskId )
         {
+            if( refuseEdit() ) return;
+
             const task = findTask( taskId );
 
             if( ! task )
@@ -1077,6 +1147,8 @@
 
         function clearCompleted()
         {
+            if( refuseEdit() ) return;
+
             tasks = tasks.filter( function( t ) { return ! t.done; } );
             render();
             saveTasks();
@@ -1338,6 +1410,8 @@
         // one, which is what someone who did them out of order means.
         async function toggleSubtask( taskId, subtaskId )
         {
+            if( refuseEdit() ) return;
+
             const task = findTask( taskId );
 
             if( ! task )
@@ -1395,6 +1469,9 @@
             {
                 const sub = task.subtasks.find( function( s ) { return s.id === subtaskId; } );
 
+                if( sText && refuseEdit() )
+                    return;   // read-only: the field stays open with what was typed
+
                 if( sText )
                 {
                     task.subtasks = task.subtasks.map( function( s ) { return s.id === subtaskId ? { ...s, text: sText } : s; } );
@@ -1441,6 +1518,8 @@
             if( fromTaskId === toTaskId )
                 return;
 
+            if( refuseEdit() ) { render(); return; }   // render: put the dragged row back
+
             const fromTask = findTask( fromTaskId );
             const toTask   = findTask( toTaskId );
 
@@ -1477,6 +1556,8 @@
         {
             if( subtaskId === targetSubtaskId )
                 return;
+
+            if( refuseEdit() ) { render(); return; }   // render: put the dragged row back
 
             const task = findTask( taskId );
 
@@ -2063,6 +2144,9 @@
         {
             if( ! planSheet )
                 return;
+
+            if( refuseEdit() )
+                return;   // read-only: the sheet stays open with what was set
 
             const task = findTask( planSheet.taskId );
             const sub  = task && ( task.subtasks || [] ).find( function( s ) { return s.id === planSheet.subtaskId; } );

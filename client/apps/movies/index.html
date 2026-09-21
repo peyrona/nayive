@@ -496,6 +496,10 @@ var st = {
     stageOpen: false,
     subsOn: false,
     prog: { version: 1, watched: {}, resume: {} },
+    progDirty: {},                             // path -> true: changed here since the last good save
+    progBlocked: false,                        // the boot read failed: this page never writes the file
+    progSaving: Promise.resolve(),             // saves run one at a time (each re-reads the file)
+    lastRec: null,                             // "path|second" last recorded: a paused film adds nothing
     posters: { key: "", items: {} },           // data/movies/posters.json, see fetchPosters()
     saveTimer: null,
     trackUrl: null                             // active blob: URL for the subtitle <track>
@@ -736,18 +740,31 @@ async function downloadPoster( mv, remoteUrl )
 /* ---------------------------------------------------------------------------
  * PROGRESS FILE  (data/movies/progress.json)
  * -------------------------------------------------------------------------*/
+// readJson's answer -> the progress map. null (no file yet, a 404) is an empty
+// one; anything that is not a map throws, like a read error.
+function parseProgress( raw )
+{
+    raw = raw === null ? {} : raw;
+    if( typeof raw !== "object" || Array.isArray( raw ) ) throw new SyntaxError( "progress.json is not a map" );
+    return {
+        version: 1,
+        watched: raw.watched && typeof raw.watched === "object" ? raw.watched : {},
+        resume:  raw.resume  && typeof raw.resume  === "object" ? raw.resume  : {}
+    };
+}
+
+// Only a missing file is "nothing watched yet". On any other failure the page
+// shows no progress (st.progBlocked) and says so; its empty map is never
+// written - a save re-reads the file and lays only this tab's films over it.
 async function loadProgress()
 {
-    try
+    try { st.prog = parseProgress( await GumApi.readJson( PROGRESS_PATH ) ); st.progBlocked = false; }
+    catch( e )
     {
-        var raw = JSON.parse( await GumApi.readFile( PROGRESS_PATH ) ) || {};
-        st.prog = {
-            version: 1,
-            watched: raw.watched && typeof raw.watched === "object" ? raw.watched : {},
-            resume:  raw.resume  && typeof raw.resume  === "object" ? raw.resume  : {}
-        };
+        st.prog = { version: 1, watched: {}, resume: {} };
+        st.progBlocked = true;
+        NayiveUI.toast( NayiveUI.t( e instanceof SyntaxError ? 'ui.store.badFile' : 'ui.store.notRead' ) );
     }
-    catch( e ) { st.prog = { version: 1, watched: {}, resume: {} }; }
 }
 
 function scheduleSaveProgress()
@@ -756,15 +773,42 @@ function scheduleSaveProgress()
     st.saveTimer = setTimeout( function () { st.saveTimer = null; saveProgressNow(); }, 4000 );
 }
 
-async function saveProgressNow()
+// Several devices share the file, so a save never writes this page's whole
+// map: it re-reads the file and lays over it only the films changed HERE
+// (st.progDirty). A tab where nothing was played writes nothing, and one left
+// open on the phone cannot wipe the resume points set on the laptop.
+function saveProgressNow()
 {
     if( st.saveTimer ) { clearTimeout( st.saveTimer ); st.saveTimer = null; }
+    st.progSaving = st.progSaving.then( writeProgress );
+    return st.progSaving;
+}
+
+async function writeProgress()
+{
+    var paths = Object.keys( st.progDirty );
+    // No st.progBlocked here: the file is read again below and only this tab's
+    // films are laid over it, so a boot read that failed (offline, a 5xx) no
+    // longer stops every save for the rest of the visit. A file that still
+    // cannot be read or parsed is never written (the catch below).
+    if( ! paths.length ) return;
+    st.progDirty = {};
     try
     {
+        var disk = parseProgress( await GumApi.readJson( PROGRESS_PATH ) );
+        paths.forEach( function ( p )
+        {
+            if( st.prog.watched[ p ] ) disk.watched[ p ] = true;            else delete disk.watched[ p ];
+            if( st.prog.resume[ p ] )  disk.resume[ p ]  = st.prog.resume[ p ]; else delete disk.resume[ p ];
+        } );
         await GumApi.writeFileBytes( PROGRESS_PATH,
-            new TextEncoder().encode( JSON.stringify( st.prog, null, 1 ) ) );
+            new TextEncoder().encode( JSON.stringify( disk, null, 1 ) ) );
     }
-    catch( e ) { /* a lost resume point is not worth a toast */ }
+    catch( e )
+    {
+        // a lost resume point is not worth a toast; the next save tries again
+        paths.forEach( function ( p ) { st.progDirty[ p ] = true; } );
+    }
 }
 
 function isWatched( mv )  { return !! st.prog.watched[ mv.path ]; }
@@ -784,6 +828,12 @@ function recordProgress()
     if( ! mv || ! video.duration || ! isFinite( video.duration ) ) return;
     var t = video.currentTime, d = video.duration;
 
+    // Not played since the last call (paused, a tab hidden twice): nothing
+    // new, so nothing goes over what another device saved for this film.
+    var rec = mv.path + "|" + Math.floor( t );
+    if( rec === st.lastRec ) return;
+    st.lastRec = rec;
+
     if( t >= d - 15 || t >= d * 0.97 )
     {
         st.prog.watched[ mv.path ] = true;
@@ -793,6 +843,8 @@ function recordProgress()
     {
         st.prog.resume[ mv.path ] = { t: Math.floor( t ), d: Math.floor( d ), at: Math.floor( Date.now() / 1000 ) };
     }
+    else return;                                  // the first seconds are no resume point
+    st.progDirty[ mv.path ] = true;
     scheduleSaveProgress();
 }
 
@@ -800,6 +852,7 @@ function toggleWatched( mv )
 {
     if( st.prog.watched[ mv.path ] ) delete st.prog.watched[ mv.path ];
     else { st.prog.watched[ mv.path ] = true; delete st.prog.resume[ mv.path ]; }
+    st.progDirty[ mv.path ] = true;
     saveProgressNow();
     renderLibrary();
 }
@@ -1384,7 +1437,12 @@ function wireStaticUI()
     } );
     video.addEventListener( "ended", function ()
     {
-        if( st.current ) { st.prog.watched[ st.current.path ] = true; delete st.prog.resume[ st.current.path ]; }
+        if( st.current )
+        {
+            st.prog.watched[ st.current.path ] = true;
+            delete st.prog.resume[ st.current.path ];
+            st.progDirty[ st.current.path ] = true;
+        }
         saveProgressNow();
         renderLibrary();
         NayiveUI.toast( NayiveUI.t( 'movies.theEnd' ) );

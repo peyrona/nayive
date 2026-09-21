@@ -1964,6 +1964,41 @@
 
     var FP_CSS_DONE = false;
 
+    // The path-keyed sidecars (a photo's note in data/photos/comments.json, the
+    // Photos / Music scan caches) must follow a folder the picker renames or
+    // trashes, or its notes vanish. That upkeep lives in shared/media.js
+    // (NayiveMedia.remapPaths / purgePaths, the same calls Drive makes), and
+    // most callers of the picker - Write, Calc, Text, Trips, Chat,
+    // share-target - do not load it, so it is fetched on first use from beside
+    // this file. Best-effort like the upkeep itself: it never throws.
+    var MEDIA_JS = ( function ()
+    {
+        try { return new URL( "media.js", document.currentScript.src ).href; }
+        catch ( e ) { return "/nayive/shared/media.js"; }
+    } )();
+    var mediaLoad = null;
+
+    function sidecarUpkeep( verb, arg )
+    {
+        if( ! window.NayiveMedia && ! mediaLoad )
+            mediaLoad = new Promise( function ( resolve )
+            {
+                var s = document.createElement( "script" );
+                s.src     = MEDIA_JS;
+                s.onload  = resolve;
+                s.onerror = function () { mediaLoad = null; resolve(); };   // a later call tries again
+                document.head.appendChild( s );
+            } );
+
+        return Promise.resolve( window.NayiveMedia ? null : mediaLoad )
+            .then( function ()
+            {
+                var m = window.NayiveMedia;
+                return m && m[ verb ] ? m[ verb ]( arg ) : null;
+            } )
+            .catch( function () {} );
+    }
+
     function injectFpCss()
     {
         if( FP_CSS_DONE ) return;
@@ -2235,15 +2270,24 @@
                     } );
                     expanded = reopen;
 
-                    return to;
+                    // The photo notes and scan entries under it follow, as
+                    // they do on a rename in Drive.
+                    return sidecarUpkeep( "remapPaths", [ [ target, to ] ] )
+                        .then( function () { return to; } );
                 } ) );
             }
 
             // Straight to the papelera - Drive can put it back - so this acts at
             // once: a delete already inside a dialog never asks a second time.
+            // Its scan entries and thumbnails go, as on a delete in Drive (the
+            // notes stay, so a restore brings them back).
             function deleteFolder()
             {
-                runTask( GumApi.deletePaths( [ selected ] ).then( function () { return null; } ) );
+                var gone = selected;
+                runTask( GumApi.deletePaths( [ gone ] ).then( function ()
+                {
+                    return sidecarUpkeep( "purgePaths", [ gone ] ).then( function () { return null; } );
+                } ) );
             }
 
             //---- the sheet ------------------------------------------------//

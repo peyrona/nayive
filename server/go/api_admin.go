@@ -403,9 +403,11 @@ func (s *Server) adminRenameUser(w http.ResponseWriter, r *http.Request, body *a
 		sendError(w, r, http.StatusInternalServerError,
 			"no se pudo renombrar la carpeta del usuario")
 	default:
+		s.shares.RenameUser(oldName, newName)   // what they shared or got, their trip links
 		s.trackers.RenameUser(oldName, newName) // their location URL keeps working
 		s.chat.RenameUser(oldName, newName)     // read again under the new name; others' contacts follow
 		s.devices.RenameUser(oldName, newName)  // their phones keep working
+		s.convert.RenameUser(oldName, newName)  // their queued videos still convert
 		s.log.Info("user renamed", "from", oldName, "to", newName)
 		sendJSON(w, r, http.StatusOK,
 			map[string]string{"message": "usuario renombrado", "name": newName})
