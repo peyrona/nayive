@@ -19,7 +19,7 @@ import
 from './calc.js';
 import
 {
-    table, activeSheet, lastSelection, localMarks
+    table, activeSheet, lastSelection, localMarks, undoStep
 }
 from './grid.js';
 
@@ -75,7 +75,21 @@ function clearSelectionStyle()
 {
     if( ! lastSelection ) return;
 
-    forEachSelectedCell( function( addr ) { delete activeSheet.cellStyles[ addr ]; } );
+    // Ctrl+Z puts the formats back (undoStep), under any style set on those
+    // cells since - that one stays on top. The sheet itself is kept: a sort
+    // gives it a new cellStyles object (and clears Ctrl+Z anyway).
+    const sheet = activeSheet;
+    const was   = {};
+
+    forEachSelectedCell( function( addr )
+    {
+        if( sheet.cellStyles[ addr ] ) was[ addr ] = sheet.cellStyles[ addr ];
+        delete sheet.cellStyles[ addr ];
+    } );
+
+    if( Object.keys( was ).length ) undoStep(
+        function() { for( const a in was ) sheet.cellStyles[ a ] = Object.assign( {}, was[ a ], sheet.cellStyles[ a ] ); },
+        function() { for( const a in was ) delete sheet.cellStyles[ a ]; } );
 
     table.render();
     updateToolbarActiveState();

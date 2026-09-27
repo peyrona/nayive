@@ -1,7 +1,7 @@
 <!-- index.html - Launcher for the Balata single-page apps. A 3-column grid of the
      apps (Photos / Music / Movies are folder viewers: opened from here they use the
      folder each remembers in its own data/<app>/config.json, asking once via
-     NayiveUI.pickFolder the first time; Text has no tile: its files open from Drive),
+     NayiveUI.pickFolder the first time; Write, Calc and Text open from the Office tile's popup),
      centred in the viewport, with a settings row below: a gear button that, when pressed,
      rolls from the centre to the left edge while the other tool buttons unfold into place
      to its right, one after another (right-to-left as the gear rolls out, mirrored on the
@@ -17,6 +17,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- A BIG SCREEN STARTS ON THE DESKTOP (desktop/index.html): at least 1024 x 600
+         with a mouse or touchpad, unless this device's desktop settings say
+         otherwise (localStorage "balata-desktop" .start: auto | desktop | launcher).
+         Never inside a frame (the desktop's own menu IS this page), never on a
+         phone, and never with a query or hash (?here=, enrolment...: this page acts on it). -->
+    <script>
+    try
+    {
+        if( window.top === window && ! location.search && ! location.hash &&
+            ! window.matchMedia( '(max-width: 640px)' ).matches )
+        {
+            var dkStart = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ) || {} ).start || 'auto';
+            var dkBig   = window.matchMedia( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' ).matches;
+            if( dkStart === 'desktop' || ( dkStart === 'auto' && dkBig ) ) location.replace( 'desktop/' );
+        }
+    }
+    catch( e ) {}
+    </script>
     <!-- The interface language. First of all: it hides the page until the
          dictionary is in, and every inline script below may call it. -->
     <script src="shared/i18n.js"></script>
@@ -39,12 +57,14 @@
             dismissible: true,
             buttons: [
                 { sel: '#chatBtn',           name: 'Chat', text: NayiveUI.t( 'launcher.introChat' ) },
+                { sel: '#mailBtn',           name: 'eMail', text: NayiveUI.t( 'launcher.introMail' ) },
+                { sel: '#findBtn',           name: NayiveUI.t( 'find.title' ), text: NayiveUI.t( 'launcher.introFind' ) },
+                { section: NayiveUI.t( 'launcher.introSettings' ) },
                 { sel: '#gearBtn',           text: NayiveUI.t( 'launcher.introGear' ) },
                 { sel: '[data-theme-toggle]', name: NayiveUI.t( 'ui.theme' ), text: NayiveUI.t( 'launcher.introTheme' ) },
                 { sel: '#accountBtn',        text: NayiveUI.t( 'launcher.introAccount' ) },
                 { sel: '#installBtn',        text: NayiveUI.t( 'launcher.introInstall' ) },
-                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ) },
-                { sel: '#findBtn',           text: NayiveUI.t( 'launcher.introFind' ) }
+                { sel: '#logoutBtn',         text: NayiveUI.t( 'launcher.introLogout' ) }
             ],
             tip: NayiveUI.t( 'launcher.introTip' )
         } );
@@ -176,7 +196,7 @@
 
         .tile
         {
-            position: relative;               /* holds Chat's unread badge */
+            position: relative;               /* holds Chat's and eMail's unread badges */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -201,6 +221,9 @@
             line-height: 1.2;
         }
         .tile:hover span { color: var(--text); }
+
+        /* The desktop's menu: Office's and Records' corner caret, a bit bigger than the toolbar's. */
+        :root.in-desktop .tile.has-popup::after { right: 4px; bottom: 4px; border-width: 4px 4px 0; }
 
         .theme-btn
         {
@@ -309,7 +332,7 @@
 
         .tool-extra svg { width: 20px; height: 20px; }
 
-        /* Chat's unread count: a red disc on the tile's icon, top-right. */
+        /* Chat's and eMail's unread counts: a red disc on the tile's icon, top-right. */
         .chat-badge
         {
             position: absolute; top: 6px; right: calc(50% - 32px);
@@ -320,15 +343,28 @@
         }
 
 
+        /* Office and Records are <button> tiles (they open a popup, not a page). */
+        button.tile { border: 0; background: none; font: inherit; cursor: pointer; }
+
         /* "Buscar mi móvil" (2026-09-21, his ask: the panel's bottom-right corner).
            The settings row's own round .theme-btn, on that row's line at the right
-           edge - not a floating button over the content. It is only there when
-           there is something to find (a phone with the Android app, or a last
-           known position), and it steps aside while the settings row is open:
-           the row's buttons need that end of the line. */
+           edge - not a floating button over the content. Always there since
+           2026-09-23, but disabled - dimmed and deaf, like the shared
+           .icon-btn:disabled - until there is something to find (a phone with the
+           Android app, or a last known position). It steps aside while the
+           settings row is open: the row's buttons need that end of the line. */
         .find-btn { position: absolute; right: 30px; bottom: 26px; transition: opacity .2s ease, visibility .2s; }
         .find-btn svg { width: 20px; height: 20px; }
+        .find-btn:disabled { opacity: 0.45; cursor: default; }
+        .find-btn:disabled:hover  { color: var(--text-dim); background: var(--card2); }
+        .find-btn:disabled:active { transform: none; }
         .panel:has(.tools.open) .find-btn { opacity: 0; visibility: hidden; }
+
+        /* Office's and Records' popups: the shared .top-menu card, laid out as ONE
+           row of tiles the size of the grid's (the ids outweigh the phone rule's
+           width: 100%). */
+        #officeMenu, #recordsMenu           { flex-direction: row; gap: 4px; min-width: 0; }
+        #officeMenu .tile, #recordsMenu .tile { width: clamp(88px, 27vw, 110px); }
 
         /* Its dialog, and Mi cuenta's list of phones: rows like .scm-row, not buttons. */
         .find-row
@@ -346,14 +382,16 @@
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
            width - 30px padding + 24px column gaps + 27vw tiles made it 426px wide
            on a 390px screen, so the page scrolled sideways and the build date was
-           cut off. Tiles now share the panel's width three-up. */
+           cut off. Tiles now share the panel's width three-up.
+           Not in the desktop's menu (html.in-desktop): that frame is narrow, the
+           screen is not, so it keeps the big-screen card. */
         @media (max-width: 640px)
         {
-            .launcher { padding: 16px 10px; }
-            .panel    { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
-            .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
-            .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
-            .find-btn { right: 12px; }
+            :root:not(.in-desktop) .launcher { padding: 16px 10px; }
+            :root:not(.in-desktop) .panel    { width: 100%; max-width: 420px; padding: 22px 12px 26px; gap: 22px; }
+            :root:not(.in-desktop) .grid     { width: 100%; gap: 8px 4px; justify-items: center; }
+            :root:not(.in-desktop) .tile     { width: 100%; max-width: 110px; padding: 12px 4px 10px; }
+            :root:not(.in-desktop) .find-btn { right: 12px; }
         }
 
         /* ---- eye toggle inside a password field (Mi cuenta dialog) ---- */
@@ -483,7 +521,8 @@
       <div class="panel">
 
         <div class="grid">
-            <!-- 4 rows of 3 (2026-09-19): Drive+Planner+Chat / Write+Calc+Contacts / Photos+Music+Movies / Trips+Split+Games -->
+            <!-- 4 rows of 3 (2026-09-24): Drive+Planner+Office / eMail+Chat+Records / Photos+Music+Movies /
+                 Trips+Split+Games -->
             <a class="tile" href="drive/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path></svg>
                 <span>Drive</span>
@@ -493,6 +532,19 @@
                 <span>Planner</span>
             </a>
             <!-- Calendar and Tasks have no tile of their own (2026-09-06): both open inside Planner. -->
+            <!-- Office (2026-09-23): Write, Calc and Text in a popup (#officeMenu, under the grid). -->
+            <button class="tile has-popup" id="officeBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="officeMenu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                <span>Office</span>
+            </button>
+
+            <!-- eMail (2026-09-26): the unread count of every account's Inbox rides on
+                 its icon, like Chat's. The admin has no mail: hidden, slot kept. -->
+            <a class="tile" id="mailBtn" href="email/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                <span>eMail</span>
+                <b class="chat-badge" hidden></b>
+            </a>
             <!-- Chat (2026-09-19): the unread count rides on its icon. The admin has
                  no chat: the script below hides the tile but keeps its slot. -->
             <a class="tile" id="chatBtn" href="chat/index.html">
@@ -500,21 +552,11 @@
                 <span>Chat</span>
                 <b class="chat-badge" hidden></b>
             </a>
-
-            <!-- Write and Calc have their tiles back (2026-09-19; the Office tile that held
-                 them is gone). Text has none: its files open from Drive. -->
-            <a class="tile" href="write/index.html">
-                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
-                <span>Write</span>
-            </a>
-            <a class="tile" href="calc/index.html">
-                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
-                <span>Calc</span>
-            </a>
-            <a class="tile" href="contact/index.html">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
-                <span>Contacts</span>
-            </a>
+            <!-- Records (2026-09-23): Contacts, Bookmarks and Passwords in a popup (#recordsMenu, under the grid). -->
+            <button class="tile has-popup" id="recordsBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="recordsMenu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="4" y1="12" x2="20" y2="12"></line><line x1="10" y1="7" x2="14" y2="7"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
+                <span>Records</span>
+            </button>
 
             <a class="tile" href="photos/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"></rect><circle cx="12" cy="8" r="2"></circle><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"></path><path d="M18 22H4a2 2 0 0 1-2-2V6"></path></svg>
@@ -541,6 +583,39 @@
             <a class="tile" href="games/index.html">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59c-.08.67-.7 5.87-.7 7.41a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.41.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.54-.62-6.74-.7-7.41A4 4 0 0 0 17.32 5z"></path></svg>
                 <span>Games</span>
+            </a>
+
+        </div>
+
+        <!-- Office's and Records' popups (2026-09-23): the shared "more" menu card
+             (NayiveUI.wireMenu) holding one row of real launcher tiles - links, so
+             the desktop's menu opens them as windows, like the grid's. -->
+        <div class="top-menu" id="officeMenu" role="menu" hidden>
+            <a class="tile" role="menuitem" href="write/index.html">
+                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>
+                <span>Write</span>
+            </a>
+            <a class="tile" role="menuitem" href="calc/index.html">
+                <svg viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>
+                <span>Calc</span>
+            </a>
+            <a class="tile" role="menuitem" href="text/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                <span>Text</span>
+            </a>
+        </div>
+        <div class="top-menu" id="recordsMenu" role="menu" hidden>
+            <a class="tile" role="menuitem" href="contact/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3"></path><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
+                <span>Contacts</span>
+            </a>
+            <a class="tile" role="menuitem" href="bookmarks/index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                <span>Bookmarks</span>
+            </a>
+            <a class="tile" role="menuitem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+                <span>Passwords</span>
             </a>
         </div>
 
@@ -577,6 +652,12 @@
             </a>
 
         </div>
+
+        <!-- "Buscar mi móvil": the panel's bottom-right corner; disabled until the
+             script below finds a phone or a last known position. -->
+        <button class="theme-btn find-btn" id="findBtn" type="button" disabled data-i18n-attr="title:find.title, aria-label:find.title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"></rect><line x1="12" y1="17" x2="12.01" y2="17"></line><path d="M20.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M3.5 9a4.5 4.5 0 0 0 0 6"></path></svg>
+        </button>
 
       </div>
 
@@ -654,7 +735,6 @@
                     <option value="es">Español</option>
                     <option value="fr">Français</option>
                     <option value="it">Italiano</option>
-                    <option value="la">Latina</option>
                     <option value="pt">Português</option>
                 </select>
             </label>
@@ -765,17 +845,18 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        // The Chat tile's unread count (all chats not muted), now and whenever
-        // the launcher comes back on screen. The admin has no chat: the tile
-        // goes invisible but keeps its slot, so the grid does not shift.
-        ( function ()
+        // The Chat and eMail tiles' unread counts (Chat: all chats not muted;
+        // eMail: every account's Inbox), now and whenever the launcher comes
+        // back on screen. The admin has neither: the tile goes invisible but
+        // keeps its slot, so the grid does not shift.
+        [ [ 'chatBtn', '/api/chat/unread' ], [ 'mailBtn', '/api/mail/unread' ] ].forEach( function ( tile )
         {
-            var btn = document.getElementById( 'chatBtn' );
+            var btn = document.getElementById( tile[ 0 ] );
             if( ! btn ) return;
             var badge = btn.querySelector( '.chat-badge' );
             function refresh()
             {
-                fetch( '/api/chat/unread', { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
+                fetch( tile[ 1 ], { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
                     .then( function ( r )
                     {
                         if( r.status === 403 ) { btn.style.visibility = 'hidden'; return null; }
@@ -792,7 +873,50 @@
             }
             refresh();
             document.addEventListener( 'visibilitychange', function () { if( ! document.hidden ) refresh(); } );
-        } )();
+            // a push while the launcher is on screen (sw.js: { chat: "new" } / { mail: "new" })
+            var kind = tile[ 0 ] === 'mailBtn' ? 'mail' : 'chat';
+            if( navigator.serviceWorker )
+                navigator.serviceWorker.addEventListener( 'message', function ( e ) { if( e.data && e.data[ kind ] === 'new' ) refresh(); } );
+        } );
+    </script>
+
+    <script>
+        // Office's and Records' popups (2026-09-23): Write / Calc / Text and
+        // Contacts / Bookmarks / Passwords, on the shared "more" menu
+        // (NayiveUI.wireMenu). Two clicks never reach that one's closing, so
+        // they close a card here, on the window, in the capture phase (before
+        // anybody can stop them): a pick in the card - it closes itself on a
+        // <button> only, these are links, and the desktop's menu
+        // (desktop/index.html) stops link clicks on the document - and a press
+        // on the OTHER popup's tile, whose button stops its own click.
+        NayiveI18n.ready.then( function ()
+        {
+            if( ! window.NayiveUI ) return;
+            var pops = [ [ 'officeBtn', 'officeMenu' ], [ 'recordsBtn', 'recordsMenu' ] ].map( function ( ids )
+            {
+                return { btn:  document.getElementById( ids[ 0 ] ),
+                         card: document.getElementById( ids[ 1 ] ),
+                         menu: NayiveUI.wireMenu( { btn: ids[ 0 ], menu: ids[ 1 ] } ) };
+            } ).filter( function ( p ) { return p.menu; } );
+
+            window.addEventListener( 'click', function ( e )
+            {
+                var t = e.target;
+                pops.forEach( function ( p )
+                {
+                    var pick  = p.card.contains( t ) && t.closest( 'a[href]' );
+                    var other = pops.some( function ( q ) { return q !== p && q.btn.contains( t ); } );
+                    if( pick || other ) p.menu.close();
+                } );
+            }, true );
+
+            // The launcher going away closes them too: its page hidden (another
+            // app, another tab) or, on the desktop, its menu shut - every way
+            // the desktop shuts it (desktop/index.html, closeMenu) calls this.
+            function closeAll() { pops.forEach( function ( p ) { p.menu.close(); } ); }
+            document.addEventListener( 'visibilitychange', function () { if( document.hidden ) closeAll(); } );
+            window.NayiveLauncher = { closePopups: closeAll };
+        } );
     </script>
 
     <script>
@@ -855,10 +979,10 @@
             /* ---- "Esquemas de color" ---------------------------------- */
             var KEY   = 'balata-schemes';
             var NKEYS = [ '--bg', '--card', '--card2', '--line', '--accent' ];   // what the dialog edits
-            // The highlight colour: theme.css's green per mode, used when a scheme has
+            // The highlight colour: theme.css's accent per mode, used when a scheme has
             // none of its own. Its text colour (--on-accent) is never typed - onAccent()
             // picks theme.css's dark or light ink, whichever reads better on it.
-            var ACCENT     = { dark: '#16a085', light: '#0a6151' };
+            var ACCENT     = { dark: '#1f80b1', light: '#61410a' };
             var INK        = { dark: '#0D0F17', light: '#F9F9FB' };
             var LOW_ACCENT = 3;   // accent contrast on page / cards / fields below this -> warn
             var HEX   = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -867,24 +991,30 @@
             // literal in every language - like "Beige" beside them.
             // Bump SEED_VERSION whenever a built-in changes or is added: load() then
             // brings stored data up to date (see upgrade()).
-            var SEED_VERSION = 2;
+            var SEED_VERSION = 4;
             var SEED  = {
                 schemes: [
-                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#16A085', '--on-accent': '#0D0F17' } },
+                    { id: 'dark-default',  name: 'Oscuro', kind: 'dark',  tokens: { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#1F80B1', '--on-accent': '#0D0F17' } },
                     { id: 'dark-noche',    name: 'Noche',  kind: 'dark',  tokens: { '--bg': '#101722', '--card': '#18202C', '--card2': '#212B38', '--line': '#353F4E', '--accent': '#16A085', '--on-accent': '#0D0F17' } },
-                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#0A6151', '--on-accent': '#F9F9FB' } },
-                    { id: 'light-niebla',  name: 'Niebla', kind: 'light', tokens: { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A6151', '--on-accent': '#F9F9FB' } }
+                    { id: 'light-default', name: 'Beige',  kind: 'light', tokens: { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#61410A', '--on-accent': '#F9F9FB' } },
+                    { id: 'light-niebla',  name: 'Niebla', kind: 'light', tokens: { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A4061', '--on-accent': '#F9F9FB' } }
                 ],
                 activeDark: 'dark-default',
                 activeLight: 'light-default',
                 seedVersion: SEED_VERSION
             };
-            // The built-ins as version 1 shipped them: a stored copy still equal to
-            // these was never edited, so upgrade() may refresh it.
-            var SEED_V1 = {
-                'dark-default':  { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' },
-                'light-default': { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' }
+            // The built-ins as older versions shipped them: a stored copy still equal
+            // to one of these was never edited, so upgrade() may refresh it.
+            var SEED_OLD = {
+                'dark-default':  [ { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#343539' },
+                                   { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#16A085' },
+                                   { '--bg': '#1E1F23', '--card': '#25272B', '--card2': '#2F3034', '--line': '#424349', '--accent': '#0876A6' } ],
+                'light-default': [ { '--bg': '#D8D0C0', '--card': '#E0D9CB', '--card2': '#F2ECDF', '--line': '#735C2E' },
+                                   { '--bg': '#D8D0C0', '--card': '#E3DCCC', '--card2': '#F2ECDF', '--line': '#86714B', '--accent': '#0A6151' } ],
+                'light-niebla':  [ { '--bg': '#D4DBD9', '--card': '#DFE5E3', '--card2': '#F0F5F3', '--line': '#76847F', '--accent': '#0A6151' } ]
             };
+            // The SEED_VERSION that first shipped each built-in (1 when not listed).
+            var SEED_BORN = { 'dark-noche': 2, 'light-niebla': 2 };
 
             var root     = document.documentElement;
             var openBtn  = document.getElementById( 'schemesBtn' );
@@ -927,7 +1057,8 @@
             // other app picks the new tones up through theme.js.
             function upgrade( d )
             {
-                if( ( d.seedVersion || 1 ) >= SEED_VERSION ) return d;
+                var from = d.seedVersion || 1;
+                if( from >= SEED_VERSION ) return d;
                 SEED.schemes.forEach( function ( s )
                 {
                     var have = null, last = -1;
@@ -938,16 +1069,16 @@
                     }
                     if( have )
                     {
-                        if( SEED_V1[ s.id ] && sameTokens( have.tokens, SEED_V1[ s.id ] ) ) have.tokens = JSON.parse( JSON.stringify( s.tokens ) );
+                        if( ( SEED_OLD[ s.id ] || [] ).some( function ( o ){ return sameTokens( have.tokens, o ); } ) ) have.tokens = JSON.parse( JSON.stringify( s.tokens ) );
                     }
-                    else if( ! SEED_V1[ s.id ] ) d.schemes.splice( last + 1, 0, JSON.parse( JSON.stringify( s ) ) );
+                    else if( ( SEED_BORN[ s.id ] || 1 ) > from ) d.schemes.splice( last + 1, 0, JSON.parse( JSON.stringify( s ) ) );
                 } );
                 d.seedVersion = SEED_VERSION;
                 try { localStorage.setItem( KEY, JSON.stringify( d ) ); } catch ( e ) {}
                 return d;
             }
             function sameTokens( a, b ){ return Object.keys( b ).every( function ( k ){ return String( ( a && a[ k ] ) || '' ).toLowerCase() === b[ k ].toLowerCase(); } ); }
-            // A scheme's editable tokens, with the mode's green when it has no accent yet.
+            // A scheme's editable tokens, with the mode's default accent when it has no accent yet.
             function tokensOf( s ){ var t = {}; NKEYS.forEach( function ( k ){ t[ k ] = ( s.tokens && s.tokens[ k ] ) || ( k === '--accent' ? ACCENT[ s.kind ] : '' ); } ); return t; }
             // What gets stored: the edited tokens plus the derived --on-accent.
             function toStore( t ){ var o = {}; NKEYS.forEach( function ( k ){ o[ k ] = t[ k ]; } ); o[ '--on-accent' ] = onAccent( t[ '--accent' ] ); return o; }
@@ -1103,7 +1234,7 @@
                         showMsg( NayiveUI.tf( 'scm.needOne', { kind: savedKind === 'dark' ? NayiveUI.t( 'scm.darkWord' ) : NayiveUI.t( 'scm.lightWord' ) } ) );
                         return;
                     }
-                    // Keep the default green right for the new mode; a chosen colour stays.
+                    // Keep the default accent right for the new mode; a chosen colour stays.
                     if( draft.tokens[ '--accent' ].toLowerCase() === ACCENT[ draft.kind ] ) draft.tokens[ '--accent' ] = ACCENT[ k ];
                     draft.kind = k;
                     clearMsg();
@@ -1152,11 +1283,24 @@
             {
                 if( delBtn.disabled ) return;
                 var s = find( editingId );
+                var at = data.schemes.indexOf( s ), wasDark = data.activeDark === s.id, wasLight = data.activeLight === s.id;
                 data.schemes = data.schemes.filter( function ( x ){ return x.id !== s.id; } );
                 reconcile();
                 editingId = ( firstOfKind( s.kind ) || data.schemes[ 0 ] ).id;
                 loadDraft();
                 persist(); clearMsg(); render();
+                // Undo: the scheme back in its place, and in use again if it was.
+                NayiveUI.undoToast( NayiveUI.t( 'ui.toast.deleted' ), function ()
+                {
+                    if( find( s.id ) ) return;
+                    data.schemes.splice( Math.min( at, data.schemes.length ), 0, s );
+                    if( wasDark )  data.activeDark  = s.id;
+                    if( wasLight ) data.activeLight = s.id;
+                    persist();
+                    if( scmBack.hidden ) { if( window.BalataTheme ) window.BalataTheme.refresh(); return; }
+                    editingId = s.id;
+                    loadDraft(); clearMsg(); render();
+                } );
             } );
 
             selDark.addEventListener( 'change', function (){ data.activeDark  = this.value; persist(); render(); } );
@@ -2041,6 +2185,16 @@
         }
         catch ( e ) {}
 
+        // Sign out is a POST (a GET could be fired by a picture in an email,
+        // or a link on another site): the link only works through this.
+        document.getElementById( 'logoutBtn' ).addEventListener( 'click', function ( e )
+        {
+            e.preventDefault();
+            fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } )
+                .catch( function () {} )
+                .then( function () { location.href = '/nayive/login.html'; } );
+        } );
+
         fetch( '/api/whoami', { credentials: 'same-origin' } )
             .then( function ( r ) {
                 if( r.status === 401 ) { location.href = '/nayive/login.html'; return null; }
@@ -2109,9 +2263,8 @@
         // 2. "?here=<find>": the answer to a "¿Dónde estás?" push (the iPhone
         //    path) - send where this device is, once, and clean the address.
         // 3. The round button in the panel's bottom-right corner and its dialog.
-        //    Only there when there is something to find: a phone with the app,
-        //    or a last known position. Without either the launcher is exactly
-        //    what it was.
+        //    Disabled until there is something to find: a phone with the app,
+        //    or a last known position.
         // 4. Mi cuenta's list of phones (NayiveDevices.loadAccount).
         ( function ()
         {
@@ -2145,7 +2298,6 @@
 
             var SVG = function ( body ) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>'; };
             var ICON = {
-                find: SVG( '<rect x="7" y="3" width="10" height="18" rx="2"></rect><line x1="12" y1="17" x2="12.01" y2="17"></line><path d="M20.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M3.5 9a4.5 4.5 0 0 0 0 6"></path>' ),
                 ring: SVG( '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>' ),
                 stop: SVG( '<rect x="6" y="6" width="12" height="12" rx="2"></rect>' ),
                 map:  SVG( '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>' ),
@@ -2234,8 +2386,9 @@
 
             // ---- 3. the button and its dialog --------------------------------
             var state   = null;       // the last GET /api/device
+            var gone    = {};         // phone ids removed with the Undo still on show: not drawn
             var others  = 0;          // devices with notifications, this one aside
-            var findBtn = null;
+            var findBtn = document.getElementById( 'findBtn' );
             var back    = document.getElementById( 'findBackdrop' );
             var pollT   = 0;
 
@@ -2247,19 +2400,7 @@
                 {
                     if( j._status !== 200 ) return;          // the admin (403), or signed out
                     state = j;
-                    if( worthIt( j ) && ! findBtn )
-                    {
-                        findBtn = document.createElement( 'button' );
-                        findBtn.type = 'button';
-                        findBtn.id = 'findBtn';
-                        findBtn.className = 'theme-btn find-btn';
-                        findBtn.title = T( 'find.title' );
-                        findBtn.setAttribute( 'aria-label', T( 'find.title' ) );
-                        findBtn.innerHTML = ICON.find;
-                        findBtn.addEventListener( 'click', openFind );
-                        document.querySelector( '.panel' ).appendChild( findBtn );
-                    }
-                    else if( ! worthIt( j ) && findBtn ) { findBtn.remove(); findBtn = null; }
+                    findBtn.disabled = ! worthIt( j );
                     if( ! back.hidden ) render();
                 } ).catch( function () {} );
             }
@@ -2274,7 +2415,7 @@
             function render()
             {
                 if( ! state ) return;
-                var phones = state.devices || [];
+                var phones = ( state.devices || [] ).filter( function ( d ) { return ! gone[ d.id ]; } );
                 document.getElementById( 'findPhonesWrap' ).hidden = ! phones.length;
                 document.getElementById( 'findPhones' ).innerHTML = phones.map( function ( d )
                 {
@@ -2344,6 +2485,8 @@
             }
             function closeFind() { back.hidden = true; clearTimeout( pollT ); }
 
+            findBtn.addEventListener( 'click', openFind );
+
             document.getElementById( 'findClose' ).addEventListener( 'click', closeFind );
             back.addEventListener( 'click', function ( e ) { if( e.target === back ) closeFind(); } );
             document.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' && ! back.hidden ) closeFind(); } );
@@ -2368,35 +2511,60 @@
             // ---- 4. Mi cuenta ----------------------------------------------
             var devWrap = document.getElementById( 'devWrap' );
             var devList = document.getElementById( 'devList' );
+            var devs    = [];         // the phones of the last GET
             function loadAccount()
             {
                 api( 'GET', '' ).then( function ( j )
                 {
-                    var ds = ( j._status === 200 && j.devices ) || [];
-                    devWrap.hidden = ! ds.length;
-                    devList.innerHTML = ds.map( function ( d )
-                    {
-                        return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) );
-                    } ).join( '' );
+                    devs = ( j._status === 200 && j.devices ) || [];
+                    drawAccount();
                 } ).catch( function () {} );
             }
-            // A delete inside a dialog acts at once: no second question.
+            function drawAccount()
+            {
+                var ds = devs.filter( function ( d ) { return ! gone[ d.id ]; } );
+                devWrap.hidden = ! ds.length;
+                devList.innerHTML = ds.map( function ( d )
+                {
+                    return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) );
+                } ).join( '' );
+            }
+            function redraw() { drawAccount(); if( ! back.hidden ) render(); }
+            // A delete inside a dialog acts at once: no second question. Its token
+            // dies (the phone must enrol again), so the row only hides now; the
+            // real DELETE goes when the Undo is gone for good.
             devList.addEventListener( 'click', function ( e )
             {
                 var b = e.target.closest( '[data-act-find="remove"]' );
                 if( ! b ) return;
                 var id = b.getAttribute( 'data-id' );
-                b.disabled = true;
-                api( 'DELETE', '/' + encodeURIComponent( id ) ).then( function ( j )
-                {
-                    if( j._status !== 204 && j._status !== 404 ) { b.disabled = false; toast( j.error || T( 'ui.saveFailed' ) ); return; }
-                    var mine = parse( 'nayive-device' );
-                    if( mine && mine.id === id ) put( 'nayive-device', null );
-                    toast( T( 'dev.removed' ) );
-                    loadAccount();
-                    refreshButton();
-                } ).catch( function () { b.disabled = false; toast( T( 'login.noServer' ) ); } );
+                gone[ id ] = true;
+                redraw();
+                NayiveUI.undoToast( T( 'dev.removed' ), function () { delete gone[ id ]; redraw(); },
+                                    { onExpire: function () { removeNow( id ); } } );
             } );
+            // The DELETE first: a closing page sends only a fetch started at once.
+            // This browser's own record goes too, before the answer (a closing
+            // page never reads it), and comes back if the server says no.
+            function removeNow( id )
+            {
+                var req  = api( 'DELETE', '/' + encodeURIComponent( id ) );
+                var had  = get( 'nayive-device' ), mine = parse( 'nayive-device' );
+                if( mine && mine.id === id ) put( 'nayive-device', null ); else had = null;
+                function failed( m )
+                {
+                    if( had && ! get( 'nayive-device' ) ) put( 'nayive-device', had );
+                    delete gone[ id ];
+                    redraw();
+                    toast( m );
+                }
+                req.then( function ( j )
+                {
+                    if( j._status !== 204 && j._status !== 404 ) { failed( j.error || T( 'ui.saveFailed' ) ); return; }
+                    loadAccount();              // `gone` keeps its id: a phone that enrols again gets a new one
+                    refreshButton();
+                } ).catch( function () { failed( T( 'login.noServer' ) ); } );
+            }
             window.NayiveDevices = { loadAccount: loadAccount };
 
             // ---- start -----------------------------------------------------

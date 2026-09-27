@@ -32,6 +32,9 @@ function openNode( node )
     if( ext === 'xlsx' ) { openDoc( '../calc/index.html?file='  + encodeURIComponent( node.path ) ); return true; }
     if( toText )         { openDoc( '../text/index.html?file='  + encodeURIComponent( node.path ) ); return true; }
 
+    // A .zip: the list of what is inside, with "Extract here" (zip.js).
+    if( ext === 'zip' ) { openZipDialog( node ); return true; }
+
     // A LibreOffice document: its Microsoft Office twin, made first when
     // there is none (Impress / Draw / Math / Base only get a "no").
     const office = officeKind( ext );

@@ -39,13 +39,13 @@ import (
 
 const ref = "es"
 
-var langs = []string{"es", "en", "pt", "fr", "de", "it", "la"}
+var langs = []string{"es", "en", "pt", "fr", "de", "it"}
 
 // Never translated - see docs/i18n.md. A value that carries one of these in the
 // reference must carry the same word in every language.
 var appNames = []string{"Nayive", "Drive", "Planner", "Calendar", "Tasks", "Contacts",
 	"Write", "Calc", "Text", "Photos", "Music", "Movies", "Trips",
-	"Split", "Habits", "Games", "Chat"}
+	"Split", "Habits", "Games", "Chat", "Bookmarks"}
 
 var placeholder = regexp.MustCompile(`\{([\p{L}\p{N}_]+)\}`)
 

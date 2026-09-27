@@ -182,6 +182,8 @@ async function doMove( paths, dest )
 
     let moved = 0, skipped = 0;
     const remapped = [];
+    const steps    = [];         // what the Undo walks back: { from, to, moved, bin } (undoMoves)
+    let   canUndo  = true;       // false: a "Replace" got no bin ids back (an old server)
 
     try
     {
@@ -192,15 +194,22 @@ async function doMove( paths, dest )
 
             if( parent === dest ) { skipped++; continue; }      // already there
 
-            const to = joinPath( dest, name );
+            const to    = joinPath( dest, name );
+            const clash = clashes.indexOf( p ) !== -1;
 
-            if( clashes.indexOf( p ) !== -1 )
+            if( clash && ! replace ) { skipped++; continue; }
+
+            const step = { from: p, to: to, moved: false, bin: null };
+            steps.push( step );
+
+            if( clash )
             {
-                if( ! replace ) { skipped++; continue; }
-                await withBusy( GumApi.deletePaths( [ to ] ) );   // existing -> papelera
+                step.bin = await withBusy( GumApi.binPaths( [ to ] ) );   // existing -> papelera
+                if( ! step.bin ) canUndo = false;
             }
 
             await withBusy( GumApi.rename( p, to ) );
+            step.moved = true;
             remapped.push( [ p, to ] );
             moved++;
         }
@@ -210,8 +219,11 @@ async function doMove( paths, dest )
         if( movedCur ) currentFolder = movedCur[1];   // moved the folder we're in — follow it
         selectedPaths.clear();
         await reload();
-        flashStatus( TF( 'drive.nMoved', { n: moved } )
-                   + (skipped ? ' · ' + TF( 'drive.nSkipped', { n: skipped } ) : '') );
+
+        const msg = TF( 'drive.nMoved', { n: moved } )
+                  + (skipped ? ' · ' + TF( 'drive.nSkipped', { n: skipped } ) : '');
+        if( moved && canUndo ) NayiveUI.undoToast( msg, function() { undoMoves( steps ); } );
+        else                   flashStatus( msg );
     }
     catch( err )
     {
@@ -219,9 +231,69 @@ async function doMove( paths, dest )
         // sidecars with it, or those notes are orphaned. Safe here:
         // remapPaths() is best-effort and never throws.
         await NayiveMedia.remapPaths( remapped );
-        NayiveUI.toast( TF( 'drive.moveFailed', { err: err && err.message || err } ) );
+
+        // The Undo puts back only what did happen: the items that moved,
+        // and a "Replace" whose item went to the bin.
+        const msg  = TF( 'drive.moveFailed', { err: err && err.message || err } );
+        const done = steps.filter( function( s ) { return s.moved || s.bin; } );
+        if( done.length && canUndo ) NayiveUI.undoToast( msg, function() { undoMoves( done ); } );
+        else                         NayiveUI.toast( msg );
         await reload();
     }
+}
+
+// UNDO of a move / rename (a drop, "Move to…", Cut-Paste, rename). Each
+// step is { from, to, moved, bin }: a moved item goes back where it came
+// from, its sidecars with it (remapPaths in reverse); THEN whatever a
+// "Replace" sent to the bin is restored - in that order, or the restore
+// would find its name still taken and land as "name (2)". So when an item
+// cannot go back, what it replaced stays in the bin. The view is re-read
+// wherever the user is now; one who went into a moved folder follows it.
+async function undoMoves( steps, failKey )
+{
+    setStatus( T( 'drive.moving' ) );
+
+    const back = [], ids = [];
+    let   err  = null;
+
+    for( const s of steps.slice().reverse() )
+    {
+        if( s.moved )
+        {
+            try { await withBusy( GumApi.rename( s.to, s.from ) ); }
+            catch( e ) { err = err || e; continue; }
+            back.push( [ s.to, s.from ] );
+        }
+        if( s.bin ) ids.push.apply( ids, s.bin );
+    }
+
+    await NayiveMedia.remapPaths( back );
+    currentFolder = followPath( currentFolder, back );
+
+    let res = null;
+    if( ids.length )
+    {
+        try { res = await withBusy( GumApi.trashRestore( ids ) ); }
+        catch( e ) { err = err || e; }
+    }
+
+    await refreshView();
+    if( trashMode ) setStatus( '' );      // the bin's refresh does not clear "Moving…" (reload does)
+
+    if( err )      NayiveUI.toast( TF( failKey || 'drive.moveFailed', { err: err && err.message || err } ) );
+    else if( res ) restoredStatus( res );
+}
+
+// Where `path` is after the moves in `pairs` ([ old, new ]): the same
+// place, or the new one when it is (or lives inside) a moved item.
+function followPath( path, pairs )
+{
+    for( const pr of pairs )
+    {
+        if( path === pr[0] )                    return pr[1];
+        if( path.indexOf( pr[0] + '/' ) === 0 ) return pr[1] + path.slice( pr[0].length );
+    }
+    return path;
 }
 
 async function doCopy( paths, dest )
@@ -329,14 +401,3 @@ function uniqueName( name, taken )
     }
 }
 
-function triggerDownloadBlob( blob, filename )
-{
-    const url = URL.createObjectURL( blob );
-    const a   = document.createElement( 'a' );
-    a.href     = url;
-    a.download = filename;
-    document.body.appendChild( a );
-    a.click();
-    a.remove();
-    setTimeout( function() { URL.revokeObjectURL( url ); }, 4000 );
-}

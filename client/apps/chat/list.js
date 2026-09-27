@@ -22,6 +22,7 @@
         w.people  = r.people || {};
         w.list    = ( r.convs || [] ).map( function ( c ) { if( w.via ) c.via = w.via; return c; } );
         w.deleteAfter = r.deleteAfter || 0;   // the home's auto-delete after N days (0 = never)
+        if( w === S && C.pendingTtl ) w.deleteAfter = C.pendingTtl.days;   // a new one, its "Undo" on show (info.js)
         w.meta    = r.meta;
         if( w.v < 0 ) w.v = r.v;
         w.revs = {};
@@ -310,6 +311,7 @@
     function matches( c )
     {
         if( c.hidden && c.id !== S.open ) return false;    // deleted by me, nothing new since
+        if( going.has( c.id ) && c.id !== S.open ) return false;   // being deleted, its "Undo" on show
         if( S.filter === "unread" && ! c.unread ) return false;
         if( S.filter === "groups" && c.kind !== "g" ) return false;
         if( ! S.query ) return true;
@@ -408,19 +410,59 @@
                 l2 ) );
     }
 
+    // Deleting a chat, a group or a person, with "Undo" (the chat's ⋮ ->
+    // Delete, info.js - its dialog was the question: no second one). The chat
+    // leaves the list now - by state, so a live redraw keeps it away - and
+    // the server is told when the Undo is gone (the shared undoToast: 6 s,
+    // the next toast, the page closing).
+    var going    = new Set();   // ids of the chats on their way out
+    var convUndo = null;        // the delete whose Undo is on show
+
+    // call(): the real request, started at once (no await before it: a
+    // closing page still sends it). gone: the chat never comes back (a
+    // group, a person), so it stays off the list for good.
+    C.deleteConv = function ( id, msg, call, gone )
+    {
+        C.leaveToList();
+        going.add( id );
+        C.renderList();
+        var mine = convUndo = { id: id };
+        NayiveUI.undoToast( msg, function ()
+        {
+            if( convUndo === mine ) convUndo = null;
+            going.delete( id );
+            C.renderList();
+        }, { onExpire: function ()
+        {
+            if( convUndo === mine ) convUndo = null;
+            call().then( function ()
+            {
+                var c = C.convOf( id );
+                if( c && ! gone ) c.hidden = true;   // what the next summary says too
+                // A cleared chat comes back when somebody writes: it leaves
+                // "going" once a summary read after the clear is in.
+                return C.loadSummary().catch( function () {} ).then( function ()
+                {
+                    if( ! gone ) going.delete( id );
+                    C.renderList();
+                } );
+            }, function ( e ) { going.delete( id ); C.renderList(); C.fail( e ); } );
+        } } );
+    };
+
+    // Opening a chat whose delete still has its Undo on show: the delete is final first.
+    C.settleConv = function ( id )
+    {
+        if( convUndo && convUndo.id === id ) NayiveUI.undoSettle();
+    };
+
     // Delete a chat - for me only, as in WhatsApp: its messages go from my
     // side, and it leaves the list until somebody writes again. Asked from
     // The chat's ⋮ -> Delete (info.js), whose dialog already said what it does.
-    C.clearChat = async function ( c )
+    C.clearChat = function ( c )
     {
-        try
-        {
-            await C.api( "POST", "conv/" + c.id + "/clear" );
-            C.leaveToList();
-            await C.loadSummary();
-            C.toast( "chat.chatDeleted" );
-        }
-        catch( e ) { C.fail( e ); }
+        var base = C.W( c ).api;   // its world, read now: the list may change before the call
+        C.deleteConv( c.id, T( "chat.chatDeleted" ), function () { return C.api( "POST", "conv/" + c.id + "/clear", null, { base: base } ); } );
     };
 
     // The page title carries the unread count, like WhatsApp Web.

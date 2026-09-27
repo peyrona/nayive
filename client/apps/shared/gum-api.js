@@ -325,6 +325,19 @@
         return fetchText( API_FILES + "?" + pathsQuery( paths ), { method: "DELETE" } );
     }
 
+    // The same delete, for an Undo: resolves to the bin ids of what went in
+    // (trashRestore( ids ) puts them back), or null from a server too old to
+    // say - the caller then shows a plain toast, no Undo.
+    function binPaths( paths )
+    {
+        return deletePaths( paths ).then( function ( text )
+        {
+            var ids = null;
+            try { ids = JSON.parse( text ).ids; } catch ( e ) {}
+            return Array.isArray( ids ) ? ids : null;
+        } );
+    }
+
     // Delete for good, skipping the trash: DELETE ?paths=a&paths=b&purge=1
     // Only allowed under data/ (the app-owned sidecars the user never sees in
     // Drive - scan caches, thumbnails); anything else is refused with 403. Use
@@ -440,6 +453,7 @@
         biggest:         biggest,
         makeDir:         makeDir,
         deletePaths:     deletePaths,
+        binPaths:        binPaths,
         purgePaths:      purgePaths,
         rename:          rename,
 

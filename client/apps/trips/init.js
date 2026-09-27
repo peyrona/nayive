@@ -16,7 +16,7 @@ NayiveI18n.ready.then( function()
         else if( document.getElementById( 'filePickerSheetBackdrop' ).classList.contains( 'open' ) ) closeFilePicker();
         else if( document.getElementById( 'stageSheetBackdrop'    ).classList.contains( 'open' ) ) closeStageSheet();
         else if( document.getElementById( 'tripSheetBackdrop'     ).classList.contains( 'open' ) ) closeTripSheet();
-        else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'mapSheetBackdrop' );
+        else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeMapSheet();
         else if( document.getElementById( 'locSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'locSheetBackdrop' );
         else if( document.getElementById( 'discoverSheetBackdrop' ).classList.contains( 'open' ) ) closeDiscover();
         else if( document.getElementById( 'currencySheetBackdrop' ).classList.contains( 'open' ) ) closeSheet( 'currencySheetBackdrop' );

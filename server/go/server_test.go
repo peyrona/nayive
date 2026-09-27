@@ -121,7 +121,19 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Errorf("whoami = %v", me)
 	}
 
+	// a GET no longer signs out (a picture in a mail could fire it): it only
+	// goes to the launcher
 	resp = do(t, client, "GET", ts.URL+"/api/logout", nil, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("GET logout = %d, want 303", resp.StatusCode)
+	}
+	resp = do(t, client, "GET", ts.URL+"/api/whoami", nil, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("whoami after a GET logout = %d, want 200 (still signed in)", resp.StatusCode)
+	}
+	resp = do(t, client, "POST", ts.URL+"/api/logout", nil, nil)
 	resp.Body.Close()
 
 	resp = do(t, client, "GET", ts.URL+"/api/whoami", nil, nil)
@@ -315,6 +327,8 @@ func TestFileRoundTrip(t *testing.T) {
 	}
 
 	resp = do(t, client, "DELETE", ts.URL+"/api/files?paths=files/movido.txt", nil, nil)
+	var trashed struct{ IDs []string }
+	json.NewDecoder(resp.Body).Decode(&trashed)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("delete = %d, want 200", resp.StatusCode)
@@ -326,6 +340,19 @@ func TestFileRoundTrip(t *testing.T) {
 	resp.Body.Close()
 	if len(listing.Items) != 1 || listing.Items[0].Name != "movido.txt" {
 		t.Errorf("trash listing = %+v", listing.Items)
+	}
+
+	// The delete names the bin entry, so an app's Undo can put it back.
+	if len(trashed.IDs) != 1 {
+		t.Fatalf("delete answered ids %v, want one", trashed.IDs)
+	}
+	resp = do(t, client, "POST", ts.URL+"/api/files?trash=restore&ids="+trashed.IDs[0], nil, nil)
+	resp.Body.Close()
+	resp = do(t, client, "GET", ts.URL+"/api/files?file=files/movido.txt", nil, nil)
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "hola\n" {
+		t.Errorf("after the undo read back %q", body)
 	}
 }
 

@@ -1,0 +1,157 @@
+/* bookmarks.css - Bookmarks' own layout. Every control wears the shared look
+   from ../shared/app.css (.icon-btn, .folder-row, .card-row, .pill, .sheet,
+   .field, .top-menu, .open-crumb, .empty-hint, .pane-resizer, .text-btn);
+   only placement and the few things no other app has live here. */
+
+/* A tool shell (like Drive): the header stays, the tree and the list scroll
+   themselves. */
+html, body { height: 100%; overflow: hidden; }
+.body-row  { flex: 1 1 auto; min-height: 0; display: flex; }
+
+/* --- Tree pane -------------------------------------------------------- */
+.tree-pane
+{
+    width: var(--tree-w, 240px); flex: 0 0 auto; overflow: auto;
+    padding: 6px 6px 16px;
+}
+.tree-head  { display: flex; align-items: center; gap: 2px; padding: 2px 0 6px 6px; }
+.tree-head .section-label { flex: 1 1 auto; margin: 0; }
+/* The rows are the shared .folder-row; the indent is set inline per depth. */
+.tree-row             { gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+.tree-row .tree-name  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The twisty: a 24 px target (a finger on a tablet), the row no taller. */
+.tree-row .twisty     { display: flex; flex: 0 0 auto; width: 24px; height: 24px; margin: -4px -4px -4px -4px; color: var(--text-dim); transition: transform var(--tr-move); }
+.tree-row .twisty svg { width: 13px; height: 13px; margin: auto; }
+.tree-row .twisty.open { transform: rotate(90deg); }
+.tree-row .twisty.leaf { visibility: hidden; }
+
+/* --- List pane -------------------------------------------------------- */
+.list-pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 28px; }
+
+/* Search: the Contacts field - a magnifier on the right, which becomes the ×
+   that clears it while a search is on. Esc clears it too. */
+.search-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.search-box  { position: relative; flex: 1 1 auto; min-width: 0; max-width: 560px; }
+.search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
+.search-input { width: 100%; padding-right: 44px; }   /* clears the magnifier / × */
+.search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; }
+.search-clear.show { display: flex; }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+/* Selection mode: the Contacts bar. */
+.select-bar
+{
+    display: flex; align-items: center; gap: 4px; margin-bottom: 10px;
+    padding: 4px 6px 4px 2px;
+    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
+}
+.select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); padding-left: 4px; }
+
+.crumb-row  { display: flex; align-items: center; gap: 4px; min-height: 36px; margin-bottom: 8px; }
+.crumb-row .open-crumb { margin: 0; flex: 1 1 auto; min-width: 0; }
+.crumb-row .crumb-seg[aria-current] { color: var(--text); font-weight: 600; }
+.crumb-note { padding: 3px 5px; color: var(--text); font-weight: 600; }
+
+/* --- Items: cards (grid) or rows (list) --------------------------------
+   Each one is a shared .card-row; the grid only turns it into a column. */
+.items.is-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.items.is-list { display: flex; flex-direction: column; gap: 6px; }
+
+.bm-item      { cursor: pointer; min-width: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.bm-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.is-grid .bm-item { flex-direction: column; align-items: stretch; gap: 6px; }
+.is-list .bm-item { padding: 7px 8px 7px 10px; }
+.is-list .bm-notes, .is-list .bm-tags { display: none; }
+.is-list .bm-item { flex-wrap: wrap; }
+.is-list .bm-top  { flex: 1 1 100%; }
+.is-list .bm-path { margin-left: 44px; }
+
+.bm-top   { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.bm-head  { flex: 1 1 auto; min-width: 0; }
+.bm-title { font-size: 0.93rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-domain,
+.bm-path  { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-path  { display: flex; align-items: center; gap: 5px; }
+.bm-path svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.bm-path span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bm-notes
+{
+    font-size: 0.82rem; color: var(--text-dim); line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    white-space: pre-line;
+}
+.bm-tags  { display: flex; flex-wrap: wrap; gap: 4px; }
+.bm-tag   { padding: 3px 9px; }        /* the shared .pill, one size down to sit inside a card */
+
+/* The coloured initial (hue from the domain), with the site's own icon laid
+   over it once it loads ("ok", input.js) - unseen until then, so the initial
+   shows while the server looks the icon up. */
+.bm-ic
+{
+    position: relative; flex: 0 0 auto; width: 34px; height: 34px; border-radius: var(--radius-s);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    background: hsl(var(--hue, 200) 45% 45%); color: #fff; font-weight: 700; font-size: 0.95rem;
+}
+.bm-ic img    { position: absolute; inset: 0; width: 100%; height: 100%; padding: 5px; object-fit: contain; opacity: 0; }
+.bm-ic img.ok { opacity: 1; background: var(--card); }
+.bm-ic.is-folder { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.bm-ic.is-folder svg { width: 19px; height: 19px; }
+.is-list .bm-ic { width: 30px; height: 30px; }
+
+.bm-star     { display: flex; flex: 0 0 auto; color: var(--warn); }
+.bm-star svg { width: 16px; height: 16px; }
+.card-row.is-selected .bm-domain,
+.card-row.is-selected .bm-path,
+.card-row.is-selected .bm-notes,
+.card-row.is-selected .row-menu { color: var(--on-accent); }
+
+/* Drag and drop */
+.dragging { opacity: 0.4; }
+.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* Tree reorder: a line on the row's top / bottom edge says where it lands. */
+.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.drop-after  { box-shadow: inset 0 -3px 0 var(--accent); }
+
+/* Empty screens: the shared .empty-hint, with its buttons side by side. */
+.empty-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+.empty-btns .text-btn { margin-top: 0; }
+
+/* --- Menus ---------------------------------------------------------------- */
+.menu-caption { display: flex; align-items: center; gap: 10px; padding: 6px 12px 2px; font-size: 0.78rem; color: var(--text-dim); }
+.menu-caption svg { width: 16px; height: 16px; }
+/* The phone-only rows (grid / list) are shown by app.css under 641px. */
+
+/* --- Sheets --------------------------------------------------------------- */
+.sheet-lead    { margin: -6px 0 14px; font-size: 0.85rem; line-height: 1.4; color: var(--text-dim); }
+.field-caption { display: block; margin-bottom: 5px; font-size: 0.8rem; color: var(--text-dim); }
+.check-row     { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 0.92rem; cursor: pointer; }
+.choice-row    { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.choice-row .text-btn { flex: 1 1 180px; }
+.bm-dup-note   { margin: -8px 0 12px; font-size: 0.8rem; color: var(--warn); }
+#bmletLink     { text-decoration: none; cursor: grab; }     /* a link, dragged to the browser's bar */
+
+.dup-count  { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); }
+.dup-group  { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 6px 10px; margin-bottom: 10px; background: var(--card2); }
+.dup-row    { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; cursor: pointer; }
+.dup-row + .dup-row { border-top: 1px solid var(--line); }
+.dup-row input { margin-top: 3px; flex: 0 0 auto; }
+.dup-meta   { display: flex; flex-direction: column; min-width: 0; }
+.dup-title  { display: flex; align-items: center; gap: 5px; font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
+.dup-title svg { width: 14px; height: 14px; color: var(--warn); flex: 0 0 auto; }
+.dup-sub    { font-size: 0.78rem; color: var(--text-dim); overflow-wrap: anywhere; }
+
+/* --- Phone ------------------------------------------------------------------
+   No tree pane: folders are the rows at the top of the list, the crumbs say
+   where you are and ← goes up. The grid / list switch and the search button
+   leave the header (the switch is in the "⋮"; the field is always there). */
+@media (max-width: 640px)
+{
+    .tree-pane, .pane-resizer { display: none; }
+    .list-pane { padding: 10px 10px 24px; }
+    #searchBtn, .view-btn { display: none; }
+    .topbar    { padding: 6px; }                     /* Drive's phone bar: fits a 320px screen on one row */
+    .topbar h1 { font-size: 1rem; margin-right: 6px; }
+    .items.is-grid { grid-template-columns: 1fr; gap: 8px; }
+    .search-box { max-width: none; }
+}

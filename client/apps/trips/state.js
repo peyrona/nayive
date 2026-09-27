@@ -38,6 +38,7 @@ const ICON_TRASH      = '<line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7
 const ICON_CHECK      = '<polyline points="4 12 9 17 20 6"></polyline>';
 const ICON_X          = '<line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>';
 const ICON_PIN        = '<path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z"></path><circle cx="12" cy="10" r="2.3"></circle>';
+const ICON_HOUSE      = '<path d="M3 11 12 3l9 8"></path><path d="M5 9.5V21h14V9.5"></path><path d="M10 21v-6h4v6"></path>';
 const ICON_CALENDAR   = '<rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>';
 const ICON_CLOCK      = '<circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>';
 const ICON_MAP        = '<path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2z"></path><line x1="9" y1="3" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="21"></line>';

@@ -921,6 +921,50 @@ function undoTypedFormats( action, redo )
     table.render();
 }
 
+// One step on Handsontable's own Ctrl+Z / Ctrl+Y lists for a change it does
+// not make itself (a note deleted, formats cleared): `back` undoes it, `again`
+// does it once more. In the plugin's lists, so Ctrl+Z walks back through the
+// cell edits and these in order; loadData (a sort, another sheet) clears them.
+// done() is called whatever happens - until it is, the plugin takes no more.
+function undoStep( back, again )
+{
+    const ur = table && table.getPlugin( 'undoRedo' );
+    if( ! ur || ! ur.isEnabled() ) return;
+
+    ur.done( function()
+    {
+        return {
+            actionType : 'nayive',
+            undo       : function( hot, done ) { try { back();  hot.render(); updateToolbarActiveState(); } finally { done(); } },
+            redo       : function( hot, done ) { try { again(); hot.render(); updateToolbarActiveState(); } finally { done(); } }
+        };
+    } );
+}
+
+// Right-click "Delete note": what Handsontable's own item does (every note in
+// the selection goes), plus a Ctrl+Z step that puts them back - its own has none.
+function removeNotes()
+{
+    const range = table.getSelectedRangeActive();
+    if( ! range ) return;
+
+    const comments = table.getPlugin( 'comments' );
+    const gone     = [];
+
+    range.forAll( function( r, c )
+    {
+        if( r < 0 || c < 0 ) return;
+        const meta = table.getCellMeta( r, c ).comment;
+        if( meta ) gone.push( { r: r, c: c, meta: Object.assign( {}, meta ) } );
+        comments.removeCommentAtCell( r, c, false );
+    } );
+    table.render();
+
+    if( gone.length ) undoStep(
+        function() { gone.forEach( function( n ) { table.setCellMeta( n.r, n.c, 'comment', Object.assign( {}, n.meta ) ); } ); },
+        function() { gone.forEach( function( n ) { comments.removeCommentAtCell( n.r, n.c, false ); } ); } );
+}
+
 // The active sheet's notes, in the shape Handsontable's `cell` setting wants.
 function commentCells()
 {
@@ -995,7 +1039,7 @@ function initGrid( d )
                          copy            : cmItem( 'copy' ),
                          sep6            : '---------',
                          commentsAddEdit : cmItem( 'commentsAddEdit' ),
-                         commentsRemove  : cmItem( 'commentsRemove' )
+                         commentsRemove  : Object.assign( cmItem( 'commentsRemove' ), { callback: removeNotes } )
                         } },
         comments    : true,
         // Keep the selection (and its green highlight) visible while the user works
@@ -1950,5 +1994,5 @@ export
 {
     table, newSheet, newDoc, doc, activeSheet, gridBooting, lastSelection, htThemeName,
     CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
-    editText, localMarks
+    editText, localMarks, undoStep
 };

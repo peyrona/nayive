@@ -419,6 +419,14 @@
                 'signed in with a regular account. To administer, sign out ' +
                 'and sign back in with the admin account.' +
                 '<span style="display:block;margin-top:12px"><a class="link" href="/api/logout">Sign out</a></span>';
+            // sign out is a POST (a GET could be fired by any page)
+            $( 'fatal' ).querySelector( 'a' ).addEventListener( 'click', function ( e )
+            {
+                e.preventDefault();
+                fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } )
+                    .catch( function () {} )
+                    .then( function () { location.href = '/nayive/login.html'; } );
+            } );
             return;
         }
         if ( !res.ok ) { $( 'fatal' ).textContent = await errText( res ); return; }

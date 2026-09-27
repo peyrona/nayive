@@ -11,7 +11,7 @@ async function openTrash()
     setStatus( T( 'drive.loadingTrash' ) );
     try
     {
-        trashItems = await withBusy( GumApi.trashList() );
+        trashItems = shownTrash( await withBusy( GumApi.trashList() ) );
         try { trashDays = ( await GumApi.trashDays() ).days; }
         catch( _e ) { trashDays = null; }
         trashMode  = true;
@@ -33,9 +33,19 @@ function closeTrash()
 
 async function refreshTrash()
 {
-    try { trashItems = await withBusy( GumApi.trashList() ); }
+    try { trashItems = shownTrash( await withBusy( GumApi.trashList() ) ); }
     catch( _ ) { trashItems = []; }
     render();
+}
+
+// Bin ids deleted for good once their Undo is gone (purgeTrash). Until
+// then every read of the bin leaves them out, so a refresh cannot bring
+// one back.
+const trashPurging = new Set();
+
+function shownTrash( items )
+{
+    return items.filter( function( it ) { return ! trashPurging.has( it.id ); } );
 }
 
 function renderTrashBar()
@@ -184,6 +194,9 @@ async function restoreTrash( ids )
 
 async function purgeTrash( ids, name )
 {
+    if( ids.length === 1 ) { purgeOneLater( ids ); return; }
+
+    // Several at once: the question stays, and they go at once, no Undo.
     if( ! await NayiveUI.confirm( {
         title: T( 'drive.deleteForever' ),
         body: TF( 'drive.deleteForeverBody', { name: name } ),
@@ -198,6 +211,35 @@ async function purgeTrash( ids, name )
     catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.deleteFailedMsg' ) ); }
 }
 
+// One item: no question. Its row goes now and it is deleted for good when
+// the Undo is gone (a real delete has no way back, so it waits). A closing
+// page still sends it: the fetch is the first thing onExpire does.
+function purgeOneLater( ids )
+{
+    ids.forEach( function( id ) { trashPurging.add( id ); } );
+    trashItems = shownTrash( trashItems );
+    render();
+
+    function forget() { ids.forEach( function( id ) { trashPurging.delete( id ); } ); }
+
+    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+    {
+        forget();
+        if( trashMode ) refreshTrash();
+    },
+    { onExpire: function()
+    {
+        // Gone: the ids stay in the set, so a bin read that was already on
+        // its way cannot draw the row again.
+        withBusy( GumApi.trashDelete( ids ) ).catch( function()
+        {
+            forget();
+            NayiveUI.toast( T( 'drive.deleteFailedMsg' ) );
+            if( trashMode ) refreshTrash();      // it is still in the bin: show it again
+        } );
+    } } );
+}
+
 async function emptyTrash()
 {
     if( ! trashItems.length ) return;
@@ -205,6 +247,7 @@ async function emptyTrash()
         title: T( 'drive.emptyTrashTitle' ),
         body: TF( 'drive.emptyTrashBody', { n: trashItems.length } ),
         confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
+    NayiveUI.undoSettle();            // a one-item delete waiting on its Undo goes now: all of it is going
     setStatus( T( 'drive.emptyingTrash' ) );
     try
     {

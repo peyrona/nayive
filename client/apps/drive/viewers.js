@@ -183,7 +183,9 @@ function dataUrlToBytes( dataUrl )
     return out;
 }
 
-async function saveEditorTo( destPath )
+// `replaced`: set when "Save a copy" sent a file of the same name to the
+// bin first (confirmSaveCopy) - the "Saved" toast then carries its Undo.
+async function saveEditorTo( destPath, replaced )
 {
     if( ! imageEditor ) return;
 
@@ -220,7 +222,8 @@ async function saveEditorTo( destPath )
 
         await savePhotoComment( destPath );
 
-        NayiveUI.toast( T( 'drive.imageSaved' ) );
+        if( replaced ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( destPath, replaced ); } );
+        else           NayiveUI.toast( T( 'drive.imageSaved' ) );
     }
     catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); }
 
@@ -268,6 +271,8 @@ async function confirmSaveCopy()
     // ask. The folder is re-listed rather than read off the screen: the
     // image may have been opened from a search hit, whose folder is not
     // the one on display.
+    let replaced = null;      // what the Undo needs to put the replaced file back
+
     if( dest !== editorPath && ( await destNameSet( dir ) ).has( name ) )
     {
         if( ! await NayiveUI.confirm( {
@@ -275,12 +280,70 @@ async function confirmSaveCopy()
             body: TF( 'drive.nameExistsCopyBody', { name: name } ),
             confirm: T( 'drive.replace' ), danger: true } ) ) return;
 
-        try { await withBusy( GumApi.deletePaths( [ dest ] ) ); }
+        const note = await noteOf( dest );          // the copy's note will take its place
+        let ids;
+        try { ids = await withBusy( GumApi.binPaths( [ dest ] ) ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.moveExistingFailed' ) ); return; }
         await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
+
+        // An old server does not say the bin ids: no Undo then.
+        if( ids ) replaced = { ids: ids, note: note, from: editorPath, seq: editorSeq };
     }
 
-    saveEditorTo( dest );
+    saveEditorTo( dest, replaced );
+}
+
+// The photo note `path` has now: '' for none, null when the notes could not
+// be read (the Undo then leaves them alone).
+async function noteOf( path )
+{
+    try { return ( await NayiveMedia.readComments() )[ path ] || ''; }
+    catch( _ ) { return null; }
+}
+
+// Undo of "Save a copy" over an existing name: the copy goes to the bin the
+// way Drive's own delete sends it, THEN the file it replaced comes back to
+// its name (the other order would land it as "name (2)"), with its note.
+// An editor still open on the copy goes back to the image it was editing,
+// unsaved - otherwise its ✓ would overwrite the file that just came back.
+async function undoSaveCopy( dest, r )
+{
+    setStatus( T( 'drive.restoring' ) );
+
+    try { await withBusy( GumApi.deletePaths( [ dest ] ) ); }
+    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); return; }
+    await NayiveMedia.purgePaths( [ dest ] );
+
+    if( editorPath === dest )
+    {
+        if( editorSeq === r.seq )
+        {
+            editorPath  = r.from;
+            editorDirty = true;
+            document.getElementById( 'editorName' ).textContent = r.from.split( '/' ).pop();
+        }
+        else closeImageEditor( true );      // re-opened on the copy: that file is in the bin now
+    }
+
+    let res = null;
+    try { res = await withBusy( GumApi.trashRestore( r.ids ) ); }
+    catch( _ ) { NayiveUI.toast( T( 'drive.restoreFailed' ) ); }
+
+    // Its note, unless it had to land under another name.
+    if( res && ! ( res.renamed && res.renamed.length ) && r.note !== null )
+    {
+        try
+        {
+            const map = await NayiveMedia.readComments();
+            if( r.note ) map[ dest ] = r.note; else delete map[ dest ];
+            await NayiveMedia.writeComments( map );
+        }
+        catch( _ ) { /* non-fatal: the file itself is back */ }
+    }
+
+    await refreshView();
+    if( res ) restoredStatus( res );
+    else      setStatus( '' );
 }
 
 async function closeImageEditor( force )

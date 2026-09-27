@@ -83,9 +83,7 @@ function renderHeader()
         mapBtn.className = 'icon-btn';
         mapBtn.title = T( 'trips.routeMap' );
         mapBtn.appendChild( svgIcon( ICON_MAP, 17 ) );
-        // Sheet opens BEFORE the map is built - Leaflet measures its container's size at
-        // init, and a still-hidden (display:none) container measures as 0x0.
-        mapBtn.addEventListener( 'click', function() { openSheet( 'mapSheetBackdrop' ); renderMapSheet(); } );
+        mapBtn.addEventListener( 'click', openMapSheet );
         actions.appendChild( mapBtn );
 
         // The currency converter lives in the header only when the whole trip uses one
@@ -467,7 +465,13 @@ function buildPhotosRow( trip )
         clearBtn.appendChild( svgIcon( ICON_X, 15 ) );
         clearBtn.addEventListener( 'click', function()
         {
-            mutateTrip( selectedTripId, function( t ) { const u = { ...t }; delete u.photosDir; return u; } );
+            const tripId = selectedTripId;
+            const old    = trip.photosDir;
+            mutateTrip( tripId, function( t ) { const u = { ...t }; delete u.photosDir; return u; } );
+            NayiveUI.undoToast( T( 'ui.toast.removed' ), function()
+            {
+                mutateTrip( tripId, function( t ) { return { ...t, photosDir: old }; } );
+            });
         });
         row.appendChild( clearBtn );
     }
@@ -616,11 +620,8 @@ function buildFileList( trip, docs, fnDelete )
             delBtn.className = 'icon-btn sm danger file-del';
             delBtn.title = T( 'trips.deleteDoc' );
             delBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
-            delBtn.addEventListener( 'click', function()
-            {
-                openConfirm( T( 'trips.deleteDoc' ), TF( 'trips.deleteStageBody', { name: name.textContent } ),
-                             NayiveUI.t( 'ui.delete' ), function() { fnDelete( d ); } );
-            });
+            // No question: it goes at once, with an Undo (deleteDocWithUndo).
+            delBtn.addEventListener( 'click', function() { fnDelete( d ); } );
             row.appendChild( delBtn );
         }
 
@@ -712,11 +713,8 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     delBtn.className = 'icon-btn danger';
     delBtn.title = T( 'trips.deleteStage' );
     delBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
-    delBtn.addEventListener( 'click', function()
-    {
-        const label = ( st.location || '' ).trim() || T( 'trips.thisStage' );
-        openConfirm( T( 'trips.deleteStage' ), TF( 'trips.deleteStageBody', { name: label } ), NayiveUI.t( 'ui.delete' ), function() { deleteStage( st.id ); } );
-    });
+    // No question: it goes at once, with an Undo (see deleteStage).
+    delBtn.addEventListener( 'click', function() { deleteStage( st.id ); } );
 
     // The eye toggles this stage enabled/disabled - same control as a password field.
     const eyeBtn = document.createElement( 'button' );
@@ -826,7 +824,7 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     {
         const row = document.createElement( 'div' );
         row.className = 'stage-row';
-        row.appendChild( svgIcon( ICON_PIN, 14 ) );
+        row.appendChild( svgIcon( ICON_HOUSE, 14 ) );
         const t2 = document.createElement( 'span' );
         t2.textContent = st.accommodation;
         row.appendChild( t2 );

@@ -199,7 +199,7 @@ function refreshDiscoverGo()
 // THE SEARCH
 
 // "exposiciones, museos en Dublín hoy". Natural language, not OR operators: it
-// reads the same way in all seven languages and every engine copes with it. The
+// reads the same way in all six languages and every engine copes with it. The
 // terms follow the on-screen (alphabetical) order, not the order they were ticked
 // in, so the same set of ticks always produces the same query.
 function discoverQuery()

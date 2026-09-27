@@ -54,6 +54,13 @@ http.createServer( ( req, res ) =>
         return;
     }
 
+    // Only the apps and the tools: never store/ (live config, keys) or the rest.
+    if( base === ROOT && ! sub.startsWith( '/client/apps/' ) && ! sub.startsWith( '/tools/' ) )
+    {
+        res.writeHead( 403 ).end( 'no' );
+        return;
+    }
+
     const file = path.join( base, sub );
     if( !file.startsWith( base ) ) { res.writeHead( 403 ).end( 'no' ); return; }
 
@@ -65,4 +72,4 @@ http.createServer( ( req, res ) =>
         res.end( body );
     } );
 } )
-.listen( PORT, () => console.log( `canvas-spike: http://localhost:${ PORT }/` ) );
+.listen( PORT, process.env.HOST || '127.0.0.1', () => console.log( `canvas-spike: http://localhost:${ PORT }/` ) );

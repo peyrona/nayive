@@ -421,6 +421,7 @@ var st = {
     selectedFolder: null,   // a folder path
     queue: [],              // songs currently queued, by reference to entries in st.songs
     playingIndex: -1,       // index into st.queue
+    seekOnLoad: 0,          // seconds to jump to once the new src loads (an Undo resuming a song)
     isPlaying: false,
     shuffle: false,
     playlists: [],          // [{id, name, paths:[...]}]
@@ -1060,6 +1061,8 @@ function handleQueueDrop( targetIndex )
 
 function removeFromQueue( index )
 {
+    var entry = st.queue[ index ];
+    if( ! entry ) return;
     var wasPlaying = index === st.playingIndex;
     st.queue.splice( index, 1 );
     if( ! st.queue.length ) { st.playingIndex = -1; stopPlayback(); }
@@ -1067,6 +1070,16 @@ function removeFromQueue( index )
     else if( index < st.playingIndex ) st.playingIndex--;
     renderQueueList();
     renderLibrary();
+
+    // Undo: the row goes back where it was; the song playing now keeps playing.
+    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.removed' ), function ()
+    {
+        var cur = st.queue[ st.playingIndex ];
+        st.queue.splice( Math.min( index, st.queue.length ), 0, entry );
+        st.playingIndex = cur ? st.queue.indexOf( cur ) : -1;
+        renderQueueList();
+        renderLibrary();
+    } );
 }
 
 function clearQueue()
@@ -1075,6 +1088,43 @@ function clearQueue()
     stopPlayback();
     renderQueueList();
     renderLibrary();
+}
+
+// What "Empty the queue" and "Load a playlist" throw away, for their Undo.
+function queueSnapshot()
+{
+    return { queue: st.queue.slice(), index: st.playingIndex,
+             time: audio.currentTime || 0, playing: ! audio.paused };
+}
+
+// Their Undo: the old queue comes back, in front of anything queued since
+// (minus `drop`, the rows the loaded playlist put in), and its song goes on
+// where it was. A song queued since that is playing now keeps playing.
+function restoreQueue( snap, drop )
+{
+    var cur  = st.queue[ st.playingIndex ];
+    var kept = st.queue.filter( function ( e ) { return drop.indexOf( e ) === -1; } );
+    st.queue = snap.queue.concat( kept );
+
+    if( cur && kept.indexOf( cur ) !== -1 ) st.playingIndex = st.queue.indexOf( cur );
+    else
+    {
+        st.playingIndex = -1;
+        stopPlayback();
+        var entry = st.queue[ snap.index ];
+        if( snap.index >= 0 && entry )
+        {
+            // a song that can no longer play just stays picked, as before
+            st.playingIndex = snap.index;
+            audio.src = GumApi.fileUrl( entry.song.path );
+            st.seekOnLoad = snap.time;
+            if( snap.playing ) audio.play().catch( function () {} );
+            updateMediaSession( entry.song );
+        }
+    }
+    renderQueueList();
+    renderLibrary();
+    updatePlayerBar();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1088,6 +1138,7 @@ function playIndex( index )
 {
     if( index < 0 || index >= st.queue.length ) return;
     st.playingIndex = index;
+    st.seekOnLoad = 0;                      // an Undo's resume point was for the song before
     var song = st.queue[ index ].song;
     audio.src = GumApi.fileUrl( song.path );
     audio.play().catch( function () {} );   // autoplay may be blocked - controls still work
@@ -1249,23 +1300,43 @@ function loadPlaylist( id )
     if( ! pl ) return;
     var found = pl.paths.map( findSong ).filter( Boolean ).map( function ( s ) { return { song: s }; } );
     var missing = pl.paths.length - found.length;
+    var missingMsg = missing ? NayiveUI.tf( missing === 1 ? "music.oneMissing" : "music.nMissing", { n: missing } ) : "";
+    var snap = queueSnapshot();                 // the queue this list throws away
     st.queue = found;
     st.playingIndex = -1;
     stopPlayback();
     renderQueueList();
     NayiveUI.setOpen( "loadBackdrop", false );
     if( found.length ) playIndex( 0 );
-    if( missing ) NayiveUI.toast( NayiveUI.tf( missing === 1 ? "music.oneMissing" : "music.nMissing", { n: missing } ) );
+
+    // Undo puts the old queue back - only when there was one to lose.
+    if( snap.queue.length )
+        NayiveUI.undoToast( NayiveUI.t( 'music.listLoaded' ) + ( missingMsg ? " " + missingMsg : "" ),
+                            function () { restoreQueue( snap, found ); } );
+    else if( missingMsg ) NayiveUI.toast( missingMsg );
 }
 
+// At once, no question: the Undo puts the list back where it was.
 async function deletePlaylist( id )
 {
-    var pl = st.playlists.filter( function ( p ) { return p.id === id; } )[ 0 ];
-    if( ! pl ) return;
-    if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'music.deleteList' ), body: NayiveUI.tf( "music.deleteListBody", { name: pl.name } ), confirm: NayiveUI.t( 'ui.delete' ), danger: true } ) ) return;
+    var at = -1;
+    st.playlists.forEach( function ( p, i ) { if( p.id === id ) at = i; } );
+    if( at === -1 ) return;
+    var pl = st.playlists[ at ];
     st.playlists = st.playlists.filter( function ( p ) { return p.id !== id; } );
     renderLoadList();
-    try { await writePlaylists(); }
+
+    var saving = writePlaylists();
+    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.deleted' ), async function ()
+    {
+        try { await saving; } catch( e ) {}     // the delete's write lands first, or it could land last
+        if( st.playlists.some( function ( p ) { return p.id === id; } ) ) return;
+        st.playlists.splice( Math.min( at, st.playlists.length ), 0, pl );
+        renderLoadList();
+        try { await writePlaylists(); }
+        catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+    } );
+    try { await saving; }
     catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
 }
 
@@ -1334,11 +1405,13 @@ function wireStaticUI()
     $( "#shuffleBtn" ).addEventListener( "click", function ()
     { st.shuffle = true; $( "#shuffleBtn" ).classList.add( "is-active" ); $( "#seqBtn" ).classList.remove( "is-active" ); } );
 
-    $( "#clearQueueBtn" ).addEventListener( "click", async function ()
+    // At once, no question: the Undo brings the queue back.
+    $( "#clearQueueBtn" ).addEventListener( "click", function ()
     {
         if( ! st.queue.length ) return;
-        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'music.clearQueue' ), body: NayiveUI.t( "music.clearQueueBody" ), confirm: NayiveUI.t( "music.empty" ), danger: true } ) ) return;
+        var snap = queueSnapshot();
         clearQueue();
+        NayiveUI.undoToast( NayiveUI.t( 'music.queueEmptied' ), function () { restoreQueue( snap, [] ); } );
     } );
 
     $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
@@ -1367,6 +1440,7 @@ function wireStaticUI()
     {
         seekRange.max = Math.floor( audio.duration ) || 1;
         $( "#totalLabel" ).textContent = fmtClock( audio.duration );
+        if( st.seekOnLoad ) { try { audio.currentTime = st.seekOnLoad; } catch( e ) {} st.seekOnLoad = 0; }
     } );
     audio.addEventListener( "timeupdate", function ()
     {

@@ -35,7 +35,6 @@ async function _tryAutoAccess_()
         await loadListing( FS_ROOT );                       // fills the right pane + renders
         await applyDeepLink();
         pollConvert();   // a conversion may still be running from an earlier upload
-        document.getElementById( 'searchInput' ).focus();   // ready to type a filter straight away
         refreshDiskGauge();                                 // fill the server-HD bar under the title
     }
     catch( _ )
@@ -57,6 +56,8 @@ function wireStaticUI()
     document.getElementById( 'uploadPhotoInput'  ).addEventListener( 'change', onUploadInputChange );
     document.getElementById( 'renameBtn'         ).addEventListener( 'click', openRename );
     document.getElementById( 'copyLinkBtn'       ).addEventListener( 'click', copySelectionLink );
+    document.getElementById( 'compressBtn'       ).addEventListener( 'click', compressSelection );
+    document.getElementById( 'propsBtn'          ).addEventListener( 'click', openProperties );
     document.getElementById( 'downloadBtn'       ).addEventListener( 'click', downloadSelection );
     document.getElementById( 'deleteBtn'         ).addEventListener( 'click', openDeleteConfirm );
     // New documents are created in the folder currently open in Drive
@@ -298,4 +299,5 @@ function wireStaticUI()
     document.getElementById( 'pickFolderConfirmBtn' ).addEventListener( 'click', confirmFolderPicker );
 
     wireContextMenu();
+    wireZip();          // the .zip list and "Extract here" (zip.js)
 }

@@ -54,6 +54,7 @@
         if( ! C.convOf( id ) ) { await C.loadSummary().catch( function () {} ); if( ! C.convOf( id ) ) return; }
         if( C.closeInfoNow ) C.closeInfoNow();
         if( S.open !== id ) C.flushDeletes();
+        C.settleConv( id );   // opening a chat just deleted (its "Undo" on show) makes the delete final
         S.open = id;
         S.msgs = new Map();
         S.order = [];
@@ -75,6 +76,7 @@
         C.renderConvHead();
         C.renderList();
         wallIn.textContent = "";
+        if( S.shared ) { C.fillComposer( S.shared ); S.shared = null; }
 
         try
         {
@@ -574,6 +576,19 @@
         plain( el, text.slice( last ), q );
     };
 
+    // 1 to 3 emojis and nothing else (spaces aside): shown big, with no bubble.
+    // One emoji is one grapheme, so a flag, a skin tone or a family counts once.
+    var GRAPHEMES = window.Intl && Intl.Segmenter ? new Intl.Segmenter( undefined, { granularity: "grapheme" } ) : null;
+    var EMOJI_RE  = /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u;
+
+    C.fewEmojis = function ( text )
+    {
+        var s = ( text || "" ).replace( /\s+/g, "" );
+        if( ! s ) return false;
+        var parts = GRAPHEMES ? Array.from( GRAPHEMES.segment( s ), function ( g ) { return g.segment; } ) : Array.from( s );
+        return parts.length <= 3 && parts.every( function ( g ) { return EMOJI_RE.test( g ); } );
+    };
+
     function plain( el, s, q )
     {
         if( ! s ) return;
@@ -634,6 +649,7 @@
         var el = h( "div", { class: "msg " + ( mine ? "out" : "in" ) + ( tail ? " tail" : "" ) + " " + kind +
                                       ( m.failed ? " failed" : "" ),
                              data: { id: String( m.id ) } } );
+        if( C.msgHidden( m.id ) ) el.hidden = true;   // deleted, its "Undo" still on show (compose.js)
 
         if( group && ! mine && tail )
             el.appendChild( h( "span", { class: "from", text: C.nameOf( m.from ), data: { c: String( C.colorOf( m.from ) ) } } ) );
@@ -657,6 +673,8 @@
             case "poll":  C.pollBody( el, m, meta ); break;
             case "call":  C.callBody( el, m, meta ); break;
             default:
+                // a reply or a forward keeps its bubble: the quote needs it
+                if( ! m.replyTo && ! m.fwd && C.fewEmojis( m.text ) ) el.classList.add( "jumbo" );
                 C.textNodes( el, m.text || "" );
                 el.appendChild( meta( m ) );
         }

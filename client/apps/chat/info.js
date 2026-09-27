@@ -123,7 +123,7 @@
     function sharedKinds()
     {
         var msgs = S.order.map( function ( x ) { return S.msgs.get( x ); } )
-                          .filter( function ( m ) { return m && m.id > 0 && ! m.deleted; } ).reverse();
+                          .filter( function ( m ) { return m && m.id > 0 && ! m.deleted && ! C.msgHidden( m.id ); } ).reverse();
         var of = function ( kind ) { return msgs.filter( function ( m ) { return m.kind === kind; } ); };
         var files = of( "file" );
         var links = [];
@@ -245,6 +245,15 @@
 
     // The list's ⋮ -> Auto-delete (the owner): one number of days for every
     // chat. The server applies it at once, then every hour; 0 = never.
+    C.pendingTtl = null;       // { days } saved, not sent yet (its "Undo" on show)
+
+    function showTtl( n )
+    {
+        S.deleteAfter = n;
+        C.renderList();        // the clock on the filters row
+        C.refreshInfo();       // and Info's line
+    }
+
     C.openAutoDelete = function ()
     {
         var input = h( "input", { attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
@@ -263,20 +272,33 @@
         NayiveUI.applySheetButtons( back );
         function done() { back.remove(); document.removeEventListener( "keydown", esc, true ); }
         function esc( e ) { if( e.key === "Escape" && document.body.lastElementChild === back ) { e.stopPropagation(); done(); } }
-        async function save()
+        // The server deletes the old messages (for everyone) the moment it
+        // hears: so it hears when the "Undo" is gone (the shared undoToast:
+        // 6 s, the next toast, the page closing). Until then the new number
+        // shows here only (C.pendingTtl: a summary read meanwhile keeps it).
+        function save()
         {
             var n = Number( input.value );
             if( input.value.trim() === "" || ! Number.isInteger( n ) || n < 0 || n > 3650 ) { input.focus(); input.select(); return; }
-            ok.disabled = true;
-            try
+            done();
+            var old  = S.deleteAfter || 0;
+            var mine = C.pendingTtl = { days: n };
+            showTtl( n );
+            NayiveUI.undoToast( n ? C.TF( "chat.autoDeleteOn", { n: n } ) : T( "chat.autoDeleteOff" ), function ()
             {
-                await C.api( "PUT", "autodelete", { days: n } );
-                S.deleteAfter = n;
-                C.renderList();   // the clock on the filters row
-                done();
-                NayiveUI.toast( n ? C.TF( "chat.autoDeleteOn", { n: n } ) : T( "chat.autoDeleteOff" ), { ms: 3000 } );
-            }
-            catch( e ) { ok.disabled = false; C.fail( e ); }
+                if( C.pendingTtl === mine ) C.pendingTtl = null;
+                showTtl( old );
+            }, { onExpire: function ()
+            {
+                C.api( "PUT", "autodelete", { days: n } ).then( function ()
+                {
+                    if( C.pendingTtl === mine ) C.pendingTtl = null;
+                }, function ( e )
+                {
+                    if( C.pendingTtl === mine ) { C.pendingTtl = null; showTtl( old ); }
+                    C.fail( e );
+                } );
+            } } );
         }
         ok.addEventListener( "click", save );
         no.addEventListener( "click", done );
@@ -305,23 +327,36 @@
         catch( e ) { C.fail( e ); }
     };
 
-    async function deletePerson( ct )
+    // A person or a group: off the list now, deleted when the "Undo" is gone (list.js deleteConv).
+    function deletePerson( ct )
     {
-        try { await C.api( "DELETE", "contacts/" + ct.id ); C.leaveToList(); await C.loadSummary(); }
-        catch( e ) { C.fail( e ); }
+        C.deleteConv( "d-" + ct.id, T( "ui.toast.deleted" ), function () { return C.api( "DELETE", "contacts/" + ct.id ); }, true );
     }
 
-    async function deleteGroup( c )
+    function deleteGroup( c )
     {
-        try { await C.api( "DELETE", "groups/" + c.id.slice( 2 ) ); C.leaveToList(); await C.loadSummary(); }
-        catch( e ) { C.fail( e ); }
+        C.deleteConv( c.id, T( "ui.toast.deleted" ), function () { return C.api( "DELETE", "groups/" + c.id.slice( 2 ) ); }, true );
     }
 
+    // Out at once; "Undo" puts them back in the same place.
     async function removeMember( c, p )
     {
-        var members = ( c.members || [] ).filter( function ( x ) { return x !== "o" && x !== p; } );
-        try { await C.api( "PATCH", "groups/" + c.id.slice( 2 ), { members: members } ); await C.loadSummary(); }
-        catch( e ) { C.fail( e ); }
+        var gid    = c.id.slice( 2 );
+        var before = ( c.members || [] ).filter( function ( x ) { return x !== "o"; } );
+        var members = before.filter( function ( x ) { return x !== p; } );
+        try { await C.api( "PATCH", "groups/" + gid, { members: members } ); }
+        catch( e ) { C.fail( e ); return; }
+        NayiveUI.undoToast( T( "ui.toast.removed" ), async function ()
+        {
+            // Whoever is in the group by now, with them back where they were.
+            var now = C.convOf( c.id );
+            var list = ( ( now && now.members ) || members ).filter( function ( x ) { return x !== "o" && x !== p; } );
+            var at = before.indexOf( p );
+            list.splice( at < 0 ? list.length : Math.min( at, list.length ), 0, p );
+            try { await C.api( "PATCH", "groups/" + gid, { members: list } ); await C.loadSummary(); }
+            catch( e ) { C.fail( e ); }
+        } );
+        C.loadSummary().catch( function () {} );
     }
 
     // A new picture: the camera or the gallery, shrunk here to 512 px.

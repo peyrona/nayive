@@ -218,12 +218,46 @@
             var files = Array.prototype.slice.call( input.files || [] );
             input.remove();
             if( ! files.length ) return;
-            if( how === "file" ) files.forEach( function ( f ) { upload( f, "file", "" ); } );
+            if( how === "file" ) sendFiles( files );
             else previewPhotos( files );
         } );
         document.body.appendChild( input );
         input.click();
     };
+
+    // Files from this device ("Local doc." or dropped on the chat): a picture
+    // goes as a photo - shown in the chat, not as a file icon - the rest as
+    // files. upload() still sends a picture this browser cannot draw as a file.
+    function isPicture( f ) { return /^image\//.test( f.type || "" ) || IMAGE_EXT.test( f.name || "" ); }
+
+    function sendFiles( files )
+    {
+        var pics = files.filter( isPicture );
+        files.forEach( function ( f ) { if( ! isPicture( f ) ) upload( f, "file", "" ); } );
+        if( pics.length ) previewPhotos( pics );
+    }
+
+    // Drag and drop onto an open chat. Only files; not while a sheet or the
+    // photo editor is on top.
+    function dropOk( e )
+    {
+        var dt = e.dataTransfer;
+        return S.open && dt && Array.prototype.indexOf.call( dt.types || [], "Files" ) >= 0 &&
+               ! document.querySelector( ".sheet-backdrop.open, .editor-backdrop.open" );
+    }
+    document.addEventListener( "dragover", function ( e )
+    {
+        if( ! dropOk( e ) ) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+    } );
+    document.addEventListener( "drop", function ( e )
+    {
+        if( ! dropOk( e ) ) return;
+        e.preventDefault();
+        var files = Array.prototype.slice.call( e.dataTransfer.files || [] );
+        if( files.length ) sendFiles( files );
+    } );
 
     // The owner's extras need their session: guest.html has no GumApi.
     // Their own files (the clip's "Nayive doc") serve in any chat; keeping or

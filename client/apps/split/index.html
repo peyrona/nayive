@@ -1824,7 +1824,18 @@
             g.archived = ! g.archived;
             persist( g );
             goHome();
-            toast( g.archived ? T( 'split.archived' ) : T( 'split.unarchived' ) );
+
+            // Undo flips it back. By folder, not by object: a reload in between
+            // (focus, the plug) swaps every group for a fresh copy.
+            const now = g.archived;
+            showUndo( now ? T( 'split.archived' ) : T( 'split.unarchived' ), function()
+            {
+                const cur = groups.find( x => x._base === g._base );
+                if( ! cur ) return;
+                cur.archived = ! now;
+                persist( cur );
+                render();
+            } );
         }
 
         // Called from the trash button on a group's row in the list - never from
@@ -1846,14 +1857,26 @@
             if( ! ok ) return;
 
             if( ! navigator.onLine ) { toast( T( 'split.needOnline' ) ); return; }
-            try { await GumApi.deletePaths( g._base ); }
+            let ids;                                    // bin ids for the Undo (null: an old server)
+            try { ids = await GumApi.binPaths( g._base ); }
             catch( _ ) { toast( T( 'split.deleteFailed' ) ); return; }
 
             await store.forget( g._base + '/' + FILE );
             groups  = groups.filter( x => x !== g );
             current = null;
             render();
-            toast( T( 'split.groupDeleted' ) );
+
+            // The question stays (the whole group goes, and others may see it);
+            // the Undo covers the slip. The folder went to the bin whole, and
+            // its shares live on the server pointing at that folder, so a
+            // restore brings the group back for everyone it was shared with.
+            if( ! ids || ! ids.length ) { toast( T( 'split.groupDeleted' ) ); return; }
+            showUndo( T( 'split.groupDeleted' ), function()
+            {
+                GumApi.trashRestore( ids )
+                    .then( loadGroups )
+                    .catch( function() { toast( T( 'split.restoreFailed' ) ); } );
+            } );
         }
 
         //------------------------------------------------------------------------//

@@ -42,11 +42,9 @@
             title: 'Contacts',
             lead:  T( 'contact.introLead' ),
             buttons: [
-                { sel: '#importBtn', text: T( 'contact.introImport' ) },
-                { sel: '#exportBtn', text: T( 'contact.introExport' ) },
                 { sel: '#dedupBtn',  text: T( 'contact.introDedup' ) },
+                { sel: '#settingsBtn', text: T( 'contact.introSettings' ) },
                 { sel: '#selectBtn', text: T( 'contact.introSelect' ) },
-                { sel: '#moreBtn',   text: T( 'contact.introMore' ) },
                 { sel: '#addBtn',    text: T( 'contact.introAdd' ) },
                 { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
                   text: T( 'contact.introSync' ) }
@@ -78,24 +76,6 @@
         /* Search */
         .search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
         .search-box { position: relative; flex: 1 1 auto; min-width: 0; }
-
-        /* --- Overflow menu (phone only) - same look as Calendar's -------------
-           Import / export / duplicates leave the header on a phone (six buttons
-           plus the title did not fit in 390px and wrapped onto a second row) and
-           come back in this "⋮" menu. "Select to merge" is not in here: it lives
-           in the search row, where it is always reachable. .card is its
-           containing block. */
-        .card    { position: relative; }
-        #moreBtn { display: none; }
-        /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
-           anchored under its button by NayiveUI.wireMenu. Nothing local. */
-
-        /* --- Phone layout (see TWO LAYOUT MODES in shared/app.css) --- */
-        @media (max-width: 640px)
-        {
-            #importBtn, #exportBtn, #dedupBtn { display: none; }
-            #moreBtn { display: flex; }
-        }
         .search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
         /* Look from app.css (FORM FIELD) like every other text field; only the
            right padding is local, to clear the magnifier / clear button (44px:
@@ -120,6 +100,17 @@
             text-transform: uppercase; letter-spacing: 0.04em;
             padding: 12px 2px 4px; border-bottom: 1px solid var(--line); margin-bottom: 2px;
         }
+        /* In a desktop window the title row is sticky too (shared/app.css), and
+           the search row pins right under it, so search is always one click
+           away. Padding, not margin, below it: rows slide under it unseen. The
+           letters pin under both; --win-search-h is measured on boot. */
+        html.is-windowed .search-row
+        {
+            position: sticky; top: var(--win-head-h, 0px); z-index: 19;
+            background: var(--card);
+            margin-bottom: 0; padding-bottom: 16px;
+        }
+        html.is-windowed .letter-head { top: calc(var(--win-head-h, 0px) + var(--win-search-h, 0px)); }
 
         /* --- A-Z jump rail ---------------------------------------------------
            Fixed to the right edge of the *card*, not of the window: on a phone
@@ -331,34 +322,18 @@
                     <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
                         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
-                    <button id="importBtn" class="icon-btn" data-i18n-attr="title:contact.importVcf">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 9 12 4 17 9"></polyline><line x1="12" y1="4" x2="12" y2="16"></line></svg>
-                    </button>
-                    <button id="exportBtn" class="icon-btn" data-i18n-attr="title:contact.exportVcf">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    </button>
                     <button id="dedupBtn" class="icon-btn" data-i18n-attr="title:contact.findDupes">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     </button>
-                    <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    <!-- Settings: sync with phones (CardDAV) + import / export .vcf.
+                         The launcher's gear glyph, so "settings" looks the same everywhere. -->
+                    <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     </button>
                     <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                     <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
-                </div>
-
-                <div id="topMenu" class="top-menu" role="menu" hidden>
-                    <button type="button" class="menu-item" data-menu="import" role="menuitem">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span data-i18n="contact.importVcf"></span>
-                    </button>
-                    <button type="button" class="menu-item" data-menu="export" role="menuitem">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span data-i18n="contact.exportVcf"></span>
-                    </button>
-                    <button type="button" class="menu-item" data-menu="dedup" role="menuitem">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span data-i18n="contact.findDupes"></span>
-                    </button>
                 </div>
 
                 <div class="search-row">
@@ -528,6 +503,104 @@
         </div>
     </div>
 
+    <!-- Settings: sync with phones (CardDAV) + vCard files. The sync half is UI
+         only for now (2026-09-22) and is wired by NayiveUI.davSection (shared/ui.js),
+         which Calendar's CalDAV sheet shares. Same rows and cards as Trips' "My location". -->
+    <div id="settingsBackdrop" class="sheet-backdrop">
+        <div class="sheet">
+            <h2 data-i18n="ui.settings"></h2>
+
+            <div id="setSync" class="share-sect share-link">
+                <p class="share-head" data-i18n="dav.syncHead"></p>
+                <p class="share-note" data-i18n="contact.set.syncLead"></p>
+
+                <!-- Off: one row, the (i) and the "+" that connects a phone. -->
+                <div data-dav="off" class="share-row share-link-app">
+                    <span class="share-link-url has-info" data-i18n="dav.syncOff"></span>
+                    <button class="info-dot" data-i18n-attr="data-info:contact.set.syncInfo"></button>
+                    <button data-dav="connect" class="share-drop" type="button" data-i18n-attr="title:dav.connect, aria-label:dav.connect"></button>
+                </div>
+
+                <!-- On: one card per phone kind (the phone decides; a PC sees both),
+                     the by-hand values, and the row that turns it off. -->
+                <div data-dav="on" hidden>
+                    <div class="loc-app" data-dav="iphone">
+                        <p class="share-head share-link-app" data-i18n="dav.iphone"></p>
+                        <p class="loc-links">
+                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.iphoneSetup"></a>
+                        </p>
+                        <p class="share-note share-link-how" data-i18n="contact.set.iphoneHow"></p>
+                    </div>
+                    <div class="loc-app" data-dav="android">
+                        <p class="share-head share-link-app" data-i18n="dav.android"></p>
+                        <p class="loc-links">
+                            <a class="loc-link" href="https://f-droid.org/packages/at.bitfire.davdroid/" target="_blank" rel="noopener" data-i18n="dav.davxGet"></a>
+                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.davxSetup"></a>
+                        </p>
+                        <p class="share-note share-link-how" data-i18n="contact.set.androidHow"></p>
+                    </div>
+                    <p class="share-note share-link-how" data-dav="onphone" data-i18n="dav.onPhone"></p>
+
+                    <div class="loc-app">
+                        <p class="share-head share-link-app" data-i18n="dav.byHand"></p>
+                        <div class="share-row"><span class="share-link-url" data-dav="server"></span><button class="share-drop" data-dav-copy="server"></button></div>
+                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="user"></span><button class="share-drop" data-dav-copy="user"></button></div>
+                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="pass"></span><button class="share-drop" data-dav-copy="pass"></button></div>
+                    </div>
+
+                    <div class="share-row loc-off">
+                        <span class="share-link-url" data-i18n="dav.syncOn"></span>
+                        <button data-dav="stop" class="share-drop" type="button" data-i18n-attr="title:dav.stop, aria-label:dav.stop"></button>
+                    </div>
+                </div>
+
+                <div class="field-row share-link-app">
+                    <div class="field">
+                        <label for="setAccess" data-i18n="dav.access"></label>
+                        <select id="setAccess">
+                            <option value="rw" data-i18n="dav.accessRw"></option>
+                            <option value="ro" data-i18n="dav.accessRo"></option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="setGroups" data-i18n="contact.set.groups"></label>
+                        <select id="setGroups">
+                            <option value="groups" data-i18n="contact.set.groupsAsGroups"></option>
+                            <option value="labels" data-i18n="contact.set.groupsAsLabels"></option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="setPhotos" data-i18n="contact.set.photos"></label>
+                        <select id="setPhotos">
+                            <option value="yes" data-i18n="contact.set.photosYes"></option>
+                            <option value="no"  data-i18n="contact.set.photosNo"></option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="share-sect share-link">
+                <p class="share-head" data-i18n="contact.set.filesHead"></p>
+                <div class="share-row">
+                    <span class="share-link-url" data-i18n="contact.set.importRow"></span>
+                    <button id="setImportBtn" class="share-drop" type="button" data-i18n-attr="title:contact.importVcf, aria-label:contact.importVcf">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 9 12 4 17 9"></polyline><line x1="12" y1="4" x2="12" y2="16"></line></svg>
+                    </button>
+                </div>
+                <div class="share-row share-link-app">
+                    <span class="share-link-url" data-i18n="contact.set.exportRow"></span>
+                    <button id="setExportBtn" class="share-drop" type="button" data-i18n-attr="title:contact.exportVcf, aria-label:contact.exportVcf">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="settingsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Merge preview -->
     <div id="mergeBackdrop" class="sheet-backdrop">
         <div class="sheet">
@@ -604,11 +677,22 @@
             // in render(), which would repaint under a detail / edit / duplicates sheet.
             NayiveUI.wireRefresh( { store: store, read: loadContacts } );
 
+            // In a desktop window the search row is sticky (CSS above): its height
+            // tells the letter heads where to pin.
+            if( document.documentElement.classList.contains( 'is-windowed' ) && window.ResizeObserver )
+            {
+                const searchRow = document.querySelector( '.search-row' );
+                new ResizeObserver( () =>
+                    document.documentElement.style.setProperty( '--win-search-h', searchRow.offsetHeight + 'px' )
+                ).observe( searchRow );
+            }
+
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
             // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, async function()
+            NayiveUI.bootWithStore( store, async function( who )
             {
+                whoUser = ( who && who.user ) || '';      // the by-hand "User" row in Settings
                 await loadContacts();
                 document.getElementById( 'searchInput' ).focus();   // ready to search straight away
             } );
@@ -2536,21 +2620,17 @@
             refreshDedupIfOpen();
         }
 
-        async function deleteCurrent()
+        // No question: it goes at once, and "Deleted [Undo]" puts the card back in
+        // its place in the list and in the file (it keeps its pos and its lines).
+        function deleteCurrent()
         {
             if( ! detailUid || ! canSave() ) return;
 
             const uid = detailUid;
-            const c   = contacts.find( x => x.uid === uid );
-            if( ! c ) return;
+            const idx = contacts.findIndex( x => x.uid === uid );
+            if( idx === -1 ) return;
 
-            const ok = await NayiveUI.confirm( {
-                title:   T( 'contact.deleteContact' ),
-                body:    TF( 'contact.deleteContactBody', { name: displayName( c ) } ),
-                confirm: T( 'ui.delete' ),
-                danger:  true
-            } );
-            if( ! ok ) return;
+            const c = contacts[ idx ];
 
             contacts = contacts.filter( x => x.uid !== uid );
 
@@ -2558,6 +2638,18 @@
             render();
             saveContacts();
             refreshDedupIfOpen();
+
+            // By uid, not by the list as it was: a re-read may have replaced `contacts`.
+            flashUndo( T( 'ui.toast.deleted' ), function()
+            {
+                if( ! canSave() || findContact( uid ) ) return;
+
+                contacts.splice( Math.min( idx, contacts.length ), 0, c );
+
+                render();
+                saveContacts();
+                refreshDedupIfOpen();
+            } );
         }
 
         function setMoreOpen( open )
@@ -2574,23 +2666,34 @@
         let dupGroups  = [];     // last findDuplicateGroups() result, backing the dedup sheet
         let mergeModel = null;   // union preview backing the merge sheet
 
-        // Phone-only "⋮" menu: the three header buttons that do not fit beside the
-        // title on a 390px screen (import / export / duplicates). Same shape as
-        // Calendar's: a button toggles it, any click elsewhere closes it.
-        // The shared header "..." popup (shared/ui.js): anchors itself under the button and
-        // closes on a pick, a click outside, Escape or a resize.
-        function wireTopMenu()
+        //------------------------------------------------------------------------//
+        // SETTINGS SHEET  -  sync with phones (CardDAV) + vCard files.
+        // The sync half is UI ONLY for now: "Connect" just flips the sheet to its
+        // "on" look, and nothing is sent or saved. Import / export are the real ones.
+
+        let whoUser = '';
+        let davSync = null;      // NayiveUI.davSection over #setSync
+
+        function openSettingsSheet()
         {
-            NayiveUI.wireMenu(
+            davSync.refresh( whoUser );
+            openBackdrop( 'settingsBackdrop' );
+        }
+
+        function wireSettingsSheet()
+        {
+            davSync = NayiveUI.davSection( document.getElementById( 'setSync' ) );
+
+            document.getElementById( 'settingsBtn'      ).addEventListener( 'click', openSettingsSheet );
+            document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'settingsBackdrop' ) );
+
+            document.getElementById( 'setExportBtn' ).addEventListener( 'click', exportVcf );
+            document.getElementById( 'setImportBtn' ).addEventListener( 'click', () =>
             {
-                btn: 'moreBtn', menu: 'topMenu',
-                onPick: function( item )
-                {
-                    if(      item.dataset.menu === 'import' ) { if( canSave() ) document.getElementById( 'importInput' ).click(); }
-                    else if( item.dataset.menu === 'export' ) exportVcf();
-                    else if( item.dataset.menu === 'dedup'  ) openDedupSheet();
-                }
-            } );
+                if( ! canSave() ) return;
+                closeBackdrop( 'settingsBackdrop' );     // the import's own result shows on the list
+                document.getElementById( 'importInput' ).click();
+            });
         }
 
         function openDedupSheet()
@@ -3178,9 +3281,8 @@
             wireLongPress();
             wireAzRail();
 
-            document.getElementById( 'exportBtn' ).addEventListener( 'click', exportVcf );
+            wireSettingsSheet();
 
-            document.getElementById( 'importBtn' ).addEventListener( 'click', () => { if( canSave() ) document.getElementById( 'importInput' ).click(); } );
             document.getElementById( 'importInput' ).addEventListener( 'change', function()
             {
                 if( this.files && this.files[ 0 ] )
@@ -3227,7 +3329,6 @@
             });
 
             document.getElementById( 'dedupBtn'        ).addEventListener( 'click', openDedupSheet );
-            wireTopMenu();
             document.getElementById( 'dedupCloseBtn'   ).addEventListener( 'click', () => closeBackdrop( 'dedupBackdrop' ) );
             document.getElementById( 'mergeCloseBtn'   ).addEventListener( 'click', () => closeBackdrop( 'mergeBackdrop' ) );
             document.getElementById( 'mergeConfirmBtn' ).addEventListener( 'click', doMerge );
@@ -3269,8 +3370,8 @@
         // shared/theme.css); these two names are kept only because the app calls them a lot.
         // Plain functions, not `const x = NayiveUI.y`: shared/ui.js is deferred, so NayiveUI
         // does not exist yet while this script is parsed.
-        function flashToast( msg ) { NayiveUI.toast( msg ); }
-        function flashUndo( msg )  { NayiveUI.undoToast( msg, undoMerge ); }
+        function flashToast( msg )      { NayiveUI.toast( msg ); }
+        function flashUndo( msg, undo ) { NayiveUI.undoToast( msg, undo || undoMerge ); }   // no `undo`: the merge's
 
     </script>
 </body>

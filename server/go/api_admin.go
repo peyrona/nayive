@@ -189,7 +189,7 @@ func (s *Server) adminSetup(w http.ResponseWriter, r *http.Request, body *adminR
 		return
 	}
 
-	token := s.sessions.Create(name, "admin", s.cfg.SessionTTL)
+	token := s.sessions.Create(name, "admin", s.cfg.SessionTTL, false)
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, s.cfg.SessionTTL, false, r.TLS != nil))
 	s.log.Info("admin account created", "name", name)
 	sendJSON(w, r, http.StatusOK,

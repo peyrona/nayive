@@ -665,10 +665,12 @@
     //   saver.saveTo( path )      "Guardar como": write there; the app then makes it the open doc
     //   saver.opened( o )         another document is on screen; o.pristine = imported bytes, o.dirty
     //   saver.moved( from, to )   the open document was renamed
+    //   saver.bakTaken( path )    its .bak was just written by hand (Restore's Undo): no copy over it this session
     //   saver.dirty()             edited since it was opened or last saved
     //   saver.takeDraft()         at boot: the device draft -> { name, body, at } or null
     //   saver.restored( d )       the app has put that draft on screen
     //   saver.dropDraft()         the user threw the untitled document away
+    //   saver.pristine()          the imported bytes still waiting to be the first .bak
     //   saver.lock()              the open document's key, or null
     //   saver.setLock( l )        this document is (not) locked - no writing
     //   saver.lockDoc( l )        put a password on: also frees the plain .bak
@@ -1102,11 +1104,13 @@
             saveTo:    saveTo,
             opened:    opened,
             moved:     moved,
+            bakTaken:  function ( p ) { backedUp.add( p ); },
             dirty:     function () { return dirty; },
             takeDraft: takeDraft,
             restored:  restored,
             dropDraft: dropDraft,
             drafted:   function () { return drafted; },
+            pristine:  function () { return pristine; },
             lock:      function () { return lock; },
             setLock:   function ( l ) { lock = l; },
             lockDoc:   lockDoc,
@@ -1135,6 +1139,8 @@
     //       finishName:  function ( name, fmt ) {...},  // "Guardar como": the final name, null = stay in the dialog
     //       renameName:  function ( typed, path ) {...},// rename in place: the new file name
     //       blocked:     function ( path ) {...},       // true = do not write it now (Calc's loss gate)
+    //       lossless:    function () {...},             // false = what is on screen, written back, loses something
+    //                                                   //   the file has (Calc: charts): Restore asks, no Undo
     //       ready:       function () {...},             // false = the editor is not up yet (Write)
     //       busy:        function () {...},             // true = not a moment to ask for a name (Calc: a cell is being typed)
     //       onChange:    function () {...},             // the document's name changed (Text re-picks the language)
@@ -1151,6 +1157,9 @@
     //   session.dropDraft()                    the untitled document was thrown away (Write: a template over it)
     //   session.openDialog()  .recent()        the "Abrir documento" sheet
     //   session.locked()                       it is written encrypted
+    //   session.keepUntitled()                 the untitled document about to go, for an Undo (null = none)
+    //   session.offerBack( kept )              its "Borrador descartado [Deshacer]" (Write: a template over it)
+    //   session.offerUndo( msg, back )         an Undo toast the next key or edit makes final (Write: the dictionary)
     //
     // THE PADLOCK (#lockBtn, optional): a password on the open document. The
     // key is derived once and kept in this tab only (shared/crypt.js), so a
@@ -1290,6 +1299,7 @@
 
         function opened( p )
         {
+            settleUndo();                      // another document: the Undo of the last one is over
             path     = p;
             readOnly = NayiveUI.isShared( p );
             pending  = null;
@@ -1302,6 +1312,7 @@
         function untitled( name, x )
         {
             x = x || {};
+            settleUndo();
             path     = null;
             readOnly = false;
             pending  = name || null;
@@ -1448,39 +1459,109 @@
         }
 
         // A blank document without leaving the app. An untitled one with edits
-        // is only in the device draft, so it asks first - and then drops it.
+        // is only in the device draft: it goes at once, and the toast's Undo
+        // brings it back. One that cannot be kept for that (a password on it,
+        // or it cannot be read) still asks first, as it always did.
         async function newDocument()
         {
             if( notReady() ) return;
 
             var dropping = saver.dirty() && ! path;
-            if( dropping && ! await NayiveUI.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
-                                                        confirm: t( "write.newDoc" ) } ) ) return;
+            var kept     = dropping ? await keepUntitled() : null;
+            if( dropping && ! kept && ! await NayiveUI.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
+                                                                  confirm: t( "write.newDoc" ) } ) ) return;
 
-            await startBlank( dropping );
+            if( await startBlank( dropping ) && kept ) offerBack( kept );
         }
 
         // "Guardar como"'s bin, shown only for a document that is nowhere but
         // on this device: throw it away and start blank. No second question -
-        // pressing a red bin inside a dialog already is one.
+        // pressing a red bin inside a dialog already is one - and an Undo.
         async function discardUntitled()
         {
             if( path || notReady() ) return;
+            var kept = await keepUntitled();
             NayiveUI.close( "saveAsBackdrop" );
-            await startBlank( true );
+            if( await startBlank( true ) && kept ) offerBack( kept );
         }
 
+        // True when the blank document is on screen.
         async function startBlank( dropping )
         {
             await saver.flush();               // a named document keeps its waiting autosave
             if( dropping ) await saver.dropDraft();
 
             try { await o.blank(); }
-            catch ( e ) { toast( "ui.openFailed" ); return; }
+            catch ( e ) { toast( "ui.openFailed" ); return false; }
 
             untitled( null );
             o.store.resting();                 // nothing was read or written: settle the plug by hand
             if( o.focus ) o.focus();
+            return true;
+        }
+
+        // ---- Undo: the document that New, the red bin or Restore swapped away --
+        //
+        // Kept in memory only, while its toast is on show (NayiveUI.undoToast).
+        // The first key or edit in what replaced it makes the Undo final - it
+        // would throw that new work away - and so does another document on
+        // screen (opened / untitled). The Undo button's own Enter is not "a key".
+
+        var undoOn = false;      // one of ours is on show
+
+        // Set AFTER undoToast: it settles the Undo it replaces first, and when
+        // that one is ours too, its onExpire clears the flag.
+        function offerUndo( msg, back )
+        {
+            NayiveUI.undoToast( msg, function () { undoOn = false; back(); },
+                                { onExpire: function () { undoOn = false; } } );
+            undoOn = true;
+        }
+
+        function settleUndo()
+        {
+            if( ! undoOn ) return;
+            undoOn = false;
+            NayiveUI.undoSettle();
+        }
+
+        document.addEventListener( "keydown", function ( e )
+        {
+            if( ! undoOn || /^(Shift|Control|Alt|AltGraph|Meta|CapsLock|Tab)$/.test( e.key ) ) return;
+            if( e.target && e.target.closest && e.target.closest( "#toast" ) ) return;
+            settleUndo();
+        }, true );
+
+        // The untitled document about to be thrown away: its body as the device
+        // draft keeps it, its name, and whether "Guardar como" was offered
+        // already (✗ = not again). Null when there is nothing to bring back -
+        // no edits, it cannot be read - or it has a password: no copy of that
+        // is ever kept in the clear, not even here (THE PADLOCK).
+        async function keepUntitled()
+        {
+            if( path || ! saver.dirty() || saver.lock() ) return null;
+
+            try { return { body: await o.encode( null ), name: pending, asked: asked, pristine: saver.pristine() }; }
+            catch ( e ) { return null; }
+        }
+
+        // Its Undo: back on screen and back in the device draft - now, not in 7 s.
+        function offerBack( kept )
+        {
+            offerUndo( t( "write.draftDiscarded" ), async function ()
+            {
+                if( path ) return;                     // a file is open now: leave it be
+
+                try { await o.load( kept.body, kept.name, "draft" ); }
+                catch ( e ) { toast( "ui.openFailed" ); return; }
+
+                untitled( kept.name, { dirty: true, pristine: kept.pristine } );
+                asked = kept.asked;
+                saver.edited();
+                saver.flush();
+                if( ! asked ) askSoon();
+                if( o.focus ) o.focus();
+            } );
         }
 
         // ---- a new document asks for its name ---------------------------------
@@ -1492,6 +1573,7 @@
 
         function edited()
         {
+            settleUndo();                      // new work: an Undo now would throw it away
             saver.edited();
             if( ! path && ! asked ) askSoon();
         }
@@ -1724,21 +1806,31 @@
         // ONE .bak per document, taken before its first save of the session. The
         // order matters: read the copy FIRST, then write what is on screen over
         // it, and only then load - so restoring is itself undoable.
+        //
+        // A plain document swaps at once and the toast's Undo swaps it back.
+        // It still asks first, with no Undo, when a password is on either side
+        // (no plain copy of it is kept in memory), when the store will not
+        // write the file as it is (Text: not UTF-8; Calc: a sheet it could not
+        // read), or when the app says what is on screen could not be written
+        // back whole (Calc: charts, pivots) - the Undo would write it so.
         async function restorePrevious()
         {
             if( notReady() ) return;
             if( ! path )   { toast( "write.noBackupYet" ); return; }
             if( readOnly ) { toast( "text.notYours" );     return; }
 
+            var p    = path;
             var bak  = bakPath( path );
             var prev = null;
             try { prev = await GumApi.readFileBytes( bak ); } catch ( e ) { prev = null; }
             if( ! prev || ! prev.length ) { toast( "write.noBackupYet" ); return; }
 
-            var ok = await NayiveUI.confirm( { title:   t( "write.restore" ),
-                                               body:    tf( "write.restoreBody", { size: NayiveUI.fmtBytes( prev.length ) } ),
-                                               confirm: t( "write.restore" ) } );
-            if( ! ok ) return;
+            var undoable = ! saver.lock() && ! NayiveCrypt.looksLocked( prev ) &&
+                           ! ( o.store.isBlocked && o.store.isBlocked( p ) ) && ( ! o.lossless || o.lossless() );
+
+            if( ! undoable && ! await NayiveUI.confirm( { title:   t( "write.restore" ),
+                                                          body:    tf( "write.restoreBody", { size: NayiveUI.fmtBytes( prev.length ) } ),
+                                                          confirm: t( "write.restore" ) } ) ) return;
 
             // The copy coming back was sealed by the key of its day: the one we
             // hold, or - after the password changed - one only the user knows.
@@ -1761,18 +1853,36 @@
                 prev = plain;
             }
 
+            var bakWas = undoable ? prev.slice() : null;     // the .bak's own bytes, whatever load() does with prev
+
             try
             {
                 // The copy going up takes the document's own state with it.
                 var now = await o.encode( path );
-                if( saver.lock() ) now = await NayiveCrypt.seal( saver.lock(), now );
-                await GumApi.writeFileBytes( bak, typeof now === "string" ? new TextEncoder().encode( now ) : now );
+                var up  = saver.lock() ? await NayiveCrypt.seal( saver.lock(), now ) : now;
+                await GumApi.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up );
 
                 await o.load( prev, path, "restore" );
                 saver.edited();                // the restored copy still has to be saved over the document
-                toast( "write.restored" );
             }
-            catch ( e ) { toast( "write.actionFailed" ); }
+            catch ( e ) { toast( "write.actionFailed" ); return; }
+
+            if( ! undoable ) { toast( "write.restored" ); return; }
+
+            // Undo: the .bak as it was, and what was on screen back on screen -
+            // to be saved over the document again.
+            offerUndo( t( "write.restored" ), async function ()
+            {
+                if( path !== p ) return;               // another document now
+                try
+                {
+                    await GumApi.writeFileBytes( bak, bakWas );
+                    saver.bakTaken( p );        // or the next save's first-time copy would write over it
+                    await o.load( now, p, "restore" );
+                    saver.edited();
+                }
+                catch ( e ) { toast( "write.actionFailed" ); }
+            } );
         }
 
         // ---- the padlock: put a password on, or take it off ---------------------
@@ -1926,7 +2036,10 @@
             openSaveAs: openSaveAs,
             openDialog: openDialog,
             recent:     recent.list,
-            locked:     function () { return !! saver.lock(); }
+            locked:     function () { return !! saver.lock(); },
+            keepUntitled: keepUntitled,
+            offerBack:    offerBack,
+            offerUndo:    offerUndo
         };
     }
 

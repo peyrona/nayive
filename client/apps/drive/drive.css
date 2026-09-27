@@ -24,7 +24,7 @@ html, body { height: 100%; overflow: hidden; }
    when it comes and goes. The hidden attribute wins over this (app.css) and
    takes the whole group, rule included, in one go. */
 #selActions { display: contents; }
-.status-label { flex: 1 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
+.status-label { flex: 0 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
 
 /* "Moved to the bin" used to be words in the status slot. Now the papelera
    itself answers: two slow gulps (swell, settle, duck, settle) tinted
@@ -283,6 +283,15 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
 .row-convert { color: var(--accent); font-weight: 600; margin-right: 6px; }
 .replace-opt[hidden] { display: none; }   /* class selector would otherwise beat [hidden]'s UA style */
 
+/* What is inside a .zip (zip.js): .replace-list's box, one file per row -
+   its folders dimmed, its size on the right. */
+.zip-summary, .zip-note { font-size: 0.88rem; }
+.zip-list { max-height: 45vh; }
+.zip-list li { display: flex; gap: 12px; }
+.zip-list .zip-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.zip-list .zip-dir  { color: var(--text-dim); }
+.zip-list .zip-size { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
 /* Built-in image viewer (lightbox — view only, no editing).
    Always a dark overlay, so its own colours are fixed and do not follow the theme. */
 .viewer-backdrop
@@ -401,6 +410,7 @@ body.trash-mode #searchToggleBtn,
 body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
 body.trash-mode #renameBtn,  body.trash-mode #moveToBtn,
 body.trash-mode #copyToBtn,  body.trash-mode #copyLinkBtn,
+body.trash-mode #compressBtn, body.trash-mode #propsBtn,
 body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
 body.trash-mode #shareBtn,   body.trash-mode #bigFilesBtn,
 body.trash-mode .topbar .sep,
@@ -466,7 +476,7 @@ body.trash-mode .tree-pane { display: none; }
     .breadcrumb .crumb-root::after { content: " ▾"; color: var(--text-dim); }
 
     /* B6 — per-file actions come from the row's ⋮ menu; keep Download */
-    #renameBtn, #moveToBtn, #copyToBtn, #copyLinkBtn, #deleteBtn { display: none; }
+    #renameBtn, #moveToBtn, #copyToBtn, #copyLinkBtn, #compressBtn, #propsBtn, #deleteBtn { display: none; }
 
     /* B6b — of what is left, the ones a phone reaches for LEAST move
        into the header's own "⋮" (#topMenu, built in wireTopMenu from

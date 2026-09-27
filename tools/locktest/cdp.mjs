@@ -12,14 +12,16 @@ import path from "node:path";
 
 const CHROME = [ "/usr/bin/chromium", "/usr/bin/google-chrome", "/usr/bin/chromium-browser" ];
 
-export async function browser()
+// extraArgs: more Chromium flags - e.g. the --blink-settings that make it report
+// a real mouse (hover / fine pointer), which headless otherwise does not.
+export async function browser( extraArgs = [] )
 {
     const bin = CHROME.find( p => fs.existsSync( p ) );
     if( ! bin ) throw new Error( "no Chromium found (tried " + CHROME.join( ", " ) + ")" );
 
     const dir  = fs.mkdtempSync( path.join( os.tmpdir(), "nayive-cdp-" ) );
     const proc = spawn( bin, [ "--headless=new", "--remote-debugging-port=0", "--no-sandbox",
-                               "--disable-gpu", "--user-data-dir=" + dir, "about:blank" ],
+                               "--disable-gpu", "--user-data-dir=" + dir, ...extraArgs, "about:blank" ],
                         { stdio: [ "ignore", "pipe", "pipe" ] } );
 
     // Chromium prints its DevTools endpoint on stderr once it is listening.
@@ -62,6 +64,10 @@ export async function attach( wsUrl )
         if( m.id && waiting.has( m.id ) ) { waiting.get( m.id )( m ); waiting.delete( m.id ); }
         if( m.method === "Runtime.consoleAPICalled" )
             logs.push( m.params.args.map( a => a.value ?? a.description ).join( " " ) );
+        // "Failed to load resource: 404" and the like: the red lines a person
+        // sees in DevTools, which never reach the console API.
+        if( m.method === "Log.entryAdded" && m.params.entry.level === "error" )
+            logs.push( "LOG-ERROR " + m.params.entry.text + " " + ( m.params.entry.url || "" ) );
         if( m.method === "Runtime.exceptionThrown" )
             logs.push( "EXCEPTION " + ( m.params.exceptionDetails.exception?.description ||
                                         m.params.exceptionDetails.text ) );
@@ -75,6 +81,7 @@ export async function attach( wsUrl )
     } );
 
     await send( "Runtime.enable" );
+    await send( "Log.enable" );
     await send( "Page.enable" );
 
     // The timeout matters: a test that leaves a dialog unanswered would

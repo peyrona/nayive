@@ -27,11 +27,22 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-c2646e34c470";
+var CACHE_VERSION = "nayive-60791a8bd54d";
 /* @end */
 
 /* @generated:precache */
 var PRECACHE_SHELL = [
+    "bookmarks/bookmarks.css",
+    "bookmarks/boot.js",
+    "bookmarks/icons/icon-192.png",
+    "bookmarks/icons/icon-512.png",
+    "bookmarks/index.html",
+    "bookmarks/input.js",
+    "bookmarks/io.js",
+    "bookmarks/manifest.json",
+    "bookmarks/model.js",
+    "bookmarks/render.js",
+    "bookmarks/sheets.js",
     "calc/calc.css",
     "calc/calc.js",
     "calc/codec.js",
@@ -56,6 +67,7 @@ var PRECACHE_SHELL = [
     "contact/icons/icon-512.png",
     "contact/index.html",
     "contact/manifest.json",
+    "desktop/index.html",
     "drive/actions.js",
     "drive/advsearch.js",
     "drive/dragdrop.js",
@@ -73,6 +85,16 @@ var PRECACHE_SHELL = [
     "drive/tree.js",
     "drive/upload.js",
     "drive/viewers.js",
+    "drive/zip.js",
+    "email/accounts.js",
+    "email/actions.js",
+    "email/compose.js",
+    "email/core.js",
+    "email/email.css",
+    "email/email.js",
+    "email/labels.js",
+    "email/list.js",
+    "email/read.js",
     "games/asteroids.html",
     "games/checkers.html",
     "games/chess.html",
@@ -111,7 +133,6 @@ var PRECACHE_SHELL = [
     "shared/i18n/es.json",
     "shared/i18n/fr.json",
     "shared/i18n/it.json",
-    "shared/i18n/la.json",
     "shared/i18n/pt.json",
     "shared/ical.js",
     "shared/media.js",
@@ -389,7 +410,8 @@ self.addEventListener( "fetch", function ( event )
         event.respondWith( assetStrategy( req ) );
 } );
 
-// Web Share Target POST -> stash images in SHARE_INBOX, redirect to the page.
+// Web Share Target POST -> stash images in SHARE_INBOX, redirect to the page
+// (or, for a shared link/text, to Chat).
 async function handleShare( req )
 {
     var base = new URL( "share-target/", self.registration.scope ).toString();
@@ -402,6 +424,20 @@ async function handleShare( req )
             return f && typeof f === "object" && f.size > 0 &&
                    ( /^image\//.test( f.type ) || /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/i.test( f.name || "" ) );
         } );
+
+        // No photos, only a link or text (YouTube's "Share"): Chat opens with
+        // it in the box, to pick who gets it.
+        if( ! files.length )
+        {
+            var text  = String( form.get( "text" )  || "" ).trim();
+            var link  = String( form.get( "url" )   || "" ).trim();
+            var title = String( form.get( "title" ) || "" ).trim();
+            if( link && text.indexOf( link ) < 0 ) text = text ? text + "\n" + link : link;
+            if( ! text ) text = title;
+            if( text )
+                return Response.redirect( new URL( "chat/?text=" + encodeURIComponent( text ),
+                                                   self.registration.scope ).toString(), 303 );
+        }
 
         var cache = await caches.open( SHARE_INBOX );
 
@@ -619,6 +655,17 @@ async function showPush( event )
     }
     if( d.quiet ) opts.silent = true;
 
+    // A chat message: tell every open Nayive page, so the one on screen puts
+    // its red Chat dot on at once (shared/ui.js, CHAT DOT). New mail the same
+    // way: the launcher's eMail count and an open eMail follow at once.
+    var news = String( d.tag || "" ).indexOf( "chat-" ) === 0 ? { chat: "new" }
+             : String( d.tag || "" ).indexOf( "mail-" ) === 0 ? { mail: "new" } : null;
+    if( news )
+    {
+        var wins = await clients.matchAll( { type: "window", includeUncontrolled: true } );
+        for( var w = 0; w < wins.length; w++ ) wins[ w ].postMessage( news );
+    }
+
     return self.registration.showNotification( title, opts );
 }
 
@@ -636,6 +683,21 @@ async function openTarget( url )
     // controlled by THIS worker generation, and we still want to focus it
     // instead of opening a second copy of the app.
     var all = await clients.matchAll( { type: "window", includeUncontrolled: true } );
+
+    // Frames are clients too (Planner's panes, the desktop's windows): only a
+    // whole browser window may be focused or navigated.
+    all = all.filter( function ( c ) { return c.frameType !== "nested"; } );
+
+    // The desktop (desktop/index.html) shows every app in a window of its own:
+    // it opens the page there - an open Chat is told which chat to show.
+    for( var d = 0; d < all.length; d++ )
+    {
+        if( new URL( all[ d ].url ).pathname.indexOf( SCOPE_PATH + "desktop/" ) === 0 )
+        {
+            all[ d ].postMessage( { desktopOpen: target } );
+            return all[ d ].focus();
+        }
+    }
 
     for( var i = 0; i < all.length; i++ )
     {

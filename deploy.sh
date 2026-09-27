@@ -2,7 +2,7 @@
 # ==============================================================================
 # deploy — Nayive (personal cloud apps), GO server
 # ==============================================================================
-# Pushes two things to the VPS:
+# Pushes three things to the VPS:
 #
 #   1. the server         server/go/  -> built here into ONE static Linux binary
 #                         -> ${REMOTE_BASE}/server/go/nayive
@@ -12,6 +12,10 @@
 #      (calc, calendar, contact, drive, habits, planner, tasks, text, trips, write,
 #       index.html launcher, login.html, admin.html and the shared/ code every
 #       app loads — theme, store, gum-api, ui, ical; see docs/shared-modules.md)
+#   3. the Android app    android/publish.sh -> android/build/site/
+#                         -> ~/web_sites/app/  (https://<origin>/app/)
+#      (nayive.apk + version.json, which installed phones check once a day:
+#       bump versionCode in android/app/build.gradle or they never see it)
 #
 # The VPS tree mirrors the repo (since 2026-09-15): ~/nayive/store/ is the
 # run-root (config/, homes/), ~/nayive/client/apps/ the apps, ~/nayive/server/go/nayive
@@ -100,11 +104,13 @@ REMOTE_BASE="/home/${REMOTE_USER}/nayive" # mirrors the repo: client/ + store/ +
 REMOTE_RUNROOT="$REMOTE_BASE/store"       # the server run-root on the VPS
 REMOTE_APPS_DIR="$REMOTE_BASE/client/apps"
 REMOTE_BIN="$REMOTE_BASE/server/go/nayive" # the Go binary on the VPS
+REMOTE_APK_DIR="/home/${REMOTE_USER}/web_sites/app" # the APK download site (sites_dir/app)
 SERVICE="nayive.service"
 
 SRC_ROOT="$SCRIPT_DIR/client"             # the server run-root in the repo
 APPSSRC="$SRC_ROOT/apps"
 GOSRC="$SCRIPT_DIR/server/go"               # the Go server's source
+APKSITE="$SCRIPT_DIR/android/build/site"    # what android/publish.sh lays out
 
 SSH_OPTS=(-p "$REMOTE_PORT" -o StrictHostKeyChecking=accept-new)
 RSYNC_RSH="ssh -p $REMOTE_PORT -o StrictHostKeyChecking=accept-new"
@@ -146,6 +152,7 @@ PREBUILD_STEPS=(
     "go -C tools run ./check-docx-editor"       # the docx-editor.dev engine vs docx-editor.lock.json, and the refs to it
     "go -C tools run ./build-precache"          # refresh apps/sw.js: precache file list + CACHE_VERSION
     "go -C tools run ./build-gzip"              # .gz sidecar beside every text asset (server sends them as-is)
+    "android/publish.sh"                        # the release APK + version.json, into android/build/site/ (skipped if android/ is unchanged)
 )
 
 for step in "${PREBUILD_STEPS[@]}"; do
@@ -205,6 +212,21 @@ if ! rsync -rltz --itemize-changes \
       -e "$RSYNC_RSH" \
       "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"; then
     echo "ERROR: apps rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/ failed." >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Android app — android/build/site/ -> $REMOTE_APK_DIR/
+# -c: by checksum. version.json goes LAST, so a phone that sees the new version
+# number always finds the new APK already there.
+# ------------------------------------------------------------------------------
+echo "==> Deploying the Android app  $APKSITE/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/"
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "mkdir -p '$REMOTE_APK_DIR'" ||
+   ! rsync -rlzc --itemize-changes --exclude='version.json' \
+      -e "$RSYNC_RSH" "$APKSITE/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/" ||
+   ! rsync -zc --itemize-changes \
+      -e "$RSYNC_RSH" "$APKSITE/version.json" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/version.json"; then
+    echo "ERROR: Android app rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/ failed." >&2
     exit 1
 fi
 

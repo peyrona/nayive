@@ -501,6 +501,7 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 	}
 
 	done := 0
+	ids := []string{} // the bin entry of each item trashed, so an app's Undo can restore it
 	for _, j := range resolved {
 		info, err := j.p.Lstat()
 		if err != nil {
@@ -525,9 +526,11 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 			// exactly as it is - only Trash.Purge frees space. The ADMIN trash is
 			// <base>/.trash, outside every home, so an admin trashing someone's
 			// file really does shrink that home: re-measure it.
-			if _, err := s.trash.MoveIn(role, user, j.p, j.rel); err != nil {
+			id, err := s.trash.MoveIn(role, user, j.p, j.rel)
+			if err != nil {
 				continue
 			}
+			ids = append(ids, id)
 			if role == "admin" && owner != "" {
 				s.users.ForgetUsage(owner)
 			}
@@ -538,11 +541,11 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 		}
 	}
 
-	message := "trashed"
 	if purge {
-		message = "purged"
+		sendJSON(w, r, http.StatusOK, map[string]any{"message": "purged", "count": done})
+		return
 	}
-	sendJSON(w, r, http.StatusOK, map[string]any{"message": message, "count": done})
+	sendJSON(w, r, http.StatusOK, map[string]any{"message": "trashed", "count": done, "ids": ids})
 }
 
 // -----------------------------------------------------------------------------
@@ -672,7 +675,7 @@ func (s *Server) isStructuralDir(role, user, target string) bool {
 	if err != nil {
 		return true // cannot tell -> refuse, the safe default
 	}
-	if s.isAccountFile(t) || s.isChatData(t) {
+	if s.isAccountFile(t) || s.isServerData(t) {
 		return true // for the admin as much as for the user
 	}
 
@@ -726,14 +729,15 @@ func (s *Server) isAccountFile(t string) bool {
 // config.json (a user who could write it could lift their own quota). The
 // admin panel is the way to change it. `t` must already be resolved.
 func (s *Server) isProtectedFile(role, t string) bool {
-	return (role != "admin" && s.isAccountFile(t)) || s.isChatData(t)
+	return (role != "admin" && s.isAccountFile(t)) || s.isServerData(t)
 }
 
-// isChatData is anything under homes/<someone>/data/chat: the Chat server
-// keeps it in memory and writes it itself (chat.go), so a copy written, moved
-// or trashed from Drive would only be overwritten - or lose a conversation.
-// `t` must already be resolved.
-func (s *Server) isChatData(t string) bool {
+// isServerData is anything under homes/<someone>/data/chat or data/mail: the
+// Chat and eMail servers keep it in memory and write it themselves (chat.go,
+// mail.go), so a copy written, moved or trashed from Drive would only be
+// overwritten - or lose a conversation, or an account. `t` must already be
+// resolved.
+func (s *Server) isServerData(t string) bool {
 	owner := homeOwner(s.cfg.HomesDir, t)
 	if owner == "" {
 		return false
@@ -742,8 +746,13 @@ func (s *Server) isChatData(t string) bool {
 	if err != nil {
 		return false
 	}
-	chat := filepath.Join(home, "data", "chat")
-	return t == chat || isInside(chat, t)
+	for _, app := range []string{"chat", "mail"} {
+		dir := filepath.Join(home, "data", app)
+		if t == dir || isInside(dir, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // purgeable is the one folder whose files may be deleted for good, skipping

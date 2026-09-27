@@ -850,11 +850,23 @@ function recordProgress()
 
 function toggleWatched( mv )
 {
+    var resume = null;                  // the resume point "Watched" throws away
     if( st.prog.watched[ mv.path ] ) delete st.prog.watched[ mv.path ];
-    else { st.prog.watched[ mv.path ] = true; delete st.prog.resume[ mv.path ]; }
+    else { st.prog.watched[ mv.path ] = true; resume = st.prog.resume[ mv.path ] || null; delete st.prog.resume[ mv.path ]; }
     st.progDirty[ mv.path ] = true;
     saveProgressNow();
     renderLibrary();
+
+    // Only that loss gets an Undo (a second tap un-marks it): not watched
+    // again, and back in "Keep watching" at the same point.
+    if( resume ) NayiveUI.undoToast( NayiveUI.t( 'movies.markedWatched' ), function ()
+    {
+        delete st.prog.watched[ mv.path ];
+        if( ! st.prog.resume[ mv.path ] ) st.prog.resume[ mv.path ] = resume;   // a newer point wins
+        st.progDirty[ mv.path ] = true;
+        saveProgressNow();
+        renderLibrary();
+    } );
 }
 
 /* ---------------------------------------------------------------------------

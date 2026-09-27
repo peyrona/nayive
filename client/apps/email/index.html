@@ -1,0 +1,354 @@
+<!-- index.html - eMail: the user's mail accounts (IMAP: Gmail with an app
+     password, and any other provider), read here. The server does the talking
+     (server/go/api_mail.go, mail_imap.go); this page only shows. Phase 1 of
+     docs/email-app-plan.md: accounts, the five trays, list, search, reading. -->
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- The interface language. First of all: it hides the page until the
+         dictionary is in. -->
+    <script src="../shared/i18n.js"></script>
+    <title>eMail</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpolyline points='22 6 12 13 2 6'/%3E%3C/svg%3E">
+
+    <!-- Shared colour scheme. Apply the saved choice before first paint to avoid a flash. -->
+    <meta name="theme-color" content="#1E1F23">
+    <link rel="stylesheet" href="../shared/theme.css">
+    <link rel="stylesheet" href="../shared/app.css">
+    <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
+    <script src="../shared/theme.js" defer></script>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script>
+        if( 'serviceWorker' in navigator )
+            window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+    </script>
+
+    <link rel="stylesheet" href="email.css">
+</head>
+<body>
+    <noscript><h2 data-i18n="ui.needJs"></h2></noscript>
+
+    <div id="app" class="app" style="display: none;">
+
+        <!-- List:      [icon] eMail ......... [search] [write] [select] [settings] [?] [plug]
+             Writing:   [←] [icon] eMail ...... [clip] [discard] [send] [?] [plug]
+                        (the clip opens Chat's panel: this device, Nayive, gallery)
+             Selecting: [←] [icon] eMail 3 .... [what can be done to them] [?] [plug]
+             Reading:   [←] [icon] eMail ...... [what can be done to it] [pictures] [?] [plug]
+             The action buttons get their glyphs from core.js (data-icon); which of
+             them show depends on the tray (email.js, E.syncBar). -->
+        <div class="topbar">
+            <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.back, aria-label:mail.back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+            <h1>eMail</h1>
+            <span id="selCount" class="mail-sel-count" hidden></span>
+
+            <div class="topbar-actions">
+                <!-- Enter searches (the mail server does it: not on every key). -->
+                <div id="searchWrap" class="search-wrap">
+                    <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
+                    <button id="searchClear" class="icon-btn sm" type="button" hidden data-i18n-attr="title:mail.searchClear, aria-label:mail.searchClear">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div id="actions" class="mail-actions" hidden>
+                    <button id="actAll"     class="icon-btn" type="button" data-icon="selectAll" data-i18n-attr="title:mail.selectAll, aria-label:mail.selectAll"></button>
+                    <button id="actReply"    class="icon-btn" type="button" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
+                    <button id="actReplyAll" class="icon-btn" type="button" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
+                    <button id="actForward"  class="icon-btn" type="button" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
+                    <button id="actRead"    class="icon-btn" type="button" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
+                    <button id="actUnread"  class="icon-btn" type="button" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
+                    <button id="actStar"    class="icon-btn" type="button" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
+                    <button id="actLabel"   class="icon-btn" type="button" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
+                    <button id="actSpam"    class="icon-btn" type="button" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
+                    <button id="actNotSpam" class="icon-btn" type="button" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
+                    <button id="actRestore" class="icon-btn" type="button" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
+                    <button id="actDelete"  class="icon-btn" type="button" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
+                    <button id="actForget"  class="icon-btn danger" type="button" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
+                </div>
+                <!-- Reading only, and only when the message has pictures from the internet. -->
+                <button id="imagesBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.showImages, aria-label:mail.showImages">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                </button>
+                <!-- Writing: what a message being written can do. -->
+                <div id="writeActions" class="mail-actions" hidden>
+                    <button id="cAttach"  class="icon-btn" type="button" data-icon="clip"   aria-haspopup="true" data-i18n-attr="title:mail.attach, aria-label:mail.attach"></button>
+                    <button id="cDiscard" class="icon-btn" type="button" data-icon="trash"  data-i18n-attr="title:mail.discard, aria-label:mail.discard"></button>
+                    <button id="cSend"    class="icon-btn mail-send" type="button" data-icon="sent" data-i18n-attr="title:mail.send, aria-label:mail.send"></button>
+                </div>
+                <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
+                <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="select" data-i18n-attr="title:mail.select, aria-label:mail.select"></button>
+                <button id="setBtn" class="icon-btn mail-list-only" type="button" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </button>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+            </div>
+        </div>
+
+        <div class="mail-body">
+            <!-- The account (a picker, only with two or more) and its five trays.
+                 A column on a wide screen, a row of pills on a phone. -->
+            <nav id="side" class="mail-side" hidden>
+                <select id="acctSel" class="tb-select" hidden data-i18n-attr="aria-label:mail.account"></select>
+                <div id="trays" class="mail-trays"></div>
+                <!-- Nayive's own labels, in a panel of their own that scrolls: a tap lists
+                     what carries one, from every account; its pencil (or a long press /
+                     right click) edits it; (+) makes one. -->
+                <div class="mail-labels-panel">
+                    <div class="mail-labels-head">
+                        <span class="section-label" data-i18n="mail.labels"></span>
+                        <button id="labelAddBtn" class="icon-btn sm" type="button" data-icon="plus" data-i18n-attr="title:mail.newLabel, aria-label:mail.newLabel"></button>
+                    </div>
+                    <div id="labelsSide" class="mail-trays mail-labels"></div>
+                </div>
+            </nav>
+
+            <main class="mail-main">
+                <!-- No account yet -->
+                <div id="noAcct" class="empty-state" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                    <p data-i18n="mail.noAccount"></p>
+                    <p data-i18n="mail.noAccountHint"></p>
+                    <button id="noAcctAdd" class="text-btn" type="button" data-i18n="mail.addAccount"></button>
+                </div>
+
+                <!-- A tray -->
+                <section id="listView" class="mail-list-view" hidden>
+                    <div id="acctProblem" class="mail-problem" hidden></div>
+                    <!-- The Trash (when it empties itself) and Spam: the button that
+                         empties it now, for good (list.js sets the words). -->
+                    <div id="trashBar" class="mail-images-bar" hidden>
+                        <span id="trashBarText"></span>
+                        <button id="emptyTrashBtn" class="icon-btn danger mail-bar-bin" type="button" data-icon="trash" data-i18n-attr="title:mail.emptyTrash, aria-label:mail.emptyTrash"></button>
+                    </div>
+                    <div id="list" class="mail-list"></div>
+                    <div id="listEmpty" class="empty-state" hidden>
+                        <p id="listEmptyText"></p>
+                    </div>
+                    <div id="listMore" class="mail-more" hidden></div>
+                </section>
+
+                <!-- One message -->
+                <section id="readView" class="mail-read-view" hidden>
+                    <h2 id="readSubject" class="mail-subject"></h2>
+                    <div id="readLabels" class="mail-chips" hidden></div>
+                    <div id="readMeta" class="mail-meta"></div>
+                    <div id="readParts" class="mail-parts" hidden></div>
+                    <div id="imagesBar" class="mail-images-bar" hidden>
+                        <span data-i18n="mail.imagesHidden"></span>
+                        <button id="imagesBarBtn" class="text-btn" type="button" data-i18n="mail.showImages"></button>
+                    </div>
+                    <div id="readBody" class="mail-content"></div>
+                </section>
+
+                <!-- Writing one: From (with two or more accounts), To, Cc/Bcc on
+                     demand, Subject, the files, the text. Saved to Drafts a few
+                     seconds after each change (compose.js). -->
+                <section id="composeView" class="mail-compose" hidden>
+                    <div id="cFromRow" class="mail-cfield" hidden>
+                        <label for="cFrom" data-i18n="mail.from"></label>
+                        <select id="cFrom"></select>
+                    </div>
+                    <div class="mail-cfield">
+                        <label for="cTo" data-i18n="mail.to"></label>
+                        <input id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                        <button id="cCcBtn" class="text-btn ghost" type="button" data-i18n="mail.ccBtn"></button>
+                    </div>
+                    <div id="cCcRow" class="mail-cfield" hidden>
+                        <label for="cCc" data-i18n="mail.cc"></label>
+                        <input id="cCc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                    </div>
+                    <div id="cBccRow" class="mail-cfield" hidden>
+                        <label for="cBcc" data-i18n="mail.bcc"></label>
+                        <input id="cBcc" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                    </div>
+                    <div class="mail-cfield">
+                        <label for="cSubject" data-i18n="mail.subject"></label>
+                        <input id="cSubject" type="text" autocomplete="off">
+                    </div>
+                    <div id="cFiles" class="mail-parts" hidden></div>
+                    <textarea id="cText" class="mail-ctext" data-i18n-attr="placeholder:mail.textPh, aria-label:mail.textPh"></textarea>
+                    <p id="cStatus" class="mail-cstatus"></p>
+                    <!-- the addresses of the Contacts app that fit what is being typed -->
+                    <div id="cSuggest" class="mail-suggest" role="listbox" hidden></div>
+                    <input id="cFileInput" type="file" multiple hidden>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- LABELS for the messages picked (or the one open): a tap puts a label on
+         all of them, or takes it off all of them (mixed = some have it). A new
+         one can be made right here. It acts at once; ✗ only closes. -->
+    <div class="sheet-backdrop" id="labelSheet" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 data-i18n="mail.labelsBtn"></h2>
+            <div id="labelPick" class="mail-label-pick"></div>
+            <p id="labelPickEmpty" class="hint" data-i18n="mail.noLabels" hidden></p>
+            <div class="mail-new-label">
+                <input id="labelNew" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh, aria-label:mail.newLabel">
+                <button id="labelNewBtn" class="icon-btn" type="button" data-icon="plus" data-i18n-attr="title:mail.newLabel, aria-label:mail.newLabel"></button>
+            </div>
+            <div class="sheet-actions">
+                <button type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS, two tabs.
+         Accounts: the ones there are (bin = remove, at once: the mail stays on
+         its server) and the form that adds one - the provider drop-down fills
+         itself from the server (/api/mail/providers) and follows the address as
+         it is typed; what that provider needs is spelled out under it, step by
+         step, with a link to where its app password is made.
+         General: how many days mail stays in the Trash; pictures from the internet
+         always shown or not. Every change applies at once. -->
+    <div class="sheet-backdrop" id="setSheet" role="dialog" aria-modal="true">
+        <div class="sheet sheet--wide">
+            <h2 data-i18n="mail.settings"></h2>
+            <div class="mail-tabs" role="tablist">
+                <button class="pill is-active" type="button" role="tab" data-tab="accounts" data-i18n="mail.tabAccounts"></button>
+                <button class="pill"           type="button" role="tab" data-tab="general"  data-i18n="mail.tabGeneral"></button>
+            </div>
+
+            <div data-pane="accounts">
+                <div id="acctList" class="mail-acct-list"></div>
+                <div class="section-label" data-i18n="mail.addAccount"></div>
+                <div class="field-row">
+                    <div class="field mail-prov">
+                        <label for="addProv" data-i18n="mail.provider"></label>
+                        <select id="addProv"></select>
+                    </div>
+                    <div class="field">
+                        <label for="addEmail" data-i18n="mail.email"></label>
+                        <input id="addEmail" type="email" autocomplete="email" spellcheck="false" autocapitalize="none">
+                    </div>
+                </div>
+
+                <!-- What the provider picked needs -->
+                <div id="provHelp" class="mail-prov-help">
+                    <p id="provWhat"></p>
+                    <ol id="provSteps"></ol>
+                    <a id="provLink" class="text-btn ghost" target="_blank" rel="noopener noreferrer" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        <span id="provLinkText"></span>
+                    </a>
+                </div>
+
+                <div id="addFields">
+                    <div class="field">
+                        <label for="addPass" id="addPassLabel"></label>
+                        <div class="mail-pass">
+                            <input id="addPass" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="none">
+                            <button id="passEye" class="icon-btn sm" type="button" data-i18n-attr="title:ui.showPassword, aria-label:ui.showPassword"></button>
+                        </div>
+                    </div>
+
+                    <!-- "JMAP" (a server of one's own choosing) only: its address. -->
+                <div id="jmapField" class="field" hidden>
+                    <label for="jmapUrl" data-i18n="mail.jmapUrl"></label>
+                    <input id="jmapUrl" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="mail.example.com">
+                    <p class="hint" data-i18n="mail.jmapUrlHint"></p>
+                </div>
+
+                <!-- "Other" only: the provider's two servers. -->
+                    <div id="hostFields" hidden>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="imapHost" data-i18n="mail.imapHost"></label>
+                                <input id="imapHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="imap.example.com">
+                            </div>
+                            <div class="field mail-port">
+                                <label for="imapPort" data-i18n="mail.port"></label>
+                                <input id="imapPort" type="number" min="1" max="65535" value="993">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="smtpHost" data-i18n="mail.smtpHost"></label>
+                                <input id="smtpHost" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="smtp.example.com">
+                            </div>
+                            <div class="field mail-port">
+                                <label for="smtpPort" data-i18n="mail.port"></label>
+                                <input id="smtpPort" type="number" min="1" max="65535" value="465">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="addName" data-i18n="mail.nameOpt"></label>
+                        <input id="addName" type="text" autocomplete="name">
+                        <p class="hint" data-i18n="mail.nameHint"></p>
+                    </div>
+                </div>
+
+                <p id="addStatus" class="mail-add-status" hidden></p>
+                <p id="addError" class="field-error" hidden></p>
+                <button id="addBtn" class="text-btn" type="button" data-i18n="mail.addAccount"></button>
+
+            </div>
+
+            <div data-pane="general" hidden>
+                <div class="section-label" data-i18n="mail.tray.trash"></div>
+                <div class="field">
+                    <label for="trashDays" data-i18n="mail.trashDays"></label>
+                    <input id="trashDays" type="number" min="1" max="365" inputmode="numeric">
+                    <p id="trashDaysHint" class="hint" data-i18n="mail.trashDaysHint" hidden></p>
+                </div>
+                <div class="section-label" data-i18n="mail.showImages"></div>
+                <label class="mail-check"><input id="showImagesAlways" type="checkbox"> <span data-i18n="mail.showImagesAlways"></span></label>
+                <p class="hint" data-i18n="mail.showImagesAlwaysHint"></p>
+            </div>
+
+            <div class="sheet-actions">
+                <button type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ONE LABEL: its name and colour. New from the side panel's (+), edit from
+         a label's pencil; the bin (edit only) deletes it at once - and takes it
+         off every message. -->
+    <div class="sheet-backdrop" id="labelDlg" role="dialog" aria-modal="true">
+        <div class="sheet">
+            <h2 id="labelDlgTitle"></h2>
+            <div class="field">
+                <label for="labelName" data-i18n="mail.labelName"></label>
+                <input id="labelName" type="text" maxlength="40" autocomplete="off" data-i18n-attr="placeholder:mail.newLabelPh">
+            </div>
+            <div class="field">
+                <label data-i18n="mail.labelColor"></label>
+                <div id="labelColors" class="mail-swatches" role="radiogroup" data-i18n-attr="aria-label:mail.labelColor"></div>
+            </div>
+            <p id="labelDlgError" class="field-error" hidden></p>
+            <div class="sheet-actions">
+                <button id="labelDelBtn" class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:mail.removeLabel" hidden></button>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="labelSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/gum-api.js" defer></script>
+    <script src="../shared/ui.js" defer></script>
+    <script src="core.js" defer></script>
+    <script src="list.js" defer></script>
+    <script src="read.js" defer></script>
+    <script src="accounts.js" defer></script>
+    <script src="labels.js" defer></script>
+    <script src="actions.js" defer></script>
+    <script src="compose.js" defer></script>
+    <script src="email.js" defer></script>
+</body>
+</html>

@@ -70,7 +70,11 @@
 
 
     // ----------------------------------------------------------------- //
-    // AUTOMATIC MODE - dark after sunset, light after sunrise.
+    // AUTOMATIC MODE - dark once dusk is really dark, light once the morning
+    // is really light. Plain sunrise/sunset is too early both ways: the sky
+    // at sunrise is still dim, and after sunset there is plenty of light for
+    // a good while. So the edges are sun HEIGHTS, not horizon crossings:
+    // LIGHT_AT in the morning, DARK_AT in the evening.
     //
     // Works the same on a phone and on a PC because it needs nothing from the
     // operating system: the browser gives us coordinates once, and the rest is
@@ -91,7 +95,9 @@
     var RAD      = Math.PI / 180;
     var FALLBACK_RISE = 7;                 // hours, local, used when even the time zone gives no place
     var FALLBACK_SET  = 19;
-    var MAX_WAIT = 6 * 3600 * 1000;        // never sleep longer than this before looking again
+    var LIGHT_AT = 5;                      // degrees above the horizon: go Light (~25-40 min after sunrise in Spain)
+    var DARK_AT  = -4;                     // degrees below the horizon: go Dark (~20-30 min after sunset in Spain)
+    var MAX_WAIT = 6 * 3600 * 1000;        // re-check this often when a day has no edge at all (far north/south)
 
     var timer = null;                      // the pending "flip at the next boundary" timeout
 
@@ -158,9 +164,12 @@
     // NOAA's sunrise equation in its short form - about a minute of error, which
     // is far more than a colour switch will ever need, and no table and no
     // network. `dayOffset` picks the local solar day: 0 = the one `now` is in.
-    // Returns { rise: Date, set: Date }, or the string "up" / "down" near the
-    // poles, where the sun does not cross the horizon at all that day.
-    function sunTimes( now, lat, lon, dayOffset )
+    // `height` is the sun height in degrees the times are for: -0.833 is plain
+    // sunrise/sunset (the disc is half a degree wide and the air bends its
+    // light, so it LOOKS risen while its centre is still below).
+    // Returns { rise: Date, set: Date }, or the string "up" / "down" when the
+    // sun stays above / below that height all day (near the poles).
+    function sunTimes( now, lat, lon, dayOffset, height )
     {
         var jd = now.getTime() / 86400000 + 2440587.5;                  // Julian date of `now`
 
@@ -183,13 +192,11 @@
         var sinDec = Math.sin( L * RAD ) * Math.sin( 23.44 * RAD );     // 23.44 deg = Earth's tilt
         var cosDec = Math.cos( Math.asin( sinDec ) );
 
-        // -0.833 deg, not 0: the sun's disc is half a degree wide and the air
-        // bends its light, so it LOOKS risen while its centre is still below.
-        var cosW = ( Math.sin( -0.833 * RAD ) - Math.sin( lat * RAD ) * sinDec )
+        var cosW = ( Math.sin( height * RAD ) - Math.sin( lat * RAD ) * sinDec )
                  / ( Math.cos( lat * RAD ) * cosDec );
 
-        if( cosW >  1 ) return "down";        // polar night: it never comes up
-        if( cosW < -1 ) return "up";          // midnight sun: it never goes down
+        if( cosW >  1 ) return "down";        // it never climbs to `height` that day
+        if( cosW < -1 ) return "up";          // it never drops to `height` that day
 
         var w = Math.acos( cosW ) / RAD;      // half the day, as an hour angle in degrees
 
@@ -224,16 +231,19 @@
             return { mode: DARK, next: edge };
         }
 
-        var today = sunTimes( now, g.lat, g.lon, 0 );
+        var light = sunTimes( now, g.lat, g.lon, 0, LIGHT_AT );   // its .rise is the morning edge
+        var dark  = sunTimes( now, g.lat, g.lon, 0, DARK_AT  );   // its .set is the evening edge
 
-        if( today === "up"   ) return { mode: LIGHT, next: null };
-        if( today === "down" ) return { mode: DARK,  next: null };
+        // A day with no edge: the sun never gets high enough (Dark all day), or
+        // never gets low enough (Light all day). Just look again later.
+        if( light === "up"   || dark === "up"   ) return { mode: LIGHT, next: null };
+        if( light === "down" || dark === "down" ) return { mode: DARK,  next: null };
 
-        if( now < today.rise ) return { mode: DARK,  next: today.rise };
-        if( now < today.set  ) return { mode: LIGHT, next: today.set  };
+        if( now < light.rise ) return { mode: DARK,  next: light.rise };
+        if( now < dark.set   ) return { mode: LIGHT, next: dark.set   };
 
-        // After sunset: the next boundary is tomorrow's sunrise.
-        var tomorrow = sunTimes( now, g.lat, g.lon, 1 );
+        // After dusk: the next edge is tomorrow morning's.
+        var tomorrow = sunTimes( now, g.lat, g.lon, 1, LIGHT_AT );
         return { mode: DARK, next: ( tomorrow.rise && tomorrow.rise > now ) ? tomorrow.rise : null };
     }
 
@@ -243,9 +253,10 @@
         if( ! isAuto() ) return;
 
         // +1s so we land just PAST the boundary and never re-fire on the same one.
+        // No cap on a real edge: a sleeping device wakes through focus /
+        // visibilitychange / pageshow, which all call tick() again.
         var wait = next ? ( next.getTime() - Date.now() + 1000 ) : MAX_WAIT;
 
-        if( wait > MAX_WAIT ) wait = MAX_WAIT;     // a long wait is re-checked instead of trusted
         if( wait < 1000     ) wait = 1000;
 
         timer = setTimeout( tick, wait );

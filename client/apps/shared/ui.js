@@ -97,7 +97,32 @@
     // both frames. A cross-origin `top` throws: treat that as framed too.
     var EMBEDDED = false;
     try { EMBEDDED = ( window.self !== window.top ); } catch ( e ) { EMBEDDED = true; }
-    if( EMBEDDED ) { try { document.documentElement.classList.add( "is-embedded" ); } catch ( e ) {} }
+
+    // WINDOWED - framed, but as a whole app in a window of the desktop
+    // (desktop/index.html), not as a pane of another app. It keeps its own
+    // icon, title and sync dot - that row IS the window's title bar - so it gets
+    // html.is-windowed instead of .is-embedded. Still EMBEDDED for the JS: the
+    // update bar, quota card and Chat dot belong to the desktop, not to a window.
+    var WINDOWED = false;
+    try
+    {
+        WINDOWED = EMBEDDED && window.parent === window.top &&
+                   window.top.location.pathname.indexOf( "/nayive/desktop/" ) === 0;
+    }
+    catch ( e ) {}
+    if( EMBEDDED ) { try { document.documentElement.classList.add( WINDOWED ? "is-windowed" : "is-embedded" ); } catch ( e ) {} }
+
+    // In a window the card's title row is sticky (app.css); its height goes in
+    // --win-head-h so an app's own sticky heads (Contacts' letters) sit under it.
+    if( WINDOWED && window.ResizeObserver ) document.addEventListener( "DOMContentLoaded", function ()
+    {
+        var head = document.querySelector( ".page > .page-inner > .card > .header" );
+        if( ! head ) return;
+        new ResizeObserver( function ()
+        {
+            document.documentElement.style.setProperty( "--win-head-h", head.offsetHeight + "px" );
+        } ).observe( head );
+    } );
 
     // ...and is the HOST window wide enough to show every pane at once? Planner's
     // PC / tablet layout puts calendar + tasks + habits side by side, and each of
@@ -108,7 +133,7 @@
     // .is-embedded rule. The width to test is the TOP window's (same 640px
     // breakpoint Planner uses): our own frame is only a slice of it, and a 25%-
     // wide pane on a desktop is narrower than a phone.
-    if( EMBEDDED ) try
+    if( EMBEDDED && ! WINDOWED ) try
     {
         var wide = window.top.matchMedia( "(min-width: 641px)" );
 
@@ -399,6 +424,7 @@
         var t = byId( opts.id || "toast" );
         if( ! t ) return;
 
+        settleUndo();                           // it takes an Undo's place: that one is final now
         clearTimeout( t._nayiveToastTimer );
         t.classList.remove( "actionable" );     // clear a prior actionable toast (contact)
         t.textContent = msg;
@@ -509,6 +535,8 @@
         // "New folder" - the same glyph Drive's toolbar uses, so the verb reads
         // the same in the toolbar and in the folder picker.
         folderplus: [ 2, '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line>' ],
+        // "Extract here" - the same folder, with an arrow going into it (Drive's .zip).
+        unzip:  [ 2,   '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="10" x2="12" y2="17"></line><polyline points="9 14 12 17 15 14"></polyline>' ],
         doc:    [ 2,   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="12" y2="17"></line>' ],
         // "Save as" - the check, with a small + centred near the top edge for "as a new copy".
         saveas: [ 2,   '<polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line>' ],
@@ -542,7 +570,11 @@
         // draws. Write's and Calc's Edición menus use them (shared/menubar.js).
         cut:      [ 2, '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>' ],
         copy:     [ 2, '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' ],
-        paste:    [ 2, '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path>' ]
+        paste:    [ 2, '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path>' ],
+        // Pausa / Seguir / Parar - a running thing (the desktop's countdown).
+        pause:    [ 2.2, '<line x1="9" y1="5" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="19"></line>' ],
+        play:     [ 2.2, '<polygon points="7 4 19 12 7 20 7 4"></polygon>' ],
+        stop:     [ 2.2, '<rect x="6" y="6" width="12" height="12" rx="1.5"></rect>' ]
     };
 
     // App logos that don't fit the 24 stroke grid the ICONS table above uses:
@@ -578,6 +610,31 @@
             return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">' + d[ 1 ] + '</svg>';
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + d[ 0 ] +
                '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d[ 1 ] + '</svg>';
+    }
+
+    // THE CLIP'S PANEL (Chat's writer, eMail's): a round coloured button per
+    // choice, its name under it, three to a row (app.css .attach). items:
+    // [{ icon: <svg> node, label, color: 0-5, act }]. A tap runs onPick (the
+    // caller closes the panel), then the choice. The caller places it.
+    function attachPanel( items, onPick )
+    {
+        var el = document.createElement( "div" );
+        el.className = "attach";
+        items.forEach( function ( a )
+        {
+            var ai = document.createElement( "span" );
+            ai.className = "ai";
+            ai.appendChild( a.icon );
+            var b = document.createElement( "button" );
+            b.type = "button";
+            b.className = "att";
+            b.setAttribute( "data-c", String( a.color ) );
+            b.appendChild( ai );
+            b.appendChild( document.createTextNode( a.label ) );
+            b.addEventListener( "click", function () { if( onPick ) onPick(); a.act(); } );
+            el.appendChild( b );
+        } );
+        return el;
     }
 
     // role -> [ css class, default icon ]
@@ -1284,6 +1341,7 @@
     //           { sel: "[data-intro-open]", text: "Abre esta ayuda." },
     //           { icon: "grid", name: "Vistas", text: "Cuadricula, mapa o pase." }
     //       ],
+    //       // { section: "Ajustes" } in `buttons`: a line + subtitle, then the rows go on
     //       tip: "Consejo: ...",          // extra line under the list (launcher)
     //       autoShow: true,               // open on load until dismissed (launcher)
     //       dismissible: true             // add a "No volver a mostrar" button
@@ -1390,6 +1448,21 @@
             for( var i = 0; i < rows.length; i++ )
             {
                 var it = rows[ i ];
+
+                // { section: "Title" }: a line, a subtitle, then a fresh list.
+                if( it.section )
+                {
+                    if( ul.children.length ) sheet.appendChild( ul );
+                    sheet.appendChild( document.createElement( "hr" ) ).className = "intro-sep";
+                    var sh = document.createElement( "h3" );
+                    sh.className   = "intro-sub";
+                    sh.textContent = it.section;
+                    sheet.appendChild( sh );
+                    ul = document.createElement( "ul" );
+                    ul.className = "intro-btns";
+                    continue;
+                }
+
                 var el = it.sel ? document.querySelector( it.sel ) : null;
                 if( it.sel && ! el ) continue;         // button not on this screen
 
@@ -1527,7 +1600,12 @@
         // a real control inside the header keeps its own job
         if( e.target.closest && e.target.closest( "a, button, input, select" ) ) return;
         e.preventDefault();
-        navWindow().location.href = "/nayive/";      // the TOP window when framed (Planner)
+        // In a desktop window "home" is the desktop's menu: leaving would close every window.
+        if( WINDOWED ) { try { window.top.NayiveDesktop.menu(); } catch ( err ) {} return; }
+        // A red Chat dot on the icon (see CHAT DOT below): the tap - icon OR
+        // name, one target for a finger - goes to Chat.
+        var toChat = chatDot && ! chatDot.hidden && chatDot.style.display !== "none";
+        navWindow().location.href = toChat ? "/nayive/chat/" : "/nayive/";   // the TOP window when framed (Planner)
     }
 
     function applyHomeLinks( root )
@@ -1546,7 +1624,7 @@
             // Framed (Planner): the icon is back on screen as the pane's label, but
             // the host header already owns the way home - a pane icon that walked
             // the TOP window out of Planner would be a trap.
-            if( isIcon && EMBEDDED ) continue;
+            if( isIcon && EMBEDDED && ! WINDOWED ) continue;
             if( el._nayiveHome ) continue;
             el._nayiveHome = true;
 
@@ -1557,7 +1635,109 @@
                 el.setAttribute( "role", "button" );
             }
             el.addEventListener( "click", onHomeClick );
+            if( isIcon ) placeChatDot();
         }
+    }
+
+    //------------------------------------------------------------------------//
+    // CHAT DOT  - a new Chat message while the user is in another app
+    //
+    // A red dot sits on the app's icon (top-right) while Chat has unread
+    // messages (muted chats do not count - /api/chat/unread). When the count
+    // goes UP it blinks 5 times. A tap on the icon or the name then opens Chat instead of
+    // the launcher (onHomeClick). Not in Chat itself, not in a Planner frame
+    // (the host page shows it), not on the launcher, and not for the admin
+    // (403) or a page with no login (401): those stop asking.
+    //
+    // News comes three ways: the worker forwards every chat push (sw.js,
+    // { chat: "new" }), the page asks again when it comes back on screen, and
+    // every 60 s while it is on screen (a device without notifications).
+
+    var chatDot    = null;
+    var chatUnread = -1;           // -1 = not asked yet: unread found at load shows, but does not blink
+
+    function chatDotWanted()
+    {
+        var p = location.pathname;
+        // the launcher has its own count on the Chat tile
+        if( p === "/nayive/" || p === "/nayive/index.html" ) return false;
+        return ! EMBEDDED && p.indexOf( "/nayive/" ) === 0 && p.indexOf( "/nayive/chat/" ) !== 0;
+    }
+
+    // The dot lives in the icon's parent (an <svg> cannot hold it), placed over
+    // the icon's top-right corner. It is absolute, so the header's flex gap and
+    // layout do not change.
+    function placeChatDot()
+    {
+        if( ! chatDot || chatDot.hidden ) return;
+        var ico = null, all = document.querySelectorAll( ".app-icon.nayive-home-link" );
+        for( var i = 0; i < all.length && ! ico; i++ ) if( onScreen( all[ i ] ) ) ico = all[ i ];
+        if( ! ico ) { chatDot.style.display = "none"; return; }
+
+        var host = ico.parentNode;
+        if( chatDot.parentNode !== host ) host.appendChild( chatDot );
+        if( getComputedStyle( host ).position === "static" ) host.style.position = "relative";
+        chatDot.style.display = "";
+
+        var hr = host.getBoundingClientRect(), ir = ico.getBoundingClientRect();
+        chatDot.style.left = ( ir.right - hr.left + host.scrollLeft - host.clientLeft - 8 ) + "px";
+        chatDot.style.top  = ( ir.top   - hr.top  + host.scrollTop  - host.clientTop  - 3 ) + "px";
+    }
+
+    function showChatDot( n )
+    {
+        var before = chatUnread;
+        chatUnread = n;
+        // The desktop (desktop/index.html) has no app icon: it draws its own dot.
+        try { document.dispatchEvent( new CustomEvent( "nayive:chatunread", { detail: n } ) ); } catch ( e ) {}
+        if( ! n ) { if( chatDot ) chatDot.hidden = true; return; }
+
+        if( ! chatDot )
+        {
+            chatDot = document.createElement( "span" );
+            chatDot.className = "chat-dot";
+            chatDot.setAttribute( "aria-hidden", "true" );
+        }
+        chatDot.hidden = false;
+        placeChatDot();
+
+        if( before >= 0 && n > before )
+        {
+            chatDot.classList.remove( "blink" );
+            void chatDot.offsetWidth;                 // restart the animation
+            chatDot.classList.add( "blink" );
+        }
+    }
+
+    var chatAsking = false, chatStopped = false;
+
+    function askChatUnread()
+    {
+        if( chatStopped || chatAsking || document.hidden ) return;
+        chatAsking = true;
+        fetch( "/api/chat/unread", { credentials: "same-origin", headers: { Accept: "application/json" } } )
+            .then( function ( r )
+            {
+                if( r.status === 401 || r.status === 403 ) chatStopped = true;
+                return r.ok ? r.json() : null;
+            } )
+            .then( function ( j ) { if( j ) showChatDot( j.n || 0 ); } )
+            .catch( function () {} )
+            .then( function () { chatAsking = false; } );
+    }
+
+    function startChatDot()
+    {
+        if( ! chatDotWanted() ) return;
+        askChatUnread();
+        setInterval( askChatUnread, 60000 );
+        document.addEventListener( "visibilitychange", askChatUnread );
+        window.addEventListener( "resize", placeChatDot );
+        if( navigator.serviceWorker )
+            navigator.serviceWorker.addEventListener( "message", function ( e )
+            {
+                if( e.data && e.data.chat === "new" ) askChatUnread();
+            } );
     }
 
     //------------------------------------------------------------------------//
@@ -2256,7 +2436,19 @@
                 var to = target.slice( 0, target.lastIndexOf( "/" ) + 1 ) + nm;
                 if( to === target ) { cancelName(); return; }
 
-                runTask( GumApi.rename( target, to ).then( function ()
+                runTask( renameFolder( target, to ).then( function ()
+                {
+                    undoToast( t( "ui.toast.renamed" ), function ()
+                    {
+                        afterUndo( renameFolder( to, target ).then( function () { return target; } ) );
+                    } );
+                    return to;
+                } ) );
+            }
+
+            function renameFolder( from, to )
+            {
+                return GumApi.rename( from, to ).then( function ()
                 {
                     // The whole sub-tree moves with the folder, so re-key what
                     // the user had open under it or it all collapses on the
@@ -2265,27 +2457,39 @@
                     var reopen = {};
                     Object.keys( expanded ).forEach( function ( k )
                     {
-                        var moved = ( k === target || k.indexOf( target + "/" ) === 0 );
-                        reopen[ moved ? to + k.slice( target.length ) : k ] = expanded[ k ];
+                        var moved = ( k === from || k.indexOf( from + "/" ) === 0 );
+                        reopen[ moved ? to + k.slice( from.length ) : k ] = expanded[ k ];
                     } );
                     expanded = reopen;
 
                     // The photo notes and scan entries under it follow, as
                     // they do on a rename in Drive.
-                    return sidecarUpkeep( "remapPaths", [ [ target, to ] ] )
-                        .then( function () { return to; } );
-                } ) );
+                    return sidecarUpkeep( "remapPaths", [ [ from, to ] ] );
+                } );
+            }
+
+            // An Undo's server call: on the tree when the picker is still open,
+            // on its own when it has closed meanwhile.
+            function afterUndo( p )
+            {
+                if( ! done ) runTask( p );
+                else p.catch( function ( err ) { toast( String( ( err && err.message ) || err ) ); } );
             }
 
             // Straight to the papelera - Drive can put it back - so this acts at
-            // once: a delete already inside a dialog never asks a second time.
-            // Its scan entries and thumbnails go, as on a delete in Drive (the
-            // notes stay, so a restore brings them back).
+            // once, with an Undo: a delete already inside a dialog never asks a
+            // second time. Its scan entries and thumbnails go, as on a delete in
+            // Drive (the notes stay, so a restore brings them back).
             function deleteFolder()
             {
                 var gone = selected;
-                runTask( GumApi.deletePaths( [ gone ] ).then( function ()
+                runTask( GumApi.binPaths( [ gone ] ).then( function ( ids )
                 {
+                    if( ids && ids.length )
+                        undoToast( t( "ui.toast.binned" ), function ()
+                        {
+                            afterUndo( GumApi.trashRestore( ids ).then( function () { return gone; } ) );
+                        } );
                     return sidecarUpkeep( "purgePaths", [ gone ] ).then( function () { return null; } );
                 } ) );
             }
@@ -3306,6 +3510,10 @@
         return Promise.reject( new Error( "no clipboard" ) );
     }
 
+    // The public links whose × is still on Undo: a sheet opened again meanwhile
+    // must not show (or hand out) a link about to die.
+    var linksGoing = {};
+
     /* The "Compartir" dialog: tick one or more people, see who already has it, take it back.
      * opts = { path, app, title }. Resolves when the dialog closes. */
     function shareSheet( opts )
@@ -3403,7 +3611,18 @@
                         {
                             del.disabled = true;
                             shareApi( "DELETE", null, g.id )
-                                .then( load )
+                                .then( function ()
+                                {
+                                    // Undo shares it again, the same way (a new grant, same person and rights).
+                                    undoToast( tf( "share.stopped", { who: name } ), function ()
+                                    {
+                                        shareApi( "POST", { to: g.to, root: path, app: g.app || opts.app || "folder",
+                                                            title: g.title || opts.title || "", mode: g.mode || "ro" } )
+                                            .catch( function ( e ) { toast( e.message ); } )
+                                            .then( function () { if( back.parentNode ) return load(); } );
+                                    } );
+                                    return load();
+                                } )
                                 .catch( function ( e ) { toast( e.message ); del.disabled = false; } );
                         } );
                         row.appendChild( del );
@@ -3636,10 +3855,26 @@
                         return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
                                                      function () { toast( url ); } );
                     } ) );
+                    // Gone from the sheet at once; the link itself dies when the
+                    // Undo does (a new link would be a new address).
                     row.appendChild( rowButton( "x", t( "share.link.stop" ), function ()
                     {
-                        return shareApi( "DELETE", null, link.id )
-                                   .then( function () { dropped = true; return load(); } );
+                        var id = link.id;
+                        linksGoing[ id ] = true;
+                        link    = null;
+                        dropped = true;
+                        render();
+                        undoToast( t( "share.link.stopped" ), function ()
+                        {
+                            delete linksGoing[ id ];
+                            dropped = false;
+                            if( back.parentNode ) load();
+                        }, { onExpire: function ()
+                        {
+                            shareApi( "DELETE", null, id )
+                                .catch( function ( e ) { toast( e.message ); } )
+                                .then( function () { delete linksGoing[ id ]; } );
+                        } } );
                     } ) );
                 }
                 box.appendChild( row );
@@ -3659,6 +3894,7 @@
                     // A public link is not a person: it has its own section.
                     mine = here.filter( function ( g ) { return ! g.token; } );
                     link = here.filter( function ( g ) { return !! g.token; } )[ 0 ] || null;
+                    if( link && linksGoing[ link.id ] ) { link = null; dropped = true; }   // its × is still on Undo
 
                     // One link per trip, the same for whoever gets it - so it is made
                     // as the sheet opens, with nothing to press first. After its ×
@@ -3864,6 +4100,69 @@
         return box;
     }
 
+    /* "Sync with your phones" (CardDAV in Contacts, CalDAV in Calendar): the top
+     * of each app's Settings sheet. The markup lives in the app (its texts differ);
+     * this wires it, finding its parts by data-dav="…":
+     *   off / on        the two states; connect (+) and stop (x) flip them
+     *   iphone / android / onphone   the set-up cards: the phone being read on
+     *                   decides which one shows, a PC shows both (as locationSection)
+     *   server / user / pass         the by-hand rows; [data-dav-copy="<part>"] copies one
+     * UI ONLY for now (2026-09-22): nothing is sent or saved. Set-up links
+     * ([data-dav-soon]), the password and every <select> answer "Not working yet".
+     * Returns { refresh( user ) }: call it each time the sheet opens. */
+    function davSection( root )
+    {
+        function part( k )   { return root.querySelector( '[data-dav="' + k + '"]' ); }
+        function soon( e )   { if( e ) e.preventDefault(); toast( t( "dav.soon" ) ); }
+        function show( on )  { part( "off" ).hidden = on; part( "on" ).hidden = ! on; }
+        function isAndroid() { return /android/i.test( navigator.userAgent ); }
+
+        function setValue( k, label, value )
+        {
+            var el = part( k );
+            el.textContent   = t( label ) + ": " + ( value || "…" );
+            el.dataset.value = value;
+        }
+
+        part( "connect" ).innerHTML = icon( "plus" );
+        part( "stop"    ).innerHTML = icon( "x" );
+        part( "connect" ).addEventListener( "click", function () { show( true ); } );
+        part( "stop"    ).addEventListener( "click", function () { show( false ); } );
+
+        root.querySelectorAll( "[data-dav-soon]" ).forEach( function ( el ) { el.addEventListener( "click", soon ); } );
+        root.querySelectorAll( "select" ).forEach( function ( el ) { el.addEventListener( "change", function () { soon(); } ); } );
+
+        root.querySelectorAll( "[data-dav-copy]" ).forEach( function ( b )
+        {
+            b.type      = "button";
+            b.innerHTML = icon( "copy" );
+            b.title     = t( "ui.copy" );
+            b.setAttribute( "aria-label", b.title );
+            b.addEventListener( "click", function ()
+            {
+                var value = part( b.dataset.davCopy ).dataset.value;
+                if( ! value ) { soon(); return; }          // no password yet
+                copyText( value ).then( function () { toast( t( "dav.copied" ) ); },
+                                        function () { toast( value ); } );
+            } );
+        } );
+
+        function refresh( user )
+        {
+            var ios = isIOS(), droid = isAndroid();
+            part( "iphone"  ).hidden = droid;
+            part( "android" ).hidden = ios;
+            part( "onphone" ).hidden = ios || droid;
+
+            setValue( "server", "dav.server", location.origin + "/dav/" );
+            setValue( "user",   "dav.user",   user || "" );
+            setValue( "pass",   "dav.pass",   "" );
+            part( "pass" ).textContent = t( "dav.pass" ) + ": ••••-••••-••••-••••";
+        }
+
+        return { refresh: refresh };
+    }
+
     // The town at a (rounded) position, in the viewer's language; "" when unknown.
     // Asks OpenStreetMap's Nominatim, so pass a position already rounded.
     function townName( lat, lon )
@@ -3944,25 +4243,118 @@
     }
 
     //------------------------------------------------------------------------//
-    // UPLOAD PROGRESS BAR
+    // TRANSFER BAR - uploads and downloads, one look
+    //
+    // One box, a row per transfer under way: the uploads (drawn from GumApi's
+    // "nayive:upload" events, below) and whatever an app hands to transfer() -
+    // Drive's downloads. A row is its text with the percent, the bar, and a ✕
+    // when the transfer can be stopped. Never modal: the app stays usable.
+    //
+    // WHERE. An app may offer room in its toolbar: an element with
+    // data-transfer-slot (class .transfer-slot takes the toolbar's free width).
+    // When that room is at least TRANSFER_SLOT_MIN px the box sits there, flat;
+    // otherwise - a phone, a narrow window, an app with no slot - it floats
+    // above the toast at the bottom, the way the upload bar always did. Asked
+    // again on every update and on resize. Styled in theme.css.
+
+    var TRANSFER_SLOT_MIN = 220;
+    var transferBox = null;
+
+    function placeTransferBox()
+    {
+        if( ! transferBox || ! document.body ) return;
+        var slot = document.querySelector( "[data-transfer-slot]" );
+        var fits = !! ( slot && slot.getClientRects().length && slot.clientWidth >= TRANSFER_SLOT_MIN );
+        var host = fits ? slot : document.body;
+        if( transferBox.parentNode !== host ) host.appendChild( transferBox );
+        transferBox.classList.toggle( "in-slot", fits );
+    }
+
+    window.addEventListener( "resize", placeTransferBox );
+
+    // A new row on the transfer bar; opts.onStop adds a ✕ that calls it.
+    // Answers { set( text, pct ), end() }: set draws the row (it shows on the
+    // first call), end takes it away - the box fades out with its last row.
+    function transfer( opts )
+    {
+        opts = opts || {};
+        if( ! transferBox )
+        {
+            transferBox = document.createElement( "div" );
+            transferBox.className = "transfer-bar";
+        }
+
+        var row = document.createElement( "div" );
+        row.className = "transfer-row";
+        row.setAttribute( "role", "progressbar" );
+        row.setAttribute( "aria-valuemin", "0" );
+        row.setAttribute( "aria-valuemax", "100" );
+        row.innerHTML = '<span class="transfer-text"></span>' +
+                        '<span class="transfer-track"><span class="transfer-fill"></span></span>';
+        if( opts.onStop )
+        {
+            var stop = document.createElement( "button" );
+            stop.type      = "button";
+            stop.className = "icon-btn sm transfer-stop";
+            stop.title     = t( "ui.cancel" );
+            stop.setAttribute( "aria-label", t( "ui.cancel" ) );
+            stop.innerHTML = icon( "x" );
+            stop.addEventListener( "click", function () { stop.disabled = true; opts.onStop(); } );
+            row.appendChild( stop );
+            row.classList.add( "can-stop" );
+        }
+
+        var ended = false;
+        return {
+            set: function ( text, pct )
+            {
+                if( ended ) return;
+                pct = Math.max( 0, Math.min( 100, Math.floor( pct || 0 ) ) );
+                row.setAttribute( "aria-valuenow", String( pct ) );
+                row.querySelector( ".transfer-text" ).textContent = text;
+                row.querySelector( ".transfer-fill" ).style.width = pct + "%";
+                if( row.parentNode !== transferBox ) transferBox.appendChild( row );
+                placeTransferBox();
+                transferBox.classList.add( "show" );
+            },
+            end: function ()
+            {
+                if( ended ) return;
+                ended = true;
+                if( row.parentNode !== transferBox ) return;
+                // The last row stays while the box fades, so it does not
+                // shrink to an empty frame first.
+                var last = true;
+                for( var r = transferBox.firstChild; r; r = r.nextSibling )
+                    if( r !== row && ! r.classList.contains( "ended" ) ) last = false;
+                row.classList.add( "ended" );
+                if( last ) transferBox.classList.remove( "show" );
+                setTimeout( function () { if( row.parentNode ) row.parentNode.removeChild( row ); },
+                            last ? 250 : 0 );
+            }
+        };
+    }
+
+    //------------------------------------------------------------------------//
+    // UPLOAD PROGRESS
     //
     // GumApi.putBinary announces every upload as "nayive:upload" events on the
     // document ({ id, loaded, total }, then { id, done: true }). Most uploads -
     // a settings file, a thumbnail - finish at once and must show nothing, so
-    // the bar appears only once a BURST of uploads has run for UPLOAD_SHOW_MS.
+    // the row appears only once a BURST of uploads has run for UPLOAD_SHOW_MS.
     // A burst, not one request: Photos and Drive send many files one after
-    // another, and each alone may be quick. It hides UPLOAD_HIDE_MS after the
+    // another, and each alone may be quick. It goes UPLOAD_HIDE_MS after the
     // last one ends, so it does not flicker in the gap between two files.
     //
     // The percent is of what is in flight NOW; the apps already say "3 de 12"
-    // in their own status line when they send several. Styled in theme.css.
+    // in their own status line when they send several.
 
     var UPLOAD_SHOW_MS = 600;
     var UPLOAD_HIDE_MS = 400;
 
     var uploads     = {};     // id -> { loaded, total }, the requests in flight
     var burstBytes  = 0;      // bytes the finished uploads of this burst sent
-    var uploadBar   = null;
+    var uploadRow   = null;   // the uploads' row on the transfer bar, while shown
     var burstStart  = 0;      // when the current burst began; 0 = none
     var uploadShowT = null;
     var uploadHideT = null;
@@ -3979,26 +4371,11 @@
     function drawUploadBar( pct )
     {
         if( ! document.body ) return;
-
-        if( ! uploadBar || ! document.body.contains( uploadBar ) )
-        {
-            uploadBar = document.createElement( "div" );
-            uploadBar.className = "upload-bar";
-            uploadBar.setAttribute( "role", "progressbar" );
-            uploadBar.setAttribute( "aria-valuemin", "0" );
-            uploadBar.setAttribute( "aria-valuemax", "100" );
-            uploadBar.innerHTML = '<span class="upload-bar-text"></span>' +
-                                  '<span class="upload-bar-track"><span class="upload-bar-fill"></span></span>';
-            document.body.appendChild( uploadBar );
-        }
-
-        uploadBar.setAttribute( "aria-valuenow", String( pct ) );
-        uploadBar.querySelector( ".upload-bar-text" ).textContent = tf( "ui.uploading", { pct: pct } );
-        uploadBar.querySelector( ".upload-bar-fill" ).style.width = pct + "%";
-        uploadBar.classList.add( "show" );
+        if( ! uploadRow ) uploadRow = transfer();
+        uploadRow.set( tf( "ui.uploading", { pct: pct } ), pct );
     }
 
-    function uploadBarShown() { return !! ( uploadBar && uploadBar.classList.contains( "show" ) ); }
+    function uploadBarShown() { return !! uploadRow; }
 
     function endUploadBurst()
     {
@@ -4006,7 +4383,7 @@
         clearTimeout( uploadShowT );      // a burst that ended before the bar was due
         uploadShowT = null;
         burstStart  = 0;
-        if( uploadBar ) uploadBar.classList.remove( "show" );
+        if( uploadRow ) { uploadRow.end(); uploadRow = null; }
         // A real upload (not an autosave or a thumbnail) may just have pushed
         // the space past 90%: look now rather than at the next page.
         if( burstBytes >= QUOTA_BURST_MIN ) scheduleQuotaCheck( true, 1500 );
@@ -4369,14 +4746,32 @@
     //------------------------------------------------------------------------//
     // UNDO TOAST  -  "Eliminado  [Deshacer]" for a few seconds. Paired CSS
     // (.toast.actionable / .toast-undo) lives in shared/theme.css.
+    //
+    //   NayiveUI.undoToast( msg, undo, opts )     opts: { id, ms, label,
+    //                                                     onExpire, keepOnLeave }
+    //
+    // Two ways to use it:
+    //   - do it now, `undo` puts it back (a move, a rename, a delete to the bin);
+    //   - hide it now and do the real thing in `onExpire` (a delete with no way
+    //     back): `undo` then only shows it again.
+    // onExpire runs once, when the Undo is gone for good: the time is up, another
+    // toast takes this one's place, undoSettle() is called (an editor or a game
+    // on its next key), or the page is closed. keepOnLeave: a closed page does
+    // NOT run it (a send: the draft keeps the mail).
+    var undoPending = null;             // { tt, onExpire, keepOnLeave } of the Undo on show
+
     function undoToast( msg, fn, opts )
     {
         opts = opts || {};
         var tt = byId( opts.id || "toast" );
         if( ! tt ) return;
 
+        settleUndo();                   // one Undo at a time: the older one is final now
         clearTimeout( tt._nayiveToastTimer );
         tt.textContent = msg;
+
+        var mine = { tt: tt, onExpire: opts.onExpire || null, keepOnLeave: !! opts.keepOnLeave };
+        undoPending = mine;
 
         var b = document.createElement( "button" );
         b.type        = "button";
@@ -4384,6 +4779,8 @@
         b.textContent = opts.label || t( "ui.undo" );
         b.addEventListener( "click", function ()
         {
+            if( undoPending !== mine ) return;
+            undoPending = null;
             clearTimeout( tt._nayiveToastTimer );
             tt.classList.remove( "show", "actionable" );
             fn();
@@ -4395,8 +4792,57 @@
         {
             tt.classList.remove( "show" );
             setTimeout( function () { tt.classList.remove( "actionable" ); }, 250 );
+            if( undoPending === mine ) settleUndo();
         }, opts.ms || 6000 );
     }
+
+    // The Undo on show (if any) is final: its onExpire runs now. Cleared BEFORE
+    // the call - an onExpire that shows a toast must not settle itself again.
+    function settleUndo( leaving )
+    {
+        var p = undoPending;
+        if( ! p ) return;
+        undoPending = null;
+        if( ! p.onExpire || ( leaving && p.keepOnLeave ) ) return;
+
+        try
+        {
+            if( leaving ) withKeepalive( p.onExpire );
+            else          p.onExpire();
+        }
+        catch ( e ) { console.error( e ); }
+    }
+
+    // B5: an editor or a game closes the Undo on the next key or move, or the
+    // Undo would throw the new work away.
+    function undoSettle()
+    {
+        var p = undoPending;
+        if( ! p ) return;
+        clearTimeout( p.tt._nayiveToastTimer );
+        p.tt.classList.remove( "show", "actionable" );
+        settleUndo();
+    }
+
+    // A fetch started while the page is going away is cancelled with it unless
+    // it carries keepalive (small bodies only: the browser caps them at 64 KB).
+    // So while a closing page runs its last onExpire, every fetch gets the flag.
+    // Only the fetches started in that same tick: one after an await is lost.
+    function withKeepalive( fn )
+    {
+        var real = window.fetch;
+        if( ! real ) { fn(); return; }
+        window.fetch = function ( url, init )
+        {
+            var o = Object.assign( {}, init || {} ), body = o.body;
+            if( body == null || ( typeof body === "string" && body.length < 60000 ) ) o.keepalive = true;
+            return real.call( window, url, o );
+        };
+        try { fn(); }
+        finally { window.fetch = real; }
+    }
+
+    window.addEventListener( "pagehide", function () { settleUndo( true ); } );
 
     //------------------------------------------------------------------------//
     // "MORE" MENU  -  the small popup a header "..." button opens (view switch
@@ -4681,6 +5127,7 @@
         applyInfoDots();
         applyHomeLinks();
         applySyncDots();
+        startChatDot();
         initDragSheets();
         wireSheetClosing();
         wireSheetFocus();
@@ -4722,8 +5169,11 @@
         bootWithStore:  bootWithStore,    // the access probe + "open from cache" fallback
         wireRefresh:    wireRefresh,      // visibilitychange / focus / plug-click re-read
         undoToast:      undoToast,        // "Eliminado [Deshacer]"
+        undoSettle:     undoSettle,       // the Undo on show is final now (editor / game: next key)
+        transfer:       transfer,         // a row on the shared upload/download bar
         wireMenu:       wireMenu,         // the header "..." popup menu
         icon:              icon,
+        attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         t:         t,
         tf:        tf,
         applyI18n: applyI18n,
@@ -4739,7 +5189,8 @@
         applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,
-        embedded:          EMBEDDED,     // true inside Planner's iframes
+        embedded:          EMBEDDED,     // true inside Planner's iframes (and a desktop window)
+        windowed:          WINDOWED,     // true inside a desktop window
         localizeDateTimeInputs: localizeDateTimeInputs,
         confirm:  confirmDialog,
         askPassword: askPassword,
@@ -4757,6 +5208,7 @@
         canAddTo:     canAddTo,
         sharedBadge:  sharedBadge,
         shareSheet:   shareSheet,
+        davSection:      davSection,          // Contacts' / Calendar's "Sync with your phones" (UI only)
         locationSection: locationSection,     // Trips' "My location" sheet: the location URL
         pickFolder:           pickFolder,
         pickFile:             pickFile,

@@ -71,7 +71,12 @@ const server = http.createServer( ( req, res ) =>
         return send( res, path.join( CORPUS, rel.slice( 8 ) ), CORPUS );
     }
 
-    send( res, path.join( ROOT, rel ), ROOT );
+    // Only the apps and the tools: never store/ (live config, keys) or the rest,
+    // even when HOST opens this to the LAN.
+    const sub = path.normalize( rel );
+    if( ! sub.startsWith( '/client/apps/' ) && ! sub.startsWith( '/tools/' ) ) { res.writeHead( 403 ).end( 'no' ); return; }
+
+    send( res, path.join( ROOT, sub ), ROOT );
 } );
 
 server.listen( PORT, process.env.HOST || '127.0.0.1', () =>

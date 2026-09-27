@@ -1,13 +1,21 @@
 package main
 
 // =============================================================================
-// SessionStore - the in-memory session table, and the cookie that carries it.
+// SessionStore - the session table, and the cookie that carries it.
 // =============================================================================
 //
 // A session is a random opaque token (the value of the `nayive_session` cookie)
-// mapped to {user, role, expiry}. No database, no files: a map in this one
-// process. Restart the server and everyone signs in again. Same design as
-// lib/sessions.py.
+// mapped to {user, role, expiry}. The table is a map in this one process, and
+// a copy of it lives in config/sessions.json, so a restart - every deploy - no
+// longer signs everyone out. (Until 2026-09-21 it did, like lib/sessions.py;
+// the Android app made it plain: its first screen after a deploy was the
+// password.)
+//
+// Only each token's SHA-256 reaches the disk, as in devices.json: the file on
+// its own signs nobody in. It is written at once on a sign-in or a sign-out;
+// the sliding expiries - every request moves one - at most every
+// sessionSaveEvery, from the sweep, and on the way out (Server.Close). A
+// kill -9 loses at most that much of a slide.
 //
 // java: THREADING. net/http runs every request on its own goroutine, so this
 // map is shared mutable state and needs a lock. Go's maps are NOT
@@ -23,11 +31,19 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
 )
+
+// sessionSaveEvery is how stale the expiries on disk may get. A var, not a
+// const, so the tests can shorten it.
+var sessionSaveEvery = 15 * time.Minute
 
 // Session is what a token resolves to. Handed to callers BY VALUE, so nobody
 // can reach back into the store and edit it.
@@ -40,9 +56,24 @@ type Session struct {
 //
 // java: lowercase name = package private. Nothing outside this file needs it.
 type entry struct {
-	session Session
-	ttl     time.Duration
-	expires time.Time
+	session  Session
+	ttl      time.Duration
+	expires  time.Time
+	remember bool // "Mantenme conectado": the cookie carries a Max-Age
+}
+
+// sessionRow is one line of config/sessions.json.
+type sessionRow struct {
+	Hash     string `json:"hash"` // hex SHA-256 of the token
+	User     string `json:"user"`
+	Role     string `json:"role"`
+	TTL      int64  `json:"ttl"`     // seconds
+	Expires  int64  `json:"expires"` // unix seconds
+	Remember bool   `json:"remember,omitempty"`
+}
+
+type sessionsFile struct {
+	Sessions []sessionRow `json:"sessions"`
 }
 
 // SessionStore is the table itself.
@@ -54,23 +85,37 @@ type entry struct {
 // and NewSessionStore returns a pointer.
 type SessionStore struct {
 	mu       sync.Mutex
-	byToken  map[string]*entry
-	fallback time.Duration // TTL used when Create is given zero
+	byHash   map[string]*entry // keyed by tokenHash(token), never by the token
+	fallback time.Duration     // TTL used when Create is given zero
+	path     string            // config/sessions.json; "" keeps it all in memory
+	log      Logger
+	broken   bool      // the file could not be read: moved aside before the next save
+	dirty    bool      // an expiry moved (or ran out) since the last save
+	saved    time.Time // when the file was last written
 }
 
-// NewSessionStore builds an empty table.
+// NewSessionStore builds the table, with the sessions a previous run left in
+// configDir/sessions.json. An empty configDir keeps it in memory only.
 //
 // java: a map must be MADE before use. A nil map reads fine (returns the zero
 // value) but panics on write - the one place Go's zero value is not ready to go.
-func NewSessionStore(defaultTTL time.Duration) *SessionStore {
-	return &SessionStore{
-		byToken:  make(map[string]*entry),
+func NewSessionStore(defaultTTL time.Duration, configDir string, log Logger) *SessionStore {
+	s := &SessionStore{
+		byHash:   make(map[string]*entry),
 		fallback: defaultTTL,
+		log:      log,
+		saved:    time.Now(),
 	}
+	if configDir != "" {
+		s.path = filepath.Join(configDir, "sessions.json")
+		s.load()
+	}
+	return s
 }
 
-// Create mints a token for (user, role) and returns it.
-func (s *SessionStore) Create(user, role string, ttl time.Duration) string {
+// Create mints a token for (user, role) and returns it. `remember` is only
+// kept so that Remembered can say so later; the TTL is the caller's.
+func (s *SessionStore) Create(user, role string, ttl time.Duration, remember bool) string {
 	if ttl <= 0 {
 		ttl = s.fallback
 	}
@@ -83,12 +128,32 @@ func (s *SessionStore) Create(user, role string, ttl time.Duration) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.byToken[token] = &entry{
-		session: Session{User: user, Role: role},
-		ttl:     ttl,
-		expires: time.Now().Add(ttl),
+	s.byHash[tokenHash(token)] = &entry{
+		session:  Session{User: user, Role: role},
+		ttl:      ttl,
+		expires:  time.Now().Add(ttl),
+		remember: remember,
 	}
+	s.save()
 	return token
+}
+
+// lookup is the live entry behind a token, or nil. Caller holds mu.
+func (s *SessionStore) lookup(token string) *entry {
+	if token == "" {
+		return nil
+	}
+	h := tokenHash(token)
+	e, found := s.byHash[h]
+	if !found {
+		return nil
+	}
+	if time.Now().After(e.expires) {
+		delete(s.byHash, h)
+		s.dirty = true
+		return nil
+	}
+	return e
 }
 
 // Get resolves a token, or reports that it is unknown or expired.
@@ -98,23 +163,30 @@ func (s *SessionStore) Create(user, role string, ttl time.Duration) string {
 // `sess, ok := store.Get(tok); if !ok { ... }`. The compiler will not let you
 // use `sess` without having received `ok`, so there is no accidental NPE.
 func (s *SessionStore) Get(token string) (Session, bool) {
-	if token == "" {
-		return Session{}, false
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	e, found := s.byToken[token]
-	if !found {
-		return Session{}, false
-	}
-	if time.Now().After(e.expires) {
-		delete(s.byToken, token)
+	e := s.lookup(token)
+	if e == nil {
 		return Session{}, false
 	}
 	e.expires = time.Now().Add(e.ttl) // sliding window
+	s.dirty = true
 	return e.session, true
+}
+
+// Remembered is the TTL of a live "Mantenme conectado" session, so its
+// cookie's Max-Age can be counted again from now (apiWhoami). False for any
+// other token.
+func (s *SessionStore) Remembered(token string) (time.Duration, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	e := s.lookup(token)
+	if e == nil || !e.remember {
+		return 0, false
+	}
+	return e.ttl, true
 }
 
 // Drop forgets one token (sign-out).
@@ -123,7 +195,11 @@ func (s *SessionStore) Get(token string) (Session, bool) {
 func (s *SessionStore) Drop(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.byToken, token)
+	h := tokenHash(token)
+	if _, found := s.byHash[h]; found {
+		delete(s.byHash, h)
+		s.save()
+	}
 }
 
 // DropUser kills every session belonging to `user` (used when an account is
@@ -135,34 +211,121 @@ func (s *SessionStore) Drop(token string) {
 func (s *SessionStore) DropUser(user string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for token, e := range s.byToken {
+	removed := false
+	for h, e := range s.byHash {
 		if e.session.User == user {
-			delete(s.byToken, token)
+			delete(s.byHash, h)
+			removed = true
 		}
+	}
+	if removed {
+		s.save()
 	}
 }
 
 // Sweep drops expired sessions. The background worker calls this so closed
-// browsers do not pile up forever.
+// browsers do not pile up forever - and it is also what brings the sliding
+// expiries to the disk, at most every sessionSaveEvery.
 func (s *SessionStore) Sweep() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	removed := 0
-	for token, e := range s.byToken {
+	for h, e := range s.byHash {
 		if now.After(e.expires) {
-			delete(s.byToken, token)
+			delete(s.byHash, h)
 			removed++
 		}
 	}
+	if removed > 0 || (s.dirty && now.Sub(s.saved) >= sessionSaveEvery) {
+		s.save()
+	}
 	return removed
+}
+
+// Flush writes whatever has not reached the disk yet (Server.Close).
+func (s *SessionStore) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dirty {
+		s.save()
+	}
 }
 
 // Count is here for the tests and the log line.
 func (s *SessionStore) Count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return len(s.byToken)
+	return len(s.byHash)
+}
+
+// load fills the table from the file, leaving out what has expired meanwhile.
+// A file that cannot be read signs everyone out - the old behaviour, never a
+// crash - and is moved aside, not overwritten, by the next save.
+func (s *SessionStore) load() {
+	raw, err := os.ReadFile(s.path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.log.Error("sessions.json is unreadable - everyone signs in again", "err", err)
+			s.broken = true
+		}
+		return
+	}
+	var file sessionsFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		s.log.Error("sessions.json is unreadable - everyone signs in again", "err", err)
+		s.broken = true
+		return
+	}
+	now := time.Now()
+	for _, r := range file.Sessions {
+		expires := time.Unix(r.Expires, 0)
+		if len(r.Hash) != 64 || r.User == "" || (r.Role != "admin" && r.Role != "user") ||
+			r.TTL <= 0 || !now.Before(expires) {
+			continue
+		}
+		s.byHash[r.Hash] = &entry{
+			session:  Session{User: r.User, Role: r.Role},
+			ttl:      time.Duration(r.TTL) * time.Second,
+			expires:  expires,
+			remember: r.Remember,
+		}
+	}
+}
+
+// save writes the table. Caller holds mu. Like Devices.save, it never writes
+// over a file that could not be read: that one is moved aside first.
+func (s *SessionStore) save() {
+	if s.path == "" {
+		s.dirty = false
+		return
+	}
+	if s.broken {
+		aside := s.path + ".broken-" + time.Now().Format("2006-01-02-150405")
+		if err := os.Rename(s.path, aside); err != nil && !os.IsNotExist(err) {
+			s.log.Error("sessions.json is unreadable and cannot be moved aside - not saving", "err", err)
+			return
+		}
+		s.broken = false
+	}
+	rows := make([]sessionRow, 0, len(s.byHash))
+	for h, e := range s.byHash {
+		rows = append(rows, sessionRow{
+			Hash: h, User: e.session.User, Role: e.session.Role,
+			TTL: int64(e.ttl / time.Second), Expires: e.expires.Unix(), Remember: e.remember,
+		})
+	}
+	// java: map order is random in Go, on purpose. Sorted, the file only
+	// changes where a session did.
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Hash < rows[j].Hash })
+	if err := atomicWriteJSON(s.path, sessionsFile{Sessions: rows}, 4); err != nil {
+		s.log.Error("cannot save sessions.json", "err", err)
+		return
+	}
+	// Best effort, as for vapid.json: hashes only, but nobody else's business.
+	_ = os.Chmod(s.path, 0o600)
+	s.dirty = false
+	s.saved = time.Now()
 }
 
 // newToken returns ~43 URL-safe random characters, like secrets.token_urlsafe(32).

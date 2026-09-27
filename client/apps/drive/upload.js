@@ -649,7 +649,7 @@ async function uploadItems( items )
     for( let i = 0; i < items.length; i++ )
     {
         const it = items[i];
-        setStatus( TF( 'photos.uploadingN', { i: i + 1, n: items.length } ) );
+        setStatus( TF( 'drive.uploadingOf', { i: i + 1, n: items.length } ) );   // the bar beside it already says "Uploading"
 
         try
         {

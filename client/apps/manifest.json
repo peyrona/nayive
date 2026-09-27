@@ -4,6 +4,12 @@
     "start_url": "index.html",
     "scope": "./",
     "display": "standalone",
+    "display_override": [ "tabbed" ],
+    "tab_strip": {
+        "home_tab": {
+            "scope_patterns": [ { "pathname": "/nayive/" }, { "pathname": "/nayive/index.html" } ]
+        }
+    },
     "background_color": "#1E1F23",
     "theme_color": "#1E1F23",
     "icons": [

@@ -35,6 +35,9 @@ deploy.local.sh
 # build that tools/build-docx-editor.sh keeps for --restore is not.
 client/apps/write/lib/.docx-editor-prev/
 
+# The systemd unit install.sh writes: it holds this machine's user and paths.
+/nayive.service
+
 # Build output.
 /nayive.zip
 /server/go/nayive

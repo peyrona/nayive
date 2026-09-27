@@ -46,7 +46,6 @@ var publicStatic = map[string]bool{
 	"shared/i18n/fr.json": true,
 	"shared/i18n/de.json": true,
 	"shared/i18n/it.json": true,
-	"shared/i18n/la.json": true,
 	// A public trip link (/s/<token>, api_public.go): the page and its map. No
 	// trip data lives in them - that comes from /api/public, token-checked.
 	// The vendored map libraries under trips/lib/ are public too (isPublicStatic).

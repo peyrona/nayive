@@ -67,7 +67,7 @@ const (
 
 // UILangs are the interface languages, and must match LANGS in
 // apps/shared/i18n.js.
-var UILangs = []string{"es", "en", "pt", "fr", "de", "it", "la"}
+var UILangs = []string{"es", "en", "pt", "fr", "de", "it"}
 
 // UserConfig is homes/<user>/data/config.json.
 //

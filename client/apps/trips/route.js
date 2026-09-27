@@ -54,6 +54,38 @@ async function geocodeInto( tripId, sKind, id, sQuery )
     }
 }
 
+// Phone map (below 920px): the whole screen, no dialog. Top-right corner: Plan,
+// Journey (the one shown is disabled) and close. It takes one history entry, so
+// the phone's "go back" gesture closes it too, as the × does.
+function openMapSheet()
+{
+    // Sheet opens BEFORE the map is built - Leaflet measures its container's size at
+    // init, and a still-hidden (display:none) container measures as 0x0.
+    openSheet( 'mapSheetBackdrop' );
+    renderMapSheet();
+    history.pushState( { tripsMap: true }, '' );
+}
+
+function mapSheetOpen() { return document.getElementById( 'mapSheetBackdrop' ).classList.contains( 'open' ); }
+
+function closeMapSheet()
+{
+    if( history.state && history.state.tripsMap ) history.back();   // popstate below closes it
+    else                                          closeSheet( 'mapSheetBackdrop' );
+}
+
+window.addEventListener( 'popstate', function() { if( mapSheetOpen() ) closeSheet( 'mapSheetBackdrop' ); } );
+
+// Escape goes through closeMapSheet() as well, so the history entry goes with it.
+// Capture on window: runs before shared/ui.js's own Escape, which would just hide it.
+window.addEventListener( 'keydown', function( e )
+{
+    if( e.key !== 'Escape' || ! mapSheetOpen() ) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeMapSheet();
+}, true );
+
 function renderMapSheet()
 {
     const trip  = findTrip( selectedTripId );
@@ -65,8 +97,27 @@ function renderMapSheet()
 
     ensureRouteCoords( trip );
 
-    buildSheetHeader( T( 'trips.route' ), 'mapSheetBackdrop', sheet );
     buildRouteMapBlock( trip, 'sheet', sheet );
+
+    // The corner buttons: Plan / Journey (a shared trip has none) + close.
+    const bar  = sheet.querySelector( '.map-bar' );
+    let   mode = bar.querySelector( '.map-mode' );
+    if( ! mode )
+    {
+        mode = document.createElement( 'div' );
+        mode.className = 'map-mode';
+        bar.appendChild( mode );
+    }
+    mode.querySelectorAll( 'button[aria-pressed="true"]' ).forEach( function( b ) { b.disabled = true; } );
+
+    const closeBtn = document.createElement( 'button' );
+    closeBtn.type      = 'button';
+    closeBtn.className = 'icon-btn sm';
+    closeBtn.title     = NayiveUI.t( 'ui.close' );
+    closeBtn.setAttribute( 'aria-label', closeBtn.title );
+    closeBtn.appendChild( svgIcon( ICON_X, 16 ) );
+    closeBtn.addEventListener( 'click', closeMapSheet );
+    mode.appendChild( closeBtn );
 }
 
 // "My location" (list header): what places you on the Journey maps - the

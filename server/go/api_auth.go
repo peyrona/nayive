@@ -83,7 +83,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	if creds.Remember {
 		ttl = s.cfg.RememberTTL
 	}
-	token := s.sessions.Create(user, role, ttl)
+	token := s.sessions.Create(user, role, ttl, creds.Remember)
 	// r.TLS is nil on a plain HTTP connection - that is the "is this secure?"
 	// test, and it decides whether the cookie gets "; Secure".
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, creds.Remember, r.TLS != nil))
@@ -98,8 +98,16 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiLogout drops the session, clears the cookie and sends the browser to the
-// login page.
+// login page. POST only: a GET that signs out could be fired by anything a
+// page loads - a picture in an email, a link on another site (the cookie is
+// SameSite=Lax, which lets top-level GETs through). A GET (an old launcher
+// still in a phone's cache, a bookmark) only goes to the launcher, signed in
+// as before: its button signs out.
 func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		redirect(w, http.StatusSeeOther, URLPrefix+"/")
+		return
+	}
 	s.sessions.Drop(tokenFrom(r))
 	w.Header().Set("Set-Cookie", clearCookieHeader())
 	redirect(w, http.StatusFound, URLPrefix+"/login.html")
@@ -129,6 +137,14 @@ func (s *Server) apiWhoami(w http.ResponseWriter, r *http.Request) {
 	// deciding, exactly as before these settings existed.
 	me["lang"] = s.users.UserLang(sess.Role, sess.User)
 	me["tz"] = s.users.UserTZ(sess.Role, sess.User)
+
+	// A "Mantenme conectado" cookie's Max-Age counts from the sign-in, while
+	// the session behind it slides with every request: re-issue the cookie
+	// here - every page asks this on load - so a phone in daily use is never
+	// signed out on day 30.
+	if ttl, ok := s.sessions.Remembered(tokenFrom(r)); ok {
+		w.Header().Set("Set-Cookie", sessionCookieHeader(tokenFrom(r), ttl, true, r.TLS != nil))
+	}
 
 	sendJSON(w, r, http.StatusOK, me)
 }
@@ -178,11 +194,16 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 
 	// A new password makes every existing session for this account stale: kill
 	// them all (other devices, a possible intruder), then re-issue one for THIS
-	// request so the person who just changed it stays signed in here. A
-	// "remember me" cookie degrades to a session cookie - acceptable.
+	// request so the person who just changed it stays signed in here - for as
+	// long as before: a "Mantenme conectado" session stays one (a phone must not
+	// ask for the new password again the next day).
+	ttl, remember := s.sessions.Remembered(tokenFrom(r))
+	if !remember {
+		ttl = s.cfg.SessionTTL
+	}
 	s.sessions.DropUser(sess.User)
-	token := s.sessions.Create(sess.User, sess.Role, s.cfg.SessionTTL)
-	w.Header().Set("Set-Cookie", sessionCookieHeader(token, s.cfg.SessionTTL, false, r.TLS != nil))
+	token := s.sessions.Create(sess.User, sess.Role, ttl, remember)
+	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, remember, r.TLS != nil))
 
 	s.log.Info("password changed", "user", sess.User, "role", sess.Role)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "contraseña actualizada"})

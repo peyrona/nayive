@@ -160,7 +160,7 @@ function buildJourneyMap( trip, j, mapDiv, sWhich )
 
     if( j.route.length > 1 )
         L.polyline( j.route.map( function( p ) { return [ p.lat, p.lon ]; } ),
-                    { color: accent, weight: 3, opacity: 0.85, lineJoin: 'round' } ).addTo( map );
+                    { color: accent, weight: 2, opacity: 0.85, dashArray: '1, 6', lineCap: 'round' } ).addTo( map );
 
     j.route.forEach( function( p )
     {

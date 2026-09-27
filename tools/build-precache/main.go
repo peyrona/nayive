@@ -40,7 +40,7 @@ import (
 // shared/store.js"; games is here for the other reason - it asks the server for
 // nothing at all, so its shell IS the whole app.
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
-	"games"}
+	"games", "bookmarks", "desktop"} // desktop: the launcher sends a big screen there, so it must open offline too
 
 // Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js and
 // *.css catch an app's own top-level scripts and stylesheet (write.js, calc.css).
@@ -54,8 +54,7 @@ var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",
-	"shared/i18n/fr.json", "shared/i18n/de.json", "shared/i18n/it.json",
-	"shared/i18n/la.json"}
+	"shared/i18n/fr.json", "shared/i18n/de.json", "shared/i18n/it.json"}
 
 // The launcher lives at apps/index.html itself; login.html is the sign-in page.
 var rootFiles = []string{"index.html", "login.html", "manifest.json", "icons/*"}

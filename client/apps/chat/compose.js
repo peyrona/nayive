@@ -84,6 +84,9 @@
 
     C.focusComposer = function () { try { ta.focus(); } catch( _ ) {} };
 
+    // A shared link, ready to send (chat.js ?text=).
+    C.fillComposer = function ( text ) { ta.value = text; grow(); };
+
     C.resetComposer = function ()
     {
         S.replyTo = null;
@@ -260,7 +263,7 @@
     };
 
     // The list: when each goes, its text, [send now] [delete]. Delete acts at
-    // once - the list itself is the question.
+    // once - the list itself is the question - and "Undo" schedules it again.
     function openLaterList()
     {
         var conv = S.open;
@@ -282,20 +285,39 @@
         }
         async function act( l, now )
         {
+            var went = false;
             try
             {
                 if( now ) await C.api( "POST", "conv/" + conv + "/later/" + l.id + "/send" );
                 else await C.api( "DELETE", "conv/" + conv + "/later/" + l.id );
             }
-            catch( e ) { if( ! e || e.status !== 404 ) { C.fail( e ); return; } }   // 404: it already went
+            catch( e ) { if( ! e || e.status !== 404 ) { C.fail( e ); return; } went = true; }   // 404: it already went
             var c = C.convOf( conv );
             if( c && c.later ) c.later = c.later.filter( function ( x ) { return x.id !== l.id; } );
             C.renderLater();
             if( now && S.open === conv ) C.loadSince();
+            if( ! now && ! went ) NayiveUI.undoToast( T( "ui.toast.deleted" ), function () { reschedule( conv, l ); } );
         }
         render();
         sh = C.sheet( T( "chat.scheduledList" ), body, null, function () { laterSheet = null; } );
         laterSheet = { render: render, close: sh.close };
+    }
+
+    // Undo of a deleted scheduled text: the same text, time and reply again
+    // (texts only - a scheduled message has no attachments).
+    async function reschedule( conv, l )
+    {
+        try
+        {
+            var out = await C.api( "POST", "conv/" + conv + "/later", { text: l.text, at: l.at, replyTo: l.replyTo || 0, cid: l.cid || C.rid() } );
+            var c = C.convOf( conv );
+            if( c && ! ( c.later || [] ).some( function ( x ) { return x.id === out.id; } ) )
+            {
+                c.later = ( c.later || [] ).concat( [ out ] ).sort( function ( a, b ) { return a.at - b.at; } );
+                C.renderLater();
+            }
+        }
+        catch( e ) { C.fail( e ); }
     }
 
     // Send any JSON message (text, place, contact, poll, a forward) to `conv`
@@ -381,21 +403,17 @@
         // No camera here: it sits beside the clip already (his call,
         // 2026-09-19). A document from this device, or (the owner, who has
         // their files) one already in Nayive - two buttons, no chooser.
-        var el = h( "div", { class: "attach" } );
-        [ [ "file", "chat.localDoc", 4, function () { C.pickFiles( "file" ); } ],
-          C.canUseNayive() ? [ "folder", "chat.nayiveDoc", 3, function () { C.pickFromNayive(); } ] : null,
-          [ "image", "chat.gallery", 1, function () { C.pickFiles( "gallery" ); } ],
-          [ "pin-map", "chat.location", 5, function () { C.openLocationPicker(); } ],
-          [ "user", "chat.contact", 2, function () { C.openCardSheet(); } ],
-          [ "poll", "chat.poll", 0, function () { C.openPollSheet(); } ]
-        ].filter( Boolean ).forEach( function ( a )
+        return NayiveUI.attachPanel( [
+            [ "file", "chat.localDoc", 4, function () { C.pickFiles( "file" ); } ],
+            C.canUseNayive() ? [ "folder", "chat.nayiveDoc", 3, function () { C.pickFromNayive(); } ] : null,
+            [ "image", "chat.gallery", 1, function () { C.pickFiles( "gallery" ); } ],
+            [ "pin-map", "chat.location", 5, function () { C.openLocationPicker(); } ],
+            [ "user", "chat.contact", 2, function () { C.openCardSheet(); } ],
+            [ "poll", "chat.poll", 0, function () { C.openPollSheet(); } ]
+        ].filter( Boolean ).map( function ( a )
         {
-            var ai = h( "span", { class: "ai" } );
-            ai.appendChild( C.ic( a[ 0 ] ) );
-            el.appendChild( h( "button", { class: "att", attrs: { type: "button" }, data: { c: String( a[ 2 ] ) },
-                                           on: { click: function () { closePanel(); a[ 3 ](); } } }, ai, T( a[ 1 ] ) ) );
-        } );
-        return el;
+            return { icon: C.ic( a[ 0 ] ), label: T( a[ 1 ] ), color: a[ 2 ], act: a[ 3 ] };
+        } ), closePanel );
     }
 
     // ---------------------------------------------------------------------
@@ -534,39 +552,50 @@
         catch( e ) { C.fail( e ); }
     };
 
-    // Delete for everyone - after a few seconds with "Undo", never a second question.
-    var pending = new Map();      // id -> { timer, conv }
+    // Delete for everyone - with "Undo", never a second question. The bubble
+    // hides now (by state: a redraw keeps it hidden, conv.js bubble) and the
+    // server is told when the Undo is gone (the shared undoToast: 6 s, the
+    // next toast, leaving the chat, the page closing).
+    var hiding  = new Set();      // "conv:id" of the messages on their way out
+    var msgUndo = null;           // the delete whose Undo is on show
+
+    C.msgHidden = function ( id ) { return hiding.has( S.open + ":" + id ); };
+
+    function unhideMsg( conv, id )
+    {
+        hiding.delete( conv + ":" + id );
+        var el = S.open === conv ? S.els.get( id ) : null;
+        if( el ) el.hidden = false;
+    }
 
     C.deleteMsg = function ( m )
     {
         var conv = S.open;
+        var mine = msgUndo = { id: m.id };
+        hiding.add( conv + ":" + m.id );
         var el = S.els.get( m.id );
         if( el ) el.hidden = true;
-        var go = function ()
-        {
-            pending.delete( m.id );
-            C.api( "DELETE", "conv/" + conv + "/messages/" + m.id ).then( function ( out )
-            {
-                if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }
-            }, function ( e ) { if( el ) el.hidden = false; C.fail( e ); } );
-        };
-        pending.set( m.id, { timer: setTimeout( go, 5000 ), go: go } );
         NayiveUI.undoToast( T( "chat.deletedToast" ), function ()
         {
-            var p = pending.get( m.id );
-            if( ! p ) return;
-            clearTimeout( p.timer );
-            pending.delete( m.id );
-            if( el ) el.hidden = false;
-        }, { ms: 5000 } );
+            if( msgUndo === mine ) msgUndo = null;
+            unhideMsg( conv, m.id );
+        }, { onExpire: function ()
+        {
+            if( msgUndo === mine ) msgUndo = null;
+            C.api( "DELETE", "conv/" + conv + "/messages/" + m.id ).then( function ( out )
+            {
+                hiding.delete( conv + ":" + m.id );
+                if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }
+            }, function ( e ) { unhideMsg( conv, m.id ); C.fail( e ); } );
+        } } );
     };
 
-    // Leaving the chat (or the page) sends the deletes still waiting.
+    // Leaving the chat makes a message's delete final now (only that Undo:
+    // another one on show - a chat's, the auto-delete - keeps its time).
     C.flushDeletes = function ()
     {
-        pending.forEach( function ( p ) { clearTimeout( p.timer ); p.go(); } );
+        if( msgUndo ) NayiveUI.undoSettle();
     };
-    window.addEventListener( "pagehide", function () { C.flushDeletes(); } );
 
     // ---------------------------------------------------------------------
     // sheets: who reacted, who read it, forward to
@@ -681,7 +710,7 @@
             S.searching.hits = ! q ? [] : S.order.filter( function ( id )
             {
                 var m = S.msgs.get( id );
-                return m && ! m.deleted && C.fold( m.text || ( m.file && m.file.name ) || "" ).indexOf( f ) >= 0;
+                return m && ! m.deleted && ! C.msgHidden( id ) && C.fold( m.text || ( m.file && m.file.name ) || "" ).indexOf( f ) >= 0;
             } );
             S.searching.at = S.searching.hits.length;
             C.renderAll();

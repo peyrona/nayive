@@ -96,6 +96,17 @@ GLYPHS = {
             "<line x1='3' y1='10' x2='21' y2='10'></line>"
         ),
     },
+    "email": {
+        "dir": APPS / "email" / "icons",
+        "svg": (
+            "<rect x='2' y='4' width='20' height='16' rx='2'></rect>"
+            "<polyline points='22 6 12 13 2 6'></polyline>"
+        ),
+    },
+    "bookmarks": {
+        "dir": APPS / "bookmarks" / "icons",
+        "svg": "<path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/>",
+    },
     "contact": {
         "dir": APPS / "contact" / "icons",
         "svg": (

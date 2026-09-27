@@ -106,6 +106,7 @@ const session = O.session( {
     // somewhere NEW is let through (the "save a copy" way out of the
     // dialog) unless it is a .csv, which loses things wherever it goes.
     blocked    : function( path ) { return lossyBlocked( path ); },
+    lossless   : function() { return keepsAll( session.path() ); },   // Restore's Undo, see keepsAll
     onSavedAs  : sheetSavedAs,
     // a cell half typed (maybe a formula picked with the mouse): the name can wait
     busy       : function() { const ed = table && table.getActiveEditor(); return !! ( ed && ed.isOpened() ); },
@@ -818,6 +819,16 @@ function lossyDialogIsOpen()
 {
     const el = document.getElementById( 'lossyBackdrop' );
     return !! el && el.classList.contains( 'open' );
+}
+
+// Restore's Undo (shared/office.js) puts Calc's own copy of what was on screen
+// back, and saves it over the file. Only when that copy loses nothing: nothing
+// the file has that Calc cannot write (unless "Guardar igualmente" was said),
+// nothing on screen a .csv cannot hold. Otherwise Restore asks, with no Undo.
+function keepsAll( path )
+{
+    if( doc.lossy.length && ! doc.lossyAck ) return false;
+    return O.extOf( path || '' ) !== 'csv' || ! csvLosses().length;
 }
 
 // What a .csv cannot hold of what is on screen: it keeps the values of one

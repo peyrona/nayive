@@ -1,8 +1,9 @@
 /* actions.js - confirm dialog, navigation, sheet helpers, trip and stage actions. */
 
 //------------------------------------------------------------------------//
-// CONFIRM DIALOG - a small yes/no sheet used before every destructive delete
-// (trips and stages). Only its two buttons (or Escape) close it.
+// CONFIRM DIALOG - a small yes/no sheet used before deleting a whole trip. A
+// stage or a document goes at once, with an Undo instead. Only its two buttons
+// (or Escape) close it.
 
 let confirmOnYes = null;
 
@@ -218,11 +219,14 @@ async function deleteTrip()
 
     setSyncStatus( 'saving' );
 
+    // The bin ids of the trip folder, for the Undo (null from an old server).
+    let ids = null;
+
     try
     {
-        await GumApi.deletePaths( 'data/trips/' + trip.dirName );
+        ids = await GumApi.binPaths( 'data/trips/' + trip.dirName );
         await store.forget( 'data/trips/' + trip.dirName + '/trip.json' );
-        trips = trips.filter( function( t ) { return t.id !== selectedTripId; } );
+        trips = trips.filter( function( t ) { return t.id !== trip.id; } );
         setSyncStatus( 'synced' );
         syncActiveTripDocs();
     }
@@ -247,6 +251,23 @@ async function deleteTrip()
     view = 'list';
     closeTripSheet();
     renderAll();
+
+    // The question stays (a whole trip goes); the Undo covers the slip. The whole
+    // folder went to the bin - trip.json, its files, positions.json - so restoring
+    // it brings all of that back. Shares and the public /s/ link live on the
+    // server and point at the folder, so they work again once it is back.
+    if( ! ids || ! ids.length )
+    {
+        NayiveUI.toast( T( 'ui.toast.binned' ) );
+        return;
+    }
+
+    NayiveUI.undoToast( T( 'ui.toast.binned' ), function()
+    {
+        GumApi.trashRestore( ids )
+            .then( loadTrips )
+            .catch( function() { setSyncStatus( 'error' ); NayiveUI.toast( T( 'trips.restoreFailed' ) ); } );
+    });
 }
 
 //------------------------------------------------------------------------//
@@ -375,54 +396,61 @@ async function saveStage()
     closeStageSheet();
 }
 
+// No question: it goes at once, and the Undo puts it back at its place. Its
+// documents' files are never touched here (they stay in the trip folder).
 function deleteStage( stageId )
 {
-    mutateTrip( selectedTripId, function( t )
+    const tripId = selectedTripId;
+    let removed  = null;
+    let at       = -1;
+
+    mutateTrip( tripId, function( t )
     {
+        at = t.stages.findIndex( function( st ) { return st.id === stageId; } );
+        if( at === -1 ) return t;
+        removed = t.stages[ at ];
         return { ...t, stages: t.stages.filter( function( st ) { return st.id !== stageId; } ) };
     });
-}
 
-// The trash button on a stage card's document row. Same rules as removing the row in
-// the stage sheet and saving: an uploaded file is deleted too (needs the network),
-// a link just goes - the linked file stays in the user's files.
-async function deleteStageDoc( stageId, doc )
-{
-    const trip  = findTrip( selectedTripId );
-    const stage = trip && trip.stages.find( function( s ) { return s.id === stageId; } );
-    if( ! stage ) return;
+    if( ! removed ) return;
 
-    const oldDocs = stage.documents;
-    const newDocs = oldDocs.filter( function( x ) { return x !== doc; } );   // by identity: names can repeat
-
-    if( docFilesDirty( newDocs, oldDocs ) )
+    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
     {
-        if( ! navigator.onLine )
+        mutateTrip( tripId, function( t )
         {
-            NayiveUI.toast( T( 'trips.filesNeedNet' ) );
-            return;
-        }
-
-        await syncDocFiles( trip.dirName, newDocs, oldDocs );
-    }
-
-    mutateTrip( trip.id, function( t )
-    {
-        return { ...t, stages: t.stages.map( function( st ) { return st.id === stageId ? { ...st, documents: newDocs } : st; } ) };
+            if( t.stages.some( function( st ) { return st.id === removed.id; } ) ) return t;
+            const stages = [ ...t.stages ];
+            stages.splice( Math.min( at, stages.length ), 0, removed );
+            return { ...t, stages };
+        });
     });
 }
 
+// The trash button on a stage card's document row.
+function deleteStageDoc( stageId, doc ) { return deleteDocWithUndo( stageId, doc ); }
+
 // The trash button on a trip-level document row (trip detail -> "Documentos").
-// Same rules as deleteStageDoc.
-async function deleteTripDoc( doc )
+function deleteTripDoc( doc ) { return deleteDocWithUndo( null, doc ); }
+
+// Both of the above (stageId null = the trip's own list). No question: the row
+// goes at once and the Undo puts it back at its place. Same rules as removing the
+// row in a sheet and saving: an uploaded file goes to the bin too (needs the
+// network) and the Undo brings it back from there; a link just goes - the linked
+// file stays in the user's files.
+async function deleteDocWithUndo( stageId, doc )
 {
-    const trip = findTrip( selectedTripId );
-    if( ! trip ) return;
+    const trip  = findTrip( selectedTripId );
+    const stage = trip && stageId !== null ? trip.stages.find( function( s ) { return s.id === stageId; } ) : null;
+    const docs  = stageId === null ? ( trip && trip.documents ) : ( stage && stage.documents );
+    if( ! docs ) return;
 
-    const oldDocs = trip.documents;
-    const newDocs = oldDocs.filter( function( x ) { return x !== doc; } );   // by identity: names can repeat
+    const tripId = trip.id;
+    const at     = docs.indexOf( doc );                                     // by identity: names can repeat
+    if( at === -1 ) return;
 
-    if( docFilesDirty( newDocs, oldDocs ) )
+    let ids = null;                                                        // the file's bin id, for the Undo
+
+    if( docFilesDirty( docs.filter( function( x ) { return x !== doc; } ), docs ) )
     {
         if( ! navigator.onLine )
         {
@@ -430,10 +458,37 @@ async function deleteTripDoc( doc )
             return;
         }
 
-        await syncDocFiles( trip.dirName, newDocs, oldDocs );
+        // Straight to the bin (not syncDocFiles) so the Undo knows its bin id.
+        // A failure is not fatal, as there: never uploaded / already gone.
+        try { ids = await GumApi.binPaths( 'data/trips/' + trip.dirName + '/' + docStoredFile( doc ) ); }
+        catch( _ ) { ids = null; }
     }
 
-    mutateTrip( trip.id, function( t ) { return { ...t, documents: newDocs }; } );
+    editDocs( tripId, stageId, function( list ) { return list.filter( function( x ) { return x !== doc; } ); } );
+
+    NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+    {
+        editDocs( tripId, stageId, function( list )
+        {
+            if( list.indexOf( doc ) !== -1 ) return list;
+            const out = [ ...list ];
+            out.splice( Math.min( at, out.length ), 0, doc );
+            return out;
+        });
+
+        if( ids && ids.length )
+            GumApi.trashRestore( ids ).catch( function() { setSyncStatus( 'error' ); NayiveUI.toast( T( 'trips.restoreFailed' ) ); } );
+    });
+}
+
+// fn( documents ) -> the new document list of the trip (stageId null) or of that stage.
+function editDocs( tripId, stageId, fn )
+{
+    mutateTrip( tripId, function( t )
+    {
+        if( stageId === null ) return { ...t, documents: fn( t.documents || [] ) };
+        return { ...t, stages: t.stages.map( function( st ) { return st.id === stageId ? { ...st, documents: fn( st.documents || [] ) } : st; } ) };
+    });
 }
 
 function deleteStageFromSheet()
@@ -469,7 +524,10 @@ function reorderStage( stageId, targetStageId, bBefore )
     if( sId === tId )
         return;
 
-    mutateTrip( selectedTripId, function( t )
+    const tripId = selectedTripId;
+    let   oldAt  = -1;          // where it was, for the Undo; stays -1 when nothing moved
+
+    mutateTrip( tripId, function( t )
     {
         const stages = [ ...t.stages ];
         const from   = stages.findIndex( function( st ) { return String( st.id ) === sId; } );
@@ -489,6 +547,29 @@ function reorderStage( stageId, targetStageId, bBefore )
 
         stages.splice( to, 0, moved );
 
+        if( to !== from ) oldAt = from;   // dropped right beside itself = same order
+
         return { ...t, stages };
+    });
+
+    if( oldAt === -1 )
+        return;
+
+    // Undo moves this one stage back to where it was.
+    NayiveUI.undoToast( T( 'ui.toast.moved' ), function()
+    {
+        mutateTrip( tripId, function( t )
+        {
+            const stages = [ ...t.stages ];
+            const now    = stages.findIndex( function( st ) { return String( st.id ) === sId; } );
+
+            if( now === -1 )
+                return t;
+
+            const [ moved ] = stages.splice( now, 1 );
+            stages.splice( Math.min( oldAt, stages.length ), 0, moved );
+
+            return { ...t, stages };
+        });
     });
 }

@@ -2045,6 +2045,7 @@ async function closeImageEditor( save )
         catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }   // stays open: nothing lost
     }
     const comment = p ? $( "#editorComment" ).value.trim() : "";
+    const noteGone = save && p && ! comment ? commentBase : "";   // a note this ✓ clears: its Undo puts it back
 
     // Write BEFORE tearing the editor down: a save that fails leaves it open
     // with the edit and the note, so nothing is lost and ✓ can try again.
@@ -2094,7 +2095,21 @@ async function closeImageEditor( save )
     renderGrid();
     if( st.cluster != null ) openCluster( st.cluster );
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
-    NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) );
+    if( ! noteGone ) { NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) ); return; }
+
+    NayiveUI.undoToast( NayiveUI.t( 'photos.commentDeleted' ), async () =>
+    {
+        if( ! await saveComment( p.id, noteGone ) ) return;          // it said why
+        // the editor open on this photo again, its box still empty: the note shows there too
+        if( editorPhoto && editorPhoto.id === p.id && ! commentBase && ! $( "#editorComment" ).value.trim() )
+        {
+            $( "#editorComment" ).value = noteGone;
+            commentBase = noteGone;
+        }
+        renderGrid();
+        if( st.cluster != null ) openCluster( st.cluster );
+        if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
+    } );
 }
 
 /* Is `name` already in the folder `dir` ("files/x/")? A listing that fails
@@ -2142,13 +2157,15 @@ async function confirmSaveAs()
 
     // A PUT replaces a file outright, with no trip through the papelera, so
     // a name already taken is asked about first - as Drive's "Guardar copia"
-    // does. "No" leaves the editor open with the edits.
+    // does. "No" leaves the editor open with the edits. "Replace" bins the
+    // old file first; its bin ids let the Undo below bring it back.
+    let binned = null;
     if( ! DEMO && dest !== p.path && await nameTaken( dir, name ) )
     {
         if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.nameExistsTitle' ),
                                         body: NayiveUI.tf( 'drive.nameExistsCopyBody', { name } ),
                                         confirm: NayiveUI.t( 'drive.replace' ), danger: true } ) ) return;
-        try { await GumApi.deletePaths( [ dest ] ); }
+        try { binned = await GumApi.binPaths( [ dest ] ); }   // null from an old server: no Undo
         catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.moveExistingFailed' ) ); return; }
         await NayiveMedia.purgePaths( [ dest ] );    // its thumbnail + scan entry, as Drive's delete does
     }
@@ -2189,10 +2206,27 @@ async function confirmSaveAs()
 
     // a replaced file's note must not stick to the new picture
     let noteOk = true;
+    const oldNote = COMMENTS[ dest ] || "";
     if( comment || COMMENTS[ dest ] ) noteOk = await saveComment( dest, comment );
 
     await loadFolder();
-    if( noteOk ) NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) );   // else saveComment's toast stands
+    if( ! noteOk ) return;                       // saveComment's toast stands
+    if( ! binned || ! binned.length ) { NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) ); return; }
+
+    // Undo of the Replace: the new copy to the bin FIRST (a restore onto a
+    // taken name lands as "name (2)"), then the old file and its note back.
+    NayiveUI.undoToast( NayiveUI.t( 'photos.copySaved' ), async () =>
+    {
+        try
+        {
+            await GumApi.deletePaths( [ dest ] );
+            await NayiveMedia.purgePaths( [ dest ] );
+            await GumApi.trashRestore( binned );
+        }
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.restoreFailed' ) ); await loadFolder(); return; }
+        if( oldNote !== comment ) await saveComment( dest, oldNote );
+        await loadFolder();
+    } );
 }
 
 /* ---------------------------------------------------------------------------

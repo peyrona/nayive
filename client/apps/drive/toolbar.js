@@ -60,21 +60,26 @@ function updateToolbarState()
     clBtn.disabled = (nT !== 1);
     clBtn.title    = (n === 1) ? T( 'drive.linkItem' ) : T( 'drive.linkFolder' );
 
-    // Download acts on the checked items, or (nothing checked) on the current folder.
+    // Compress packs the checked items (or the open folder) into one .zip
+    // beside them (zip.js).
+    document.getElementById( 'compressBtn' ).disabled = (nT === 0) || roSel;
+
+    // Properties shows the details of the checked items, or the open folder.
+    document.getElementById( 'propsBtn' ).disabled = (nT === 0);
+
+    // Download acts on the checked items, or (nothing checked) on the current
+    // folder - one at a time, so it is off while one runs (actions.js).
     const dlBtn = document.getElementById( 'downloadBtn' );
-    dlBtn.disabled = (nT === 0);
+    dlBtn.disabled = (nT === 0) || !! dlJob;
     dlBtn.title    = (n > 0) ? T( 'drive.downloadSelection' ) : T( 'drive.downloadFolder' );
 
 
-    // The six above act on WHAT IS SELECTED: the ticked rows, or (nothing
+    // The eight above act on WHAT IS SELECTED: the ticked rows, or (nothing
     // ticked) the folder open in the tree. So the group - rule included, see
     // #selActions in index.html and drive.css - leaves the bar only when
-    // there is no target at all (the Drive root, nothing ticked). With just
-    // the open folder, Link, Share and Delete show; Rename, Move and Copy
-    // wait for a tick.
+    // there is no target at all (the Drive root, nothing ticked). A folder
+    // clicked in the tree shows the same buttons as one right-clicked there.
     document.getElementById( 'selActions' ).hidden = ! nT;
-    for( const id of [ 'renameBtn', 'moveToBtn', 'copyToBtn' ] )
-        document.getElementById( id ).hidden = ! n;
 
     // Several of the titles above were just rewritten from scratch, so the
     // "· Ctrl+D" hints go back on last.

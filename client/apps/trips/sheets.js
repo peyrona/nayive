@@ -316,11 +316,8 @@ function renderStageSheet()
         delBtn.title = T( 'trips.deleteStage' );
         delBtn.disabled = stageSheetBusy;
         delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
-        delBtn.addEventListener( 'click', function()
-        {
-            const label = ( stageDraft.location || '' ).trim() || T( 'trips.thisStage' );
-            openConfirm( T( 'trips.deleteStage' ), TF( 'trips.deleteStageBody', { name: label } ), NayiveUI.t( 'ui.delete' ), deleteStageFromSheet );
-        });
+        // Already inside a dialog: no second question, it goes at once with an Undo.
+        delBtn.addEventListener( 'click', deleteStageFromSheet );
         actions.appendChild( delBtn );
     }
 

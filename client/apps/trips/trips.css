@@ -32,6 +32,31 @@
     .trip-panel { border-radius: 0; border: none; box-shadow: none; min-height: 100vh; }
 }
 
+/* In a desktop window (html.is-windowed, desktop/index.html) the header is the
+   window's title bar (the desktop puts its three dots at its start), so it
+   spans the whole window: the layout turns into a grid - the header across the
+   top, the list below it on the left, the route map on the right - and the two
+   panels around them step aside (display: contents), frames and margins gone.
+   Trips on its own is untouched. */
+html.is-windowed .trip-page   { padding: 0; }
+html.is-windowed .trip-layout
+{
+    display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); grid-template-rows: auto 1fr;
+    gap: 0; max-width: none; min-height: 100vh; align-items: stretch;
+}
+html.is-windowed .trip-main,
+html.is-windowed .trip-main > .trip-panel { display: contents; }
+html.is-windowed .trip-header
+{
+    grid-column: 1 / -1; grid-row: 1; position: sticky; top: 0; z-index: 20;
+    margin: 0; padding: 8px 10px; min-height: 53px;
+    background: var(--card); border-bottom: 1px solid var(--line);
+}
+html.is-windowed #tripContent { grid-column: 1; grid-row: 2; min-width: 0; padding: 18px; background: var(--card); }
+html.is-windowed .route-panel { grid-column: 2; grid-row: 2; top: 53px; max-width: none; border-left: 1px solid var(--line); }
+html.is-windowed .route-panel .trip-panel { min-height: 100%; border-radius: 0; border: none; box-shadow: none; }
+@media (max-width: 919px) { html.is-windowed .trip-layout { grid-template-columns: minmax(0, 1fr); } }
+
 /* Header - like the app.css .header, but the <h1> doubles as the trip
    name when a trip is open (plain --text), and only shows --accent in
    its "Trips" app-title state. */
@@ -146,7 +171,20 @@
 .stage-docs { margin-top: 8px; }
 
 /* .sheet-backdrop / .sheet / .sheet-header / .field / inputs from app.css. */
-#mapSheet { max-width: 1600px; }
+/* Phone route map (route.js openMapSheet): the whole screen, not a dialog. The
+   map fills it; the legend / "Now in ..." sits top-left and Plan / Journey / ×
+   top-right, each on a card-coloured pill so they read over the tiles. The
+   transform override stops shared/ui.js's dialog drag nudging it. */
+#mapSheetBackdrop { padding: 0; }
+#mapSheet { max-width: none; max-height: none; width: 100vw; height: 100vh; height: 100dvh; padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; transform: none !important; }
+#mapSheet .route-map { position: absolute; inset: 0; width: auto; height: auto; max-width: none; border: 0; border-radius: 0; }
+#mapSheet .map-bar { position: absolute; z-index: 1000; top: calc(10px + env(safe-area-inset-top)); left: 10px; right: 10px; margin: 0; align-items: flex-start; pointer-events: none; }
+#mapSheet .map-bar > * { pointer-events: auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m); box-shadow: var(--elev-card); }
+#mapSheet .map-legend, #mapSheet .journey-now { flex: 0 1 auto; padding: 6px 10px; }
+#mapSheet .map-mode { padding: 3px; }
+#mapSheet .map-caption { display: none; }
+#mapSheet .calc-warn { position: absolute; z-index: 1000; left: 10px; right: 10px; bottom: calc(24px + env(safe-area-inset-bottom)); margin: 0; background: var(--card); }
+#mapSheet .route-offline { margin: calc(64px + env(safe-area-inset-top)) 16px 0; }
 
 /* trip form fields sit outside a .field (multi-value doc/loc rows) too - they
    just need width. */

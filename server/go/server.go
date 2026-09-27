@@ -29,20 +29,22 @@ import (
 
 // Server holds the running server's collaborators.
 type Server struct {
-	cfg      *Config
-	log      Logger
-	sessions *SessionStore
-	users    *Users
-	shares   *Shares
-	trackers *Trackers
-	tree     *FileTree
-	trash    *Trash
-	push     *VapidStore
-	convert  *Converter
-	office   *Office
-	static   *StaticFiles
-	chat     *ChatHub // the Chat app's messenger (chat.go)
-	devices  *Devices // the Android app's phones (devices.go)
+	cfg       *Config
+	log       Logger
+	sessions  *SessionStore
+	users     *Users
+	shares    *Shares
+	trackers  *Trackers
+	tree      *FileTree
+	trash     *Trash
+	push      *VapidStore
+	convert   *Converter
+	office    *Office
+	static    *StaticFiles
+	chat      *ChatHub   // the Chat app's messenger (chat.go)
+	devices   *Devices   // the Android app's phones (devices.go)
+	downloads *Downloads // Drive's downloads under way (api_download.go)
+	mail      *MailHub   // the eMail app's accounts and unread counts (mail.go)
 
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
@@ -74,21 +76,23 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:      cfg,
-		log:      log,
-		sessions: NewSessionStore(cfg.SessionTTL),
-		users:    users,
-		shares:   shares,
-		trackers: NewTrackers(cfg.ConfigDir, log),
-		tree:     tree,
-		trash:    trash,
-		push:     push,
-		convert:  NewConverter(cfg, users, trash, push, log),
-		office:   NewOffice(log),
-		static:   static,
-		chat:     NewChatHub(cfg, users, push, log),
-		devices:  NewDevices(cfg.ConfigDir, cfg.HomesDir, log),
-		scheme:   "http",
+		cfg:       cfg,
+		log:       log,
+		sessions:  NewSessionStore(cfg.SessionTTL, cfg.ConfigDir, log),
+		users:     users,
+		shares:    shares,
+		trackers:  NewTrackers(cfg.ConfigDir, log),
+		tree:      tree,
+		trash:     trash,
+		push:      push,
+		convert:   NewConverter(cfg, users, trash, push, log),
+		office:    NewOffice(log),
+		static:    static,
+		chat:      NewChatHub(cfg, users, push, log),
+		devices:   NewDevices(cfg.ConfigDir, cfg.HomesDir, log),
+		downloads: NewDownloads(),
+		mail:      NewMailHub(cfg, users, push, log),
+		scheme:    "http",
 	}
 	s.chat.Hook(s.devices)
 
@@ -200,9 +204,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Close releases what the server owns.
 func (s *Server) Close() error {
+	s.sessions.Flush() // the sliding expiries the sweep has not written yet
 	s.office.Close()
 	s.chat.Close()
 	s.devices.Close()
+	s.mail.Close()
 	return s.static.Close()
 }
 
@@ -254,6 +260,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/chat/{rest...}", s.apiChatOwner)
 	mux.HandleFunc("/api/chat/via/{owner}", s.apiChatVia) // another user's home, where I am a contact
 	mux.HandleFunc("/api/chat/via/{owner}/{rest...}", s.apiChatVia)
+	mux.HandleFunc("/api/mail/{rest...}", s.apiMail) // the eMail app (api_mail.go)
 	mux.HandleFunc("/api/c/{token}", s.apiChatGuest)
 	mux.HandleFunc("/api/c/{token}/{rest...}", s.apiChatGuest)
 	mux.HandleFunc("/c/{token}", s.chatGuestRedirect)
@@ -261,8 +268,11 @@ func (s *Server) routes() http.Handler {
 
 	// --- the file API ------------------------------------------------------
 	mux.HandleFunc("/api/files", s.apiFiles)
-	mux.HandleFunc("/api/convert", s.apiConvert) // Go only - see convert.go
-	mux.HandleFunc("/api/office", s.apiOffice)   // Go only - see office.go
+	mux.HandleFunc("/api/convert", s.apiConvert)            // Go only - see convert.go
+	mux.HandleFunc("/api/office", s.apiOffice)              // Go only - see office.go
+	mux.HandleFunc("/api/zip", s.apiZip)                    // what is in a .zip, "Extract here"
+	mux.HandleFunc("/api/download", s.apiDownload)          // Drive's "Download": a file, or a zip made on the fly
+	mux.HandleFunc("/api/bookmarks/{what}", s.apiBookmarks) // a site's icon, a page's title
 
 	// Anything else under /api/ is a 404 in JSON, never an HTML error page: the
 	// browser apps parse every /api/ answer as JSON.

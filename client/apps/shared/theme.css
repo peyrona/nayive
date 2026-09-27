@@ -47,7 +47,7 @@
     --text-dim:    #93959F;               /* secondary text, icon buttons at rest, field labels */
     --text-faint:  #6B6E77;               /* done items, placeholders, disabled text */
 
-    --accent:      #16A085;               /* brand green: titles, primary buttons, active/selected */
+    --accent:      #1F80B1;               /* brand blue: titles, primary buttons, active/selected */
     --on-accent:   #0D0F17;               /* text / icon on an accent fill */
     --danger:      #D9707D;               /* destructive actions, errors (muted rose-red) */
 
@@ -71,7 +71,7 @@
     --text-dim:    #484C5B;
     --text-faint:  #5E6472;
 
-    --accent:      #0A6151;
+    --accent:      #61410A;
     --on-accent:   #F9F9FB;
     --danger:      #9C4150;
 
@@ -196,19 +196,36 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 .toast-undo              { border: none; background: none; padding: 0; font: inherit; font-weight: 700;
                            color: var(--accent); cursor: pointer; }
 
-/* Upload progress (every app; shared/ui.js draws it from GumApi.putBinary's
- * "nayive:upload" events). Shown only when an upload is not instant. Sits above
- * the toast (bottom: 90px), so a "Guardado" that follows it stays readable. */
-.upload-bar              { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
+/* Transfer bar: uploads and downloads (every app; shared/ui.js -> transfer(),
+ * the uploads drawn from GumApi.putBinary's "nayive:upload" events). Floating,
+ * it sits above the toast (bottom: 90px), so a "Guardado" that follows it stays
+ * readable. .in-slot: flat, inside an app's toolbar (.transfer-slot) when that
+ * has room. Only the ✕ takes clicks - the rest lets them through. */
+.transfer-bar            { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
                            width: min(320px, 90vw); box-sizing: border-box;
-                           display: flex; flex-direction: column; gap: 8px;
+                           display: flex; flex-direction: column; gap: 10px;
                            background: var(--card2); color: var(--text); border: 1px solid var(--line);
                            border-radius: var(--radius-s); padding: 10px 16px; font-size: 0.9rem; z-index: 200;
                            text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-.upload-bar.show         { opacity: 1; }
-.upload-bar-track        { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.upload-bar-fill         { display: block; height: 100%; width: 0; background: var(--accent);
+.transfer-bar.show       { opacity: 1; }
+.transfer-bar.show .transfer-stop { pointer-events: auto; }
+.transfer-row            { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: center; }
+.transfer-row.can-stop   { grid-template-columns: minmax(0, 1fr) auto; }
+.transfer-text           { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-track          { grid-column: 1; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.transfer-fill           { display: block; height: 100%; width: 0; background: var(--accent);
                            transition: width 0.2s; }
+.transfer-stop           { grid-column: 2; grid-row: 1 / span 2; }
+
+.transfer-slot           { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; }
+.transfer-bar.in-slot    { position: static; transform: none; width: 100%; max-width: 380px;
+                           background: none; border: none; border-radius: 0; padding: 0 6px; gap: 2px;
+                           font-size: 0.8rem; color: var(--text-dim); z-index: auto; }
+.in-slot .transfer-row          { grid-template-columns: auto minmax(40px, 1fr); }
+.in-slot .transfer-row.can-stop { grid-template-columns: auto minmax(40px, 1fr) auto; }
+.in-slot .transfer-track        { grid-column: 2; grid-row: 1; }
+.in-slot .transfer-stop         { grid-column: 3; grid-row: 1; width: 24px; height: 24px; }
+.in-slot .transfer-stop svg     { width: 14px; height: 14px; }
 
 /* Top "your session expired" bar (shared/ui.js -> NayiveUI.sessionExpired()).
  * Sits above .sheet (100), .toast / .info-popup (200) and .coach-overlay (300):

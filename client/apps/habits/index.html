@@ -980,6 +980,7 @@
             const target = t >= 2 ? t : null;
             const days   = hs.days.slice();          // "Personalizado" with nothing ticked = every day
             const editing = !! hs.h;
+            const old     = hs.h;                    // untouched below: the edit makes a new object
 
             if( editing )
             {
@@ -996,7 +997,28 @@
             save();
             closeSheet( 'habitSheetBackdrop' );
             render();
-            toast( editing ? T( 'habits.saved' ) : T( 'habits.created' ) );
+
+            // A lower target turns the part-done days that reach it into done days,
+            // and no target drops them all: raising it again cannot bring back
+            // "4 of 5". Only then the toast carries an Undo.
+            const oldCounts = editing ? Object.keys( old.counts || {} ) : [];
+            const lost = editing && old.target && ( target
+                       ? target < old.target && oldCounts.some( d => old.counts[ d ] >= target )
+                       : oldCounts.length > 0 );
+            if( ! lost ) { toast( editing ? T( 'habits.saved' ) : T( 'habits.created' ) ); return; }
+
+            showUndo( T( 'habits.targetChanged' ), function()
+            {
+                // In place, never a new object: an open sheet holds this one (hs.h),
+                // and saveHabit finds it by identity.
+                const cur = habits.find( x => x.id === old.id );
+                if( ! cur ) return;
+                const done = cur.done.filter( d => ! ( old.counts[ d ] && old.done.indexOf( d ) === -1 ) );
+                Object.assign( cur, H.normalise( Object.assign( {}, cur,
+                    { target: old.target, done, counts: Object.assign( {}, cur.counts, old.counts ) } ) ) );
+                save();
+                render();
+            } );
         }
 
         // Archive keeps the history; restoring starts the count afresh from today
@@ -1004,31 +1026,48 @@
         function toggleArchive()
         {
             if( ! hs || ! hs.h || ! canEdit() ) return;
-            const h = hs.h;
+            const h   = hs.h;
+            const was = { archived: h.archived, created: h.created };   // restore resets the start date
             if( h.archived ) { h.archived = null; h.created = H.todayIso(); }
             else h.archived = H.todayIso();
             save();
             closeSheet( 'habitSheetBackdrop' );
             render();
-            toast( h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ) );
+
+            // Undo flips it back, the old start date included. By id: a reload
+            // in between swaps every habit for a fresh copy.
+            showUndo( h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ), function()
+            {
+                const cur = habits.find( x => x.id === h.id );
+                if( ! cur ) return;
+                cur.archived = was.archived;
+                cur.created  = was.created;
+                save();
+                render();
+            } );
         }
 
-        async function deleteHabit()
+        // The bin sits inside the sheet (a dialog already), and only on an archived
+        // habit: no question, it goes at once, and the Undo puts it back, history
+        // and all, at its place in the list.
+        function deleteHabit()
         {
             if( ! hs || ! hs.h || ! canEdit() ) return;
-            const h  = hs.h;
-            const ok = await NayiveUI.confirm( {
-                title:  T( 'habits.deleteHabit' ),
-                body:   TF( 'habits.deleteHabitBody', { name: h.name } ),
-                danger: true
-            } );
-            if( ! ok ) return;
+            const at = habits.findIndex( x => x.id === hs.h.id );
+            if( at === -1 ) return;
 
-            habits = habits.filter( x => x !== h );
+            const h = habits.splice( at, 1 )[ 0 ];
             save();
             closeSheet( 'habitSheetBackdrop' );
             render();
-            toast( T( 'habits.deleted' ) );
+
+            showUndo( T( 'habits.deleted' ), function()
+            {
+                if( habits.some( x => x.id === h.id ) ) return;
+                habits.splice( Math.min( at, habits.length ), 0, h );
+                save();
+                render();
+            } );
         }
 
         //------------------------------------------------------------------------//

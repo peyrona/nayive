@@ -777,8 +777,26 @@ async function addPersonalWord( word )
     try { await GumApi.writeJson( PERSONAL_DICT, { words: personalWords } ); }
     catch( _ ) { saved = false; }
 
-    NayiveUI.toast( saved ? NayiveUI.tf( 'write.wordAdded', { word: word } ) : NayiveUI.t( 'write.dictSaveFailed' ) );
     if( spell ) spell.forget( word );        // its red lines go at once
+
+    if( ! saved ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); return; }
+    session.offerUndo( NayiveUI.tf( 'write.wordAdded', { word: word } ), function() { removePersonalWord( word ); } );
+}
+
+// The Undo of "Add to dictionary": out of the list again, and red again. A full
+// re-check (spell.reset), not a redraw: paragraphs checked after the add never
+// flagged it - the worker skips the personal words.
+async function removePersonalWord( word )
+{
+    const i = personalWords.indexOf( word );
+    if( i === -1 ) return;
+
+    personalWords.splice( i, 1 );
+    setPersonalWords( personalWords );
+    if( spell ) spell.reset();
+
+    try { await GumApi.writeJson( PERSONAL_DICT, { words: personalWords } ); }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); }
 }
 
 //----------------------------------------------------------------------------//
@@ -1000,13 +1018,16 @@ async function renderTemplates( dir )
 
 // A template opens as an UNTITLED document, so the first save asks where it goes
 // - the template itself is never overwritten. An untitled document with edits
-// is only in the device draft, and the template takes its place: the question
-// New asks comes first, while the list is still open (a "no" stays in it).
+// is only in the device draft, and the template takes its place: as with New,
+// it goes at once and the toast's Undo brings it back. One the session cannot
+// keep for that (a password on it) gets New's question instead, while the list
+// is still open (a "no" stays in it).
 async function useTemplate( path )
 {
     const dropping = session.dirty() && ! session.path();
-    if( dropping && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
-                                                confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
+    const kept     = dropping ? await session.keepUntitled() : null;
+    if( dropping && ! kept && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
+                                                          confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
 
     setBackdrop( 'tplBackdrop', false );
 
@@ -1018,6 +1039,7 @@ async function useTemplate( path )
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
         session.untitled( baseName( path ), { dirty: true } );
+        if( kept ) session.offerBack( kept );
     }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
 }

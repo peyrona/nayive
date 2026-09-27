@@ -50,7 +50,7 @@
         </activity>
 
         <!-- The TWA. Also the target of links to <origin>/nayive/ (App Links)
-             and of "Share -> Nayive" for photos, like the installed PWA. -->
+             and of "Share -> Nayive" for photos and links, like the installed PWA. -->
         <activity
             android:name=".Launcher"
             android:exported="true"
@@ -75,6 +75,13 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- A link or text (YouTube's "Share", a web page...): Chat opens
+                 with it in the box, to pick who gets it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 

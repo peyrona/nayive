@@ -62,7 +62,7 @@ package main
 //	middleware.go  the panic guard, the request log, the security headers
 //	response.go    sendJSON / sendText / the gzip tiers / the body cap
 //	query.go       the query string, read the way Python's parse_qs reads it
-//	sessions.go    the in-memory session table and its cookie
+//	sessions.go    the session table (kept across restarts) and its cookie
 //	users.go       authentication, accounts, the path sandbox, quota, push subs
 //	shares.go      read-only sharing between users
 //	filetree.go    the /api/files tree, disk sizes, content types
@@ -78,6 +78,7 @@ package main
 //	api_shares.go  sharing
 //	api_files.go   the file API
 //	upload.go      PUT: streaming an upload to disk
+//	api_zip.go     a .zip: what is inside, and "Extract here"
 //	static.go      the /nayive/ apps: Range, 304, .gz sidecars, path sandbox
 //
 // Testing from the shell:
@@ -135,6 +136,9 @@ func main() {
 		fmt.Printf("[i] removed %d stale temp file(s)\n", removed)
 	}
 
+	// The only visible sign that a restart signed nobody out (sessions.go).
+	fmt.Printf("[i] %d session(s) kept from the last run\n", server.sessions.Count())
+
 	// Load (or, on a brand-new install, create) the Web Push signing key before
 	// anything can use it, and print it. Seeing this key CHANGE between restarts
 	// is the only visible sign that every device's notifications just died - see
@@ -161,6 +165,10 @@ func main() {
 	go server.chat.RunExpiry(ctx)
 	// Chat's scheduled texts ("Schedule message"), sent when their time comes.
 	go server.chat.RunLater(ctx)
+	// eMail: every account's unread count, for the launcher's badge.
+	go server.mail.RunPoller(ctx)
+	// eMail: the Trash deletes for good what is older than each user's days.
+	go server.mail.RunPurge(ctx)
 
 	// Converting uploaded videos needs ffmpeg + ffprobe on the machine
 	// (`sudo apt install ffmpeg`). Without them Drive simply never offers it.

@@ -1,0 +1,349 @@
+/* email.css - eMail's own styles. */
+/* Base reset, .app shell, .topbar, .icon-btn, .pill, .sheet, .field and the
+   input look all come from ../shared/app.css. eMail keeps the page still
+   (the tray column and the list / message pane scroll themselves) and adds
+   its rows, the message header and the reading frame. */
+html, body { height: 100%; overflow: hidden; }
+
+/* The search field: its width, and the clear cross inside it (as in Drive). */
+.search-wrap { position: relative; flex: 0 0 auto; width: 210px; }
+.search-wrap .topbar-search { width: 100%; padding-right: 32px; }
+.search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
+.search-wrap .icon-btn.sm { width: 26px; height: 26px; }
+.search-wrap .icon-btn.sm svg { width: 15px; height: 15px; }
+body.reading .search-wrap,
+body.selecting .search-wrap,
+body.in-label .search-wrap { display: none; }
+
+/* The bar's modes: list-only buttons leave while reading or picking; the
+   message actions come (actions.js, syncBar). */
+body.reading .mail-list-only,
+body.selecting .mail-list-only,
+body.composing .mail-list-only,
+body.composing .search-wrap,
+body.composing #actions,
+body.composing #imagesBtn { display: none; }
+.icon-btn.mail-send  { color: var(--accent); }
+
+/* Writing: a label and its field per row, the files, the text filling the rest. */
+.mail-compose        { position: relative; display: flex; flex-direction: column; gap: 8px; max-width: 920px; min-height: 100%; padding: 14px 18px 20px; }
+.mail-cfield         { display: flex; align-items: center; gap: 10px; }
+.mail-cfield label   { flex: 0 0 64px; font-size: 0.82rem; color: var(--text-dim); }
+.mail-cfield input,
+.mail-cfield select  { flex: 1 1 auto; min-width: 0; }
+.mail-cfield .text-btn { flex: 0 0 auto; }
+.mail-ctext          { flex: 1 1 auto; min-height: 260px; resize: vertical; line-height: 1.5; font: inherit; }
+.mail-cstatus        { margin: 0; min-height: 1.2em; font-size: 0.78rem; color: var(--text-dim); }
+.mail-cfile .icon-btn { margin: -4px -8px -4px 0; }
+.mail-suggest
+{
+    position: absolute; z-index: 30;
+    display: flex; flex-direction: column;
+    max-height: 260px; overflow-y: auto;
+    padding: 4px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-m);
+    box-shadow: var(--elev-card);
+}
+.mail-sug            { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.mail-sug small      { font-size: 0.76rem; color: var(--text-dim); }
+.mail-sug.is-at,
+.mail-sug:hover      { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.mail-actions        { display: flex; align-items: center; gap: 2px; }
+.mail-sel-count      { margin: 0 8px 0 -4px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+#actStar.is-on       { color: var(--warn); }
+
+.mail-body { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* The trays: pills, stacked in a column on a wide screen. */
+.mail-side
+{
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 8px;
+    border-right: 1px solid var(--line);
+    overflow: hidden;              /* the labels' panel scrolls, not the column */
+}
+.mail-side .tb-select { width: 100%; }
+.mail-trays { display: flex; flex-direction: column; gap: 4px; }
+.mail-tray
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    white-space: nowrap;
+}
+.mail-tray svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.mail-tray b   { margin-left: auto; padding-left: 6px; font-weight: 700; }
+.mail-tray.is-missing { opacity: 0.5; }
+
+.mail-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+
+/* A server that refused the password or does not answer. */
+.mail-problem
+{
+    margin: 10px 14px 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+/* One row: who + when / subject + marks / the first words. Unread: bold,
+   with an accent edge on the left. */
+.mail-row
+{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 10px;
+    width: 100%;
+    padding: 9px 14px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.mail-row:hover       { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mail-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mail-row.unread      { box-shadow: inset 3px 0 0 var(--accent); }
+.mail-row .who,
+.mail-row .subj,
+.mail-row .snip       { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-row .who        { font-size: 0.92rem; }
+.mail-row .when       { font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; align-self: center; }
+.mail-row .subj       { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 0.88rem; }
+.mail-row .subj span  { overflow: hidden; text-overflow: ellipsis; }
+.mail-row .subj svg   { width: 14px; height: 14px; flex: 0 0 auto; color: var(--text-dim); }
+.mail-row .subj .star { color: var(--warn, #E0A800); }
+.mail-row .snip       { grid-column: 1 / -1; font-size: 0.82rem; color: var(--text-dim); }
+/* Picking several: a round tick at the row's start. */
+.mail-row             { position: relative; }
+.mail-tick
+{
+    display: none;
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px;
+    align-items: center; justify-content: center;
+    border: 2px solid color-mix(in srgb, var(--text) 35%, transparent);
+    border-radius: 50%;
+}
+.mail-tick svg        { width: 14px; height: 14px; visibility: hidden; }
+body.selecting .mail-row  { padding-left: 46px; }
+body.selecting .mail-tick { display: flex; }
+.mail-row.is-picked   { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mail-row.is-picked .mail-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.mail-row.is-picked .mail-tick svg { visibility: visible; }
+
+/* Labels: a coloured dot (--c), on a chip, a pill or a dialog row. */
+.mail-dot   { display: inline-block; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--accent)); }
+.mail-chip
+{
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+    padding: 1px 8px; font-size: 0.7rem; line-height: 1.5;
+}
+.mail-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
+.mail-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+/* The labels' panel under the trays: its head (name + "+") stays, the list
+   scrolls on its own when there are many. */
+.mail-labels-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 6px; }
+.mail-labels-head  { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; }
+.mail-labels-head .section-label { margin: 0 4px; }
+.mail-labels       { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 4px; }
+.mail-label-line   { display: flex; align-items: center; gap: 2px; }
+.mail-label-line .pill { flex: 1 1 auto; min-width: 0; }
+.mail-label-line .pill span { overflow: hidden; text-overflow: ellipsis; }
+.mail-label-pen    { opacity: 0; }
+.mail-label-line:hover .mail-label-pen,
+.mail-label-line.is-active .mail-label-pen,
+.mail-label-pen:focus-visible { opacity: 1; }
+@media (hover: none) { .mail-label-pen { opacity: 1; } }
+
+/* Settings' tabs (as the desktop's) and a label's colours. */
+.mail-tabs     { display: flex; gap: 6px; margin: 0 0 16px; }
+.mail-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.mail-swatch
+{
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 50%;
+    background: var(--c); color: #fff; cursor: pointer;
+}
+.mail-swatch svg   { width: 16px; height: 16px; }
+.mail-swatch.is-on { outline: 2px solid var(--text); outline-offset: 2px; }
+#addBtn            { margin-top: 2px; }
+
+.mail-label-pick { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.mail-pick       { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.mail-pick.is-on { border-color: var(--accent); }
+.mail-pick-name  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-pick-mark  { flex: 0 0 auto; width: 18px; text-align: center; color: var(--accent); font-weight: 700; }
+.mail-pick-mark svg { width: 16px; height: 16px; display: block; }
+.mail-new-label  { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.mail-new-label input { flex: 1 1 auto; min-width: 0; }
+
+.mail-row.unread .who,
+.mail-row.unread .subj span { font-weight: 700; }
+
+.mail-bar-bin { margin: -6px -6px -6px auto; }   /* the Trash / Spam bar's bin, at its right end */
+
+.mail-more { padding: 16px; text-align: center; font-size: 0.84rem; color: var(--text-dim); }
+
+/* One message */
+.mail-read-view { max-width: 920px; padding: 16px 18px 40px; }
+.mail-subject   { margin: 0 0 10px; font-size: 1.15rem; line-height: 1.3; overflow-wrap: anywhere; }
+.mail-meta
+{
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 3px 10px;
+    margin-bottom: 12px;
+    font-size: 0.84rem;
+    color: var(--text-dim);
+}
+.mail-meta dd   { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.mail-meta dt   { white-space: nowrap; }
+
+.mail-parts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.mail-part
+{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--card2);
+    color: var(--text);
+    font-size: 0.8rem;
+}
+.mail-part:hover { text-decoration: none; border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.mail-part svg   { width: 15px; height: 15px; flex: 0 0 auto; color: var(--text-dim); }
+.mail-part span  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-part small { color: var(--text-dim); white-space: nowrap; }
+
+.mail-images-bar
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: var(--radius-m);
+    background: var(--card2);
+    font-size: 0.82rem;
+    color: var(--text-dim);
+}
+
+/* HTML mail is drawn on white, as its sender designed it (dark mode or not). */
+.mail-content iframe
+{
+    display: block;
+    width: 100%;
+    min-height: 60px;
+    border: 0;
+    border-radius: var(--radius-m);
+    background: #fff;
+}
+.mail-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 0.92rem; line-height: 1.5; }
+
+/* The accounts dialog */
+.mail-acct-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.mail-acct-list .card-row > div { flex: 1 1 auto; min-width: 0; }
+.mail-acct-list .card-row b,
+.mail-acct-list .card-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-acct-list .card-row small { font-size: 0.76rem; color: var(--text-dim); }
+.mail-acct-list .card-row small.bad { color: var(--danger); }
+.field .hint,
+.sheet > .hint { margin: 6px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); }
+.sheet > .hint { margin: 0 0 12px; }
+.field.mail-port { flex: 0 0 90px; }
+.field.mail-prov { flex: 0 1 230px; }
+
+/* What the provider picked needs: a short line, its steps, its link. Red-edged
+   when the provider lets no app in (Microsoft, Proton). */
+.mail-prov-help
+{
+    margin: -2px 0 14px;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-m);
+    background: var(--card2);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+.mail-prov-help.is-blocked { border-left-color: var(--danger); }
+.mail-prov-help p  { margin: 0 0 6px; color: var(--text); }
+.mail-prov-help ol { margin: 0; padding-left: 20px; color: var(--text-dim); }
+.mail-prov-help li + li { margin-top: 3px; }
+.mail-prov-help .text-btn { margin-top: 10px; }
+
+/* The password with its eye (show / hide), as the search field's cross. */
+.mail-pass { position: relative; }
+.mail-pass input { padding-right: 38px; }
+.mail-pass .icon-btn { position: absolute; right: 3px; top: 0; bottom: 0; margin: auto 0; }
+
+.mail-add-status { margin: -4px 0 12px; font-size: 0.82rem; color: var(--text-dim); }
+
+/* A phone: the trays become a row of pills over the list; reading hides it. */
+@media (max-width: 760px)
+{
+    .mail-body            { flex-direction: column; }
+    .mail-side
+    {
+        flex: 0 0 auto;
+        flex-direction: row;
+        align-items: center;
+        padding: 6px 8px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    .mail-side .tb-select { width: auto; max-width: 150px; }
+    .mail-trays           { flex-direction: row; }
+    .mail-labels-panel    { flex-direction: row; align-items: center; flex: 0 0 auto; margin: 0 0 0 6px; }
+    .mail-labels-head .section-label { display: none; }
+    .mail-labels-head     { order: 2; }                /* the (+) after the labels */
+    .mail-labels          { display: flex; flex-direction: row; gap: 4px; overflow: visible; padding: 0; }
+    .mail-label-pen       { display: none; }
+    .mail-label-line.is-active .mail-label-pen { display: flex; }
+    body.reading .mail-side,
+    body.composing .mail-side { display: none; }
+    .mail-compose         { padding: 10px 12px 16px; }
+    .mail-cfield label    { flex-basis: 48px; }
+    .mail-read-view       { padding: 12px 12px 32px; }
+    .search-wrap          { width: 150px; }
+    .field.mail-prov      { flex: 1 1 100%; }
+}
+@media (max-width: 420px)
+{
+    .search-wrap          { width: 118px; }
+}
+
+/* the clip's panel while writing (Chat's look, app.css .attach): under the
+   clip, placed by compose.js */
+.mail-attach { position: fixed; z-index: 40; width: min(330px, calc(100vw - 20px)); }
+
+/* a file of the message: the chip downloads it, the arrow beside it keeps it in Nayive */
+.mail-part-line { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.mail-part-line .mail-part { min-width: 0; }
+
+/* a message too long to show whole */
+.mail-cut { margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius-m); background: var(--card2); font-size: 0.84rem; color: var(--text-dim); }
+
+/* Settings: an account's new password, under its row */
+.mail-newpass { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -2px 0 10px; }
+.mail-newpass .mail-pass { flex: 1 1 200px; }
+.mail-newpass .mail-add-status,
+.mail-newpass .field-error { flex: 1 1 100%; margin: 0; }
+.mail-check { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 0.92rem; cursor: pointer; }
+

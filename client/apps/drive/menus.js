@@ -26,12 +26,16 @@ function wireContextMenu()
 
     document.getElementById( 'ctxOpen'     ).addEventListener( 'click', function() { closeCtxMenus(); openSelectedNode(); } );
     document.getElementById( 'ctxDownload' ).addEventListener( 'click', function() { closeCtxMenus(); downloadSelection(); } );
+    document.getElementById( 'ctxExtract'  ).addEventListener( 'click', function() { closeCtxMenus(); extractSelectedZip(); } );
     document.getElementById( 'ctxCut'      ).addEventListener( 'click', function() { closeCtxMenus(); setClipboard( 'move' ); } );
     document.getElementById( 'ctxClip'     ).addEventListener( 'click', function() { closeCtxMenus(); setClipboard( 'copy' ); } );
     document.getElementById( 'ctxMove'     ).addEventListener( 'click', function() { closeCtxMenus(); openFolderPicker( 'move' ); } );
     document.getElementById( 'ctxCopy'     ).addEventListener( 'click', function() { closeCtxMenus(); openFolderPicker( 'copy' ); } );
     document.getElementById( 'ctxRename'   ).addEventListener( 'click', function() { closeCtxMenus(); openRename(); } );
     document.getElementById( 'ctxLink'     ).addEventListener( 'click', function() { closeCtxMenus(); copySelectionLink(); } );
+    document.getElementById( 'ctxCompress' ).addEventListener( 'click', function() { closeCtxMenus(); compressSelection(); } );
+    // Share is the toolbar's button: one handler, one "who may share what" rule.
+    document.getElementById( 'ctxShare'    ).addEventListener( 'click', function() { closeCtxMenus(); document.getElementById( 'shareBtn' ).click(); } );
     document.getElementById( 'ctxDelete'   ).addEventListener( 'click', function() { closeCtxMenus(); openDeleteConfirm(); } );
     document.getElementById( 'ctxProps'    ).addEventListener( 'click', function() { closeCtxMenus(); openProperties(); } );
 
@@ -255,11 +259,19 @@ function updateCtxMenuState()
     const one = selectedPaths.size === 1;
     const ro  = readOnlySel();
     document.getElementById( 'ctxOpen'   ).disabled = ! one;
+    document.getElementById( 'ctxDownload' ).disabled = !! dlJob;   // one at a time
     document.getElementById( 'ctxRename' ).disabled = ! one || ro;
     document.getElementById( 'ctxLink'   ).disabled = ! one;
     document.getElementById( 'ctxCut'    ).disabled = ro;   // a cut is a move
     document.getElementById( 'ctxMove'   ).disabled = ro;
     document.getElementById( 'ctxDelete' ).disabled = ro;
+    document.getElementById( 'ctxCompress' ).disabled = ro;   // the .zip lands beside them
+    document.getElementById( 'ctxShare'    ).disabled = document.getElementById( 'shareBtn' ).disabled;
+
+    // "Extract here" is there for ONE .zip only; it writes beside the zip.
+    const ext = document.getElementById( 'ctxExtract' );
+    ext.hidden   = ! ( one && isZipNode( rowNode( Array.from( selectedPaths )[0] ) ) );
+    ext.disabled = ro;
 }
 
 function updateAreaMenuState()

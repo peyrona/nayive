@@ -97,6 +97,17 @@
         // ?c=<conv>: a notification was tapped. A person with a single chat
         // (no groups) goes straight into it, as in the mockup.
         var want = new URLSearchParams( location.search ).get( "c" );
+
+        // ?text=: a link shared to Nayive (YouTube's "Share"; sw.js). It waits
+        // in the box of the first chat opened.
+        var shared = S.mode === "owner" && new URLSearchParams( location.search ).get( "text" );
+        if( shared )
+        {
+            S.shared = shared;
+            try { history.replaceState( history.state, "", location.pathname ); } catch( _ ) {}
+            C.toast( "chat.pickToShare", 4000 );
+        }
+
         if( want && C.convOf( want ) ) C.openConv( want );
         else if( S.mode === "guest" && S.convs.length === 1 && matchMedia( "(max-width: 640px)" ).matches )
             C.openConv( S.convs[ 0 ].id );

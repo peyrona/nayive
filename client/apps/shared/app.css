@@ -268,6 +268,22 @@ a:hover            { text-decoration: underline; opacity: 0.85; }
 .app-title.nayive-home-link:hover    { text-decoration: underline; text-underline-offset: 3px; }
 .app-icon.nayive-home-link:hover     { opacity: 0.7; }
 
+/* Chat has unread messages (shared/ui.js, CHAT DOT): a red dot on the app
+   icon's top-right corner, placed by JS. It lets the tap through to the icon.
+   It blinks 5 times when a new message arrives - on purpose also with
+   "reduce motion" on: it is a short signal, not decoration. */
+.chat-dot
+{
+    position: absolute; z-index: 2;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--danger);
+    box-shadow: 0 0 0 2px var(--bg);
+    pointer-events: none;
+}
+.chat-dot[hidden]  { display: none; }
+.chat-dot.blink    { animation: chat-dot-blink .7s ease-in-out 5; }
+@keyframes chat-dot-blink { 50% { opacity: 0.1; transform: scale(0.6); } }
+
 /* -----------------------------------------------------------------------------
  * EMBEDDED  - the page runs inside another Nayive page's <iframe> (Planner
  * frames calendar + tasks + habits). shared/ui.js stamps html.is-embedded
@@ -313,15 +329,59 @@ html.is-embedded.is-embedded-wide .header             { justify-content: flex-st
    no outer padding, no cap, no border / radius / shadow, and a min-height so a
    short list does not leave a card-coloured box floating on the page
    background. Standalone (own tab, installed PWA) the card is untouched. */
-html.is-embedded .page                       { padding: 0; }
-html.is-embedded .page > .page-inner         { max-width: 100%; }
-html.is-embedded .page > .page-inner > .card
+html.is-embedded .page,
+html.is-windowed .page                       { padding: 0; }
+html.is-embedded .page > .page-inner,
+html.is-windowed .page > .page-inner         { max-width: 100%; }
+html.is-embedded .page > .page-inner > .card,
+html.is-windowed .page > .page-inner > .card
 {
     min-height: 100vh;
     border: none;
     border-radius: 0;
     box-shadow: none;
 }
+/* In a window the card's top row is the title bar, so it must not scroll away
+   with the page (Contacts, Tasks, Habits, Split). It takes over the card's top
+   padding and its own gap below, both opaque, so rows slide under it unseen.
+   shared/ui.js puts its height in --win-head-h for an app's own sticky heads. */
+html.is-windowed .page > .page-inner > .card > .header
+{
+    position: sticky; top: 0; z-index: 20;
+    margin-top: -20px; padding-top: 20px;
+    margin-bottom: 0; padding-bottom: var(--space-4);
+    background: var(--card);
+}
+
+/* -----------------------------------------------------------------------------
+ * WINDOWED  - the app runs as a window of the desktop (desktop/index.html).
+ * shared/ui.js stamps html.is-windowed instead of .is-embedded: the app keeps
+ * its icon and title (not its sync dot: the desktop shows one for all), and its top row doubles as the window's title
+ * bar. The card shell fills the window (same rule as EMBEDDED above).
+ *
+ * .win-dots  the window's close / minimise / maximise, three small discs the
+ *            desktop puts at the start of that row. Their mark shows while the
+ *            pointer is over the group; a window behind the others greys them
+ *            (html.is-window-back, set by the desktop).
+ * ---------------------------------------------------------------------------*/
+/* The connection status: ONE for the whole desktop, after its clock (it copies
+   the worst of every window's), so no window shows its own. */
+html.is-windowed .sync-indicator { display: none; }
+.win-dots          { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; margin-right: 12px; }
+.win-dots button
+{
+    display: flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; padding: 0;
+    border: none; border-radius: 50%;
+    color: rgba(0, 0, 0, 0.6); cursor: pointer;
+}
+.win-dots [data-win="close"] { background: var(--danger); }
+.win-dots [data-win="min"]   { background: var(--warn); }
+.win-dots [data-win="max"]   { background: var(--ok); }
+.win-dots svg      { width: 10px; height: 10px; display: block; visibility: hidden; }
+.win-dots:hover svg { visibility: visible; }
+.win-dots button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html.is-window-back .win-dots:not(:hover) button { background: var(--line); }
 
 /* The trailing button bar, kept together so it wraps as one unit (see above). */
 .topbar-actions,
@@ -1232,6 +1292,11 @@ button { -webkit-touch-callout: none; }
     font-size: 0.8rem;
 }
 .intro-btn-i svg     { width: 18px; height: 18px; display: block; }
+
+/* A `{ section }` row: a line across, then a small subtitle over the next list. */
+.intro-sep           { border: 0; border-top: 1px solid var(--line); margin: 14px 0 0; }
+.intro-sub           { margin: 12px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--text); }
+.intro-sub + .intro-btns { margin-top: 4px; }
 
 .intro-btn-t         { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .intro-btn-t b       { font-weight: 600; color: var(--text); }
@@ -2428,3 +2493,33 @@ input[type=range]:disabled           { opacity: 0.5; }
         border-top: 1px solid var(--line);
     }
 }
+
+/* THE CLIP'S PANEL (NayiveUI.attachPanel): round coloured buttons, three to a
+   row, each with its name under it - Chat's writer and eMail's. Where it sits
+   is the app's (Chat: over its writer; eMail: under its clip). */
+.attach
+{
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 6px;
+    max-width: 420px;
+    padding: 22px 10px 18px; border-radius: var(--radius-l);
+    background: var(--card); box-shadow: var(--elev-dialog);
+}
+.att
+{
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    border: none; background: none; font: inherit; font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
+}
+.att .ai
+{
+    width: 54px; height: 54px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--c);
+}
+.att .ai svg   { width: 24px; height: 24px; }
+.att:hover .ai { filter: brightness(1.08); }
+.att[data-c="0"] { --c: var(--accent); }
+.att[data-c="1"] { --c: var(--link); }
+.att[data-c="2"] { --c: var(--warn); }
+.att[data-c="3"] { --c: var(--danger); }
+.att[data-c="4"] { --c: var(--busy); }
+.att[data-c="5"] { --c: var(--ok); }

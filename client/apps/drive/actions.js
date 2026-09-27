@@ -32,6 +32,11 @@ async function confirmRename()
     const parent  = oldPath.includes( '/' ) ? oldPath.slice( 0, oldPath.lastIndexOf( '/' ) ) : '';
     const newPath = joinPath( parent, newName );
 
+    // What the Undo walks back (undoMoves, move-copy.js): the rename, and
+    // the bin ids of the item a "Replace" moved out of the way.
+    const step    = { from: oldPath, to: newPath, moved: false, bin: null };
+    let   canUndo = newPath !== oldPath;
+
     // The server refuses to rename onto an existing item (it would be
     // destroyed with no trip through the papelera). Offer to move the
     // one in the way to the papelera first.
@@ -45,21 +50,32 @@ async function confirmRename()
             setStatus( '' );
             return;
         }
-        try { await withBusy( GumApi.deletePaths( [ newPath ] ) ); }
+        try { step.bin = await withBusy( GumApi.binPaths( [ newPath ] ) ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.moveExistingFailed' ) ); setStatus( '' ); return; }
+        if( ! step.bin ) canUndo = false;     // an old server: nothing to restore it by
     }
 
     try
     {
         await withBusy( GumApi.rename( oldPath, newPath ) );
+        step.moved = true;
         await NayiveMedia.remapPaths( [ [ oldPath, newPath ] ] );
         if( oldPath === currentFolder ) currentFolder = newPath;   // renamed the folder we're in — stay in it
         selectedPaths.clear();
         await reload();
+
+        if( canUndo )
+            NayiveUI.undoToast( T( 'ui.toast.renamed' ),
+                                function() { undoMoves( [ step ], 'drive.renameFailed' ); } );
+        else if( newPath !== oldPath )
+            NayiveUI.toast( T( 'ui.toast.renamed' ) );
     }
     catch( err )
     {
-        NayiveUI.toast( TF( 'drive.renameFailed', { err: err.message } ) );
+        // The one in the way may be in the bin already: its Undo brings it back.
+        const msg = TF( 'drive.renameFailed', { err: err.message } );
+        if( step.bin ) NayiveUI.undoToast( msg, function() { undoMoves( [ step ], 'drive.renameFailed' ); } );
+        else           NayiveUI.toast( msg );
         setStatus( '' );
     }
 }
@@ -433,6 +449,11 @@ function openDeleteConfirm()
     if( selectedPaths.size )
     {
         deleteTargets = Array.from( selectedPaths );
+
+        // Only files: no question - they go at once and the toast's Undo
+        // brings them back. A folder holds more than you see: it still asks.
+        if( deleteTargets.every( isFileRow ) ) { confirmDelete(); return; }
+
         const names = deleteTargets.map( function( p ) { return p.split( '/' ).pop(); } );
         msg = names.length === 1 ? TF( 'drive.trashOne', { name: names[0] } )
                                   : TF( 'drive.trashN', { n: names.length } );
@@ -464,21 +485,35 @@ function openDeleteConfirm()
     setBackdrop( 'deleteBackdrop', true );
 }
 
+// A file shown in the listing (or the search results). Anything not
+// found is taken for a folder, so it keeps its question.
+function isFileRow( path )
+{
+    const node = rowNode( path );
+    return !! node && ! isDir( node );
+}
+
+let deleteBusy = false;   // a move to the bin is on its way: a held Del key must not send it twice
+
 async function confirmDelete()
 {
-    if( ! deleteTargets.length ) return;
+    if( ! deleteTargets.length || deleteBusy ) return;
+
+    const targets = deleteTargets;
+    deleteTargets = [];
+    deleteBusy    = true;
 
     setBackdrop( 'deleteBackdrop', false );
     setStatus( T( 'drive.movingToTrash' ) );
 
-    const droppedCurrent = deleteTargets.indexOf( currentFolder ) !== -1;
+    const droppedCurrent = targets.indexOf( currentFolder ) !== -1;
 
     try
     {
-        await withBusy( GumApi.deletePaths( deleteTargets ) );
-        await NayiveMedia.purgePaths( deleteTargets );
+        const ids = await withBusy( GumApi.binPaths( targets ) );
+        await NayiveMedia.purgePaths( targets );
         selectedPaths.clear();
-        deleteTargets = [];
+        deleteBusy = false;
 
         if( droppedCurrent )
             currentFolder = currentFolder.includes( '/' )
@@ -487,12 +522,49 @@ async function confirmDelete()
         await reload();
         setStatus( '' );      // clears "Moving to the bin..."; the bin itself says it landed
         flashBin();
+
+        // An old server does not say the bin ids: no way back from here.
+        if( ids ) NayiveUI.undoToast( T( 'ui.toast.binned' ), function() { undoBin( ids ); } );
+        else      NayiveUI.toast( T( 'ui.toast.binned' ) );
     }
     catch( _ )
     {
+        deleteBusy = false;
         NayiveUI.toast( T( 'drive.trashFailed' ) );
         setStatus( '' );
     }
+}
+
+// Undo of a move to the bin: everything comes back to where it was. The
+// view stays where it is now (a binned open folder left it on its parent)
+// and is re-read. Sidecars: the same as the bin's own Restore - nothing;
+// Photos remakes a thumbnail it misses.
+async function undoBin( ids )
+{
+    setStatus( T( 'drive.restoring' ) );
+
+    let res;
+    try { res = await withBusy( GumApi.trashRestore( ids ) ); }
+    catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); await refreshView(); return; }
+
+    await refreshView();
+    restoredStatus( res );
+}
+
+// "Restored", or where one landed when its old name was taken meanwhile.
+function restoredStatus( res )
+{
+    if( res && res.renamed && res.renamed.length )
+        flashStatus( TF( 'drive.restoredAs', { name: res.renamed[0] } ) );
+    else
+        flashStatus( T( 'drive.restored' ) );
+}
+
+// After an Undo: show the truth for wherever the user is NOW - the bin, or
+// the open folder, which may no longer be the one the action happened in.
+function refreshView()
+{
+    return trashMode ? refreshTrash() : reload();
 }
 
 //------------------------------------------------------------------------//
@@ -506,100 +578,116 @@ function showProgress( title )
 
 function hideProgress() { setBackdrop( 'progressBackdrop', false ); }
 
+// Download: the SERVER sends it (server/go/api_download.go) - one file as it
+// is, anything else as ONE .zip it writes while it reads - and the browser
+// saves it with its own downloader. So no size is too big for a phone's
+// memory, and Drive stays usable meanwhile. Drive only watches: it asks the
+// server how far it got and draws that on the shared transfer bar
+// (NayiveUI.transfer: in the toolbar when there is room, else at the bottom),
+// whose ✕ stops it. One at a time: Download is off while one runs.
+
+const DL_POLL_MS   = 700;
+const DL_NET_TRIES = 20;     // polls in a row that may fail before Drive stops watching
+
+let dlJob = null;            // the download under way: { id, name, files, row, timer, fails, stopped }
+
 async function downloadSelection()
 {
-    if( ! selectedPaths.size )
+    if( dlJob ) return;
+    const paths = actionTargets();
+    if( ! paths.length ) return;
+
+    const q = new URLSearchParams();
+    paths.forEach( function( p ) { q.append( 'paths', p ); } );
+
+    let r;
+    try
     {
-        if( currentFolder && currentFolder !== FS_ROOT ) downloadFolder( currentFolder );
+        r = JSON.parse( await withBusy( GumApi.fetchText( '/api/download?' + q.toString(), { method: 'POST' } ) ) );
+    }
+    catch( err )
+    {
+        NayiveUI.toast( err && err.status === 413 ? T( 'drive.compressTooMany' ) : T( 'drive.downloadFailed' ),
+                        { ms: 6000 } );
         return;
     }
 
-    const paths = Array.from( selectedPaths );
+    const job = dlJob = { id: r.id, name: r.name, files: r.files, timer: 0, fails: 0, stopped: false,
+                          row: NayiveUI.transfer( { onStop: stopDownload } ) };
+    drawDownload( job, 0, 0 );
+    updateToolbarState();
 
-    // Single file: download it directly, no zip needed.
-    if( paths.length === 1 && ! isDir( rowNode( paths[0] ) ) )
+    // The browser fetches it itself: a plain link, clicked.
+    const a = document.createElement( 'a' );
+    a.href     = '/api/download?id=' + encodeURIComponent( job.id );
+    a.download = job.name;
+    document.body.appendChild( a );
+    a.click();
+    a.remove();
+
+    job.timer = setTimeout( pollDownload, DL_POLL_MS );
+}
+
+// "Downloading… 45%", and "· 3 of 12" for a zip of several files.
+function drawDownload( job, pct, done )
+{
+    const text = job.files > 1 ? TF( 'drive.downloadPctFiles', { pct: pct, done: done, n: job.files } )
+                               : TF( 'drive.downloadPct', { pct: pct } );
+    job.row.set( text, pct );
+}
+
+async function pollDownload()
+{
+    const job = dlJob;
+    if( ! job ) return;
+
+    let p;
+    try
     {
-        setStatus( T( 'drive.downloading' ) );
+        p = JSON.parse( await GumApi.fetchText( '/api/download?progress=1&id=' + encodeURIComponent( job.id ) ) );
+        job.fails = 0;
+    }
+    catch( err )
+    {
+        // 404: the server forgot it (restarted, or never fetched in time).
+        p = { state: ( err && err.status === 404 ) || ++job.fails >= DL_NET_TRIES ? 'gone' : 'net' };
+    }
+    if( dlJob !== job ) return;       // stopped meanwhile
 
-        try { await downloadFile( paths[0] ); setStatus( '' ); }
-        catch( _ ) { NayiveUI.toast( T( 'drive.downloadFailed' ) ); setStatus( '' ); }
-
+    if( p.state === 'waiting' || p.state === 'running' || p.state === 'net' )
+    {
+        if( p.total !== undefined )
+            drawDownload( job, p.total > 0 ? Math.min( 100, Math.floor( p.sent * 100 / p.total ) ) : 0, p.done );
+        job.timer = setTimeout( pollDownload, DL_POLL_MS );
         return;
     }
-
-    // One or more folders, or a mixed/multi-file selection: bundle as a single zip.
-    setStatus( T( 'drive.downloading' ) );
-
-    try
-    {
-        await downloadAsZip( paths );
-        setStatus( '' );
-    }
-    catch( _ )
-    {
-        NayiveUI.toast( T( 'drive.downloadFailed' ) );
-        setStatus( '' );
-    }
+    if( p.state === 'done' ) drawDownload( job, 100, job.files );
+    endDownload( p.state );
 }
 
-async function downloadFile( path )
+// The ✕: the server breaks the connection, and the browser's own list
+// shows the download as failed - never half a file that looks whole.
+async function stopDownload()
 {
-    const bytes = await withBusy( GumApi.readFileBytes( path ) );
-    triggerDownload( bytes, path.split( '/' ).pop() );
+    const job = dlJob;
+    if( ! job ) return;
+    job.stopped = true;
+    clearTimeout( job.timer );
+    try { await GumApi.fetchText( '/api/download?id=' + encodeURIComponent( job.id ), { method: 'DELETE' } ); }
+    catch( _ ) {}
+    if( dlJob === job ) endDownload( 'stopped' );
 }
 
-async function downloadAsZip( paths )
+function endDownload( state )
 {
-    showProgress( T( 'drive.zipping' ) );
-
-    try
-    {
-        const entries = [];
-
-        for( const p of paths )
-        {
-            const folder = findNode( p );
-            if( folder && isDir( folder ) )
-            {
-                // The folders-only tree has no file nodes — pull the
-                // whole subtree for this one folder.
-                const sub = await withBusy( GumApi.listDirRecursive( p ) );
-                collectEntries( pruneTreeInPlace( { path: p, nodes: sub.nodes || [] } ),
-                                nameOf( folder ), entries );
-            }
-            else
-            {
-                const f = rowNode( p );
-                if( f && ! isDir( f ) ) entries.push( { fullPath: f.path, zipPath: f.path.split( '/' ).pop() } );
-            }
-        }
-
-        const zipWriter = new zip.ZipWriter( new zip.BlobWriter( 'application/zip' ) );
-
-        for( const entry of entries )
-        {
-            const bytes = await withBusy( GumApi.readFileBytes( entry.fullPath ) );
-            await zipWriter.add( entry.zipPath, new zip.Uint8ArrayReader( bytes ) );
-        }
-
-        const blob = await zipWriter.close();
-        const only = rowNode( paths[0] );
-        const name = (paths.length === 1 && only) ? (nameOf( only ) + '.zip') : 'seleccion.zip';
-
-        triggerDownloadBlob( blob, name );
-    }
-    finally
-    {
-        hideProgress();
-    }
-}
-
-async function downloadFolder( path )
-{
-    setStatus( T( 'drive.downloading' ) );
-
-    try { await downloadAsZip( [ path ] ); setStatus( '' ); }
-    catch( _ ) { NayiveUI.toast( T( 'drive.downloadFailed' ) ); setStatus( '' ); }
+    const job = dlJob;
+    clearTimeout( job.timer );
+    dlJob = null;
+    // A finished one stays at 100 % a moment, so it reads as done.
+    if( state === 'done' ) setTimeout( job.row.end, 800 ); else job.row.end();
+    if(      state === 'failed' )                 NayiveUI.toast( T( 'drive.downloadFailed' ), { ms: 6000 } );
+    else if( state === 'stopped' && job.stopped ) NayiveUI.toast( T( 'drive.downloadStopped' ) );
+    updateToolbarState();
 }
 
 // Walks `node`, collecting every leaf file with its path inside the zip
@@ -618,7 +706,3 @@ function collectEntries( node, zipPrefix, out )
     });
 }
 
-function triggerDownload( bytes, filename )
-{
-    triggerDownloadBlob( new Blob( [ bytes ] ), filename );
-}

@@ -66,7 +66,7 @@
                 { sel: '#nextBtn',   text: NayiveUI.t( 'calendar.introNext'   ) },
                 { sel: '#searchBtn', text: NayiveUI.t( 'calendar.introSearch' ) },
                 { sel: '#gotoBtn',   text: NayiveUI.t( 'calendar.introGoTo'   ) },
-                { sel: '#exportBtn', text: NayiveUI.t( 'calendar.introExport' ) },
+                { sel: '#settingsBtn', text: NayiveUI.t( 'calendar.introSettings' ) },
                 { sel: '#moreBtn',   text: NayiveUI.t( 'calendar.introViews'  ) }
             ]
             // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
@@ -129,8 +129,18 @@
         .today-pill:hover  { filter: brightness(1.13); }
         .today-pill:active { filter: brightness(0.92); }
 
-        /* Export dialog: two dates side by side + the format. */
-        #exportBackdrop .sheet { max-width: 400px; }
+        /* Settings' "Export to file": from, to, format and the ✓ that downloads, all on
+           one line - which is why this sheet is a .sheet--wide one. A phone wraps it
+           onto two. The button row is not the sheet's bottom bar, so it never takes
+           the phone's sticky look. */
+        /* 460px (the default) and even .sheet--wide's 560 leave the ✗ / ✓ wrapping
+           onto a line of its own; 600 is what the four of them need (the ✗ is the
+           sheet's own, up in the corner). */
+        #settingsBackdrop .sheet     { max-width: 600px; }
+        #setExportRow                { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 4px; }
+        #setExportRow .field         { flex: 1 1 130px; min-width: 120px; margin-bottom: 0; }
+        #setExportRow .field-format  { flex: 0 1 108px; min-width: 96px; }
+        #setExportRow .sheet-actions { position: static; margin: 0; padding: 0; border-top: 0; background: none; }
 
         .switch { position: relative; width: 44px; height: 26px; flex: 0 0 auto; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -399,8 +409,9 @@
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
             </button>
 
-            <button id="exportBtn" class="icon-btn" data-i18n-attr="title:calendar.exportEvents">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <!-- Settings: sync with phones (CalDAV) + export. The launcher's gear glyph. -->
+            <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </button>
             <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
@@ -642,39 +653,125 @@
         </div>
     </div>
 
-    <!-- Export every event between two dates: PDF (the browser's own print dialog),
-         plain text, or .ics. See EXPORT in the module below. -->
-    <div id="exportBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <div class="sheet-header">
-                <h2 data-i18n="calendar.exportEvents"></h2>
-            </div>
+    <!-- Settings: export to a file + sync with phones (CalDAV). The sync half is UI only for
+         now (2026-09-22) and is wired by NayiveUI.davSection (shared/ui.js), the
+         same one Contacts' CardDAV sheet uses. -->
+    <div id="settingsBackdrop" class="sheet-backdrop">
+        <div class="sheet sheet--wide">
+            <h2 data-i18n="ui.settings"></h2>
 
-            <div class="field-row">
-                <div class="field">
-                    <label for="xFrom" data-i18n="calendar.exportFrom"></label>
-                    <div class="dt-field"><input type="date" id="xFrom"><span class="dt-display"></span></div>
+            <!-- Export every event between two dates: PDF (the browser's own print
+                 dialog), plain text, or .ics. See EXPORT in the module below. -->
+            <div class="share-sect">
+                <p class="share-head" data-i18n="calendar.set.exportHead"></p>
+                <!-- One affirmative action (the check), so the format is a field, not three
+                     buttons - see THE ONE ICON PER MEANING RULE in shared/ui.js. -->
+                <div id="setExportRow">
+                    <div class="field">
+                        <label for="xFrom" data-i18n="calendar.exportFrom"></label>
+                        <div class="dt-field"><input type="date" id="xFrom"><span class="dt-display"></span></div>
+                    </div>
+                    <div class="field">
+                        <label for="xTo" data-i18n="calendar.exportTo"></label>
+                        <div class="dt-field"><input type="date" id="xTo"><span class="dt-display"></span></div>
+                    </div>
+                    <div class="field field-format">
+                        <label for="xFormat" data-i18n="calendar.exportFormat"></label>
+                        <select id="xFormat">
+                            <option value="pdf">PDF</option>
+                            <option value="txt">TXT</option>
+                            <option value="ics">ICS</option>
+                        </select>
+                    </div>
+                    <div class="sheet-actions">
+                        <button id="exportGoBtn" data-act="primary:download" data-i18n-attr="title:ui.download"></button>
+                    </div>
                 </div>
-                <div class="field">
-                    <label for="xTo" data-i18n="calendar.exportTo"></label>
-                    <div class="dt-field"><input type="date" id="xTo"><span class="dt-display"></span></div>
+            </div>
+
+            <div id="setSync" class="share-sect share-link">
+                <p class="share-head" data-i18n="dav.syncHead"></p>
+                <p class="share-note" data-i18n="calendar.set.syncLead"></p>
+
+                <!-- Off: one row, the (i) and the "+" that connects a phone. -->
+                <div data-dav="off" class="share-row share-link-app">
+                    <span class="share-link-url has-info" data-i18n="dav.syncOff"></span>
+                    <button class="info-dot" data-i18n-attr="data-info:calendar.set.syncInfo"></button>
+                    <button data-dav="connect" class="share-drop" type="button" data-i18n-attr="title:dav.connect, aria-label:dav.connect"></button>
+                </div>
+
+                <!-- On: one card per phone kind (the phone decides; a PC sees both),
+                     the by-hand values, and the row that turns it off. -->
+                <div data-dav="on" hidden>
+                    <div class="loc-app" data-dav="iphone">
+                        <p class="share-head share-link-app" data-i18n="dav.iphone"></p>
+                        <p class="loc-links">
+                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.iphoneSetup"></a>
+                        </p>
+                        <p class="share-note share-link-how" data-i18n="calendar.set.iphoneHow"></p>
+                    </div>
+                    <div class="loc-app" data-dav="android">
+                        <p class="share-head share-link-app" data-i18n="dav.android"></p>
+                        <p class="loc-links">
+                            <a class="loc-link" href="https://f-droid.org/packages/at.bitfire.davdroid/" target="_blank" rel="noopener" data-i18n="dav.davxGet"></a>
+                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.davxSetup"></a>
+                        </p>
+                        <p class="share-note share-link-how" data-i18n="calendar.set.androidHow"></p>
+                    </div>
+                    <p class="share-note share-link-how" data-dav="onphone" data-i18n="dav.onPhone"></p>
+
+                    <div class="loc-app">
+                        <p class="share-head share-link-app" data-i18n="dav.byHand"></p>
+                        <div class="share-row"><span class="share-link-url" data-dav="server"></span><button class="share-drop" data-dav-copy="server"></button></div>
+                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="user"></span><button class="share-drop" data-dav-copy="user"></button></div>
+                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="pass"></span><button class="share-drop" data-dav-copy="pass"></button></div>
+                    </div>
+
+                    <div class="share-row loc-off">
+                        <span class="share-link-url" data-i18n="dav.syncOn"></span>
+                        <button data-dav="stop" class="share-drop" type="button" data-i18n-attr="title:dav.stop, aria-label:dav.stop"></button>
+                    </div>
+                </div>
+
+                <!-- What the phones get: this calendar, plus three read-only extras. -->
+                <div class="field-row share-link-app">
+                    <div class="field">
+                        <label for="setAccess" data-i18n="dav.access"></label>
+                        <select id="setAccess">
+                            <option value="rw" data-i18n="dav.accessRw"></option>
+                            <option value="ro" data-i18n="dav.accessRo"></option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="setBirthdays" data-i18n="calendar.set.birthdays"></label>
+                        <select id="setBirthdays">
+                            <option value="yes" data-i18n="calendar.set.show"></option>
+                            <option value="no"  data-i18n="calendar.set.hide"></option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="setTrips" data-i18n="calendar.set.trips"></label>
+                        <select id="setTrips">
+                            <option value="yes" data-i18n="calendar.set.show"></option>
+                            <option value="no"  data-i18n="calendar.set.hide"></option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="setTasks" data-i18n="calendar.set.tasks"></label>
+                        <select id="setTasks">
+                            <option value="no"  data-i18n="calendar.set.tasksNo"></option>
+                            <option value="yes" data-i18n="calendar.set.tasksYes"></option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <!-- One affirmative action (the check), so the format is a field, not three
-                 buttons - see THE ONE ICON PER MEANING RULE in shared/ui.js. -->
-            <div class="field">
-                <label for="xFormat" data-i18n="calendar.exportFormat"></label>
-                <select id="xFormat">
-                    <option value="pdf">PDF</option>
-                    <option value="txt">TXT</option>
-                    <option value="ics">ICS</option>
-                </select>
-            </div>
-
+            <!-- The only other action is closing, so shared/ui.js lifts it into the
+                 sheet's top-right corner and this row goes away. -->
             <div class="sheet-actions">
-                <button id="exportCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="exportGoBtn"     data-act="primary" data-i18n-attr="title:ui.download"></button>
+                <button id="settingsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
             </div>
         </div>
     </div>
@@ -758,11 +855,13 @@
 
         let eventDefs   = [];   // source of truth: array of event definitions (see makeEventDef)
         let calFile     = null;    // calendar.ics as read, so a save keeps what eventDefs does not model (null: no file yet)
+        let whoUser     = '';      // who is signed in (Settings' by-hand "User" row)
         let calBadSaid  = false;   // the "cannot understand this file" toast was shown for this bad spell
         let dragBusy    = false;   // a finger / mouse is down on an event (press through drop)
         let dragMoving  = false;   // ...and FullCalendar has started dragging / resizing it
         let refetchHeld = false;   // a re-read landed meanwhile; repaint once the drop is done
         let editingKey   = null;   // key (uid + recurrence-id) of the event being edited in the sheet, or null when adding
+        let undoHold     = false;  // an Undo is on show: no re-read until it goes (see undoable)
         let calendar     = null;
 
         //------------------------------------------------------------------------//
@@ -796,7 +895,7 @@
                     if( dragBusy ) refetchHeld = true;
                     else           refetchAll();
                 },
-                guard: function() { return ! calendar || anyBackdropOpen(); },
+                guard: function() { return ! calendar || anyBackdropOpen() || undoHold; },
                 // FullCalendar has already re-read the clock on this same event.
                 onVisible: function() { checkToday( false ); }
             } );
@@ -808,8 +907,9 @@
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
             // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, async function()
+            NayiveUI.bootWithStore( store, async function( who )
             {
+                whoUser = ( who && who.user ) || '';      // the by-hand "User" row in Settings
                 await loadCalendar();
                 initFullCalendar();
             } );
@@ -1010,8 +1110,8 @@
                 eventDragStop:    endDrag,
                 eventResizeStop:  endDrag,
 
-                eventDrop: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event ); },
-                eventResize: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event ); }
+                eventDrop: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event, T( 'ui.toast.moved' ) ); },
+                eventResize: function( arg ) { if( refuseEdit() ) arg.revert(); else applyDragOrResize( arg.event, T( 'calendar.timeChanged' ) ); }
             });
 
             calendar.render();
@@ -1149,10 +1249,15 @@
             if( dragBusy && ! dragMoving ) endDrag();
         }
 
-        function applyDragOrResize( fcEvent )
+        // Undo puts the old start / end back: for a series, the whole series, as the
+        // drag moved it. A copy: the all-day branch changes def.start in place.
+        function applyDragOrResize( fcEvent, msg )
         {
             const def = findDef( fcEvent.extendedProps.key );
             if( ! def ) return;
+
+            const key = def.key;
+            const was = JSON.stringify( { start: def.start, end: def.end } );
 
             const zone = def.floating ? VIEWER_TZ : def.tzid;
 
@@ -1171,6 +1276,16 @@
             }
 
             saveCalendar();
+
+            undoable( msg, function()
+            {
+                const d = findDef( key );
+                if( ! d ) return false;
+
+                const old = JSON.parse( was );
+                d.start = old.start;
+                d.end   = old.end;
+            } );
         }
 
         //------------------------------------------------------------------------//
@@ -1292,7 +1407,7 @@
 
         function anyBackdropOpen()
         {
-            return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'searchBackdrop', 'exportBackdrop' ]
+            return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'searchBackdrop', 'settingsBackdrop' ]
                    .some( id => document.getElementById( id ).classList.contains( 'open' ) );
         }
 
@@ -1609,8 +1724,15 @@
                 closeGoTo();
             });
 
-            document.getElementById( 'exportBtn' ).addEventListener( 'click', openExport );
-            document.getElementById( 'exportCancelBtn' ).addEventListener( 'click', closeExport );
+            // Settings: export to a file + sync with phones (UI only, NayiveUI.davSection).
+            const davSync = NayiveUI.davSection( document.getElementById( 'setSync' ) );
+            document.getElementById( 'settingsBtn' ).addEventListener( 'click', function()
+            {
+                fillExportRange();
+                davSync.refresh( whoUser );
+                NayiveUI.open( 'settingsBackdrop' );
+            });
+            document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', closeSettings );
             document.getElementById( 'exportGoBtn' ).addEventListener( 'click', commitExport );
 
             document.getElementById( 'searchBtn' ).addEventListener( 'click', openSearch );
@@ -1783,7 +1905,7 @@
         // in the .ics, its own RRULE-less VEVENT with a "<uid>-<startMs>" uid, so
         // re-importing the file somewhere else can't collide with the series.
 
-        function openExport()
+        function fillExportRange()
         {
             // Default to the range on screen. FullCalendar's activeEnd is exclusive.
             // currentStart / currentEnd, not activeStart / activeEnd: a month view's
@@ -1797,11 +1919,9 @@
             document.getElementById( 'xFrom' ).value = from.toISODate();
             document.getElementById( 'xTo'   ).value = to.toISODate();
             refreshAllDtDisplays();
-
-            document.getElementById( 'exportBackdrop' ).classList.add( 'open' );
         }
 
-        function closeExport() { document.getElementById( 'exportBackdrop' ).classList.remove( 'open' ); }
+        function closeSettings() { NayiveUI.close( 'settingsBackdrop' ); }
 
         function commitExport()
         {
@@ -1816,7 +1936,7 @@
 
             if( ! rows.length )         { NayiveUI.toast( T( 'calendar.nothingToExport' ) ); return; }
 
-            closeExport();
+            closeSettings();
 
             const stem = 'calendar_' + from + '_' + to;
 
@@ -2356,17 +2476,59 @@
             if( ! editingKey ) return;
             if( refuseEdit() ) return;
 
-            const gone = findDef( editingKey );
+            const key  = editingKey;
+            const gone = findDef( key );
+            const goes = d => d.key === key || ( gone && ! gone.rid && d.uid === gone.uid );
+
+            // What leaves and where it stood, for the Undo. The same def objects: a
+            // save writes each back from its own lines, as it came (calendarToIcs).
+            const removed = [];
+            eventDefs.forEach( ( d, i ) => { if( goes( d ) ) removed.push( { i, d } ); } );
 
             // A moved occurrence goes for good: its series gets an EXDATE for it, or the
             // series would bring that occurrence back at its old time.
-            if( gone && gone.rid )
-                excludeOccurrence( eventDefs.find( d => d.uid === gone.uid && ! d.rid ), gone );
+            const master = gone && gone.rid ? eventDefs.find( d => d.uid === gone.uid && ! d.rid ) : null;
+            const exN    = master && master.exdatesAdded ? master.exdatesAdded.length : 0;
 
-            eventDefs = eventDefs.filter( d => d.key !== editingKey && ! ( gone && ! gone.rid && d.uid === gone.uid ) );
+            if( gone && gone.rid )
+                excludeOccurrence( master, gone );
+
+            eventDefs = eventDefs.filter( d => ! goes( d ) );
             closeSheet();
             refetchAll();
             saveCalendar();
+
+            if( ! removed.length ) return;
+
+            undoable( T( 'ui.toast.deleted' ), function()
+            {
+                // That EXDATE lives only on the series' def until the next read.
+                if( master && master.exdatesAdded ) master.exdatesAdded.length = exN;
+
+                for( const r of removed )
+                    if( ! findDef( r.d.key ) ) eventDefs.splice( Math.min( r.i, eventDefs.length ), 0, r.d );
+            } );
+        }
+
+        // "Deleted [Undo]" / "Moved [Undo]": `undo` puts the change back (false: there
+        // is nothing left to put back), then the grid repaints and the file is saved.
+        // No re-read while the Undo is up (undoHold, the wireRefresh guard): it puts
+        // back def objects of THIS read, and a series' new EXDATE lives only on its
+        // def - a re-read would swap them for fresh ones. The flag is set AFTER
+        // undoToast(): that call settles the Undo before this one, whose onExpire
+        // clears it.
+        function undoable( msg, undo )
+        {
+            NayiveUI.undoToast( msg, function()
+            {
+                undoHold = false;
+                if( refuseEdit() )     return;
+                if( undo() === false ) return;
+                refetchAll();
+                saveCalendar();
+            }, { onExpire: function() { undoHold = false; } } );
+
+            undoHold = true;
         }
 
         function flashToast( msg ) { NayiveUI.toast( msg ); }   // <div id="toast"> below; styling in shared/theme.css

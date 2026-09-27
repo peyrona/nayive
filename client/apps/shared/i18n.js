@@ -48,12 +48,7 @@
 {
     "use strict";
 
-    var LANGS   = [ "es", "en", "pt", "fr", "de", "it", "la" ];  // languages the UI can offer
-    // Latin has no CLDR data, so Intl falls back to en-US: month and weekday
-    // names, currency names and number formats would all come out English.
-    // These borrow Italian instead. Only the browser-formatted bits follow
-    // this map - the interface TEXT and <html lang> stay "la".
-    var INTL    = { la: "it" };
+    var LANGS   = [ "es", "en", "pt", "fr", "de", "it" ];  // languages the UI can offer
     var SOURCE  = "es";                               // the reference dictionary
     var KEY     = "balata-lang";
     var SHOW_MS = 2500;                               // never hide the page longer than this
@@ -180,10 +175,6 @@
     //   weekday( 1, "narrow" )  -> "L" / "M" / "M"
     //   month( 0 )              -> "enero" / "January" ...             (0 = January)
 
-    // The BCP-47 tag for Intl / toLocale*, which is not always the interface
-    // language: see INTL above.
-    function intlTag() { return INTL[ lang ] || lang; }
-
     function capitalise( s ) { return s ? s.charAt( 0 ).toUpperCase() + s.slice( 1 ) : s; }
 
     function weekday( iso, style )
@@ -192,7 +183,7 @@
         var d = new Date( Date.UTC( 2024, 0, iso ) );
         try
         {
-            return capitalise( new Intl.DateTimeFormat( intlTag(),
+            return capitalise( new Intl.DateTimeFormat( lang,
                    { weekday: style || "long", timeZone: "UTC" } ).format( d ) );
         }
         catch ( e ) { return String( iso ); }
@@ -203,7 +194,7 @@
         var d = new Date( Date.UTC( 2024, idx, 1 ) );
         try
         {
-            return capitalise( new Intl.DateTimeFormat( intlTag(),
+            return capitalise( new Intl.DateTimeFormat( lang,
                    { month: style || "long", timeZone: "UTC" } ).format( d ) );
         }
         catch ( e ) { return String( idx + 1 ); }
@@ -273,9 +264,8 @@
         saved:     saved,
         // The BCP-47 tag to hand Intl / toLocale*: the interface language, so
         // dates, numbers and currency names follow what the user picked here
-        // rather than what the browser is set to. Not always lang() - a
-        // language with no CLDR data borrows another's formats (INTL above).
-        locale:    function () { return intlTag(); },
+        // rather than what the browser is set to.
+        locale:    function () { return lang; },
         weekday:   weekday,
         month:     month,
         langs:     LANGS.slice(),

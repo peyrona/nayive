@@ -22,6 +22,12 @@
 # After that the same page asks you to sign in as that admin, and it is where
 # you add / edit / delete the normal users.
 #
+# Because that first page asks for no login, a NEW server.json listens on
+# 127.0.0.1 only: nobody else can reach the empty admin panel. On a remote
+# machine, reach it through SSH (ssh -L <port>:127.0.0.1:<port> you@server),
+# create the admin, THEN set "host": "0.0.0.0" in store/config/server.json and
+# restart the service.
+#
 # Usage:
 #   ./install.sh [--systemd]
 #     --systemd   also install + start the systemd service now (needs sudo).
@@ -84,7 +90,7 @@ if [[ -f "$CFG" ]]; then
 else
     cat > "$CFG" <<EOF
 {
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": $PORT,
     "base_dir": ".",
     "apps_dir": "../client/apps",
@@ -98,6 +104,7 @@ else
 }
 EOF
     echo "wrote $CFG  (admin account is empty - set it in the admin panel)"
+    echo "  it listens on 127.0.0.1 only until you create the admin; then set \"host\": \"0.0.0.0\" there"
 fi
 
 # ---- systemd unit ------------------------------------------------------------

@@ -388,7 +388,7 @@
             <div class="sheet-actions">
                 <!-- The house "remove" action: a red bin, same as everywhere else. It
                      takes the duration and the order off this sub-task and closes -
-                     it never deletes the sub-task, which this app has no button for. -->
+                     it never deletes the sub-task: that is the bin on a done sub-task's row. -->
                 <button type="button" id="planClearBtn" class="sheet-actions-left" data-act="danger" data-i18n-attr="title:tasks.planClear"></button>
                 <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button type="button" id="planSaveBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
@@ -1079,9 +1079,109 @@
         {
             if( refuseEdit() ) return;
 
+            const idx = tasks.findIndex( function( t ) { return t.id === id; } );
+
+            if( idx === -1 )
+                return;
+
+            const gone = [ { idx: idx, task: JSON.parse( JSON.stringify( tasks[ idx ] ) ) } ];
+
             tasks = tasks.filter( function( t ) { return t.id !== id; } );
             render();
             saveTasks();
+            undoDelete( gone );
+        }
+
+        // "Deleted [Undo]": Undo puts the tasks back, each where it stood in the
+        // list, with its sub-tasks. `gone` is [{ idx, task }] in list order (a copy
+        // of each task). By id and index, never by object: a re-read (focus, the
+        // plug) may have replaced `tasks` meanwhile. A task the list holds again
+        // is not doubled.
+        function undoDelete( gone )
+        {
+            NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+            {
+                if( refuseEdit() ) return;
+
+                gone.forEach( function( g )
+                {
+                    if( ! findTask( g.task.id ) )
+                        tasks.splice( Math.min( g.idx, tasks.length ), 0, g.task );
+                });
+
+                render();
+                saveTasks();
+            } );
+        }
+
+        // The bin on a done sub-task, the same as the bin on a done task. Whatever
+        // waited for it stops waiting, as when it is dragged to another task.
+        // Undo puts it back in its place, and those waits with it.
+        function deleteSubtask( taskId, subtaskId )
+        {
+            if( refuseEdit() ) return;
+
+            const task = findTask( taskId );
+
+            if( ! task || ! task.subtasks )
+                return;
+
+            const idx = task.subtasks.findIndex( function( s ) { return s.id === subtaskId; } );
+
+            if( idx === -1 )
+                return;
+
+            const sub    = JSON.parse( JSON.stringify( task.subtasks[ idx ] ) );
+            const waited = [];   // [{ id, at }] siblings that waited for it, and where in their after[]
+
+            task.subtasks = task.subtasks.filter( function( s ) { return s.id !== subtaskId; } );
+
+            task.subtasks.forEach( function( s )
+            {
+                if( Array.isArray( s.after ) )
+                {
+                    const at = s.after.indexOf( subtaskId );
+                    if( at !== -1 ) waited.push( { id: s.id, at: at } );
+
+                    s.after = s.after.filter( function( id ) { return id !== subtaskId; } );
+                }
+            });
+
+            render();
+            saveTasks();
+
+            // Looked up again at Undo time, by id: a re-read may have replaced the task.
+            NayiveUI.undoToast( T( 'ui.toast.deleted' ), function()
+            {
+                if( refuseEdit() ) return;
+
+                const t = findTask( taskId );
+
+                if( ! t || ( t.subtasks || [] ).some( function( s ) { return s.id === sub.id; } ) )
+                    return;   // its task is gone, or the sub-task is back already
+
+                if( ! t.subtasks )
+                    t.subtasks = [];
+
+                t.subtasks.splice( Math.min( idx, t.subtasks.length ), 0, sub );
+
+                waited.forEach( function( w )
+                {
+                    const s = t.subtasks.find( function( x ) { return x.id === w.id; } );
+
+                    if( ! s )
+                        return;
+
+                    if( ! Array.isArray( s.after ) )
+                        s.after = [];
+
+                    if( s.after.indexOf( sub.id ) === -1 )
+                        s.after.splice( Math.min( w.at, s.after.length ), 0, sub.id );
+                });
+
+                render();
+                saveTasks();
+            } );
         }
 
         function startEdit( id )
@@ -1149,9 +1249,19 @@
         {
             if( refuseEdit() ) return;
 
+            const gone = [];   // every done task and its place, for the Undo
+
+            tasks.forEach( function( t, i )
+            {
+                if( t.done ) gone.push( { idx: i, task: JSON.parse( JSON.stringify( t ) ) } );
+            });
+
             tasks = tasks.filter( function( t ) { return ! t.done; } );
             render();
             saveTasks();
+
+            if( gone.length )
+                undoDelete( gone );
         }
 
         //------------------------------------------------------------------------//
@@ -1910,6 +2020,18 @@
             checkBtn.addEventListener( 'click', function() { toggleSubtask( task.id, s.id ); } );
 
             actions.appendChild( checkBtn );
+
+            // ...and the red bin next to it, which deletes the sub-task at once.
+            if( s.done )
+            {
+                const delBtn = document.createElement( 'button' );
+                delBtn.className = 'icon-btn sm danger';
+                delBtn.title = NayiveUI.t( 'ui.delete' );
+                delBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>';
+                delBtn.addEventListener( 'click', function() { deleteSubtask( task.id, s.id ); } );
+
+                actions.appendChild( delBtn );
+            }
 
             // The one new control. Full height so the row keeps its shape, 16px wide
             // so it takes almost nothing from the text.
