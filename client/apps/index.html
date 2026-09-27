@@ -647,7 +647,7 @@
                 </svg>
             </button>
 
-            <a class="theme-btn tool-extra" id="logoutBtn" href="/api/logout" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
+            <a class="theme-btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </a>
 
@@ -1721,7 +1721,14 @@
                                             label: navigator.platform || '' } )
                 } );
                 var d = await r.json().catch( function (){ return {}; } );
-                if( r.ok ) pushState.subscribed = true;
+                if( r.ok )
+                {
+                    pushState.subscribed = true;
+                    // This phone's app row names this Chrome's endpoint: a new
+                    // subscription (after a sign-out) must reach it now, not at
+                    // the next launcher load - or a call rings here twice.
+                    if( window.NayiveDevices ) NayiveDevices.moveEndpoint();
+                }
                 return { ok: r.ok, data: d };
             }
 
@@ -2185,12 +2192,46 @@
         }
         catch ( e ) {}
 
+        // What this browser keeps for the account must not outlive the session:
+        // the push subscription (else the notices keep coming here, and the
+        // next person's sign-in would register it for them too), the active
+        // trip's PDFs and the share inbox. Before the logout: the DELETE needs
+        // the session. getRegistration(), not .ready - .ready never settles
+        // with no service worker, and a sign-out must never hang (3 s cap).
+        function forgetThisBrowser()
+        {
+            var work = ( async function ()
+            {
+                try
+                {
+                    var reg = ( 'serviceWorker' in navigator ) ? await navigator.serviceWorker.getRegistration() : null;
+                    var sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+                    if( sub )
+                    {
+                        var ep = sub.endpoint;
+                        try { await sub.unsubscribe(); } catch ( e ) {}
+                        await fetch( '/api/push?endpoint=' + encodeURIComponent( ep ),
+                                     { method: 'DELETE', credentials: 'same-origin' } );
+                    }
+                }
+                catch ( e ) {}
+                try
+                {
+                    if( window.caches ) await Promise.all( [ caches.delete( 'nayive-trips-docs' ),
+                                                             caches.delete( 'nayive-share-inbox' ) ] );
+                }
+                catch ( e ) {}
+            } )();
+            return Promise.race( [ work, new Promise( function ( r ) { setTimeout( r, 3000 ); } ) ] );
+        }
+
         // Sign out is a POST (a GET could be fired by a picture in an email,
         // or a link on another site): the link only works through this.
         document.getElementById( 'logoutBtn' ).addEventListener( 'click', function ( e )
         {
             e.preventDefault();
-            fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } )
+            forgetThisBrowser()
+                .then( function () { return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } )
                 .catch( function () {} )
                 .then( function () { location.href = '/nayive/login.html'; } );
         } );
@@ -2305,25 +2346,54 @@
             };
 
             // ---- 1. enrolment ------------------------------------------------
+            // The token is the phone's whole credential: it stays in this
+            // browser only until the server has it ("nayive-enrol", device.html).
+            // What is kept after that - "nayive-device" - is the id + endpoint,
+            // never the token (any script on this origin could read it).
             function enrol()
             {
                 var pending = parse( 'nayive-enrol' );     // device.html, just now
                 var known   = parse( 'nayive-device' );    // enrolled before, from this browser
-                var mine    = pending || known;
-                if( ! mine || ! mine.t ) return;
+                if( known && known.t )                     // written by an older launcher: drop the token
+                {
+                    delete known.t;
+                    put( 'nayive-device', JSON.stringify( known ) );
+                }
+                if( ! pending || ! pending.t ) { if( known ) moveEndpoint( known ); return; }
                 myEndpoint().then( function ( ep )
                 {
-                    if( ! pending && known.ep === ep ) return;   // nothing new to say
-                    return api( 'POST', '/enrol', { t: mine.t, name: mine.n || '', endpoint: ep } ).then( function ( j )
+                    return api( 'POST', '/enrol', { t: pending.t, name: pending.n || '', endpoint: ep } ).then( function ( j )
                     {
                         if( j._status === 200 )
                         {
                             put( 'nayive-enrol', null );
-                            put( 'nayive-device', JSON.stringify( { t: mine.t, n: mine.n || '', ep: ep, id: j.id } ) );
-                            if( pending ) toast( T( 'dev.enrolled' ), 3500 );
+                            put( 'nayive-device', JSON.stringify( { n: pending.n || '', ep: ep, id: j.id } ) );
+                            toast( T( 'dev.enrolled' ), 3500 );
                             refreshButton();
                         }
                         else if( j._status === 400 ) put( 'nayive-enrol', null );   // not a token at all
+                    } );
+                } ).catch( function () {} );
+            }
+
+            // An enrolled phone whose Chrome got a new push endpoint (a sign-out
+            // unsubscribes it): tell the server by the phone's id - the token is
+            // not kept here. 404 = no such phone for THIS account (removed, or
+            // another person's): forget it quietly. No endpoint = nothing to say.
+            function moveEndpoint( known )
+            {
+                if( ! known.id ) return;
+                myEndpoint().then( function ( ep )
+                {
+                    if( ! ep || ep === known.ep ) return;
+                    return api( 'PUT', '/' + encodeURIComponent( known.id ), { endpoint: ep } ).then( function ( j )
+                    {
+                        if( j._status === 200 )
+                        {
+                            known.ep = ep;
+                            put( 'nayive-device', JSON.stringify( known ) );
+                        }
+                        else if( j._status === 404 ) put( 'nayive-device', null );
                     } );
                 } ).catch( function () {} );
             }
@@ -2565,7 +2635,10 @@
                     refreshButton();
                 } ).catch( function () { failed( T( 'login.noServer' ) ); } );
             }
-            window.NayiveDevices = { loadAccount: loadAccount };
+            window.NayiveDevices = {
+                loadAccount:  loadAccount,
+                moveEndpoint: function () { var k = parse( 'nayive-device' ); if( k ) moveEndpoint( k ); }
+            };
 
             // ---- start -----------------------------------------------------
             ( window.NayiveI18n ? NayiveI18n.ready : Promise.resolve() ).then( function ()

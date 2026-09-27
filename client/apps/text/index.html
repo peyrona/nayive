@@ -180,6 +180,12 @@
         }
         #preview hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
         #preview img { max-width: 100%; height: auto; border-radius: var(--radius-s); }
+        /* An image the reader does not load (remote, or not beside the file): its alt text. */
+        #preview .md-img-off
+        {
+            display: inline-block; padding: 0.1em 0.5em; font-size: 0.9em; color: var(--text-dim);
+            border: 1px dashed var(--line); border-radius: var(--radius-s);
+        }
         /* Code keeps the editor's face; the block is a raised surface like a card. */
         #preview code
         {
@@ -581,6 +587,10 @@
         // the state: wireStaticUI() reads both before the section's own lines run.
         const MD_MIME   = 'text/x-markdown';
         let   mdReading = false;   // true = the rendered pane is up, the editor is away
+        // Which .md the preview's relative links are read beside. The session only
+        // knows a file's path after loadText has put it on screen, so while a file
+        // is arriving loadText says which one it is (null: ask the session).
+        let   mdOpening = null;
 
         const FONT_KEY = 'gum_text_font_size';
         const FONT_MIN = 9;
@@ -663,6 +673,7 @@
             // while writing, so it can never answer by hiding what was written.
             document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); setPreview( false ); editor.focus(); } );
             document.getElementById( 'mdViewBtn'  ).addEventListener( 'click',  function()    { setPreview( ! mdReading ); } );
+            document.getElementById( 'preview'    ).addEventListener( 'click',  mdAnchorClick );
             document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); writeTextCfg( { indent: e.target.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
@@ -1144,50 +1155,236 @@
             document.querySelectorAll( '#toolbar .edit-only' ).forEach( function( el ) { el.hidden = mdReading; } );
         }
 
-        // Tags that do something (run, fetch, submit) rather than say something.
         // marked hands raw HTML straight through, and a .md can arrive from an
         // upload or a shared folder, so the tree is cleaned before it is shown.
-        const HTML_DROP = new Set( [ 'SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED',
-                                     'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT' ] );
+        // It is an ALLOW-list: only the plain HTML a document is made of stays,
+        // and only the attributes that shape it. Anything else is a way in -
+        // <svg><style> restyles the whole page, <svg><set href="javascript:">
+        // runs on a click, a style="" or an id="" reaches outside the preview.
+        const HTML_NS = 'http://www.w3.org/1999/xhtml';
 
-        function sanitize( root )
+        const MD_TAGS = new Set( [ 'a', 'abbr', 'b', 'bdi', 'bdo', 'blockquote', 'br', 'caption', 'cite', 'code',
+                                   'col', 'colgroup', 'dd', 'del', 'details', 'dfn', 'div', 'dl', 'dt', 'em',
+                                   'figcaption', 'figure', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img',
+                                   'input', 'ins', 'kbd', 'li', 'mark', 'ol', 'p', 'pre', 'q', 'rp', 'rt', 'ruby',
+                                   's', 'samp', 'small', 'span', 'strong', 'sub', 'summary', 'sup', 'table',
+                                   'tbody', 'td', 'tfoot', 'th', 'thead', 'time', 'tr', 'u', 'ul', 'var', 'wbr' ] );
+
+        // Not allowed and not worth reading either: gone with all they hold. Any
+        // other unknown tag (<font>, <center>...) steps aside and keeps its text.
+        const MD_GONE = new Set( [ 'script', 'style', 'template', 'svg', 'math', 'iframe', 'frame', 'frameset',
+                                   'object', 'embed', 'applet', 'noscript', 'noembed', 'noframes', 'textarea',
+                                   'select', 'option', 'datalist', 'button', 'title', 'head', 'link', 'meta',
+                                   'base', 'xmp', 'plaintext', 'audio', 'video', 'source', 'track', 'canvas', 'dialog' ] );
+
+        // Attributes that only describe; src and href go through mdUrl() below.
+        const MD_ATTRS = new Set( [ 'title', 'lang', 'dir', 'align', 'colspan', 'rowspan', 'start', 'reversed',
+                                    'alt', 'width', 'height', 'open', 'datetime', 'cite' ] );
+
+        function sanitize( root, mdPath )
         {
-            root.querySelectorAll( '*' ).forEach( function( el )
+            Array.from( root.children ).forEach( function( el )
             {
-                // The one <input> worth keeping: a GFM task box. marked already
-                // writes it disabled - saying so again costs nothing and is what
-                // makes it safe to let through.
-                if( el.tagName === 'INPUT' && el.type === 'checkbox' ) { el.disabled = true; return; }
+                const tag = el.localName;
 
-                if( HTML_DROP.has( el.tagName ) ) { el.remove(); return; }
+                // An <svg>/<math> child is not HTML even when its name looks like it.
+                if( el.namespaceURI !== HTML_NS || MD_GONE.has( tag ) ) { el.remove(); return; }
+
+                if( ! MD_TAGS.has( tag ) )
+                {
+                    sanitize( el, mdPath );
+                    el.replaceWith( ...el.childNodes );
+                    return;
+                }
+
+                // The one <input> worth keeping: a GFM task box, and only as a box.
+                if( tag === 'input' )
+                {
+                    if( ( el.getAttribute( 'type' ) || '' ).toLowerCase() !== 'checkbox' ) { el.remove(); return; }
+                    const on = el.hasAttribute( 'checked' );
+                    Array.from( el.attributes ).forEach( function( at ) { el.removeAttribute( at.name ); } );
+                    el.type     = 'checkbox';
+                    el.checked  = on;
+                    el.disabled = true;
+                    if( on ) el.setAttribute( 'checked', '' );
+                    return;
+                }
 
                 Array.from( el.attributes ).forEach( function( at )
                 {
-                    const name = at.name.toLowerCase();
-                    // A URL is read the way a browser reads it: whitespace and control
-                    // characters inside "java\nscript:" mean nothing to it.
-                    const url  = at.value.replace( /[\s\u0000-\u001F]/g, '' ).toLowerCase();
+                    const name = at.name;
 
-                    if( name.startsWith( 'on' ) )
+                    if( name === 'id' || name === 'name' )
                     {
-                        el.removeAttribute( at.name );
+                        // Kept as an anchor for "#section" links, but never as a real
+                        // id: <img id="preview"> would stand in for the app's own.
+                        if( ! el.hasAttribute( 'data-md-anchor' ) ) el.setAttribute( 'data-md-anchor', at.value );
+                        el.removeAttribute( name );
                     }
-                    else if( name === 'href' || name === 'src' || name === 'xlink:href' || name === 'srcdoc' || name === 'formaction' )
+                    else if( name === 'data-md-anchor' )
                     {
-                        // data: is kept for images only - that is the one place it is useful.
-                        if( /^(javascript|vbscript):/.test( url ) ||
-                            ( url.startsWith( 'data:' ) && ! ( name === 'src' && url.startsWith( 'data:image/' ) ) ) )
-                            el.removeAttribute( at.name );
+                        // set just above, by this same element's id
+                    }
+                    else if( name === 'class' && tag === 'code' && /^language-[\w+#.-]+$/.test( at.value ) )
+                    {
+                        // marked's fence language: harmless, and says what the code is
+                    }
+                    else if( name === 'src' && tag === 'img' )
+                    {
+                        const url = mdUrl( at.value, mdPath, 'img' );
+                        if( url ) el.setAttribute( 'src', url );
+                        else      el.removeAttribute( 'src' );
+                    }
+                    else if( name === 'href' && tag === 'a' )
+                    {
+                        const url = mdUrl( at.value, mdPath, 'a' );
+                        if( url ) el.setAttribute( 'href', url );
+                        else      el.removeAttribute( 'href' );
+                    }
+                    else if( ! MD_ATTRS.has( name ) )
+                    {
+                        el.removeAttribute( name );
                     }
                 } );
-            } );
 
-            // Links leave for a new tab: this one holds an open document.
-            root.querySelectorAll( 'a[href]' ).forEach( function( a )
-            {
-                a.target = '_blank';
-                a.rel    = 'noopener noreferrer';
+                // An image that was not let in says what it was instead of loading.
+                if( tag === 'img' && ! el.hasAttribute( 'src' ) )
+                {
+                    const ph = document.createElement( 'span' );
+                    ph.className   = 'md-img-off';
+                    ph.textContent = el.getAttribute( 'alt' ) || T( 'text.mdImgOff' );
+                    ph.title       = T( 'text.mdImgOff' );
+                    el.replaceWith( ph );
+                    return;
+                }
+
+                // Links leave for a new tab: this one holds an open document. A
+                // "#section" link stays here - mdAnchorClick() scrolls to it.
+                if( tag === 'a' && el.hasAttribute( 'href' ) && ! el.getAttribute( 'href' ).startsWith( '#' ) )
+                {
+                    el.target = '_blank';
+                    el.rel    = 'noopener noreferrer';
+                }
+
+                sanitize( el, mdPath );
             } );
+        }
+
+        // What a src/href in the document may point at, or null for nothing:
+        //   - beside the .md (a relative path): the file itself, through the file
+        //     API, or - a link to text - that file opened in Text;
+        //   - an image: only that, or a data:image. Anything else is another
+        //     request made in the reader's name: a remote image tells a stranger
+        //     the reader's IP, a same-origin one (/api/...) acts as the reader;
+        //   - a link: also the web (http/https/mailto/tel) and "#section" - but
+        //     never another page of this server: that is the reader's session.
+        const MD_IMG_EXTS = new Set( [ 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'bmp', 'ico' ] );
+
+        function mdUrl( raw, mdPath, kind )
+        {
+            // What a browser keeps of it: the ends trimmed of spaces and control
+            // characters, tabs and line breaks dropped. That is what is handed on
+            // ("mailto:x?subject=hi there" keeps its space) ...
+            const b = String( raw ).replace( /^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '' ).replace( /[\t\n\r]/g, '' );
+            // ... and what is judged is stricter: every blank and control character
+            // out, so "java script:" cannot pass for anything but a scheme.
+            const v = b.replace( /[\s\u0000-\u001F]/g, '' );
+            if( ! v ) return null;
+
+            if( v.startsWith( '#' ) ) return kind === 'a' ? b : null;
+
+            const scheme = /^([a-z][a-z0-9+.-]*):/i.exec( v );
+
+            // "\" is a "/" to a browser: "\\host\x.png" is as remote as "//host/x.png".
+            if( scheme || /^[\/\\]/.test( v ) )
+            {
+                let u;
+                try { u = new URL( b, location.href ); } catch( _ ) { return null; }
+
+                if( kind === 'img' )
+                    return ( u.protocol === 'data:' && /^data:image\//i.test( v ) ) ? b : null;
+
+                if( u.protocol === 'mailto:' || u.protocol === 'tel:' ) return b;
+                if( u.protocol !== 'http:' && u.protocol !== 'https:' ) return null;
+                if( u.origin === location.origin ) return null;   // "/%61pi/..." is /api/ to the server
+                return u.href;
+            }
+
+            // Relative: beside the .md - without its ?query, never above the top
+            // folder it lives in ("files", or "shared/<slug>" for someone else's).
+            // Untitled text has no "beside".
+            if( ! mdPath ) return null;
+
+            const parts = mdPath.split( '/' ).slice( 0, -1 );
+            const top   = ( parts[ 0 ] === 'shared' ? 2 : 1 );
+            const hash  = b.indexOf( '#' ) === -1 ? '' : b.slice( b.indexOf( '#' ) );
+
+            if( parts.length < top ) return null;
+
+            for( const seg of b.split( /[?#]/ )[ 0 ].split( '/' ) )
+            {
+                let s;
+                try { s = decodeURIComponent( seg ); } catch( _ ) { return null; }
+
+                if( s === '' || s === '.' ) continue;
+                if( s === '..' ) { if( parts.length <= top ) return null; parts.pop(); continue; }
+                if( s.includes( '/' ) || s.includes( '\\' ) ) return null;
+                parts.push( s );
+            }
+
+            const path = parts.join( '/' );
+            if( parts.length <= top || path === mdPath.split( '/' ).slice( 0, -1 ).join( '/' ) ) return null;
+
+            // An <img> is fetched whole: a film beside the .md is not an image.
+            if( kind === 'img' ) return MD_IMG_EXTS.has( O.extOf( path ) ) ? GumApi.fileUrl( path ) : null;
+
+            // Text reads the #part too (mdScrollTo, once the file is on screen).
+            if( textCanOpen( path ) ) return location.pathname + '?file=' + encodeURIComponent( path ) + hash;
+            return GumApi.fileUrl( path );
+        }
+
+        // Headings get the anchor GitHub gives them ("## Dos palabras" ->
+        // #dos-palabras; a repeated one -1, -2...), so "#section" links written
+        // for GitHub land here too.
+        function mdAnchors( root )
+        {
+            const seen = new Map();
+
+            root.querySelectorAll( 'h1, h2, h3, h4, h5, h6' ).forEach( function( h )
+            {
+                if( h.hasAttribute( 'data-md-anchor' ) ) return;
+
+                const base = h.textContent.trim().toLowerCase()
+                              .replace( /[^\p{L}\p{N}\s_-]/gu, '' ).replace( /\s/g, '-' );
+                const n    = seen.get( base ) || 0;
+
+                seen.set( base, n + 1 );
+                h.setAttribute( 'data-md-anchor', n ? base + '-' + n : base );
+            } );
+        }
+
+        // A "#section" link scrolls the preview, not a new tab.
+        function mdAnchorClick( e )
+        {
+            const a = e.target.closest( 'a[href^="#"]' );
+            if( ! a ) return;
+
+            e.preventDefault();
+            mdScrollTo( a.getAttribute( 'href' ) );
+        }
+
+        // "#section" -> that heading (or id/name) brought to the top of the preview.
+        function mdScrollTo( hash )
+        {
+            let want = hash.slice( 1 );
+            try { want = decodeURIComponent( want ); } catch( _ ) {}
+            if( ! want ) return;
+
+            const all = Array.from( document.querySelectorAll( '#preview [data-md-anchor]' ) );
+            const hit = all.find( function( el ) { return el.getAttribute( 'data-md-anchor' ) === want; } ) ||
+                        all.find( function( el ) { return el.getAttribute( 'data-md-anchor' ).toLowerCase() === want.toLowerCase(); } );
+
+            if( hit ) hit.scrollIntoView( { block: 'start' } );
         }
 
         function renderPreview()
@@ -1201,10 +1398,14 @@
             const tpl = document.createElement( 'template' );
 
             tpl.innerHTML = marked.parse( getEditorText() );
-            sanitize( tpl.content );
+            sanitize( tpl.content, mdOpening !== null ? mdOpening : ( session.path() || '' ) );
+            mdAnchors( tpl.content );
 
             doc.replaceChildren( tpl.content );
             pane.scrollTop = 0;
+
+            // Opened from another .md's "other.md#part" link: straight to the part.
+            if( mdOpening && location.hash ) mdScrollTo( location.hash );
         }
 
         //------------------------------------------------------------------------//
@@ -1266,7 +1467,9 @@
 
             setEditorText( text );
             setLanguage( detectMime( name || '' ) );
-            setPreview( isMarkdown() );   // a .md file opens as a document, not as source
+            mdOpening = ( how === 'open' || how === 'restore' ) ? name : '';   // an import or a draft is nowhere yet
+            try     { setPreview( isMarkdown() ); }   // a .md file opens as a document, not as source
+            finally { mdOpening = null; }
 
             // Not UTF-8, or no way to tell: on screen as it really reads, but a
             // save would write it back as UTF-8 - so it is not written at all.

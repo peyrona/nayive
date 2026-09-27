@@ -85,6 +85,22 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	defer file.Close()
-	serveFileFrom(w, r, file, ContentType(name), info)
+	ctype := ContentType(name)
+	// A site lives on Nayive's origin, so its script could call /api/* with the
+	// visitor's session. The sandbox runs its pages in an origin of their own:
+	// script, forms and links still work; cookies, localStorage and anything of
+	// Nayive's do not. From that origin even the site's own fonts and data files
+	// are cross-origin, so every file says anyone may read it - they are public
+	// anyway, and no cookie ever goes with such a request.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if scriptable(ctype) {
+		w.Header().Set("Content-Security-Policy", siteSandbox)
+	}
+	serveFileFrom(w, r, file, ctype, info)
 	return true
 }
+
+// siteSandbox is a site page's CSP. Deliberately NO allow-same-origin: with it
+// the page would be Nayive's origin again.
+const siteSandbox = "sandbox allow-scripts allow-forms allow-popups " +
+	"allow-popups-to-escape-sandbox allow-modals allow-downloads"

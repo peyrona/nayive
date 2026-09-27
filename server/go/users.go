@@ -1016,9 +1016,13 @@ func clampInt(v, lo, hi int) int {
 //
 // Tolerant on read: a hand-edited or half-written entry is dropped, never
 // raised, so one bad line cannot stop the reminder loop for everyone.
+//
+// The endpoint must be a real push service (chatPushHostOK): the server POSTs
+// to it, so any https URL would let an account aim it at internal hosts. Every
+// sender reads the devices through here, so this is checked on save AND send.
 func cleanSub(raw PushSub) (PushSub, bool) {
 	endpoint := strings.TrimSpace(raw.Endpoint)
-	if !strings.HasPrefix(endpoint, "https://") || len(endpoint) > 1024 {
+	if !chatPushHostOK(endpoint) || len(endpoint) > 1024 {
 		return PushSub{}, false
 	}
 	p256dh := strings.TrimSpace(raw.Keys.P256dh)

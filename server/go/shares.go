@@ -634,8 +634,10 @@ func (s *Shares) ExtraPath(g *Grant, parts []string) string {
 		return ""
 	}
 
+	// Only ever something inside files/ - never files/ itself, never data/
+	// (the account file, the chats), whatever trip.json says.
 	want := cleanSegments(parts)
-	if len(want) == 0 || hasDotDot(want) {
+	if len(want) < 2 || want[0] != "files" || hasDotDot(want) {
 		return ""
 	}
 
@@ -652,9 +654,12 @@ func (s *Shares) ExtraPath(g *Grant, parts []string) string {
 	if err != nil {
 		return ""
 	}
-	// The same containment test RootPath uses. ResolvePath checks it again
-	// against the owner's home; doing it here too keeps this function safe alone.
-	if !isInside(ownerHome, target) {
+	// Checked AFTER the symlinks are followed, against files/ itself: a link
+	// inside files/ that points at data/ lends nothing. ResolvePath checks
+	// again against the owner's home; doing it here keeps this function safe
+	// alone.
+	files, err := resolveExisting(filepath.Join(ownerHome, "files"))
+	if err != nil || target == files || !isInside(files, target) {
 		return ""
 	}
 	if _, err := os.Lstat(target); err != nil {
@@ -708,12 +713,12 @@ func readTripExtras(path string) tripExtras {
 			if d.Kind != "link" {
 				continue
 			}
-			if ref := splitRef(d.Path); len(ref) > 0 {
+			if ref := splitRef(d.Path); len(ref) >= 2 && ref[0] == "files" {
 				out.docs[strings.Join(ref, "/")] = true
 			}
 		}
 	}
-	out.photos = splitRef(trip.PhotosDir)
+	out.photos = publicPhotoDir(trip.PhotosDir) // a folder inside files/, or nil
 	return out
 }
 

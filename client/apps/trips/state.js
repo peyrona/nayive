@@ -99,6 +99,11 @@ const TRANSPORT_COLORS  = {
     other:  '#37474f'
 };
 
+// table[ key ] only for the table's OWN keys. A shared trip's JSON is someone
+// else's text: a transport of "constructor" or "__proto__" would otherwise find
+// Object's own members (a function where a label or a colour is expected).
+function ownKey( table, key ) { return Object.hasOwn( table, key ) ? table[ key ] : undefined; }
+
 // Weather-forecast glyphs, keyed by the bucket wxBucket() maps a WMO code to.
 const WX_ICONS = {
     clear:  '<circle cx="12" cy="12" r="4.5"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.6 4.6l1.5 1.5M17.9 17.9l1.5 1.5M4.6 19.4l1.5-1.5M17.9 6.1l1.5-1.5"></path>',

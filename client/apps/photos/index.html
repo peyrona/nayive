@@ -688,7 +688,9 @@ let DEMO = DIR === null;
 // "shared/<algo>" = an album another user shared with us (lib/shares.py). We can
 // look at it, never change it - the server refuses every write there anyway.
 // Note what stays ON: thumbnails, the EXIF cache, places and our own comments
-// all live in OUR OWN data/photos/, so they work exactly as for our own photos.
+// all live in OUR OWN data/photos/, so they work exactly as for our own photos
+// (the thumbs and the EXIF entries go once the share is taken back: see
+// purgeRevokedShares).
 let RO   = DIR !== null && DIR.indexOf( "shared/" ) === 0;
 // ...unless whoever shared it ticked "pueden añadir archivos". Then, and only
 // then, we may ADD photos of our own to the album - never overwrite one, never
@@ -1307,7 +1309,43 @@ async function enrich()
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
     if( st.mode === "map" ) drawMap();
 
-    sweepThumbs();                       // background; once a day per device
+    // background; once a day per device (at once when a share was taken back)
+    purgeRevokedShares().then( sweepThumbs );
+}
+
+/* An album someone shared with us leaves its capture dates + GPS in OUR scan
+ * cache and its thumbnails in OUR data/photos/thumbs. Once they take the share
+ * back, none of it may stay: drop every "shared/<slug>/..." entry whose grant
+ * is no longer in /api/shares, and clear the sweep's day mark so sweepThumbs()
+ * runs now and deletes the thumbs only those entries kept alive. Only on a
+ * clean answer from the server - never on a guess (offline, 500...). */
+async function purgeRevokedShares()
+{
+    if( DEMO ) return;
+    if( ! SCAN_CACHE.loaded ) await SCAN_CACHE.load();
+    if( ! SCAN_CACHE.loaded ) return;
+    const keys = Object.keys( SCAN_CACHE.map ).filter( k => k.indexOf( "shared/" ) === 0 );
+    if( ! keys.length ) return;              // never looked at a shared album: nothing to ask
+
+    let grants;
+    try
+    {
+        const r = await fetch( location.origin + "/api/shares", { credentials: "same-origin" } );
+        if( ! r.ok ) return;
+        grants = ( await r.json() ).with_me;
+    }
+    catch( _ ) { return; }
+    if( ! Array.isArray( grants ) ) return;
+
+    // Only a share missing from the list is taken back. "gone" can be passing
+    // (the owner renaming the folder): its entries stay.
+    const live = grants.filter( g => g && g.path ).map( g => g.path + "/" );
+    const dead = keys.filter( k => ! live.some( root => k.indexOf( root ) === 0 ) );
+    if( ! dead.length ) return;
+
+    dead.forEach( k => { delete SCAN_CACHE.map[ k ]; } );
+    await SCAN_CACHE.saveNow();
+    try { localStorage.removeItem( THUMB_SWEEP_KEY ); } catch( _ ) {}
 }
 
 /* ---- EXIF : capture date + GPS from a JPEG's first bytes ---- */
@@ -1476,7 +1514,10 @@ async function geocode()
     }
     applyPlaces();
 
-    if( added && ! DEMO )
+    // Not for an album someone shared with us: places.json is OURS and keeps
+    // no trace of whose photo a place came from, so nothing could take the
+    // owner's places back out of it when the share ends. Memory only, then.
+    if( added && ! DEMO && ! RO )
         GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( PLACES, null, 1 ) ) ).catch( () => {} );
 }
 async function reverseGeocode( lat, lon )
@@ -2421,7 +2462,13 @@ async function boot()
     CAN_ADD = await NayiveUI.canAddTo( DIR );
 
     const folder = await NayiveMedia.loadFolderTree( DIR, setGridMsg, false );
-    if( ! folder ) return;
+    if( ! folder )
+    {
+        // A shared album that answers 403 was most likely taken back: its
+        // thumbs and GPS go now (enrich(), which normally does it, never runs).
+        if( RO ) purgeRevokedShares().then( sweepThumbs );
+        return;
+    }
 
     // Album index: a folder that only holds sub-folders (one album per trip,
     // say) shows those first; picking one re-opens Photos at ?dir=<that album>.

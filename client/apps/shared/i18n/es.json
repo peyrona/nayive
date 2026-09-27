@@ -677,6 +677,7 @@
   "text.sc.fold": "Plegar / desplegar bloque",
   "text.sc.zoomIn": "Texto más grande",
   "text.sc.zoomOut": "Texto más pequeño",
+  "text.mdImgOff": "Imagen no mostrada: solo se cargan las imágenes junto a este archivo",
   "write.introLead": "Procesador de textos que guarda en .docx sin convertir nada. El documento se guarda solo mientras escribes.",
   "write.introFormatBar": "En el móvil: muestra u oculta la barra de formato. Se pliega sola en cuanto tocas el texto.",
   "write.introMoreBar": "En el móvil: abre el resto de la barra (fuente, tablas, sangrías, zoom, buscar…).",

@@ -43,7 +43,7 @@ func recoverPanic(log Logger, next http.Handler) http.Handler {
 					panic(err)
 				}
 				log.Error("request panicked",
-					"method", r.Method, "path", r.URL.Path, "err", err)
+					"method", r.Method, "path", redactPath(r.URL.Path), "err", err)
 				sendError(w, r, http.StatusInternalServerError, "error interno")
 			}
 		}()
@@ -68,7 +68,7 @@ func logRequest(log Logger, next http.Handler) http.Handler {
 
 		log.Debug("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", redactPath(r.URL.Path), // never a link's token
 			"status", rec.status,
 			"bytes", rec.written,
 			"ms", time.Since(started).Milliseconds())
@@ -200,8 +200,10 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 //
 // java: a filter is the right place for these - one line each, applied
 // everywhere, impossible for a new route to forget. There is deliberately no
-// Content-Security-Policy: it is easy to break the vendored libraries with one,
-// and handler.py says the same.
+// Content-Security-Policy here: it is easy to break the vendored libraries with
+// one, and handler.py says the same. The two exceptions are content Nayive did
+// not write - a user's HTML/SVG (filesRead) and a static site (serveSite) - and
+// each sets its own sandbox.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -229,6 +231,78 @@ func refuseTraversal(next http.Handler) http.Handler {
 				sendText(w, r, http.StatusForbidden, "Forbidden.\n")
 				return
 			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// redactPath is a URL path fit for the log: the segment that IS a secret - a
+// chat link's token (/c/..., /api/c/...), a public trip link's (/s/...,
+// /api/public/...), a location app's key (/api/location/...) - becomes "-".
+// Anyone reading the log could otherwise open the chat, the trip or post
+// positions as its owner.
+func redactPath(p string) string {
+	parts := strings.Split(collapseSegments(p), "/")
+	at := -1
+	switch {
+	case len(parts) > 2 && (parts[1] == "c" || parts[1] == "s"):
+		at = 2
+	case len(parts) > 3 && parts[1] == "api" &&
+		(parts[2] == "c" || parts[2] == "public" || parts[2] == "location"):
+		at = 3
+	}
+	if at < 0 || parts[at] == "" {
+		return p
+	}
+	parts[at] = "-"
+	return strings.Join(parts, "/")
+}
+
+// bodyReadBase is how long a request body may take to arrive, plus one second
+// for every bodyMinRate bytes it declares. A var so a test can shorten it.
+var bodyReadBase = 30 * time.Second
+
+// bodyMinRate is the slowest upload, in bytes a second, that still finishes:
+// 16 KiB/s, what even a bad mobile line sends. Lower and a login's 1 MiB body
+// buys minutes per connection (at 1 KiB/s it was 17), which a few dozen
+// dribbling clients turn into everyone locked out.
+const bodyMinRate = 16 << 10
+
+// bodyAllowance is how long a body of `length` bytes (-1: not said) may take.
+func bodyAllowance(length int64) time.Duration {
+	allowed := bodyReadBase
+	if length > 0 {
+		secs := min(length/bodyMinRate, 30*24*3600) // no overflow
+		allowed += time.Duration(secs) * time.Second
+	}
+	return allowed
+}
+
+// bodyDeadline puts a read deadline on a request's BODY, and only there.
+//
+// ReadHeaderTimeout covers the headers; nothing covered the body, so a client
+// could send the headers of a POST /api/login and then one byte a minute, and
+// 250 of those held every connection slot. The deadline grows with the declared
+// length (bodyAllowance), so a big upload on a slow line still gets through. A
+// request with no body gets none at all. What one client can hold at once is
+// capped too, by address (listener.go).
+//
+// It never reaches a long-poll (the chat's 25 s, a phone's minutes): once the
+// body has been read to the end, net/http lifts the deadline itself as it
+// starts the background read that notices a client hanging up - HTTP/2's is
+// per stream and ends with the body. TestLongPollSurvivesBodyDeadline holds
+// that in place. A body the handler never reads keeps its deadline, which is
+// what bounds the server draining it after the answer.
+//
+// java: http.ResponseController reaches the connection behind a
+// ResponseWriter. It must be given the server's OWN writer, which is why this
+// is the outermost filter - statusRecorder does not pass it through.
+func bodyDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength != 0 && r.Body != nil && r.Body != http.NoBody {
+			// An error only means this writer cannot reach a socket (a test's
+			// recorder): nothing to bound.
+			http.NewResponseController(w).SetReadDeadline(time.Now().Add(bodyAllowance(r.ContentLength)))
 		}
 		next.ServeHTTP(w, r)
 	})

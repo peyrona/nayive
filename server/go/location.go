@@ -461,14 +461,12 @@ func stampOrNow(tst int64) int64 {
 }
 
 // requestOrigin is this Nayive's own address, as the phone asking for it sees it
-// - the .properties file has to carry an absolute URL.
+// - the .properties file has to carry an absolute URL. Nothing proxies Nayive,
+// so X-Forwarded-Proto is not trusted.
 func requestOrigin(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
-	}
-	if fwd := r.Header.Get("X-Forwarded-Proto"); fwd != "" {
-		scheme = fwd
 	}
 	return scheme + "://" + r.Host
 }

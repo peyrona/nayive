@@ -358,10 +358,10 @@ func TestDeviceCall(t *testing.T) {
 	rand.Read(auth)
 	p256 := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
 	au := base64.RawURLEncoding.EncodeToString(auth)
-	f.srv.users.AddPushSub("ana", "https://push.example/phone", p256, au, "es", "", nil)
-	f.srv.users.AddPushSub("ana", "https://push.example/laptop", p256, au, "es", "", nil)
+	f.srv.users.AddPushSub("ana", "https://fcm.googleapis.com/fcm/send/phone", p256, au, "es", "", nil)
+	f.srv.users.AddPushSub("ana", "https://fcm.googleapis.com/fcm/send/laptop", p256, au, "es", "", nil)
 	jsonCall(t, f.owner, "POST", f.base+"/api/device/enrol",
-		`{"t":"`+phoneToken+`","name":"Pixel","endpoint":"https://push.example/phone"}`, 200, nil)
+		`{"t":"`+phoneToken+`","name":"Pixel","endpoint":"https://fcm.googleapis.com/fcm/send/phone"}`, 200, nil)
 	st := phoneWait(t, f.base, phoneToken, "")
 
 	dc := "d-" + f.ids["Carmen"]
@@ -381,7 +381,7 @@ func TestDeviceCall(t *testing.T) {
 	ring := h.callPushes(o, c, "ring")
 	missed := h.callPushes(o, c, "missed")
 	h.mu.Unlock()
-	if len(ring) != 1 || ring[0].sub.Endpoint != "https://push.example/laptop" {
+	if len(ring) != 1 || ring[0].sub.Endpoint != "https://fcm.googleapis.com/fcm/send/laptop" {
 		t.Fatalf("ring pushes = %+v", ring)
 	}
 	if len(missed) != 2 {
@@ -415,15 +415,15 @@ func TestDeviceCall(t *testing.T) {
 func TestDevicePushFilters(t *testing.T) {
 	dir := t.TempDir()
 	d := NewDevices(dir, dir, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	id, err := d.Enrol("ana", phoneToken, "Pixel", "https://push.example/phone", 3)
+	id, err := d.Enrol("ana", phoneToken, "Pixel", "https://fcm.googleapis.com/fcm/send/phone", 3)
 	if err != nil || id == "" {
 		t.Fatalf("enrol: %v", err)
 	}
-	if !d.HasApp("ana", "https://push.example/phone") || d.HasApp("ana", "https://push.example/other") ||
-		d.HasApp("bea", "https://push.example/phone") {
+	if !d.HasApp("ana", "https://fcm.googleapis.com/fcm/send/phone") || d.HasApp("ana", "https://push.example/other") ||
+		d.HasApp("bea", "https://fcm.googleapis.com/fcm/send/phone") {
 		t.Fatal("HasApp is wrong")
 	}
-	if !d.SkipCallPush("ana", "https://push.example/phone") {
+	if !d.SkipCallPush("ana", "https://fcm.googleapis.com/fcm/send/phone") {
 		t.Fatal("an online phone's Chrome should not ring the call too")
 	}
 	// Not seen for a while: its Chrome rings after all (the app may be dead).
@@ -431,7 +431,7 @@ func TestDevicePushFilters(t *testing.T) {
 	d.seen[id] = time.Now().Add(-time.Hour).Unix()
 	d.rows[0].Seen = d.seen[id]
 	d.mu.Unlock()
-	if d.SkipCallPush("ana", "https://push.example/phone") {
+	if d.SkipCallPush("ana", "https://fcm.googleapis.com/fcm/send/phone") {
 		t.Fatal("a phone not seen for an hour still swallows the ring")
 	}
 

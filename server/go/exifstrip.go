@@ -24,18 +24,31 @@ package main
 // The file on disk is never touched: cleanReader lays the zeros over the bytes
 // as they are read. A JPEG this cannot walk is refused, never sent as it is.
 //
-// Not handled: PNG / WebP / AVIF metadata. Phones write JPEG (or HEIC, which
-// a browser cannot show and a link does not lend).
+// A PNG or a WebP keeps its metadata in chunks of its own (spliceReader). The
+// EXIF chunk (PNG eXIf, WebP EXIF) stays, with its GPS IFD as zeros, the same
+// walk as above - it holds the Orientation; a PNG's chunk gets its CRC anew.
+// One this cannot walk is LEFT OUT, as are the text chunks: PNG tEXt, iTXt
+// (XMP) and zTXt, WebP "XMP " (and the VP8X flags that announce what went,
+// and the RIFF size put right). Anything after the image's end is cut, as for
+// a JPEG. cleanImage picks by the file's first bytes, not its name: a browser
+// does too.
+//
+// Not handled: AVIF (its Exif is an item the file's index points at, which
+// cannot be left out without rewriting that index) and GIF (phones write no
+// GPS there; an XMP application block would pass).
 //
 // exifmeta.go READS the same blocks, with the same walkers.
 
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"io"
 	"os"
+	"slices"
 	"sync"
 )
 
@@ -382,5 +395,323 @@ func (c *cleanReader) Seek(offset int64, whence int) (int64, error) {
 		return 0, errors.New("cleanReader: negative position")
 	}
 	c.pos = offset
+	return offset, nil
+}
+
+// -----------------------------------------------------------------------------
+// PNG and WebP: the metadata chunks left out
+// -----------------------------------------------------------------------------
+
+var errBadImage = errors.New("not an image this can walk")
+
+var pngSignature = []byte("\x89PNG\r\n\x1a\n")
+
+// cleanImage is a public photo as a stranger may read it: a JPEG, PNG or WebP
+// without its position, anything else as it is. `key` names the file (its
+// absolute path) for the cache.
+//
+// By its first bytes, never its name - except that a NAME this cleans (ctype
+// image/jpeg, png or webp) whose content is none of the three is refused
+// (errBadImage): a HEIC or TIFF renamed .png would otherwise go out with its
+// GPS, and a browser would show it anyway.
+func cleanImage(key string, file *os.File, info os.FileInfo, ctype string) (io.ReadSeeker, error) {
+	head := make([]byte, 12)
+	n, _ := file.ReadAt(head, 0)
+	head = head[:n]
+	switch {
+	case bytes.HasPrefix(head, []byte{0xFF, 0xD8}):
+		return cleanJPEG(key, file, info)
+	case bytes.HasPrefix(head, pngSignature):
+		return cleanSpliced(key, file, info, planPNG)
+	case n == 12 && string(head[:4]) == "RIFF" && string(head[8:]) == "WEBP":
+		return cleanSpliced(key, file, info, planWebP)
+	case ctype == "image/jpeg" || ctype == "image/png" || ctype == "image/webp":
+		return nil, errBadImage
+	}
+	return file, nil
+}
+
+// piece is one run of what is sent: n bytes of the file from off, n zeros
+// (zero), or lit.
+type piece struct {
+	off, n int64
+	zero   bool
+	lit    []byte
+}
+
+func (p piece) len() int64 {
+	if p.lit != nil {
+		return int64(len(p.lit))
+	}
+	return p.n
+}
+
+// splicePlans caches planPNG / planWebP per file version, as jpegPlans does.
+var splicePlans = struct {
+	sync.Mutex
+	m map[string][]piece
+}{m: map[string][]piece{}}
+
+// cleanSpliced is `file` as `plan` lays it out.
+func cleanSpliced(key string, file *os.File, info os.FileInfo,
+	plan func(io.ReaderAt, int64) ([]piece, error)) (*spliceReader, error) {
+
+	key += "|" + itoa64(info.Size()) + "|" + itoa64(info.ModTime().UnixNano())
+	splicePlans.Lock()
+	pieces, found := splicePlans.m[key]
+	splicePlans.Unlock()
+	if !found {
+		var err error
+		if pieces, err = plan(file, info.Size()); err != nil {
+			return nil, err
+		}
+		splicePlans.Lock()
+		if len(splicePlans.m) >= jpegPlansMax {
+			clear(splicePlans.m)
+		}
+		splicePlans.m[key] = pieces
+		splicePlans.Unlock()
+	}
+	return newSpliceReader(file, pieces), nil
+}
+
+// splicePiecesMax is the most pieces a PNG or WebP may come to. A real
+// picture has a handful - kept chunks that follow on join into one - but one
+// made of alternating dropped and kept empty chunks has one per chunk, and
+// such a file is refused rather than planned, cached and served.
+const splicePiecesMax = 4096
+
+// keep adds the file's bytes [off, off+n) to the pieces, joined to the last
+// run when they follow on.
+func keep(pieces []piece, off, n int64) []piece {
+	if n <= 0 {
+		return pieces
+	}
+	if k := len(pieces) - 1; k >= 0 && pieces[k].lit == nil && !pieces[k].zero && pieces[k].off+pieces[k].n == off {
+		pieces[k].n += n
+		return pieces
+	}
+	return append(pieces, piece{off: off, n: n})
+}
+
+// keepBlanked adds the file's bytes [off, off+n) with the runs (sorted) as zeros.
+func keepBlanked(pieces []piece, off, n int64, runs []span) []piece {
+	end := off + n
+	for _, s := range runs {
+		lo, hi := max(s.off, off), min(s.off+s.n, end)
+		if lo >= hi {
+			continue
+		}
+		pieces = append(keep(pieces, off, lo-off), piece{off: lo, n: hi - lo, zero: true})
+		off = hi
+	}
+	return keep(pieces, off, end-off)
+}
+
+// exifMax is the largest EXIF chunk walked; a bigger one is left out.
+const exifMax = 1 << 20
+
+// exifChunk reads the EXIF data at [off, off+n) - TIFF, maybe after
+// "Exif\0\0" - and finds its GPS runs, sorted. ok is false when it cannot be
+// walked: then it is left out.
+func exifChunk(r io.ReaderAt, off, n int64) (data []byte, runs []span, ok bool) {
+	if n <= 0 || n > exifMax {
+		return nil, nil, false
+	}
+	data = make([]byte, n)
+	if _, err := r.ReadAt(data, off); err != nil {
+		return nil, nil, false
+	}
+	tiff, base := data, off
+	if bytes.HasPrefix(tiff, []byte("Exif\x00\x00")) {
+		tiff, base = tiff[6:], off+6
+	}
+	runs, err := gpsSpans(tiff, base)
+	if err != nil {
+		return nil, nil, false
+	}
+	slices.SortFunc(runs, func(a, b span) int { return cmp.Compare(a.off, b.off) })
+	return data, runs, true
+}
+
+// planPNG keeps every chunk of a PNG up to IEND but the text ones, and eXIf
+// with its GPS as zeros and its CRC anew. A chunk cut short by the end of the
+// file is kept as far as it goes, unless it is metadata.
+func planPNG(r io.ReaderAt, size int64) ([]piece, error) {
+	pieces := []piece{{off: 0, n: 8}}
+	head := make([]byte, 8)
+	for pos := int64(8); pos+8 <= size; {
+		if _, err := r.ReadAt(head, pos); err != nil {
+			return nil, errBadImage
+		}
+		typ := string(head[4:])
+		n := int64(binary.BigEndian.Uint32(head[:4]))
+		end := min(pos+12+n, size)
+		switch typ {
+		case "tEXt", "iTXt", "zTXt":
+		case "eXIf":
+			data, runs, ok := exifChunk(r, pos+8, n)
+			if !ok || end < pos+12+n {
+				break // left out
+			}
+			if len(runs) == 0 {
+				pieces = keep(pieces, pos, end-pos)
+				break
+			}
+			for _, s := range runs {
+				clear(data[s.off-pos-8 : s.off-pos-8+s.n])
+			}
+			crc := crc32.NewIEEE()
+			crc.Write(head[4:])
+			crc.Write(data)
+			pieces = keepBlanked(keep(pieces, pos, 8), pos+8, n, runs)
+			pieces = append(pieces, piece{lit: crc.Sum(nil)})
+		default:
+			pieces = keep(pieces, pos, end-pos)
+		}
+		if typ == "IEND" {
+			break
+		}
+		if len(pieces) > splicePiecesMax {
+			return nil, errBadImage
+		}
+		pos = end
+	}
+	return pieces, nil
+}
+
+// planWebP keeps every chunk of a WebP but "XMP ", and EXIF with its GPS as
+// zeros; clears the VP8X flags of what went, and writes the RIFF size anew.
+// Nothing after the RIFF is sent.
+func planWebP(r io.ReaderAt, size int64) ([]piece, error) {
+	riff := make([]byte, 12)
+	if _, err := r.ReadAt(riff, 0); err != nil {
+		return nil, errBadImage
+	}
+	riffEnd := min(8+int64(binary.LittleEndian.Uint32(riff[4:8])), size)
+	pieces := []piece{{lit: riff}} // its size is put right at the end
+	total := int64(12)
+	head := make([]byte, 9)
+	var flags []byte // VP8X's, put right at the end
+	exifKept := false
+	for pos := int64(12); pos+8 <= riffEnd; {
+		if _, err := r.ReadAt(head[:8], pos); err != nil {
+			return nil, errBadImage
+		}
+		fourcc := string(head[:4])
+		n := int64(binary.LittleEndian.Uint32(head[4:8]))
+		end := min(pos+8+n+n%2, riffEnd)
+		switch {
+		case fourcc == "XMP ":
+		case fourcc == "EXIF":
+			_, runs, ok := exifChunk(r, pos+8, n)
+			if !ok || pos+8+n > riffEnd {
+				break // left out
+			}
+			pieces = keepBlanked(keep(pieces, pos, 8), pos+8, n, runs)
+			pieces = keep(pieces, pos+8+n, end-pos-8-n) // the pad byte
+			total += end - pos
+			exifKept = true
+		case fourcc == "VP8X" && end > pos+8 && flags == nil:
+			if _, err := r.ReadAt(head[8:], pos+8); err != nil {
+				return nil, errBadImage
+			}
+			flags = []byte{head[8]}
+			pieces = append(keep(pieces, pos, 8), piece{lit: flags})
+			pieces = keep(pieces, pos+9, end-pos-9)
+			total += end - pos
+		default:
+			pieces = keep(pieces, pos, end-pos)
+			total += end - pos
+		}
+		if len(pieces) > splicePiecesMax {
+			return nil, errBadImage
+		}
+		pos = end
+	}
+	if flags != nil {
+		flags[0] &^= 0x04 // XMP
+		if !exifKept {
+			flags[0] &^= 0x08
+		}
+	}
+	binary.LittleEndian.PutUint32(riff[4:8], uint32(total-8))
+	return pieces, nil
+}
+
+// spliceReader reads the pieces one after the other. It seeks, so
+// http.ServeContent can answer Range requests from it.
+type spliceReader struct {
+	src    io.ReaderAt
+	pieces []piece
+	ends   []int64 // ends[i]: where piece i ends in the output
+	size   int64
+	pos    int64
+}
+
+func newSpliceReader(src io.ReaderAt, pieces []piece) *spliceReader {
+	ends := make([]int64, len(pieces))
+	size := int64(0)
+	for i, p := range pieces {
+		size += p.len()
+		ends[i] = size
+	}
+	return &spliceReader{src: src, pieces: pieces, ends: ends, size: size}
+}
+
+// Read fills p from as many pieces as it takes, finding the first by binary
+// search: one piece per call, found by walking from the start, made a file of
+// many small pieces quadratic to send.
+func (s *spliceReader) Read(p []byte) (int, error) {
+	if s.pos >= s.size {
+		return 0, io.EOF
+	}
+	done := 0
+	i, _ := slices.BinarySearch(s.ends, s.pos+1) // the first piece ending past pos
+	for ; done < len(p) && i < len(s.pieces); i++ {
+		pc := s.pieces[i]
+		at := s.pos - (s.ends[i] - pc.len())
+		want := min(int64(len(p)-done), pc.len()-at)
+		dst := p[done : done+int(want)]
+		switch {
+		case pc.zero:
+			clear(dst)
+		case pc.lit != nil:
+			copy(dst, pc.lit[at:])
+		default:
+			got, err := s.src.ReadAt(dst, pc.off+at)
+			done += got
+			s.pos += int64(got)
+			if got < len(dst) {
+				if err == nil || err == io.EOF {
+					err = io.ErrUnexpectedEOF // the file shrank under us
+				}
+				if done > 0 {
+					return done, nil // the error comes back on the next Read
+				}
+				return 0, err
+			}
+			continue
+		}
+		done += int(want)
+		s.pos += want
+	}
+	return done, nil
+}
+
+func (s *spliceReader) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+	case io.SeekCurrent:
+		offset += s.pos
+	case io.SeekEnd:
+		offset += s.size
+	default:
+		return 0, errors.New("spliceReader: bad whence")
+	}
+	if offset < 0 {
+		return 0, errors.New("spliceReader: negative position")
+	}
+	s.pos = offset
 	return offset, nil
 }

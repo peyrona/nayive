@@ -58,11 +58,14 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -152,10 +155,66 @@ func NewVapidStore(configDir, contact string, log Logger) *VapidStore {
 		path:    filepath.Join(configDir, "vapid.json"),
 		contact: contact,
 		jwts:    make(map[string]cachedJWT),
-		client:  &http.Client{Timeout: pushTimeout},
+		client:  newPushClient(),
 		log:     log,
 	}
 }
+
+// newPushClient is the client every push goes out with. A subscription's URL
+// comes from a browser - a guest's too - so on top of chatPushHostOK's check of
+// the NAME:
+//   - it dials only public addresses, checked after the name is resolved
+//     (pushDialControl), so a push host that resolves inside - or is made to,
+//     between the check and the dial - reaches nothing;
+//   - it never follows a redirect: push services answer, they do not send you
+//     elsewhere, and a redirect would take the POST anywhere;
+//   - no proxy from the environment: the guard would then check the proxy's
+//     address, not the push service's.
+func newPushClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.Proxy = nil
+	tr.DialContext = (&net.Dialer{
+		Timeout:   pushTimeout,
+		KeepAlive: 30 * time.Second,
+		Control:   pushDialControl,
+	}).DialContext
+	return &http.Client{
+		Timeout:   pushTimeout,
+		Transport: tr,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// errPushInside is a push that would have connected to this machine or its
+// network.
+var errPushInside = errors.New("push: refusing a non-public address")
+
+// pushDialControl runs on every connection the push client opens, with the
+// address it is about to connect to - after DNS, so what it checks is what is
+// dialled. Only a public unicast address passes: never loopback, a private or
+// shared (100.64/10) network, link-local, multicast, unspecified, or an IPv6
+// address with a zone; an IPv4-mapped IPv6 one is judged as its IPv4.
+func pushDialControl(network, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return errPushInside
+	}
+	a := ap.Addr()
+	if a.Zone() != "" {
+		return errPushInside
+	}
+	a = a.Unmap()
+	if !a.IsGlobalUnicast() || a.IsPrivate() || cgnat.Contains(a) {
+		return errPushInside
+	}
+	return nil
+}
+
+// cgnat is 100.64.0.0/10, the carriers' shared address space (RFC 6598):
+// never a push service, and often a provider's internal network.
+var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
 // keys returns the keypair, loading or creating it on first call.
 func (v *VapidStore) keys() (*ecdsa.PrivateKey, []byte, error) {

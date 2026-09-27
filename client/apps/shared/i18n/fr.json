@@ -677,6 +677,7 @@
   "text.sc.fold": "Replier / déplier le bloc",
   "text.sc.zoomIn": "Texte plus grand",
   "text.sc.zoomOut": "Texte plus petit",
+  "text.mdImgOff": "Image non affichée : seules les images à côté de ce fichier sont chargées",
   "write.introLead": "Un traitement de texte qui enregistre en .docx sans rien convertir. Le document s'enregistre seul pendant que tu écris.",
   "write.introFormatBar": "Sur mobile : affiche ou masque la barre de mise en forme. Elle se replie dès que tu touches le texte.",
   "write.introMoreBar": "Sur mobile : ouvre le reste de la barre (police, tableaux, retraits, zoom, recherche…).",

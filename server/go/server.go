@@ -23,7 +23,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -49,12 +48,14 @@ type Server struct {
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
 
-	// authMu serialises every credential check across the whole process. One at
-	// a time, plus the ~0.4 s penalty on a wrong guess, caps password guessing
-	// at roughly 2 tries a second no matter how many connections or source IPs
-	// an attacker uses. A per-request sleep alone did nothing: 250 workers meant
-	// 250 parallel guesses.
-	authMu sync.Mutex
+	// authLocks serialises credential checks per account name AND per client
+	// address (see authThrottle). One at a time, plus the ~0.4 s penalty on a
+	// wrong guess, caps password guessing at roughly 2 tries a second on any one
+	// name, however many addresses it comes from, and from any one address,
+	// however many names it tries. A per-request sleep alone did nothing: 250
+	// workers meant 250 parallel guesses. It used to be ONE lock for the whole
+	// process, and then a stream of wrong guesses queued every real sign-in.
+	authLocks keyedMutex
 }
 
 const authFailDelay = 400 * time.Millisecond
@@ -113,11 +114,11 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	// take as long as it takes while it keeps moving. Zero here is the closest
 	// honest equivalent, and it leaves the two servers behaving the same.
 	//
-	// TODO: the real fix is an idle deadline of our own, pushed forward as
-	// bytes move, via http.ResponseController (Go 1.20+): SetReadDeadline from
-	// cappedWriter.Write on the upload path, SetWriteDeadline from a wrapper
-	// around the ReadSeeker that ServeContent copies from. See
-	// docs/go-port-review.md, B1.
+	// A request BODY has its own deadline instead, set per request and lifted
+	// once the body is in, so a long-poll can still wait as long as it likes:
+	// see bodyDeadline (middleware.go). Nothing bounds a slow RESPONSE yet; that
+	// would need a SetWriteDeadline pushed forward as bytes move, from a wrapper
+	// around the ReadSeeker that ServeContent copies from.
 	s.httpd = &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           s.routes(),
@@ -306,12 +307,12 @@ func (s *Server) routes() http.Handler {
 	// --- the front door ----------------------------------------------------
 	mux.HandleFunc("/", s.handleRoot)
 
-	// Read the chain INSIDE OUT: recoverPanic runs first, then the request log,
-	// then the security headers, then the chunked refusal, then the traversal
-	// guard, then the mux. The security headers must sit OUTSIDE both guards, or
-	// a refused request would go out without them - which is the one response
-	// where they matter most. Wrapping in the other order would put the panic
-	// guard inside the logger and a panic would skip the log line.
+	// Read the chain INSIDE OUT: bodyDeadline runs first, then recoverPanic, then
+	// the request log, then the security headers, then the chunked refusal, then
+	// the traversal guard, then the mux. The security headers must sit OUTSIDE
+	// both guards, or a refused request would go out without them - which is the
+	// one response where they matter most. Wrapping in the other order would put
+	// the panic guard inside the logger and a panic would skip the log line.
 	//
 	// collapsePath goes INSIDE refuseTraversal, so the ".." guard still reads the
 	// raw path: collapsing first would let "/nayive/..//config" past it.
@@ -326,6 +327,9 @@ func (s *Server) routes() http.Handler {
 	h = securityHeaders(h)
 	h = logRequest(s.log, h)
 	h = recoverPanic(s.log, h)
+	// Outermost of all: it needs the server's own ResponseWriter to reach the
+	// connection (see bodyDeadline), and it does nothing that could panic.
+	h = bodyDeadline(h)
 	return h
 }
 

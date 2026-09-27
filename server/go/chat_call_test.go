@@ -347,6 +347,7 @@ func TestChatCallPush(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer push.Close()
+	localPush(f.srv.chat.push) // the fake service is on this machine
 	count := func() int { mu.Lock(); defer mu.Unlock(); return hits }
 	waitHits := func(n int) {
 		t.Helper()

@@ -70,6 +70,30 @@ const (
 	convertNice  = 19           // the lowest CPU priority there is
 )
 
+// convertMinCap is the least time one ffmpeg run gets before it is killed; a
+// longer video gets four times its length (convertCap). A var for the tests.
+var convertMinCap = time.Hour
+
+// convertMaxCap is the most: the length is the file's own claim, and a header
+// that says 1e8 s must not buy years on the only queue.
+const convertMaxCap = 24 * time.Hour
+
+// convertStall kills an ffmpeg whose progress (out_time) has not moved for
+// this long - a file that hangs it well before its cap. A var for the tests.
+var convertStall = 10 * time.Minute
+
+// convertProbeCap is how long one ffprobe may take.
+const convertProbeCap = 5 * time.Minute
+
+// convertCap is how long ffmpeg may take on a video of `duration` seconds: a
+// file that hangs it must not block the only queue for good.
+func convertCap(duration float64) time.Duration {
+	// Clamped as seconds, before the conversion: a float too big for a
+	// Duration converts to nonsense.
+	secs := min(4*duration, convertMaxCap.Seconds())
+	return min(max(time.Duration(secs*float64(time.Second)), convertMinCap), convertMaxCap)
+}
+
 // ConvertJob is one queued file, as config/convert.json stores it.
 type ConvertJob struct {
 	User  string `json:"user"`
@@ -422,6 +446,8 @@ func (p probeInfo) audioCopyable() bool {
 }
 
 func (c *Converter) probe(ctx context.Context, abs string) (probeInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, convertProbeCap)
+	defer cancel()
 	raw, err := exec.CommandContext(ctx, c.ffprobe, "-v", "error",
 		"-protocol_whitelist", "file",
 		"-show_entries", "format=duration:stream=codec_type,codec_name,pix_fmt:stream_disposition=attached_pic",
@@ -492,6 +518,9 @@ func ffmpegArgs(src, dst string, p probeInfo) []string {
 // runFFmpeg runs it at the lowest priority and turns its progress lines into
 // the percent GET /api/convert shows.
 func (c *Converter) runFFmpeg(ctx context.Context, args []string, duration float64) error {
+	// Past its cap ffmpeg is killed (nice execs it, so the kill lands on it).
+	ctx, cancel := context.WithTimeout(ctx, convertCap(duration))
+	defer cancel()
 	var cmd *exec.Cmd
 	if c.nice != "" {
 		// nice sets the priority BEFORE ffmpeg starts, so every thread it makes
@@ -500,6 +529,7 @@ func (c *Converter) runFFmpeg(ctx context.Context, args []string, duration float
 	} else {
 		cmd = exec.CommandContext(ctx, c.ffmpeg, args...)
 	}
+	cmd.WaitDelay = time.Second // Wait must not hang on its pipes after the kill
 	stderr := &tailBuffer{max: 2048}
 	cmd.Stderr = stderr
 	out, err := cmd.StdoutPipe()
@@ -512,6 +542,12 @@ func (c *Converter) runFFmpeg(ctx context.Context, args []string, duration float
 	if c.nice == "" {
 		syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, convertNice)
 	}
+
+	// The stall watchdog: killed when out_time has not moved for convertStall,
+	// counted from the start (a hang before the first progress line too).
+	stall := time.AfterFunc(convertStall, cancel)
+	defer stall.Stop()
+	last := int64(0)
 
 	// "out_time_us=" (and the older, misnamed "out_time_ms=") are both in
 	// microseconds.
@@ -526,6 +562,10 @@ func (c *Converter) runFFmpeg(ctx context.Context, args []string, duration float
 			continue
 		}
 		if us, err := strconv.ParseInt(v, 10, 64); err == nil && us > 0 {
+			if us > last {
+				last = us
+				stall.Reset(convertStall)
+			}
 			c.setPercent(min(99, int(float64(us)/(duration*1e6)*100)))
 		}
 	}

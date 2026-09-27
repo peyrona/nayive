@@ -208,9 +208,26 @@ func (s *Server) filesRead(w http.ResponseWriter, r *http.Request, target Resolv
 	if isTrue(q.Get("immutable")) {
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	}
+	ctype := ContentType(target.Abs)
+	// A user's HTML or SVG, opened in a tab, would run its script on Nayive's
+	// own origin, as whoever opened it - and it may be somebody else's: a file
+	// in a share, a picture dropped into an "add" album. The sandbox gives the
+	// page an origin of its own and no script at all. The apps read these files
+	// with fetch() (Text edits them), which a response's CSP does not touch.
+	if scriptable(ctype) {
+		w.Header().Set("Content-Security-Policy", "sandbox")
+	}
 	// NO .gz SIDECAR here: a user's own "foo.txt.gz" must stay a file. Only the
 	// static apps use sidecars.
-	serveFileFrom(w, r, file, ContentType(target.Abs), info)
+	serveFileFrom(w, r, file, ctype, info)
+}
+
+// scriptable reports a Content-Type a browser runs script in when it opens it
+// as a page: HTML, and any XML - SVG, XHTML, a plain .xml that holds XHTML.
+// Never a PDF: Chrome will not show one under a sandbox.
+func scriptable(ctype string) bool {
+	mt := strings.ToLower(strings.TrimSpace(strings.SplitN(ctype, ";", 2)[0]))
+	return mt == "text/html" || strings.Contains(mt, "xml")
 }
 
 // filesListDir answers ?dir=<path>, and ?dir=<path>&recursive=1.
@@ -726,10 +743,26 @@ func (s *Server) isAccountFile(t string) bool {
 }
 
 // isProtectedFile is a file the file API must not even REPLACE: a user's own
-// config.json (a user who could write it could lift their own quota). The
-// admin panel is the way to change it. `t` must already be resolved.
+// config.json (a user who could write it could lift their own quota), and
+// every file directly in config/. The admin panel is the way to change them.
+// `t` must already be resolved.
 func (s *Server) isProtectedFile(role, t string) bool {
-	return (role != "admin" && s.isAccountFile(t)) || s.isServerData(t)
+	return (role != "admin" && s.isAccountFile(t)) || s.isServerData(t) || s.isServerConfig(t)
+}
+
+// isServerConfig is config/<anything> - server.json, shares.json, mail.key,
+// turn_secret... - the same rule isStructuralDir applies to move and delete.
+// The server reads them once and keeps them in memory, so a copy PUT from
+// Drive is never seen, and the next save from the admin panel writes the old
+// one back over it; a key replaced under a running server breaks what it
+// signs. `t` need not exist yet: a new file there is refused too.
+func (s *Server) isServerConfig(t string) bool {
+	dir, err := resolveExisting(filepath.Dir(t))
+	if err != nil {
+		return false
+	}
+	config, err := resolveExisting(s.cfg.ConfigDir)
+	return err == nil && dir == config
 }
 
 // isServerData is anything under homes/<someone>/data/chat or data/mail: the

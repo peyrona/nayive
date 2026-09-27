@@ -8,8 +8,10 @@ package main
 // and the admin panel live next door.
 
 import (
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +41,9 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 
 	var creds loginRequest
 	ctype := strings.TrimSpace(strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0])
+	// A plain form post is the login page with no JavaScript: a browser
+	// NAVIGATES there, so it gets a page to go on to, never raw JSON.
+	isForm := strings.EqualFold(ctype, "application/x-www-form-urlencoded")
 
 	if ctype == "application/json" {
 		if err := readJSON(w, r, &creds); err != nil {
@@ -62,18 +67,22 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	// "José" their keyboard just produced. See NormaliseUsername.
 	user := NormaliseUsername(creds.User)
 
-	// java: the mutex is held ACROSS the sleep on purpose. Releasing it first
-	// would let 250 guesses run in parallel and each just wait its own 0.4 s,
-	// which throttles nobody. See Server.authMu.
-	s.authMu.Lock()
+	// java: the locks are held ACROSS the sleep on purpose. Releasing them
+	// first would let 250 guesses run in parallel and each just wait its own
+	// 0.4 s, which throttles nobody. See Server.authLocks.
+	unlock := s.authThrottle(user, r)
 	role := s.users.Authenticate(user, creds.Password)
 	if role == "" {
 		time.Sleep(authFailDelay)
-		s.authMu.Unlock()
+		unlock()
+		if isForm {
+			redirect(w, http.StatusSeeOther, URLPrefix+"/login.html") // try again
+			return
+		}
 		sendError(w, r, http.StatusUnauthorized, "usuario o contraseña incorrectos")
 		return
 	}
-	s.authMu.Unlock()
+	unlock()
 
 	if role == "user" { // make sure data/ and files/ exist
 		s.ensureHome(user)
@@ -90,6 +99,14 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("login ok", "user", user, "role", role, "remember", creds.Remember)
 
+	if isForm { // where login.html's script goes (its returnTo)
+		if role == "admin" {
+			redirect(w, http.StatusSeeOther, URLPrefix+"/admin.html")
+		} else {
+			redirect(w, http.StatusSeeOther, URLPrefix+"/")
+		}
+		return
+	}
 	body := map[string]any{"user": user, "role": role}
 	if s.users.NeedsPassword(role, user) {
 		body["must_set_password"] = true
@@ -172,15 +189,15 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.authMu.Lock() // the same server-wide throttle as login
+	unlock := s.authThrottle(sess.User, r) // the same throttle as login
 	good := s.users.Authenticate(sess.User, body.Current) == sess.Role
 	if !good {
 		time.Sleep(authFailDelay)
-		s.authMu.Unlock()
+		unlock()
 		sendError(w, r, http.StatusUnauthorized, "la contraseña actual no es correcta")
 		return
 	}
-	s.authMu.Unlock()
+	unlock()
 
 	if len([]rune(body.New)) < 4 {
 		sendError(w, r, http.StatusBadRequest,
@@ -298,5 +315,63 @@ func (s *Server) apiUsers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ensureHome(user string) {
 	for _, sub := range []string{"data", "files"} {
 		mkdirAll(s.users.homeDir(user), sub)
+	}
+}
+
+// authThrottle takes the credential-check locks for account `name` and for
+// the request's client address, and returns what releases both. The name lock
+// always comes first: two checks can then never each hold the lock the other
+// is waiting for.
+func (s *Server) authThrottle(name string, r *http.Request) (unlock func()) {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	byName := s.authLocks.Lock("name:" + name)
+	byAddr := s.authLocks.Lock("addr:" + addrKey(host)) // an IPv6 client: its /64
+	return func() {
+		byAddr()
+		byName()
+	}
+}
+
+// keyedMutex is one mutex per key, made when first wanted and dropped when
+// nobody holds or waits for it: the keys are names and addresses an attacker
+// chooses, so keeping them all would be a leak of its own.
+//
+// java: a ConcurrentHashMap<String, ReentrantLock> with a reference count, so
+// the entry can be removed the moment its last user lets go.
+type keyedMutex struct {
+	mu    sync.Mutex
+	locks map[string]*keyedLock
+}
+
+type keyedLock struct {
+	sync.Mutex
+	users int // holding it, or waiting for it
+}
+
+// Lock blocks until `key` is free, takes it, and returns what releases it.
+func (k *keyedMutex) Lock(key string) (unlock func()) {
+	k.mu.Lock()
+	if k.locks == nil {
+		k.locks = make(map[string]*keyedLock)
+	}
+	l := k.locks[key]
+	if l == nil {
+		l = &keyedLock{}
+		k.locks[key] = l
+	}
+	l.users++
+	k.mu.Unlock()
+
+	l.Lock()
+	return func() {
+		l.Unlock()
+		k.mu.Lock()
+		if l.users--; l.users == 0 {
+			delete(k.locks, key)
+		}
+		k.mu.Unlock()
 	}
 }

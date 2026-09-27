@@ -78,6 +78,13 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Open without a login only on a fresh install, as setup is: a wiped
+		// server.json must not hand every user's name, quota and usage to
+		// whoever asks first.
+		if !configured && len(s.users.ListUserNames()) > 0 {
+			sendError(w, r, http.StatusConflict, adminLostMessage)
+			return
+		}
 		var adminName, sitesDir string
 		var ext *ExternalStorage
 		s.cfg.Read(func(c *ServerConfig) {
@@ -153,6 +160,10 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// adminLostMessage answers the open, no-login panel on a server that has users
+// but no admin account.
+const adminLostMessage = "ya existen usuarios; restaura el administrador editando config/server.json"
+
 // needAdmin gates everything except "setup".
 func (s *Server) needAdmin(w http.ResponseWriter, r *http.Request, isAdmin bool) bool {
 	if !isAdmin {
@@ -172,14 +183,17 @@ func (s *Server) adminSetup(w http.ResponseWriter, r *http.Request, body *adminR
 		// Not a fresh install - regular users already exist. Refuse the open,
 		// no-login setup so a wiped server.json cannot be used to seize the box;
 		// the admin restores it by hand instead.
-		sendError(w, r, http.StatusConflict,
-			"ya existen usuarios; restaura el administrador editando config/server.json")
+		sendError(w, r, http.StatusConflict, adminLostMessage)
 		return
 	}
 	name := NormaliseUsername(body.Name)
 	pw := derefString(body.Password)
 	if name == "" || pw == "" {
 		sendError(w, r, http.StatusBadRequest, "usuario y contraseña requeridos")
+		return
+	}
+	if !ValidUsername(name) { // the same rule as every account's name
+		sendError(w, r, http.StatusBadRequest, "nombre de usuario no válido")
 		return
 	}
 	if err := s.cfg.Update(func(c *ServerConfig) {
@@ -203,10 +217,32 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 		sendError(w, r, http.StatusBadRequest, "usuario requerido")
 		return
 	}
+	// Keeping the name it already has is never refused: admin.html sends
+	// set-admin on every Save, and an older install's admin may have a name
+	// today's rule refuses, or one a user has too - it must still be able to
+	// change the password.
+	if name != s.cfg.AdminName() {
+		if !ValidUsername(name) {
+			sendError(w, r, http.StatusBadRequest, "nombre de usuario no válido")
+			return
+		}
+		// Never a regular user's name: sessions, chat and the rest go by name,
+		// so dropping the admin's sessions would drop theirs too, and the other
+		// way round. The mirror of adminSaveUser's "ese nombre es del
+		// administrador".
+		if _, err := os.Lstat(filepath.Join(s.cfg.HomesDir, name)); err == nil {
+			sendError(w, r, http.StatusConflict, "ese nombre ya está en uso")
+			return
+		}
+	}
 	pw := derefString(body.Password)
 
 	failed := false
+	oldName := ""
 	err := s.cfg.Update(func(c *ServerConfig) {
+		if c.Admin != nil {
+			oldName = c.Admin.Name
+		}
 		if pw == "" && c.Admin != nil {
 			pw = c.Admin.Password // blank = keep the current one
 		}
@@ -223,6 +259,19 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 	if err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar la configuración")
 		return
+	}
+	// A new name: the sessions under the old one belong to nobody now - a
+	// password change there would check the old name and say "wrong password".
+	// End them all, then re-issue THIS one under the new name, as long-lived as
+	// before, so the admin stays signed in here (the same as apiPassword).
+	if oldName != "" && oldName != name {
+		ttl, remember := s.sessions.Remembered(tokenFrom(r))
+		if !remember {
+			ttl = s.cfg.SessionTTL
+		}
+		s.sessions.DropUser(oldName)
+		token := s.sessions.Create(name, "admin", ttl, remember)
+		w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, remember, r.TLS != nil))
 	}
 	s.log.Info("admin account updated", "name", name)
 	sendJSON(w, r, http.StatusOK,

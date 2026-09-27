@@ -187,7 +187,9 @@ func TestLocationTickSendsOnce(t *testing.T) {
 	subs := []PushSub{testSub(t, service.URL+"/a"), testSub(t, service.URL+"/b")}
 
 	trackers := NewTrackers(cfg.ConfigDir, log)
-	r := NewReminders(cfg, users, nil, nil, NewVapidStore(cfg.ConfigDir, "", log), trackers, log)
+	vapid := NewVapidStore(cfg.ConfigDir, "", log)
+	localPush(vapid) // the fake service is on this machine
+	r := NewReminders(cfg, users, nil, nil, vapid, trackers, log)
 
 	day := func(d int) string { return time.Now().AddDate(0, 0, d).Format("2006-01-02") }
 	dir := filepath.Join(cfg.HomesDir, "ana", "data", "trips", "now")

@@ -677,6 +677,7 @@
   "text.sc.fold": "Comprimi / espandi blocco",
   "text.sc.zoomIn": "Testo più grande",
   "text.sc.zoomOut": "Testo più piccolo",
+  "text.mdImgOff": "Immagine non mostrata: si caricano solo le immagini accanto a questo file",
   "write.introLead": "Elaboratore di testi che salva in .docx senza convertire niente. Il documento si salva da solo mentre scrivi.",
   "write.introFormatBar": "Sul cellulare: mostra o nasconde la barra di formato. Si chiude da sola appena tocchi il testo.",
   "write.introMoreBar": "Sul cellulare: apre il resto della barra (carattere, tabelle, rientri, zoom, cerca…).",

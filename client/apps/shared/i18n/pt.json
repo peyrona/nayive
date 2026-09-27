@@ -677,6 +677,7 @@
   "text.sc.fold": "Dobrar / desdobrar bloco",
   "text.sc.zoomIn": "Texto maior",
   "text.sc.zoomOut": "Texto menor",
+  "text.mdImgOff": "Imagem não mostrada: só se carregam as imagens junto a este ficheiro",
   "write.introLead": "Processador de texto que guarda em .docx sem converter nada. O documento guarda-se sozinho enquanto escreves.",
   "write.introFormatBar": "No telemóvel: mostra ou esconde a barra de formatação. Recolhe assim que tocas no texto.",
   "write.introMoreBar": "No telemóvel: abre o resto da barra (tipo de letra, tabelas, avanços, zoom, procurar…).",

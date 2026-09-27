@@ -29,6 +29,7 @@ package main
 //
 //	POST   /api/device/enrol            (session) {t, name, endpoint?} -> {"id"}
 //	GET    /api/device                  (session) -> the phones, the finds, the last position
+//	PUT    /api/device/<id>             (session) {endpoint} its Chrome's push endpoint, anew
 //	DELETE /api/device/<id>             (session) -> revoke: that token stops working
 //	POST   /api/device/find             (session) {id} ring that phone
 //	                                              {ask: true, endpoint?} push "¿Dónde estás?"
@@ -340,7 +341,9 @@ var errTooManyDevices = errors.New("demasiados móviles; quita alguno en Mi cuen
 func (d *Devices) Enrol(owner, token, name, endpoint string, app int) (string, error) {
 	h := tokenHash(token)
 	name = cleanDeviceName(name)
-	if len(endpoint) > 1024 || !strings.HasPrefix(endpoint, "https://") {
+	// The same rule as PUT /api/device/<id>: only a real push service. Anything
+	// else is dropped, never refused - the phone still enrols, without push.
+	if len(endpoint) > 1024 || !chatPushHostOK(endpoint) {
 		endpoint = ""
 	}
 	d.mu.Lock()
@@ -397,6 +400,24 @@ func (d *Devices) List(owner string) []deviceRow {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Created > out[j].Created })
 	return out
+}
+
+// SetEndpoint changes the web-push endpoint of `owner`'s phone `id`. Only ever
+// their own phone: unlike Enrol, it never moves one to another account.
+func (d *Devices) SetEndpoint(owner, id, endpoint string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	for i := range d.rows {
+		if d.rows[i].Owner == owner && d.rows[i].ID == id {
+			if d.rows[i].Endpoint != endpoint {
+				d.rows[i].Endpoint = endpoint
+				d.save()
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // Revoke forgets one phone of `owner`; its token dies with it.
@@ -896,6 +917,26 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 		s.devices.NoteLast(user, p)
 		if body.Find != "" {
 			s.devices.FoundAt(user, body.Find, s.roundedForFind(p))
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
+
+	case len(parts) == 1 && r.Method == http.MethodPut:
+		// The launcher no longer keeps the phone's token, so after a new
+		// sign-in it names the phone by id to update its Chrome's endpoint.
+		var body struct {
+			Endpoint string `json:"endpoint"`
+		}
+		if err := readJSON(w, r, &body); err != nil {
+			sendBodyError(w, r, err)
+			return
+		}
+		if len(body.Endpoint) > 1024 || !chatPushHostOK(body.Endpoint) {
+			sendError(w, r, http.StatusBadRequest, "endpoint no válido")
+			return
+		}
+		if !s.devices.SetEndpoint(user, parts[0], body.Endpoint) {
+			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+			return
 		}
 		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
 

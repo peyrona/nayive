@@ -45,7 +45,7 @@ func publicFixture(t *testing.T, srv *Server) {
 
 	photo, _ := gpsJPEG(t)
 	writeFile("files/fotos/porto/a.jpg", photo)
-	writeFile("files/fotos/porto/b.png", []byte("png"))
+	writeFile("files/fotos/porto/b.png", tinyPNG) // a PNG inside, or it is not lent
 	writeFile("files/fotos/porto/notas.txt", []byte("not a photo"))
 	writeFile("files/fotos/porto/dibujo.svg", []byte("<svg onload='alert(1)'/>"))
 	writeFile("files/fotos/porto/sub/c.jpg", plainJPEG(t))
@@ -339,7 +339,7 @@ func TestPublicPhotos(t *testing.T) {
 		t.Errorf("thumb/a.jpg: %d %q", resp.StatusCode, got)
 	}
 	resp = do(t, anon, "GET", url+"/photo/b.png", nil, nil)
-	if got := readBody(t, resp); resp.StatusCode != http.StatusOK || string(got) != "png" {
+	if got := readBody(t, resp); resp.StatusCode != http.StatusOK || !bytes.Equal(got, tinyPNG) {
 		t.Errorf("photo/b.png: %d %q", resp.StatusCode, got)
 	}
 

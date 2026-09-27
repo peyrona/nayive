@@ -110,14 +110,14 @@ function buildRealMap( trip, container, sWhich )
             const mode = points[ i - 1 ].transport;
             legs[ points[ i - 1 ].id ] =
                 L.polyline( [ [ points[i-1].lat, points[i-1].lon ], [ points[i].lat, points[i].lon ] ],
-                    { color: TRANSPORT_COLORS[ mode ] || TRANSPORT_COLORS.other, weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' } )
-                    .bindTooltip( TRANSPORT_LABELS()[ mode ] || T( 'trips.leg' ), { sticky: true } )
+                    { color: ownKey( TRANSPORT_COLORS, mode ) || TRANSPORT_COLORS.other, weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' } )
+                    .bindTooltip( ownKey( TRANSPORT_LABELS(), mode ) || T( 'trips.leg' ), { sticky: true } )
                     .addTo( map );
         }
 
         points.forEach( function( p )
         {
-            L.marker( [ p.lat, p.lon ] ).bindPopup( TF( 'trips.stageN', { n: p.index } ) + ': ' + p.label ).addTo( map );
+            L.marker( [ p.lat, p.lon ] ).bindPopup( NayiveUI.escapeHtml( TF( 'trips.stageN', { n: p.index } ) + ': ' + p.label ) ).addTo( map );
         });
 
         map.fitBounds( latlngs, { padding: [ 28, 28 ], maxZoom: 12 } );
@@ -127,7 +127,7 @@ function buildRealMap( trip, container, sWhich )
     else if( trip.stages.length === 0 && typeof trip.lat === 'number' && typeof trip.lon === 'number' )
     {
         map.setView( [ trip.lat, trip.lon ], 9 );
-        L.marker( [ trip.lat, trip.lon ] ).bindPopup( trip.destination ).addTo( map );
+        L.marker( [ trip.lat, trip.lon ] ).bindPopup( NayiveUI.escapeHtml( trip.destination || '' ) ).addTo( map );
     }
     else
     {
@@ -214,9 +214,9 @@ function buildRouteMapBlock( trip, sWhich, parentEl )
             it.className = 'map-legend-item';
             const sw = document.createElement( 'span' );
             sw.className = 'map-legend-swatch';
-            sw.style.background = TRANSPORT_COLORS[ m ] || TRANSPORT_COLORS.other;
+            sw.style.background = ownKey( TRANSPORT_COLORS, m ) || TRANSPORT_COLORS.other;
             it.appendChild( sw );
-            it.appendChild( document.createTextNode( TRANSPORT_LABELS()[ m ] || T( 'trips.trOther' ) ) );
+            it.appendChild( document.createTextNode( ownKey( TRANSPORT_LABELS(), m ) || T( 'trips.trOther' ) ) );
             legend.appendChild( it );
         });
         bar.insertBefore( legend, bar.firstChild );

@@ -477,6 +477,7 @@ func TestChatPush(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer push.Close()
+	localPush(f.srv.chat.push) // the fake service is on this machine
 	count := func(p string) int { mu.Lock(); defer mu.Unlock(); return hits[p] }
 
 	// A real key pair for the encryption (the fake service does not decrypt).

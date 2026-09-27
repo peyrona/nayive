@@ -677,6 +677,7 @@
   "text.sc.fold": "Fold / unfold block",
   "text.sc.zoomIn": "Bigger text",
   "text.sc.zoomOut": "Smaller text",
+  "text.mdImgOff": "Image not shown: only images beside this file are loaded",
   "write.introLead": "A word processor that saves to .docx with no conversion. The document saves itself as you type.",
   "write.introFormatBar": "On the phone: shows or hides the formatting bar. It folds away as soon as you touch the text.",
   "write.introMoreBar": "On the phone: opens the rest of the bar (font, tables, indents, zoom, find…).",

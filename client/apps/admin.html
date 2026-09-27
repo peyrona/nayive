@@ -400,6 +400,37 @@
         ]
     };
 
+    // The account signed in here is a regular one (the 403 below): what this
+    // browser keeps for it goes before the logout, as the launcher's sign-out
+    // does - its push subscription (DELETE needs the session), the trip PDFs
+    // and the share inbox. Capped at 3 s: a sign-out never hangs.
+    function forgetThisBrowser()
+    {
+        var work = ( async function ()
+        {
+            try
+            {
+                var reg = ( 'serviceWorker' in navigator ) ? await navigator.serviceWorker.getRegistration( '/nayive/' ) : null;
+                var sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+                if ( sub )
+                {
+                    var ep = sub.endpoint;
+                    try { await sub.unsubscribe(); } catch ( e ) {}
+                    await fetch( '/api/push?endpoint=' + encodeURIComponent( ep ),
+                                 { method: 'DELETE', credentials: 'same-origin' } );
+                }
+            }
+            catch ( e ) {}
+            try
+            {
+                if ( window.caches ) await Promise.all( [ caches.delete( 'nayive-trips-docs' ),
+                                                          caches.delete( 'nayive-share-inbox' ) ] );
+            }
+            catch ( e ) {}
+        } )();
+        return Promise.race( [ work, new Promise( function ( r ) { setTimeout( r, 3000 ); } ) ] );
+    }
+
     async function load()
     {
         var res;
@@ -418,12 +449,13 @@
                 'This page is for the administrator only. You are currently ' +
                 'signed in with a regular account. To administer, sign out ' +
                 'and sign back in with the admin account.' +
-                '<span style="display:block;margin-top:12px"><a class="link" href="/api/logout">Sign out</a></span>';
+                '<span style="display:block;margin-top:12px"><a class="link" href="#">Sign out</a></span>';
             // sign out is a POST (a GET could be fired by any page)
             $( 'fatal' ).querySelector( 'a' ).addEventListener( 'click', function ( e )
             {
                 e.preventDefault();
-                fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } )
+                forgetThisBrowser()
+                    .then( function () { return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } )
                     .catch( function () {} )
                     .then( function () { location.href = '/nayive/login.html'; } );
             } );

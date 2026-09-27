@@ -677,6 +677,7 @@
   "text.sc.fold": "Block falten / entfalten",
   "text.sc.zoomIn": "Größerer Text",
   "text.sc.zoomOut": "Kleinerer Text",
+  "text.mdImgOff": "Bild nicht angezeigt: nur Bilder neben dieser Datei werden geladen",
   "write.introLead": "Eine Textverarbeitung, die ohne Umwandlung in .docx speichert. Das Dokument speichert sich beim Tippen von selbst.",
   "write.introFormatBar": "Am Handy: zeigt oder verbirgt die Formatleiste. Sie klappt ein, sobald du den Text berührst.",
   "write.introMoreBar": "Am Handy: öffnet den Rest der Leiste (Schrift, Tabellen, Einzüge, Zoom, Suchen…).",

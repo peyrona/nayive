@@ -652,7 +652,7 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     node.className = 'stage-node' + (isHere ? ' here' : '');
     // The node icon is this stage's onward transport (matches the map leg leaving it);
     // the final stage has no onward journey, so it shows a location pin instead.
-    node.appendChild( svgIcon( bIsLast ? ICON_PIN : ( TRANSPORT_ICONS[ st.transport ] || TRANSPORT_ICONS.other ), 17 ) );
+    node.appendChild( svgIcon( bIsLast ? ICON_PIN : ( ownKey( TRANSPORT_ICONS, st.transport ) || TRANSPORT_ICONS.other ), 17 ) );
     item.appendChild( node );
 
     const card = document.createElement( 'div' );

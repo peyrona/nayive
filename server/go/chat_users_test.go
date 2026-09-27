@@ -6,10 +6,12 @@ package main
 // =============================================================================
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -248,12 +250,19 @@ func TestChatUserPush(t *testing.T) {
 	}))
 	defer push.Close()
 	count := func(p string) int { mu.Lock(); defer mu.Unlock(); return hits[p] }
-	f.srv.chat.push.client = push.Client()
+	// The endpoint must name a real push service (cleanSub); dial the test
+	// server whatever host the request names.
+	tr := push.Client().Transport.(*http.Transport).Clone()
+	tr.TLSClientConfig.InsecureSkipVerify = true
+	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, push.Listener.Addr().String())
+	}
+	f.srv.chat.push.client = &http.Client{Transport: tr}
 
 	key, _ := ecdh.P256().GenerateKey(rand.Reader)
 	auth := make([]byte, 16)
 	rand.Read(auth)
-	sub := PushSub{Endpoint: push.URL + "/beto", Lang: "es", Keys: PushKeys{
+	sub := PushSub{Endpoint: "https://fcm.googleapis.com/beto", Lang: "es", Keys: PushKeys{
 		P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
 		Auth:   base64.RawURLEncoding.EncodeToString(auth)}}
 	raw, _ := json.Marshal(map[string]any{"subs": []PushSub{sub}})

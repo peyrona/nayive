@@ -258,7 +258,7 @@ function buildTripPrintDoc( trip )
             h.appendChild( prEl( 'span', 'pr-loc', st.location || T( 'trips.noLocation' ) ) );
             // A stage's transport is how you travel onward from it, so the last stage has none.
             if( ! isLast )
-                h.appendChild( prEl( 'span', 'pr-transport', TRANSPORT_LABELS()[ st.transport ] || T( 'trips.trOther' ) ) );
+                h.appendChild( prEl( 'span', 'pr-transport', ownKey( TRANSPORT_LABELS(), st.transport ) || T( 'trips.trOther' ) ) );
             li.appendChild( h );
 
             // "Salida" / "Llegada" are the journey's departure and arrival stamps
@@ -275,7 +275,7 @@ function buildTripPrintDoc( trip )
                 [ T( 'trips.dates' ),      fmtRange( fmtDate( st.startDate ), fmtDate( st.endDate ) ) ],
                 [ T( 'trips.timezone' ), [ st.tzLabel, st.tz && st.tz !== st.tzLabel ? '(' + st.tz + ')' : '' ].filter( Boolean ).join( ' ' ) || st.tz || '' ],
                 [ T( 'trips.coords' ), coordText( st.lat, st.lon ) ],
-                [ T( 'trips.transport' ),  isLast ? '' : ( TRANSPORT_LABELS()[ st.transport ] || T( 'trips.trOther' ) ) ],
+                [ T( 'trips.transport' ),  isLast ? '' : ( ownKey( TRANSPORT_LABELS(), st.transport ) || T( 'trips.trOther' ) ) ],
                 [ T( 'trips.departure' ),      depTxt ],
                 [ T( 'trips.arrival' ),     arrTxt ],
                 [ T( 'trips.currency' ),      cur.code + ( cur.matched ? '' : ' (aproximada)' ) ],
@@ -394,9 +394,9 @@ function buildPrintRouteMap( trip )
         {
             const it = prEl( 'span', 'pr-map-legend-item' );
             const sw = prEl( 'span', 'pr-map-legend-swatch' );
-            sw.style.background = TRANSPORT_COLORS[ m ] || TRANSPORT_COLORS.other;
+            sw.style.background = ownKey( TRANSPORT_COLORS, m ) || TRANSPORT_COLORS.other;
             it.appendChild( sw );
-            it.appendChild( document.createTextNode( TRANSPORT_LABELS()[ m ] || T( 'trips.trOther' ) ) );
+            it.appendChild( document.createTextNode( ownKey( TRANSPORT_LABELS(), m ) || T( 'trips.trOther' ) ) );
             legend.appendChild( it );
         });
         sec.appendChild( legend );
@@ -424,14 +424,14 @@ function buildPrintRouteMap( trip )
             {
                 const mode = pts[ i - 1 ].transport;
                 L.polyline( [ [ pts[i-1].lat, pts[i-1].lon ], [ pts[i].lat, pts[i].lon ] ],
-                    { color: TRANSPORT_COLORS[ mode ] || TRANSPORT_COLORS.other,
+                    { color: ownKey( TRANSPORT_COLORS, mode ) || TRANSPORT_COLORS.other,
                       weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' } ).addTo( map );
             }
 
             pts.forEach( function( p )
             {
                 L.marker( [ p.lat, p.lon ] )
-                    .bindTooltip( p.index + '. ' + ( p.label || '' ),
+                    .bindTooltip( NayiveUI.escapeHtml( p.index + '. ' + ( p.label || '' ) ),
                                   { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
                     .addTo( map );
             });
@@ -442,7 +442,7 @@ function buildPrintRouteMap( trip )
         {
             map.setView( [ trip.lat, trip.lon ], 9 );
             L.marker( [ trip.lat, trip.lon ] )
-                .bindTooltip( trip.destination || '', { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
+                .bindTooltip( NayiveUI.escapeHtml( trip.destination || '' ), { permanent: true, direction: 'top', offset: [ 0, -6 ] } )
                 .addTo( map );
         }
 

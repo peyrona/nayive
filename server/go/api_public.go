@@ -21,7 +21,7 @@ package main
 //   - every coordinate rounded to 3 decimals, about 100 m (roundCoord);
 //   - no documents, notes, accommodation, and not the owner's login name;
 //   - "where I am now" only between the trip's first and last day;
-//   - full JPEGs lose their GPS on the way out (exifstrip.go).
+//   - full JPEGs, PNGs and WebPs lose their GPS on the way out (exifstrip.go).
 //
 // GET and HEAD only, and Cache-Control: no-cache, so a stopped link stops at the
 // next load rather than whenever some cache expires.
@@ -263,14 +263,10 @@ func (s *Server) serveTripPhoto(w http.ResponseWriter, r *http.Request, owner, r
 	}
 
 	ctype := ContentType(name)
-	if ctype != "image/jpeg" {
-		serveImage(w, r, photo, ctype, info)
-		return
-	}
-	clean, err := cleanJPEG(filepath.Join(dir, name), photo, info)
+	clean, err := cleanImage(filepath.Join(dir, name), photo, info, ctype)
 	if err != nil {
-		// Never send a JPEG whose GPS could not be found and removed.
-		s.log.Warn("public photo not served: cannot read its JPEG structure", "err", err)
+		// Never send a photo whose GPS could not be found and removed.
+		s.log.Warn("public photo not served: cannot read its structure", "err", err)
 		notFound()
 		return
 	}

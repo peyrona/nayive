@@ -1357,12 +1357,21 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 			if orig.File != nil {
 				f := *orig.File
 				m.File = &f
-				file, _, err := h.openMedia(a.o, src, orig)
+				file, info, err := h.openMedia(a.o, src, orig)
 				if err != nil {
 					sendError(w, r, http.StatusGone, "ese fichero ya no está")
 					return
 				}
 				defer file.Close()
+				// A copy is an upload: the same daily allowance and quota.
+				if !a.o.allowBytes(a.pid, info.Size()) {
+					sendError(w, r, http.StatusTooManyRequests, "demasiados envíos seguidos")
+					return
+				}
+				if q := h.users.UserQuotaBytes(a.o.user); q != nil && h.users.UserUsageBytes(a.o.user)+info.Size() > *q {
+					sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
+					return
+				}
 				copyFrom = file
 			}
 		} else if req.Ref != "" {

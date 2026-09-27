@@ -70,6 +70,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"io/fs"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -101,9 +102,11 @@ const (
 	chatLaterTick    = 20 * time.Second     // how often RunLater looks for texts whose time has come
 )
 
-// chatPushHosts are the push services a PERSON's subscription may point at.
-// A signed-in user's endpoint only needs https (users.go cleanSub); a stranger
-// holding a link must not be able to make this server POST to any URL it likes.
+// chatPushHosts are the push services a subscription may point at, a guest's
+// and a signed-in user's alike (users.go cleanSub): nobody may make this server
+// POST to any URL it likes.
+// Chrome's newer endpoints, jmt<digits>.google.com, are matched apart
+// (googlePushHost): all of .google.com would take in every open redirect there.
 var chatPushHosts = []string{
 	"fcm.googleapis.com", "android.googleapis.com", // Chrome, Edge on Android, Samsung, Opera
 	".push.apple.com",            // Safari, iPhone
@@ -1511,12 +1514,23 @@ func cleanChatText(s string, max int) (string, bool) {
 }
 
 // chatPushHostOK: a person's device may only be reached at a real push service.
+//
+// Only by NAME: an IP literal, bracketed or not, and a zone ("%...") never
+// pass - "[::ffff:127.0.0.1%25.google.com]" ends in ".google.com" and dials
+// 127.0.0.1. What a name resolves to is checked again when the push is sent
+// (webpush.go pushDialControl).
 func chatPushHostOK(endpoint string) bool {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
+	if strings.HasPrefix(u.Host, "[") || strings.ContainsAny(host, ":%") || net.ParseIP(host) != nil {
+		return false
+	}
+	if googlePushHost(host) {
+		return true
+	}
 	for _, h := range chatPushHosts {
 		if strings.HasPrefix(h, ".") {
 			if strings.HasSuffix(host, h) {
@@ -1527,6 +1541,25 @@ func chatPushHostOK(endpoint string) bool {
 		}
 	}
 	return false
+}
+
+// googlePushHost is Chrome's newer push endpoint host, jmt<digits>.google.com
+// (jmt17 is the one seen in the wild), and nothing else under google.com.
+func googlePushHost(host string) bool {
+	d, ok := strings.CutSuffix(host, ".google.com")
+	if !ok {
+		return false
+	}
+	d, ok = strings.CutPrefix(d, "jmt")
+	if !ok || d == "" || len(d) > 4 {
+		return false
+	}
+	for _, c := range d {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // fileExt is the extension a stored attachment keeps: letters and digits only.
