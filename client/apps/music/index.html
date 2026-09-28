@@ -48,6 +48,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script>
@@ -128,18 +129,12 @@
 
     .scope-bar  { display: flex; align-items: center; margin: 18px 0 12px; }
 
-    .show-more { display: block; width: 100%; margin: 10px 0 4px; padding: 10px;
-                 border: 1px dashed var(--line); border-radius: var(--radius-s);
-                 background: transparent; color: var(--text-dim); font: inherit;
-                 font-size: 0.82rem; cursor: pointer; }
-    .show-more:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-                       color: var(--text); }
+    /* "Show more" is the shared .text-btn.ghost, full width. */
+    .show-more { width: 100%; margin: 10px 0 4px; }
 
-    /* ---- library rows: one song, real drag source ------------------- */
-    .song-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
-                background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
-                cursor: grab; transition: border-color var(--tr-fast); }
-    .song-row:hover  { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+    /* ---- library rows: one song (a shared .card-row), real drag source;
+       a tap on its body plays it ------------------------------------------ */
+    .song-row { padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
     .song-row:active { cursor: grabbing; }
     .song-row.is-playing { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
                             background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
@@ -216,9 +211,18 @@
     .player-art     { width: 48px; height: 48px; border-radius: var(--radius-s); }
     .player-art svg { width: 22px; height: 22px; }
 
+    /* The queue as a sheet on a phone (openQueueSheet): the same pane, flat. */
+    .queue-open-btn { display: none; }
+    .queue-sheet .queue-pane { display: flex; min-width: 0; max-width: none; border-left: 0; background: none;
+                               width: auto !important; flex-basis: auto !important; }   /* over the resizer's inline width */
+    .queue-sheet .queue-header { padding: 0 36px 12px 0; }
+    .queue-sheet .queue-list   { padding: 12px 0 0; overflow: visible; }
+    .queue-sheet .queue-row    { cursor: pointer; }
+
     @media (max-width: 760px)
     {
-        .queue-pane, .pane-resizer { display: none; }
+        #mainRow > .queue-pane, .pane-resizer { display: none; }
+        .queue-open-btn             { display: inline-flex; }
         .lib-pane                   { min-width: 0; }   /* the 420px floor made the page 551px wide on a phone */
         .search-toggle              { display: inline-flex; }
         .tb-end .topbar-search      { display: none; }
@@ -269,6 +273,10 @@
                     <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </button>
+                    <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
+                    <button class="icon-btn queue-open-btn" id="queueBtn" type="button" data-i18n-attr="title:music.openQueue, aria-label:music.openQueue">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>
+                    </button>
                     <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                     </button>
@@ -280,7 +288,7 @@
             <div class="lib-content" id="libContent"></div>
         </div>
 
-        <div class="pane-resizer" id="paneResizer" data-i18n-attr="title:music.dragWidth"></div>
+        <div class="pane-resizer" id="paneResizer" data-i18n-attr="title:ui.dragResize"></div>
 
         <div class="queue-pane" id="queuePane">
             <div class="queue-header">
@@ -288,10 +296,14 @@
                 <div class="queue-mode-row">
                     <div class="mode-pills">
                         <button class="icon-btn is-active" id="seqBtn" data-i18n-attr="title:music.playSeq, aria-label:music.playSeq">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
                         </button>
                         <button class="icon-btn" id="shuffleBtn" data-i18n-attr="title:music.playShuffle, aria-label:music.playShuffle">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        </button>
+                        <!-- Off: the queue stops after its last song. On: it starts again. -->
+                        <button class="icon-btn" id="repeatBtn" type="button" aria-pressed="false" data-i18n-attr="title:music.repeat, aria-label:music.repeat">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                         </button>
                     </div>
                     <div class="queue-actions">
@@ -354,6 +366,16 @@
     </div>
 
     <audio id="player" preload="metadata"></audio>
+
+    <!-- QUEUE SHEET (phones): #queuePane is moved in here by openQueueSheet().
+         Before the playlist sheets, so theirs open on top of it. -->
+    <div class="sheet-backdrop" id="queueBackdrop">
+        <div class="sheet queue-sheet" id="queueSheet">
+            <div class="sheet-actions">
+                <button data-act="close" id="queueCloseBtn" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
 
     <!-- SAVE PLAYLIST SHEET ------------------------------------------------- -->
     <div class="sheet-backdrop" id="saveBackdrop">
@@ -424,6 +446,9 @@ var st = {
     seekOnLoad: 0,          // seconds to jump to once the new src loads (an Undo resuming a song)
     isPlaying: false,
     shuffle: false,
+    repeat: false,          // at the end of the queue: stop (false) or start again (true); per device
+    played: new Set(),      // shuffle: queue entries already played this round (none repeats before all have)
+    history: [],            // shuffle: entries played before the current one, for "previous"
     playlists: [],          // [{id, name, paths:[...]}]
     playlistsBlocked: "",   // "unread" / "bad": the file could not be read, so it is never written
     queueWidth: 360,
@@ -436,6 +461,30 @@ var audio = $( "#player" );
 // track, duration, tagRead }. Read by applyCache(), topped up by refineTags()
 // / loadDurations() as they read files (shared/media.js scanCache).
 var SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
+
+// What a pass reads goes into SCAN_CACHE through cacheSet(): never into a
+// cache that could not be read. SCAN_CACHE.set() (shared/media.js) writes the
+// file in batches; cacheFlush() writes the rest at the end of a pass, only
+// when something was set since.
+var cacheDirty = false;
+
+function cacheSet( song, fields )
+{
+    if( ! SCAN_CACHE.loaded ) return;
+    cacheDirty = true;
+    SCAN_CACHE.set( song, fields );
+}
+
+function cacheFlush()
+{
+    if( ! cacheDirty || ! SCAN_CACHE.loaded ) return;
+    cacheDirty = false;
+    SCAN_CACHE.saveNow();
+}
+
+// Every scan() takes a new number; the tag and length readers of an older pass
+// (a Rescan while they still run) see it and stop.
+var scanGen = 0;
 
 // The "Canciones" list is built one page at a time - a whole library at once
 // is a lot of DOM and refineTags() re-renders it on nearly every frame while
@@ -491,9 +540,10 @@ function deriveFromPath( fullPath )
 
 async function scan()
 {
+    var gen = ++scanGen;
     setLibMsg( NayiveUI.t( 'music.scanning' ) );
     var tree = await NayiveMedia.loadFolderTree( DIR, setLibMsg, true );
-    if( ! tree ) return;
+    if( ! tree || gen !== scanGen ) return;
     st.folderTree = { path: DIR, nodes: tree.nodes };
 
     var files = NayiveMedia.flattenFiles( st.folderTree, AUDIO_EXT );
@@ -511,11 +561,20 @@ async function scan()
     st.songs.sort( songCmp );
 
     await applyCache();          // reuse tags + durations read on a previous open
+    if( gen !== scanGen ) return;
+
+    // The queue still holds the last pass's song objects: point each row at
+    // this pass's object for the same file (one gone since keeps its old one).
+    var byPath = {};
+    st.songs.forEach( function ( s ) { byPath[ s.path ] = s; } );
+    st.queue.forEach( function ( e ) { e.song = byPath[ e.song.path ] || e.song; } );
 
     renderCollectionSummary();
     renderLibrary();
-    refineTags();
-    loadDurations();
+    renderQueueList();
+    updatePlayerBar();
+    refineTags( gen );
+    loadDurations( gen );
 }
 
 function songCmp( a, b )
@@ -561,7 +620,11 @@ async function applyCache()
     // A song gone from the library (deleted, or moved out) leaves a dead entry.
     // refineTags()/loadDurations() may both do nothing this open (all cached),
     // so sweep here: drop the orphans and rewrite the file.
-    if( SCAN_CACHE.prune( new Set( st.songs.map( function ( s ) { return s.path; } ) ) ) )
+    // Only entries under DIR can be judged from its listing: the library of
+    // another folder (Music opened on it from Drive) keeps its own.
+    if( SCAN_CACHE.loaded &&
+        SCAN_CACHE.prune( new Set( st.songs.map( function ( s ) { return s.path; } ) ),
+                          function ( k ) { return k.indexOf( DIR + "/" ) === 0; } ) )
         SCAN_CACHE.save();
 }
 
@@ -569,8 +632,26 @@ async function applyCache()
  * ID3v2 TAGS - a small Range read of the file's start, same trick Photos uses
  * for EXIF. Text frames only (TIT2/TPE1/TALB/TRCK); v2.2/2.3/2.4. Anything
  * that fails (not an mp3, no tag, a shape we don't parse) just keeps the
- * filename-derived guess - never throws.
+ * filename-derived guess.
+ *
+ * The first 64 KB hold the text frames of nearly every file. A frame that
+ * runs past what was read - a cover picture, most often - is stepped over:
+ * the read goes on AFTER it, up to the size the tag's header declares, so the
+ * title / artist behind a big cover still come in and the picture itself is
+ * never downloaded. A few reads per file at most.
  * -------------------------------------------------------------------------*/
+var ID3_CHUNK = 65536;
+
+// `len` bytes of the file at `url` from byte `off`. Only a real partial answer
+// (206) will do past the start: a server that sent the whole file instead
+// would put every later byte at the wrong offset.
+async function rangeRead( url, off, len )
+{
+    var r = await fetch( url, { credentials: "same-origin", headers: { Range: "bytes=" + off + "-" + ( off + len - 1 ) } } );
+    if( r.status !== 206 && ! ( r.ok && off === 0 ) ) throw new Error( "HTTP " + r.status );
+    return new Uint8Array( await r.arrayBuffer() );
+}
+
 function syncSafeOrPlain( b, off, syncsafe )
 {
     if( syncsafe )
@@ -602,35 +683,60 @@ function decodeId3Text( bytes )
     catch( e ) { return ""; }
 }
 
-function parseId3v2( bytes )
+// The song's tag, or null when it has none. Throws when the file cannot be read.
+async function readId3( url )
 {
-    if( bytes.length < 10 || bytes[ 0 ] !== 0x49 || bytes[ 1 ] !== 0x44 || bytes[ 2 ] !== 0x33 ) return null;
-    var verMajor = bytes[ 3 ];
-    var declaredSize = syncSafeOrPlain( bytes, 6, true ) + 10;
-    var end = Math.min( declaredSize, bytes.length );
-    var idLen = verMajor === 2 ? 3 : 4;
+    var buf  = await rangeRead( url, 0, ID3_CHUNK );    // buf holds the file's bytes from `base` on
+    var base = 0, reads = 1;
+    if( buf.length < 10 || buf[ 0 ] !== 0x49 || buf[ 1 ] !== 0x44 || buf[ 2 ] !== 0x33 ) return null;
+    var verMajor  = buf[ 3 ];
+    var end       = syncSafeOrPlain( buf, 6, true ) + 10;     // the whole tag, its header included
+    var idLen     = verMajor === 2 ? 3 : 4;
     var headerLen = verMajor === 2 ? 6 : 10;
-    var frames = {};
+    var want      = verMajor === 2 ? [ "TT2", "TP1", "TAL", "TRK" ] : [ "TIT2", "TPE1", "TALB", "TRCK" ];
+    var frames = {}, found = 0;
     var pos = 10;
 
-    while( pos + idLen + ( verMajor === 2 ? 3 : 4 ) <= end )
+    // v2.3 / v2.4 may put an extended header first (flag 0x40): step over it.
+    // Its size counts itself in v2.4, not in v2.3.
+    if( verMajor >= 3 && ( buf[ 5 ] & 0x40 ) && buf.length >= 14 )
+        pos = verMajor === 4 ? 10 + syncSafeOrPlain( buf, 10, true ) : 14 + syncSafeOrPlain( buf, 10, false );
+
+    // Bytes [off, off + len) at hand, reading the stretch of the file that
+    // holds them when they are not. False when that fails or takes too many reads.
+    async function have( off, len )
     {
-        var id = "";
+        if( off >= base && off + len <= base + buf.length ) return true;
+        if( ++reads > 5 ) return false;
+        try { buf = await rangeRead( url, off, Math.max( ID3_CHUNK, len ) ); base = off; }
+        catch( e ) { return false; }
+        return off + len <= base + buf.length;
+    }
+
+    while( found < want.length && pos + headerLen <= end )
+    {
+        if( ! await have( pos, headerLen ) ) break;
+        var o = pos - base, id = "";
         for( var i = 0; i < idLen; i++ )
         {
-            var c = bytes[ pos + i ];
+            var c = buf[ o + i ];
             if( c === 0 ) break;
             id += String.fromCharCode( c );
         }
-        if( ! id ) break;
+        if( ! id ) break;                               // the padding: no more frames
 
         var size;
-        if( verMajor === 2 ) size = ( bytes[ pos + 3 ] << 16 ) | ( bytes[ pos + 4 ] << 8 ) | bytes[ pos + 5 ];
-        else                 size = syncSafeOrPlain( bytes, pos + 4, verMajor === 4 );
+        if( verMajor === 2 ) size = ( buf[ o + 3 ] << 16 ) | ( buf[ o + 4 ] << 8 ) | buf[ o + 5 ];
+        else                 size = syncSafeOrPlain( buf, o + 4, verMajor === 4 );
+        if( size <= 0 || pos + headerLen + size > end ) break;
 
-        if( size <= 0 || pos + headerLen + size > bytes.length ) break;
-        frames[ id ] = bytes.subarray( pos + headerLen, pos + headerLen + size );
-        pos += headerLen + size;
+        if( want.indexOf( id ) !== -1 && ! frames[ id ] )
+        {
+            if( ! await have( pos + headerLen, size ) ) break;
+            frames[ id ] = buf.slice( pos + headerLen - base, pos + headerLen + size - base );
+            found++;
+        }
+        pos += headerLen + size;                        // any other frame (a cover) is only stepped over
     }
 
     function text( v2, v3 ) { var d = frames[ verMajor === 2 ? v2 : v3 ]; return d ? decodeId3Text( d ) : ""; }
@@ -642,28 +748,33 @@ function parseId3v2( bytes )
     };
 }
 
-async function refineTags()
+// Tags read change only the rows of those songs: they are patched in place,
+// once per frame, and the library is re-sorted and drawn again once at the end
+// (a repaint per tag rebuilt the whole list hundreds of times).
+async function refineTags( gen )
 {
     var mp3s = st.songs.filter( function ( s ) { return extOf( s.path ) === "mp3" && ! s.tagRead; } );
     if( ! mp3s.length ) return;
-    var CONCURRENCY = 4, next = 0, dirty = false;
+    var CONCURRENCY = 4, next = 0, changed = new Set();
 
-    function scheduleRepaint()
+    function schedulePatch( song )
     {
-        if( dirty ) return;
-        dirty = true;
-        requestAnimationFrame( function () { dirty = false; renderLibrary(); renderQueueList(); } );
+        if( ! changed.size ) requestAnimationFrame( function ()
+        {
+            changed.forEach( patchSongRows );
+            changed.clear();
+        } );
+        changed.add( song );
     }
 
     async function worker()
     {
-        while( next < mp3s.length )
+        while( next < mp3s.length && gen === scanGen )
         {
             var song = mp3s[ next++ ];
             try
             {
-                var bytes = await GumApi.fetchBinary( GumApi.fileUrl( song.path ), { headers: { Range: "bytes=0-262143" } } );
-                var tag = parseId3v2( bytes );
+                var tag = await readId3( GumApi.fileUrl( song.path ) );
                 if( tag )
                 {
                     if( tag.title  ) song.title  = tag.title;
@@ -674,37 +785,73 @@ async function refineTags()
                 }
             }
             catch( e ) { /* keep the filename guess */ }
+            if( gen !== scanGen ) return;               // a Rescan replaced this pass
             song.tagRead = true;
-            SCAN_CACHE.set( song, {
+            cacheSet( song, {
                 tagRead: true, title: song.title, artist: song.artist,
                 album: song.album, track: song.track
             } );
-            scheduleRepaint();
+            schedulePatch( song );
         }
     }
     var workers = [];
     for( var i = 0; i < CONCURRENCY; i++ ) workers.push( worker() );
     await Promise.all( workers );
+    if( gen !== scanGen ) return;
+
+    cacheFlush();
+    // The tags may have moved songs to another artist / album / track number:
+    // one re-sort and one full draw now.
+    st.songs.sort( songCmp );
+    renderCollectionSummary();
+    renderLibrary();
+    renderQueueList();
+    updatePlayerBar();
+}
+
+// A song's tags came in: its rows (library and queue) and the player bar show
+// them, without rebuilding the lists.
+function patchSongRows( song )
+{
+    var sub = ( song.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + ( song.album || NayiveUI.t( 'music.unknownAlbum' ) );
+    $$( '.song-row[data-path="' + cssEsc( song.path ) + '"]' ).forEach( function ( row )
+    {
+        row.querySelector( ".song-title" ).textContent = song.title;
+        row.querySelector( ".song-sub" ).textContent   = sub;
+        row.querySelector( ".song-art" ).style.background = song.color;
+    } );
+    st.queue.forEach( function ( e, i )
+    {
+        if( e.song !== song ) return;
+        var row = $( '.queue-row[data-index="' + i + '"]' );
+        if( ! row ) return;
+        row.querySelector( ".queue-title" ).textContent = song.title;
+        row.querySelector( ".queue-sub" ).textContent   = song.artist || NayiveUI.t( 'music.unknownArtist' );
+        row.querySelector( ".queue-art" ).style.background = song.color;
+    } );
+    var cur = st.queue[ st.playingIndex ];
+    if( cur && cur.song === song ) updatePlayerBar();
 }
 
 // Real duration via a throwaway Audio() + preload=metadata (cheap: the server
 // supports Range, so the browser only pulls enough to read the header, not
 // the whole file). Small batches so a big folder doesn't open 200 connections
 // at once.
-async function loadDurations()
+async function loadDurations( gen )
 {
     var pending = st.songs.filter( function ( s ) { return s.duration == null; } );
     if( ! pending.length ) return;
     await NayiveMedia.pool( pending, 4, async function ( song )
     {
+        if( gen !== scanGen ) return;               // a Rescan replaced this pass
         var d = await NayiveMedia.probeDuration( "audio", GumApi.fileUrl( song.path ) );
-        if( d == null ) return;
+        if( d == null || gen !== scanGen ) return;
         song.duration = d;
-        SCAN_CACHE.set( song, { duration: d } );
+        cacheSet( song, { duration: d } );
         renderLibraryDuration( song );
         renderQueueDuration( song );
     } );
-    SCAN_CACHE.saveNow();       // final flush once everything is probed
+    if( gen === scanGen ) cacheFlush();         // final flush once everything is probed
 }
 
 /* ---------------------------------------------------------------------------
@@ -714,10 +861,11 @@ async function loadDurations()
  * -------------------------------------------------------------------------*/
 function albumKey( s ) { return ( s.artist || "" ) + "‡" + ( s.album || s.folder || "" ); }
 
-function computeAlbums()
+// `songs`: the songs to group (default: the whole library).
+function computeAlbums( songs )
 {
     var map = {};
-    st.songs.forEach( function ( s )
+    ( songs || st.songs ).forEach( function ( s )
     {
         var key = albumKey( s );
         if( ! map[ key ] ) map[ key ] = {
@@ -730,10 +878,10 @@ function computeAlbums()
         .sort( function ( a, b ) { return a.artist.localeCompare( b.artist, NayiveUI.lang() ) || a.title.localeCompare( b.title, NayiveUI.lang() ); } );
 }
 
-function computeArtists()
+function computeArtists( songs )
 {
     var map = {};
-    st.songs.forEach( function ( s )
+    ( songs || st.songs ).forEach( function ( s )
     {
         var name = s.artist || NayiveUI.t( 'music.unknownArtist' );
         if( ! map[ name ] ) map[ name ] = { name: name, songCount: 0, albums: {}, color: colorFor( name ) };
@@ -757,7 +905,7 @@ function songRowHtml( s )
 {
     var cur = st.queue[ st.playingIndex ];
     var playing = !! cur && cur.song === s;
-    return '<div class="song-row' + ( playing ? ' is-playing' : '' ) + '" draggable="true" data-path="' + esc( s.path ) + '">' +
+    return '<div class="card-row song-row' + ( playing ? ' is-playing' : '' ) + '" draggable="true" data-path="' + esc( s.path ) + '">' +
         '<span class="song-art" style="background:' + s.color + '">' + MUSIC_NOTE_SVG + '</span>' +
         '<span class="song-meta">' +
             '<div class="song-title">' + esc( s.title ) + '</div>' +
@@ -775,7 +923,7 @@ function songListHtml( list, windowed )
     if( ! list.length ) return '<div class="empty-hint"><p data-i18n="music.noMatch"></p></div>';
     if( windowed && list.length > listShown )
         return list.slice( 0, listShown ).map( songRowHtml ).join( "" ) +
-            '<button class="show-more" id="showMoreBtn">' +
+            '<button class="text-btn ghost show-more" id="showMoreBtn">' +
             esc( NayiveUI.tf( "music.showMore", { n: list.length - listShown } ) ) + '</button>';
     return list.map( songRowHtml ).join( "" );
 }
@@ -800,16 +948,19 @@ function renderLibrary()
     var host = $( "#libContent" );
     var html = "";
 
+    // The search box filters every view: the songs, and the albums / artists /
+    // folder songs made of the songs it matches.
+    var q = st.search.trim().toLowerCase();
+    var pool = ! q ? st.songs : st.songs.filter( function ( s )
+    { return ( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+
     if( st.filter === "songs" )
     {
-        var q = st.search.trim().toLowerCase();
-        var list = ! q ? st.songs : st.songs.filter( function ( s )
-        { return ( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
-        html = songListHtml( list, true );
+        html = songListHtml( pool, true );
     }
     else if( st.filter === "albums" )
     {
-        var albums = computeAlbums();
+        var albums = computeAlbums( pool );
         html += '<div class="album-grid">' + albums.map( function ( a )
         {
             var active = st.selectedAlbum === a.key;
@@ -821,14 +972,14 @@ function renderLibrary()
         if( st.selectedAlbum )
         {
             var picked = albums.filter( function ( a ) { return a.key === st.selectedAlbum; } )[ 0 ];
-            var songs = st.songs.filter( function ( s ) { return albumKey( s ) === st.selectedAlbum; } );
-            html += scopeBarHtml( picked ? picked.title + " · " + picked.artist : "" ) + songListHtml( songs );
+            var songs = pool.filter( function ( s ) { return albumKey( s ) === st.selectedAlbum; } );
+            html += scopeBarHtml( picked ? picked.title + " · " + picked.artist : "" ) + songListHtml( songs, true );
         }
         else html += '<div class="empty-hint">' + MUSIC_NOTE_SVG + '<p data-i18n="music.pickAlbum"></p></div>';
     }
     else if( st.filter === "artists" )
     {
-        var artists = computeArtists();
+        var artists = computeArtists( pool );
         html += '<div class="artist-grid">' + artists.map( function ( a )
         {
             var active = st.selectedArtist === a.name;
@@ -839,8 +990,8 @@ function renderLibrary()
         } ).join( "" ) + '</div>';
         if( st.selectedArtist )
         {
-            var songs2 = st.songs.filter( function ( s ) { return ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
-            html += scopeBarHtml( st.selectedArtist ) + songListHtml( songs2 );
+            var songs2 = pool.filter( function ( s ) { return ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) === st.selectedArtist; } );
+            html += scopeBarHtml( st.selectedArtist ) + songListHtml( songs2, true );
         }
         else html += '<div class="empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><p data-i18n="music.pickArtist"></p></div>';
     }
@@ -850,8 +1001,8 @@ function renderLibrary()
         if( st.selectedFolder )
         {
             var prefix = st.selectedFolder;
-            var songs3 = st.songs.filter( function ( s ) { return s.path.slice( 0, prefix.length + 1 ) === prefix + "/"; } );
-            html += scopeBarHtml( prefix.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) ) + songListHtml( songs3 );
+            var songs3 = pool.filter( function ( s ) { return s.path.slice( 0, prefix.length + 1 ) === prefix + "/"; } );
+            html += scopeBarHtml( prefix.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) ) + songListHtml( songs3, true );
         }
         else html += '<div class="empty-hint">' + FOLDER_SVG + '<p data-i18n="music.pickFolder"></p></div>';
     }
@@ -877,6 +1028,12 @@ function wireLibraryRows()
             var song = findSong( row.getAttribute( "data-path" ) );
             st.dragPayload = { type: "library", song: song };
         } );
+        // The row's body plays it (its "+" only queues it).
+        row.addEventListener( "click", function ( e )
+        {
+            if( e.target.closest( "[data-add]" ) ) return;
+            playSong( findSong( row.getAttribute( "data-path" ) ) );
+        } );
     } );
     $$( "#libContent [data-add]" ).forEach( function ( btn )
     {
@@ -892,6 +1049,7 @@ function wireLibraryRows()
         {
             var key = btn.getAttribute( "data-album" );
             st.selectedAlbum = st.selectedAlbum === key ? null : key;
+            listShown = LIST_PAGE;
             renderLibrary();
         } );
     } );
@@ -901,6 +1059,7 @@ function wireLibraryRows()
         {
             var name = btn.getAttribute( "data-artist" );
             st.selectedArtist = st.selectedArtist === name ? null : name;
+            listShown = LIST_PAGE;
             renderLibrary();
         } );
     } );
@@ -910,6 +1069,7 @@ function wireLibraryRows()
         {
             var path = btn.getAttribute( "data-folder" );
             st.selectedFolder = st.selectedFolder === path ? null : path;
+            listShown = LIST_PAGE;
             renderLibrary();
         } );
     } );
@@ -996,6 +1156,12 @@ function wireQueueRows()
     {
         var index = parseInt( row.getAttribute( "data-index" ), 10 );
         row.addEventListener( "dragstart", function () { st.dragPayload = { type: "queue", index: index }; } );
+        // A tap on the row plays it (its x only takes it out).
+        row.addEventListener( "click", function ( e )
+        {
+            if( e.target.closest( "[data-remove], [data-play]" ) ) return;
+            playIndex( index );
+        } );
         row.addEventListener( "dragover", function ( e ) { e.preventDefault(); row.classList.add( "drag-over" ); } );
         row.addEventListener( "dragleave", function () { row.classList.remove( "drag-over" ); } );
         row.addEventListener( "drop", function ( e )
@@ -1026,6 +1192,17 @@ function wireQueueRows()
 /* ---------------------------------------------------------------------------
  * QUEUE LOGIC
  * -------------------------------------------------------------------------*/
+// A song tapped in the library plays now: from its place in the queue when it
+// is there already, else added at the end first.
+function playSong( song )
+{
+    if( ! song ) return;
+    var at = -1;
+    st.queue.forEach( function ( e, i ) { if( at === -1 && e.song === song ) at = i; } );
+    if( at === -1 ) { st.queue.push( { song: song } ); at = st.queue.length - 1; }
+    playIndex( at );
+}
+
 function addToQueue( song )
 {
     if( ! song ) return;
@@ -1167,13 +1344,64 @@ function advance( dir )
 {
     if( ! st.queue.length ) return;
     var idx;
-    if( st.shuffle )
-    {
-        idx = st.queue.length === 1 ? 0 : Math.floor( Math.random() * st.queue.length );
-        while( st.queue.length > 1 && idx === st.playingIndex ) idx = Math.floor( Math.random() * st.queue.length );
-    }
+    if( st.shuffle ) idx = st.queue.indexOf( shuffleStep( dir ) );
     else idx = ( st.playingIndex + dir + st.queue.length ) % st.queue.length;
     playIndex( idx );
+}
+
+// The song that just ended (or failed) was the queue's last: in order, the
+// last row; shuffled, every other song has played this round.
+function atQueueEnd()
+{
+    if( ! st.queue.length ) return true;
+    var cur = st.queue[ st.playingIndex ];
+    if( ! st.shuffle ) return st.playingIndex >= st.queue.length - 1;
+    return st.queue.every( function ( e ) { return e === cur || st.played.has( e ); } );
+}
+
+// What happens on its own after a song: the next one - but past the last,
+// only with Repeat on. False when the queue stopped there.
+function autoNext()
+{
+    if( ! st.repeat && atQueueEnd() ) return false;
+    advance( 1 );
+    return true;
+}
+
+function setRepeat( on )
+{
+    st.repeat = !! on;
+    $( "#repeatBtn" ).classList.toggle( "is-active", st.repeat );
+    $( "#repeatBtn" ).setAttribute( "aria-pressed", st.repeat ? "true" : "false" );
+    try { localStorage.setItem( "music-repeat", st.repeat ? "1" : "0" ); } catch( e ) {}
+}
+
+// Shuffle: "next" draws from the songs not played yet this round, so none
+// comes back before all have played (then a new round starts); "previous"
+// goes back through the songs that did play, not to another random one.
+function shuffleStep( dir )
+{
+    var cur = st.queue[ st.playingIndex ] || null;
+    var entry = null;
+    if( dir < 0 )
+    {
+        while( st.history.length && ! entry )
+        {
+            entry = st.history.pop();
+            if( st.queue.indexOf( entry ) === -1 ) entry = null;   // removed from the queue since
+        }
+        return entry || cur || st.queue[ 0 ];                       // nothing before it: it starts again
+    }
+    if( cur ) { st.history.push( cur ); st.played.add( cur ); }
+    var left = st.queue.filter( function ( e ) { return e !== cur && ! st.played.has( e ); } );
+    if( ! left.length )
+    {
+        st.played = new Set( cur ? [ cur ] : [] );
+        left = st.queue.filter( function ( e ) { return e !== cur; } );
+    }
+    entry = left.length ? left[ Math.floor( Math.random() * left.length ) ] : cur;
+    st.played.add( entry );
+    return entry;
 }
 
 function updatePlayerBar()
@@ -1273,10 +1501,10 @@ function renderLoadList()
     if( ! st.playlists.length )
     {
         host.innerHTML = '<p class="dialog-text" data-i18n="music.noLists"></p>';
-        $( "#loadActions" ).hidden = false;
+        setLoadActions( false );
         return;
     }
-    $( "#loadActions" ).hidden = true;
+    setLoadActions( true );
     host.innerHTML = '<div class="saved-list">' + st.playlists.map( function ( pl )
     {
         return '<div class="saved-row">' +
@@ -1292,6 +1520,14 @@ function renderLoadList()
     { btn.addEventListener( "click", function () { loadPlaylist( btn.getAttribute( "data-load" ) ); } ); } );
     $$( "#loadList [data-del]" ).forEach( function ( btn )
     { btn.addEventListener( "click", function () { deletePlaylist( btn.getAttribute( "data-del" ) ); } ); } );
+}
+
+// #loadActions holds a lone close button, which shared/ui.js moves to the
+// sheet's corner, removing the row: then there is nothing left to hide.
+function setLoadActions( hidden )
+{
+    var row = $( "#loadActions" );
+    if( row ) row.hidden = hidden;
 }
 
 function loadPlaylist( id )
@@ -1367,6 +1603,33 @@ function wireResizer()
         document.addEventListener( "mousemove", onMove );
         document.addEventListener( "mouseup", onUp );
     } );
+    resizer.addEventListener( "dblclick", function ()
+    {
+        st.queueWidth = 360;
+        pane.style.width = pane.style.flexBasis = "";
+    } );
+}
+
+/* ---------------------------------------------------------------------------
+ * QUEUE ON A PHONE - at <= 760 px there is no room for the queue pane, so
+ * #queueBtn opens it in #queueBackdrop's sheet. It is the same node, moved in
+ * (and back out when the screen grows wide), so every render and handler
+ * above keeps working unchanged.
+ * -------------------------------------------------------------------------*/
+var PHONE = window.matchMedia( "(max-width: 760px)" );
+
+function openQueueSheet()
+{
+    var sheet = $( "#queueSheet" );
+    sheet.insertBefore( $( "#queuePane" ), sheet.firstChild );
+    NayiveUI.open( "queueBackdrop" );
+}
+
+function dockQueuePane()
+{
+    var pane = $( "#queuePane" );
+    NayiveUI.close( "queueBackdrop" );
+    if( pane.parentNode !== $( "#mainRow" ) ) $( "#paneResizer" ).after( pane );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1403,7 +1666,18 @@ function wireStaticUI()
     $( "#seqBtn" ).addEventListener( "click", function ()
     { st.shuffle = false; $( "#seqBtn" ).classList.add( "is-active" ); $( "#shuffleBtn" ).classList.remove( "is-active" ); } );
     $( "#shuffleBtn" ).addEventListener( "click", function ()
-    { st.shuffle = true; $( "#shuffleBtn" ).classList.add( "is-active" ); $( "#seqBtn" ).classList.remove( "is-active" ); } );
+    {
+        if( ! st.shuffle ) { st.played = new Set(); st.history = []; }   // a fresh round
+        st.shuffle = true; $( "#shuffleBtn" ).classList.add( "is-active" ); $( "#seqBtn" ).classList.remove( "is-active" );
+    } );
+
+    var rep = null;
+    try { rep = localStorage.getItem( "music-repeat" ); } catch( e ) {}
+    setRepeat( rep === "1" );
+    $( "#repeatBtn" ).addEventListener( "click", function () { setRepeat( ! st.repeat ); } );
+
+    $( "#queueBtn" ).addEventListener( "click", openQueueSheet );
+    PHONE.addEventListener( "change", function () { if( ! PHONE.matches ) dockQueuePane(); } );
 
     // At once, no question: the Undo brings the queue back.
     $( "#clearQueueBtn" ).addEventListener( "click", function ()
@@ -1427,6 +1701,9 @@ function wireStaticUI()
     $( "#playBtn" ).addEventListener( "click", togglePlay );
 
     $( "#queueList" ).addEventListener( "dragover", function ( e ) { e.preventDefault(); } );
+    // The empty queue has no rows or list to drop on: the pane itself takes it.
+    // (A drop on the list bubbles here too; the first handler used the payload.)
+    $( "#queueList" ).addEventListener( "drop", function ( e ) { e.preventDefault(); handleQueueDrop( st.queue.length ); } );
 
     var seekRange = $( "#seekRange" ), seeking = false;
     seekRange.addEventListener( "input", function () { seeking = true; $( "#elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
@@ -1450,7 +1727,21 @@ function wireStaticUI()
     } );
     audio.addEventListener( "play",  function () { st.isPlaying = true;  setPlayIcon( true ); } );
     audio.addEventListener( "pause", function () { st.isPlaying = false; setPlayIcon( false ); } );
-    audio.addEventListener( "ended", function () { advance( 1 ); } );
+    audio.addEventListener( "ended", function () { autoNext(); } );
+
+    // A song that cannot play (gone since the scan, a format the browser lacks)
+    // says so and the queue goes on - it must not just stop, on a locked phone
+    // least of all. A whole queue that fails in a row stops.
+    var failedInRow = 0;
+    audio.addEventListener( "playing", function () { failedInRow = 0; } );
+    audio.addEventListener( "error", function ()
+    {
+        var entry = st.queue[ st.playingIndex ];
+        if( ! entry || ! audio.getAttribute( "src" ) ) return;
+        NayiveUI.toast( NayiveUI.tf( 'music.cantPlay', { name: entry.song.title } ) );
+        if( ++failedInRow >= st.queue.length ) { failedInRow = 0; return; }
+        if( ! autoNext() ) failedInRow = 0;
+    } );
 
     wireResizer();
 

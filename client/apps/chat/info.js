@@ -70,17 +70,21 @@
         // The owner changes a person's or a group's picture by tapping the
         // circle, and the name by tapping the name. (Search and mute live on
         // the chat's own bar - no second copy here.)
+        // Another Nayive user (in my home or theirs): the picture is my own
+        // for that account, so I change it from either side.
         var editable = owner && ( ct || c.kind === "g" );
+        var acct = S.mode === "owner" && c.kind === "d" ? ( ct ? ct.user : c.via ) || "" : "";
         var face = C.ringIfOnline( C.avatar( c.id, c.name, "xl" ), c.id );
         var name = h( "b", { text: c.name } );
-        if( editable )
+        if( editable || acct )
         {
             var cam = h( "span", { class: "cam" }, C.ic( "camera" ) );
             face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
-                                  on: { click: function () { pickPhoto( c, ct ); } } }, face, cam );
+                                  on: { click: function () { pickPhoto( c, ct, acct ); } } }, face, cam );
+        }
+        if( editable )
             name = h( "button", { class: "name-btn", attrs: { type: "button", title: T( "chat.rename" ) },
                                   on: { click: function () { rename( c ); } } }, c.name );
-        }
         wallEl.appendChild( h( "div", { class: "info-top" }, face, name, sub ? h( "small", { text: sub } ) : null ) );
 
         // Auto-delete, in words (the list's filters row shows it as a clock + days).
@@ -359,19 +363,20 @@
         C.loadSummary().catch( function () {} );
     }
 
-    // A new picture: the camera or the gallery, shrunk here to 512 px.
-    // From this device or from Nayive (media.js pickImage).
-    async function pickPhoto( c, ct )
+    // A new picture: from this device or from Nayive (media.js pickImage),
+    // made a JPEG of 300 px at most. A Nayive user's goes to my picture for
+    // that account; a person picked from Contacts gives it to their card too.
+    async function pickPhoto( c, ct, acct )
     {
         var file = await C.pickImage( T( "chat.changePhoto" ) );
         if( ! file ) return;
         try
         {
-            var blob = await NayivePhoto.shrinkToJpeg( file, { maxW: 512, maxH: 512, quality: 0.85 } );
-            var path = ( ct ? "contacts/" + ct.id : "groups/" + c.id.slice( 2 ) ) + "/photo";
-            var res = await fetch( S.api + "/" + path, { method: "PUT", credentials: "same-origin",
-                                                        headers: { "Content-Type": "image/jpeg" }, body: blob } );
-            if( ! res.ok ) throw { status: res.status };
+            var blob = await C.facePicture( file );
+            var path = acct ? "users/" + encodeURIComponent( acct ) + "/photo"
+                     : ( ct ? "contacts/" + ct.id : "groups/" + c.id.slice( 2 ) ) + "/photo";
+            await C.putPicture( path, blob );
+            if( ct && ct.card && ! acct ) await C.cardPicture( ct.card, blob );
             await C.loadSummary();
         }
         catch( e ) { C.fail( e ); }

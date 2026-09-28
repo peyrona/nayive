@@ -67,11 +67,12 @@ chmod +x "$STAGE/install.sh" "$STAGE/$GOSRC/nayive"
 # Drop things that must not ship:
 #  - editor / OS cruft
 #  - per-user data written live on a running server (never in a fresh install)
-#  - .bak snapshot folders
+#  - every dot path, at any depth (.bak snapshots, write/lib/.docx-editor-prev/):
+#    zip's -x '.*' below matches only the top level
 find "$STAGE" \( -name '*~' -o -name '*.swp' -o -name '*.swo' -o -name '.DS_Store' \) -delete
 find "$STAGE/$SRC/apps" \( -name 'calendar.ics' -o -name 'contacts.vcf' \
         -o -name 'contacts-meta.json' -o -name 'tasks.json' \) -delete
-find "$STAGE" -type d -name '.bak' -exec rm -rf {} + 2>/dev/null || true
+find "$STAGE" -mindepth 1 -name '.*' -prune -exec rm -rf {} +
 OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 rm -f "$OUT_ABS"
 ( cd "$STAGE" && zip -qr "$OUT_ABS" . -x '.*' )

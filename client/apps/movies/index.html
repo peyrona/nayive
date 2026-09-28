@@ -54,6 +54,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script>
@@ -134,9 +135,6 @@
     .poster-scrim{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                    background: color-mix(in srgb, #000 44%, transparent); opacity: 0; transition: opacity var(--tr-fast); }
     .poster-card:hover .poster-scrim { opacity: 1; }
-    .poster-play { width: 42px; height: 42px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
-                   background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; }
-    .poster-play svg { width: 19px; height: 19px; }
     .poster-seen { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%;
                    background: color-mix(in srgb, var(--accent) 88%, #000); color: var(--on-accent);
                    display: flex; align-items: center; justify-content: center; }
@@ -165,6 +163,10 @@
     /* The folder tree, the scope chip and the empty hint are the shared MEDIA
        VIEWER block in shared/app.css; only the bar's own margin is Movies'. */
     .scope-bar  { display: flex; align-items: center; margin: 18px 0 14px; }
+    /* A film's detail is a sub-view: "←" before its title is the way out. */
+    .detail-back       { gap: 8px; margin-top: 0; }
+    .detail-back-title { min-width: 0; font-size: 0.92rem; font-weight: 600; color: var(--text);
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* movie detail */
     .movie-detail  { display: flex; gap: 22px; padding: 20px; background: var(--card2);
@@ -202,7 +204,9 @@
                      max-width: 60%; font-size: 0.74rem; color: rgba(244,244,246,.72); font-family: var(--font-mono);
                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .stage-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
-    .video-stage:fullscreen .stage-badge, .video-stage:fullscreen .stage-btn { display: none; }
+    /* Full screen keeps only its own exit (.stage-full); the video's native
+       controls (switched on then, see fullscreenchange) bring seek and subtitles. */
+    .video-stage:fullscreen .stage-badge, .video-stage:fullscreen .stage-collapse { display: none; }
 
     /* ---- player bar: the shared MEDIA VIEWER block (shared/app.css). What is
        Movies' own: the 34x50 poster (and the column width it sets), the "skip
@@ -294,7 +298,7 @@
 
             <div class="video-stage" id="videoStage" hidden>
                 <div class="stage-frame">
-                    <video id="stageVideo" playsinline></video>
+                    <video id="stageVideo" playsinline controlslist="nofullscreen"></video>
                     <div class="stage-overlay">
                         <button class="stage-play" id="stagePlayBtn" data-i18n-attr="title:media.play, aria-label:media.play">
                             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>
@@ -400,6 +404,7 @@ var DIR    = ( function () { var d = PARAMS.get( "dir" ); return d ? d.replace( 
 
 var PROGRESS_PATH = "data/movies/progress.json";
 var POSTERS_PATH  = "data/movies/posters.json";      // { key, items: { "<title>|<year>": {...} } }
+var SCAN_PATH     = "data/movies/scan-cache.json";   // { "<path>": { size, mtime, duration } }
 var TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500";
 var VIDEO_EXT = [ "mp4", "m4v", "webm", "ogv", "mov", "mkv" ];
 var IMG_EXT   = [ "jpg", "jpeg", "png", "webp", "avif", "gif" ];
@@ -501,16 +506,25 @@ var st = {
     progSaving: Promise.resolve(),             // saves run one at a time (each re-reads the file)
     lastRec: null,                             // "path|second" last recorded: a paused film adds nothing
     posters: { key: "", items: {} },           // data/movies/posters.json, see fetchPosters()
+    postersBlocked: false,                     // posters.json could not be read: it is never written
     saveTimer: null,
     trackUrl: null                             // active blob: URL for the subtitle <track>
 };
 
 var video = $( "#stageVideo" );
 
+// Each film's length costs a probe (a network hit, and a stalled file holds
+// the others up), so it is probed once and remembered in SCAN_PATH next to the
+// file's size + mtime (shared/media.js scanCache): later opens take it from
+// there while both still match.
+var SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
+
 /* ---------------------------------------------------------------------------
  * SCAN
  * -------------------------------------------------------------------------*/
-function pickPoster( movie, byDir )
+// `alone`: the film is the only one in its folder. Only then is a folder.jpg /
+// poster.jpg its poster - in a folder of several films it belongs to none.
+function pickPoster( movie, byDir, alone )
 {
     var list = byDir[ movie.dir ] || [];
     var wantBase = norm( stripExt( movie.name ) );
@@ -519,12 +533,14 @@ function pickPoster( movie, byDir )
     {
         var b = norm( stripExt( list[ i ].name ) );
         if( b === wantBase ) same = list[ i ].path;
-        else if( POSTER_NAMES.indexOf( stripExt( list[ i ].name ).toLowerCase() ) !== -1 ) named = named || list[ i ].path;
+        else if( alone && POSTER_NAMES.indexOf( stripExt( list[ i ].name ).toLowerCase() ) !== -1 ) named = named || list[ i ].path;
     }
     return same || named || null;
 }
 
-function pickSubtitle( movie, byDir )
+// A subtitle file named after another film (or after none) is only taken when
+// the film is `alone` in its folder - never every film's in a shared folder.
+function pickSubtitle( movie, byDir, alone )
 {
     var list = byDir[ movie.dir ] || [];
     var wantBase = norm( stripExt( movie.name ) );
@@ -537,6 +553,7 @@ function pickSubtitle( movie, byDir )
         // the first dot after the film's base name still starts with wantBase.
         var sb = norm( stripExt( s.name ).replace( /\.[a-z]{2,3}$/i, "" ) );
         var matches = sb === wantBase || norm( stripExt( s.name ) ) === wantBase;
+        if( ! matches && ! alone ) continue;
         var rank = ( matches ? 0 : 2 ) + ( kind === "vtt" ? 0 : 1 );
         if( ! best || rank < best.rank ) best = { path: s.path, kind: kind, rank: rank };
     }
@@ -554,7 +571,8 @@ async function scan()
 
     var videos = files.filter( function ( f ) { return VIDEO_EXT.indexOf( extOf( f.path ) ) !== -1; } );
 
-    var imgByDir = {}, subByDir = {}, txtByDir = {};
+    var imgByDir = {}, subByDir = {}, txtByDir = {}, vidsInDir = {};
+    videos.forEach( function ( f ) { var d = dirOf( f.path ); vidsInDir[ d ] = ( vidsInDir[ d ] || 0 ) + 1; } );
     files.forEach( function ( f )
     {
         var e = extOf( f.path ), d = dirOf( f.path );
@@ -567,13 +585,13 @@ async function scan()
     st.movies = videos.map( function ( f )
     {
         var mv = deriveMovie( f );
-        mv.poster = pickPoster( mv, imgByDir );
+        mv.poster = pickPoster( mv, imgByDir, vidsInDir[ mv.dir ] === 1 );
         if( ! mv.poster )                       // no sibling image - use a TMDB one we fetched before
         {
-            var cp = st.posters.items[ posterKey( mv ) ];
+            var cp = posterEntry( mv );
             if( cp && cp.poster ) mv.poster = cp.poster;
         }
-        mv.subtitle = pickSubtitle( mv, subByDir );
+        mv.subtitle = pickSubtitle( mv, subByDir, vidsInDir[ mv.dir ] === 1 );
         var txts = txtByDir[ mv.dir ] || [];
         for( var i = 0; i < txts.length; i++ )
             if( norm( stripExt( txts[ i ].name ) ) === norm( stripExt( mv.name ) ) ) mv.synopsis = txts[ i ].path;
@@ -587,23 +605,46 @@ async function scan()
                a.title.localeCompare( b.title, NayiveUI.lang() );
     } );
 
+    await applyDurations();      // lengths probed on an earlier open
+
     loadSynopses();
     renderCollectionSummary();
     renderLibrary();
     loadDurations();
 }
 
+async function applyDurations()
+{
+    await SCAN_CACHE.load();
+    st.movies.forEach( function ( mv )
+    {
+        var hit = SCAN_CACHE.hit( mv );
+        if( hit && hit.duration != null ) mv.duration = hit.duration;
+    } );
+    // A film gone from the folder leaves a dead entry. Only entries under this
+    // folder can be judged from its listing, and never in a cache that could
+    // not be read (its empty map would be written over the real one).
+    if( SCAN_CACHE.loaded &&
+        SCAN_CACHE.prune( new Set( st.movies.map( function ( mv ) { return mv.path; } ) ),
+                          function ( k ) { return k.indexOf( DIR + "/" ) === 0; } ) )
+        SCAN_CACHE.save();
+}
+
 /* Real duration via a throwaway <video> + preload=metadata (cheap: the server
  * supports Range, so the browser only pulls the header). Small batches. */
 async function loadDurations()
 {
-    await NayiveMedia.pool( st.movies, 2, async function ( mv )
+    var pending = st.movies.filter( function ( mv ) { return mv.duration == null; } );
+    var probed  = false;
+    await NayiveMedia.pool( pending, 2, async function ( mv )
     {
         var d = await NayiveMedia.probeDuration( "video", GumApi.fileUrl( mv.path ) );
         if( d == null ) return;
         mv.duration = d;
+        if( SCAN_CACHE.loaded ) { SCAN_CACHE.set( mv, { duration: d } ); probed = true; }
         renderRuntime( mv );
     } );
+    if( probed ) SCAN_CACHE.saveNow();
     renderCollectionSummary();     // now the "N h en total" is known
 }
 
@@ -646,11 +687,30 @@ async function loadSynopses()
  * -------------------------------------------------------------------------*/
 function posterKey( mv ) { return norm( mv.title ) + "|" + ( mv.year || "" ); }
 
+// posters.json written before norm() kept every script's letters holds its
+// entries under the old ASCII-only key: still found there. Not when that old
+// title part is empty - every non-Latin film of a year shared that one key.
+function oldPosterKey( mv )
+{
+    var t = String( mv.title || "" ).toLowerCase().replace( /[^a-z0-9]+/g, "" );
+    return t ? t + "|" + ( mv.year || "" ) : "";
+}
+function posterEntry( mv )
+{
+    var items = st.posters.items;
+    var hit = items[ posterKey( mv ) ];
+    if( hit ) return hit;
+    var old = oldPosterKey( mv );
+    return old && old !== posterKey( mv ) ? items[ old ] : undefined;
+}
+
 function posterFileName( mv )
 {
     return ( norm( mv.title ) || "film" ).slice( 0, 60 ) + "-" + ( mv.year || "x" );
 }
 
+// Only a missing file (404) is "no posters yet". Any other failure leaves the
+// map empty and blocked: a save would put this empty map over all of them.
 async function loadPosters()
 {
     try
@@ -660,11 +720,25 @@ async function loadPosters()
             key:   raw && typeof raw.key === "string" ? raw.key : "",
             items: raw && raw.items && typeof raw.items === "object" ? raw.items : {}
         };
+        st.postersBlocked = false;
     }
-    catch( e ) { st.posters = { key: "", items: {} }; }
+    catch( e ) { st.posters = { key: "", items: {} }; st.postersBlocked = e instanceof SyntaxError ? "bad" : "unread"; }
 }
 
-function savePosters() { return GumApi.writeJson( POSTERS_PATH, st.posters ).catch( function () {} ); }
+// A blocked map is read again first; true when posters.json may be written.
+// It says why when it still cannot.
+async function postersReady()
+{
+    if( st.postersBlocked ) await loadPosters();
+    if( st.postersBlocked ) NayiveUI.toast( NayiveUI.t( st.postersBlocked === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+    return ! st.postersBlocked;
+}
+
+function savePosters()
+{
+    if( st.postersBlocked ) return Promise.resolve();
+    return GumApi.writeJson( POSTERS_PATH, st.posters ).catch( function () {} );
+}
 
 function openTmdbKeySheet()
 {
@@ -675,10 +749,11 @@ function openTmdbKeySheet()
 
 async function fetchPosters()
 {
+    if( ! await postersReady() ) return;
     if( ! st.posters.key ) { openTmdbKeySheet(); return; }
 
     var todo = st.movies.filter( function ( mv )
-    { return ! mv.poster && ! st.posters.items[ posterKey( mv ) ]; } );
+    { return ! mv.poster && ! posterEntry( mv ); } );
 
     if( ! todo.length ) { NayiveUI.toast( NayiveUI.t( 'movies.allHavePosters' ) ); return; }
 
@@ -701,6 +776,9 @@ async function fetchPosters()
                 openTmdbKeySheet();
                 return;
             }
+            // 429 (too many requests), a 5xx: no answer, so nothing is stored -
+            // "nothing there" would never be asked again.
+            if( ! res.ok ) throw new Error( "HTTP " + res.status );
             var j    = await res.json();
             var hit  = ( j.results || [] ).filter( function ( r ) { return r.poster_path; } )[ 0 ];
             if( ! hit ) { st.posters.items[ key ] = { tmdb: null }; miss++; }
@@ -907,6 +985,7 @@ var GENRE_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 var PLAY_ICON   = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>';
 var CHECK_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
 var X_ICON      = NayiveMedia.ICONS.x;
+var BACK_ICON   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
 var SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
 
 function setLibMsg( text )
@@ -931,10 +1010,12 @@ function setCrumb() { if( DIR ) NayiveMedia.setCrumb( NayiveMedia.dirLabel( DIR 
 // we downloaded from TMDB) or - when the download was blocked - a full TMDB URL.
 function posterUrl( p ) { return /^https?:\/\//i.test( p ) ? p : GumApi.fileUrl( p ); }
 
+// cssUrl() writes url("..."): its quotes are escaped here, or the first one
+// ends the style attribute and no poster ever shows.
 function artStyle( color, poster )
 {
     return poster
-        ? 'style="background-color:' + color + ';background-image:' + cssUrl( posterUrl( poster ) ) + '"'
+        ? 'style="' + esc( 'background-color:' + color + ';background-image:' + cssUrl( posterUrl( poster ) ) ) + '"'
         : 'style="background:' + color + '"';
 }
 
@@ -950,7 +1031,7 @@ function posterCardHtml( mv )
         '<span class="poster-art" ' + artStyle( mv.color, mv.poster ) + '>' +
             ( mv.poster ? '' : FILM_ICON ) +
             ( isWatched( mv ) ? '<span class="poster-seen">' + CHECK_ICON + '</span>' : '' ) +
-            '<span class="poster-scrim"><button class="poster-play" data-play="' + esc( mv.path ) + '" data-i18n-attr="title:movies.watchNow, aria-label:movies.watchNow">' + PLAY_ICON + '</button></span>' +
+            '<span class="poster-scrim"><button class="transport-btn play-btn" data-play="' + esc( mv.path ) + '" data-i18n-attr="title:movies.watchNow, aria-label:movies.watchNow">' + PLAY_ICON + '</button></span>' +
             ( pct ? '<span class="poster-bar"><span style="width:' + pct + '%"></span></span>' : '' ) +
         '</span>' +
         '<span class="poster-body">' +
@@ -980,7 +1061,11 @@ function movieDetailHtml( mv )
     if( mv.duration ) tags.push( '<span class="movie-tag">' + esc( fmtRuntime( mv.duration ) ) + '</span>' );
     if( isWatched( mv ) ) tags.push( '<span class="movie-tag seen" data-i18n="movies.watched"></span>' );
 
-    return scopeBarHtml( mv.title + ( mv.year ? " (" + mv.year + ")" : "" ), NayiveUI.t( 'movies.backToAll' ) ) +
+    // A sub-view: its way out is a "←" before the title (#clearScopeBtn, wired
+    // in wireLibrary), never an ×.
+    var back = esc( NayiveUI.t( 'movies.backToAll' ) );
+    return '<div class="scope-bar detail-back"><button class="icon-btn" id="clearScopeBtn" type="button" title="' + back + '" aria-label="' + back + '">' + BACK_ICON + '</button>' +
+        '<span class="detail-back-title">' + esc( mv.title + ( mv.year ? " (" + mv.year + ")" : "" ) ) + '</span></div>' +
         '<div class="movie-detail">' +
             '<span class="movie-poster" ' + artStyle( mv.color, mv.poster ) + '>' + ( mv.poster ? '' : FILM_ICON ) + '</span>' +
             '<div class="movie-info">' +
@@ -1221,7 +1306,7 @@ function updatePlayerBar()
     $( "#playerTitle" ).textContent = mv ? mv.title : NayiveUI.t( 'movies.nothingPlaying' );
     $( "#playerSub" ).textContent   = mv ? ( ( mv.year ? mv.year + " · " : "" ) + genreName( mv ) ) : NayiveUI.t( 'movies.pickMovie' );
     $( "#playerArt" ).style.backgroundColor = mv ? mv.color : "#3A3C42";
-    $( "#playerArt" ).style.backgroundImage = mv && mv.poster ? cssUrl( GumApi.fileUrl( mv.poster ) ) : "none";
+    $( "#playerArt" ).style.backgroundImage = mv && mv.poster ? cssUrl( posterUrl( mv.poster ) ) : "none";
 
     var has = !! mv;
     $( "#back10Btn" ).disabled = ! has;
@@ -1259,12 +1344,26 @@ function srtToVtt( srt )
         .trim() + "\n";
 }
 
+// Subtitle files come in UTF-8, UTF-16 (with its BOM) or - from older
+// Windows tools - Windows-1252: a file that is not valid UTF-8 is read as the
+// latter, instead of a "�" for every accent.
+function decodeSubtitle( bytes )
+{
+    if( bytes[ 0 ] === 0xFF && bytes[ 1 ] === 0xFE ) return new TextDecoder( "utf-16le" ).decode( bytes );
+    if( bytes[ 0 ] === 0xFE && bytes[ 1 ] === 0xFF ) return new TextDecoder( "utf-16be" ).decode( bytes );
+    try { return new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ); }
+    catch( e ) { return new TextDecoder( "windows-1252" ).decode( bytes ); }
+}
+
 async function loadSubtitle( mv )
 {
     if( ! mv.subtitle ) { updatePlayerBar(); return; }
     try
     {
-        var text = await GumApi.readFile( mv.subtitle.path );
+        var text = decodeSubtitle( await GumApi.readFileBytes( mv.subtitle.path ) );
+        // Another film was picked while this file loaded: the track is not
+        // for the film on screen now (and its blob URL would never be freed).
+        if( st.current !== mv ) return;
         var vtt  = mv.subtitle.kind === "vtt" ? text : srtToVtt( text );
         st.trackUrl = URL.createObjectURL( new Blob( [ vtt ], { type: "text/vtt" } ) );
 
@@ -1380,6 +1479,7 @@ function wireStaticUI()
     {
         var k = ( $( "#tmdbKey" ).value || "" ).trim();
         if( ! k ) return;
+        if( ! await postersReady() ) return;          // the sheet stays open, the key kept
         st.posters.key = k;
         NayiveUI.setOpen( "tmdbBackdrop", false );
         await savePosters();
@@ -1403,8 +1503,12 @@ function wireStaticUI()
         var s = $( "#videoStage" );
         if( document.fullscreenElement ) document.exitFullscreen();
         else if( s.requestFullscreen ) s.requestFullscreen().catch( function () {} );
+        // iPhone: no Fullscreen API on elements, only the video's own full
+        // screen player (with its seek, subtitles and "done").
+        else if( video.webkitEnterFullscreen ) video.webkitEnterFullscreen();
     } );
-    video.addEventListener( "click", togglePlay );
+    // With the native controls on (full screen) a click is theirs already.
+    video.addEventListener( "click", function () { if( ! video.controls ) togglePlay(); } );
     video.addEventListener( "dblclick", function () { $( "#stageFullBtn" ).click(); } );
 
     var seekRange = $( "#seekRange" ), seeking = false;
@@ -1461,12 +1565,21 @@ function wireStaticUI()
     } );
     video.addEventListener( "error", function ()
     {
-        if( ! st.current ) return;
-        NayiveUI.toast( NayiveUI.t( 'movies.cantPlay' ) );
+        var mv = st.current;
+        if( ! mv ) return;
+        // A film Drive is converting to MP4 cannot play yet: say that, not
+        // "cannot play" (/api/convert lists this user's queued conversions).
+        GumApi.fetchText( "/api/convert" )
+            .then( function ( txt ) { return ( ( JSON.parse( txt ) || {} ).jobs || [] ).some( function ( j ) { return j.path === mv.path; } ); } )
+            .catch( function () { return false; } )
+            .then( function ( converting ) { NayiveUI.toast( NayiveUI.t( converting ? 'movies.converting' : 'movies.cantPlay' ) ); } );
     } );
 
     document.addEventListener( "fullscreenchange", function ()
     {
+        // Full screen hides the player bar: the video's own controls stand in
+        // for its seek bar and subtitles button there.
+        video.controls = document.fullscreenElement === $( "#videoStage" );
         $( "#stageFullBtn" ).title = document.fullscreenElement ? NayiveUI.t( 'movies.exitFullscreen' ) : NayiveUI.t( 'movies.fullscreen' );
     } );
 

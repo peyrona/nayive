@@ -13,8 +13,9 @@
  *               starves the page that triggered it.
  *   - fetch   : HTML          -> stale-while-revalidate (instant, self-updating)
  *               versioned libs -> cache-first (filenames carry the version)
- *               trips/**.pdf    -> served from the "nayive-trips-docs" cache the trips
- *                                 page fills with just the active trip's files
+ *               a trip document -> served from the "nayive-trips-docs" cache the trips
+ *               (/api/files?file=)  page fills with just the active trip's files;
+ *                                 any other file GET goes to the network untouched
  *               /api/*          -> passed straight through; the app and
  *                                 shared/store.js own the data path, never cached.
  *
@@ -27,7 +28,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-3986f6fa8e4a";
+var CACHE_VERSION = "nayive-882071a765ec";
 /* @end */
 
 /* @generated:precache */
@@ -68,6 +69,7 @@ var PRECACHE_SHELL = [
     "contact/index.html",
     "contact/manifest.json",
     "desktop/index.html",
+    "desktop/tiling.js",
     "drive/actions.js",
     "drive/advsearch.js",
     "drive/dragdrop.js",
@@ -135,6 +137,11 @@ var PRECACHE_SHELL = [
     "shared/i18n/it.json",
     "shared/i18n/pt.json",
     "shared/ical.js",
+    "shared/locker.js",
+    "shared/lockers/clock.js",
+    "shared/lockers/life.js",
+    "shared/lockers/matrix.js",
+    "shared/lockers/stars.js",
     "shared/media.js",
     "shared/menubar.js",
     "shared/office.js",
@@ -171,6 +178,7 @@ var PRECACHE_SHELL = [
     "trips/location.js",
     "trips/manifest.json",
     "trips/map.js",
+    "trips/my-location.js",
     "trips/pdf.js",
     "trips/persistence.js",
     "trips/public.html",
@@ -287,16 +295,15 @@ async function precacheList( rels )
 
 // Stricter than the server's Cache-Control rule on purpose: only a path with
 // a version in it (luxon_v3.7.2.min.js, trips/lib/leaflet_v1.9.4/...,
-// write/lib/docx-editor/docx-editor_v<ver>.min.js) or an icon is copied over -
-// a change there means a new name, so the 2.5 MB editor bundle is carried
-// cache-to-cache instead of being re-fetched on every install. An unversioned
-// lib file (the proofing dictionaries) is still re-validated with the server
-// on every install (a 304 = headers only), so an in-place upgrade of one of
-// those is picked up as before.
+// write/lib/docx-editor/docx-editor_v<ver>.min.js) is copied over - a change
+// there means a new name, so the 2.5 MB editor bundle is carried cache-to-cache
+// instead of being re-fetched on every install. Everything else - an
+// unversioned lib file (the proofing dictionaries), an icon redrawn under the
+// same name - is re-validated with the server on every install (a 304 =
+// headers only), so an in-place change is picked up.
 function isImmutable( rel )
 {
-    var parts = rel.split( "/" );
-    return parts.some( function ( seg ) { return /_v\d/.test( seg ); } ) || parts.indexOf( "icons" ) !== -1;
+    return rel.split( "/" ).some( function ( seg ) { return /_v\d/.test( seg ); } );
 }
 
 // On install, before anything is fetched: copy every immutable precache entry
@@ -328,15 +335,74 @@ async function carryOverImmutable()
     }
 }
 
+// A deploy seen on a weak signal: whatever of the shell did not come down is
+// copied from the previous version's cache, still there during install (the
+// activate below deletes it) - an app with an old file still opens offline,
+// one with no file does not (Trips abroad). The copy is marked STALE_HDR, and
+// refreshStale() fetches it again at the first chance, so an old file is not
+// served cache-first online until the next deploy.
+var STALE_HDR = "X-Nayive-Stale";
+
+async function fillShellGaps()
+{
+    var keys = await caches.keys();
+    var olds = keys.filter( function ( k )
+    {
+        return k !== CACHE_NAME && k !== TRIP_DOCS && k !== SHARE_INBOX &&
+               ( k.indexOf( "nayive-" ) === 0 || k.indexOf( "nube-" ) === 0 );
+    } );
+    if( ! olds.length ) return;
+
+    var cache = await caches.open( CACHE_NAME );
+
+    await Promise.all( PRECACHE_SHELL.map( async function ( rel )
+    {
+        var url = new URL( rel, self.registration.scope ).toString();
+        if( await cache.match( url ) ) return;
+
+        for( var i = 0; i < olds.length; i++ )
+        {
+            var hit = await ( await caches.open( olds[ i ] ) ).match( url );
+            if( ! hit ) continue;
+            var h = new Headers( hit.headers );
+            h.set( STALE_HDR, "1" );
+            await cache.put( url, new Response( await hit.blob(),
+                                                { status: hit.status, statusText: hit.statusText, headers: h } ) );
+            return;
+        }
+    } ) );
+}
+
+async function refreshStale()
+{
+    var cache = await caches.open( CACHE_NAME );
+
+    await Promise.all( PRECACHE_SHELL.map( async function ( rel )
+    {
+        var url = new URL( rel, self.registration.scope ).toString();
+        var hit = await cache.match( url );
+        if( ! hit || ! hit.headers.has( STALE_HDR ) ) return;
+
+        try
+        {
+            var res = await fetch( url, { cache: "no-cache", credentials: "same-origin" } );
+            if( res.ok && res.type === "basic" && ! res.redirected ) await cache.put( url, res );
+        }
+        catch ( e ) { /* still no signal: the old copy stays until the next try */ }
+    } ) );
+}
+
 // The heavy libs are warmed once, lazily, off the first fetch the SW handles -
 // by then the page that triggered the update already has its shell and is
-// running, so this no longer competes for its first connections.
+// running, so this no longer competes for its first connections. The stale
+// shell copies (above) get their second chance here too.
 var restWarmed = false;
 function warmRestOnce()
 {
     if( restWarmed ) return;
     restWarmed = true;
     precacheList( PRECACHE_REST );
+    refreshStale().catch( function () {} );
 }
 
 //----------------------------------------------------------------------------//
@@ -348,6 +414,7 @@ self.addEventListener( "install", function ( event )
     event.waitUntil( carryOverImmutable()
         .catch( function () {} )
         .then( function () { return precacheList( PRECACHE_SHELL ); } )
+        .then( function () { return fillShellGaps().catch( function () {} ); } )
         .then( function () { self.skipWaiting(); } ) );
 } );
 
@@ -393,6 +460,17 @@ self.addEventListener( "fetch", function ( event )
     var url = new URL( req.url );
 
     if( url.origin !== self.location.origin ) return;          // cross-origin: leave alone
+
+    // A trip's documents are /api/files?file=... URLs (trips/helpers.js
+    // docHref), kept per exact URL in TRIP_DOCS for the active trip: answered
+    // from there, anything else goes to the network as it would have. Not a
+    // Range request (music, a film): those never go through here.
+    if( url.pathname === "/api/files" && url.searchParams.has( "file" ) &&
+        ! req.headers.has( "range" ) )
+    {
+        event.respondWith( tripDocOrNetwork( req ) );
+        return;
+    }
 
     // The data API and every auth endpoint stay on the network, always.
     if( url.pathname.indexOf( "/api/" ) === 0 ) return;
@@ -527,12 +605,27 @@ async function swText( req, key )
     return key;
 }
 
+// A file GET: the active trip's copy when TRIP_DOCS holds this exact URL,
+// else the network - and a network failure stays a failure (a rejected
+// fetch), which is what shared/store.js reads as "offline".
+async function tripDocOrNetwork( req )
+{
+    try
+    {
+        var hit = await ( await caches.open( TRIP_DOCS ) ).match( req );
+        if( hit ) return hit;
+    }
+    catch ( e ) {}
+    return fetch( req );
+}
+
 // Trips PDFs - cache-first against the trips-managed store; never populated here
-// (trips decides which trip's docs are worth the phone space).
+// (trips decides which trip's docs are worth the phone space). Matched by the
+// whole URL: the documents differ only in their ?file=.
 async function tripDocStrategy( req )
 {
     var cache  = await caches.open( TRIP_DOCS );
-    var cached = await cache.match( req, { ignoreSearch: true } );
+    var cached = await cache.match( req );
 
     if( cached ) return cached;
 
@@ -574,7 +667,15 @@ async function htmlStrategy( req, url )
 
     if( res ) return res;
 
-    return ( await cache.match( new URL( "index.html", self.registration.scope ).toString() ) ) ||
+    // Offline and never opened here: the launcher instead - by a redirect to
+    // the scope's root, so its relative shared/* links resolve (the
+    // launcher's HTML served under share-target/ was a blank page).
+    var root = new URL( "index.html", self.registration.scope ).toString();
+    if( url.pathname !== SCOPE_PATH && url.pathname !== SCOPE_PATH + "index.html" &&
+        req.mode === "navigate" && await cache.match( root ) )
+        return Response.redirect( self.registration.scope, 302 );
+
+    return ( await cache.match( root ) ) ||
            new Response( "Offline - open this app once with a connection first.",
                          { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } } );
 }
@@ -706,9 +807,15 @@ async function openTarget( url )
 
     // The Chat page is never navigated away: it may be in a call. A chat
     // notification tells it which chat to show (chat/chat.js); any other one
-    // uses another window, or a new one.
+    // uses another window, or a new one. Nor is an open document (Write,
+    // Calc, Text): it would be left mid-edit.
     var chat = SCOPE_PATH + "chat/";
     var isChat = function ( u ) { return new URL( u ).pathname.indexOf( chat ) === 0; };
+    var isEditor = function ( u )
+    {
+        var p = new URL( u ).pathname;
+        return [ "write/", "calc/", "text/" ].some( function ( a ) { return p.indexOf( SCOPE_PATH + a ) === 0; } );
+    };
     if( isChat( target ) )
     {
         for( var k = 0; k < all.length; k++ )
@@ -723,7 +830,8 @@ async function openTarget( url )
 
     for( var j = 0; j < all.length; j++ )
     {
-        if( all[ j ].url.indexOf( SCOPE_PATH ) !== -1 && ! isChat( all[ j ].url ) && "navigate" in all[ j ] )
+        if( all[ j ].url.indexOf( SCOPE_PATH ) !== -1 && ! isChat( all[ j ].url ) && ! isEditor( all[ j ].url ) &&
+            "navigate" in all[ j ] )
         {
             await all[ j ].navigate( target );
             return all[ j ].focus();
@@ -745,7 +853,7 @@ async function resubscribe( event )
     var old = event.oldSubscription;
     var key = old && old.options && old.options.applicationServerKey;
 
-    if( ! key ) return;   // nothing to re-subscribe WITH; the page heals it on next open
+    if( ! key ) return;   // nothing to re-subscribe WITH; the launcher heals it on its next load
 
     try
     {
@@ -754,12 +862,21 @@ async function resubscribe( event )
 
         // Best effort: the session cookie may already have expired, in which
         // case this 401s and the device stays silent until the user next opens
-        // the launcher - which re-posts the subscription. See loadPush().
+        // the launcher - which re-posts the subscription (healPush() there: a
+        // new endpoint, or none left at all). The worker cannot know the
+        // language picked in Nayive: the browser's is the best guess, and the
+        // launcher's next load puts the right one.
         await fetch( "/api/push", {
             method:      "POST",
             credentials: "same-origin",
             headers:     { "Content-Type": "application/json" },
-            body:        JSON.stringify( { subscription: sub.toJSON() } )
+            // old_endpoint: the server moves that device's language and
+            // label over to the new one (users.go RenewPushSub).
+            body:        JSON.stringify( { subscription: sub.toJSON(),
+                                           old_endpoint: ( old && old.endpoint ) || "",
+                                           lang:  String( self.navigator.language || "" ).slice( 0, 2 ).toLowerCase(),
+                                           label: self.navigator.platform || "",
+                                           tz:    Intl.DateTimeFormat().resolvedOptions().timeZone || "" } )
         } );
 
         if( old && old.endpoint )

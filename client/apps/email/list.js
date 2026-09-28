@@ -48,14 +48,16 @@
         ROLES.forEach( function ( role )
         {
             var t = S.trays.filter( function ( x ) { return x.role === role; } )[ 0 ] || { role: role };
-            // the unread count where it means "new mail"; Drafts counts what is there
-            var n = role === "drafts" ? t.total : ( role === "sent" ? 0 : t.unread );
+            // not read / all of them, on every tray ("3/7", "0/0")
+            var unread = t.unread || 0, total = t.total || 0;
             var b = h( "button", { class: "pill mail-tray" + ( ! S.label && role === S.tray ? " is-active" : "" ) + ( t.missing ? " is-missing" : "" ),
-                                   attrs: { type: "button", "data-tray": role, title: t.missing ? E.T( "mail.missingTray" ) : null },
+                                   attrs: { type: "button", "data-tray": role,
+                                            title: t.missing ? E.T( "mail.missingTray" ) : E.TF( "mail.trayCount", { unread: unread, total: total } ) },
                                    html: E.icon( role ),
                                    on: { click: function () { E.openTray( role ); } } },
                        h( "span", { text: E.T( "mail.tray." + role ) } ),
-                       n ? h( "b", { text: n > 999 ? "999+" : String( n ) } ) : null );
+                       h( "span", { class: "mail-tray-n" + ( unread ? " has-new" : "" ) },
+                          h( "b", { text: count( unread ) } ), h( "small", { text: "/" + count( total ) } ) ) );
             box.appendChild( b );
         } );
 
@@ -76,6 +78,9 @@
             lab.appendChild( h( "div", { class: "mail-label-line" + ( S.label === l.id ? " is-active" : "" ) }, pill, pen ) );
         } );
     };
+
+    // a tray's number, short, rounded down: 999, 9700 -> 9K
+    function count( n ) { return n < 1000 ? String( n ) : Math.floor( n / 1000 ) + "K"; }
 
     function wireLabelPress( el, l )
     {

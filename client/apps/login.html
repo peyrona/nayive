@@ -143,14 +143,38 @@
                 } );
             } )();
 
-            function returnTo( role )
+            // The admin account manages users, so it goes straight to the
+            // admin panel. Everyone else lands on the app launcher - ?return= is
+            // NOT a way back into any app: on iPhone, Safari restores the last
+            // app's tab after its cookie expired, and following it would drop
+            // you into that stale app. Only a ONE-SHOT target comes back (the
+            // same list as server/go/static.go loginReturn), rebuilt from its
+            // own parameters, never echoed: a chat notice or a link shared to
+            // Chat (chat/?c=, ?text=) and a "¿Dónde estás?" answer (/?here=).
+            // Both pages drop the parameter once used. An account with no
+            // password yet goes to the launcher, which asks for one first.
+            function returnTo( info )
             {
-                // The admin account manages users, so send it straight to the
-                // admin panel. Everyone else lands on the app launcher. We ignore
-                // any ?return= path on purpose: on iPhone, Safari restores the
-                // last app's tab and its cookie has expired, so honouring
-                // ?return= would drop you into that app instead.
-                return role === 'admin' ? '/nayive/admin.html' : '/nayive/';
+                if( info.role === 'admin' ) return '/nayive/admin.html';
+                if( info.must_set_password ) return '/nayive/';
+                var raw = new URLSearchParams( location.search ).get( 'return' );
+                var u   = null;
+                try { u = raw ? new URL( raw, location.origin ) : null; } catch ( e ) {}
+                if( ! u || u.origin !== location.origin ) return '/nayive/';
+
+                var keep = new URLSearchParams();
+                var take = function ( k ) { var v = u.searchParams.get( k ); if( v ) keep.set( k, v ); };
+                var path = '';
+                if( u.pathname === '/nayive/chat/' || u.pathname === '/nayive/chat/index.html' )
+                {
+                    take( 'c' ); take( 'text' ); path = '/nayive/chat/';
+                }
+                else if( u.pathname === '/nayive/' || u.pathname === '/nayive/index.html' )
+                {
+                    take( 'here' ); path = '/nayive/';
+                }
+                var q = keep.toString();
+                return path && q ? path + '?' + q : '/nayive/';
             }
 
             form.addEventListener( 'submit', async function ( ev )
@@ -181,12 +205,20 @@
                         // after each sign-in (see "after each login" there).
                         if( info.role !== 'admin' )
                             try { sessionStorage.setItem( 'nayive-just-in', '1' ); } catch ( e ) {}
-                        location.href = returnTo( info.role );
+                        // No password yet: the launcher (never the big-screen
+                        // desktop, whose apps the server now refuses) asks for one.
+                        try
+                        {
+                            if( info.must_set_password ) sessionStorage.setItem( 'nayive-must-set', '1' );
+                            else                         sessionStorage.removeItem( 'nayive-must-set' );
+                        }
+                        catch ( e ) {}
+                        location.href = returnTo( info );
                         return;
                     }
 
-                    var data = await res.json().catch( function () { return {}; } );
-                    errBox.textContent = data.error || NayiveI18n.t( 'login.failed' );
+                    // The server's own words are Spanish: say it in the user's language.
+                    errBox.textContent = NayiveI18n.t( res.status === 401 ? 'login.badCreds' : 'login.failed' );
                 }
                 catch ( e )
                 {

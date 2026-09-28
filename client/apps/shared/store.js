@@ -32,9 +32,47 @@
  * overwrite theirs), and onConflict listeners hear about it. The app resolves it
  * by saving elsewhere and forget()-ing the old path.
  *
+ * MERGE  (opt-in: createStore( { conflicts: true, merge: fn } ) - 2026-09-28)
+ * The small list apps (Habits, Split, Contacts, Calendar, Tasks, Trips, Games)
+ * save one whole file, so a phone's offline ticks used to overwrite the PC's.
+ * With `merge` the store keeps `base` per path - the body this device last
+ * read from or saved to the server - and on a 412 it GETs the server copy and
+ * calls fn( path, base, mine, theirs ) (base null when unknown). A string back
+ * is the merged body: it goes to the cache and the outbox, onMerged( path,
+ * body ) listeners reload the app's data, and it goes up with the new
+ * If-Unmodified-Since (a few tries). null = the CONFLICTS path above. While a
+ * merge is being made, write() waits for it and merges its own body onto the
+ * result (fn( path, mine-before, body, merged )): that body was built before
+ * the app reloaded, and would otherwise drop the other device's changes.
+ * Every page may flush any entry, but only a page whose store claimed the path
+ * (read or wrote it with `merge`) can merge it: elsewhere a 412 just leaves it
+ * queued for its own app. So a merging store reads and writes only its own
+ * app's files; another app's file is read with GumApi (or a plain store).
+ * Every store keeps `base` for a text file (a plain store reading or writing a
+ * merged path must not wipe it), and a plain store's write over a queued
+ * merging save keeps it merge-protected (`mrg`, If-Unmodified-Since). A clean
+ * copy cached by an older store.js gets its body as `base` at the next save.
+ * A merge that said null is tried again each time its app reads the file. The
+ * merge's GET is dropped when another account signed in since (whoNow).
+ *
  * A 403 / 409 on a PUT (a read-only share, a protected file) can never succeed:
  * the entry is dropped and the write reports `forbidden`, instead of sitting in
  * the outbox forever looking like an expired session.
+ *
+ * WHOSE SAVE  (2026-09-28)
+ * One browser, two accounts: a save queued while ana was signed in used to go
+ * up with whatever session the browser held when it was sent - beto's, after a
+ * sign-out, an expired session or a sign-in in another tab - and land in HIS
+ * home. So this page reads who it belongs to ONCE, when it loads (the readable
+ * "nayive_who" cookie, server/go/store_owner.go), and every record it writes
+ * carries that name (`who`). A queued save goes up with it in X-Nayive-User;
+ * the server answers 423 when it is not the session's, and the entry stays
+ * here until its owner signs in again. Records of another account are never
+ * read, sent or counted by this page. No cookie (a page that loaded signed
+ * out, or before the cookie existed) = no name: untagged records, taken as
+ * before. The key stays the path and DB_VERSION stays 1 - an older store.js in
+ * another tab must still read and send every record.
+ * Signing out clears the lot (localCount / clearLocal, used by the launcher).
  *
  * Auth: /api/files is authenticated by the nayive_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
@@ -90,6 +128,7 @@
     var OUTBOX     = "outbox";    // pending writes,             keyPath "path"
 
     var FLUSH_DEBOUNCE_MS = 1500;
+    var MERGE_TRIES       = 4;      // 412 -> merge -> PUT rounds before waiting for the next flush
     var GZIP_MIN          = 1400;   // same cutoff the server uses on the way down:
                                     // below ~one packet, compression is a net loss
 
@@ -100,7 +139,38 @@
     var blocked  = {};   // path -> "unread" | "bad": writes refused (see block())
     var loaded   = {};   // path -> a read() of it has succeeded on this page
     var firstOut = {};   // path -> reads out before the first success: writes refused
+    var mergers  = {};   // path -> { fn, fire, get } of the store that merges it (see MERGE)
+    var merging  = {};   // path -> a merge being made: resolves { mine, merged } | null
     var toastAt  = 0;
+
+    // Who this page belongs to: the "nayive_who" cookie AS IT WAS WHEN THE PAGE
+    // LOADED - never read again, so a tab left open across another account's
+    // sign-in still tags its saves with its own owner. "" = unknown.
+    var ME = ( function ()
+    {
+        try
+        {
+            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
+            return m ? m[ 1 ] : "";
+        }
+        catch ( e ) { return ""; }
+    } )();
+
+    // Who is signed in on this browser NOW (the cookie as it is at this moment,
+    // unlike ME): "" = unknown.
+    function whoNow()
+    {
+        try
+        {
+            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
+            return m ? m[ 1 ] : "";
+        }
+        catch ( e ) { return ""; }
+    }
+
+    // A record this page may use: untagged, or this page's own account. Only a
+    // record KNOWN to be another account's is skipped.
+    function ours( rec ) { return ! rec || ! rec.who || ! ME || rec.who === ME; }
 
     //------------------------------------------------------------------------//
     // TINY INDEXEDDB PROMISE WRAPPER
@@ -248,9 +318,11 @@
 
         var api       = opts.apiBase || ( window.location.origin + "/api/files" );
         var binary    = !! opts.binary;   // body is raw bytes (Uint8Array), not text
-        var conflicts = !! opts.conflicts; // send If-Unmodified-Since (see CONFLICTS above)
+        var mergeFn   = typeof opts.merge === "function" ? opts.merge : null;   // see MERGE above
+        var conflicts = !! opts.conflicts || !! mergeFn; // send If-Unmodified-Since (see CONFLICTS above)
         var listeners = [];
         var conflictFns = [];
+        var mergedFns   = [];
         var state     = "init";
         var flushTimer = null;
         var flushing   = false;
@@ -320,7 +392,7 @@
         async function settle()
         {
             var db      = await dbPromise;
-            var pending = await idbGetAll( db, OUTBOX );
+            var pending = ( await idbGetAll( db, OUTBOX ) ).filter( ours );
 
             if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
             else if( pending.length === 0 ) emit( navigator.onLine ? "synced"  : "offline" );
@@ -331,8 +403,10 @@
         // NETWORK
 
         // Same retry shape as the apps' old fetchIt(): two retries, only for a
-        // thrown "Failed to fetch" (a genuine connectivity drop), never for an
-        // HTTP error status.
+        // thrown TypeError - a genuine connectivity drop, whatever the browser
+        // calls it (Chrome "Failed to fetch", Safari "Load failed", Firefox
+        // "NetworkError...") - never for an HTTP error status. Only GET and PUT
+        // come through here, and both are safe to send twice.
         // A 401 means the session is gone (idle timeout, or a server restart -
         // the session table is in RAM). Raise the shared bar so the user learns
         // why the red dot appeared. Only 401: the "needs-auth" state below also
@@ -353,7 +427,7 @@
             }
             catch ( err )
             {
-                if( retry < 2 && String( err && err.message ).indexOf( "Failed to fetch" ) !== -1 )
+                if( retry < 2 && err instanceof TypeError )
                 {
                     await new Promise( function ( r ) { setTimeout( r, 500 * Math.pow( 2, retry ) ); } );
                     return netFetch( url, options, retry + 1 );
@@ -433,7 +507,7 @@
         // `since` (ms, the server's own time for this file) becomes
         // If-Unmodified-Since - see CONFLICTS above. The answer's Last-Modified
         // comes back as `srv`, the base for the next save.
-        async function netPut( path, body, since, bin )
+        async function netPut( path, body, since, bin, who )
         {
             try
             {
@@ -442,6 +516,7 @@
 
                 if( packed ) headers[ "Content-Encoding" ] = "gzip";
                 if( since )  headers[ "If-Unmodified-Since" ] = new Date( since ).toUTCString();
+                if( who )    headers[ "X-Nayive-User" ] = who;
 
                 var r = await netFetch( api + "?file=" + encodeURIComponent( path ),
                                         { method: "PUT", headers: headers, body: packed || body } );
@@ -451,6 +526,20 @@
 
                 if( r.status === 412 )
                     return { ok: false, status: 412, conflict: true };
+
+                // Queued under another account than the one signed in now
+                // (WHOSE SAVE above): kept for its owner, no "session expired" bar.
+                if( r.status === 423 )
+                    return { ok: false, status: 423, otherAccount: true };
+
+                // No password yet (the server's must_set_password gate): the save is
+                // fine, the account is not - kept like a lost session, never dropped.
+                if( r.status === 403 )
+                {
+                    var why = await r.clone().json().catch( function () { return null; } );
+                    if( why && why.must_set_password )
+                        return { ok: false, status: 403, needsAuth: true };
+                }
 
                 // Not this user's to write (a read-only share, a protected file) or
                 // a shared folder that only takes NEW names. Retrying never helps.
@@ -490,6 +579,8 @@
             var first = ! loaded[ path ];
             var res;
 
+            claim( path );
+
             if( first ) firstOut[ path ] = ( firstOut[ path ] || 0 ) + 1;
 
             try { res = await readNow( path ); }
@@ -518,10 +609,19 @@
             var cached = await idbGet( db, DOCS, path );
             var queued = await idbGet( db, OUTBOX, path );
 
+            // Another account's copy is not this person's file: as if absent.
+            if( ! ours( cached ) ) cached = null;
+            if( ! ours( queued ) ) queued = null;
+
             // A not-yet-flushed local write is the truth - never let a network
             // GET clobber the user's pending edit on screen.
             if( queued )
             {
+                // A merge that said null (MERGE) is tried again each time its
+                // app opens the file: the other side may be fine by now.
+                if( queued.conflict && queued.mrg && mergeFn )
+                    await idbUpdate( db, OUTBOX, path, function ( c ) { if( ! c || ! c.conflict ) return undefined; c.conflict = false; return c; } );
+
                 scheduleFlush();
 
                 if( cached )
@@ -555,8 +655,11 @@
                     await idbUpdate( db, DOCS, path, function ()
                     {
                         if( ( writeSeq[ path ] || 0 ) !== seq ) return undefined;
+                        // `base` for every text file, merging store or not: a
+                        // plain store (Drive's import) reading a merged path must
+                        // not leave it without one (see MERGE).
                         return { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false,
-                                 srv: res.srv };
+                                 srv: res.srv, who: ME, base: typeof res.body === "string" ? res.body : undefined };
                     } );
 
                     if( ( writeSeq[ path ] || 0 ) !== seq )
@@ -636,9 +739,11 @@
             }
 
             loaded[ path ] = true;   // this page now holds the file's content: later reads are RE-reads
+            claim( path );
 
             var now = Date.now();
             var conflicted = false;
+            var held = merging[ path ];   // a merge is being made: this body predates it (see MERGE)
 
             // Each entry says how it must be sent (bytes or text, with or without
             // If-Unmodified-Since): the outbox is shared by every store, and a
@@ -648,16 +753,46 @@
             writeSeq[ path ] = ( writeSeq[ path ] || 0 ) + 1;
             var queued = ( async function ()
             {
+                if( held )
+                {
+                    var mr = await held;
+                    if( mr && mergeFn )
+                    {
+                        try
+                        {
+                            var again = mergeFn( path, mr.mine, body, mr.merged );
+                            if( typeof again === "string" ) body = again;
+                        }
+                        catch ( e ) { /* keep the body as the app built it */ }
+                    }
+                }
+
                 var db = await dbPromise;
+                // Another account's record under the same path gives nothing
+                // to this one - not its server time, not its conflict.
+                // `base` is kept whatever store writes. A clean copy cached by an
+                // older store.js has none: its body IS what the server had.
                 await idbUpdate( db, DOCS, path, function ( old )
                 {
-                    return { path: path, body: body, mtime: now, cachedAt: now, dirty: true, srv: old ? old.srv : null };
+                    var mineOld = old && ours( old );
+                    var base    = mineOld ? old.base : undefined;
+                    if( mineOld && base === undefined && old.dirty === false && typeof old.body === "string" ) base = old.body;
+                    return { path: path, body: body, mtime: now, cachedAt: now, dirty: true,
+                             srv: mineOld ? old.srv : null, who: ME, base: base };
                 } );
+                // A save queued by a merging store stays merge-protected when a
+                // plain store (Drive's import) writes the same path: it keeps
+                // If-Unmodified-Since and `mrg`, and waits for its own app to
+                // merge it. A merging entry's next save merges again instead of
+                // staying held: whatever the last merge refused may be fine now.
                 await idbUpdate( db, OUTBOX, path, function ( old )
                 {
-                    conflicted = !! ( old && old.conflict );
+                    var was = old && ours( old ) ? old : null;
+                    var mrg = !! mergeFn || !! ( was && was.mrg );
+                    conflicted = ! mrg && !! ( was && was.conflict );
                     return { path: path, body: body, queuedAt: now, conflict: conflicted,
-                             bin: binary || body instanceof Uint8Array, ius: conflicts };
+                             bin: binary || body instanceof Uint8Array, ius: conflicts || !! ( was && was.ius ), who: ME,
+                             mrg: mrg };
                 } );
             } )();
 
@@ -701,7 +836,10 @@
             var entry = await idbGet( db, OUTBOX, path );
 
             if( ! entry ) return { ok: true };
+            if( ! ours( entry ) ) return { ok: false, otherAccount: true };  // waits for its owner
             if( entry.conflict ) return { ok: false, conflict: true };   // waits for the app, never re-sent
+
+            var merger = entry.mrg ? mergers[ path ] : null;   // see MERGE above
 
             if( ! navigator.onLine )
             {
@@ -715,9 +853,29 @@
             var bin   = entry.bin != null ? !! entry.bin : ( entry.body instanceof Uint8Array );
             var ius   = entry.ius != null ? !! entry.ius : bin;
             var known = ius ? await idbGet( db, DOCS, path ) : null;
+            var who   = entry.who || ME;
+            if( known && known.who && entry.who && known.who !== entry.who ) known = null;
 
             emit( "saving" );                      // a PUT is in flight - sending data
-            var res = await netPut( path, entry.body, known && known.srv, bin );
+            var res = await netPut( path, entry.body, known && known.srv, bin, who );
+
+            // Saved from another device since: merge both (see MERGE above).
+            // `entry` is then the merged one, and `res` the answer to it.
+            if( res.conflict && entry.mrg )
+            {
+                if( ! merger )
+                {
+                    // Not this page's app: it stays queued, as it was, for the
+                    // page that can merge it.
+                    emit( "pending" );
+                    return { ok: false, deferred: true };
+                }
+
+                var m = await mergeAndPut( db, path, entry, merger, bin, who );
+                if( m.done ) return m.done;
+                res   = m.res;
+                entry = m.entry;
+            }
 
             // Only the entry that was sent is settled: a newer one queued while
             // the PUT was in flight stays for the next flush.
@@ -738,6 +896,7 @@
                     if( ! doc ) return undefined;
                     if( res.srv ) doc.srv   = res.srv;   // the base for the next save
                     if( cleared ) doc.dirty = false;
+                    if( typeof entry.body === "string" ) doc.base = entry.body;   // what the server holds now
                     return doc;
                 } );
 
@@ -771,8 +930,127 @@
                 return { ok: false, needsAuth: true };
             }
 
+            // Another account is signed in: this page's saves wait for their
+            // owner (a sign-in again) - and the next entry may still go.
+            if( res.otherAccount )
+            {
+                emit( "needs-auth" );
+                return { ok: false, otherAccount: true };
+            }
+
             emit( res.netError ? "offline" : "error" );
             return { ok: false, offline: !! res.netError };
+        }
+
+        // MERGE (see above): this page's merging store for `path` from now on.
+        function claim( path )
+        {
+            if( mergeFn ) mergers[ path ] = { fn: mergeFn, fire: fireMerged, get: netGet };
+        }
+
+        function fireMerged( path, body )
+        {
+            mergedFns.forEach( function ( fn ) { try { fn( path, body ); } catch ( e ) {} } );
+        }
+
+        // A PUT of `entry` came back 412. Up to MERGE_TRIES times: GET the
+        // server's copy, merge the queued body onto it, put the result in the
+        // cache and the outbox, tell the app, PUT it with the server's new time.
+        // Returns { res, entry } - the last answer (never a 412 unless the merge
+        // said null: the CONFLICTS path) and the entry it answers - or { done }
+        // when there is nothing more to do here.
+        async function mergeAndPut( db, path, entry, merger, bin, who )
+        {
+            var res = { ok: false, status: 412, conflict: true };
+
+            for( var tries = 0; tries < MERGE_TRIES; tries++ )
+            {
+                // From the GET until the app has the merged body, write() waits
+                // and merges its own body onto ours: whatever it brings was
+                // built from the list before the merge.
+                var open = null;
+                merging[ path ] = new Promise( function ( r ) { open = r; } );
+                var result = null;
+                var theirs, gone = false;
+
+                try
+                {
+                    theirs = await merger.get( path );
+
+                    // Another account signed in on this browser since the save
+                    // was queued (WHOSE SAVE): that GET brought THEIR file, which
+                    // must not be merged into this one. It waits for its owner.
+                    if( who && whoNow() && whoNow() !== who )
+                        return { res: { ok: false, status: 423, otherAccount: true }, entry: entry };
+
+                    if( ! theirs.ok )
+                    {
+                        // Gone from the server since: nothing to merge with, it
+                        // goes up as it is (below; what every save did before).
+                        if( theirs.missing ) gone = true;
+                        else return { res: { ok: false, status: theirs.status, netError: theirs.netError,
+                                             needsAuth: theirs.status === 401 }, entry: entry };
+                    }
+                    else
+                    {
+                        var cur = await idbGet( db, OUTBOX, path );
+                        var doc = await idbGet( db, DOCS, path );
+
+                        if( ! cur || ! ours( cur ) ) return { done: { ok: true } };   // nothing queued any more
+
+                        var base   = doc && ours( doc ) && typeof doc.base === "string" ? doc.base : null;
+                        var merged = null;
+
+                        try { merged = merger.fn( path, base, cur.body, theirs.body ); }
+                        catch ( e ) { merged = null; }
+
+                        if( typeof merged !== "string" ) return { res: res, entry: cur };   // -> CONFLICTS
+
+                        var kept = false;
+                        await idbUpdate( db, OUTBOX, path, function ( c )
+                        {
+                            if( ! c || c.queuedAt !== cur.queuedAt ) return undefined;
+                            kept = true;
+                            c.body = merged;
+                            c.conflict = false;
+                            return c;
+                        } );
+
+                        if( ! kept ) continue;   // a newer save landed meanwhile: merge that one
+
+                        await idbUpdate( db, DOCS, path, function ( d )
+                        {
+                            d = d && ours( d ) ? d : { path: path, cachedAt: Date.now(), who: ME };
+                            d.body  = merged;
+                            d.mtime = Date.now();
+                            d.dirty = true;
+                            d.base  = theirs.body;   // what the server holds - until the PUT below lands
+                            d.srv   = theirs.srv;
+                            return d;
+                        } );
+
+                        merger.fire( path, merged );
+                        result = { mine: cur.body, merged: merged };
+                        entry  = Object.assign( {}, cur, { body: merged, conflict: false } );
+                    }
+                }
+                finally
+                {
+                    delete merging[ path ];
+                    open( result );
+                }
+
+                if( gone ) return { res: await netPut( path, entry.body, null, bin, who ), entry: entry };
+
+                emit( "saving" );
+                res = await netPut( path, entry.body, theirs.srv, bin, who );
+                if( ! res.conflict ) return { res: res, entry: entry };
+            }
+
+            // Saved elsewhere again and again: it stays queued, merged, for the
+            // next flush.
+            emit( "pending" );
+            return { done: { ok: false } };
         }
 
         async function flushAll()
@@ -818,13 +1096,14 @@
         async function hasAnyCache()
         {
             var db = await dbPromise;
-            return ( await idbGetAll( db, DOCS ) ).length > 0;
+            return ( await idbGetAll( db, DOCS ) ).some( ours );
         }
 
         async function hasCache( path )
         {
-            var db = await dbPromise;
-            return !! ( await idbGet( db, DOCS, path ) );
+            var db  = await dbPromise;
+            var rec = await idbGet( db, DOCS, path );
+            return !! rec && ours( rec );
         }
 
         // Paths of every doc currently in the cache, optionally filtered to those
@@ -833,7 +1112,7 @@
         async function listCached( prefix )
         {
             var db  = await dbPromise;
-            var all = await idbGetAll( db, DOCS );
+            var all = ( await idbGetAll( db, DOCS ) ).filter( ours );
 
             return all.map( function ( r ) { return r.path; } )
                       .filter( function ( p ) { return ! prefix || p.indexOf( prefix ) === 0; } );
@@ -851,7 +1130,7 @@
         async function pendingCount()
         {
             var db = await dbPromise;
-            return ( await idbGetAll( db, OUTBOX ) ).length;
+            return ( await idbGetAll( db, OUTBOX ) ).filter( ours ).length;
         }
 
         // A write to `path` is held back as a conflict (see CONFLICTS above).
@@ -859,11 +1138,15 @@
         {
             var db    = await dbPromise;
             var entry = await idbGet( db, OUTBOX, path );
-            return !! ( entry && entry.conflict );
+            return !! ( entry && ours( entry ) && entry.conflict );
         }
 
         // fn( path ) - a flush found `path` saved from another device since.
         function onConflict( fn ) { conflictFns.push( fn ); }
+
+        // fn( path, body ) - a flush merged `path` with another device's save
+        // (see MERGE above): the app reloads its data from `body`.
+        function onMerged( fn ) { mergedFns.push( fn ); }
 
         // BLOCKED PATHS - "never save over what we could not read".
         // read() blocks a path it could not read ('unknown' / 'unauth'); an app
@@ -898,6 +1181,7 @@
             pendingCount: pendingCount,
             conflicted:   conflicted,
             onConflict:   onConflict,
+            onMerged:     onMerged,
             block:        block,
             unblock:      unblock,
             isBlocked:    isBlocked,
@@ -907,5 +1191,281 @@
         };
     }
 
-    window.NayiveStore = { createStore: createStore };
+    //------------------------------------------------------------------------//
+    // SIGNING OUT  (the launcher's button, and admin.html's)
+    //
+    // What this browser keeps must not outlive the session: the next person to
+    // sign in here would be offered it. localCount() is how many saves and
+    // untitled drafts are still only here - EVERY account's, since they all go -
+    // so the button can ask first; clearLocal() empties the store's database
+    // and shared/office.js's "nayive-drafts". Each store is emptied with clear()
+    // in place: deleteDatabase() waits for every other open tab and, meanwhile,
+    // does nothing.
+
+    // "nayive-drafts" as shared/office.js opens it - the same upgrade, so
+    // opening it here first never leaves a database with no "drafts" store.
+    function openDraftsDb()
+    {
+        return new Promise( function ( resolve )
+        {
+            var rq;
+            try { rq = indexedDB.open( "nayive-drafts", 1 ); }
+            catch ( e ) { resolve( null ); return; }
+            rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
+            rq.onsuccess = function () { resolve( rq.result ); };
+            rq.onerror = rq.onblocked = function () { resolve( null ); };
+        } );
+    }
+
+    // fn( objectStore ) -> request, in one transaction; its result, or null.
+    function oneTx( db, name, mode, fn )
+    {
+        if( ! db ) return Promise.resolve( null );
+        return new Promise( function ( resolve )
+        {
+            try
+            {
+                var tx = db.transaction( name, mode );
+                var rq = fn( tx.objectStore( name ) );
+                tx.oncomplete = function () { resolve( rq.result === undefined ? null : rq.result ); };
+                tx.onerror = tx.onabort = function () { resolve( null ); };
+            }
+            catch ( e ) { resolve( null ); }
+        } );
+    }
+
+    async function localCount()
+    {
+        var store  = await openDb();
+        var drafts = await openDraftsDb();
+        var n = ( await oneTx( store,  OUTBOX,   "readonly", function ( os ) { return os.count(); } ) ) || 0;
+        n    += ( await oneTx( drafts, "drafts", "readonly", function ( os ) { return os.count(); } ) ) || 0;
+        if( store )  store.close();
+        if( drafts ) drafts.close();
+        return n;
+    }
+
+    // The saves still waiting here get one more chance to go up before the
+    // count: as long as one is actually being sent, up to `ms` (10 s), never
+    // longer - flush() comes back at once when nothing is queued, and stops
+    // at the first "offline" or "signed out". Offline, no wait at all.
+    function sendWaiting( ms )
+    {
+        if( ! navigator.onLine ) return Promise.resolve();
+        return Promise.race( [ createStore().flush().catch( function () {} ),
+                               new Promise( function ( r ) { setTimeout( r, ms || 10000 ); } ) ] );
+    }
+
+    async function clearLocal()
+    {
+        var store  = await openDb();
+        var drafts = await openDraftsDb();
+        await oneTx( store,  OUTBOX,   "readwrite", function ( os ) { return os.clear(); } );
+        await oneTx( store,  DOCS,     "readwrite", function ( os ) { return os.clear(); } );
+        await oneTx( drafts, "drafts", "readwrite", function ( os ) { return os.clear(); } );
+        if( store )  store.close();
+        if( drafts ) drafts.close();
+    }
+
+    //------------------------------------------------------------------------//
+    // THREE-WAY MERGE HELPERS  (for the apps' `merge` - see MERGE above)
+    //
+    // mergeLists( base, mine, theirs, o ) merges three arrays of items BY ID:
+    //   o.id( item )       -> the item's key ("" / null = no key: see below)
+    //   o.both( b, m, t )  -> the item when both sides changed it (b undefined:
+    //                         not in base); default: the newer by o.stamp( item );
+    //                         with no stamps, mine - or theirs when b is unknown
+    // Added on either side = kept; deleted on one side and untouched on the
+    // other = deleted; deleted on one side and CHANGED on the other = kept, the
+    // changed copy (an edit is never lost to a delete). Two items sharing an id
+    // on one side are both kept: the second is "id #2", and so on.
+    //
+    // base null (unknown - a copy cached by an older store.js): nothing can be
+    // told deleted, so every item of both sides is kept, and an item the two
+    // sides hold differently is THEIRS (or the newer by stamp). A guess either
+    // way loses one edit; this one loses it on THIS device, whose screen shows
+    // the merged list at once (onMerged), rather than silently undoing what the
+    // other device saved.
+    //
+    // Items with no key are told apart by their whole content, as a set: kept
+    // unless the other side dropped one that base had. Order: mine's, each item
+    // only theirs has placed after its neighbour in theirs.
+
+    function same( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); }
+
+    // m or t by their stamps; `fallback` when they do not say.
+    function newerOf( o, m, t, fallback )
+    {
+        var sm = o && o.stamp ? o.stamp( m ) : null;
+        var st = o && o.stamp ? o.stamp( t ) : null;
+        if( sm != null && st != null && sm !== st ) return st > sm ? t : m;
+        return fallback;
+    }
+
+    function mergeLists( base, mine, theirs, o )
+    {
+        o      = o || {};
+        mine   = mine   || [];
+        theirs = theirs || [];
+
+        var id = function ( x ) { var k = o.id ? o.id( x ) : null; return k == null || k === "" ? null : String( k ); };
+        var both = o.both || function ( b, m, t ) { return newerOf( o, m, t, b === undefined ? t : m ); };
+
+        // Each item's key in its list: its id, "id\u0001#2" for the second one
+        // with that id, and so on; null = no id.
+        var keysOf = function ( list )
+        {
+            var n = {};
+            return ( list || [] ).map( function ( x )
+            {
+                var k = id( x );
+                if( k === null ) return null;
+                n[ k ] = ( n[ k ] || 0 ) + 1;
+                return n[ k ] === 1 ? k : k + "\u0001#" + n[ k ];
+            } );
+        };
+        var kB = keysOf( base ), kM = keysOf( mine ), kT = keysOf( theirs );
+        var B = {}, M = {}, T = {}, i, k;
+        var own = function ( map, key ) { return Object.prototype.hasOwnProperty.call( map, key ); };
+
+        if( base ) for( i = 0; i < base.length; i++ ) if( kB[ i ] !== null ) B[ kB[ i ] ] = base[ i ];
+        for( i = 0; i < mine.length;   i++ ) if( kM[ i ] !== null ) M[ kM[ i ] ] = mine[ i ];
+        for( i = 0; i < theirs.length; i++ ) if( kT[ i ] !== null ) T[ kT[ i ] ] = theirs[ i ];
+
+        // One key -> the item to keep, or undefined to drop it.
+        function pick( k )
+        {
+            var b = own( B, k ) ? B[ k ] : undefined;
+            if( own( M, k ) && own( T, k ) )
+            {
+                var m = M[ k ], t = T[ k ];
+                if( same( m, t ) )                    return m;
+                if( b !== undefined && same( b, m ) ) return t;
+                if( b !== undefined && same( b, t ) ) return m;
+                return both( b, m, t );
+            }
+            if( own( M, k ) ) return b !== undefined && same( b, M[ k ] ) ? undefined : M[ k ];   // theirs deleted it
+            return b !== undefined && same( b, T[ k ] ) ? undefined : T[ k ];                    // mine deleted it
+        }
+
+        // Keyless items, by content: in base = "untouched" on a side that has it.
+        var had = function ( list, keys, x )
+        {
+            return !! list && list.some( function ( y, j ) { return keys[ j ] === null && same( x, y ); } );
+        };
+
+        var out = [], placed = {};   // out: [ { k, v } ], k null for a keyless item
+        for( i = 0; i < mine.length; i++ )
+        {
+            k = kM[ i ];
+            if( k === null )
+            {
+                if( ! ( had( base, kB, mine[ i ] ) && ! had( theirs, kT, mine[ i ] ) ) ) out.push( { k: null, v: mine[ i ] } );   // else theirs dropped it
+                continue;
+            }
+            placed[ k ] = true;
+            var v = pick( k );
+            if( v !== undefined ) out.push( { k: k, v: v } );
+        }
+
+        // What only theirs has, after its left neighbour in theirs.
+        var after = -1;   // index in `out` of the last item of theirs found there
+        for( i = 0; i < theirs.length; i++ )
+        {
+            var t = theirs[ i ], j;
+            k = kT[ i ];
+            if( k === null )
+            {
+                j = out.findIndex( function ( x ) { return x.k === null && same( x.v, t ); } );
+                if( j !== -1 ) { after = j; continue; }
+                if( had( mine, kM, t ) || had( base, kB, t ) ) continue;   // mine dropped it
+                out.splice( after + 1, 0, { k: null, v: t } );
+                after++;
+                continue;
+            }
+            if( placed[ k ] ) { j = out.findIndex( function ( x ) { return x.k === k; } ); if( j !== -1 ) after = j; continue; }
+            placed[ k ] = true;
+            var w = pick( k );
+            if( w === undefined ) continue;
+            out.splice( after + 1, 0, { k: k, v: w } );
+            after++;
+        }
+
+        return out.map( function ( x ) { return x.v; } );
+    }
+
+    // mergeFields( b, m, t, deep ) - one item changed on both sides, key by
+    // key: a key only one side changed takes that side; both changed = mine,
+    // or deep[ key ]( b[ key ], m[ key ], t[ key ] ) when given. b unknown
+    // (null / undefined) = theirs for every key the two hold differently (see
+    // "base null" above), deep[ key ] still merging its own.
+    function mergeFields( b, m, t, deep )
+    {
+        var out = {}, keys = {}, k;
+        b = b || null;
+        for( k in m ) keys[ k ] = true;
+        for( k in t ) keys[ k ] = true;
+
+        for( k in keys )
+        {
+            var hasM = Object.prototype.hasOwnProperty.call( m, k );
+            var hasT = Object.prototype.hasOwnProperty.call( t, k );
+            var bv   = b ? b[ k ] : undefined;
+            if( ! hasT )      { if( ! b || ! same( bv, m[ k ] ) ) out[ k ] = m[ k ]; continue; }
+            if( ! hasM )      { if( ! b || ! same( bv, t[ k ] ) ) out[ k ] = t[ k ]; continue; }
+            if( same( m[ k ], t[ k ] ) )        out[ k ] = m[ k ];
+            else if( b && same( bv, m[ k ] ) )  out[ k ] = t[ k ];
+            else if( b && same( bv, t[ k ] ) )  out[ k ] = m[ k ];
+            else if( deep && deep[ k ] )        out[ k ] = deep[ k ]( bv, m[ k ], t[ k ] );
+            else                                out[ k ] = b ? m[ k ] : t[ k ];
+        }
+        return out;
+    }
+
+    // mergeSets( b, m, t ) - three arrays of plain values (strings, numbers) as
+    // sets: added on either side kept, removed on either side removed. Sorted
+    // when both sides were.
+    function mergeSets( b, m, t )
+    {
+        b = b || []; m = m || []; t = t || [];
+        var out = [], seen = {};
+        function key( v ) { return typeof v + ":" + v; }
+        var inB = {}, inM = {}, inT = {};
+        b.forEach( function ( v ) { inB[ key( v ) ] = true; } );
+        m.forEach( function ( v ) { inM[ key( v ) ] = true; } );
+        t.forEach( function ( v ) { inT[ key( v ) ] = true; } );
+        m.concat( t ).forEach( function ( v )
+        {
+            var k = key( v );
+            if( seen[ k ] ) return;
+            seen[ k ] = true;
+            if( inM[ k ] && inT[ k ] ) out.push( v );          // on both
+            else if( ! inB[ k ] ) out.push( v );              // added by one side
+            // else: in base and removed by one side
+        } );
+        var sorted = function ( a ) { for( var i = 1; i < a.length; i++ ) if( a[ i - 1 ] > a[ i ] ) return false; return true; };
+        if( sorted( m ) && sorted( t ) ) out.sort( function ( x, y ) { return x < y ? -1 : x > y ? 1 : 0; } );
+        return out;
+    }
+
+    // hashText( text ) - a short stable name for a text (two 32-bit FNV-1a
+    // hashes, 16 hex digits): a key for an item that has none, the same on
+    // every device (shared/ical.js has its own copy, for Node).
+    function hashText( text )
+    {
+        var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+        text = String( text );
+        for( var i = 0; i < text.length; i++ )
+        {
+            var c = text.charCodeAt( i );
+            a = Math.imul( a ^ c, 0x01000193 ) >>> 0;
+            b = Math.imul( b ^ c, 0x5bd1e995 ) >>> 0;
+        }
+        return ( "0000000" + a.toString( 16 ) ).slice( -8 ) + ( "0000000" + b.toString( 16 ) ).slice( -8 );
+    }
+
+    window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting,
+                           localCount: localCount, clearLocal: clearLocal,
+                           mergeLists: mergeLists, mergeFields: mergeFields, mergeSets: mergeSets,
+                           hashText: hashText };
 } )();

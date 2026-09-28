@@ -20,13 +20,13 @@ from './lib/xlsx-format_v2.4.1.js';
 import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
-    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText
+    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf
 }
 from './grid.js';
 import
 {
     toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
-    toggleMergeSelection, toggleFreezeColumns, toggleFreezeRows, openBorderPopup,
+    updateToolbarActiveState, toggleMergeSelection, toggleFreezeColumns, toggleFreezeRows, openBorderPopup,
     closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
     updateNumFmtPreview, confirmNumFmt, cancelNumFmt
 }
@@ -92,7 +92,7 @@ const session = O.session( {
     store      : store,
     appDir     : APP_DIR,
     openRoot   : OPEN_ROOT,
-    defaultName: 'hoja.xlsx',
+    defaultName: T( 'calc.defaultFile' ),
     canOpen    : isOpenable,                                    // what the Open dialog lists
     onPick     : function( p ) { openPickedFile( p ); },        // a foreign format is converted first
     emptyKey   : 'calc.noSheets',
@@ -250,12 +250,13 @@ function wireStaticUI()
         // "Is a text field focused?" is the wrong test here: Handsontable
         // keeps focus in a hidden <textarea> whenever the grid is active, so
         // a plain input/textarea check never lets these through at all. What
-        // actually matters is whether the CELL EDITOR is open, plus the two
-        // boxes of the formula row, which are real inputs of ours outside
-        // the grid.
+        // actually matters is whether the CELL EDITOR is open, plus every
+        // field of ours outside the grid: the formula row's two boxes and a
+        // dialog's (a rename, "Guardar como", the fx search), where Ctrl+B
+        // bolded the cells behind the dialog.
         if( ( e.ctrlKey || e.metaKey ) && ! e.altKey && 'biu'.indexOf( e.key.toLowerCase() ) !== -1 )
         {
-            if( e.target && ( e.target.id === 'nameBox' || e.target.id === 'formulaBar' ) ) return;
+            if( typingOutsideGrid( e.target ) ) return;
             if( ! table || ! lastSelection ) return;
 
             const editor = table.getActiveEditor && table.getActiveEditor();
@@ -272,7 +273,7 @@ function wireStaticUI()
         // own keys.
         if( ( e.ctrlKey || e.metaKey ) && e.shiftKey && ! e.altKey && e.code === 'KeyV' )
         {
-            if( e.target && ( e.target.id === 'nameBox' || e.target.id === 'formulaBar' ) ) return;
+            if( typingOutsideGrid( e.target ) ) return;
             if( ! table || ! lastSelection ) return;
 
             const cellEditor = table.getActiveEditor && table.getActiveEditor();
@@ -413,6 +414,15 @@ function wireStaticUI()
     // only hangs the two header buttons and paints the remembered choice.
     CHROME.wire();
     CHROME.apply();
+}
+
+// A text field that is not the grid's own (the cell editor and the grid's
+// focus catcher both live inside #gridHost): its keys are its own.
+function typingOutsideGrid( el )
+{
+    if( ! el || ! el.closest || el.closest( '#gridHost' ) ) return false;
+    return el.isContentEditable || el.tagName === 'TEXTAREA' ||
+           ( el.tagName === 'INPUT' && /^(text|search|email|url|tel|password|number)$/.test( el.type ) );
 }
 
 // Handsontable only ships an en-US dictionary here, so the one the app uses
@@ -666,19 +676,19 @@ function refreshSelStats()
 
     let sum = 0, numbers = 0, filled = 0;
 
-    for( let r = lastSelection.r1; r <= lastSelection.r2; r++ )
+    // One read for the whole block: a cell at a time stalled Ctrl+A on a big
+    // sheet. Only real numbers add up, as in SUM: text that looks like one
+    // ("3,5" from a file) counts as filled, not as a number.
+    table.getData( Math.max( 0, lastSelection.r1 ), Math.max( 0, lastSelection.c1 ), lastSelection.r2, lastSelection.c2 ).forEach( function( row )
     {
-        for( let c = lastSelection.c1; c <= lastSelection.c2; c++ )
+        row.forEach( function( v )
         {
-            const v = table.getDataAtCell( r, c );
-            if( v === null || v === undefined || v === '' ) continue;
+            if( v === null || v === undefined || v === '' ) return;
 
             filled++;
-
-            const n = ( typeof v === 'number' ) ? v : Number( String( v ).replace( ',', '.' ) );
-            if( typeof v !== 'boolean' && isFinite( n ) && String( v ).trim() !== '' ) { sum += n; numbers++; }
-        }
-    }
+            if( typeof v === 'number' && isFinite( v ) ) { sum += v; numbers++; }
+        });
+    });
 
     if( ! filled ) { el.innerHTML = ''; return; }
 
@@ -847,12 +857,15 @@ function csvLosses()
     // Only a look that shows. Not the number format (a date or an amount is
     // written out the way it shows), nor the font a file puts on every cell,
     // nor plain black text.
-    const looks = Object.keys( activeSheet.cellStyles ).some( function( addr )
+    // Whole rows and columns count too (see THE LOOK OF A CELL in grid.js).
+    const shows = function( st )
     {
-        const st = activeSheet.cellStyles[ addr ] || {};
+        st = st || {};
         return !! ( st.bold || st.italic || st.underline || st.bg || st.border || ( st.align && st.align !== 'general' ) ||
                     ( st.color && st.color !== '000000' ) );
-    } );
+    };
+    const looks = Object.keys( activeSheet.cellStyles ).some( function( addr ) { return shows( activeSheet.cellStyles[ addr ] ); } ) ||
+                  ( activeSheet.rowStyles || [] ).some( shows ) || ( activeSheet.colStyles || [] ).some( shows );
     const notes = ( table.getCellsMeta() || [] ).some( function( m ) { return m && m.comment && m.comment.value; } );
 
     if( looks || notes || activeSheet.merges.length || Object.keys( activeSheet.links ).length )
@@ -922,6 +935,7 @@ window.addEventListener( 'balata:themechange', function()
     document.getElementById( 'gridHost' ).className = name;
     table.useTheme( name );
     table.render();
+    updateToolbarActiveState();     // the colour pickers start from the theme's colours
 } );
 
 //------------------------------------------------------------------------//
@@ -1088,7 +1102,7 @@ function openStats()
 function selStyle()
 {
     if( ! lastSelection ) return null;
-    return activeSheet.cellStyles[ encodeCell( { r: lastSelection.r1, c: lastSelection.c1 } ) ] || null;
+    return styleOf( activeSheet, lastSelection.r1, lastSelection.c1 );
 }
 
 function styleOn( field, value )

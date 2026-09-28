@@ -178,6 +178,8 @@ const SVG_FILE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
 const SVG_DOC    = '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(45 465) rotate(-48)"><path d="M0 0 28 -14 82 -36C96 -36 110 -27 122 -19L122 19C110 27 96 36 82 36L28 14Z"></path><rect x="132" y="-26" width="350" height="52"></rect><path d="M494 -26 522 -26C542 -26 550 -14 550 0 550 14 542 26 522 26L494 26Z"></path></g><rect x="262" y="220" width="176" height="50" rx="12"></rect><path fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M294 270 294 300C294 314 228 312 228 332L228 445C228 460 240 472 255 472L445 472C460 472 472 460 472 445L472 332C472 312 406 314 406 300L406 270"></path><path d="M228 355 472 355 472 445C472 460 460 472 445 472L255 472C240 472 228 460 228 445Z"></path></svg>';
 const SVG_SHEET  = '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><g transform="translate(-213.2 -558.1) scale(1.8891 3.2191)"><g transform="translate(37.3 3.7)"><path d="m 159.5,210.8 v 7.2 h 25.2 v 16.5 H 159.5 V 300 h -21.5 v -65.6 h -19.9 v -16.5 h 19.9 v -5.7 q 0,-14.8 6.2,-20.5 6.2,-5.7 22.9,-5.7 h 17.7 v 16.5 h -16.8 q -4.8,0 -6.6,1.8 -1.7,1.8 -1.8,6.5 z"></path><g transform="translate(67.4 112.5) scale(.625)"><path d="m 243.4,186.2 q -9.7,17.5 -14.4,33.9 -4.7,16.4 -4.7,32.8 0,16.3 4.7,32.8 4.7,16.5 14.4,34.1 h -16.7 q -11.6,-16.9 -17.3,-33.3 -5.6,-16.5 -5.6,-33.5 0,-17 5.6,-33.5 5.7,-16.6 17.3,-33.3 z"></path><path d="M 329.9,218 302.2,257.2 332.3,300 H 307.2 L 291.1,272.4 275.1,300 h -25 l 30.3,-42.8 -27.9,-39.3 h 25 l 13.6,24.5 13.7,-24.5 z"></path><path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path></g></g></g></svg>';
 const SVG_PDF    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><text x="12" y="18.5" font-size="7" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">PDF</text></svg>';
+// An archive (ARCHIVE_EXT): the page with a zipper down it and its pull tab.
+const SVG_ZIP    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>';
 const SVG_CODE   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>';
 const SVG_IMAGE  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
 const SVG_VIDEO  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="16" rx="2"></rect><polygon points="22 7 16 11 16 13 22 17"></polygon><polygon points="7 9 11 12 7 15" fill="currentColor" stroke="none"></polygon></svg>';
@@ -193,10 +195,14 @@ const SVG_SPLIT  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
 // to exactly one tool.
 const WRITE_IMPORT = [ 'docx' ];
 const CALC_IMPORT  = [ 'xlsx', 'csv' ];
+// Compressed files: all get the zipper icon. Only the last part of the name
+// counts, so "x.tar.gz" is 'gz'.
+const ARCHIVE_EXT  = [ 'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz', 'zst', 'lz', 'lzma', 'z', 'cab', 'arj', 'lzh' ];
 // LibreOffice documents. Write and Calc cannot read them, so the server
 // makes a .docx / .xlsx twin beside the original (openOffice below; keep
 // officeTwin in server/go/office.go the same lists). The other LibreOffice
-// kinds have no app here and are refused: Impress, Draw, Math, Base.
+// kinds have no app here: they upload as they are (no twin) and a
+// double-click only says Nayive cannot open them: Impress, Draw, Math, Base.
 const OFFICE_WRITE  = [ 'odt', 'ott', 'fodt', 'sxw', 'stw' ];
 const OFFICE_CALC   = [ 'ods', 'ots', 'fods', 'sxc', 'stc' ];
 const OFFICE_REFUSE = [ 'odp', 'otp', 'fodp', 'sxi', 'sti',      // Impress
@@ -295,6 +301,7 @@ function listIcon( node )
     if( WRITE_IMPORT.includes( ext ) || OFFICE_WRITE.includes( ext ) ) return { cls: ' ic-doc',   svg: SVG_DOC   };
     if( CALC_IMPORT.includes( ext )  || OFFICE_CALC.includes( ext )  ) return { cls: ' ic-sheet', svg: SVG_SHEET };
     if( ext === 'pdf'                ) return { cls: ' ic-pdf',   svg: SVG_PDF   };
+    if( ARCHIVE_EXT.includes( ext )  ) return { cls: ' ic-zip',   svg: SVG_ZIP   };
     if( TEXT_IMPORT.includes( ext )  ) return { cls: ' ic-code',  svg: SVG_CODE  };
     if( IMAGE_VIEW.includes( ext )   ) return { cls: ' ic-image', svg: SVG_IMAGE };
     if( VIDEO_VIEW.includes( ext )   ) return { cls: ' ic-media', svg: SVG_VIDEO };

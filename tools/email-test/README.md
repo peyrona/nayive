@@ -17,11 +17,13 @@ no internet, nothing of the real `store/` touched.
 - `run.mjs` drives headless Chromium over the DevTools protocol (`tools/locktest/cdp.mjs`).
 - Screenshots go to a temp folder, named at the end of the run.
 
-## What is covered (61 checks)
+## What is covered (80 checks)
 
-The clip's panel (Chat's, three choices), the writer (a file added during a save, a failed save
+The trays (not read / all, on a phone too), the clip's panel (Chat's, three choices), the writer (a file added during a save, a failed save
 keeps the text, Discard + Undo, Bcc), the message frame (no allow-same-origin, sized by its own
 script, its own pictures as `data:`, nothing sent with the session cookie after "Show pictures",
-links in a new tab), files (their real size, Save to Nayive), picking (select all, delete for good
-+ Undo), settings (new password, "always show pictures"), a start without the server, and sign-out
-by POST.
+links in a new tab), the head (From/To/Date folded, the chevron after the subject, on a phone
+too), the picture button (shows, hides again), files (their real size, Save to Nayive), picking
+(select all, delete for good + Undo), settings (new password, pictures Hidden/Shown, the
+signature), the signature in a new message and a reply (a message with only it keeps no draft),
+a start without the server, and sign-out by POST.

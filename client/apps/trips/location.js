@@ -82,7 +82,13 @@ function pickHit( aHits )
 // The caller MUST NOT persist a "not found" (null -> lat:null) for the
 // unreachable case, or a stage geocoded once while offline is stuck
 // forever (retry only fires while lat === undefined).
-async function geocodeLocation( sQuery )
+//
+// `sDate` (optional, a stage's start date): the time zone is asked for with
+// that day's weather in the SAME open-meteo call, and the answer seeds
+// weatherCache - one request per place instead of two (the free-tier budget
+// counts requests). Should that wider call fail (the archive's CORS answer is
+// not reliable), the plain time-zone call is made, as before.
+async function geocodeLocation( sQuery, sDate )
 {
     try
     {
@@ -107,12 +113,38 @@ async function geocodeLocation( sQuery )
         if( ! isFinite( lat ) || ! isFinite( lon ) )
             return null;
 
-        const tzRes = await fetch( 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&timezone=auto&daily=weathercode' );
+        let tzData = null;
 
-        if( ! tzRes.ok )
-            return { unreachable: true };
+        if( sDate )
+        {
+            try
+            {
+                const wxRes = await fetch( weatherUrl( lat, lon, sDate ) );
+                const wxKey = lat.toFixed( 3 ) + ',' + lon.toFixed( 3 ) + ',' + sDate;
 
-        const tzData = await tzRes.json();
+                // An answer - even "no data for that day" (a date past the
+                // forecast's reach) - is what the weather call would get too, so
+                // it is cached either way; only a failed fetch is asked again.
+                if( ! wxRes.ok ) weatherCache.set( wxKey, null );
+                else
+                {
+                    const wxData = await wxRes.json();
+                    weatherCache.set( wxKey, parseWeather( wxData ) );
+                    if( wxData && wxData.timezone ) tzData = wxData;
+                }
+            }
+            catch( _ ) { tzData = null; }
+        }
+
+        if( ! tzData )
+        {
+            const tzRes = await fetch( 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&timezone=auto&daily=weathercode' );
+
+            if( ! tzRes.ok )
+                return { unreachable: true };
+
+            tzData = await tzRes.json();
+        }
 
         if( ! tzData.timezone )
             return { unreachable: true };
@@ -205,20 +237,29 @@ async function loadStageWeather( key, lat, lon, sDate )
 
 async function fetchWeather( lat, lon, sDate )
 {
-    const near = sDate >= addDaysIso( todayIso(), -5 );
-    const base = near ? 'https://api.open-meteo.com/v1/forecast'
-                      : 'https://archive-api.open-meteo.com/v1/archive';
-
-    const url = base + '?latitude=' + lat + '&longitude=' + lon +
-                '&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto' +
-                '&start_date=' + sDate + '&end_date=' + sDate;
-
-    const res = await fetch( url );
+    const res = await fetch( weatherUrl( lat, lon, sDate ) );
 
     if( ! res.ok )
         return null;
 
-    const data = await res.json();
+    return parseWeather( await res.json() );
+}
+
+// The one day's weather of a place; with timezone=auto the answer also names
+// the place's time zone, which is what lets geocodeLocation() ask for both at once.
+function weatherUrl( lat, lon, sDate )
+{
+    const near = sDate >= addDaysIso( todayIso(), -5 );
+    const base = near ? 'https://api.open-meteo.com/v1/forecast'
+                      : 'https://archive-api.open-meteo.com/v1/archive';
+
+    return base + '?latitude=' + lat + '&longitude=' + lon +
+                  '&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto' +
+                  '&start_date=' + sDate + '&end_date=' + sDate;
+}
+
+function parseWeather( data )
+{
     const dy   = data && data.daily;
 
     if( ! dy || ! dy.time || ! dy.time.length )

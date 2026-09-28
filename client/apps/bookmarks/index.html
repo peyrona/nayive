@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS. -->
     <link rel="manifest" href="manifest.json">
@@ -100,7 +101,7 @@
                 </div>
                 <div id="tree"></div>
             </nav>
-            <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical"></div>
+            <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" data-i18n-attr="title:ui.dragResize"></div>
 
             <main id="listPane" class="list-pane">
                 <div class="search-row">

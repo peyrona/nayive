@@ -173,8 +173,11 @@ func TestWhoamiRenewsRememberedCookie(t *testing.T) {
 	signIn(t, client2, ts2.URL, "ana", "abc")
 	resp = do(t, client2, "GET", ts2.URL+"/api/whoami", nil, nil)
 	resp.Body.Close()
-	if raw := resp.Header.Get("Set-Cookie"); raw != "" {
-		t.Errorf("whoami after a plain sign-in set a cookie: %q", raw)
+	// Only the readable "nayive_who" (store_owner.go), never the session's.
+	for _, raw := range resp.Header.Values("Set-Cookie") {
+		if strings.HasPrefix(raw, CookieName+"=") {
+			t.Errorf("whoami after a plain sign-in set the session cookie: %q", raw)
+		}
 	}
 }
 

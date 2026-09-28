@@ -18,7 +18,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -48,6 +47,11 @@ func cleanSegments(parts []string) []string {
 
 // hasDotDot reports whether any segment is "..". Checked AFTER percent-decoding,
 // which is the whole point: "%2e%2e" would slip past a check done before.
+//
+// An API path is decoded ONCE, by the query parser (or the mux, for a path
+// value), and never again: a second decode (the Python's, kept until
+// 2026-09-28) made a name holding "%20" unreachable and put an upload named
+// "a%2Fb.txt" into a folder a/.
 func hasDotDot(parts []string) bool {
 	for _, p := range parts {
 		if p == ".." {
@@ -65,22 +69,6 @@ func hasSegment(parts []string, want string) bool {
 		}
 	}
 	return false
-}
-
-// unquotePath percent-decodes an API path the way Python's urllib unquote does.
-//
-// java: the Python decodes TWICE by accident of layering - once in parse_qs
-// when the query string is parsed, once in resolve_path. So "?file=a%252Fb"
-// really does address "a/b". Go's ParseQuery decodes once, so the second decode
-// has to be explicit here to keep the two servers addressing the same file.
-// This is deliberate compatibility, not a bug being copied blindly: a client
-// that already double-encodes would otherwise break on the port.
-func unquotePath(p string) string {
-	decoded, err := url.PathUnescape(p)
-	if err != nil {
-		return p // a stray "%" is a literal one, as in Python
-	}
-	return decoded
 }
 
 // isInside reports whether `target` is `root` itself or lies underneath it.

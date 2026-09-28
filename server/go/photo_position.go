@@ -37,6 +37,7 @@ func isJPEGName(p string) bool {
 // photoUploaded is called for every JPEG a user PUTs into their own home.
 // `rel` is its home-relative path ("files/fotos/lisboa/IMG_1.jpg").
 func (s *Server) photoUploaded(user, rel string, target Resolved) {
+	defer traced(s, "photo", 0) // last of all: tests only (chat.go testHook)
 	defer func() {
 		if v := recover(); v != nil {
 			s.log.Error("reading a photo's position failed", "err", v)

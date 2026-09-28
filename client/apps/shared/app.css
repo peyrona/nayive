@@ -357,31 +357,13 @@ html.is-windowed .page > .page-inner > .card > .header
  * WINDOWED  - the app runs as a window of the desktop (desktop/index.html).
  * shared/ui.js stamps html.is-windowed instead of .is-embedded: the app keeps
  * its icon and title (not its sync dot: the desktop shows one for all), and its top row doubles as the window's title
- * bar. The card shell fills the window (same rule as EMBEDDED above).
- *
- * .win-dots  the window's close / minimise / maximise, three small discs the
- *            desktop puts at the start of that row. Their mark shows while the
- *            pointer is over the group; a window behind the others greys them
- *            (html.is-window-back, set by the desktop).
+ * bar. The card shell fills the window (same rule as EMBEDDED above). The
+ * window's own buttons (Scale / Resize, minimise, maximise, close) are on the
+ * desktop's bar, not in the app.
  * ---------------------------------------------------------------------------*/
 /* The connection status: ONE for the whole desktop, after its clock (it copies
    the worst of every window's), so no window shows its own. */
 html.is-windowed .sync-indicator { display: none; }
-.win-dots          { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; margin-right: 12px; }
-.win-dots button
-{
-    display: flex; align-items: center; justify-content: center;
-    width: 14px; height: 14px; padding: 0;
-    border: none; border-radius: 50%;
-    color: rgba(0, 0, 0, 0.6); cursor: pointer;
-}
-.win-dots [data-win="close"] { background: var(--danger); }
-.win-dots [data-win="min"]   { background: var(--warn); }
-.win-dots [data-win="max"]   { background: var(--ok); }
-.win-dots svg      { width: 10px; height: 10px; display: block; visibility: hidden; }
-.win-dots:hover svg { visibility: visible; }
-.win-dots button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-html.is-window-back .win-dots:not(:hover) button { background: var(--line); }
 
 /* The trailing button bar, kept together so it wraps as one unit (see above). */
 .topbar-actions,
@@ -393,6 +375,16 @@ html.is-window-back .win-dots:not(:hover) button { background: var(--line); }
     flex: 0 0 auto;
     margin-left: auto;          /* hug the right edge while it shares the title's line */
 }
+
+/* In a desktop window the top row is the window's title bar (desktop/index.html
+ * drags it from any empty spot). A text field after the app name - the document
+ * name in Calc / Text / Write, a search box, Tasks' compose line - keeps an empty
+ * strip after it to grab the window by: at least 2rem, more as the window widens. */
+html.is-windowed .file-label,
+html.is-windowed .file-label-input,
+html.is-windowed .topbar .search-wrap,
+html.is-windowed .tb-end .topbar-search:not(.show),
+html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 
 /* Card-shell header: same parts, no divider. */
 .header
@@ -794,6 +786,22 @@ html.is-window-back .win-dots:not(:hover) button { background: var(--line); }
     margin: 2px 0 16px;
 }
 .sheet-header h2   { margin: 0; }
+
+/* SWITCH - an on / off slider: <label class="switch"><input type="checkbox">
+ * <span class="track"></span></label>, or the same as a <span> inside a label.
+ * Calendar's "all day", the desktop's Tile. */
+.switch { position: relative; width: 44px; height: 26px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
+.switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::before { transform: translateX(18px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled + .track { cursor: default; }
+/* .switch.sm - a shorter one, for a bar or a line of small text (the desktop's Tile). */
+.switch.sm { width: 32px; height: 18px; }
+.switch.sm .track::before { width: 14px; height: 14px; left: 2px; top: 2px; }
+.switch.sm input:checked + .track::before { transform: translateX(14px); }
 
 @media (max-width: 640px)
 {
@@ -2088,6 +2096,36 @@ button { -webkit-touch-callout: none; }
 .folder-pick .fp-btn-ic svg { width: 16px; height: 16px; }
 .folder-pick .fp-btn-nm     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* NayiveUI.pickFolder / pickFile: the folder tree in the sheet (.fp-tree, one
+   .fp-row per folder), and for pickFile the crumb of the folder on show and
+   a file's size. */
+.fp-tree  { margin: 4px 0 2px; min-height: 240px; max-height: min(66vh, 560px); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-m); }
+.fp-msg   { margin: 0; padding: 16px; color: var(--text-dim); font-size: .9rem; line-height: 1.4; }
+.fp-row
+{
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 8px; cursor: pointer;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.fp-row:last-child { border-bottom: none; }
+.fp-row:hover      { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.fp-row.sel        { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.fp-row.sel .fp-ic,
+.fp-row.sel .fp-name { color: var(--text); }
+.fp-caret
+{
+    flex: 0 0 auto; width: 20px; align-self: stretch; display: flex; align-items: center;
+    justify-content: center; color: var(--text-dim); font-size: .8rem;
+}
+.fp-caret.has:hover { color: var(--text); }
+.fp-ic     { flex: 0 0 auto; display: flex; color: var(--text-dim); }
+.fp-ic svg { width: 16px; height: 16px; }
+.fp-name   { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.fp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px; font-size: .85rem; color: var(--text-dim); }
+.fp-crumbs button { border: none; background: none; padding: 2px 4px; border-radius: var(--radius-s); font: inherit; color: var(--link); cursor: pointer; }
+.fp-crumbs button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.fp-crumbs b { padding: 2px 4px; color: var(--text); font-weight: 600; }
+.fp-size   { flex: 0 0 auto; font-size: .78rem; color: var(--text-dim); }
+
 /* Help ▸ "Keyboard shortcuts" (Calc, Write): one row per shortcut, its keys on
    the right. NayiveOffice.showShortcuts fills #scList. */
 .sc-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
@@ -2259,7 +2297,7 @@ input[type=range]
     width: 100%;
     height: 4px;
     border-radius: 2px;
-    background: var(--line);
+    background: var(--track);
     outline: none;
 }
 input[type=range]::-webkit-slider-thumb
@@ -2272,7 +2310,7 @@ input[type=range]::-webkit-slider-thumb
 }
 input[type=range]::-moz-range-thumb  { width: 12px; height: 12px; border: none; border-radius: 50%;
                                        background: var(--accent); cursor: pointer; }
-input[type=range]::-moz-range-track  { height: 4px; border-radius: 2px; background: var(--line); }
+input[type=range]::-moz-range-track  { height: 4px; border-radius: 2px; background: var(--track); }
 input[type=range]:disabled           { opacity: 0.5; }
 
 /* On a narrow window the bar goes to two rows with the seek bar full width
@@ -2523,3 +2561,48 @@ input[type=range]:disabled           { opacity: 0.5; }
 .att[data-c="3"] { --c: var(--danger); }
 .att[data-c="4"] { --c: var(--busy); }
 .att[data-c="5"] { --c: var(--ok); }
+
+/* A PICTURE YOU CAN CHANGE (.face): a round picture as a button, a small
+   camera badge on its corner - Chat's people and profile, Contacts' cards.
+   .face.sm: the badge for a list row's small circle. .face-pick: the circle
+   on top of a dialog, a "remove" button under it. */
+.face { position: relative; flex: 0 0 auto; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
+.face .cam
+{
+    position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--on-accent); background: var(--accent); border: 2px solid var(--head);
+}
+.face .cam svg { width: 15px; height: 15px; }
+.face:hover > :first-child { filter: brightness(0.95); }
+.face.sm .cam     { right: -3px; bottom: -3px; width: 18px; height: 18px; border-width: 1.5px; }
+.face.sm .cam svg { width: 10px; height: 10px; }
+.face-pick        { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 14px; }
+.face-pick .face .cam { border-color: var(--card); }
+
+
+/* SCREEN LOCKER (shared/locker.js). html.nv-locked hides the page from its
+   first paint; the locker is a full-screen modal <dialog> on black - black is
+   the lockers' artwork, like a game board, not a theme colour. The password
+   box is a .sheet in the middle, shown by a key or a press. */
+html.nv-locked body { visibility: hidden; }
+.lock-dlg
+{
+    visibility: visible;
+    position: fixed; inset: 0;
+    width: 100%; height: 100%; max-width: none; max-height: none;
+    margin: 0; padding: 0; border: 0;
+    background: #000; overflow: hidden;
+    color-scheme: dark;
+}
+.lock-dlg::backdrop { background: #000; }
+.lock-host { position: absolute; inset: 0; overflow: hidden; }
+.sheet.lock-card
+{
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(340px, calc(100% - 32px));
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+}
+.lock-card input { flex: 1 1 0; min-width: 0; }
+.lock-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--danger); }

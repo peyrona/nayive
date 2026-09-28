@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -74,8 +75,9 @@
                     <button id="actDelete"  class="icon-btn" type="button" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
                     <button id="actForget"  class="icon-btn danger" type="button" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
                 </div>
-                <!-- Reading only, and only when the message has pictures from the internet. -->
-                <button id="imagesBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.showImages, aria-label:mail.showImages">
+                <!-- Reading only, and only when the message has pictures from the internet:
+                     shows them, or hides them again (read.js sets its words). -->
+                <button id="imagesBtn" class="icon-btn" type="button" hidden aria-pressed="false" data-i18n-attr="title:mail.showImages, aria-label:mail.showImages">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                 </button>
                 <!-- Writing: what a message being written can do. -->
@@ -137,16 +139,16 @@
                     <div id="listMore" class="mail-more" hidden></div>
                 </section>
 
-                <!-- One message -->
+                <!-- One message. Its head: the subject, a chevron, the labels - a tap
+                     on the subject or the chevron shows / hides From, To, Date. -->
                 <section id="readView" class="mail-read-view" hidden>
-                    <h2 id="readSubject" class="mail-subject"></h2>
-                    <div id="readLabels" class="mail-chips" hidden></div>
-                    <div id="readMeta" class="mail-meta"></div>
-                    <div id="readParts" class="mail-parts" hidden></div>
-                    <div id="imagesBar" class="mail-images-bar" hidden>
-                        <span data-i18n="mail.imagesHidden"></span>
-                        <button id="imagesBarBtn" class="text-btn" type="button" data-i18n="mail.showImages"></button>
+                    <div class="mail-head">
+                        <h2 id="readSubject" class="mail-subject"></h2>
+                        <button id="metaBtn" class="icon-btn sm mail-meta-btn" type="button" data-icon="chevron" aria-controls="readMeta" aria-expanded="false" data-i18n-attr="title:mail.details, aria-label:mail.details"></button>
+                        <span id="readLabels" class="mail-chips" hidden></span>
                     </div>
+                    <div id="readMeta" class="mail-meta" hidden></div>
+                    <div id="readParts" class="mail-parts" hidden></div>
                     <div id="readBody" class="mail-content"></div>
                 </section>
 
@@ -160,7 +162,7 @@
                     </div>
                     <div class="mail-cfield">
                         <label for="cTo" data-i18n="mail.to"></label>
-                        <input id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr>
+                        <input id="cTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-addr data-i18n-attr="placeholder:mail.toPh">
                         <button id="cCcBtn" class="text-btn ghost" type="button" data-i18n="mail.ccBtn"></button>
                     </div>
                     <div id="cCcRow" class="mail-cfield" hidden>
@@ -213,7 +215,9 @@
          it is typed; what that provider needs is spelled out under it, step by
          step, with a link to where its app password is made.
          General: how many days mail stays in the Trash; pictures from the internet
-         always shown or not. Every change applies at once. -->
+         hidden or shown when a message opens (the toolbar's picture button shows
+         them in one message); the signature under every new message, reply and
+         forward. Every change applies at once. -->
     <div class="sheet-backdrop" id="setSheet" role="dialog" aria-modal="true">
         <div class="sheet sheet--wide">
             <h2 data-i18n="mail.settings"></h2>
@@ -306,9 +310,20 @@
                     <input id="trashDays" type="number" min="1" max="365" inputmode="numeric">
                     <p id="trashDaysHint" class="hint" data-i18n="mail.trashDaysHint" hidden></p>
                 </div>
-                <div class="section-label" data-i18n="mail.showImages"></div>
-                <label class="mail-check"><input id="showImagesAlways" type="checkbox"> <span data-i18n="mail.showImagesAlways"></span></label>
-                <p class="hint" data-i18n="mail.showImagesAlwaysHint"></p>
+                <div class="section-label" data-i18n="mail.images"></div>
+                <div class="field">
+                    <label for="imagesDefault" data-i18n="mail.imagesDefault"></label>
+                    <select id="imagesDefault">
+                        <option value="hide" data-i18n="mail.imagesHide"></option>
+                        <option value="show" data-i18n="mail.imagesShow"></option>
+                    </select>
+                    <p id="imagesHint" class="hint"></p>
+                </div>
+                <div class="section-label" data-i18n="mail.signature"></div>
+                <div class="field">
+                    <textarea id="signature" class="mail-signature" rows="4" maxlength="2000" data-i18n-attr="placeholder:mail.signaturePh, aria-label:mail.signature"></textarea>
+                    <p class="hint" data-i18n="mail.signatureHint"></p>
+                </div>
             </div>
 
             <div class="sheet-actions">

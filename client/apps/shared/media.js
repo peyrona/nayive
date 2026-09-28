@@ -47,7 +47,10 @@
     function baseName( path ) { return String( path ).slice( String( path ).lastIndexOf( "/" ) + 1 ); }
     function dirOf( path )    { var i = String( path ).lastIndexOf( "/" ); return i < 0 ? "" : String( path ).slice( 0, i ); }
     function stripExt( name ) { return String( name ).replace( /\.[a-z0-9]+$/i, "" ); }
-    function norm( s )        { return String( s || "" ).toLowerCase().replace( /[^a-z0-9]+/g, "" ); }
+    // Letters and digits of every script, so "Alién" is not "Alin" and two
+    // Cyrillic titles are not both "". NFC first: a macOS file name spells
+    // "é" as "e" + an accent mark, which would drop the accent.
+    function norm( s )        { return String( s || "" ).normalize( "NFC" ).toLowerCase().replace( /[^\p{L}\p{N}]+/gu, "" ); }
 
     // Tile colour cycled by a stable hash of a name, so the same album / film
     // gets the same colour across reloads.
@@ -127,20 +130,22 @@
     // List the app's folder - one level (listDir) or the whole subtree
     // (listDirRecursive) - and explain the failure in the app's own message
     // slot when it can't: a missing folder, an expired session (-> the sign-in
-    // page), or no connection. Resolves with the listing, or null after
-    // having reported.
+    // page), or no answer. Resolves with the listing, or null after having
+    // reported.
     async function loadFolderTree( dir, onMsg, recursive )
     {
         try { return await ( recursive ? GumApi.listDirRecursive( dir ) : GumApi.listDir( dir ) ); }
         catch( err )
         {
-            var msg = String( err && err.message );
+            var st = err && err.status;
             // 403 = a share that was taken back (or never ours). NOT a sign-in
-            // problem, so it must never bounce the page to the login page.
-            if( msg.indexOf( "HTTP 404" ) !== -1 ) onMsg( NayiveUI.t( 'media.folderGone' ) );
-            else if( msg.indexOf( "HTTP 403" ) !== -1 ) onMsg( NayiveUI.t( 'media.noAccess' ) );
-            else if( navigator.onLine ) GumApi.loginRedirect();
-            else onMsg( NayiveUI.t( 'media.offlineRetry' ) );
+            // problem, so it must never bounce the page to the login page. Only
+            // a 401 does: a server restarting, or Wi-Fi with no internet
+            // behind it, is "try again", not "sign in".
+            if( st === 404 )      onMsg( NayiveUI.t( 'media.folderGone' ) );
+            else if( st === 403 ) onMsg( NayiveUI.t( 'media.noAccess' ) );
+            else if( st === 401 ) GumApi.loginRedirect();
+            else onMsg( NayiveUI.t( navigator.onLine ? 'ui.loadFailed' : 'media.offlineRetry' ) );
             return null;
         }
     }
@@ -210,13 +215,24 @@
     //   var cache = NayiveMedia.scanCache( "data/music/scan-cache.json" );
     //   await cache.load();                    // cache.loaded says if it worked
     //   var e = cache.hit( item );             // entry when size+mtime match, else null
-    //   cache.set( item, { title: ... } );     // record + schedule a save
+    //   cache.set( item, { title: ... } );     // record + a save: every SCAN_BATCH
+    //                                          // new entries, or 2.5 s after the last
     //   cache.prune( alivePaths, inScope );    // drop dead entries; true if any
     //   cache.save() / cache.saveNow()         // debounced / immediate write
     //   cache.map                              // the raw { path: entry } object
+    //
+    // A save is MERGED over the file as it is at that moment, never written
+    // whole from memory: Drive's re-keys (remapPaths below) and another
+    // device's scans since our load stay. What this page removed from `map`
+    // (prune, or a plain delete) since its load or last save goes from the
+    // file too; a file that cannot be read then is not written at all.
+    var SCAN_BATCH = 500;
+
     function scanCache( path )
     {
-        var timer = null;
+        var timer   = null;
+        var unsaved = 0;          // set() calls since the last save
+        var known   = {};         // the keys the file had at our last load / save
         var self = {
             map: {},
             loaded: false,
@@ -224,6 +240,8 @@
             {
                 try { self.map = ( await GumApi.readJson( path ) ) || {}; self.loaded = true; }
                 catch( e ) { self.map = {}; self.loaded = false; }
+                known = {};
+                Object.keys( self.map ).forEach( function ( k ) { known[ k ] = true; } );
                 return self.map;
             },
             hit: function ( item )
@@ -235,7 +253,15 @@
             {
                 self.map[ item.path ] = Object.assign( self.map[ item.path ] || {},
                                                        { size: item.size, mtime: item.mtime }, fields );
-                self.save();
+                // A first scan of 20 000 photos sets as fast as it reads: the
+                // whole file went up every 2.5 s. Now once per SCAN_BATCH, and
+                // the tail 2.5 s after the last one.
+                if( ++unsaved >= SCAN_BATCH ) self.saveNow();
+                else
+                {
+                    clearTimeout( timer );
+                    timer = setTimeout( function () { timer = null; self.saveNow(); }, 2500 );
+                }
             },
             // `alive`: a Set (or array) of the paths still present. `inScope(key)`
             // (optional) limits the sweep - Photos lists one folder at a time,
@@ -257,10 +283,25 @@
                 if( timer ) return;
                 timer = setTimeout( function () { timer = null; self.saveNow(); }, 2500 );
             },
-            saveNow: function ()
+            saveNow: async function ()
             {
                 if( timer ) { clearTimeout( timer ); timer = null; }
-                return GumApi.writeJson( path, self.map ).catch( function () {} );
+                unsaved = 0;
+
+                var disk;
+                try { disk = ( await GumApi.readJson( path ) ) || {}; }
+                catch( e ) { return; }
+                if( typeof disk !== "object" || Array.isArray( disk ) ) disk = {};
+
+                // Into self.map in place: callers hold it and write to it.
+                var map = self.map;
+                Object.keys( disk ).forEach( function ( k )
+                {
+                    if( ! ( k in map ) && ! known[ k ] ) map[ k ] = disk[ k ];   // new there since
+                } );
+                known = {};
+                Object.keys( map ).forEach( function ( k ) { known[ k ] = true; } );
+                try { await GumApi.writeJson( path, map ); } catch( e ) {}
             }
         };
         return self;
@@ -290,7 +331,11 @@
 
     var COMMENTS_PATH = "data/photos/comments.json";
     var PHOTOS_SCAN   = "data/photos/scan-cache.json";
-    var SCAN_CACHES   = [ PHOTOS_SCAN, "data/music/scan-cache.json" ];
+    var SCAN_CACHES   = [ PHOTOS_SCAN, "data/music/scan-cache.json", "data/movies/scan-cache.json" ];
+
+    // Movies' resume points and "watched" marks: two path-keyed maps inside
+    // one file ({ version, watched: {}, resume: {} }).
+    var MOVIES_PROGRESS = "data/movies/progress.json";
 
     // The comment map, read afresh on every call - never cached: a Drive left
     // open all day would otherwise write its old copy back and wipe the notes
@@ -360,6 +405,12 @@
         await remapComments( pairs, false );
         for( var i = 0; i < SCAN_CACHES.length; i++ )
             await editSidecar( SCAN_CACHES[ i ], function ( map ) { return rekey( map, pairs, false ); } );
+        await editSidecar( MOVIES_PROGRESS, function ( prog )
+        {
+            var a = !! prog.watched && typeof prog.watched === "object" && rekey( prog.watched, pairs, false );
+            var b = !! prog.resume  && typeof prog.resume  === "object" && rekey( prog.resume,  pairs, false );
+            return a || b;
+        } );
     }
 
     // A copy: the note is worth copying with the photo, the scan entry is not -
@@ -414,7 +465,11 @@
     //------------------------------------------------------------------------//
     // DURATION PROBE - a throwaway <audio> / <video> with preload=metadata.
     // Cheap: the server supports Range, so the browser only pulls the header.
-    // Resolves with the length in seconds, or null.
+    // Resolves with the length in seconds, or null - after PROBE_MS at most: a
+    // file that stalls (neither metadata nor an error) must not hold its place
+    // in the scan pool for ever.
+    var PROBE_MS = 15000;
+
     function probeDuration( kind, url )
     {
         return new Promise( function ( resolve )
@@ -425,12 +480,15 @@
             {
                 if( done ) return;
                 done = true;
+                // load() with no src lets the player go: past Chrome's ~1000
+                // live media players every new <audio> fails, not only <video>.
                 probe.removeAttribute( "src" );
-                if( kind === "video" ) probe.load();
+                probe.load();
                 resolve( isFinite( d ) && d > 0 ? d : null );
             }
             probe.addEventListener( "loadedmetadata", function () { finish( probe.duration ); } );
             probe.addEventListener( "error", function () { finish( null ); } );
+            setTimeout( function () { finish( null ); }, PROBE_MS );
             probe.preload = "metadata";
             probe.muted   = true;
             probe.src     = url;

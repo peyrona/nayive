@@ -235,8 +235,15 @@
         // beat, so there is no line for it in games.json and nothing for the
         // shell's loadData() to merge.
 
-        var Chess = ( function ()
+        // The ENGINE - the rules and the machine, and nothing else: no screen,
+        // no sound, not one name from outside its own braces. It is kept that
+        // way because it runs TWICE: here on the page, which asks it what the
+        // moves are, and in a worker made from this very function's source
+        // (see brain() below), where the machine thinks without freezing the
+        // page. One copy of the rules, so the two can never disagree on a move.
+        function chessEngine()
         {
+            'use strict';
 
             //---- the rules ---------------------------------------------------
             //
@@ -776,10 +783,10 @@
                 hard:   { depth: 5, quiet: true,  slop:  0, ms: 1200 }
             };
 
-            // Picks the machine's move. It is one straight call and not a
-            // worker: at these depths it is tens of milliseconds, and the board
-            // is painted before it is asked (see machineMove), so the move the
-            // player just made is on screen while it thinks.
+            // Picks the machine's move. It runs in the worker (see brain()):
+            // the hard level may take its whole 1.2 s, and on the page's own
+            // thread that is a board, a toolbar and a Back button that do not
+            // answer for as long.
             function think( pos, level )
             {
                 var cfg   = LEVELS[ level ] || LEVELS.medium;
@@ -849,17 +856,30 @@
                 return scored[ Math.floor( Math.random() * scored.length ) ].m;
             }
 
+            return { P: P, N: N, B: B, R: R, Q: Q, K: K, WHITE: WHITE, VALUE: VALUE,
+                     kind: kind, side: side, startPos: startPos, kingSq: kingSq, inCheck: inCheck,
+                     legal: legal, make: make, unmake: unmake, think: think };
+        }
+
+        var Chess = ( function ()
+        {
+            var E = chessEngine();
+            var P = E.P, N = E.N, B = E.B, R = E.R, Q = E.Q, K = E.K, WHITE = E.WHITE, VALUE = E.VALUE;
+            var kind = E.kind, side = E.side, startPos = E.startPos, kingSq = E.kingSq, inCheck = E.inCheck,
+                legal = E.legal, make = E.make, unmake = E.unmake;
+
             //---- the game ----------------------------------------------------
             //
             // The player is White and so moves first. The machine answers from
-            // a setTimeout rather than on the spot, and not for effect: the
-            // search takes the one thread there is, so without it the player's
-            // own move would not be painted until the answer to it was ready.
+            // a setTimeout rather than on the spot - the player's move is
+            // painted and heard first - and then thinks in a worker, so the
+            // page keeps answering the whole time it does.
             //
-            // That timer is the one thing leave() has to cancel. Left running
-            // it would go on playing behind the Games screen - this game's
-            // version of the loop the three canvas games stop when their pane
-            // goes away.
+            // The timer and the search are the two things leave() and a new
+            // game have to cancel. Left running, the answer would land on a
+            // board that has moved on - or go on playing behind the Games
+            // screen, this game's version of the loop the three canvas games
+            // stop when their pane goes away.
 
             var HUMAN = WHITE;
             var WAIT  = 180;                   // ms between the player's move being painted and the machine starting
@@ -887,6 +907,9 @@
             var promoM  = null;                // the promotions waiting for a piece to be chosen
             var lastMv  = null;
             var timer   = 0;                   // the machine's pending turn
+            var worker  = null;                // the machine's own thread, made on its first turn
+            var asked   = 0;                   // the number of the question in flight; an answer to any other is stale
+            var busy    = false;               // a question is out and not yet answered
 
             var squares = [];
             var boardEl, overEl, overTitleEl, overSubEl, overBtnEl, promoEl, statusEl;
@@ -924,12 +947,97 @@
 
                 timer = setTimeout( function ()
                 {
-                    var m;
-
                     timer = 0;
-                    m = think( pos, level );
-                    if( m ) play( m );
+                    ask();
                 }, WAIT );
+            }
+
+            //---- the machine's thread ----------------------------------------
+            //
+            // The worker is made from chessEngine's own source, as a blob, and
+            // not from a file of its own: the page needs the same rules the
+            // moment it is mounted, which is before any second file could have
+            // loaded. A blob is also nothing to download, so offline it thinks
+            // exactly as well as online.
+            //
+            // Every question carries a number, and an answer is only played if
+            // it is to the LAST question asked: a new game or leaving the pane
+            // ends the search in flight (terminate - a search left running would
+            // hold the next question up behind it), and the number throws away
+            // an answer that was already on its way.
+
+            var brainUrl = '';
+            var alone    = false;              // no worker to be had: think on the page, as it always did
+
+            function brain()
+            {
+                var w;
+
+                if( ! brainUrl )
+                    brainUrl = URL.createObjectURL( new Blob( [
+                        'var E = (' + chessEngine.toString() + ')();\n'
+                      + 'onmessage = function ( e ) { postMessage( { id: e.data.id, m: E.think( e.data.pos, e.data.level ) } ); };\n'
+                      + '//# sourceURL=chess-worker.js\n' ], { type: 'text/javascript' } ) );
+
+                w = new Worker( brainUrl );
+                w.onmessage = heard;
+                w.onerror   = function ( e )
+                {
+                    e.preventDefault();
+                    stop();
+                    alone = true;
+                    if( state === 'thinking' ) ask();
+                };
+                return w;
+            }
+
+            function ask()
+            {
+                if( ! alone && ! worker )
+                {
+                    try { worker = brain(); } catch ( e ) { alone = true; }
+                }
+                if( alone ) { answer( E.think( pos, level ) ); return; }
+
+                busy = true;
+                worker.postMessage( { id: ++asked, pos: pos, level: level } );
+            }
+
+            function heard( e )
+            {
+                if( ! busy || e.data.id !== asked ) return;     // an answer to a question nobody is asking any more
+
+                busy = false;
+                answer( e.data.m );
+            }
+
+            // The answer is looked up among the page's own legal moves rather
+            // than played as it came: whatever the worker says, the move played
+            // is one the rules here allow, and the one in the history is this
+            // page's own object.
+            function answer( m )
+            {
+                var list, i;
+
+                if( ! m || state !== 'thinking' ) return;
+
+                list = legal( pos );
+                for( i = 0; i < list.length; i++ )
+                    if( list[ i ].from === m.from && list[ i ].to === m.to && list[ i ].promo === m.promo ) { play( list[ i ] ); return; }
+            }
+
+            // Takes the machine's turn off the table: the wait before it, and the
+            // search itself if one is running. An idle worker is kept for the
+            // next turn.
+            function stop()
+            {
+                if( timer ) { clearTimeout( timer ); timer = 0; }
+                if( ! busy ) return;
+
+                busy = false;
+                asked++;
+                worker.terminate();
+                worker = null;
             }
 
             // The sounds are the other games'. A piece put down is Minesweeper's
@@ -1038,7 +1146,7 @@
 
             function newGame()
             {
-                if( timer ) { clearTimeout( timer ); timer = 0; }
+                stop();
 
                 pos     = startPos();
                 history = [];
@@ -1229,12 +1337,12 @@
 
                 // The machine was thinking when the pane went away, and leave()
                 // took its turn off the table. This is where it gets it back.
-                if( state === 'thinking' && ! timer ) machineTurn();
+                if( state === 'thinking' && ! timer && ! busy ) machineTurn();
             }
 
             function leave()
             {
-                if( timer ) { clearTimeout( timer ); timer = 0; }
+                stop();
             }
 
             function init()

@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
     <link rel="manifest" href="manifest.json">
@@ -197,7 +198,7 @@
         .field-label-row     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .field-label-row label { margin-bottom: 0; }
         .field .field-label-row { margin-bottom: 5px; }
-        .link-btn            { border: none; background: none; padding: 0 4px; font: inherit; font-size: 0.8rem; color: var(--link); cursor: pointer; }
+        .field-label-row .text-btn { padding: 3px 10px; font-size: 0.8rem; }   /* "Todos": the shared quiet button, label-sized */
         .chips               { display: flex; flex-wrap: wrap; gap: 6px; }
         .chips .pill         { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 4px; font-size: 0.82rem; }
         .chips .pill .avatar { width: 24px; height: 24px; font-size: 0.62rem; }
@@ -310,6 +311,13 @@
                                     <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
                                 </svg>
                             </button>
+                            <!-- Desarchivar: only on an archived group of ours. The list's row
+                                 offers the bin there, so this is the one way back. -->
+                            <button id="unarchiveBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.unarchive, aria-label:split.unarchive">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><polyline points="9.5 15 12 12.5 14.5 15"></polyline><line x1="12" y1="12.5" x2="12" y2="18"></line>
+                                </svg>
+                            </button>
                             <!-- Copiar resumen / Exportar CSV. Both only READ the group, so a
                                  read-only one keeps them. They emptied the ⋮ menu, which is why
                                  there is no ⋮ button here any more. -->
@@ -411,7 +419,7 @@
                 </div>
                 <div class="field">
                     <label for="othersInput" data-i18n="split.others"></label>
-                    <textarea id="othersInput" rows="3" placeholder="Ana&#10;Luis"></textarea>
+                    <textarea id="othersInput" rows="3" data-i18n-attr="placeholder:split.othersPh"></textarea>
                 </div>
             </div>
             <div class="sheet-actions">
@@ -469,7 +477,7 @@
             <div class="field" id="amongField">
                 <div class="field-label-row">
                     <label data-i18n="split.forLabel"></label>
-                    <button id="allBtn" class="link-btn" type="button" data-i18n="split.everyone"></button>
+                    <button id="allBtn" class="text-btn ghost" type="button" data-i18n="split.everyone"></button>
                 </div>
                 <div id="amongChips" class="chips"></div>
             </div>
@@ -597,7 +605,61 @@
         const DIR       = 'data/split';      // one folder per group: data/split/<id>/group.json
         const FILE      = 'group.json';
         const M         = SplitMoney;
-        const store     = NayiveStore.createStore( { apiBase: API_FILES } );
+        const store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeGroup } );
+
+        // Two devices saved one group from the same copy: both changes are kept
+        // (shared/store.js MERGE) - entries, people and rates one by one, by id
+        // (rates by currency); a thing changed on both takes, field by field,
+        // the side that changed it, mine when both did. null = a side that is
+        // not a group: nothing is merged over it.
+        function mergeGroup( path, base, mine, theirs )
+        {
+            const S     = NayiveStore;
+            const parse = t => { try { const v = JSON.parse( t ); return v && typeof v === 'object' && ! Array.isArray( v ) ? v : null; } catch( _ ) { return null; } };
+            const m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
+            if( ! m || ! t ) return null;
+            const list  = ( bl, ml, tl ) => S.mergeLists( Array.isArray( bl ) ? bl : ( b ? [] : null ),
+                                                          Array.isArray( ml ) ? ml : [], Array.isArray( tl ) ? tl : [],
+                                                          { id: x => x && x.id, both: S.mergeFields } );
+            const merged = S.mergeFields( b, m, t, { rates: ( br, mr, tr ) => S.mergeFields( br || null, mr || {}, tr || {} ) } );
+            merged.members = list( b && b.members, m.members, t.members );
+            merged.entries = list( b && b.entries, m.entries, t.entries );
+
+            // A person removed on one side while the other side wrote a movement
+            // for them stays: a movement must never point at nobody.
+            const used = new Set();
+            merged.entries.forEach( e =>
+            {
+                if( ! e ) return;
+                [ e.paidBy, e.from, e.to ].forEach( id => { if( id ) used.add( id ); } );
+                if( e.split && Array.isArray( e.split.among ) ) e.split.among.forEach( id => used.add( id ) );
+                if( e.split && e.split.parts && typeof e.split.parts === 'object' ) Object.keys( e.split.parts ).forEach( id => used.add( id ) );
+            } );
+            const have = new Set( merged.members.map( x => x && x.id ) );
+            used.forEach( id =>
+            {
+                if( have.has( id ) ) return;
+                const back = [ m.members, t.members, b && b.members ].map( l => Array.isArray( l ) ? l.find( x => x && x.id === id ) : null ).find( Boolean );
+                if( back ) { merged.members.push( back ); have.add( id ); }
+            } );
+            return JSON.stringify( merged, null, 2 );
+        }
+
+        // The store merged another device's save of a group in: that group, in
+        // place (the open group and any sheet keep the same object).
+        store.onMerged( function( path, body )
+        {
+            const g = groups.find( x => x._base + '/' + FILE === path );
+            let v;
+            try { v = JSON.parse( body ); } catch( _ ) { return; }
+            if( ! g || ! v || typeof v !== 'object' ) return;
+            Object.keys( g ).forEach( k => { if( k.charAt( 0 ) !== '_' ) delete g[ k ]; } );
+            Object.assign( g, v );
+            g.members = Array.isArray( g.members ) ? g.members : [];
+            g.entries = Array.isArray( g.entries ) ? g.entries : [];
+            g.rates   = g.rates && typeof g.rates === 'object' ? g.rates : {};
+            render();
+        } );
 
         // Interface strings: Spanish here, translatable through shared/i18n/*.json.
         const T  = k           => NayiveUI.t( k );
@@ -650,6 +712,17 @@
         }
 
         function fmt( minor, code, opts ) { return M.formatAmount( minor, code, opts ); }
+
+        // The language's decimal mark ("12,30" in Spanish, "12.30" in English): an
+        // amount put back in a field is written with it, and the CSV follows it.
+        const DEC = ( function()
+        {
+            try   { return new Intl.NumberFormat( NayiveI18n.locale() ).formatToParts( 1.5 ).find( p => p.type === 'decimal' ).value; }
+            catch( _ ) { return ','; }
+        } )();
+        const decText = n => String( n ).replace( '.', DEC );   // a rate as typed in this language
+        $( 'amountInput' ).placeholder = '0' + DEC + '00';
+        $( 'rateInput'   ).placeholder = '0' + DEC + '92';
 
         const IC = {
             arrow:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>',
@@ -718,6 +791,7 @@
             $( 'csvBtn'      ).addEventListener( 'click', exportCsv );
             $( 'peopleBtn' ).addEventListener( 'click', openMembersSheet );
             $( 'editBtn'    ).addEventListener( 'click', function() { openGroupSheet( current ); } );
+            $( 'unarchiveBtn' ).addEventListener( 'click', function() { toggleArchive( current ); } );
             $( 'shareBtn'  ).addEventListener( 'click', function()
             {
                 const g = current;
@@ -760,7 +834,7 @@
                 if( ! es ) return;
                 es.currency = this.value;
                 const known = current && current.rates && current.rates[ es.currency ];
-                es.rateText = es.currency === current.currency ? '' : ( known ? String( known ) : '' );
+                es.rateText = es.currency === current.currency ? '' : ( known ? decText( known ) : '' );
                 renderEntrySheet();
                 if( es.currency !== current.currency && ! es.rateText ) $( 'rateInput' ).focus();
             } );
@@ -852,6 +926,7 @@
         async function loadGroups()
         {
             let paths = null;
+            let unlisted = new Set();   // cached here, not in the listing: deleted elsewhere, or not uploaded yet
 
             if( navigator.onLine )
             {
@@ -866,9 +941,14 @@
                 catch( err )
                 {
                     // No data/split folder yet (a fresh account) = no groups, not "offline".
-                    paths = String( err && err.message ).indexOf( 'HTTP 404' ) !== -1 ? [] : null;
+                    paths = err && err.status === 404 ? [] : null;
                 }
-                if( paths !== null ) paths = paths.concat( await sharedGroupPaths() );
+                if( paths !== null )
+                {
+                    const own = ( await store.listCached( DIR + '/' ) ).filter( p => p.endsWith( '/' + FILE ) && ! paths.includes( p ) );
+                    unlisted = new Set( own );
+                    paths    = paths.concat( own, await sharedGroupPaths() );
+                }
             }
 
             if( paths === null )
@@ -883,6 +963,10 @@
 
             for( const { path, res } of results )
             {
+                // Deleted on another device: forgotten here too, or the next save of
+                // this cached copy would bring the group back. (One made offline and
+                // not uploaded yet reads back its own body and stays.)
+                if( res.source === 'empty' && unlisted.has( path ) ) { store.forget( path ); continue; }
                 if( ! res.body ) continue;   // 'empty' (gone) or 'unknown' (unreachable, nothing cached)
                 try
                 {
@@ -972,6 +1056,7 @@
             setHidden( $( 'peopleBtn'  ), ! canEdit );
             setHidden( $( 'editBtn'    ), ! canEdit );
             setHidden( $( 'shareBtn'   ), ! canEdit );
+            setHidden( $( 'unarchiveBtn' ), ! ( canEdit && current.archived ) );
             setHidden( $( 'copySumBtn' ), ! inGroup );
             setHidden( $( 'csvBtn'     ), ! inGroup );
 
@@ -1091,8 +1176,8 @@
             // the bin. You cannot delete a group you have not put away first,
             // which is the whole point - it turns one tap on a live group into
             // two deliberate ones. Eliminar still asks (see deleteGroup). To
-            // bring an archived group back, open it: the archive button in its
-            // toolbar then reads "Desarchivar".
+            // bring an archived group back, open it: its toolbar then has
+            // "Desarchivar" (#unarchiveBtn).
             if( ! g._ro )
             {
                 const archived = !! g.archived;
@@ -1159,7 +1244,7 @@
 
         function entryMatches( g, e, q )
         {
-            const bits = [ e.text || '', e.date || '', e.currency || '', M.toDecimal( e.amount, e.currency || g.currency, ',' ) ];
+            const bits = [ e.text || '', e.date || '', e.currency || '', M.toDecimal( e.amount, e.currency || g.currency, DEC ) ];
             if( e.type === 'payment' ) bits.push( nameOf( g, e.from ), nameOf( g, e.to ), T( 'split.payment' ) );
             else { bits.push( nameOf( g, e.paidBy ) ); M.participants( e ).ids.forEach( id => bits.push( nameOf( g, id ) ) ); }
             return bits.join( ' ' ).toLowerCase().indexOf( q ) !== -1;
@@ -1367,9 +1452,9 @@
                 created:    entry ? entry.created : null,
                 kind:       entry ? ( entry.type === 'payment' ? 'payment' : 'expense' ) : ( preset.kind || 'expense' ),
                 currency:   entry ? ( entry.currency || g.currency ) : ( preset.currency || g.currency ),
-                amountText: entry ? M.toDecimal( entry.amount, entry.currency || g.currency, ',' )
-                          : preset.amount ? M.toDecimal( preset.amount, preset.currency || g.currency, ',' ) : '',
-                rateText:   entry && entry.currency !== g.currency ? String( entry.rate || '' ) : '',
+                amountText: entry ? M.toDecimal( entry.amount, entry.currency || g.currency, DEC )
+                          : preset.amount ? M.toDecimal( preset.amount, preset.currency || g.currency, DEC ) : '',
+                rateText:   entry && entry.currency !== g.currency ? decText( entry.rate || '' ) : '',
                 text:       entry ? ( entry.text || '' ) : '',
                 date:       entry ? ( entry.date || todayIso() ) : todayIso(),
                 paidBy:     entry ? entry.paidBy : ( me !== null ? me : ( vis[ 0 ] ? vis[ 0 ].id : null ) ),
@@ -1385,10 +1470,10 @@
                 Object.keys( entry.split.parts ).forEach( id =>
                 {
                     const v = entry.split.parts[ id ];
-                    es.partText[ id ] = es.mode === 'exact' ? M.toDecimal( v, es.currency, ',' ) : String( v );
+                    es.partText[ id ] = es.mode === 'exact' ? M.toDecimal( v, es.currency, DEC ) : String( v );
                 } );
             }
-            if( es.currency !== g.currency && ! es.rateText && g.rates[ es.currency ] ) es.rateText = String( g.rates[ es.currency ] );
+            if( es.currency !== g.currency && ! es.rateText && g.rates[ es.currency ] ) es.rateText = decText( g.rates[ es.currency ] );
 
             $( 'entrySheetTitle' ).textContent = entry ? T( 'split.editEntry' ) : T( 'split.newEntry' );
             $( 'entryDelBtn' ).hidden = ! entry;
@@ -1938,7 +2023,7 @@
 
         function csvText( g )
         {
-            const SEP = ';';   // Spanish locale: ";" between fields, "," for decimals
+            const SEP = DEC === ',' ? ';' : ',';   // as the spreadsheet of that language reads it: ";" when "," is the decimal mark
             const q   = s => '"' + String( s == null ? '' : s ).replace( /"/g, '""' ) + '"';
             const rows = [ [ T( 'split.csvDate' ), T( 'split.csvKind' ), T( 'split.csvText' ),
                              T( 'split.csvPayer' ), T( 'split.csvFor' ), T( 'split.csvAmount' ),
@@ -1955,10 +2040,10 @@
                     pay ? '' : ( e.text || '' ),
                     nameOf( g, pay ? e.from : e.paidBy ),
                     pay ? nameOf( g, e.to ) : M.participants( e ).ids.map( id => nameOf( g, id ) ).join( ', ' ),
-                    M.toDecimal( e.amount, code, ',' ),
+                    M.toDecimal( e.amount, code, DEC ),
                     code,
-                    String( code === g.currency ? 1 : ( e.rate || '' ) ).replace( '.', ',' ),
-                    M.toDecimal( M.entryBase( e, g.currency ), g.currency, ',' )
+                    decText( code === g.currency ? 1 : ( e.rate || '' ) ),
+                    M.toDecimal( M.entryBase( e, g.currency ), g.currency, DEC )
                 ].map( q ).join( SEP ) );
             } );
             return '\ufeff' + rows.join( '\r\n' );   // BOM so Excel reads the accents

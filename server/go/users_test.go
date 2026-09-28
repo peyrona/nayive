@@ -148,22 +148,28 @@ func TestResolvePathRefuses(t *testing.T) {
 	}
 }
 
-// TestResolvePathPercentDecoding pins the double decode. The Python decodes
-// once in parse_qs and once more in resolve_path, so a client that
-// double-encodes really does address the plain path - and, more to the point,
-// "%2e%2e" must be caught rather than treated as a filename.
+// TestResolvePathPercentDecoding pins the single decode (S2-#5): the query
+// parser has already decoded the path, so ResolvePath takes a "%" literally -
+// "a%20b.txt" is that name, not "a b.txt" - and "%2e%2e" is a (harmless)
+// name, never "..".
 func TestResolvePathPercentDecoding(t *testing.T) {
-	users, _, _ := newTestUsers(t)
+	users, cfg, _ := newTestUsers(t)
 
-	if got, _ := users.ResolvePath("user", "ana", "files%2Fmio.txt"); got == "" {
-		t.Error("a percent-encoded slash was refused; the Python accepts it")
+	want := filepath.Join(cfg.HomesDir, "ana", "files", "a%20b.txt")
+	if got, _ := users.ResolvePath("user", "ana", "files/a%20b.txt"); got != want {
+		t.Errorf("files/a%%20b.txt resolved to %q, want %q", got, want)
+	}
+	if got, _ := users.ResolvePath("user", "ana", "files%2Fmio.txt"); got != "" {
+		t.Errorf("files%%2Fmio.txt was decoded a second time, to %q", got)
 	}
 	for _, path := range []string{
 		"%2e%2e/%2e%2e/etc/passwd",
 		"files/%2e%2e/%2e%2e/beto/files/suyo.txt",
-		"%252e%252e/%252e%252e/etc/passwd", // double-encoded: decoded twice too
+		"%252e%252e/%252e%252e/etc/passwd",
 	} {
-		if got, _ := users.ResolvePath("user", "ana", path); got != "" {
+		// Refused, or a literal name inside ana's own files - never above it.
+		got, _ := users.ResolvePath("user", "ana", path)
+		if got != "" && !isInside(filepath.Join(cfg.HomesDir, "ana", "files"), got) {
 			t.Errorf("ResolvePath(%q) ESCAPED to %q", path, got)
 		}
 	}
@@ -357,8 +363,8 @@ func TestAtomicWriteJSON(t *testing.T) {
 	}
 	// And the name it WOULD use must be one the sweep recognises, or a crashed
 	// write would leave litter nothing ever cleans up.
-	if !isTempName("x.json.1234.5.tmp") {
-		t.Error("the temp-name pattern and the sweep's regex disagree")
+	if name := filepath.Base(atomicTempName(filepath.Join(dir, "x.json"))); !isTempName(name) {
+		t.Errorf("atomicWriteJSON's temp %q is not one the sweep recognises", name)
 	}
 }
 
@@ -481,7 +487,7 @@ func TestRewriteKeepsUnknownFields(t *testing.T) {
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatalf("the rewritten file is not JSON: %v", err)
 	}
-	if back["password"] != "nueva" {
+	if pw, _ := back["password"].(string); !isHashedPassword(pw) || users.Authenticate("ana", "nueva") != "user" {
 		t.Errorf("password = %v", back["password"])
 	}
 	if back["inventado"] == nil || back["colors"] == nil {

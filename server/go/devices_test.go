@@ -6,16 +6,20 @@ package main
 // =============================================================================
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -51,6 +55,14 @@ func phone(t *testing.T, base, method, path, token, body string) (int, []byte) {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	return resp.StatusCode, readBody(t, resp)
+}
+
+// shortHold makes a phone's wait hold 5 s, not deviceHold's 180: a test whose
+// wake is broken then fails in seconds instead of hanging.
+func shortHold(t *testing.T) {
+	old := deviceHold
+	deviceHold = 5 * time.Second
+	t.Cleanup(func() { deviceHold = old })
 }
 
 func phoneWait(t *testing.T, base, token, v string) phoneState {
@@ -179,8 +191,18 @@ func TestDeviceWaitHolds(t *testing.T) {
 
 	// "Buscar mi móvil" while it waits: it answers at once, with the find.
 	deviceHold = 5 * time.Second
+	// The goroutine only reports back: t.Fatalf belongs to the test's own.
 	done := make(chan phoneState, 1)
-	go func() { done <- phoneWait(t, base, phoneToken, st.V) }()
+	go func() {
+		var got phoneState
+		req, _ := http.NewRequest("GET", base+"/api/device/wait?v="+st.V, nil)
+		req.Header.Set(deviceHeader, phoneToken)
+		if resp, err := anonymous().Do(req); err == nil {
+			json.NewDecoder(resp.Body).Decode(&got)
+			resp.Body.Close()
+		}
+		done <- got
+	}()
 	time.Sleep(150 * time.Millisecond)
 	var started struct{ Find deviceFind }
 	jsonCall(t, client, "POST", base+"/api/device/find", `{"id":"`+id+`"}`, 200, &started)
@@ -195,6 +217,7 @@ func TestDeviceWaitHolds(t *testing.T) {
 }
 
 func TestDeviceFind(t *testing.T) {
+	shortHold(t)
 	_, ts, client := newTestServer(t)
 	base := ts.URL
 	signIn(t, client, base, "ana", "abc")
@@ -251,6 +274,7 @@ func TestDeviceFindTimesOut(t *testing.T) {
 	old := findRing
 	findRing = 300 * time.Millisecond
 	t.Cleanup(func() { findRing = old })
+	shortHold(t)
 
 	_, ts, client := newTestServer(t)
 	base := ts.URL
@@ -349,8 +373,24 @@ func TestDeviceHere(t *testing.T) {
 // TestDeviceCall: a call to the owner rings the phone; "Rechazar" on the phone
 // declines it; the Chrome inside the phone does not ring it a second time.
 func TestDeviceCall(t *testing.T) {
+	shortHold(t)
 	f := newCallFixture(t)
 	h := f.srv.chat
+
+	// The subscriptions below name FCM, but every push this test causes goes
+	// to a local server: nothing leaves the machine (S2-#72).
+	var hits atomic.Int32
+	push := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer push.Close()
+	tr := push.Client().Transport.(*http.Transport).Clone()
+	tr.TLSClientConfig.InsecureSkipVerify = true // the name is FCM's, the certificate the test's
+	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, push.Listener.Addr().String())
+	}
+	f.srv.push.client = &http.Client{Transport: tr, Timeout: pushTimeout}
 
 	// ana's phone, whose TWA's Chrome also has notifications on.
 	key, _ := ecdh.P256().GenerateKey(rand.Reader)
@@ -386,6 +426,12 @@ func TestDeviceCall(t *testing.T) {
 	}
 	if len(missed) != 2 {
 		t.Fatalf("missed pushes = %d, want 2", len(missed))
+	}
+	for i := 0; i < 250 && hits.Load() == 0; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if hits.Load() == 0 {
+		t.Fatal("the laptop's ring never reached the local push server")
 	}
 	// (missed ended the phone's ring in the hub's hook: ring it again.)
 	h.mu.Lock()

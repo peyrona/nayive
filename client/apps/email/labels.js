@@ -29,7 +29,7 @@
 
     E.loadSettings = async function ()
     {
-        try { S.settings = Object.assign( { trashDays: 30, showImages: false }, await E.api( "GET", "settings" ) ); } catch( e ) {}
+        try { S.settings = Object.assign( { trashDays: 30, showImages: false, signature: "" }, await E.api( "GET", "settings" ) ); } catch( e ) {}
     };
 
     function labelError( err )

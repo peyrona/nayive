@@ -102,18 +102,16 @@
            KEYBOARD holds it. */
         .tet-pad         { display: flex; justify-content: center; gap: var(--space-2);
                            flex: 0 0 auto; padding: var(--space-3) var(--space-4) 0; }
-        .tet-key         { flex: 0 1 76px; height: 44px;
-                           display: flex; align-items: center; justify-content: center;
-                           border: 1px solid var(--line); border-radius: var(--radius-m);
-                           background: var(--card2); color: var(--text-dim); cursor: pointer;
+        /* The look is the shared .text-btn.ghost (app.css); only the size,
+           the touch rules and the held state are the game's own. */
+        .tet-key         { flex: 0 1 76px; height: 44px; padding: 0;
                            touch-action: none; -webkit-user-select: none; user-select: none;
-                           -webkit-touch-callout: none;
-                           transition: background-color var(--tr-fast), color var(--tr-fast); }
+                           -webkit-touch-callout: none; }
         .tet-key svg     { width: 21px; height: 21px; pointer-events: none; }
         .tet-key.turn    { color: var(--accent); }
         .tet-key.drop    { flex-basis: 96px; color: var(--accent); }
-        .tet-key:hover   { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
-        .tet-key.is-down { background: color-mix( in srgb, var(--accent) 24%, var(--card2) );
+        .tet-key.is-down,
+        .tet-key.is-down:hover { background: color-mix( in srgb, var(--accent) 24%, transparent );
                            border-color: var(--accent); color: var(--text); }
         .tet-key:focus   { outline: none; }
 
@@ -223,19 +221,19 @@
                          is `z` on a keyboard, and a sixth key would take the row
                          past what a thumb can reach on a 390px phone. -->
                     <div class="tet-pad">
-                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="left" data-i18n-attr="title:games.tetrisLeft, aria-label:games.tetrisLeft">
+                        <button class="text-btn ghost tet-key" type="button" tabindex="-1" data-tet-key="left" data-i18n-attr="title:games.tetrisLeft, aria-label:games.tetrisLeft">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                         </button>
-                        <button class="tet-key turn" type="button" tabindex="-1" data-tet-key="cw" data-i18n-attr="title:games.tetrisRotate, aria-label:games.tetrisRotate">
+                        <button class="text-btn ghost tet-key turn" type="button" tabindex="-1" data-tet-key="cw" data-i18n-attr="title:games.tetrisRotate, aria-label:games.tetrisRotate">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                         </button>
-                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="right" data-i18n-attr="title:games.tetrisRight, aria-label:games.tetrisRight">
+                        <button class="text-btn ghost tet-key" type="button" tabindex="-1" data-tet-key="right" data-i18n-attr="title:games.tetrisRight, aria-label:games.tetrisRight">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                         </button>
-                        <button class="tet-key" type="button" tabindex="-1" data-tet-key="down" data-i18n-attr="title:games.tetrisDown, aria-label:games.tetrisDown">
+                        <button class="text-btn ghost tet-key" type="button" tabindex="-1" data-tet-key="down" data-i18n-attr="title:games.tetrisDown, aria-label:games.tetrisDown">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="19"></line><polyline points="5 12 12 19 19 12"></polyline></svg>
                         </button>
-                        <button class="tet-key drop" type="button" tabindex="-1" data-tet-key="drop" data-i18n-attr="title:games.tetrisDrop, aria-label:games.tetrisDrop">
+                        <button class="text-btn ghost tet-key drop" type="button" tabindex="-1" data-tet-key="drop" data-i18n-attr="title:games.tetrisDrop, aria-label:games.tetrisDrop">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="15"></line><polyline points="6 9 12 15 18 9"></polyline><line x1="5" y1="20" x2="19" y2="20"></line></svg>
                         </button>
                     </div>
@@ -899,7 +897,7 @@
 
                 score = 0; lines = 0; level = 1;
                 piece = null; clearing = null; bag = [];
-                dirty = false;
+                flush();                       // a record beaten in the game "new game" cut short
                 state = 'ready';
 
                 A.loop.halt();

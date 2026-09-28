@@ -73,22 +73,44 @@ self.addEventListener( "notificationclick", function ( event )
     } )() );
 } );
 
+// The browser renewed (or dropped) the subscription with no page open. Firefox
+// hands over no old subscription at all, so the key comes from the server when
+// the old one cannot say it. The language goes with it, or the server takes
+// the renewed device for a Spanish one: the page's own choice (balata-lang) is
+// out of a worker's reach, so it is the browser's - which is also what the page
+// uses until the person picks another.
 self.addEventListener( "pushsubscriptionchange", function ( event )
 {
     var old = event.oldSubscription;
     var key = old && old.options && old.options.applicationServerKey;
-    if( ! key ) return;
     event.waitUntil( ( async function ()
     {
         try
         {
+            if( ! key )
+            {
+                var got = await ( await fetch( API + "/push" ) ).json();
+                if( ! got || ! got.vapid_public ) return;
+                key = b64ToU8( got.vapid_public );
+            }
             var sub = await self.registration.pushManager.subscribe( { userVisibleOnly: true, applicationServerKey: key } );
             await fetch( API + "/push", {
                 method:  "POST",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify( { subscription: sub.toJSON() } )
+                body:    JSON.stringify( { subscription: sub.toJSON(),
+                                           lang: String( self.navigator.language || "" ).slice( 0, 2 ).toLowerCase() } )
             } );
         }
         catch( e ) {}
     } )() );
 } );
+
+// base64url (the server's VAPID key) -> the bytes subscribe() wants.
+function b64ToU8( s )
+{
+    var pad = "=".repeat( ( 4 - s.length % 4 ) % 4 );
+    var raw = atob( ( s + pad ).replace( /-/g, "+" ).replace( /_/g, "/" ) );
+    var out = new Uint8Array( raw.length );
+    for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
+    return out;
+}

@@ -389,23 +389,13 @@
     // Dialogs open centred, always - so a closing one forgets where it was put.
     // Apps close them in ~15 different places (NayiveUI.close, a plain
     // classList.remove, a whole node thrown away), so instead of hooking each
-    // one we just watch the `.open` class come off any backdrop.
-    function watchSheetClose()
+    // one we watch the `.open` class come off any backdrop - in the page's one
+    // class observer, wireSheetFocus (a second one here cost every class
+    // change in Calc and Write twice).
+    function recentreSheet( back )
     {
-        if( ! window.MutationObserver ) return;
-
-        new MutationObserver( function ( recs )
-        {
-            for( var i = 0; i < recs.length; i++ )
-            {
-                var el = recs[ i ].target;
-                if( ! el.classList || ! el.classList.contains( "sheet-backdrop" ) ) continue;
-                if( el.classList.contains( "open" ) ) continue;
-
-                var s = el.querySelector( ".sheet" );
-                if( s && ( s.nayiveDragX || s.nayiveDragY ) ) moveSheet( s, 0, 0 );
-            }
-        } ).observe( document.body, { subtree: true, attributes: true, attributeFilter: [ "class" ] } );
+        var s = back.querySelector( ".sheet" );
+        if( s && ( s.nayiveDragX || s.nayiveDragY ) ) moveSheet( s, 0, 0 );
     }
 
     function initDragSheets()
@@ -413,7 +403,6 @@
         document.addEventListener( "pointerdown", onDragDown,  true );
         document.addEventListener( "click",       onDragClick, true );
         window.addEventListener( "resize", reclampSheets );
-        watchSheetClose();
     }
 
     // Bottom-centre transient toast. Needs a <div id="toast" class="toast"> in
@@ -486,7 +475,8 @@
     var i18nReady = I18N ? I18N.ready     : Promise.resolve( {} );
 
     // Sheets are often built dynamically (trip, calendar recurrence row) - catch
-    // date/time inputs added to the DOM after this script runs.
+    // date/time inputs added to the DOM after this script runs. (Their
+    // data-i18n text is shared/i18n.js's own observer's job, not this one's.)
     if( window.MutationObserver )
     {
         var dtObserver = new MutationObserver( function ( muts )
@@ -500,7 +490,6 @@
                     if( ! n || n.nodeType !== 1 ) continue;
                     if( n.matches && n.matches( 'input[type="date"], input[type="time"]' ) ) localizeDateTimeInput( n );
                     localizeDateTimeInputs( n );
-                    applyI18n( n );
                     applyInfoDots( n );
                     applyHomeLinks( n );
                     applySyncDots( n );
@@ -1351,6 +1340,7 @@
     // always match what is on screen); `text` is the hand-written explanation.
     // `{ icon, name, text }` describes a row with no single button behind it;
     // `icon` next to `sel` swaps just the glyph (two buttons that look alike).
+    // `svg` (ready markup) is for an app's own glyph that the shared set lacks.
     // Apps never auto-open the dialog - it opens only from the toolbar "?"
     // button ([data-intro-open], wired here) or NayiveUI.showIntro(). The launcher
     // passes autoShow + dismissible: it re-opens every visit until the user
@@ -1386,7 +1376,11 @@
         span.className = "intro-btn-i";
 
         var svg = el && el.querySelector && el.querySelector( "svg" );
-        if( it.icon )
+        if( it.svg )
+        {
+            span.innerHTML = it.svg;
+        }
+        else if( it.icon )
         {
             span.innerHTML = icon( it.icon );
         }
@@ -2142,8 +2136,6 @@
     // the shared sheet, so every caller gets them: Photos / Music / Movies, the
     // office save-as folder row, Write's templates folder, share-target, Trips.
 
-    var FP_CSS_DONE = false;
-
     // The path-keyed sidecars (a photo's note in data/photos/comments.json, the
     // Photos / Music scan caches) must follow a folder the picker renames or
     // trashes, or its notes vanish. That upkeep lives in shared/media.js
@@ -2179,38 +2171,10 @@
             .catch( function () {} );
     }
 
-    function injectFpCss()
-    {
-        if( FP_CSS_DONE ) return;
-        FP_CSS_DONE = true;
-        var s = document.createElement( "style" );
-        s.textContent =
-            ".fp-tree{margin:4px 0 2px;min-height:240px;max-height:min(66vh,560px);overflow-y:auto;border:1px solid var(--line);border-radius:var(--radius-m)}" +
-            ".fp-msg{margin:0;padding:16px;color:var(--text-dim);font-size:.9rem;line-height:1.4}" +
-            ".fp-row{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 8px;cursor:pointer;" +
-                "border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}" +
-            ".fp-row:last-child{border-bottom:none}" +
-            ".fp-row:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}" +
-            ".fp-row.sel{background:color-mix(in srgb,var(--accent) 22%,transparent)}" +
-            ".fp-row.sel .fp-ic,.fp-row.sel .fp-name{color:var(--text)}" +
-            ".fp-caret{flex:0 0 auto;width:20px;align-self:stretch;display:flex;align-items:center;" +
-                "justify-content:center;color:var(--text-dim);font-size:.8rem}" +
-            ".fp-caret.has:hover{color:var(--text)}" +
-            ".fp-ic{flex:0 0 auto;display:flex;color:var(--text-dim)}.fp-ic svg{width:16px;height:16px}" +
-            ".fp-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem}" +
-            // pickFile: the crumb of the folder on show, and a file's size
-            ".fp-crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:0 0 6px;font-size:.85rem;color:var(--text-dim)}" +
-            ".fp-crumbs button{border:none;background:none;padding:2px 4px;border-radius:var(--radius-s);font:inherit;color:var(--link);cursor:pointer}" +
-            ".fp-crumbs button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}" +
-            ".fp-crumbs b{padding:2px 4px;color:var(--text);font-weight:600}" +
-            ".fp-size{flex:0 0 auto;font-size:.78rem;color:var(--text-dim)}";
-        document.head.appendChild( s );
-    }
-
+    // Its look (.fp-*) is in shared/app.css, beside .folder-pick.
     function pickFolder( opts )
     {
         opts = opts || {};
-        injectFpCss();
 
         return new Promise( function ( resolve )
         {
@@ -2663,7 +2627,6 @@
     function pickFile( opts )
     {
         opts = opts || {};
-        injectFpCss();
 
         return new Promise( function ( resolve )
         {
@@ -2862,22 +2825,33 @@
             } ).then( function ( picked )
             {
                 if( ! picked ) return null;
-                return GumApi.writeJson( cfgPath, { folder: picked } )
-                    .then( function () { return picked; }, function () { return picked; } );
+                return saveLauncherFolder( cfgPath, cfg, picked );
             } );
         }, function ( err )
         {
-            var is401 = String( err && err.message ).indexOf( "401" ) !== -1;
-            if( is401 && ! opts.noRedirect && navigator.onLine ) GumApi.loginRedirect();
+            if( err && err.status === 401 && ! opts.noRedirect && navigator.onLine ) GumApi.loginRedirect();
             return null;
         } );
     }
 
+    // The app's config.json keeps whatever else it holds: only `folder`
+    // changes. `cfg` is what it holds now (null = no file yet). Resolves with
+    // `picked` either way - a failed write costs only the memory of it.
+    function saveLauncherFolder( cfgPath, cfg, picked )
+    {
+        var next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
+        next.folder = picked;
+        return GumApi.writeJson( cfgPath, next )
+            .then( function () { return picked; }, function () { return picked; } );
+    }
+
     // Change the remembered folder later (the crumb button): pick + save. The
-    // caller reloads at ?dir=<result>.
+    // caller reloads at ?dir=<result>. The file is read again first: an
+    // unreadable one (not a 404) is left as it is rather than written over.
     function changeLauncherFolder( opts )
     {
         opts = opts || {};
+        var cfgPath = "data/" + opts.app + "/config.json";
         return pickFolder( {
             title:     opts.title || t( "ui.changeFolder" ),
             note:      opts.note,
@@ -2886,8 +2860,10 @@
         } ).then( function ( picked )
         {
             if( ! picked ) return null;
-            return GumApi.writeJson( "data/" + opts.app + "/config.json", { folder: picked } )
-                .then( function () { return picked; }, function () { return picked; } );
+            return GumApi.readJson( cfgPath ).then( function ( cfg )
+            {
+                return saveLauncherFolder( cfgPath, cfg, picked );
+            }, function () { return picked; } );
         } );
     }
 
@@ -3540,9 +3516,23 @@
 
             function close()
             {
+                document.removeEventListener( "keydown", onKey, true );
                 back.classList.remove( "open" );
                 setTimeout( function () { if( back.parentNode ) back.parentNode.removeChild( back ); }, 200 );
                 resolve();
+            }
+
+            // Escape as the other dialogs take it: from anywhere (nothing inside
+            // needs the focus first), and never on to the app underneath. Only
+            // while this is the top sheet: a question asked from inside it
+            // (NayiveUI.confirm) is closed by its own Escape, not this one.
+            function onKey( e )
+            {
+                if( e.key !== "Escape" || topSheetBackdrop() !== back ) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                close();
             }
 
             var ok = null;   // the "Compartir" button, so a tick-box can enable it
@@ -3913,191 +3903,8 @@
             back.classList.add( "open" );
             load();
 
-            back.addEventListener( "keydown", function ( e )
-            {
-                if( e.key === "Escape" ) close();
-            } );
+            document.addEventListener( "keydown", onKey, true );
         } );
-    }
-
-    /* This account's ONE location URL: where a phone app sends where you are,
-     * from the background, for every trip (server/go/location.go). Two apps use
-     * it, both free and open source, neither ours - Overland on iPhone,
-     * GPSLogger on Android. Each has its own ending on the same key and its own
-     * one-tap set-up link, so the phone being read on decides which card is
-     * shown; a PC, which can set up neither, shows both.
-     * Returns an element that loads and redraws itself: make it, add it, done.
-     * Trips' "My location" sheet is its home. */
-    function locationSection()
-    {
-        var box = document.createElement( "div" );
-        box.className = "share-sect share-link";
-
-        var tracker = null;      // {url, created} when on
-        var loaded  = false;
-
-        function isAndroid() { return /android/i.test( navigator.userAgent ); }
-
-        var APPS = [
-            {
-                key:   "overland",
-                name:  "Overland",
-                head:  "trips.loc.overland",
-                how:   "trips.loc.overlandHow",
-                store: "https://apps.apple.com/app/id1292426766",
-                mine:  isIOS,
-                // The app reads its whole setup from this link: no typing on the phone.
-                setup: function ( url ) { return "overland://setup?url=" + encodeURIComponent( url ) + "&device_id=nayive"; }
-            },
-            {
-                key:   "gpslogger",
-                name:  "GPSLogger",
-                head:  "trips.loc.gpslogger",
-                how:   "trips.loc.gpsloggerHow",
-                store: "https://f-droid.org/packages/com.mendhak.gpslogger/",
-                mine:  isAndroid,
-                // Same idea, its own way: the server writes a .properties profile.
-                setup: function ( url ) { return "gpslogger://properties/" + url + ".properties"; }
-            }
-        ];
-
-        // (i): what the apps are, and where your location goes.
-        function infoButton()
-        {
-            var info = document.createElement( "button" );
-            info.className = "info-dot";
-            info.setAttribute( "data-info", t( "trips.loc.info" ) );
-            return info;
-        }
-
-        // A link that looks like a button. The store opens in a new tab; a set-up
-        // link hands over to the app itself, so it stays in this one.
-        function linkButton( label, href )
-        {
-            var a = document.createElement( "a" );
-            a.className   = "loc-link";
-            a.href        = href;
-            a.textContent = label;
-            if( /^https:/.test( href ) ) { a.target = "_blank"; a.rel = "noopener"; }
-            return a;
-        }
-
-        function appCard( app, url, last )
-        {
-            var card = document.createElement( "div" );
-            card.className = "loc-app";
-
-            var head = document.createElement( "p" );
-            head.className   = "share-head";
-            head.textContent = t( app.head );
-            card.appendChild( head );
-
-            var row = document.createElement( "div" );
-            row.className = "share-row share-link-app";
-
-            var text = document.createElement( "span" );
-            text.className   = "share-link-url";
-            text.textContent = url;
-            row.appendChild( text );
-            row.appendChild( rowButton( "copy", t( "trips.loc.copy" ), function ()
-            {
-                return copyText( url ).then( function () { toast( t( "share.link.copied" ) ); },
-                                             function () { toast( url ); } );
-            } ) );
-            card.appendChild( row );
-
-            var links = document.createElement( "p" );
-            links.className = "loc-links";
-            links.appendChild( linkButton( t( "trips.loc.get" ).replace( "{app}", app.name ), app.store ) );
-            if( app.mine() )
-                links.appendChild( linkButton( t( "trips.loc.setup" ).replace( "{app}", app.name ), app.setup( url ) ) );
-            card.appendChild( links );
-
-            // The steps - or, on a PC, where to go instead. The (i) follows the
-            // sheet's last words, but only when those words are the steps.
-            var mine = app.mine();
-            var how  = document.createElement( "p" );
-            how.className   = "share-note share-link-how";
-            how.textContent = mine ? t( app.how ) : t( "trips.loc.onPhone" );
-            if( last && mine ) how.appendChild( infoButton() );
-            card.appendChild( how );
-
-            return card;
-        }
-
-        function render()
-        {
-            box.innerHTML = "";
-
-            var note = document.createElement( "p" );
-            note.className   = "share-note";
-            note.textContent = t( "trips.loc.lead" );
-            box.appendChild( note );
-
-            if( ! tracker )
-            {
-                // Nothing set up yet: one row, and the "+" that makes the URL.
-                var row = document.createElement( "div" );
-                row.className = "share-row share-link-app";
-
-                var text = document.createElement( "span" );
-                text.className   = "share-link-url";
-                text.textContent = loaded ? t( "trips.loc.none" ) : "…";
-                row.appendChild( text );
-
-                if( loaded )
-                {
-                    text.classList.add( "has-info" );
-                    row.appendChild( infoButton() );
-                    row.appendChild( rowButton( "plus", t( "trips.loc.create" ), function ()
-                    {
-                        return jsonApi( "/api/location", "POST" ).then( load );
-                    } ) );
-                }
-                box.appendChild( row );
-                applyInfoDots( box );
-                return;
-            }
-
-            var base  = linkUrl( tracker );
-            var cards = APPS.filter( function ( a ) { return a.mine() || ( ! isIOS() && ! isAndroid() ); } );
-            cards.forEach( function ( a, i )
-            {
-                box.appendChild( appCard( a, base + "/" + a.key, i === cards.length - 1 ) );
-            } );
-
-            // Turning off is about the key, not the app: one button for both.
-            var off = document.createElement( "div" );
-            off.className = "share-row loc-off";
-
-            var onText = document.createElement( "span" );
-            onText.className   = "share-link-url";
-            onText.textContent = t( "trips.loc.on" );
-            off.appendChild( onText );
-
-            off.appendChild( rowButton( "x", t( "trips.loc.stop" ), function ()
-            {
-                // The phone keeps sending to this URL, which then just fails: ask first.
-                return confirmDialog( { title: t( "trips.loc.stopTitle" ), body: t( "trips.loc.stopBody" ),
-                                        confirm: t( "trips.loc.stopOk" ) } )
-                    .then( function ( yes ) { if( yes ) return jsonApi( "/api/location", "DELETE" ).then( load ); } );
-            } ) );
-            box.appendChild( off );
-
-            applyInfoDots( box );
-        }
-
-        function load()
-        {
-            return jsonApi( "/api/location", "GET" )
-                .then( function ( j ) { tracker = j && j.url ? j : null; },
-                       function ( e ) { toast( e.message || t( "ui.loadFailed" ) ); } )
-                .then( function () { loaded = true; render(); } );
-        }
-
-        render();
-        load();
-        return box;
     }
 
     /* "Sync with your phones" (CardDAV in Contacts, CalDAV in Calendar): the top
@@ -4105,7 +3912,7 @@
      * this wires it, finding its parts by data-dav="…":
      *   off / on        the two states; connect (+) and stop (x) flip them
      *   iphone / android / onphone   the set-up cards: the phone being read on
-     *                   decides which one shows, a PC shows both (as locationSection)
+     *                   decides which one shows, a PC shows both (as Trips' My location)
      *   server / user / pass         the by-hand rows; [data-dav-copy="<part>"] copies one
      * UI ONLY for now (2026-09-22): nothing is sent or saved. Set-up links
      * ([data-dav-soon]), the password and every <select> answer "Not working yet".
@@ -5060,6 +4867,17 @@
         if( f.tagName === "TEXTAREA" || /^(text|search|url|tel|password)$/.test( f.type || "" ) )
             try { f.setSelectionRange( f.value.length, f.value.length ); } catch ( e ) {}
 
+        // A spinner (number) or an e-mail field has no setSelectionRange, so a
+        // browser that selects all on focus left its value marked. Putting the
+        // value back moves the caret to the end; the "" step is needed because
+        // Firefox only moves it when the value CHANGES. No input event fires.
+        else if( /^(number|email)$/.test( f.type || "" ) && f.value !== "" )
+        {
+            var v = f.value;
+            f.value = "";
+            f.value = v;
+        }
+
         return true;
     }
 
@@ -5089,7 +4907,8 @@
 
     function wireSheetFocus()
     {
-        // One observer for the page: every .sheet-backdrop that gains ".open".
+        // One observer for the page: every .sheet-backdrop that gains ".open"
+        // (and, for recentreSheet, every one that loses it).
         // Both dialog families are covered - setOpen() toggles the class on the
         // markup's backdrops, and the sheets ui.js builds are in the document
         // before they get it.
@@ -5103,7 +4922,12 @@
 
                 // Read the LIVE class, not the record: an open-then-close inside
                 // one tick arrives here as two records for a closed dialog.
-                if( ! back.classList.contains( "open" ) ) { back._nayiveFocused = false; continue; }
+                if( ! back.classList.contains( "open" ) )
+                {
+                    back._nayiveFocused = false;
+                    recentreSheet( back );
+                    continue;
+                }
                 if( back._nayiveFocused ) continue;
 
                 back._nayiveFocused = true;
@@ -5209,7 +5033,10 @@
         sharedBadge:  sharedBadge,
         shareSheet:   shareSheet,
         davSection:      davSection,          // Contacts' / Calendar's "Sync with your phones" (UI only)
-        locationSection: locationSection,     // Trips' "My location" sheet: the location URL
+        rowButton:       rowButton,           // the share sheet's round button (trips/my-location.js too)
+        jsonApi:         jsonApi,             // one JSON call to this server
+        copyText:        copyText,            // to the clipboard, or a rejected promise
+        isIOS:           isIOS,
         pickFolder:           pickFolder,
         pickFile:             pickFile,
         launcherFolder:       launcherFolder,

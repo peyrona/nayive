@@ -66,7 +66,7 @@
 
         var side = h( "section", { class: "side" } );
         var main = h( "section", { class: "main" } );
-        var rz   = h( "div", { class: "pane-resizer", attrs: { title: C.T( "chat.dragWidth" ) } } );
+        var rz   = h( "div", { class: "pane-resizer", attrs: { title: C.T( "ui.dragResize" ) } } );
         var root = h( "div", { class: "chat", attrs: { id: "chat" } }, side, rz, main );
         var host = document.getElementById( "app" );
         host.textContent = "";

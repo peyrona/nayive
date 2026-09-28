@@ -233,7 +233,7 @@ try
 
       const raw = await new Promise(r=>{ const q=indexedDB.open('nayive-drafts',1);
           q.onsuccess=()=>{ const tx=q.result.transaction('drafts','readonly');
-          const g=tx.objectStore('drafts').get('calc'); g.onsuccess=()=>r(g.result); }; });
+          const g=tx.objectStore('drafts').getAll(); g.onsuccess=()=>r(g.result.find(x=>String(x.app).indexOf('calc:')===0)); }; });
 
       return {
         kept:     !!raw,

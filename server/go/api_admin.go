@@ -197,7 +197,7 @@ func (s *Server) adminSetup(w http.ResponseWriter, r *http.Request, body *adminR
 		return
 	}
 	if err := s.cfg.Update(func(c *ServerConfig) {
-		c.Admin = &AdminAccount{Name: name, Password: pw}
+		c.Admin = &AdminAccount{Name: name, Password: hashPassword(pw)}
 	}); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar la configuración")
 		return
@@ -235,7 +235,9 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 			return
 		}
 	}
-	pw := derefString(body.Password)
+	// Hashed HERE, before the closure: a blank one keeps the stored value,
+	// which is hashed already (or plaintext until the next sign-in).
+	pw := hashPassword(derefString(body.Password))
 
 	failed := false
 	oldName := ""

@@ -198,9 +198,12 @@ func TestChatAutoDelete(t *testing.T) {
 			t.Fatal("the emptied month file is still there")
 		}
 	}
-	raw, _ := os.ReadFile(filepath.Join(home, "data", "chat", "conv", conv, time.Now().UTC().Format("2006-01")+".json"))
-	if bytes.Contains(raw, []byte("viejo secreto")) {
-		t.Fatal("an expired text is still on disk")
+	// age() moved the old texts out of this month, so look in EVERY month file.
+	months, _ := filepath.Glob(filepath.Join(home, "data", "chat", "conv", conv, "*.json"))
+	for _, p := range months {
+		if raw, _ := os.ReadFile(p); bytes.Contains(raw, []byte("viejo secreto")) {
+			t.Fatalf("an expired text is still on disk, in %s", filepath.Base(p))
+		}
 	}
 	var sum map[string]any
 	f.call(t, f.owner, "GET", "/api/chat", "", 200, &sum)

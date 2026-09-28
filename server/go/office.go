@@ -7,8 +7,8 @@ package main
 // Write opens .docx and Calc opens .xlsx; neither can read OpenDocument. So a
 // Writer document (.odt, its template, flat and 1.x forms) becomes a .docx, and
 // a Calc one (.ods ...) an .xlsx - by LibreOffice itself, run headless. Impress,
-// Draw, Math and Base files have no app here: Drive refuses them (his call,
-// 2026-09-11) and the server never converts them.
+// Draw, Math and Base files have no app here: Drive stores them as they are
+// (his call, 2026-09-28; refused before) and the server never converts them.
 //
 // THE TWIN SITS BESIDE THE ORIGINAL, and the original is never touched (his
 // call). "Informe.odt" -> "Informe.docx", same folder. That name IS the record
@@ -44,6 +44,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -159,7 +160,7 @@ func (o *Office) Convert(ctx context.Context, name string, src, dst Resolved, bu
 	}
 	defer func() { <-o.turn }()
 
-	work, err := os.MkdirTemp("", "nayive-office-")
+	work, err := os.MkdirTemp("", officeTempPrefix("nayive-office-"))
 	if err != nil {
 		return 0, err
 	}
@@ -284,7 +285,7 @@ const officeRegistry = `<?xml version="1.0" encoding="UTF-8"?>
 
 // newOfficeProfile makes a fresh profile folder with officeRegistry in it.
 func newOfficeProfile() (string, error) {
-	dir, err := os.MkdirTemp("", "nayive-office-profile-")
+	dir, err := os.MkdirTemp("", officeTempPrefix("nayive-office-profile-"))
 	if err != nil {
 		return "", err
 	}
@@ -298,6 +299,54 @@ func newOfficeProfile() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// officeTempPrefix puts this process's pid in a work or profile folder's name,
+// so SweepOfficeTemp can tell a dead run's leftovers from a live one's.
+func officeTempPrefix(kind string) string {
+	return kind + strconv.Itoa(os.Getpid()) + "-"
+}
+
+// officeTempRE is the shape officeTempPrefix + MkdirTemp makes.
+var officeTempRE = regexp.MustCompile(`^nayive-office-(?:profile-)?(\d+)-\d+$`)
+
+// SweepOfficeTemp removes the work and profile folders a killed run left in
+// the temp dir (S2-#46): a kill -9 skips every RemoveAll. Only a folder whose
+// process is gone: another server on the same box (a second checkout, a test
+// run) may be converting right now, and deleting its PROFILE would make
+// LibreOffice build a default one, without the macro and link lockdown.
+// Folders from before the pid was in the name are left alone. Called once from
+// main() at boot.
+func SweepOfficeTemp() int {
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		m := officeTempRE.FindStringSubmatch(e.Name())
+		if m == nil || !e.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(m[1])
+		if err != nil || pid == os.Getpid() || processAlive(pid) {
+			continue
+		}
+		if os.RemoveAll(filepath.Join(os.TempDir(), e.Name())) == nil {
+			n++
+		}
+	}
+	return n
+}
+
+// processAlive: signal 0 tests for the process without touching it. EPERM is
+// a live process of another user.
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 // copyResolvedTo copies an approved file (read through its root) to a plain
@@ -348,6 +397,9 @@ func placeFile(from string, dst Resolved) error {
 	_, err = io.Copy(tmp, in)
 	if err == nil {
 		err = tmp.Chmod(0o644)
+	}
+	if err == nil {
+		err = tmp.Sync() // whole on disk before it takes the name (S2-#23)
 	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr

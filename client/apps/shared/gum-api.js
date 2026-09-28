@@ -39,16 +39,26 @@
     //------------------------------------------------------------------------//
     // FETCH WITH RETRY
     //
-    // Two retries with exponential backoff, but ONLY for a thrown "Failed to
-    // fetch" - a genuine connectivity drop. A non-2xx response is turned into a
-    // thrown Error and passed straight through, never retried.
+    // Two retries with exponential backoff, but ONLY for a thrown TypeError - a
+    // genuine connectivity drop, whatever the browser calls it (Chrome "Failed
+    // to fetch", Safari "Load failed", Firefox "NetworkError..."). A non-2xx
+    // response is turned into a thrown Error and passed straight through, never
+    // retried. And only a GET or a PUT: sending one twice changes nothing, while
+    // a POST or DELETE that did land (a rename, a trip to the papelera) would
+    // come back from its retry as a false error.
 
     function sleep( ms )
     {
         return new Promise( function ( r ) { setTimeout( r, ms ); } );
     }
 
-    async function withRetry( attempt, tries )
+    function mayRetry( options )
+    {
+        var m = String( ( options && options.method ) || "GET" ).toUpperCase();
+        return m === "GET" || m === "PUT";
+    }
+
+    async function withRetry( attempt, tries, once )
     {
         tries = tries || 0;
 
@@ -58,7 +68,7 @@
         }
         catch ( err )
         {
-            if( tries < MAX_RETRIES && String( err && err.message ).indexOf( "Failed to fetch" ) !== -1 )
+            if( ! once && tries < MAX_RETRIES && err instanceof TypeError )
             {
                 await sleep( BASE_DELAY * Math.pow( 2, tries ) );
                 return withRetry( attempt, tries + 1 );
@@ -102,7 +112,7 @@
         return withRetry( function ()
         {
             return fetch( url, options || {} ).then( assertOk ).then( function ( r ) { return r.text(); } );
-        } );
+        }, 0, ! mayRetry( options ) );
     }
 
     // GET -> response body as a Uint8Array.
@@ -113,7 +123,7 @@
             return fetch( url, options || {} ).then( assertOk )
                    .then( function ( r ) { return r.arrayBuffer(); } )
                    .then( function ( buf ) { return new Uint8Array( buf ); } );
-        } );
+        }, 0, ! mayRetry( options ) );
     }
 
     // PUT raw bytes (a Uint8Array or a Blob). Resolves with nothing; rejects
@@ -127,8 +137,8 @@
     //
     // The two contracts fetch() had are kept exactly: a non-2xx goes through
     // assertOk (same "HTTP <status>: <text>" message, sniffed for "401"
-    // downstream), and a dropped connection throws "Failed to fetch" - the one
-    // message withRetry retries on. A retry is a new attempt, with a new id.
+    // downstream), and a dropped connection throws a TypeError("Failed to fetch") -
+    // what withRetry retries on. A retry is a new attempt, with a new id.
     var uploadSeq = 0;
 
     function announceUpload( detail )

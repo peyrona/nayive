@@ -17,7 +17,7 @@ window.GumApi = {
     readFileBytes: async function ( p )
     {
         CALLS.push( [ "read", p ] );
-        if( !( p in SRV ) ) throw new Error( "404 " + p );
+        if( !( p in SRV ) ) throw Object.assign( new Error( "HTTP 404: " + p ), { status: 404 } );
         var b = SRV[ p ];
         return typeof b === "string" ? new TextEncoder().encode( b ) : clone( b );
     },

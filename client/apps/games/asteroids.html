@@ -58,15 +58,14 @@
            stops between the toolbar and the hint buy nothing. */
         .ast-pad          { display: flex; justify-content: center; gap: var(--space-2);
                             padding: var(--space-3) var(--space-4) 0; }
-        .ast-key          { flex: 0 1 88px; height: 46px;
-                            display: inline-flex; align-items: center; justify-content: center;
-                            border: 1px solid var(--line); border-radius: var(--radius-m);
-                            background: var(--card2); color: var(--text); cursor: pointer;
+        /* The look is the shared .text-btn.ghost (app.css); only the size,
+           the touch rules and the held state are the game's own. */
+        .ast-key          { flex: 0 1 88px; height: 46px; padding: 0;
                             touch-action: none; -webkit-user-select: none; user-select: none; }
         .ast-key svg      { width: 21px; height: 21px; pointer-events: none; }
         .ast-key.fire     { flex-basis: 110px; color: var(--accent); }
-        .ast-key:hover    { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
-        .ast-key.is-down  { background: color-mix( in srgb, var(--accent) 24%, var(--card2) );
+        .ast-key.is-down,
+        .ast-key.is-down:hover { background: color-mix( in srgb, var(--accent) 24%, transparent );
                             border-color: color-mix( in srgb, var(--accent) 60%, transparent ); }
         .ast-key:focus    { outline: none; }
 
@@ -131,16 +130,16 @@
                     </div>
 
                     <div class="ast-pad">
-                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="left" data-i18n-attr="title:games.asteroidsLeft, aria-label:games.asteroidsLeft">
+                        <button class="text-btn ghost ast-key" type="button" tabindex="-1" data-ast-key="left" data-i18n-attr="title:games.asteroidsLeft, aria-label:games.asteroidsLeft">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
                         </button>
-                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="thrust" data-i18n-attr="title:games.asteroidsThrust, aria-label:games.asteroidsThrust">
+                        <button class="text-btn ghost ast-key" type="button" tabindex="-1" data-ast-key="thrust" data-i18n-attr="title:games.asteroidsThrust, aria-label:games.asteroidsThrust">
                             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2.8 19.2 21 12 16.9 4.8 21"></polygon></svg>
                         </button>
-                        <button class="ast-key" type="button" tabindex="-1" data-ast-key="right" data-i18n-attr="title:games.asteroidsRight, aria-label:games.asteroidsRight">
+                        <button class="text-btn ghost ast-key" type="button" tabindex="-1" data-ast-key="right" data-i18n-attr="title:games.asteroidsRight, aria-label:games.asteroidsRight">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                         </button>
-                        <button class="ast-key fire" type="button" tabindex="-1" data-ast-key="fire" data-i18n-attr="title:games.asteroidsFire, aria-label:games.asteroidsFire">
+                        <button class="text-btn ghost ast-key fire" type="button" tabindex="-1" data-ast-key="fire" data-i18n-attr="title:games.asteroidsFire, aria-label:games.asteroidsFire">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"></circle><line x1="12" y1="2.6" x2="12" y2="6.2"></line><line x1="12" y1="17.8" x2="12" y2="21.4"></line><line x1="2.6" y1="12" x2="6.2" y2="12"></line><line x1="17.8" y1="12" x2="21.4" y2="12"></line></svg>
                         </button>
                     </div>
@@ -266,11 +265,14 @@
             }
 
             // One more rock in each wave, up to MOST. They are dealt away from
-            // the middle: a rock that appears on top of the ship is a life lost
-            // to nothing the player could have done.
+            // the ship - or from the middle, where the next one appears: a rock
+            // that appears on top of the ship is a life lost to nothing the
+            // player could have done. A new wave finds the ship wherever it
+            // has flown to, which is seldom the middle.
             function deal()
             {
                 var n = Math.min( ROCKS + wave, MOST ), i, x, y, tries;
+                var keep = ship ? { x: ship.x, y: ship.y, r: ROOM } : { x: w / 2, y: h / 2, r: ROOM };
 
                 wave++;
 
@@ -283,7 +285,7 @@
                         y = Math.random() * h;
                         tries++;
                     }
-                    while( tries < 40 && near( { x: x, y: y, r: SIZES[ 0 ] }, { x: w / 2, y: h / 2, r: ROOM } ) );
+                    while( tries < 40 && near( { x: x, y: y, r: SIZES[ 0 ] }, keep ) );
 
                     rocks.push( rock( x, y, 0 ) );
                 }
@@ -728,10 +730,11 @@
                 lives    = LIVES;
                 wave     = 0;
                 nextLife = EXTRA;
-                dirty    = false;
+                flush();                       // a record beaten in the game "new game" cut short
                 state    = 'ready';
 
                 rocks = []; shots = []; dust = [];
+                ship  = null;                  // the last game's: deal() keeps the middle clear instead
                 respawn = 0;
 
                 A.loop.halt();

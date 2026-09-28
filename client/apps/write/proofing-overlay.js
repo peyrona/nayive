@@ -40,8 +40,9 @@
  *   spell.reset()      the languages changed        spell.forget( word )  added to the dictionary
  *   await spell.itemsAt( x, y )   the menu rows for the flagged word there, or null
  *
- *   runRects( root, pid, a, b )   where characters [a, b) of a paragraph are
+ *   runRects( root, pid, a, b, index? )   where characters [a, b) of a paragraph are
  *                                 painted - the find bar (find.js) marks its matches with it
+ *   runIndex( root )              the painted spans grouped by paragraph, for runRects
  */
 
 const RECHECK_MS = 600;      // after the last edit
@@ -314,15 +315,18 @@ export function createSpellOverlay( o )
 
 // Where characters [a, b) of paragraph `pid` are painted, as client rects: the
 // same span arithmetic the red lines use, for anyone else who marks text (the
-// find bar). Empty when that stretch is not on a page in the DOM.
-export function runRects( root, pid, a, b )
+// find bar). Empty when that stretch is not on a page in the DOM. `index`
+// (runIndex) saves a caller with many stretches to mark a walk over every span
+// for each one.
+export function runRects( root, pid, a, b, index )
 {
-    const out = [];
+    const out   = [];
+    const spans = index ? ( index.get( pid ) || [] )
+                        : [ ...root.querySelectorAll( '.layout-run-text[data-paragraph-id][data-start]' ) ]
+                              .filter( function( span ) { return span.getAttribute( 'data-paragraph-id' ) === pid; } );
 
-    for( const span of root.querySelectorAll( '.layout-run-text[data-paragraph-id][data-start]' ) )
+    for( const span of spans )
     {
-        if( span.getAttribute( 'data-paragraph-id' ) !== pid ) continue;
-
         const s   = Number( span.getAttribute( 'data-start' ) );
         const len = span.textContent.length;
         if( ! Number.isFinite( s ) || s >= b || s + len <= a ) continue;
@@ -331,6 +335,20 @@ export function runRects( root, pid, a, b )
         if( r ) for( const rc of r.getClientRects() ) out.push( rc );
     }
     return out;
+}
+
+// The painted spans once, grouped by paragraph: pid -> [ span ... ], for runRects.
+export function runIndex( root )
+{
+    const index = new Map();
+
+    for( const span of root.querySelectorAll( '.layout-run-text[data-paragraph-id][data-start]' ) )
+    {
+        const pid = span.getAttribute( 'data-paragraph-id' );
+        if( ! index.has( pid ) ) index.set( pid, [] );
+        index.get( pid ).push( span );
+    }
+    return index;
 }
 
 // A Range over characters [a, b) of an element's text, across its text nodes.

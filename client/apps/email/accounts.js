@@ -7,8 +7,9 @@
  * the account and its labels stay. The bin removes one, with Undo (out of
  * sight at once, removed when the Undo is gone) - its mail stays on its
  * server; Nayive's labels on it go (the toast says so).
- * GENERAL: how many days mail stays in the Trash (saved as it is typed), and
- * whether pictures from the internet show at once.
+ * GENERAL: how many days mail stays in the Trash and the signature (both
+ * saved as they are typed), and whether pictures from the internet are hidden
+ * or shown when a message opens - with what each means for the sender.
  *
  * THE FORM. The provider, and beside it the address: a drop-down filled from
  * the server's list (/api/mail/providers, mail_presets.go) plus "Other". It
@@ -53,7 +54,9 @@
     {
         showTab( tab || "accounts" );
         E.$( "trashDays" ).value = S.settings.trashDays;
-        E.$( "showImagesAlways" ).checked = !! S.settings.showImages;
+        E.$( "imagesDefault" ).value = S.settings.showImages ? "show" : "hide";
+        imagesHint();
+        E.$( "signature" ).value = S.settings.signature || "";
         E.$( "trashDaysHint" ).hidden = ! S.accounts.some( function ( a ) { return a.provider === "gmail" || /gmail\.com$/.test( a.imapHost || "" ); } );
         renderList();
         [ "addEmail", "addPass", "addName", "imapHost", "smtpHost", "jmapUrl" ].forEach( function ( id ) { E.$( id ).value = ""; } );
@@ -92,11 +95,33 @@
             if( ! ( n >= 1 && n <= 365 ) ) return;
             try
             {
-                S.settings = await E.api( "PUT", "settings", { trashDays: n } );
+                S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { trashDays: n } ) );
                 if( ! S.label && S.tray === "trash" ) E.$( "trashBarText" ).textContent = E.TF( "mail.trashBar", { n: S.settings.trashDays } );
             }
             catch( err ) { NayiveUI.toast( E.errText( err ) ); }
         }, 500 );
+    }
+
+    function imagesHint()
+    {
+        E.$( "imagesHint" ).textContent = E.T( E.$( "imagesDefault" ).value === "show" ? "mail.showImagesAlwaysHint" : "mail.imagesHidden" );
+    }
+
+    // The signature: in use at once (a message written right away has it),
+    // saved a moment after the typing stops - or at once when the box is left.
+    var sigTimer = 0;
+    function saveSignature( now )
+    {
+        clearTimeout( sigTimer );
+        var text = E.$( "signature" ).value;
+        if( text === S.settings.signature && now !== true ) return;
+        S.settings.signature = text;
+        sigTimer = setTimeout( async function ()
+        {
+            sigTimer = 0;
+            try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { signature: text } ) ); }
+            catch( err ) { NayiveUI.toast( E.errText( err ) ); }
+        }, now === true ? 0 : 800 );
     }
 
     // The domain being typed picks the provider - until the user picks one.
@@ -338,12 +363,15 @@
         } );
         E.$( "addPass" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); E.addAccount(); } } );
         E.$( "trashDays" ).addEventListener( "input", saveDays );
-        E.$( "showImagesAlways" ).addEventListener( "change", async function ( e )
+        E.$( "imagesDefault" ).addEventListener( "change", async function ( e )
         {
-            var on = e.target.checked;
+            var on = e.target.value === "show";
+            imagesHint();
             try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { showImages: on } ) ); }
-            catch( err ) { e.target.checked = ! on; NayiveUI.toast( E.errText( err ) ); }
+            catch( err ) { e.target.value = on ? "hide" : "show"; imagesHint(); NayiveUI.toast( E.errText( err ) ); }
         } );
+        E.$( "signature" ).addEventListener( "input", saveSignature );
+        E.$( "signature" ).addEventListener( "change", function () { if( sigTimer ) saveSignature( true ); } );
         document.querySelector( "#setSheet .mail-tabs" ).addEventListener( "click", function ( e )
         {
             var b = e.target.closest( "[data-tab]" );

@@ -235,6 +235,7 @@
             if( res.status === 401 && C.S.mode === "owner" && window.NayiveUI ) NayiveUI.sessionExpired();
             var err = new Error( ( data && data.error ) || ( "HTTP " + res.status ) );
             err.status = res.status;
+            err.body   = data;   // the whole answer: call.js reads its "busy" flag
             throw err;
         }
         return data;
@@ -333,6 +334,15 @@
         return ct && ct.user ? "u:" + ct.user : pid;
     }
 
+    // The Nayive account behind a participant ("u:<account>" in "Nuevo
+    // chat"'s rows), or "".
+    function accountOf( pid, w )
+    {
+        var k = /^u:/.test( pid ) ? pid : colorKey( pid, w );
+        return /^u:/.test( k ) ? k.slice( 2 ) : "";
+    }
+    C.accountOf = function ( pid, conv ) { return accountOf( pid, C.W( conv === undefined ? C.S.open : conv ) ); };
+
     // An avatar: initials in the person's colour, or the group glyph. A chat
     // id brings its own world; a pid is read in `conv`'s (as C.nameOf).
     C.avatar = function ( pidOrConv, name, size, conv )
@@ -343,12 +353,22 @@
         var el = C.h( "span", { class: "av" + ( size ? " " + size : "" ), data: { c: String( isGroup ? 0 : C.colorOf( colorKey( pid, w ) ) ) } } );
         // A picture the owner chose (Options -> tap the circle) wins over the
         // initials; the URL carries its version, so a new one is a new URL.
+        // Another Nayive user: the picture I chose for that account, kept in
+        // MY home (avatar "u-<account>"), wins over everything, in any home.
         var key = isGroup ? pidOrConv.slice( 2 ) : pid;
         var ver = ( w.avatars || {} )[ key ];
+        var api = w.api;
+        var acct = isGroup || C.S.mode !== "owner" ? "" : accountOf( pid, w );
+        if( acct && ( C.S.avatars || {} )[ "u-" + acct ] )
+        {
+            key = "u-" + acct;
+            ver = C.S.avatars[ key ];
+            api = C.S.api;
+        }
         if( ver )
         {
             el.classList.add( "has-photo" );
-            el.appendChild( C.h( "img", { attrs: { src: w.api + "/avatar/" + encodeURIComponent( key ) + "?v=" + ver, alt: "", loading: "lazy" } } ) );
+            el.appendChild( C.h( "img", { attrs: { src: api + "/avatar/" + encodeURIComponent( key ) + "?v=" + ver, alt: "", loading: "lazy" } } ) );
         }
         else if( isGroup ) el.appendChild( C.ic( "users" ) );
         else el.textContent = C.initials( name );

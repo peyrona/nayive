@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS (and localhost). -->
     <link rel="manifest" href="manifest.json">
@@ -95,15 +96,9 @@
         .habit-row.archived .h-icon,
         .habit-row.archived .row-title { opacity: 0.55; }     /* not due today / archived: quieter, still there */
 
-        /* "Ayer ✗": yesterday was due and is not marked. A tap fixes it. */
-        .fix-chip
-        {
-            padding: 3px 9px; border-radius: var(--radius-pill);
-            border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
-            background: color-mix(in srgb, var(--danger) 10%, transparent);
-            color: var(--danger); font: inherit; font-size: 0.72rem; font-weight: 600; cursor: pointer;
-        }
-        .fix-chip:hover      { background: color-mix(in srgb, var(--danger) 18%, transparent); }
+        /* "Ayer ✗": yesterday was due and is not marked. A tap fixes it. The shared
+           .text-btn.ghost.danger, sized down to sit in the row's meta line. */
+        .row-meta .text-btn { padding: 3px 9px; font-size: 0.72rem; }
 
         /* THE CHECK BUTTON: 48px so a thumb cannot miss it. Hollow in the
            habit's colour; filled when the day is done. A counted habit shows "2/3". */
@@ -426,7 +421,40 @@
         const API_FILES = GumApi.API_FILES;
         const FILE      = 'data/habits/habits.json';   // the whole app, one file per user
         const H         = HabitsCore;
-        const store     = NayiveStore.createStore( { apiBase: API_FILES } );
+        const store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeHabits } );
+
+        // Two devices saved the list from the same copy: both changes are kept,
+        // habit by habit (shared/store.js MERGE). A habit changed on both keeps
+        // each side's ticks and part counts; for its other fields, the side that
+        // changed one wins, mine when both did. null = mine or theirs is not a
+        // list: nothing is merged over it.
+        function mergeHabits( path, base, mine, theirs )
+        {
+            const list = t => { try { const v = JSON.parse( t ); return Array.isArray( v ) ? v : null; } catch( _ ) { return null; } };
+            const m = list( mine ), t = list( theirs );
+            if( ! m || ! t ) return null;
+            const S = NayiveStore;
+            const merged = S.mergeLists( base == null ? null : list( base ), m, t,
+            {
+                id:   h => h && h.id,
+                both: ( b, x, y ) => S.mergeFields( b, x, y, { done: S.mergeSets, paused: S.mergeLists,
+                                                               counts: ( cb, cx, cy ) => S.mergeFields( cb, cx || {}, cy || {} ) } )
+            } );
+            return JSON.stringify( merged.map( H.normalise ).filter( Boolean ), null, 2 );
+        }
+
+        // The store merged another device's save in: show that list. An open
+        // sheet keeps working on the same habit, by id.
+        store.onMerged( function( path, body )
+        {
+            if( path !== FILE ) return;
+            try { habits = JSON.parse( body ).map( H.normalise ).filter( Boolean ); }
+            catch( _ ) { return; }
+            loaded = true;
+            loadSeq++;
+            if( hs && hs.h ) hs.h = habits.find( x => x.id === hs.h.id ) || hs.h;
+            render();
+        } );
 
         // Interface strings: Spanish here, translatable through shared/i18n/*.json.
         const T  = k           => NayiveUI.t( k );
@@ -739,7 +767,7 @@
             meta.appendChild( el( 'span', 'tag', streakText( H.streak( h, today ) ) ) );
             if( H.missedYesterday( h, today ) )
             {
-                const chip = el( 'button', 'fix-chip', T( 'habits.missedYesterday' ) );
+                const chip = el( 'button', 'text-btn ghost danger', T( 'habits.missedYesterday' ) );
                 chip.type  = 'button';
                 chip.title = T( 'habits.fixYesterday' );
                 chip.addEventListener( 'click', function( e ) { e.stopPropagation(); fixYesterday( h ); } );
@@ -786,9 +814,24 @@
         function tapHabit( h )
         {
             if( ! canEdit() ) return;
-            H.tap( h, H.todayIso() );
+            const day  = H.todayIso();
+            const was  = H.isDone( h, day );
+            const had  = h.counts && h.counts[ day ];
+            H.tap( h, day );
             save();
             render();
+
+            // A counted habit only climbs, so a mis-tap (1/8) is taken back here.
+            if( ! h.target ) return;
+            showUndo( h.name + ': ' + H.count( h, day ) + '/' + h.target, function()
+            {
+                const cur = habits.find( x => x.id === h.id );   // by id: a re-read may have replaced it
+                if( ! cur || ! canEdit() ) return;
+                H.setDone( cur, day, was );   // drops the day's count...
+                if( had ) ( cur.counts = cur.counts || {} )[ day ] = had;   // ...which was this
+                save();
+                render();
+            } );
         }
 
         function fixYesterday( h )
@@ -816,8 +859,9 @@
             $( 'monthLabel' ).textContent = month;
             $( 'nextMonth' ).disabled = month >= cur;
 
-            // Habits alive at some point of that month. A restored habit's `created` is
-            // its restore day, so its first month is the earlier of `created` and its first done day.
+            // Habits alive at some point of that month. A habit restored before restores
+            // kept history had its `created` moved to the restore day, so its first month
+            // is the earlier of `created` and its first done day.
             const firstDay = h => ( h.done.length && h.done[ 0 ] < h.created ) ? h.done[ 0 ] : h.created;
             const rows = habits.filter( h => H.monthOf( firstDay( h ) ) <= month && ( ! h.archived || h.archived > first ) );
             $( 'monthEmpty' ).hidden = rows.length > 0;
@@ -984,7 +1028,7 @@
 
             if( editing )
             {
-                const i = habits.indexOf( hs.h );
+                const i = habits.findIndex( x => x.id === hs.h.id );   // by id: a merge may have replaced it
                 const upd = H.normalise( Object.assign( {}, hs.h, { name, icon: hs.icon, color: hs.color, days, target } ) );
                 if( i !== -1 ) habits[ i ] = upd; else habits.push( upd );
             }
@@ -1021,27 +1065,33 @@
             } );
         }
 
-        // Archive keeps the history; restoring starts the count afresh from today
-        // (the months in between are not "missed").
+        // Archive keeps the history; restoring keeps it too: the start date
+        // stays, and the spell it was archived becomes a paused range - not due,
+        // so the months in between are neither "missed" nor break a streak.
         function toggleArchive()
         {
             if( ! hs || ! hs.h || ! canEdit() ) return;
             const h   = hs.h;
-            const was = { archived: h.archived, created: h.created };   // restore resets the start date
-            if( h.archived ) { h.archived = null; h.created = H.todayIso(); }
+            const was = { archived: h.archived, paused: ( h.paused || [] ).slice() };
+            if( h.archived )
+            {
+                const today = H.todayIso();
+                if( h.archived < today ) h.paused = ( h.paused || [] ).concat( [ [ h.archived, today ] ] );
+                h.archived = null;
+            }
             else h.archived = H.todayIso();
             save();
             closeSheet( 'habitSheetBackdrop' );
             render();
 
-            // Undo flips it back, the old start date included. By id: a reload
+            // Undo flips it back, the paused spells included. By id: a reload
             // in between swaps every habit for a fresh copy.
             showUndo( h.archived ? T( 'habits.archived' ) : T( 'habits.restored' ), function()
             {
                 const cur = habits.find( x => x.id === h.id );
                 if( ! cur ) return;
                 cur.archived = was.archived;
-                cur.created  = was.created;
+                cur.paused   = was.paused;
                 save();
                 render();
             } );

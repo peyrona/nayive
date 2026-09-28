@@ -667,7 +667,7 @@
     //   saver.moved( from, to )   the open document was renamed
     //   saver.bakTaken( path )    its .bak was just written by hand (Restore's Undo): no copy over it this session
     //   saver.dirty()             edited since it was opened or last saved
-    //   saver.takeDraft()         at boot: the device draft -> { name, body, at } or null
+    //   saver.takeDraft()         at boot: this tab's device draft, or a closed tab's -> { name, body, at } or null
     //   saver.restored( d )       the app has put that draft on screen
     //   saver.dropDraft()         the user threw the untitled document away
     //   saver.pristine()          the imported bytes still waiting to be the first .bak
@@ -680,8 +680,9 @@
     //   - saves 7 s after the last edit, and at least every 3 min while typing
     //   - a document with nowhere to save to (untitled, or someone else's) goes
     //     to a DRAFT on this device only - IndexedDB "nayive-drafts", one per
-    //     app, never the store's own database (bumping its version would block
-    //     on another open tab and silently turn the store online-only). The
+    //     app and tab (ONE DRAFT PER TAB below), never the store's own
+    //     database (bumping its version would block on another open tab and
+    //     silently turn the store online-only). The
     //     session asks an untitled one for its name and folder at the first
     //     pause after its first edit; that save drops the draft.
     //   - a document with a password (see THE PADLOCK) is encrypted on the one
@@ -744,6 +745,107 @@
         } );
     }
 
+    // The account this page belongs to, as store.js read it at load ("" = unknown).
+    function draftWho() { return ( window.NayiveStore && NayiveStore.me ) || ""; }
+
+    // ---- ONE DRAFT PER TAB ----------------------------------------------------
+    //
+    // Each tab keeps its own draft, keyed "<app>:<tab id>" - until 2026-09-28
+    // the key was the app's name alone, so two untitled documents in two tabs
+    // wrote over each other. The id lives in sessionStorage, so a reload of
+    // the tab finds its draft again. While the tab lives it holds a Web Lock
+    // named after the key: "Duplicate tab" copies sessionStorage, and an id
+    // whose lock is already taken is another live tab's - the copy gets a new
+    // one. A draft whose lock nobody holds is an ORPHAN (its tab was closed):
+    // the next tab of that app with no draft of its own takes it over (the
+    // saver's takeDraft). The old bare "<app>" key is an orphan too - that is
+    // its migration.
+
+    var DRAFT_ORPHAN_MS = 90 * 86400000;   // an orphan this old is dropped - unless it is the one coming back
+
+    var draftKeys = {};                    // app -> Promise<{ key, release }> - this tab's key and its lock
+
+    function newTabId() { return Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 8 ); }
+
+    // The lock's release() when this tab now holds it (for as long as it
+    // lives, or until release), null when another tab has it. No Web Locks in
+    // this browser: a do-nothing release, and no tab is ever known to be alive.
+    function holdLock( name )
+    {
+        var none = function () {};
+        if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.resolve( none );
+
+        return new Promise( function ( resolve )
+        {
+            navigator.locks.request( name, { ifAvailable: true }, function ( lock )
+            {
+                if( ! lock ) { resolve( null ); return null; }
+                return new Promise( function ( release ) { resolve( release ); } );
+            } ).catch( function () { resolve( none ); } );
+        } );
+    }
+
+    // id: the one to try first (null = a fresh one).
+    async function claimDraftKey( app, id )
+    {
+        // A taken id = a duplicated tab: a fresh one (a clash of those is
+        // next to impossible, but it is not left to chance).
+        var release = null;
+        for( var i = 0; i < 3 && ! release; i++ )
+        {
+            if( ! id ) id = newTabId();
+            release = await holdLock( "nayive-draft:" + app + ":" + id );
+            if( ! release ) id = null;
+        }
+        if( ! id ) id = newTabId();
+
+        try { sessionStorage.setItem( "nayive-draft-tab:" + app, id ); } catch ( e ) {}
+        return { key: app + ":" + id, release: release || function () {} };
+    }
+
+    function draftKey( app )
+    {
+        if( ! draftKeys[ app ] )
+        {
+            var id = null;
+            try { id = sessionStorage.getItem( "nayive-draft-tab:" + app ); } catch ( e ) {}
+            draftKeys[ app ] = claimDraftKey( app, id );
+        }
+        return draftKeys[ app ].then( function ( t ) { return t.key; } );
+    }
+
+    // This tab's key holds ANOTHER account's draft (someone else signed in
+    // here, in this same tab): leave it for its owner - its lock let go, so it
+    // is an orphan now - and take a fresh key.
+    function newDraftKey( app )
+    {
+        var old = draftKeys[ app ];
+        draftKeys[ app ] = ( async function ()
+        {
+            var t = old && await old;
+            if( t ) t.release();
+            return claimDraftKey( app, null );
+        } )();
+        return draftKeys[ app ].then( function ( t ) { return t.key; } );
+    }
+
+    // The draft keys whose tab is open now; null = not known (no Web Locks).
+    async function liveDraftKeys()
+    {
+        if( ! ( navigator.locks && navigator.locks.query ) ) return null;
+        try
+        {
+            var got = await navigator.locks.query();
+            var out = new Set();
+            ( got.held || [] ).forEach( function ( l )
+            {
+                if( l.name && l.name.indexOf( "nayive-draft:" ) === 0 ) out.add( l.name.slice( 13 ) );
+            } );
+            return out;
+        }
+        catch ( e ) { return null; }
+    }
+
     function hhmm( at )
     {
         var d = new Date( at );
@@ -766,6 +868,8 @@
         var pristine = null;        // imported bytes: the .bak when the server has no copy yet
         var backedUp = new Set();   // paths already copied to .bak/ this session
         var lock     = null;        // set = this document is written encrypted (shared/crypt.js)
+
+        draftKey( o.app );          // this tab's draft key and its lock, from the start: the tab counts as open
 
         function sync( s )  { if( o.setSync ) o.setSync( s ); }
         function path()     { return o.path(); }
@@ -903,7 +1007,7 @@
                 // Offline / queued / needs-auth all keep the body safe on this
                 // device (the store's cache + outbox): saved, from the user's side.
                 // Only a hard refusal is a failure.
-                failed = res.ok === false && ! res.offline && ! res.needsAuth;
+                failed = res.ok === false && ! res.offline && ! res.needsAuth && ! res.otherAccount;
                 if( res.forbidden ) NayiveUI.toast( t( "ui.saveFailed" ) );
                 if( ! failed )
                 {
@@ -927,9 +1031,11 @@
                 if( mine !== seq ) return null;
 
                 var at  = Date.now();
+                var key = await ownDraftKey();
                 var put = await draftTx( "readwrite", function ( os )
                 {
-                    return os.put( { app: o.app, name: ( o.name && o.name() ) || null, body: body, at: at } );
+                    return os.put( { app: key, name: ( o.name && o.name() ) || null, body: body, at: at,
+                                     who: draftWho() } );
                 } );
                 if( put && mine === seq )
                 {
@@ -952,9 +1058,16 @@
 
             try
             {
+                // No server copy yet (404) = the imported original. Any other
+                // failure is thrown to the catch below: no .bak now, and the
+                // next save tries again - not "nothing to keep" for the session.
                 var prev = null;
                 try { prev = await GumApi.readFileBytes( p ); }
-                catch ( e ) { prev = pristine; }
+                catch ( e )
+                {
+                    if( ! e || e.status !== 404 ) throw e;
+                    prev = pristine;
+                }
 
                 // The server copy of a locked document is already sealed;
                 // imported bytes never are. Either way what lands in .bak/ is
@@ -1023,7 +1136,7 @@
 
                 if( ! res || failed ) return res;
 
-                if( drafted ) { drafted = false; draftTx( "readwrite", function ( os ) { return os.delete( o.app ); } ); }
+                if( drafted ) dropDraft();
 
                 // Our copy of a conflicted file is now safe under the new name:
                 // drop the held-back write, so theirs is what the old name shows.
@@ -1060,11 +1173,70 @@
 
         // ---- the device draft -----------------------------------------------
 
+        // This tab's draft key - never one that holds another account's draft
+        // (a sign-in as someone else in this tab): that one gets a new key, so
+        // nothing here writes over or drops it.
+        async function ownDraftKey()
+        {
+            var key = await draftKey( o.app );
+            var who = draftWho();
+            var r   = await draftTx( "readonly", function ( os ) { return os.get( key ); } );
+            return r && r.who && who && r.who !== who ? newDraftKey( o.app ) : key;
+        }
+
         // The untitled document of an earlier visit. No question here: the
         // session puts it back on screen and asks for its name.
+        //
+        // This tab's own draft first (a reload). With none, the newest ORPHAN of
+        // this app - a closed tab's, or the old one-per-app draft - is taken
+        // over: moved to this tab's key in the same transaction, so two tabs
+        // opening at once cannot both get it. The other orphans stay for the
+        // next tab; those older than DRAFT_ORPHAN_MS are dropped on the way.
+        // Another account's draft on this browser is never offered or touched
+        // (store.js, WHOSE SAVE).
         async function takeDraft()
         {
-            var d = await draftTx( "readonly", function ( os ) { return os.get( o.app ); } );
+            var key  = await ownDraftKey();
+            var live = await liveDraftKeys();
+            var who  = draftWho();
+            var now  = Date.now();
+
+            var d = await draftTx( "readwrite", function ( os )
+            {
+                var out = { result: null };      // draftTx resolves with .result once the transaction is done
+                var all = os.getAll();
+                all.onsuccess = function ()
+                {
+                    var own = null, orphans = [];
+
+                    ( all.result || [] ).forEach( function ( r )
+                    {
+                        if( r.app !== o.app && String( r.app ).indexOf( o.app + ":" ) !== 0 ) return;   // another app's
+                        if( r.app === key ) { own = r; return; }
+                        if( live && live.has( r.app ) ) return;                  // its tab is open
+                        if( r.who && who && r.who !== who ) return;             // another account's
+                        if( r.body == null ) { os.delete( r.app ); return; }     // nothing in it
+                        orphans.push( r );
+                    } );
+
+                    orphans.sort( function ( a, b ) { return ( b.at || 0 ) - ( a.at || 0 ); } );
+                    var take = ! own && orphans.length ? orphans.shift() : null;
+
+                    orphans.forEach( function ( r ) { if( now - ( r.at || 0 ) > DRAFT_ORPHAN_MS ) os.delete( r.app ); } );
+
+                    if( take )
+                    {
+                        os.delete( take.app );
+                        take.app = key;
+                        os.put( take );
+                        own = take;
+                    }
+                    out.result = own;
+                };
+                return out;
+            } );
+
+            if( d && d.who && who && d.who !== who ) return null;
             return d && d.body != null ? d : null;
         }
 
@@ -1076,10 +1248,11 @@
             stamp( "ui.draftAt", d.at, t( "ui.draftNote" ) );
         }
 
-        function dropDraft()
+        async function dropDraft()
         {
             drafted = false;
-            return draftTx( "readwrite", function ( os ) { return os.delete( o.app ); } );
+            var key = await ownDraftKey();
+            return draftTx( "readwrite", function ( os ) { return os.delete( key ); } );
         }
 
         // ---- leaving --------------------------------------------------------

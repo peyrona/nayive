@@ -25,6 +25,10 @@
  * and a forward carries the original's own. Device files go up with the next
  * save or the send. 25 MB in all, Gmail's limit.
  *
+ * SIGNATURE (Settings, General): under a new message, and above what a reply
+ * quotes or a forward carries, after the usual "-- " line. A draft opened
+ * again already has it. A message holding nothing but it counts as empty.
+ *
  * ADDRESSES: typed freely ("Ana <ana@x.es>, bob@y.com"); the Contacts app's
  * addresses that fit the word being typed show under the field (arrows +
  * Enter, or a tap). The server checks them all before sending.
@@ -46,7 +50,7 @@
     function blank()
     {
         return { acct: S.acct, mid: "", draftRef: "", draftAcct: "", staleDraft: null,
-                 inReplyTo: "", references: [],
+                 inReplyTo: "", references: [], sig: "",
                  files: [],     // { kind: "keep"|"drive"|"up", name, size, acct?, ref?, part?, path?, file? }
                  dirty: false, typed: false, saving: null, timer: 0, again: false, sending: false };
     }
@@ -67,7 +71,9 @@
         if( S.selecting ) E.endSelect();
         C = blank();
         if( msg ) C.acct = msg.acct || S.acct;
-        var f = { to: "", cc: "", bcc: "", subject: "", text: "" };
+        var sig = String( S.settings.signature || "" ).replace( /\s+$/, "" );
+        C.sig = sig.trim() ? "\n\n-- \n" + sig : "";
+        var f = { to: "", cc: "", bcc: "", subject: "", text: C.sig };
 
         if( msg && opts.mode !== "fwd" )
         {
@@ -84,7 +90,7 @@
             }
             else f.to = list( to );
             f.subject = /^re:/i.test( msg.subject || "" ) ? msg.subject : "Re: " + ( msg.subject || "" );
-            f.text = "\n\n" + E.TF( "mail.wrote", { date: E.longDate( msg.date ), who: E.whoFull( msg.from ) } ) + "\n" +
+            f.text = C.sig + "\n\n" + E.TF( "mail.wrote", { date: E.longDate( msg.date ), who: E.whoFull( msg.from ) } ) + "\n" +
                      quote( bodyText( msg ) );
             C.inReplyTo = msg.mid || "";
             C.references = ( msg.references || [] ).concat( msg.mid ? [ msg.mid ] : [] );
@@ -92,7 +98,7 @@
         else if( msg )   // forward: the text under a header, and its files
         {
             f.subject = /^(fwd?|rv):/i.test( msg.subject || "" ) ? msg.subject : "Fwd: " + ( msg.subject || "" );
-            f.text = "\n\n" + E.T( "mail.fwdHeader" ) + "\n" +
+            f.text = C.sig + "\n\n" + E.T( "mail.fwdHeader" ) + "\n" +
                      E.T( "mail.from" ) + ": " + E.whoFull( msg.from ) + "\n" +
                      E.T( "mail.date" ) + ": " + E.longDate( msg.date ) + "\n" +
                      E.T( "mail.subject" ) + ": " + ( msg.subject || "" ) + "\n" +
@@ -104,6 +110,7 @@
         }
         show( f, fromRead );
         var focus = msg && opts.mode !== "fwd" ? "cText" : "cTo";
+        E.$( "cText" ).setSelectionRange( 0, 0 );      // over the signature, not under it
         setTimeout( function ()
         {
             var el = E.$( focus );
@@ -312,7 +319,12 @@
 
     function empty()
     {
-        return ! C.files.length && [ "cTo", "cCc", "cBcc", "cSubject", "cText" ].every( function ( id ) { return ! E.$( id ).value.trim(); } );
+        var sig = C.sig.trim();
+        return ! C.files.length && [ "cTo", "cCc", "cBcc", "cSubject", "cText" ].every( function ( id )
+        {
+            var v = E.$( id ).value.trim();
+            return ! v || ( id === "cText" && v === sig );
+        } );
     }
 
     // What the writer's fields hold now.

@@ -10,11 +10,9 @@
 //  3. does index.html link THIS build's stylesheet?
 //  4. does write.js import THIS build's bundle?
 //
-// 3 and 4 are checked only once the page exists: while the new Write is being
-// built beside the old one (docs/write-docx-editor-plan.md) there is a phase
-// with the engine in place and no page using it yet. The app folder is found
-// the same way the build script finds it (see appDir): client/apps/write/
-// after.
+// A missing index.html or write.js fails too: an engine no page loads is not
+// a working Write. The app folder is found the same way the build script finds
+// it (see appDir): client/apps/write/.
 //
 // Without this, the first person to notice a mismatch is a user whose editor
 // never opens. It runs as a PREBUILD_STEP in deploy.sh:
@@ -136,17 +134,16 @@ func run(apps string) int {
 		bad = append(bad, fmt.Sprintf("not in the lock file (left over from another build?): %s", extra))
 	}
 
-	// 3 + 4. The page, once there is one, points at this build and no other.
-	checked := 0
+	// 3 + 4. The page is there and points at this build and no other.
 	for _, page := range []struct{ file, want string }{
 		{"index.html", "lib/docx-editor/" + lk.CSS},
 		{"write.js", "lib/docx-editor/" + lk.Bundle},
 	} {
 		text, err := os.ReadFile(filepath.Join(apps, app, page.file))
 		if err != nil {
-			continue // Phase 0: the engine is in place, the page is not yet
+			bad = append(bad, fmt.Sprintf("missing: %s/%s", app, page.file))
+			continue
 		}
-		checked++
 		if !strings.Contains(string(text), page.want) {
 			bad = append(bad, fmt.Sprintf("%s/%s does not reference %s", app, page.file, page.want))
 		}
@@ -166,11 +163,7 @@ func run(apps string) int {
 		return 1
 	}
 
-	note := ""
-	if checked == 0 {
-		note = " (no page uses it yet)"
-	}
-	fmt.Printf("check-docx-editor: OK - %s, docx-editor.dev %s, %d files%s\n", app, v, len(lk.Files), note)
+	fmt.Printf("check-docx-editor: OK - %s, docx-editor.dev %s, %d files\n", app, v, len(lk.Files))
 	return 0
 }
 

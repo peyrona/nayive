@@ -26,7 +26,7 @@ const TRAIL_MARKS = /[-'’‘]+$/u;
 let dictPaths = {};                 // lang -> { aff, dic }, sent by proofing.js
 const loaded   = {};                // lang -> Promise<Typo|null>
 let personal   = new Set();         // lower-cased words the user added
-const done     = new Set();         // "langs|word" whose suggestions were posted
+const done     = new Set();         // "langs|word" whose suggestions were posted (until a reset)
 let queue      = [];                // [ { key, word, langs } ] still to suggest
 let busy       = false;
 
@@ -41,8 +41,14 @@ function getDict( lang )
         fetch( d.aff ).then( r => r.text() ),
         fetch( d.dic ).then( r => r.text() )
     ] )
-    .then( ( [ aff, dic ] ) => new Typo( lang, aff, dic ) )
-    .catch( () => { delete loaded[ lang ]; return null; } );
+    .then( function( [ aff, dic ] )
+    {
+        // One Typo.js cannot hold (Italian: "Map maximum size exceeded", after
+        // ~10 s) stays null for the visit - not parsed again on every check.
+        try { return new Typo( lang, aff, dic ); }
+        catch( e ) { console.error( 'proofing: the ' + lang + ' dictionary cannot be loaded -', e && e.message ); return null; }
+    } )
+    .catch( () => { delete loaded[ lang ]; return null; } );     // not fetched (offline): tried again next time
 
     return loaded[ lang ];
 }
@@ -136,6 +142,14 @@ onmessage = function( e )
         case 'init'    : dictPaths = msg.dicts || {}; break;
         case 'personal': personal  = new Set( msg.words || [] ); break;
         case 'check'   : check( msg ).catch( function() { postMessage( { type: 'result', id: msg.id, issues: [] } ); } ); break;
+
+        // Another document or other languages (proofing.js resetProofing): the
+        // queue is old words, and a dictionary no longer on is let go.
+        case 'reset'   :
+            queue = [];
+            done.clear();
+            for( const lang of Object.keys( loaded ) ) if( ( msg.langs || [] ).indexOf( lang ) === -1 ) delete loaded[ lang ];
+            break;
 
         // The right-click menu opened on a word we have not got to yet: do it next.
         case 'first'   :

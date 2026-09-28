@@ -17,7 +17,8 @@
  *
  * ---------------------------------------------------------------------------
  * An event-def is the in-memory source of truth for one event or one whole
- * recurring series (whole-series edits only - no per-occurrence exceptions):
+ * recurring series (whole-series edits only; one occurrence can be deleted -
+ * an EXDATE, excludeOne - and a moved one read from a file is its own def):
  *
  * {
  *   uid, title, location, notes, allDay,
@@ -93,14 +94,30 @@ function vEventToDef( ev )
         const dtstartProp = ev.component.getFirstProperty( 'dtstart' );
         const tzidParam    = dtstartProp ? dtstartProp.getParameter( 'tzid' ) : null;
         const isUtc        = dtstart.zone === ICAL.Timezone.utcTimezone;
-        const tzid         = tzidParam || (isUtc ? 'UTC' : null);
+        const tzid         = ianaZone( tzidParam ) || (isUtc ? 'UTC' : null);
 
-        def.floating = ! tzid;
+        def.floating = ! tzid;   // a zone no one can place (not IANA, not a known Windows name) shows at its wall clock
         def.tzid     = tzid || VIEWER_TZ;
         def.start    = { date: icalDateToStr( dtstart ), time: icalTimeToStr( dtstart ) };
 
         const dtend = ev.endDate;
         def.end      = { date: icalDateToStr( dtend ), time: icalTimeToStr( dtend ) };
+
+        // A one-off time in UTC ("...Z", from another app) shows in the VIEWER's
+        // zone (apps-2 #56): a 10:00 meeting reads 10:00 here, not 08:00 with a
+        // UTC tag. Only the model moves - `was` (fieldsOf) is taken after this,
+        // so the file keeps its "Z" line until the time itself is edited. Not a
+        // series (its wall clock in another zone would drift an hour at each DST
+        // change) nor a moved occurrence of one (it must match its series' UTC).
+        if( isUtc && ! tzidParam && ! rid && ! ev.component.getFirstProperty( 'rrule' ) )
+        {
+            const toViewer = t => DateTime.fromObject( { year: t.year, month: t.month, day: t.day, hour: t.hour, minute: t.minute },
+                                                       { zone: 'utc' } ).setZone( VIEWER_TZ );
+            const s = toViewer( dtstart ), e = toViewer( dtend );
+            def.tzid  = VIEWER_TZ;
+            def.start = { date: s.toISODate(), time: s.toFormat( 'HH:mm' ) };
+            def.end   = { date: e.toISODate(), time: e.toFormat( 'HH:mm' ) };
+        }
     }
 
     const recur = ev.component.getFirstPropertyValue( 'rrule' );
@@ -118,9 +135,67 @@ function vEventToDef( ev )
 
         if( recur.wkst && recur.wkst !== ICAL.Time.MONDAY ) def.rrule.wkst = recur.wkst;
         if( ! sheetCanShow( recur, ev.component ) )         def.rrule.custom = true;
+        if( def.rrule.custom ) def.rrule.raw = recur.toString();   // expanded as written: BYDAY=2TU, BYMONTHDAY...
     }
 
+    // The occurrences the series does not have: its EXDATEs, and (see
+    // icsToCalendar) the ones a RECURRENCE-ID override has moved.
+    def.skip = [];
+    for( const p of ev.component.getAllProperties( 'exdate' ) )
+        for( const t of p.getValues() ) def.skip.push( wallKey( t, def ) );
+
+    if( rid ) def.ridKey = wallKey( rid, def );
+
     return def;
+}
+
+// An occurrence as the series' own wall clock, "yyyy-mm-dd" (all-day) or
+// "yyyy-mm-ddThh:mm": what expandEventDef compares. A UTC time (an EXDATE
+// written with Z) is first moved into the series' zone.
+function wallKey( t, def )
+{
+    if( def.allDay || t.isDate ) return icalDateToStr( t );
+
+    if( t.zone === ICAL.Timezone.utcTimezone && ! def.floating && def.tzid !== 'UTC' )
+    {
+        const d = DateTime.fromObject( { year: t.year, month: t.month, day: t.day, hour: t.hour, minute: t.minute },
+                                       { zone: 'utc' } ).setZone( def.tzid );
+        return d.toISODate() + 'T' + d.toFormat( 'HH:mm' );
+    }
+
+    return icalDateToStr( t ) + 'T' + icalTimeToStr( t );
+}
+
+// A TZID as a zone Luxon knows: IANA as it is, Outlook's Windows names mapped
+// ("Romance Standard Time" -> Europe/Paris); null when there is no telling.
+const WINDOWS_ZONES =
+{
+    'UTC': 'UTC', 'GMT Standard Time': 'Europe/London', 'Greenwich Standard Time': 'Atlantic/Reykjavik',
+    'W. Europe Standard Time': 'Europe/Berlin', 'Romance Standard Time': 'Europe/Paris',
+    'Central Europe Standard Time': 'Europe/Budapest', 'Central European Standard Time': 'Europe/Warsaw',
+    'E. Europe Standard Time': 'Europe/Chisinau', 'GTB Standard Time': 'Europe/Bucharest',
+    'FLE Standard Time': 'Europe/Kiev', 'Russian Standard Time': 'Europe/Moscow', 'Turkey Standard Time': 'Europe/Istanbul',
+    'Morocco Standard Time': 'Africa/Casablanca', 'South Africa Standard Time': 'Africa/Johannesburg',
+    'Egypt Standard Time': 'Africa/Cairo', 'Israel Standard Time': 'Asia/Jerusalem', 'Arabian Standard Time': 'Asia/Dubai',
+    'India Standard Time': 'Asia/Kolkata', 'China Standard Time': 'Asia/Shanghai', 'Tokyo Standard Time': 'Asia/Tokyo',
+    'Korea Standard Time': 'Asia/Seoul', 'Singapore Standard Time': 'Asia/Singapore',
+    'AUS Eastern Standard Time': 'Australia/Sydney', 'New Zealand Standard Time': 'Pacific/Auckland',
+    'Eastern Standard Time': 'America/New_York', 'Central Standard Time': 'America/Chicago',
+    'Mountain Standard Time': 'America/Denver', 'US Mountain Standard Time': 'America/Phoenix',
+    'Pacific Standard Time': 'America/Los_Angeles', 'Alaskan Standard Time': 'America/Anchorage',
+    'Hawaiian Standard Time': 'Pacific/Honolulu', 'Atlantic Standard Time': 'America/Halifax',
+    'Central Standard Time (Mexico)': 'America/Mexico_City', 'SA Pacific Standard Time': 'America/Bogota',
+    'Venezuela Standard Time': 'America/Caracas', 'Pacific SA Standard Time': 'America/Santiago',
+    'Argentina Standard Time': 'America/Buenos_Aires', 'E. South America Standard Time': 'America/Sao_Paulo',
+    'Canada Central Standard Time': 'America/Regina', 'Newfoundland Standard Time': 'America/St_Johns'
+};
+
+function ianaZone( tzid )
+{
+    if( ! tzid ) return null;
+    const name = String( tzid ).replace( /^\/[^/]*\/[^/]*\//, '' ).trim();   // "/mozilla.org/20050126_1/Europe/Berlin"
+    if( DateTime.local().setZone( name ).isValid ) return name;
+    return WINDOWS_ZONES[ name ] || null;
 }
 
 // What the sheet can show AND write back as it came: one RRULE, a plain
@@ -235,6 +310,16 @@ export function icsToCalendar( icsText )
 
         if( ! def ) { file.parts.push( raw ); return; }
 
+        // An event with no UID gets one made from its own text, not a random
+        // one: the same event must have the same key on every device and at
+        // every read, or a merge (mergeIcs) would take it for two. Written
+        // into the file only when the event is edited here.
+        if( ! /^UID[;:]/mi.test( raw.replace( /\r?\n[ \t]/g, '' ) ) )
+        {
+            def.uid = 'ev-h' + textHash( raw.replace( /\r\n/g, '\n' ) );
+            def.key = def.uid + ( def.rid ? '@' + def.rid : '' );
+        }
+
         // Two events with the same uid + rid (a copy pasted in twice) must still be two.
         if( seen[ def.key ] ) def.key += '#' + seen[ def.key ]++;
         else                  seen[ def.key ] = 1;
@@ -281,6 +366,15 @@ export function icsToCalendar( icsText )
 
     if( depth !== 0 || file.at < 0 ) bad = true;
 
+    // A moved occurrence (same uid + RECURRENCE-ID) replaces the series' own:
+    // without this both showed, the old time beside the new.
+    for( const o of defs )
+    {
+        if( ! o.ridKey ) continue;
+        const master = defs.find( d => d.uid === o.uid && ! d.rid && d.rrule );
+        if( master ) master.skip.push( o.ridKey );
+    }
+
     return { defs, file, bad };
 }
 
@@ -318,6 +412,100 @@ export function calendarToIcs( file, defs )
     return out;
 }
 
+//------------------------------------------------------------------------//
+// MERGE  (apps-2 #51, cross #11: shared/store.js calls it on a 412)
+//
+// This device's calendar (`mine`) and the server's (`theirs`), both saved
+// since `base` (the copy this device last had from the server), merged event
+// by event - by uid + RECURRENCE-ID (def.key):
+//   - added on either side: kept;
+//   - deleted on one side and untouched on the other: deleted;
+//   - changed on both: the newer by its LAST-MODIFIED, else DTSTAMP, else mine;
+//   - changed on one side and deleted on the other: kept, as changed (an edit
+//     is never lost to a delete).
+// The server's file is the frame (its VTIMEZONEs, to-dos, order); an event of
+// mine goes where theirs stood, a new one before its last END:VCALENDAR.
+// `base` null (unknown): nothing counts as deleted - both sides' events stay,
+// and one they hold differently is the newer, else theirs.
+// null back: it cannot be merged safely (a file that does not parse).
+export function mergeIcs( base, mine, theirs )
+{
+    const B = base == null ? null : icsToCalendar( base );
+    const M = icsToCalendar( mine );
+    const T = icsToCalendar( theirs );
+
+    if( M.bad || T.bad || ( B && B.bad ) ) return null;
+    if( ! T.file ) return M.file ? mine : theirs;    // theirs is empty: mine as it is
+    if( ! M.file ) return B && B.file ? null : theirs;   // mine emptied a calendar: not a merge
+
+    const byKey = cal => { const m = new Map(); for( const d of cal.defs ) m.set( d.key, d._src.raw ); return m; };
+    const b = B ? byKey( B ) : new Map(), m = byKey( M ), t = byKey( T );
+
+    // The raw VEVENT to keep for `key`, or null (deleted).
+    const pick = function( key )
+    {
+        const mv = m.has( key ) ? m.get( key ) : null;
+        const tv = t.has( key ) ? t.get( key ) : null;
+        const bv = b.has( key ) ? b.get( key ) : null;
+
+        if( mv === tv ) return mv;
+        if( B && mv === bv ) return tv;                  // only theirs changed (or deleted it)
+        if( B && tv === bv ) return mv;                  // only mine changed (or deleted it)
+        if( mv === null ) return tv;                     // deleted here, changed there: kept
+        if( tv === null ) return mv;
+        // Changed on both: the newer; with no stamps, mine - or theirs when
+        // base is unknown (store.js mergeLists: this device shows the result
+        // at once, the other device's edit would be undone unseen).
+        const sm = stampOf( mv ), st = stampOf( tv );
+        if( sm !== st ) return st > sm ? tv : mv;
+        return B ? mv : tv;
+    };
+
+    const eol   = T.file.eol;
+    const norm  = raw => raw.replace( /\r?\n/g, eol );
+    let   out   = '';
+    const done  = new Set();
+
+    T.file.parts.forEach( function( part, i )
+    {
+        if( i === T.file.at )
+            for( const d of M.defs )
+                if( ! t.has( d.key ) && ! done.has( d.key ) && pick( d.key ) !== null ) { done.add( d.key ); out += norm( pick( d.key ) ); }
+
+        if( typeof part === 'string' ) { out += part; return; }
+
+        const def = T.defs.find( d => d._src === part );
+        if( ! def ) { out += part.raw; return; }
+        if( done.has( def.key ) ) return;                // a second copy under the same key
+        done.add( def.key );
+        const keep = pick( def.key );
+        if( keep !== null ) out += keep === part.raw ? keep : norm( keep );
+    } );
+
+    return out;
+}
+
+// A short stable name for a text: two 32-bit FNV-1a hashes, 16 hex digits.
+function textHash( text )
+{
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+    for( let i = 0; i < text.length; i++ )
+    {
+        const c = text.charCodeAt( i );
+        a = Math.imul( a ^ c, 0x01000193 ) >>> 0;
+        b = Math.imul( b ^ c, 0x5bd1e995 ) >>> 0;
+    }
+    return a.toString( 16 ).padStart( 8, '0' ) + b.toString( 16 ).padStart( 8, '0' );
+}
+
+// The event's own last-changed stamp as sortable text ("20260928T101500Z"),
+// LAST-MODIFIED first, then DTSTAMP; '' when it has neither.
+function stampOf( raw )
+{
+    const one = n => { const r = new RegExp( '^' + n + '(?:;[^:\r\n]*)?:(\\d{8}T\\d{6}Z?)', 'mi' ).exec( raw ); return r ? r[ 1 ] : ''; };
+    return one( 'LAST-MODIFIED' ) || one( 'DTSTAMP' );
+}
+
 // Deleting a moved occurrence (an override: the series' uid + a RECURRENCE-ID)
 // must not bring the series' own occurrence back at the old time: the series
 // gets an EXDATE for it, built from the override's RECURRENCE-ID line. Only that
@@ -336,8 +524,62 @@ export function excludeOccurrence( master, override )
 
 function eventText( def, eol )
 {
-    return def._src ? patchEvent( def._src, def, eol )
-                    : defToVEventComponent( def ).toString().replace( /\r\n/g, eol ) + eol;
+    if( def._src ) return patchEvent( def._src, def, eol );
+
+    // A new event (not read from the file yet) carries its EXDATEs (excludeOne) here.
+    let text = defToVEventComponent( def ).toString();
+    const at = text.lastIndexOf( 'END:VEVENT' );
+    if( def.exdatesAdded && def.exdatesAdded.length && at !== -1 )
+        text = text.slice( 0, at ) + def.exdatesAdded.map( x => x + '\r\n' ).join( '' ) + text.slice( at );
+
+    return text.replace( /\r\n/g, eol ) + eol;
+}
+
+// "Delete only this one" on a series (apps-2 #54): the series gets an EXDATE
+// for the occurrence at `occ` - its wall clock in the series' own zone,
+// "yyyy-mm-dd" or "yyyy-mm-ddThh:mm", what expandEventDef compares - written
+// the way its own DTSTART is: VALUE=DATE, floating, the file's own TZID=, or
+// UTC. It also leaves the screen at once (def.skip). Returns what undo() needs.
+export function excludeOne( def, occ )
+{
+    let line;
+
+    if( def.allDay )
+        line = 'EXDATE;VALUE=DATE:' + occ.replace( /-/g, '' );
+    else
+    {
+        const src  = def._src && def._src.lines.find( l => l.name === 'DTSTART' );
+        const text = src ? src.raw.replace( /^\uFEFF/, '' ).replace( /\r?\n[ \t]/g, '' ).replace( /[\r\n]+$/, '' ) : '';
+        const m    = /^DTSTART((?:;[^:;=]+=(?:"[^"]*"|[^:;]*))*):(.*)$/i.exec( text );
+        const tzid = m && /;TZID=("[^"]*"|[^:;]*)/i.exec( m[ 1 ] );
+        // The seconds the DTSTART has (10:00:30): the server matches an EXDATE to the second.
+        const sec  = ( m && ( /T\d{4}(\d{2})/.exec( m[ 2 ] ) || [] )[ 1 ] ) || '00';
+        const wall = occ.replace( /[-:]/g, '' ) + sec;             // yyyymmddThhmmss
+
+        const utc  = m ? /Z\s*$/i.test( m[ 2 ] ) : ( ! def.floating && def.tzid === 'UTC' );
+
+        if( utc )
+            line = 'EXDATE:' + DateTime.fromISO( occ + ':' + sec, { zone: def.floating ? VIEWER_TZ : def.tzid } )
+                                     .toUTC().toFormat( "yyyyLLdd'T'HHmmss'Z'" );
+        else if( tzid )
+            line = 'EXDATE;TZID=' + tzid[ 1 ] + ':' + wall;       // the file's own name, Windows or IANA
+        else if( ! m && ! def.floating )
+            line = 'EXDATE;TZID=' + def.tzid + ':' + wall;
+        else
+            line = 'EXDATE:' + wall;                               // floating
+    }
+
+    const folded = ICAL.helpers.foldline( line );
+    ( def.exdatesAdded = def.exdatesAdded || [] ).push( folded );
+    ( def.skip = def.skip || [] ).push( occ );
+
+    return function undo()
+    {
+        const i = def.exdatesAdded.lastIndexOf( folded );
+        if( i !== -1 ) def.exdatesAdded.splice( i, 1 );
+        const j = def.skip.lastIndexOf( occ );
+        if( j !== -1 ) def.skip.splice( j, 1 );
+    };
 }
 
 // One VEVENT back into the file: byte for byte when none of its fields
@@ -354,7 +596,7 @@ function patchEvent( src, def, eol )
     if( ! changed.length && ! exdates.length )
         return src.raw;
 
-    const names = changed.length ? [ 'DTSTAMP' ] : [];
+    const names = changed.length || exdates.length ? [ 'DTSTAMP' ] : [];   // the stamp a merge compares (mergeIcs)
     for( const f of changed ) names.push( ...FIELD_PROPS[ f ] );
 
     // New EXDATEs go after the event's last EXDATE, or with the other new lines.
@@ -472,6 +714,10 @@ function strToIcalDateTime( sDate, sTime, sZone )
     const [ y, m, d ]   = sDate.split( '-' ).map( Number );
     const [ hh, mm ]    = (sTime || '00:00').split( ':' ).map( Number );
 
+    if( sZone === 'UTC' )   // "...Z", not ";TZID=UTC:" (a TZID wants its VTIMEZONE block)
+        return new ICAL.Time( { year: y, month: m, day: d, hour: hh, minute: mm, second: 0, isDate: false },
+                               ICAL.Timezone.utcTimezone );
+
     if( sZone )
     {
         if( ! ICAL.TimezoneService.has( sZone ) )
@@ -509,16 +755,45 @@ export function expandEventDef( def, rangeStartMs, rangeEndMs )
 
     const durationMs = wallDurationMs( def );
     const dtStartNaive = naiveUtc( def.start );
-    const opts = { freq: RRule[ def.rrule.freq ], interval: def.rrule.interval || 1, dtstart: dtStartNaive };
+    let   opts = { freq: RRule[ def.rrule.freq ], interval: def.rrule.interval || 1, dtstart: dtStartNaive };
 
-    if( def.rrule.byweekday )
-        opts.byweekday = def.rrule.byweekday.map( d => RRule[ d ] );
-    if( def.rrule.until )
-        opts.until = naiveUtc( { date: def.rrule.until, time: def.start.time } );
-    if( def.rrule.count )
-        opts.count = def.rrule.count;
+    if( def.rrule.raw )
+    {
+        // A rule the sheet cannot show, taken whole (BYDAY=2TU is the 2nd Tuesday,
+        // not every Tuesday). Its UNTIL is read as a wall clock, like the rest.
+        try { opts = Object.assign( RRule.parseString( def.rrule.raw ), { dtstart: dtStartNaive } ); }
+        catch( _ ) {}
+
+        // A date-only UNTIL keeps its whole day, as for the sheet's own rules
+        // (and the server's reminders, ics.go); rrule.js stops at its midnight.
+        // An UNTIL in UTC ("...Z") is an instant: moved onto the series' own
+        // wall clock, which is what the naive dates here are.
+        const utcUntil = /UNTIL=(\d{8}T\d{6})Z/i.exec( def.rrule.raw );
+        if( utcUntil )
+        {
+            const u = DateTime.fromFormat( utcUntil[ 1 ], "yyyyLLdd'T'HHmmss", { zone: 'utc' } ).setZone( zone );
+            if( u.isValid ) opts.until = new Date( Date.UTC( u.year, u.month - 1, u.day, u.hour, u.minute, u.second ) );
+        }
+        else if( def.rrule.until && /UNTIL=\d{8}(?!T)/i.test( def.rrule.raw ) )
+            opts.until = naiveUtc( { date: def.rrule.until, time: def.start.time } );
+
+        // A rule that names no real day (the 31st that is also the first
+        // Monday) makes rrule.js walk to the year 9999 - seconds, on every
+        // repaint. Asked once per rule: none -> no occurrences.
+        if( ! rawRuleMatches( def, opts ) ) return [];
+    }
+    else
+    {
+        if( def.rrule.byweekday )
+            opts.byweekday = def.rrule.byweekday.map( d => RRule[ d ] );
+        if( def.rrule.until )
+            opts.until = naiveUtc( { date: def.rrule.until, time: def.start.time } );
+        if( def.rrule.count )
+            opts.count = def.rrule.count;
+    }
 
     const rule = new RRule( opts );
+    const skip = new Set( def.skip || [] );
 
     // Widen the naive window a little: byweekday expansion near range edges can otherwise clip an occurrence.
     const naiveFrom = new Date( rangeStartMs - 8 * 86400000 );
@@ -527,19 +802,57 @@ export function expandEventDef( def, rangeStartMs, rangeEndMs )
     const occurrences = rule.between( naiveFrom, naiveTo, true );
 
     return occurrences
+        .filter( d => ! skip.has( def.allDay ? naiveDateStr( d ) : naiveDateStr( d ) + 'T' + naiveTimeStr( d ) ) )
         .map( d => instantiate( def,
                                  { date: naiveDateStr( d ), time: def.allDay ? null : naiveTimeStr( d ) },
                                  null, zone, durationMs ) )
         .filter( inst => overlaps( inst, rangeStartMs, rangeEndMs ) );
 }
 
+// Does this rule's pattern name any day at all? The calendar repeats every 400
+// years (146097 days, weekdays and leap years included), so a pattern that
+// matches anywhere matches within any 400 x m years, m keeping the INTERVAL's
+// phase. The probe starts one to two such spans before 9999, where rrule.js
+// stops, so a pattern that never matches costs one bounded walk (about a
+// second for a daily rule, once) instead of ~8000 years on every repaint.
+// Remembered on the def, per rule text.
+const CYCLE = { [ RRule.YEARLY ]: 400, [ RRule.MONTHLY ]: 4800, [ RRule.WEEKLY ]: 20871, [ RRule.DAILY ]: 146097 };   // periods per 400 years
+
+function rawRuleMatches( def, opts )
+{
+    if( def._probe && def._probe.raw === def.rrule.raw ) return def._probe.ok;
+
+    let ok = true;
+    const k    = Math.max( 1, opts.interval || 1 );
+    const per  = CYCLE[ opts.freq ];
+    const gcd  = ( a, b ) => b ? gcd( b, a % b ) : a;
+    const span = per ? 400 * ( k / gcd( per, k ) ) : 0;               // years that keep the phase
+    const d    = opts.dtstart;
+
+    if( span && span <= 1200 )
+    {
+        const shift = Math.floor( ( 9999 - span - d.getUTCFullYear() ) / span ) * span;
+        const at    = new Date( d.getTime() );
+        at.setUTCFullYear( d.getUTCFullYear() + Math.max( 0, shift ) );
+        const probe = Object.assign( {}, opts, { dtstart: at, until: null, count: 1 } );
+        try { ok = new RRule( probe ).all().length > 0; } catch( _ ) { ok = true; }
+    }
+
+    def._probe = { raw: def.rrule.raw, ok };
+    return ok;
+}
+
 export function instantiate( def, start, end, zone, durationMsOverride )
 {
     if( def.allDay )
     {
+        // A repeat of an all-day event gets no `end`, only the series' length:
+        // whole days (a one-day event rounds to 0), plus the exclusive end day.
         const startDt = DateTime.fromISO( start.date, { zone: 'utc' } );
         const endDt   = end ? DateTime.fromISO( end.date, { zone: 'utc' } ).plus( { days: 1 } )
-                             : startDt.plus( { days: 1 } );
+                      : durationMsOverride != null
+                          ? startDt.plus( { days: Math.round( durationMsOverride / 86400000 ) + 1 } )
+                          : startDt.plus( { days: 1 } );
 
         return { uid: def.uid, def, allDay: true,
                  start: startDt.toISODate(), end: endDt.toISODate(),

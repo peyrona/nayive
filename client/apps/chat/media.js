@@ -100,11 +100,23 @@
         } );
     }, { rootMargin: "200px" } ) : null;
 
+    // The maps drawn so far. A re-render (a search key, a send) drops their
+    // bubbles, and a Leaflet map is only let go - its window "resize"
+    // listener with it - by remove(): so each new one sweeps the dropped ones.
+    var miniMaps = [];
+
+    function sweepMiniMaps()
+    {
+        miniMaps = miniMaps.filter( function ( mm ) { if( mm.getContainer().isConnected ) return true; mm.remove(); return false; } );
+    }
+
     function lazyMiniMap( box, l )
     {
+        sweepMiniMaps();
         box._draw = function ()
         {
             if( ! window.L || ! box.isConnected ) return;
+            sweepMiniMaps();
             var map = L.map( box, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
                                     doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false,
                                     attributionControl: true } );
@@ -112,6 +124,7 @@
             map.setView( [ l.lat, l.lon ], 15 );
             // strict-origin: the tile server sees our site, never a person's link
             L.tileLayer( OSM, { maxZoom: 19, attribution: OSM_ATTR, referrerPolicy: "strict-origin-when-cross-origin" } ).addTo( map );
+            miniMaps.push( map );
         };
         if( io ) setTimeout( function () { if( box.isConnected ) io.observe( box ); }, 0 );
         else setTimeout( box._draw, 0 );
@@ -299,6 +312,38 @@
         } );
     };
 
+    // A picture made ready to send (his rule, 2026-09-27): a JPEG of 300 x
+    // 300 px at most (NayivePhoto.face), then PUT raw to `path` of my home.
+    C.facePicture = function ( blob ) { return NayivePhoto.face( blob, { jpeg: true } ); };
+    C.putPicture = async function ( path, blob )
+    {
+        var res = await fetch( S.api + "/" + path, { method: "PUT", credentials: "same-origin",
+                                                    headers: { "Content-Type": blob.type || "image/jpeg" }, body: blob } );
+        if( ! res.ok ) throw { status: res.status };
+    };
+
+    // The same picture as the PHOTO of a card of the address book (the
+    // Contacts app), for ever. A card deleted there since: nothing to do.
+    C.cardPicture = async function ( uid, blob )
+    {
+        try { await C.putPicture( "cards/photo?uid=" + encodeURIComponent( uid ), blob ); }
+        catch( e ) { if( ! e || e.status !== 404 ) throw e; }
+        C.forgetBook();
+    };
+
+    // A card of the address book as a circle: its picture, or its initials.
+    C.cardAvatar = function ( card, size )
+    {
+        var av = C.avatar( "x" + card.name, card.name, size, null );
+        if( card.photo )
+        {
+            av.textContent = "";
+            av.classList.add( "has-photo" );
+            av.appendChild( h( "img", { attrs: { src: card.photo, alt: "", loading: "lazy" } } ) );
+        }
+        return av;
+    };
+
     function deviceImage( resolve )
     {
         var input = h( "input", { attrs: { type: "file", accept: "image/*", hidden: true } } );
@@ -378,6 +423,9 @@
         var sh = C.sheet( files.length === 1 ? T( "chat.photo" ) : C.TF( "chat.nPhotos", { n: files.length } ), body, go );
         function send()
         {
+            // The message box's limit (compose.js send): over it the server refuses
+            // the photo's caption. The sheet stays open, the caption in its box.
+            if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
             sh.close();
             var reply = S.replyTo ? S.replyTo.id : 0;
             C.resetComposer();
@@ -999,9 +1047,11 @@
     // a contact card
     // ---------------------------------------------------------------------
 
-    // The owner's own address book (the Contacts app), read once.
+    // The owner's own address book (the Contacts app), read once - again
+    // after C.forgetBook() (a card's picture changed from here). Every card
+    // with a name: {name, tels, emails, uid, photo} - photo a data: URL or "".
     var book = null;
-    async function ownerBook()
+    C.ownerBook = async function ()
     {
         if( book ) return book;
         book = [];
@@ -1012,7 +1062,8 @@
         }
         catch( _ ) {}
         return book;
-    }
+    };
+    C.forgetBook = function () { book = null; };
 
     function parseVcf( text )
     {
@@ -1023,20 +1074,35 @@
         {
             var i = line.indexOf( ":" );
             if( i < 0 ) return;
-            var key = line.slice( 0, i ).split( ";" )[ 0 ].toUpperCase().replace( /^ITEM\d+\./, "" );
+            var left = line.slice( 0, i );
+            var key = left.split( ";" )[ 0 ].toUpperCase().replace( /^ITEM\d+\./, "" );
             var val = line.slice( i + 1 ).replace( /\\n/g, " " ).replace( /\\([,;\\])/g, "$1" ).trim();
-            if( key === "BEGIN" ) cur = { name: "", tels: [], emails: [] };
+            if( key === "BEGIN" ) cur = { name: "", tels: [], emails: [], uid: "", photo: "" };
             else if( ! cur ) return;
             else if( key === "FN" ) cur.name = val;
             else if( key === "TEL" && val ) cur.tels.push( val );
             else if( key === "EMAIL" && val ) cur.emails.push( val );
+            else if( key === "UID" ) cur.uid = val;
+            else if( key === "PHOTO" && ! cur.photo ) cur.photo = photoOf( left, line.slice( i + 1 ) );
             else if( key === "END" )
             {
-                if( cur.name && ( cur.tels.length || cur.emails.length ) ) out.push( cur );
+                if( cur.name ) out.push( cur );
                 cur = null;
             }
         } );
         return out.sort( function ( a, b ) { return a.name.localeCompare( b.name ); } );
+    }
+
+    // A card's PHOTO as a data: URL, or "" (a link to the web). The Contacts
+    // app reads it the same way (its photoOf): 3.0, 2.1 and 4.0 forms.
+    function photoOf( left, value )
+    {
+        var v = value.replace( /\s+/g, "" );
+        var d = /^data:image\/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+\/=]+)$/i.exec( v );
+        if( d ) return "data:image/" + d[ 1 ].toLowerCase().replace( "jpg", "jpeg" ) + ";base64," + d[ 2 ];
+        if( /VALUE=UR[IL]/i.test( left ) || ! /^[A-Za-z0-9+\/=]{16,}$/.test( v ) ) return "";
+        var mime = /PNG/i.test( left ) || /^iVBOR/.test( v ) ? "png" : /GIF/i.test( left ) || /^R0lG/.test( v ) ? "gif" : "jpeg";
+        return "data:image/" + mime + ";base64," + v;
     }
 
     C.openCardSheet = function ()
@@ -1075,17 +1141,17 @@
             {
                 var q = C.fold( search.value );
                 list.textContent = "";
-                var shown = all.filter( function ( c ) { return ! q || C.fold( c.name ).indexOf( q ) >= 0; } ).slice( 0, 80 );
+                var shown = all.filter( function ( c ) { return ( c.tels.length || c.emails.length ) && ( ! q || C.fold( c.name ).indexOf( q ) >= 0 ); } ).slice( 0, 80 );
                 if( ! shown.length ) list.appendChild( h( "p", { class: "hint", style: "margin:6px 0", text: T( all.length ? "chat.noMatch" : "chat.noContacts" ) } ) );
                 shown.forEach( function ( c )
                 {
-                    list.appendChild( h( "button", { class: "row", attrs: { type: "button" }, on: { click: function () { send( c ); } } },
-                        C.avatar( "x" + c.name, c.name, "sm" ),
+                    list.appendChild( h( "button", { class: "row", attrs: { type: "button" }, on: { click: function () { send( { name: c.name, tels: c.tels, emails: c.emails } ); } } },
+                        C.cardAvatar( c, "sm" ),
                         h( "div", { class: "body" }, h( "span", { class: "name", text: c.name } ),
                             h( "span", { class: "state", text: c.tels[ 0 ] || c.emails[ 0 ] } ) ) ) );
                 } );
             };
-            ownerBook().then( function ( all ) { draw( all ); search.addEventListener( "input", function () { draw( all ); } ); } );
+            C.ownerBook().then( function ( all ) { draw( all ); search.addEventListener( "input", function () { draw( all ); } ); } );
         }
         else if( navigator.contacts && navigator.contacts.select )
         {

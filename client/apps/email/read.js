@@ -9,9 +9,15 @@
  * script in it is ours, let in by a nonce (the frame's CSP runs no other): it
  * tells this page the frame's height, and opens links in a new tab.
  *
+ * THE HEAD: the subject, a chevron, the labels. From, To and Date fold away
+ * under it (closed each time a message opens); the subject or the chevron
+ * shows them.
+ *
  * PICTURES. This message's own (cid:) come in as data: urls, fetched here
- * with the session. The internet's only after "Show pictures" (or the
- * setting that always shows them): they tell a sender the message was opened.
+ * with the session. The internet's only after the toolbar's picture button
+ * (or the setting that shows them at once): they tell a sender the message
+ * was opened. Settings explains that; this view only has the button, which
+ * hides them again too.
  * The server has already cut scripts, handlers and forms out (mail_mime.go);
  * cleanMessage below drops the rest, and every url that is not http(s),
  * mailto, tel, #, a data: picture or this message's own attachment.
@@ -36,8 +42,8 @@
         E.$( "readSubject" ).textContent = m.subject || E.T( "mail.noSubject" );
         E.renderReadLabels( m.labels );
         renderMeta( m );
+        showMeta( false );
         E.$( "readParts" ).hidden = true;
-        E.$( "imagesBar" ).hidden = true;
         E.$( "imagesBtn" ).hidden = true;
         E.$( "readBody" ).textContent = "";
         E.$( "readBody" ).appendChild( h( "p", { class: "mail-more", text: E.T( "mail.loading" ) } ) );
@@ -98,6 +104,17 @@
         box.appendChild( E.chips( ids ) );
         box.hidden = ! box.childNodes.length;
     };
+
+    // From, To, Date: shown or folded away (on: true / false; none: the other)
+    function showMeta( on )
+    {
+        var box = E.$( "readMeta" );
+        if( on === undefined ) on = box.hidden;
+        box.hidden = ! on;
+        E.$( "metaBtn" ).classList.toggle( "open", on );
+        E.$( "metaBtn" ).setAttribute( "aria-expanded", on ? "true" : "false" );
+    }
+    E.toggleMeta = function () { showMeta(); };
 
     function setReading( on )
     {
@@ -216,8 +233,7 @@
         }
         var doc = cleanMessage( msg.html, msg.acct );
         var remote = hasRemote( doc, msg.acct );
-        E.$( "imagesBar" ).hidden = ! remote || S.showImages;
-        E.$( "imagesBtn" ).hidden = ! remote || S.showImages;
+        imagesButton( remote );
         await ownPictures( doc, msg.acct );
         if( gen !== renderGen || S.msg !== msg ) return;
         box.textContent = "";
@@ -225,12 +241,23 @@
         box.appendChild( frame( doc, S.showImages ) );
     }
 
+    // The toolbar's picture button: this message's pictures shown or hidden
+    // (the setting only picks how a message opens).
     E.showImages = function ()
     {
         if( ! S.msg ) return;
-        S.showImages = true;
+        S.showImages = ! S.showImages;
         renderBody( S.msg );
     };
+    function imagesButton( remote )
+    {
+        var b = E.$( "imagesBtn" ), word = E.T( S.showImages ? "mail.hideImages" : "mail.showImages" );
+        b.hidden = ! remote;
+        b.title = word;
+        b.setAttribute( "aria-label", word );
+        b.setAttribute( "aria-pressed", S.showImages ? "true" : "false" );
+        b.classList.toggle( "is-active", S.showImages );
+    }
 
     // plain text, with its web addresses as links (built as nodes, never HTML)
     function plainText( text )

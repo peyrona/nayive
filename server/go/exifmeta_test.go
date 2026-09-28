@@ -203,8 +203,11 @@ func TestReadJPEGMetaDoubles(t *testing.T) {
 }
 
 func TestPhotoTime(t *testing.T) {
-	lisbon, _ := time.LoadLocation("Europe/Lisbon")
-	madrid, _ := time.LoadLocation("Europe/Madrid")
+	madrid := madrid(t) // skips with no tzdata
+	lisbon, err := time.LoadLocation("Europe/Lisbon")
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
 	trip := publicTripFile{Stages: []publicTripStage{
 		{StartDate: "2026-09-13", EndDate: "2026-09-15", Tz: "Europe/Lisbon"},
 	}}

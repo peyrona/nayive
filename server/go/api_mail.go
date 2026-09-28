@@ -43,7 +43,7 @@ package main
 //	PATCH  labels/<id>                  {"name"?,"color"?}
 //	DELETE labels/<id>                  and off every message
 //	GET    label/<id>                   {"items"}: its messages, every account, newest first
-//	GET    settings | PUT settings      {"trashDays" (1-365), "showImages"}
+//	GET    settings | PUT settings      {"trashDays" (1-365), "showImages", "signature"}
 //
 // A failing mail server answers {"error","code"}: 502 "auth" (the password
 // was refused) or "down" (no answer); 422 "rejected" (it answered no: its own
@@ -671,6 +671,7 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 		Color      *string `json:"color"`
 		TrashDays  int     `json:"trashDays"`
 		ShowImages *bool   `json:"showImages"`
+		Signature  *string `json:"signature"`
 	}
 	body := func() bool {
 		if err := readJSON(w, r, &in); err != nil {
@@ -739,6 +740,9 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 		}
 		if in.ShowImages != nil {
 			st.ShowImages = *in.ShowImages
+		}
+		if in.Signature != nil {
+			st.Signature = *in.Signature
 		}
 		st, err := s.mail.SetSettings(user, st)
 		if err != nil {

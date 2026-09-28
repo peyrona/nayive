@@ -48,9 +48,10 @@
         composer = h( "div", { class: "composer", attrs: { id: "composer" } }, cbox, sendBtn );
         wireSendHold();
 
-        ta.addEventListener( "input", function () { grow(); typing(); } );
+        ta.addEventListener( "input", function ( e ) { smiley( e ); grow(); typing(); } );
         ta.addEventListener( "keydown", function ( e )
         {
+            if( e.key === "Backspace" && unSmiley() ) { e.preventDefault(); grow(); return; }
             if( e.key === "Enter" && ! e.shiftKey && ! e.isComposing && matchMedia( "(pointer: fine)" ).matches )
             {
                 e.preventDefault();
@@ -80,6 +81,51 @@
         if( Date.now() - lastTyping < 4000 ) return;
         lastTyping = Date.now();
         C.api( "POST", "conv/" + S.open + "/typing" ).catch( function () {} );
+    }
+
+    // Emoticons become emoji as you write: ":-) " turns into "🙂 " once the
+    // space (or a new line) after it is typed, and a trailing one on Send.
+    // Only a whole word counts, so "http://x" or "a:)b" stay as they are.
+    // A Backspace right after the swap gives the emoticon back.
+    var SMILEYS = { ":)": "🙂", ":-)": "🙂", ":(": "🙁", ":-(": "🙁", ":D": "😃", ":-D": "😃",
+                    ";)": "😉", ";-)": "😉", ":P": "😛", ":-P": "😛", ":p": "😛", ":-p": "😛",
+                    ":O": "😮", ":-O": "😮", ":o": "😮", ":-o": "😮", ":'(": "😢", ":'-(": "😢",
+                    ":*": "😘", ":-*": "😘", ":|": "😐", ":-|": "😐", ":/": "😕", ":-/": "😕",
+                    "B-)": "😎", "8-)": "😎", "XD": "😆", "xD": "😆", ">:(": "😠", ">:-(": "😠",
+                    "O:)": "😇", "O:-)": "😇", "^^": "😊", "^_^": "😊", "<3": "❤️", "</3": "💔" };
+    var lastSwap = null;       // { at: caret after the swap, emoji, word }
+
+    function smiley( e )
+    {
+        lastSwap = null;
+        if( ! e || ! e.inputType || e.inputType.indexOf( "insert" ) !== 0 || e.inputType === "insertFromPaste" ) return;
+        var pos = ta.selectionStart;
+        if( pos !== ta.selectionEnd || pos < 2 || ! /\s/.test( ta.value.charAt( pos - 1 ) ) ) return;
+        var m = /(^|\s)(\S+)$/.exec( ta.value.slice( 0, pos - 1 ) );
+        if( ! m || ! SMILEYS[ m[ 2 ] ] ) return;
+        var start = pos - 1 - m[ 2 ].length, emoji = SMILEYS[ m[ 2 ] ];
+        ta.setRangeText( emoji, start, pos - 1, "end" );
+        var at = start + emoji.length + 1;
+        ta.setSelectionRange( at, at );
+        lastSwap = { at: at, emoji: emoji, word: m[ 2 ] };
+    }
+
+    function unSmiley()
+    {
+        var s = lastSwap;
+        lastSwap = null;
+        if( ! s || ta.selectionStart !== s.at || ta.selectionEnd !== s.at ) return false;
+        var from = s.at - 1 - s.emoji.length;
+        if( ta.value.slice( from, s.at - 1 ) !== s.emoji ) return false;
+        ta.setRangeText( s.word, from, s.at - 1, "end" );
+        ta.setSelectionRange( from + s.word.length + 1, from + s.word.length + 1 );
+        return true;
+    }
+
+    function smileyTail( text )
+    {
+        var m = /(^|\s)(\S+)$/.exec( text );
+        return m && SMILEYS[ m[ 2 ] ] ? text.slice( 0, text.length - m[ 2 ].length ) + SMILEYS[ m[ 2 ] ] : text;
     }
 
     C.focusComposer = function () { try { ta.focus(); } catch( _ ) {} };
@@ -125,8 +171,11 @@
     // opts.silent: "Send without sound" (the Send button held down).
     async function send( opts )
     {
-        var text = ta.value.trim();
+        var text = smileyTail( ta.value.trim() );
         if( ! S.open ) return;
+        // The server's limit (chat.go chatMaxText, in runes): over it, a send
+        // is refused and its retry fails for ever. The text stays in the box.
+        if( Array.from( text ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
         if( S.editing )
         {
             var m = S.editing;

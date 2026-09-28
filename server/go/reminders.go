@@ -107,7 +107,7 @@ type Reminders struct {
 
 	sent      map[string]int64     // "<user>|<device>|<uid>@<epoch>" -> the epoch
 	fails     map[string]int       // "<user>|<device>" -> consecutive send failures
-	events    map[string]cachedICS // home name -> the parsed calendar
+	events    map[string]cachedICS // "<home name>|<zone>" -> the parsed calendar
 	tripDay   map[string]string    // user -> the "yyyy-mm-dd" its trips were last scanned
 	lastDaily time.Time
 
@@ -118,6 +118,46 @@ type cachedICS struct {
 	mtime  time.Time
 	tzName string
 	events []Event
+}
+
+// zoneGroup is the devices of one user that share a zone.
+type zoneGroup struct {
+	tzName *string        // nil: the server's own local zone
+	loc    *time.Location // Location(tzName)
+	subs   []PushSub
+}
+
+// subsByZone splits the devices by their own zone (PushSub.TZ); one with no
+// zone of its own goes with the account's, `account`.
+func subsByZone(subs []PushSub, account *string) []zoneGroup {
+	var out []zoneGroup
+	for _, sub := range subs {
+		name := account
+		if sub.TZ != "" {
+			tz := sub.TZ
+			name = &tz
+		}
+		key := ""
+		if name != nil {
+			key = *name
+		}
+		i := 0
+		for i < len(out) && zoneKey(out[i].tzName) != key {
+			i++
+		}
+		if i == len(out) {
+			out = append(out, zoneGroup{tzName: name, loc: Location(name)})
+		}
+		out[i].subs = append(out[i].subs, sub)
+	}
+	return out
+}
+
+func zoneKey(name *string) string {
+	if name == nil {
+		return ""
+	}
+	return *name
 }
 
 func NewReminders(cfg *Config, users *Users, trash *Trash, sessions *SessionStore,
@@ -205,19 +245,23 @@ func (r *Reminders) tick() {
 		r.tripTick(user, cfg.Subs, loc)
 		r.locationTick(user, cfg.Subs, loc)
 
-		events, ok := r.eventsFor(user, tzName, loc)
-		if !ok {
-			continue
-		}
-		for _, ev := range events {
-			if ev.StartEpoch == nil {
-				continue // all-day
+		// A FLOATING event rings at the wall clock of each DEVICE's own zone -
+		// the time its calendar shows - so the file is read once per zone the
+		// devices are in. A pinned event lands on the same instant in every
+		// group; the "sent" key is per device, so it still rings once each.
+		groups := subsByZone(cfg.Subs, tzName)
+		r.dropUnusedZones(user, groups)
+		for _, g := range groups {
+			events, ok := r.eventsFor(user, g.tzName, g.loc)
+			if !ok {
+				break // no calendar
 			}
-			start := time.Unix(*ev.StartEpoch, 0)
-			if start.Before(now) || start.After(now.Add(window)) {
-				continue
+			for _, ev := range events {
+				// None for an all-day event; each occurrence of a repeating one.
+				for _, start := range ev.StartsBetween(now, now.Add(window)) {
+					r.announce(user, g.subs, ev, start, window, g.loc)
+				}
 			}
-			r.announce(user, cfg.Subs, ev, start, window, loc)
 		}
 	}
 
@@ -236,7 +280,7 @@ func (r *Reminders) announce(user string, subs []PushSub, ev Event, start time.T
 	hhmm := formatHHMM(start, loc)
 	for _, sub := range subs {
 		dev := deviceID(sub.Endpoint)
-		key := fmt.Sprintf("%s|%s|%s@%d", user, dev, ev.UID, start.Unix())
+		key := fmt.Sprintf("%s|%s|%s@%d", user, stableDeviceID(sub), ev.UID, start.Unix())
 		if _, already := r.sent[key]; already {
 			continue
 		}
@@ -433,22 +477,25 @@ func (r *Reminders) tripsDue(user string, lead int, today string) []dueTrip {
 // eventsFor is the parsed events of homes/<user>/data/calendar.ics, re-parsed
 // only when the file's mtime changed since the last tick.
 //
-// A floating DTSTART is read in the OWNER's zone, so the cache is keyed on the
-// zone name as well as the mtime: change your timezone and the same unchanged
-// file has to be re-read, or every floating event would keep the old wall clock
-// until the calendar happened to be edited.
+// A floating DTSTART is read in the DEVICE's zone (the account's for a device
+// that never said), so there is one cache entry per zone, and each also checks
+// the zone name as well as the mtime: change your timezone and the same
+// unchanged file has to be re-read, or every floating event would keep the old
+// wall clock until the calendar happened to be edited.
 func (r *Reminders) eventsFor(user string, tzName *string, loc *time.Location) ([]Event, bool) {
 	path := filepath.Join(r.cfg.HomesDir, user, "data", "calendar.ics")
+	name := zoneKey(tzName)
+	ckey := user + "|" + name
 	info, err := os.Stat(path)
 	if err != nil {
-		delete(r.events, user)
+		for k := range r.events {
+			if strings.HasPrefix(k, user+"|") {
+				delete(r.events, k)
+			}
+		}
 		return nil, false // no calendar (or unreadable)
 	}
-	name := ""
-	if tzName != nil {
-		name = *tzName
-	}
-	if hit, found := r.events[user]; found && hit.mtime.Equal(info.ModTime()) && hit.tzName == name {
+	if hit, found := r.events[ckey]; found && hit.mtime.Equal(info.ModTime()) && hit.tzName == name {
 		return hit.events, true
 	}
 
@@ -460,8 +507,22 @@ func (r *Reminders) eventsFor(user string, tzName *string, loc *time.Location) (
 	// and only the regex-matched ASCII of a DTSTART is ever interpreted. That
 	// is the same tolerance Python's errors="replace" buys.
 	events := ParseEvents(string(raw), loc)
-	r.events[user] = cachedICS{mtime: info.ModTime(), tzName: name, events: events}
+	r.events[ckey] = cachedICS{mtime: info.ModTime(), tzName: name, events: events}
 	return events, true
+}
+
+// dropUnusedZones forgets the parsed calendars of zones none of this user's
+// devices is in any more (a phone back from a trip).
+func (r *Reminders) dropUnusedZones(user string, groups []zoneGroup) {
+	used := map[string]bool{}
+	for _, g := range groups {
+		used[user+"|"+zoneKey(g.tzName)] = true
+	}
+	for k := range r.events {
+		if strings.HasPrefix(k, user+"|") && !used[k] {
+			delete(r.events, k)
+		}
+	}
 }
 
 // userTZName is the "tz" string in homes/<user>/data/config.json, or nil.
@@ -521,6 +582,17 @@ func ellipsis(text string) string {
 func deviceID(endpoint string) string {
 	sum := sha1.Sum([]byte(endpoint))
 	return hex.EncodeToString(sum[:])[:8]
+}
+
+// stableDeviceID is deviceID for the "already sent" key, but it survives a
+// renewal: RenewPushSub gives the new endpoint the old one's Created stamp and
+// label, so an occurrence rung just before the browser renewed is not rung
+// again just after. A device saved before stamps existed keeps its endpoint's.
+func stableDeviceID(sub PushSub) string {
+	if sub.Created == 0 {
+		return deviceID(sub.Endpoint)
+	}
+	return deviceID(fmt.Sprintf("created:%d|%s", sub.Created, sub.Label))
 }
 
 // keyEpoch reads the timestamp off the end of an "...@12345" key.

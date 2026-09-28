@@ -96,6 +96,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	// r.TLS is nil on a plain HTTP connection - that is the "is this secure?"
 	// test, and it decides whether the cookie gets "; Secure".
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, creds.Remember, r.TLS != nil))
+	w.Header().Add("Set-Cookie", whoCookieHeader(role, user, ttl, creds.Remember, r.TLS != nil))
 
 	s.log.Info("login ok", "user", user, "role", role, "remember", creds.Remember)
 
@@ -127,6 +128,7 @@ func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessions.Drop(tokenFrom(r))
 	w.Header().Set("Set-Cookie", clearCookieHeader())
+	w.Header().Add("Set-Cookie", clearWhoCookieHeader())
 	redirect(w, http.StatusFound, URLPrefix+"/login.html")
 }
 
@@ -159,11 +161,55 @@ func (s *Server) apiWhoami(w http.ResponseWriter, r *http.Request) {
 	// the session behind it slides with every request: re-issue the cookie
 	// here - every page asks this on load - so a phone in daily use is never
 	// signed out on day 30.
-	if ttl, ok := s.sessions.Remembered(tokenFrom(r)); ok {
+	ttl, remembered := s.sessions.Remembered(tokenFrom(r))
+	if remembered {
 		w.Header().Set("Set-Cookie", sessionCookieHeader(tokenFrom(r), ttl, true, r.TLS != nil))
 	}
+	// Who this browser belongs to, for shared/store.js (store_owner.go) - set
+	// here too so a session from before that cookie existed gets it, and an
+	// admin rename puts the new name in it.
+	w.Header().Add("Set-Cookie", whoCookieHeader(sess.Role, sess.User, ttl, remembered, r.TLS != nil))
 
 	sendJSON(w, r, http.StatusOK, me)
+}
+
+// passwordFreeAPI are the only API routes an account with NO password yet may
+// use: what the launcher's "pick a password" dialog needs (who am I, set it,
+// the language and zone rows it shows). /api/login and /api/logout never ask
+// for a session at all. Public links, chat guests, location reports and the
+// Android app's assetlinks have no session either, so nothing here touches them.
+var passwordFreeAPI = map[string]bool{
+	"/api/whoami":   true,
+	"/api/password": true,
+	"/api/lang":     true,
+	"/api/tz":       true,
+	"/api/unlock":   true,
+}
+
+// mustSetPasswordFirst answers 403 {"error", "must_set_password": true} and
+// reports true when `sess` is an account with no password yet asking for any
+// other API: a blank sign-in reaches nothing (files, chat, phones, positions)
+// until a password is set - for an account the admin just made, or one whose
+// password the admin removed. Checked live, so the moment the password is
+// saved (here or in the admin panel) everything opens.
+func (s *Server) mustSetPasswordFirst(w http.ResponseWriter, r *http.Request, sess Session) bool {
+	if sess.Role != "user" || passwordFreeAPI[r.URL.Path] || signOutUnlink(r) ||
+		!s.users.NeedsPassword(sess.Role, sess.User) {
+		return false
+	}
+	sendJSON(w, r, http.StatusForbidden, map[string]any{
+		"error":             "primero elige una contraseña",
+		"must_set_password": true,
+	})
+	return true
+}
+
+// signOutUnlink: the launcher's sign-out drops this browser's push subscription
+// and unlinks this phone (DELETE /api/push, DELETE /api/device/<id>). Taking
+// things away needs no password - refusing it left a phone linked to the account.
+func signOutUnlink(r *http.Request) bool {
+	return r.Method == http.MethodDelete &&
+		(r.URL.Path == "/api/push" || strings.HasPrefix(r.URL.Path, "/api/device/"))
 }
 
 // passwordRequest is the body of POST /api/password.
@@ -224,6 +270,45 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("password changed", "user", sess.User, "role", sess.Role)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "contraseña actualizada"})
+}
+
+// unlockRequest is the body of POST /api/unlock.
+type unlockRequest struct {
+	Password string `json:"password"`
+}
+
+// apiUnlock checks the signed-in user's password for the screen locker
+// (shared/locker.js). Nothing changes on the server: the lock lives in the
+// browser, and this only says whether the password is right.
+//
+//	200 = right password     401 = no session (go to the login page)
+//	403 = wrong password
+func (s *Server) apiUnlock(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.requireSession(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+		return
+	}
+
+	var body unlockRequest
+	if err := readJSON(w, r, &body); err != nil {
+		sendBodyError(w, r, err)
+		return
+	}
+
+	unlock := s.authThrottle(sess.User, r) // the same throttle as login
+	good := s.users.Authenticate(sess.User, body.Password) == sess.Role
+	if !good {
+		time.Sleep(authFailDelay)
+		unlock()
+		sendError(w, r, http.StatusForbidden, "contraseña incorrecta")
+		return
+	}
+	unlock()
+	sendJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // apiLang is the interface language of the signed-in ACCOUNT.

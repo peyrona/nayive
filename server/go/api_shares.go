@@ -5,6 +5,7 @@ package main
 // =============================================================================
 //
 //	GET    -> {"mine": [...], "with_me": [...]}
+//	          ?notes=shared/<slug>/<folder> -> the owner's photo notes there
 //	POST   -> share one file or folder: {to, root, app, title, mode}
 //	          to "*" (Everyone) shares it with every user, now and later
 //	DELETE -> ?id=<share id>, owner only
@@ -89,6 +90,10 @@ func (s *Server) apiShares(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if r.URL.Query().Has("notes") { // a shared album's notes (photos_notes_b4.go)
+			s.shareNotes(w, r, user)
+			return
+		}
 		mine := []shareOut{}
 		for _, g := range s.shares.ByOwner(user) {
 			grant := g

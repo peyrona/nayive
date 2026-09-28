@@ -354,6 +354,7 @@
             var aliens = [], bombs = [], bunkers = [], shot = null, ufo = null;
             var px = 0, alive = 0, dir = 1, frame = 0;
             var score = 0, best = 0, lives = 0, wave = 1, record = false;
+            var dirty = false;                 // the record has moved and is not written yet
             var marchTick = 0, bombTick = 0, ufoTick = 0, dieTick = 0, waveTick = 0;
 
             var keyL = false, keyR = false, firing = false;
@@ -595,15 +596,26 @@
                 score = score + n;
                 scoreEl.textContent = String( score );
 
-                // The record climbs as it is beaten, the way 2048's does, and is
-                // merged with a max - see saveBest() and adoptBest().
+                // The record climbs on screen as it is beaten, and is merged
+                // with a max - see saveBest() and adoptBest(). It is WRITTEN at
+                // the next pause (flush), not on every alien: saveBest()
+                // rewrites the whole file and queues an upload.
                 if( score > best )
                 {
                     best   = score;
                     record = true;
+                    dirty  = true;
                     bestEl.textContent = String( best );
-                    saveBest( 'invaders', best );
                 }
+            }
+
+            // Every way out of a game passes through here - the last ship, the
+            // pause button, another pane, a hidden tab, a new game.
+            function flush()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                saveBest( 'invaders', best );
             }
 
             //---- one step of the game ----------------------------------------
@@ -779,6 +791,7 @@
             {
                 state = 'over';
                 A.loop.halt();
+                flush();
 
                 // `score === best` as well as `record`: a game started before
                 // loadData() answered raises `best` off zero on the first alien,
@@ -939,6 +952,7 @@
                 score  = 0;
                 lives  = LIVES;
                 record = false;
+                flush();                       // a record beaten in the game "new game" cut short
                 state  = 'ready';
 
                 A.loop.halt();
@@ -1058,7 +1072,7 @@
                     setState: function ( v ) { state = v; },
                     score:    function () { return score; },
                     step: step, draw: draw, reset: reset, clearKeys: clearKeys,
-                    palette: palette, fit: fit,
+                    flush: flush, palette: palette, fit: fit,
                     onKey: onKey, onKeyUp: onKeyUp
                 } );
 

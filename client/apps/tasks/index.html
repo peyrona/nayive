@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -453,7 +454,56 @@
         const TASKS_FILE = 'data/tasks.json';
 
         // Offline-capable persistence for TASKS_FILE (see ../shared/store.js).
-        const store = NayiveStore.createStore( { apiBase: API_FILES } );
+        const store = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTasks } );
+
+        // Two devices saved from the same copy: both changes are kept, task by
+        // task and sub-task by sub-task, by id (shared/store.js MERGE). A task
+        // changed on both takes, field by field, the side that changed it - mine
+        // when both did. The reminders file merges as sets. null = a side that
+        // is not what this app writes: nothing is merged over it.
+        function mergeTasks( path, base, mine, theirs )
+        {
+            const S     = NayiveStore;
+            const parse = t => { try { return JSON.parse( t ); } catch( _ ) { return undefined; } };
+            const m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
+
+            if( path === REMINDED_FILE )
+            {
+                const obj = v => ( v && typeof v === 'object' && ! Array.isArray( v ) ) ? v : null;
+                if( ! obj( m ) || ! obj( t ) ) return null;
+                const bb = obj( b ) || {};
+                const merged = Object.assign( {}, t, m );
+                merged.trips    = S.mergeSets( obj( b ) ? bb.trips || [] : null, m.trips || [], t.trips || [] );
+                merged.birthday = ( m.birthday || '' ) > ( t.birthday || '' ) ? m.birthday : ( t.birthday || m.birthday || '' );
+                return JSON.stringify( merged, null, 2 );
+            }
+
+            const ok = v => Array.isArray( v ) && v.every( isTaskShape );
+            if( ! ok( m ) || ! ok( t ) ) return null;
+            const byId = x => x && x.id;
+            const merged = S.mergeLists( ok( b ) ? b : null, m, t,
+            {
+                id:   byId,
+                both: ( bt, x, y ) => S.mergeFields( bt, x, y,
+                      { subtasks: ( bs, xs, ys ) => S.mergeLists( bs || null, xs || [], ys || [],
+                                                                  { id: byId, both: S.mergeFields } ) } )
+            } );
+            return JSON.stringify( sanitizePlan( merged ), null, 2 );
+        }
+
+        // The store merged another device's save in: this list from now on. Not
+        // drawn while a row is being typed or dragged (the next render shows it).
+        store.onMerged( function( path, body )
+        {
+            if( path === REMINDED_FILE ) { remindedP = null; return; }
+            if( path !== TASKS_FILE ) return;
+            let list;
+            try { list = JSON.parse( body ); } catch( _ ) { return; }
+            if( ! Array.isArray( list ) ) return;
+            tasks       = sanitizePlan( list.filter( isTaskShape ) );
+            loadedTasks = JSON.stringify( tasks );
+            if( ! editBusy() ) render();
+        } );
 
         // Interface strings: every one of them lives in shared/i18n/*.json.
         const T  = k           => NayiveUI.t( k );
@@ -466,6 +516,7 @@
         const BIRTHDAY_TASK_TITLE    = T( 'tasks.birthdayTitle' );
         const TRIPS_DIR              = 'data/trips';
         const TRIP_SYNC_DATE_KEY     = 'tasks_trip_sync_date';
+        const REMINDED_FILE          = 'data/tasks-reminded.json';   // see REMINDERS ALREADY ADDED
 
         let tasks          = [];
         let loadedTasks    = '[]';   // the list as last read (JSON): what a refused edit falls back to
@@ -553,11 +604,7 @@
             {
                 store: store,
                 read:  loadTasks,
-                guard: function()
-                {
-                    const typing = adding && document.getElementById( 'newTaskInput' ).value.trim() !== '';
-                    return editingId !== null || editingSubtask !== null || typing;
-                },
+                guard: editBusy,
                 onVisible: function()
                 {
                     maybeSyncBirthdaysToday();
@@ -576,11 +623,20 @@
             } );
         });
 
+        // A row is being typed or dragged: no re-read, no redraw now.
+        function editBusy()
+        {
+            const typing = adding && document.getElementById( 'newTaskInput' ).value.trim() !== '';
+            // dragCtx: a re-render mid-drag leaves the ghost behind and loses the drop.
+            return editingId !== null || editingSubtask !== null || typing || dragCtx !== null;
+        }
+
         //------------------------------------------------------------------------//
         // PERSISTENCE
 
         async function loadTasks()
         {
+            remindedP = null;   // the syncs that follow read it afresh too
             const res = await store.read( TASKS_FILE );
             readOnce  = true;
 
@@ -734,13 +790,16 @@
             if( store.isBlocked( TASKS_FILE ) || ! readOnce )
                 return;   // tasks.json not read, or not understood: it could not be saved - retry on the next load
 
+            const done = await reminded();
+            if( ! done ) return;   // not readable now - retry on the next load
+
             localStorage.setItem( BIRTHDAY_SYNC_DATE_KEY, today );
 
             if( people.length === 0 )
                 return;
 
-            if( tasks.some( function( t ) { return t.birthdayDate === today; } ) )
-                return;   // another device already added today's reminder
+            if( done.birthday === today || tasks.some( function( t ) { return t.birthdayDate === today; } ) )
+                return;   // another device already added today's reminder (ticked and cleared since, maybe)
 
             let task;
 
@@ -761,6 +820,9 @@
             tasks.push( task );
             render();
             saveTasks();
+
+            done.birthday = today;
+            saveReminded( done );
         }
 
         //------------------------------------------------------------------------//
@@ -805,9 +867,13 @@
             if( store.isBlocked( TASKS_FILE ) || ! readOnce )
                 return;   // tasks.json not read, or not understood: it could not be saved - retry on the next load
 
+            const done = await reminded();
+            if( ! done ) return;   // not readable now - retry on the next load
+
             localStorage.setItem( TRIP_SYNC_DATE_KEY, today );
 
-            const have  = new Set( tasks.map( function( t ) { return t.tripReminder; } ) );
+            // A reminder ticked off and cleared is no longer in the list, but it was given.
+            const have  = new Set( tasks.map( function( t ) { return t.tripReminder; } ).concat( done.trips ) );
             let   added = false;
 
             due.forEach( function( trip, i )
@@ -825,6 +891,44 @@
                 render();
                 saveTasks();
             }
+
+            // Every trip in the window has its reminder now. Only those are kept:
+            // one that left the window is never asked about again.
+            const ids = due.map( function( trip ) { return trip.id; } );
+            if( JSON.stringify( ids ) !== JSON.stringify( done.trips ) )
+            {
+                done.trips = ids;
+                saveReminded( done );
+            }
+        }
+
+        // REMINDERS ALREADY ADDED - REMINDED_FILE, { trips: [trip ids], birthday: 'yyyy-mm-dd' }.
+        // The tasks themselves are not enough to know: tick one off, "clear completed",
+        // and the next day's sync (or another device's) would add it all over again.
+        // One object shared by both syncs, which run side by side, so neither saves
+        // over what the other just added. null: could not be read now.
+        let remindedP = null;
+
+        function reminded()
+        {
+            if( ! remindedP ) remindedP = ( async function()
+            {
+                const res = await store.read( REMINDED_FILE );
+                if( res.body === null && res.source !== 'empty' ) { remindedP = null; return null; }
+
+                let r = null;
+                try { r = JSON.parse( res.body || '{}' ); } catch( _ ) {}   // unreadable: a fresh start (worst case, one reminder twice)
+                r = ( r && typeof r === 'object' ) ? r : {};
+
+                return { trips: Array.isArray( r.trips ) ? r.trips : [], birthday: typeof r.birthday === 'string' ? r.birthday : '' };
+            } )();
+
+            return remindedP;
+        }
+
+        function saveReminded( done )
+        {
+            store.write( REMINDED_FILE, JSON.stringify( done, null, 2 ) );
         }
 
         // [{ id, destination, startDate }] of every trip whose start date lies
@@ -841,7 +945,7 @@
             }
             catch( err )
             {
-                if( String( err && err.message ).indexOf( 'HTTP 404' ) !== -1 )
+                if( err && err.status === 404 )
                     return [];   // no trips folder yet
                 throw err;
             }

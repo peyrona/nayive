@@ -24,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import fs          from 'node:fs';
 import path        from 'node:path';
 import url         from 'node:url';
-import { browser, attach } from '../superdoc-probe/cdp.mjs';
+import { browser, attach } from '../locktest/cdp.mjs';
 
 const HERE   = path.dirname( url.fileURLToPath( import.meta.url ) );
 const CORPUS = process.env.CORPUS || path.join( process.env.HOME, 'Downloads', 'Telegram Desktop' );

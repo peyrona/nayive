@@ -56,6 +56,7 @@ const pending = new Map();   // check id -> resolve
 const waiting = new Map();   // "es,en|palabra" -> [ resolve ], for suggestionsFor
 let   nextId  = 1;
 let   worker  = null;
+let   dead    = false;       // the worker failed: every check answers "nothing found" at once
 let   getLangsFn = null;
 
 function langsNow()
@@ -99,6 +100,7 @@ function startWorker()
     // waiting on every check: answer "nothing found" and stop trying.
     worker.onerror = function()
     {
+        dead = true;
         for( const done of pending.values() ) done( [] );
         pending.clear();
         for( const list of waiting.values() ) for( const done of list ) done( [] );
@@ -106,6 +108,19 @@ function startWorker()
     };
 
     return worker;
+}
+
+// Another document, or other languages: the words still waiting for their
+// suggestions are dropped (minutes of work on words no longer on screen), and so
+// is every suggestion kept and every dictionary no longer switched on - Spanish
+// alone is ~66 MB. The right-click menus still waiting get "none".
+export function resetProofing()
+{
+    sugg.clear();
+    for( const list of waiting.values() ) for( const done of list ) done( [] );
+    waiting.clear();
+
+    if( worker && ! dead ) worker.postMessage( { type: 'reset', langs: langsNow() } );
 }
 
 // getLangs() returns the active language codes, e.g. ['es'] or ['es','en'].
@@ -123,6 +138,7 @@ export function makeSpellProvider( getLangs )
         check: ( { segments, maxSuggestions = 5, signal } ) => new Promise( function( resolve, reject )
         {
             signal?.throwIfAborted();
+            if( dead ) { resolve( { issues: [] } ); return; }
 
             const langs = langsNow();
             const id    = nextId++;
@@ -164,6 +180,7 @@ export function suggestionsFor( word )
     const key  = suggKey( word );
     const list = sugg.get( key );
     if( list ) return Promise.resolve( list );
+    if( dead ) return Promise.resolve( [] );
 
     return new Promise( function( resolve )
     {

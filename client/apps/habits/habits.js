@@ -11,13 +11,17 @@
  * lands on the wrong day west of Greenwich, and never with .toISOString().
  *
  * WORDS USED
- *   habit     { id, name, icon, color, days, target, created, archived, done, counts }
+ *   habit     { id, name, icon, color, days, target, created, archived, paused, done, counts }
  *   days      the ISO weekdays it applies to, 1 = Monday .. 7 = Sunday; [] = every day
  *   target    null = a yes/no habit; n >= 2 = counted ("3 glasses"), done at n
  *   created / archived   yyyy-mm-dd; a habit is only DUE between them
+ *   paused    [ [ from, to ], ... ] yyyy-mm-dd: the spells it was archived,
+ *             from the archive day up to (not including) its restore day -
+ *             not due then, so they neither count nor break a streak
  *   done      sorted, unique yyyy-mm-dd of the days fully done - the truth
  *   counts    { "yyyy-mm-dd": n } partial days of a counted habit (0 < n < target)
- *   due       a day the habit applies to (weekday matches, created <= day < archived)
+ *   due       a day the habit applies to (weekday matches, created <= day < archived,
+ *             outside every paused spell)
  *   streak    consecutive due days done, ending today or yesterday; days that
  *             are not due neither count nor break it
  */
@@ -125,6 +129,11 @@
 
         var color = parseInt( h.color, 10 );
 
+        var paused = ( Array.isArray( h.paused ) ? h.paused : [] ).filter( function ( r )
+        {
+            return Array.isArray( r ) && isIso( r[ 0 ] ) && isIso( r[ 1 ] ) && r[ 0 ] < r[ 1 ];
+        } ).map( function ( r ) { return [ r[ 0 ], r[ 1 ] ]; } );
+
         return {
             id:       String( h.id || newId() ),
             name:     name,
@@ -134,6 +143,7 @@
             target:   target,
             created:  isIso( h.created ) ? h.created : ( done[ 0 ] || todayIso() ),
             archived: isIso( h.archived ) ? h.archived : null,
+            paused:   paused,
             done:     done,
             counts:   counts
         };
@@ -144,6 +154,8 @@
     {
         if( iso < h.created ) return false;
         if( h.archived && iso >= h.archived ) return false;
+        if( h.paused ) for( var i = 0; i < h.paused.length; i++ )
+            if( iso >= h.paused[ i ][ 0 ] && iso < h.paused[ i ][ 1 ] ) return false;
         if( ! h.days || ! h.days.length ) return true;
         return h.days.indexOf( isoWeekday( iso ) ) !== -1;
     }

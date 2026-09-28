@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -538,6 +539,47 @@ func (s *Shares) RenameUser(oldName, newName string) int {
 
 	if moved > 0 {
 		s.log.Info("shares follow a renamed user", "count", moved, "from", oldName, "to", newName)
+	}
+	return moved
+}
+
+// MoveRoot follows a file or folder the owner renamed or moved: every grant of
+// theirs (public trip links too) whose root is `oldRel`, or lies under it, now
+// points at the same place under `newRel`. Without this a renamed shared folder
+// or trip reads as "gone" to everyone it was lent to (S2-#7). Paths are
+// compared by segment, never as strings: "files/a" is not under "files/ab".
+// A grant of the moved item ITSELF whose title is still its old name (Drive
+// shares by name) takes the new name - what the recipient sees; a title the
+// app chose (a trip's destination, a Split group) stays. The slug stays too:
+// it is the recipient's path. Returns how many changed.
+func (s *Shares) MoveRoot(owner, oldRel, newRel string) int {
+	from, to := splitPath(oldRel), splitPath(newRel)
+	if len(from) == 0 || len(to) == 0 {
+		return 0
+	}
+	oldName, newName := from[len(from)-1], to[len(to)-1]
+	s.mu.Lock()
+	s.ensureLoaded()
+	moved := 0
+	for i := range s.grants {
+		g := &s.grants[i]
+		parts := splitPath(g.Root)
+		if g.Owner != owner || len(parts) < len(from) || !slices.Equal(parts[:len(from)], from) {
+			continue
+		}
+		g.Root = strings.Join(append(append([]string{}, to...), parts[len(from):]...), "/")
+		if len(parts) == len(from) && g.Title == oldName {
+			g.Title = newName
+		}
+		moved++
+	}
+	if moved > 0 {
+		s.save()
+	}
+	s.mu.Unlock()
+
+	if moved > 0 {
+		s.log.Info("shares follow a moved path", "count", moved, "owner", owner, "from", oldRel, "to", newRel)
 	}
 	return moved
 }

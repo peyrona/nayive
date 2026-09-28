@@ -372,6 +372,14 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 	if err := root.Chmod(tmpRel, 0o644); err != nil {
 		return "", err
 	}
+	// Whole on disk before the original goes to the papelera (S2-#23).
+	if f, err := root.OpenFile(tmpRel, os.O_RDONLY, 0); err == nil {
+		err = f.Sync()
+		f.Close()
+		if err != nil {
+			return "", err
+		}
+	}
 	outRel := freeMP4Name(root, src.Rel)
 	if err := root.Rename(tmpRel, outRel); err != nil {
 		return "", err

@@ -158,6 +158,7 @@ html, body { height: 100%; overflow: hidden; }
 .row .row-ic.ic-doc   { color: #5b8def; }   /* Write document (.docx, .md)  */
 .row .row-ic.ic-sheet { color: var(--accent); }  /* Calc spreadsheet (.xlsx, .csv) */
 .row .row-ic.ic-pdf   { color: #d9903c; }   /* PDF (amber — red reads as "error") */
+.row .row-ic.ic-zip   { color: #8fa3b8; }   /* archive: .zip .rar .7z .tar.gz… (slate) */
 .row .row-ic.ic-code  { color: #b98ae6; }   /* Text editor (.html, .css, .js, .json, .txt…) */
 .row .row-ic.ic-image { color: #d16ba5; }   /* Image, opened in Drive's built-in viewer */
 .row .row-ic.ic-media { color: #4bb8a9; }   /* Audio / video, opened in Drive's built-in player */
@@ -168,6 +169,7 @@ html, body { height: 100%; overflow: hidden; }
 
 :root[data-theme="light"] .row .row-ic.ic-doc    { color: #1E4A85; }
 :root[data-theme="light"] .row .row-ic.ic-pdf    { color: #6F430F; }
+:root[data-theme="light"] .row .row-ic.ic-zip    { color: #3E5366; }
 :root[data-theme="light"] .row .row-ic.ic-code   { color: #5A3A8C; }
 :root[data-theme="light"] .row .row-ic.ic-image  { color: #8A3466; }
 :root[data-theme="light"] .row .row-ic.ic-media  { color: #1F6F63; }
@@ -356,7 +358,7 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
 .progress-track
 {
     position: relative; height: 6px; margin-top: 2px; overflow: hidden;
-    border-radius: 3px; background: color-mix(in srgb, var(--text) 12%, transparent);
+    border-radius: 3px; background: var(--track);
 }
 .progress-track::before
 {

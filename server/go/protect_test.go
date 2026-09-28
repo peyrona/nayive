@@ -144,8 +144,8 @@ func TestPurgeOnlyThumbnails(t *testing.T) {
 func TestAccountFileProtected(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	cfgFile := filepath.Join(srv.cfg.HomesDir, "ana", "data", "config.json")
-	before, _ := os.ReadFile(cfgFile)
 	signIn(t, client, ts.URL, "ana", "abc")
+	before, _ := os.ReadFile(cfgFile) // after the sign-in, which stores it hashed
 
 	for _, c := range []struct{ method, url, body string }{
 		{"PUT", "/api/files?file=data/config.json", `{"password":"abc"}`},

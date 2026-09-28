@@ -11,7 +11,6 @@
 
 const SB_OPS      = [ 'has', 'not', 'starts', 'ends', 'is' ];
 const SB_WHEN     = [ 'any', 'today', 'd7', 'd30', 'year', 'range' ];
-const ARCHIVE_EXT = [ 'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz' ];
 
 // What each "Tipo" pill finds, built on the lists listing.js keeps for the
 // row icons and the openers. A function, not a table: CONVERT_EXT lives in

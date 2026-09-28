@@ -51,6 +51,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/photo.js" defer></script>
@@ -152,6 +153,16 @@
                               font-variant-numeric: tabular-nums; }
     /* the .tmeta block only exists to be shown in #grid list view */
     .tmeta { display: none; }
+
+    /* A HEIC / HEIF (unshownTileHtml): no browser here draws one, so its tile
+       is an icon and a short line, with the name always on. */
+    .no-show-art { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                   padding: 8px 8px 28px; color: var(--text-dim); font-size: 0.74rem; text-align: center; }
+    .no-show-art svg { width: 26px; height: 26px; }
+    .tile.no-show .cap { opacity: 1; }
+    body.view-list #grid .no-show-art { padding: 0; }
+    body.view-list #grid .no-show-art small { display: none; }
+    body.view-list #grid .no-show-art svg { width: 20px; height: 20px; }
 
     /* ---------- stage : one pane visible at a time ---------- */
     .stage { flex: 1 1 auto; min-height: 0; position: relative; }
@@ -361,10 +372,7 @@
         background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.16);
         border-radius: var(--radius-pill); padding: 6px; backdrop-filter: blur(6px);
     }
-    .pase-ctrl button { width: 40px; height: 40px; border-radius: 50%; border: 0; background: transparent; color: #fff; cursor: pointer; display: grid; place-items: center; }
-    .pase-ctrl button:hover { background: rgba(255, 255, 255, 0.14); }
-    .pase-ctrl .play { background: #fff; color: #111; }
-    .pase-ctrl .play:hover { background: #fff; }
+    /* ⏮ ⏭ are the shared .editor-btn, ▶ the shared .transport-btn.play-btn. */
     .pase-speed { border: 0; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; font-size: 0.78rem; font-weight: 700; padding: 0 10px; min-width: 44px; font-variant-numeric: tabular-nums; }
 
     .lb { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.92); display: none; flex-direction: column; }
@@ -372,13 +380,7 @@
     .lb-photo { flex: 1; position: relative; margin: 14px; }
     .lb-photo .scene { position: absolute; inset: 0; border-radius: var(--radius-m); overflow: hidden; }
     .lb-x { position: absolute; right: 14px; top: 12px; z-index: 3; }   /* look: the shared .editor-btn.over-media */
-    .lb-nav
-    {
-        position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
-        width: 44px; height: 44px; border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.4);
-        color: #fff; cursor: pointer; display: grid; place-items: center;
-    }
+    .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; }   /* look: the shared .editor-btn.over-media */
     .lb-nav.prev { left: 22px; }
     .lb-nav.next { right: 22px; }
     .lb-foot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 0 20px 16px; color: #fff; }
@@ -510,6 +512,10 @@
 <body>
     <div class="app">
         <header class="topbar">
+            <!-- An album opened from the album index: the way back to it, before the title. -->
+            <button class="icon-btn" id="backBtn" type="button" hidden data-i18n-attr="title:photos.backToAlbums, aria-label:photos.backToAlbums">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
             <h1>Photos</h1>
 
@@ -602,9 +608,9 @@
                 <div class="pase-count" id="paseCount"></div>
                 <div class="pase-cap"><div class="t" id="paseTitle"></div><div class="m" id="paseMeta"></div><div class="c" id="paseNote" hidden></div></div>
                 <div class="pase-ctrl">
-                    <button id="pPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg></button>
-                    <button id="pPlay" class="play" data-i18n-attr="title:photos.playPause, aria-label:photos.playPause"></button>
-                    <button id="pNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg></button>
+                    <button id="pPrev" class="editor-btn" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg></button>
+                    <button id="pPlay" class="transport-btn play-btn" data-i18n-attr="title:photos.playPause, aria-label:photos.playPause"></button>
+                    <button id="pNext" class="editor-btn" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg></button>
                     <button id="pSpeed" class="pase-speed" data-i18n-attr="title:photos.secondsPerPhoto, aria-label:photos.secondsPerPhoto">6 s</button>
                 </div>
             </div>
@@ -615,8 +621,8 @@
         <div class="lb-photo">
             <div class="scene" id="lbScene"></div>
             <button class="editor-btn over-media lb-x" id="lbX" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
-            <button class="lb-nav prev" id="lbPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
-            <button class="lb-nav next" id="lbNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+            <button class="editor-btn over-media lb-nav prev" id="lbPrev" data-i18n-attr="title:ui.prev, aria-label:ui.prev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="editor-btn over-media lb-nav next" id="lbNext" data-i18n-attr="title:ui.next, aria-label:ui.next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
         </div>
         <div class="lb-foot">
             <div class="lb-foot-row">
@@ -705,6 +711,7 @@ const SCAN_PATH     = "data/photos/scan-cache.json";
 const IMG_EXT   = [ "jpg", "jpeg", "png", "gif", "webp", "bmp", "avif" ];
 const EDIT_EXT  = [ "jpg", "jpeg", "png", "webp" ];   // formats TOAST UI can re-encode
 const EXIF_EXT  = [ "jpg", "jpeg" ];
+const HEIC_EXT  = [ "heic", "heif" ];                  // listed, but only as a "can't show" tile
 
 /* -------- state -------- */
 const st = {
@@ -719,10 +726,21 @@ let PHOTOS   = [];
 let CLUSTERS = [];     // [{ id, lat, lon, items:[photo], place }]
 const EDITS  = {};     // DEMO only: photo id -> edited data URL
 let COMMENTS = {};     // photo id -> comment text
+let OWNER_NOTES = {};  // a shared album: its owner's notes, read-only (loadOwnerNotes)
+let UNSHOWN  = [];     // [{ path, name }]: this folder's HEIC / HEIF files (unshownTileHtml)
 let PLACES   = {};     // "lat,lon" (3 dp) -> reverse-geocoded name
 // data/photos/scan-cache.json: image path -> { size, mtime, ts, lat, lon } - the
 // cached EXIF read of every image (any type); see SCAN CACHE below.
 const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
+
+// What scanExif() reads goes into SCAN_CACHE through cacheSet(): never into a
+// cache that could not be read. SCAN_CACHE.set() (shared/media.js) writes the
+// file in batches and once more after the last read.
+function cacheSet( p, fields )
+{
+    if( ! SCAN_CACHE.loaded || DEMO ) return;
+    SCAN_CACHE.set( p, fields );
+}
 
 // The photos the grid / list / lightbox work on: all of them, or - when the
 // header search box has text - just those whose file name matches.
@@ -847,7 +865,7 @@ function queueThumb( p, source )
     if( DEMO || ! p.size || ! p.mtime ) return;
     const key = thumbKey( p );
     const st  = THUMB_STATE.get( key );
-    if( st === "pending" || st === "ok" || st === "failed" ) return;
+    if( st === "pending" || st === "ok" || st === "failed" ) { dropLocalUrl( p ); return; }
     THUMB_STATE.set( key, "pending" );
     THUMB_QUEUE.push( { p, source } );
     runThumbQueue();
@@ -878,14 +896,18 @@ async function makeThumb( p, source )
     {
         // Quota full (507), offline, whatever: don't try this one again until
         // the next open - re-uploading on every re-render would just fail again.
-        THUMB_STATE.set( key, "failed" );      // the tile keeps showing the full photo
-        return;
+        THUMB_STATE.set( key, "failed" );      // the tile shows the full photo from the server
     }
-    if( p.localUrl )                           // uploaded from here: local preview no longer needed
-    {
-        try { URL.revokeObjectURL( p.localUrl ); } catch( _ ) {}
-        delete p.localUrl;
-    }
+    finally { dropLocalUrl( p ); }             // made or not, the local preview has done its job
+}
+
+// Uploaded from here: the object URL of the local bytes, freed once no
+// thumbnail is going to be made from them (the photo is on the server).
+function dropLocalUrl( p )
+{
+    if( ! p.localUrl ) return;
+    try { URL.revokeObjectURL( p.localUrl ); } catch( _ ) {}
+    delete p.localUrl;
 }
 
 /* Once a day per device: delete thumbnails no photo refers to any more. The
@@ -905,7 +927,7 @@ async function sweepThumbs()
     try { listing = await GumApi.listDir( THUMB_DIR ); }
     catch( err )
     {
-        if( String( err && err.message ).indexOf( "HTTP 404" ) === -1 ) return;   // offline etc: try tomorrow
+        if( ! err || err.status !== 404 ) return;                               // offline etc: try tomorrow
         listing = { nodes: [] };                                                // no thumbs folder yet
     }
 
@@ -939,7 +961,19 @@ async function refreshStat( p )
     if( ! n ) return;
     p.size = n.size || 0; p.mtime = n.mtime || 0;
     const e = SCAN_CACHE.map[ p.path ];
-    if( e ) { e.size = p.size; e.mtime = p.mtime; SCAN_CACHE.saveNow(); }
+    if( ! e ) return;
+    e.size = p.size; e.mtime = p.mtime;
+    // Only this entry goes to the file, laid over a fresh read of it: this
+    // page's copy may be hours old, and written whole it would undo Drive's
+    // re-keys and other devices' scans made since.
+    try
+    {
+        const disk = ( await GumApi.readJson( SCAN_PATH ) ) || {};
+        if( typeof disk !== "object" || Array.isArray( disk ) ) return;
+        disk[ p.path ] = Object.assign( disk[ p.path ] || {}, e );
+        await GumApi.writeJson( SCAN_PATH, disk );
+    }
+    catch( _ ) {}
 }
 
 function sceneClass( p ) { return realPhoto( p ) ? "scene is-photo" : ( "scene " + p.scene ); }
@@ -1126,6 +1160,13 @@ async function handleAddPhotos( fileList )
 
         // No limit -> ready.blob is the original file, untouched.
         const ready = await NayivePhoto.prepare( f, maxPx );
+        // Only the types Photos lists (a HEIC the limit turned into a JPEG
+        // passes): an SVG, a TIFF, a HEIC would sit in the album unseen.
+        if( IMG_EXT.indexOf( extOf( ready.name || f.name ) ) === -1 )
+        {
+            NayiveUI.toast( NayiveUI.tf( "photos.notAPhoto", { name: f.name } ) );
+            continue;
+        }
         const name  = uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
         taken.add( name );
 
@@ -1137,11 +1178,11 @@ async function handleAddPhotos( fileList )
         }
         catch( err )
         {
-            const msg = String( err && err.message );
+            const status = err && err.status;
 
             // 507: no room left. On a shared album that is the OWNER's disk, not
             // ours, and there is nothing we can empty to fix it - say whose it is.
-            if( msg.indexOf( "507" ) !== -1 )
+            if( status === 507 )
             {
                 NayiveUI.toast( RO ? NayiveUI.t( 'photos.ownerNoSpace' )
                                    : NayiveUI.t( "ui.quotaExceeded" ) );
@@ -1150,7 +1191,7 @@ async function handleAddPhotos( fileList )
 
             // 409: that name is already taken. Only a shared folder answers this
             // (you may add, never replace) - keep going, the rest may be fine.
-            if( msg.indexOf( "409" ) !== -1 )
+            if( status === 409 )
             {
                 NayiveUI.toast( NayiveUI.tf( "photos.alreadyThere", { name: name } ) );
                 continue;
@@ -1190,6 +1231,9 @@ async function loadFolder( folder )
 
     const files = ( ( folder && folder.nodes ) || [] ).filter( n => n.nodes == null );
     const imgs  = files.filter( n => IMG_EXT.indexOf( extOf( n.path ) ) !== -1 );
+    UNSHOWN = files.filter( n => HEIC_EXT.indexOf( extOf( n.path ) ) !== -1 )
+                   .map( n => ( { path: n.path, name: baseName( n.path ) } ) )
+                   .sort( ( a, b ) => a.name.localeCompare( b.name, NayiveUI.lang() ) );
 
     // Keep the crumb usable (change folder) even when the folder is a dead end.
     setCrumbPath( dirLabel() );
@@ -1197,6 +1241,7 @@ async function loadFolder( folder )
     if( ! imgs.length )
     {
         PHOTOS = [];
+        if( UNSHOWN.length ) { setCrumb(); renderGrid(); return; }
         setGridMsg( DEMO ? NayiveUI.t( 'photos.noImages' )
                          : NayiveUI.t( 'photos.noPhotosYet' ) );
         return;
@@ -1226,6 +1271,7 @@ async function loadFolder( folder )
     }
 
     await loadComments();
+    await loadOwnerNotes();
     sweepComments();
 
     setCrumb();
@@ -1266,7 +1312,7 @@ async function scanExif()
             // Not a JPEG: nothing to read, but record it anyway - the cache is
             // also the registry of every image (its size + mtime) that the
             // thumbnail sweep keeps thumbs for.
-            SCAN_CACHE.set( p, { ts: 0, lat: null, lon: null } );
+            cacheSet( p, { ts: 0, lat: null, lon: null } );
             dirty = true;
         }
         else todo.push( p );
@@ -1280,7 +1326,7 @@ async function scanExif()
         if( ! x ) return;                       // fetch failed - try again next open
         if( x.ts ) { p.ts = x.ts; p.day = dayOf( x.ts ); p.time = timeOf( x.ts ); }
         if( x.lat != null ) { p.lat = x.lat; p.lon = x.lon; }
-        SCAN_CACHE.set( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
+        cacheSet( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
     } );
 
     // Only this folder's own entries (not a sub-folder's) can be judged dead
@@ -1289,7 +1335,7 @@ async function scanExif()
     const inScope = k => k.indexOf( prefix ) === 0 && k.slice( prefix.length ).indexOf( "/" ) === -1;
     if( SCAN_CACHE.prune( new Set( PHOTOS.map( p => p.path ) ), inScope ) ) dirty = true;
 
-    if( dirty && ! DEMO ) SCAN_CACHE.saveNow();
+    if( dirty && ! DEMO && SCAN_CACHE.loaded ) SCAN_CACHE.saveNow();
 }
 
 async function enrich()
@@ -1299,13 +1345,13 @@ async function enrich()
     sortPhotos();
     st.geoReady = true;
     buildClusters();
-    renderGrid();
+    refreshGrid();
     updateNoGeoChip();
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
     if( st.mode === "map" ) drawMap();
 
     await geocode();
-    renderGrid();
+    refreshGrid();
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
     if( st.mode === "map" ) drawMap();
 
@@ -1354,12 +1400,40 @@ async function exifFor( p )
     if( EXIF_EXT.indexOf( extOf( p.name ) ) === -1 ) return null;
     try
     {
-        const buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-262143" } } );
+        // 64 KB first: the Exif block (64 KB at most itself) nearly always
+        // opens the file. Only when it runs past that, or other big blocks
+        // come before it, is a longer stretch read - never past 256 KB.
+        let buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-65535" } } );
+        const need = exifEnd( buf );
+        if( need > buf.length && buf.length >= 65536 )
+            buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-" + ( Math.min( need, 262144 ) - 1 ) } } );
         // a JPEG with no Exif still counts as "scanned" - return an empty
         // result (not null) so scanExif() caches it and never re-reads it.
         return parseJpegExif( buf ) || { ts: null, lat: null, lon: null };
     }
     catch( _ ) { return null; }
+}
+
+// How many bytes from the file's start hold its whole Exif block: where the
+// block ends when it is found, 256 KB when the blocks before it run past `u8`,
+// 0 when there is none (not a JPEG, or the picture data starts first).
+function exifEnd( u8 )
+{
+    if( ! u8 || u8.length < 4 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return 0;
+    let i = 2;
+    while( i + 4 <= u8.length )
+    {
+        if( u8[ i ] !== 0xFF ) return 0;
+        const marker = u8[ i + 1 ];
+        if( marker === 0xD9 || marker === 0xDA ) return 0;      // EOI / start of scan
+        const len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
+        if( len < 2 ) return 0;
+        if( marker === 0xE1 && i + 10 <= u8.length &&
+            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 && u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 && u8[ i + 8 ] === 0x00 )
+            return i + 2 + len;
+        i += 2 + len;
+    }
+    return 262144;
 }
 
 function parseJpegExif( u8 )
@@ -1485,40 +1559,82 @@ function buildClusters()
     applyPlaces();
 }
 function placeKey( c ) { return c.lat.toFixed( 3 ) + "," + c.lon.toFixed( 3 ); }
+// A cluster's centre moves as photos join it, and differs from folder to
+// folder, so its key seldom matches a saved one exactly: a place saved within
+// PLACE_NEAR metres of it is the same place - no new question to Nominatim.
+// Its name, "" (asked, no name), or null (never asked).
+const PLACE_NEAR = 150;
+function knownPlace( c )
+{
+    const exact = PLACES[ placeKey( c ) ];
+    if( exact != null ) return exact;
+    let best = null, bestD = PLACE_NEAR;
+    for( const k of Object.keys( PLACES ) )
+    {
+        const ll = k.split( "," );
+        const d  = haversine( c, { lat: +ll[ 0 ], lon: +ll[ 1 ] } );
+        if( d <= bestD && PLACES[ k ] != null ) { best = k; bestD = d; }
+    }
+    return best === null ? null : PLACES[ best ];
+}
 function applyPlaces()
 {
     CLUSTERS.forEach( c =>
     {
-        c.place = PLACES[ placeKey( c ) ] || "";
+        c.place = knownPlace( c ) || "";
         c.items.forEach( p => { p.place = c.place; } );
     } );
 }
 
 /* ---- reverse geocoding (Nominatim), cached in data/photos/places.json ---- */
+// One run at a time: Recargar (or a new scan) while a run still asks starts a
+// new one, which waits for the old to stop at its next place - two loops at
+// once asked Nominatim twice a second.
+let geoRun  = 0;                        // bumped by every geocode(); an older run sees it and stops
+let geoBusy = Promise.resolve();        // settles when the run before has stopped
+
 async function geocode()
+{
+    const my   = ++geoRun;
+    const prev = geoBusy;
+    let release;
+    geoBusy = new Promise( r => { release = r; } );
+    try { await prev; if( my === geoRun ) await geocodeRun( my ); }
+    finally { release(); }
+}
+
+async function geocodeRun( my )
 {
     if( ! CLUSTERS.length ) return;
 
-    try { PLACES = JSON.parse( await GumApi.readFile( PLACES_PATH ) ) || {}; }
-    catch( _ ) { if( ! PLACES ) PLACES = {}; }
+    // Only a missing file is "no places yet": a file that could not be read
+    // is never written, or this run's few places would replace all of them.
+    let canSave = ! DEMO && ! RO;
+    try
+    {
+        const map = await GumApi.readJson( PLACES_PATH );
+        if( map && typeof map === "object" && ! Array.isArray( map ) ) PLACES = map;
+        else if( map !== null ) canSave = false;
+    }
+    catch( _ ) { canSave = false; }
 
-    let added = false;
     for( const c of CLUSTERS )
     {
-        const key = placeKey( c );
-        if( PLACES[ key ] != null ) continue;
+        if( knownPlace( c ) != null ) continue;
+        if( my !== geoRun ) return;              // a newer run took over
         const name = await reverseGeocode( c.lat, c.lon );
-        PLACES[ key ] = name;                    // "" is a valid cached "unknown"
-        added = true;
+        PLACES[ placeKey( c ) ] = name;          // "" is a valid cached "unknown"
+        applyPlaces();
+        // Saved at once: a page closed half-way keeps every answer it got.
+        // Not for an album someone shared with us: places.json is OURS and
+        // keeps no trace of whose photo a place came from, so nothing could
+        // take the owner's places back out of it when the share ends. Memory
+        // only, then.
+        if( canSave )
+            GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( PLACES, null, 1 ) ) ).catch( () => {} );
         await sleep( 1100 );                     // Nominatim: <= 1 request / second
     }
     applyPlaces();
-
-    // Not for an album someone shared with us: places.json is OURS and keeps
-    // no trace of whose photo a place came from, so nothing could take the
-    // owner's places back out of it when the share ends. Memory only, then.
-    if( added && ! DEMO && ! RO )
-        GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( PLACES, null, 1 ) ) ).catch( () => {} );
 }
 async function reverseGeocode( lat, lon )
 {
@@ -1553,10 +1669,26 @@ async function loadComments()
     catch( err )
     {
         COMMENTS = {};
-        if( ! /HTTP 40[34]/.test( String( err && err.message ) ) )
+        if( ! err || ( err.status !== 403 && err.status !== 404 ) )
             NayiveUI.toast( NayiveUI.t( 'photos.commentsFailed' ) );
     }
 }
+// A shared album: what its owner wrote about the photos, lent by the server
+// (GET /api/shares?notes=) - shown, never written. Our own note, if any, wins.
+async function loadOwnerNotes()
+{
+    OWNER_NOTES = {};
+    if( ! RO ) return;
+    try
+    {
+        const r = await fetch( "/api/shares?notes=" + encodeURIComponent( DIR ) );
+        const j = r.ok ? await r.json() : null;
+        if( j && j.notes && typeof j.notes === "object" ) OWNER_NOTES = j.notes;
+    }
+    catch( _ ) {}
+}
+function noteFor( id ) { return COMMENTS[ id ] || OWNER_NOTES[ id ] || ""; }
+
 async function saveComment( id, text )
 {
     if( DEMO )
@@ -1590,7 +1722,7 @@ async function saveComment( id, text )
 async function sweepComments()
 {
     if( DEMO || ! PHOTOS.length ) return;
-    const alive  = new Set( PHOTOS.map( p => p.name.toLowerCase() ) );
+    const alive  = new Set( PHOTOS.concat( UNSHOWN ).map( p => p.name.toLowerCase() ) );
     const prefix = DIR ? ( DIR + "/" ) : "";
     const dead   = [];
     for( const key of Object.keys( COMMENTS ) )
@@ -1646,31 +1778,99 @@ function setCrumb()
  * -------------------------------------------------------------------------*/
 let gridObs = null;
 
-function tileHtml( p )
+function tileCap( p )  { return p.time + ( p.place ? " · " + p.place : "" ); }
+function tileBits( p )
 {
-    const cap  = esc( p.time + ( p.place ? " · " + p.place : "" ) );
-    // .tmeta is shown only in list view (CSS); .cap only in grid view.
     const bits = [ p.day + " " + p.time ];
     if( p.place )      bits.push( p.place );
     if( p.size )       bits.push( fmtSize( p.size ) );
+    return bits.join( " · " );
+}
+function tileHtml( p )
+{
+    const cap  = esc( tileCap( p ) );
+    // .tmeta is shown only in list view (CSS); .cap only in grid view.
     return '<button class="tile" data-id="' + esc( p.id ) + '" title="' + cap + '">'
          + sceneHtml( p, true )
          + '<span class="geo-dot' + ( p.lat != null ? "" : " no" ) + '"></span>'
-         + ( COMMENTS[ p.id ] ? NOTE_MARK : "" )
+         + ( noteFor( p.id ) ? NOTE_MARK : "" )
          + '<span class="cap">' + cap + "</span>"
-         + '<span class="tmeta"><b>' + esc( p.name ) + "</b><i>" + esc( bits.join( " · " ) ) + "</i></span>"
+         + '<span class="tmeta"><b>' + esc( p.name ) + "</b><i>" + esc( tileBits( p ) ) + "</i></span>"
          + "</button>";
 }
 
-function renderGrid()
+// A HEIC / HEIF: listed, so it is not just missing, but no browser here can
+// draw it - a tap offers Download or Drive instead (openUnshown).
+const NO_SHOW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+function unshown()
+{
+    const q = st.q.trim().toLowerCase();
+    return q ? UNSHOWN.filter( u => u.name.toLowerCase().indexOf( q ) !== -1 ) : UNSHOWN;
+}
+function unshownTileHtml( u )
+{
+    const why = esc( NayiveUI.t( 'photos.cantShow' ) );
+    return '<button class="tile no-show" data-heic="' + esc( u.path ) + '" title="' + esc( u.name ) + '">'
+         + '<span class="scene is-photo no-show-art">' + NO_SHOW_SVG + '<small>' + why + '</small></span>'
+         + '<span class="cap">' + esc( u.name ) + '</span>'
+         + '<span class="tmeta"><b>' + esc( u.name ) + '</b><i>' + why + '</i></span>'
+         + '</button>';
+}
+async function openUnshown( path )
+{
+    const name = baseName( path );
+    const pick = await NayiveUI.confirm( {
+        title:     name,
+        body:      NayiveUI.t( 'photos.cantShowBody' ),
+        confirm:   NayiveUI.t( 'photos.openInDrive' ),
+        other:     NayiveUI.t( 'ui.download' ),
+        otherIcon: 'download'
+    } );
+    if( pick === true ) location.href = '../drive/index.html?sel=' + encodeURIComponent( path );
+    else if( pick === 'other' )
+    {
+        const a = document.createElement( 'a' );
+        a.href = GumApi.fileUrl( path );
+        a.download = name;
+        document.body.appendChild( a );
+        a.click();
+        a.remove();
+    }
+}
+
+// What the grid on screen was built from (see refreshGrid).
+let gridShape = "";
+function shapeOf( list ) { return list.map( p => p.id + "|" + p.day ).join( "\n" ); }
+
+/* The scan (dates) and the geocoder (places) change what the tiles say. When
+ * the photos and their days still stand in the same order, only the captions
+ * are repainted - a rebuild threw anyone scrolled down back to the top. When
+ * the order did change, the grid is rebuilt at the same scroll position. */
+function refreshGrid()
+{
+    if( shapeOf( photos() ) !== gridShape ) { renderGrid( $( "#grid" ).scrollTop ); return; }
+    $$( "#grid .tile[data-id]" ).forEach( el =>
+    {
+        const p = photoById( el.dataset.id );
+        if( ! p ) return;
+        el.title = tileCap( p );
+        el.querySelector( ".cap" ).textContent = tileCap( p );
+        el.querySelector( ".tmeta i" ).textContent = tileBits( p );
+        el.querySelector( ".geo-dot" ).classList.toggle( "no", p.lat == null );
+    } );
+}
+
+// `keepTop`: a scroll position to come back to (refreshGrid).
+function renderGrid( keepTop )
 {
     const list = photos();
-    st.list = list;
+    gridShape = shapeOf( list );
 
     const grid = $( "#grid" );
     if( gridObs ) { gridObs.disconnect(); gridObs = null; }
     grid.innerHTML = "";
-    if( ! list.length )
+    const odd = unshown();
+    if( ! list.length && ! odd.length )
     {
         if( st.q.trim() ) setGridMsg( NayiveUI.tf( "photos.noMatch", { q: st.q.trim() } ) );
         return;
@@ -1706,17 +1906,39 @@ function renderGrid()
             frag.appendChild( h );
             frag.appendChild( shots );
         }
+        // The HEIC / HEIF tiles come last, after the final day.
+        if( gi >= groups.length && odd.length && ! grid.querySelector( ".no-show" ) )
+        {
+            const h = document.createElement( "div" );
+            h.className = "day-h";
+            h.innerHTML = "HEIC<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: odd.length } ) ) + "</span>";
+            const shots = document.createElement( "div" );
+            shots.className = "shots";
+            shots.innerHTML = odd.map( unshownTileHtml ).join( "" );
+            frag.appendChild( h );
+            frag.appendChild( shots );
+        }
         grid.insertBefore( frag, sentinel );
         if( gi >= groups.length && gridObs ) { gridObs.disconnect(); gridObs = null; sentinel.remove(); }
     }
 
     gridObs = new IntersectionObserver( es =>
     {
-        if( es.some( e => e.isIntersecting ) ) addBatch();
+        if( ! es.some( e => e.isIntersecting ) ) return;
+        addBatch();
+        // Still in view (short days, a tall screen)? The observer only speaks
+        // on a change, so it would stall here: observing again makes it report
+        // the sentinel once more, and the next batch comes in.
+        if( gridObs ) { gridObs.unobserve( sentinel ); gridObs.observe( sentinel ); }
     }, { root: grid, rootMargin: "800px" } );
     gridObs.observe( sentinel );
 
     addBatch();                 // first batch straight away
+    if( keepTop )
+    {
+        while( gi < groups.length && grid.scrollHeight < keepTop + grid.clientHeight ) addBatch();
+        grid.scrollTop = keepTop;
+    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1829,7 +2051,6 @@ function openCluster( id )
     }
     if( ! list.length ) return;
 
-    st.list = list;
     $( "#stripTitle" ).textContent = title + "  ·  " + list.length;
     $( "#stripScroll" ).innerHTML = list.map( p =>
         '<button class="tile" data-id="' + esc( p.id ) + '" title="' + esc( p.time + ( p.place ? " · " + p.place : "" ) ) + '">' + sceneHtml( p, true ) + '<span class="cap">' + esc( p.time ) + "</span></button>" ).join( "" );
@@ -1845,26 +2066,39 @@ function closeStrip()
 /* ---------------------------------------------------------------------------
  * LIGHTBOX
  * -------------------------------------------------------------------------*/
+// The lightbox holds the photo's id (st.lbId), not only its place in the
+// list: the scan re-sorts the photos under it, and ?photo= (Chat's "Abrir en
+// Fotos") then jumped to another one.
 function openLb( id, list )
 {
     st.list = list || photos();
     st.lb   = Math.max( 0, st.list.findIndex( p => p.id === id ) );
+    st.lbId = id;
     paintLb();
     $( "#lb" ).classList.add( "open" );
 }
 function paintLb()
 {
+    const at = st.list.findIndex( p => p.id === st.lbId );
+    if( at !== -1 ) st.lb = at;
     const p = st.list[ st.lb ];
     if( ! p ) return;
+    st.lbId = p.id;
     paintScene( $( "#lbScene" ), p );
     $( "#lbTitle" ).textContent = p.place || p.name;
     $( "#lbMeta" ).textContent  = p.day + " · " + p.time;
     $( "#lbMap" ).style.display = ( p.cluster != null ) ? "" : "none";
-    const c = COMMENTS[ p.id ] || "";
+    const c = noteFor( p.id );
     $( "#lbNote" ).hidden = ! c;
     $( "#lbNoteText" ).textContent = c;
 }
-function lbStep( d ) { st.lb = ( st.lb + d + st.list.length ) % st.list.length; paintLb(); }
+function lbStep( d )
+{
+    if( ! st.list.length ) return;
+    st.lb   = ( st.lb + d + st.list.length ) % st.list.length;
+    st.lbId = st.list[ st.lb ].id;
+    paintLb();
+}
 function closeLb() { $( "#lb" ).classList.remove( "open" ); }
 
 /* ---------------------------------------------------------------------------
@@ -1873,6 +2107,7 @@ function closeLb() { $( "#lb" ).classList.remove( "open" ); }
 function startPase( idx, autoplay )
 {
     const list = photos();
+    if( ! list.length ) return;
     st.paseStarted = true;
     st.paseIdx = idx % list.length;
     st.ab = false;
@@ -1924,13 +2159,14 @@ function showPase()
     $( "#paseCount" ).textContent = ( st.paseIdx + 1 ) + " / " + list.length;
     $( "#paseProg" ).style.width  = ( ( st.paseIdx + 1 ) / list.length * 100 ) + "%";
 
-    const c = COMMENTS[ p.id ] || "";
+    const c = noteFor( p.id );
     $( "#paseNote" ).hidden = ! c;
     $( "#paseNote" ).textContent = c;
 }
 function paseStep( d )
 {
     const list = photos();
+    if( ! list.length ) return;
     st.paseIdx = ( st.paseIdx + d + list.length ) % list.length;
     showPase();
     if( st.playing ) armTimer();
@@ -2196,22 +2432,6 @@ async function confirmSaveAs()
     const dir  = p.path.slice( 0, p.path.lastIndexOf( "/" ) + 1 );   // "" at the root
     const dest = dir + name;
 
-    // A PUT replaces a file outright, with no trip through the papelera, so
-    // a name already taken is asked about first - as Drive's "Guardar copia"
-    // does. "No" leaves the editor open with the edits. "Replace" bins the
-    // old file first; its bin ids let the Undo below bring it back.
-    let binned = null;
-    if( ! DEMO && dest !== p.path && await nameTaken( dir, name ) )
-    {
-        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.nameExistsTitle' ),
-                                        body: NayiveUI.tf( 'drive.nameExistsCopyBody', { name } ),
-                                        confirm: NayiveUI.t( 'drive.replace' ), danger: true } ) ) return;
-        try { binned = await GumApi.binPaths( [ dest ] ); }   // null from an old server: no Undo
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.moveExistingFailed' ) ); return; }
-        await NayiveMedia.purgePaths( [ dest ] );    // its thumbnail + scan entry, as Drive's delete does
-    }
-    if( editorPhoto !== p || ! imageEditor ) return;    // the editor went away meanwhile
-
     const fmt  = editorFormat( name );
     const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
     let dataUrl;
@@ -2221,17 +2441,42 @@ async function confirmSaveAs()
     const comment = $( "#editorComment" ).value.trim();
     const size    = imageEditor.getCanvasSize();
 
+    // The bytes are made first: keepExif copies the tags from the photo's own
+    // file, which a "Replace" of the photo itself (below) sends to the bin.
+    let bytes = null;
+    if( ! DEMO )
+    {
+        editorSaving = true;
+        try { bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height ); }
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
+        finally { editorSaving = false; }
+    }
+
+    // A PUT replaces a file outright, with no trip through the papelera, so
+    // a name already taken is asked about first - as Drive's "Guardar copia"
+    // does; the photo's own name is taken too (it was written over unasked).
+    // "No" leaves the editor open with the edits. "Replace" bins the old file
+    // first; its bin ids let the Undo below bring it back.
+    let binned = null;
+    if( ! DEMO && ( dest === p.path || await nameTaken( dir, name ) ) )
+    {
+        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.nameExistsTitle' ),
+                                        body: NayiveUI.tf( 'drive.nameExistsCopyBody', { name } ),
+                                        confirm: NayiveUI.t( 'drive.replace' ), danger: true } ) ) return;
+        if( editorPhoto !== p || ! imageEditor ) return;    // the editor went away meanwhile
+        try { binned = await GumApi.binPaths( [ dest ] ); }   // null from an old server: no Undo
+        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.moveExistingFailed' ) ); return; }
+        await NayiveMedia.purgePaths( [ dest ] );    // its thumbnail + scan entry, as Drive's delete does
+    }
+    else if( editorPhoto !== p || ! imageEditor ) return;
+
     // Write the copy BEFORE tearing the editor down (same order as
     // closeImageEditor): a failed write leaves it open with the edits, so
     // nothing is lost and the copy can be tried again.
     if( ! DEMO )
     {
         editorSaving = true;
-        try
-        {
-            const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
-            await GumApi.writeFileBytes( dest, bytes );
-        }
+        try { await GumApi.writeFileBytes( dest, bytes ); }
         catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
         finally { editorSaving = false; }
     }
@@ -2275,6 +2520,13 @@ async function confirmSaveAs()
  * -------------------------------------------------------------------------*/
 function setMode( m )
 {
+    // A slideshow of nothing (an empty folder, a search that matches no photo)
+    // is not started: it stayed blank until a reload.
+    if( m === "pase" && ! photos().length )
+    {
+        NayiveUI.toast( PHOTOS.length ? NayiveUI.tf( "photos.noMatch", { q: st.q.trim() } ) : NayiveUI.t( 'photos.noPhotos' ) );
+        return;
+    }
     st.mode = m;
     // "grid" and "lista" are the same pane (#grid), just laid out differently;
     // "lista" adds body.view-list, which the #grid CSS keys off.
@@ -2297,7 +2549,6 @@ function setMode( m )
 
     if( m === "pase" )
     {
-        if( ! PHOTOS.length ) { NayiveUI.toast( NayiveUI.t( 'photos.noPhotos' ) ); return; }
         if( ! st.paseStarted ) startPase( 0, true );
         else setPlaying( true );
     }
@@ -2335,6 +2586,7 @@ $( "#grid" ).addEventListener( "click", e =>
 {
     const el = e.target.closest( ".tile" );
     if( ! el ) return;
+    if( el.dataset.heic ) { openUnshown( el.dataset.heic ); return; }
     if( st.mode === "editar" && ! RO ) editPhoto( el.dataset.id );
     else openLb( el.dataset.id, photos() );
 } );
@@ -2454,9 +2706,33 @@ async function boot()
             rootLabel: NayiveUI.t( "ui.fp.allFiles" )
         } );
         if( picked ) { DIR = picked; DEMO = false; }
+        else
+        {
+            // No folder. Never the made-up Lisbon trip: offline or with the
+            // session gone it passed for his own photos (and asked Nominatim
+            // five times). Signed out: to the sign-in page, as every app;
+            // offline / a server error: say so; the picker cancelled: say how.
+            let who = null;
+            try { who = await GumApi.probeAccess(); }
+            catch( err )
+            {
+                if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+            }
+            DEMO = false;                        // the crumb's folder picker works
+            setGridMsg( NayiveUI.t( who ? 'photos.needFolder' : 'photos.loadFailed' ) );
+            return;
+        }
     }
 
     if( DEMO ) { buildDemo(); renderGrid(); return; }
+
+    // Opened from the album index (&up=): "←" before the title goes back to it.
+    const up = PARAMS.get( "up" );
+    if( up != null && up !== DIR )
+    {
+        $( "#backBtn" ).hidden = false;
+        $( "#backBtn" ).addEventListener( "click", () => { location.href = "?dir=" + encodeURIComponent( up ); } );
+    }
 
     // Before the first loadFolder(), which decides what the toolbar shows.
     CAN_ADD = await NayiveUI.canAddTo( DIR );
@@ -2523,7 +2799,8 @@ function renderAlbums( subs )
             card.querySelector( ".a-name" ).textContent = baseName( n.path );
             card.addEventListener( "click", () =>
             {
-                location.href = "?dir=" + encodeURIComponent( n.path );
+                // &up= : the index it came from, for the "←" before the title
+                location.href = "?dir=" + encodeURIComponent( n.path ) + "&up=" + encodeURIComponent( DIR );
             } );
             box.appendChild( card );
         } );

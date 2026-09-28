@@ -147,7 +147,12 @@ func TestChatCallFlow(t *testing.T) {
 		t.Fatalf("owner's page got %+v", w.Sig)
 	}
 
-	time.Sleep(1100 * time.Millisecond)
+	// Two seconds of talk, without waiting them: the answer moves back.
+	h := f.srv.chat
+	h.mu.Lock()
+	c := h.owner("ana").cs().byID[start.ID]
+	c.Answered = c.Answered.Add(-2 * time.Second)
+	h.mu.Unlock()
 	var end struct{ State, Reason string }
 	f.call(t, f.owner, "POST", "/api/chat/call/"+start.ID+"/end", `{}`, 200, &end)
 	if end.State != "ended" || end.Reason != "hangup" {
@@ -158,7 +163,7 @@ func TestChatCallFlow(t *testing.T) {
 
 	msgs := f.convMsgs(t, carmen, cp+"/conv/"+conv+"/messages")
 	last := msgs[len(msgs)-1]
-	if last.Kind != "call" || last.From != "o" || last.Call == nil || !last.Call.Video || last.Call.Secs < 1 || last.Call.End != "" {
+	if last.Kind != "call" || last.From != "o" || last.Call == nil || !last.Call.Video || last.Call.Secs != 2 || last.Call.End != "" {
 		t.Fatalf("bubble = %+v %+v", last, last.Call)
 	}
 	// A call both had is not unread for either.
@@ -351,7 +356,7 @@ func TestChatCallPush(t *testing.T) {
 	count := func() int { mu.Lock(); defer mu.Unlock(); return hits }
 	waitHits := func(n int) {
 		t.Helper()
-		for i := 0; i < 100 && count() < n; i++ {
+		for i := 0; i < 500 && count() < n; i++ { // up to 10 s: a slow box, not a flake
 			time.Sleep(20 * time.Millisecond)
 		}
 		if count() != n {
@@ -364,6 +369,7 @@ func TestChatCallPush(t *testing.T) {
 	keys := PushKeys{P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
 		Auth: base64.RawURLEncoding.EncodeToString(auth)}
 	h := f.srv.chat
+	evs := traceEvents(t, h)
 	dc := "d-" + f.ids["Carmen"]
 	h.mu.Lock()
 	o := h.owner("ana")
@@ -392,10 +398,15 @@ func TestChatCallPush(t *testing.T) {
 
 	// Answered: the ringing notification is replaced, quietly.
 	f.call(t, anonymous(), "POST", "/api/c/"+f.carmen+"/call/"+s.ID+"/answer", `{"dev":"carmen-page-1"}`, 200, nil)
+	if n := waitEv(t, evs, "call-push"); n != 1 {
+		t.Fatalf("the answer sent %d pushes, want 1", n)
+	}
 	waitHits(2)
 	// Hung up while talking: nothing more.
 	f.call(t, f.owner, "POST", "/api/chat/call/"+s.ID+"/end", `{}`, 200, nil)
-	time.Sleep(150 * time.Millisecond)
+	if n := waitEv(t, evs, "call-push"); n != 0 {
+		t.Fatalf("a hang-up while talking sent %d pushes", n)
+	}
 	waitHits(2)
 
 	// Rings, then the caller gives up: "missed" replaces it.

@@ -137,16 +137,23 @@ async function saveTrip()
     if( isEditingTrip )
     {
         const original = findTrip( tripDraft.id );
-        const updated  = { ...tripDraft };   // dirName carried over unchanged from the original trip
 
-        // The trip's own lat/lon only ever back the map's "no stages yet" fallback
-        // pin, geocoded from this destination text (see ensureRouteCoords()) - if the
-        // text just changed, drop the old coordinates rather than show a stale pin.
-        if( original && original.destination !== updated.destination )
+        // The trip as saved: the sheet's draft (dirName carried over unchanged from the
+        // original trip). The trip's own lat/lon only ever back the map's "no stages
+        // yet" fallback pin, geocoded from this destination text (see
+        // ensureRouteCoords()) - if the text just changed, drop the old coordinates
+        // rather than show a stale pin.
+        const build = function( docs )
         {
-            delete updated.lat;
-            delete updated.lon;
-        }
+            const u = { ...tripDraft, documents: docs };
+            if( original && original.destination !== u.destination )
+            {
+                delete u.lat;
+                delete u.lon;
+            }
+            return u;
+        };
+        let updated = build( tripDraft.documents );
 
         // Attachments (upload a picked file / delete a removed one) need the network;
         // a text-only edit still saves offline through the store.
@@ -162,6 +169,10 @@ async function saveTrip()
             try
             {
                 await syncDocFiles( updated.dirName, updated.documents, original ? original.documents : [] );
+
+                // Another device's save merged in during the upload patched the
+                // draft (persistence.js onTripMerged): built again, or it is lost.
+                if( tripDraft ) updated = build( updated.documents );
             }
             catch( _ )
             {
@@ -217,6 +228,14 @@ async function deleteTrip()
     if( ! trip )
         return;
 
+    // From the trip's sheet the button goes at once, so a second tap must not
+    // send a second delete while the first is out.
+    if( tripDraft )
+    {
+        if( tripSheetBusy ) return;
+        setTripSheetBusy( true );
+    }
+
     setSyncStatus( 'saving' );
 
     // The bin ids of the trip folder, for the Undo (null from an old server).
@@ -252,7 +271,8 @@ async function deleteTrip()
     closeTripSheet();
     renderAll();
 
-    // The question stays (a whole trip goes); the Undo covers the slip. The whole
+    // From the detail header the question stays (a whole trip goes); from inside
+    // the trip's own sheet that sheet was the question. The Undo covers the slip. The whole
     // folder went to the bin - trip.json, its files, positions.json - so restoring
     // it brings all of that back. Shares and the public /s/ link live on the
     // server and point at the folder, so they work again once it is back.

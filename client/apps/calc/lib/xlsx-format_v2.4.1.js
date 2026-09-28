@@ -2190,7 +2190,7 @@ function buildStyleRegistry(wb, opts) {
 	for (const sheetName of wb.SheetNames) {
 		const ws = wb.Sheets[sheetName];
 		if (!ws) continue;
-		eachWorksheetCell(ws, (cell) => {
+		const register = (cell) => {
 			const normalized = normalizeCellStyle(cell, opts);
 			if (!normalized) return;
 			const fontId = normalized.font ? getOrAdd(registry.fonts, fontIds, normalized.font) : 0;
@@ -2214,7 +2214,13 @@ function buildStyleRegistry(wb, opts) {
 			const styleId = getOrAdd(registry.cellXfs, xfIds, xf);
 			registry.cellStyleIds.set(cell, styleId);
 			if (styleId !== 0) registry.hasStyles = true;
-		});
+		};
+		eachWorksheetCell(ws, register);
+		// NAYIVE: a whole column's or row's look (`s` on a !cols / !rows entry)
+		// takes a cell format like a cell's does; the writer puts it out as
+		// <col style=> / <row s= customFormat="1">.
+		(ws["!cols"] || []).forEach((col) => { if (col && col.s) register(col); });
+		(ws["!rows"] || []).forEach((row) => { if (row && row.s) register(row); });
 	}
 	return registry;
 }
@@ -5252,24 +5258,53 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 	lines.push("<sheetFormatPr defaultRowHeight=\"15\"/>");
 	if (ws["!cols"]) {
 		lines.push("<cols>");
-		for (let i = 0; i < ws["!cols"].length; ++i) {
-			if (!ws["!cols"][i]) continue;
-			const col = ws["!cols"][i];
+		// NAYIVE: a column's look goes out as style=, and a run of columns with
+		// the same look (and the same width and hidden flag) as ONE <col min max>
+		// - a formatted sheet is 16,384 of them. A column with a look and no
+		// width of its own is written at Excel's default width, and not as a
+		// custom one (Excel writes a formatted column so; the width is kept,
+		// as some readers take a missing one for zero).
+		const colStyle = (col) => col && col.s ? getCellStyleIndex(opts, col) || 0 : 0;
+		const cols = ws["!cols"];
+		for (let i = 0; i < cols.length; ++i) {
+			if (!cols[i]) continue;
+			const col = cols[i];
+			const sid = colStyle(col);
+			let last = i;
+			if (sid > 0) while (last + 1 < cols.length && cols[last + 1] && colStyle(cols[last + 1]) === sid && cols[last + 1].width === col.width && !!cols[last + 1].hidden === !!col.hidden) last++;
 			const attrs = {
 				min: String(i + 1),
-				max: String(i + 1)
+				max: String(last + 1)
 			};
 			if (col.width) attrs.width = String(col.width);
 			else attrs.width = "9.140625";
+			if (sid > 0) attrs.style = String(sid);
 			if (col.hidden) attrs.hidden = "1";
-			attrs.customWidth = "1";
+			if (col.width || !(sid > 0)) attrs.customWidth = "1";
 			lines.push(writeXmlElement("col", null, attrs));
+			i = last;
 		}
 		lines.push("</cols>");
 	}
 	lines.push("<sheetData>");
 	const dense = ws["!data"] != null;
 	const range = safeDecodeRange(ref);
+	// NAYIVE: a row's look (see buildStyleRegistry) is s= customFormat="1", and
+	// such a row is written even with no cell in it.
+	const rowStyle = (rowIdx) => {
+		const row = ws["!rows"]?.[rowIdx];
+		return row && row.s ? getCellStyleIndex(opts, row) || 0 : 0;
+	};
+	const rowXml = (rowIdx, row_cells) => {
+		let rowTag = "<row r=\"" + (rowIdx + 1) + "\"";
+		if (ws["!rows"]?.[rowIdx]) {
+			if (ws["!rows"][rowIdx].hpt) rowTag += " ht=\"" + ws["!rows"][rowIdx].hpt + "\" customHeight=\"1\"";
+			if (ws["!rows"][rowIdx].hidden) rowTag += " hidden=\"1\"";
+		}
+		if (rowStyle(rowIdx) > 0) rowTag += " s=\"" + rowStyle(rowIdx) + "\" customFormat=\"1\"";
+		if (!row_cells.length) return rowTag + "/>";
+		return rowTag + ">" + row_cells.join("") + "</row>";
+	};
 	for (let rowIdx = range.s.r; rowIdx <= range.e.r; ++rowIdx) {
 		const row_cells = [];
 		for (let colIdx = range.s.c; colIdx <= range.e.c; ++colIdx) {
@@ -5328,18 +5363,13 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 			cellXml += "</c>";
 			row_cells.push(cellXml);
 		}
-		if (row_cells.length > 0) {
-			let rowTag = "<row r=\"" + (rowIdx + 1) + "\"";
-			if (ws["!rows"]?.[rowIdx]) {
-				if (ws["!rows"][rowIdx].hpt) rowTag += " ht=\"" + ws["!rows"][rowIdx].hpt + "\" customHeight=\"1\"";
-				if (ws["!rows"][rowIdx].hidden) rowTag += " hidden=\"1\"";
-			}
-			rowTag += ">";
-			lines.push(rowTag);
-			lines.push(row_cells.join(""));
-			lines.push("</row>");
-		}
+		if (row_cells.length > 0 || rowStyle(rowIdx) > 0) lines.push(rowXml(rowIdx, row_cells));
 	}
+	// NAYIVE: rows past the used range that carry only a look. The <dimension>
+	// stays the range of the cells.
+	(ws["!rows"] || []).forEach((row, rowIdx) => {
+		if (rowIdx > range.e.r && rowStyle(rowIdx) > 0) lines.push(rowXml(rowIdx, []));
+	});
 	lines.push("</sheetData>");
 	// NAYIVE: CT_Worksheet is a *sequence* — a reader is entitled to reject a file
 	// whose elements are out of order, and Excel answers such a file with the
@@ -6353,6 +6383,10 @@ function parseZip(zip, opts) {
 		Sheets: wb.Sheets,
 		Names: wb.Names
 	};
+	// NAYIVE: the style of one cell format (an s= number), read the way a cell's
+	// is. Calc reads the s= of whole rows and columns itself and asks here what
+	// each means - this library reads styles only off cells.
+	if (options.cellStyles) result._xfStyle = (n) => getStyleFromXf(styles, n);
 	return result;
 }
 

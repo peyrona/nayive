@@ -72,6 +72,10 @@
 # Usage:
 #   ./deploy.sh          Pre-build + build + rsync. No questions.
 #   ./deploy.sh -y       The same thing (kept so an old habit still works).
+#   ./deploy.sh -n       Dry run: pre-build + build here, then only LIST what
+#                        rsync would send/delete on the VPS. Nothing is copied,
+#                        nothing restarted. (Pre-build still refreshes sw.js,
+#                        the .gz files and the APK locally.)
 #   ./deploy.sh --help   Print this header.
 #
 # Needs Go 1.24 or newer: ~/sdk/go1.27.1 is used when present, else `go` on the
@@ -88,7 +92,8 @@
 # apps/, and so are the per-app USER-DATA files (calendar.ics, contacts.vcf,
 # contacts-meta.json, tasks.json) — those are written live on the server and
 # must never be overwritten by a stale local copy.
-# Additive: files removed locally are NOT deleted on the server.
+# Files removed locally ARE deleted from the server's apps/ (--delete), except
+# those excluded ones: rsync never deletes what it excludes.
 # ==============================================================================
 set -euo pipefail
 
@@ -118,12 +123,18 @@ RSYNC_RSH="ssh -p $REMOTE_PORT -o StrictHostKeyChecking=accept-new"
 # No confirmation prompt: running this script IS the confirmation. `-y` / `--yes`
 # are still accepted so an old habit or an alias does not fail, but they change
 # nothing.
+DRY_RUN=0
 case "${1:-}" in
     -y|--yes)  ;;
     "")        ;;
+    -n|--dry-run) DRY_RUN=1 ;;
     -h|--help) grep -E '^# ' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *)         echo "Unknown option: $1 (use -y | --yes | --help)" >&2; exit 2 ;;
+    *)         echo "Unknown option: $1 (use -y | -n | --dry-run | --help)" >&2; exit 2 ;;
 esac
+
+# In a dry run every rsync gets -n: it lists the changes and writes nothing.
+DRY=()
+[ "$DRY_RUN" = 1 ] && DRY=(-n)
 
 command -v rsync >/dev/null 2>&1 || { echo "ERROR: 'rsync' not found (needed to deploy)." >&2; exit 1; }
 
@@ -138,6 +149,7 @@ command -v go >/dev/null 2>&1 || { echo "ERROR: 'go' not found (install Go 1.24+
 
 echo "==> Deploying  server/go/ + $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_BASE/"
 echo "==> Using $(go version)"
+[ "$DRY_RUN" = 1 ] && echo "==> DRY RUN: nothing will be copied to the VPS or restarted"
 
 # ------------------------------------------------------------------------------
 # PRE-BUILD — everything that MUST pass or run on every deploy.
@@ -193,7 +205,7 @@ ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "test -d '$REMOTE_APPS_DIR' && 
 # --chmod=F755: executable, whatever the local umask made of it.
 # ------------------------------------------------------------------------------
 echo "==> Deploying the server binary  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_BIN"
-if ! BIN_CHANGES="$(rsync -zc --chmod=F755 --itemize-changes \
+if ! BIN_CHANGES="$(rsync "${DRY[@]}" -zc --chmod=F755 --itemize-changes \
         -e "$RSYNC_RSH" \
         "$BUILD_DIR/nayive" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_BIN")"; then
     echo "ERROR: binary rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_BIN failed." >&2
@@ -202,11 +214,14 @@ fi
 [ -n "$BIN_CHANGES" ] && printf '%s\n' "$BIN_CHANGES"
 
 # ------------------------------------------------------------------------------
-# 2. Apps — client/apps/ -> $REMOTE_APPS_DIR/  (recursive, additive)
+# 2. Apps — client/apps/ -> $REMOTE_APPS_DIR/  (recursive, a mirror)
 # -rltz: recurse, keep symlinks + mtimes, compress; no owner/group/perms.
+# --delete-delay: a file gone from client/apps/ (an old engine, a renamed page)
+# is deleted there too, after the transfer, so an open page never meets a gap.
+# The --exclude'd names are never deleted (rsync protects what it excludes).
 # ------------------------------------------------------------------------------
 echo "==> Deploying apps  $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"
-if ! rsync -rltz --itemize-changes \
+if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay \
       --exclude='.*' --exclude='*~' --exclude='*.swp' \
       --exclude='calendar.ics' --exclude='contacts.vcf' --exclude='contacts-meta.json' --exclude='tasks.json' \
       -e "$RSYNC_RSH" \
@@ -221,10 +236,10 @@ fi
 # number always finds the new APK already there.
 # ------------------------------------------------------------------------------
 echo "==> Deploying the Android app  $APKSITE/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/"
-if ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "mkdir -p '$REMOTE_APK_DIR'" ||
-   ! rsync -rlzc --itemize-changes --exclude='version.json' \
+if { [ "$DRY_RUN" = 0 ] && ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "mkdir -p '$REMOTE_APK_DIR'"; } ||
+   ! rsync "${DRY[@]}" -rlzc --itemize-changes --exclude='version.json' \
       -e "$RSYNC_RSH" "$APKSITE/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/" ||
-   ! rsync -zc --itemize-changes \
+   ! rsync "${DRY[@]}" -zc --itemize-changes \
       -e "$RSYNC_RSH" "$APKSITE/version.json" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/version.json"; then
     echo "ERROR: Android app rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/ failed." >&2
     exit 1
@@ -233,8 +248,25 @@ fi
 # ------------------------------------------------------------------------------
 # Restart the service only if the binary actually changed (apps/ alone is
 # static and needs no restart) - and only if the service really runs it.
+# An unchanged binary still needs one when the running process is an OLDER
+# copy: a restart that failed last time (no sudo) leaves the new file in place
+# and the old process running, its exe shown as "(deleted)".
 # ------------------------------------------------------------------------------
-if [ -z "$BIN_CHANGES" ]; then
+if [ -z "$BIN_CHANGES" ] && ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
+        "pid=\$(systemctl show -p MainPID --value '$SERVICE'); [ \"\${pid:-0}\" != 0 ] && readlink /proc/\$pid/exe | grep -q ' (deleted)\$'"; then
+    BIN_CHANGES="the running $SERVICE is an older binary than $REMOTE_BIN"
+    echo "==> $BIN_CHANGES"
+fi
+
+if [ "$DRY_RUN" = 1 ]; then
+    if [ -z "$BIN_CHANGES" ]; then
+        echo "==> DRY RUN: server binary unchanged — no restart needed."
+    else
+        echo "==> DRY RUN: a real deploy would restart $SERVICE ($BIN_CHANGES)"
+    fi
+    echo "==> Dry run complete — nothing was changed on the VPS."
+    exit 0
+elif [ -z "$BIN_CHANGES" ]; then
     echo "==> Server binary unchanged — service not restarted."
 elif ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
         "systemctl show -p ExecStart '$SERVICE' | grep -qF '$REMOTE_BIN '"; then
@@ -245,7 +277,7 @@ elif ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
     echo "      AmbientCapabilities=CAP_NET_BIND_SERVICE"                           >&2
     echo "    then: sudo systemctl daemon-reload && sudo systemctl restart $SERVICE" >&2
 else
-    echo "==> Server binary changed — restarting $SERVICE"
+    echo "==> Restarting $SERVICE ($BIN_CHANGES)"
     # -t: allocate a remote TTY so 'sudo' can prompt for a password if this user
     # doesn't have passwordless sudo for the unit. To skip the prompt entirely,
     # on the VPS: echo "$REMOTE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart $SERVICE, /usr/bin/systemctl status $SERVICE" | sudo tee /etc/sudoers.d/nayive

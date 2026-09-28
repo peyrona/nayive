@@ -135,6 +135,9 @@ func main() {
 	if removed := server.tree.SweepStaleTemp(); removed > 0 {
 		fmt.Printf("[i] removed %d stale temp file(s)\n", removed)
 	}
+	if removed := SweepOfficeTemp(); removed > 0 {
+		fmt.Printf("[i] removed %d stale LibreOffice folder(s)\n", removed)
+	}
 
 	// The only visible sign that a restart signed nobody out (sessions.go).
 	fmt.Printf("[i] %d session(s) kept from the last run\n", server.sessions.Count())

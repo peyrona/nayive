@@ -643,19 +643,9 @@ button.who { cursor: pointer; }
 .info-wall  { flex: 1 1 auto; overflow-y: auto; background: color-mix(in srgb, var(--text) 5%, var(--head)); }
 .info-top   { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 16px 14px; background: var(--head); text-align: center; }
 .info-top b     { font-size: 1.3rem; }
-/* Options (owner): the circle and the name are the buttons that change them.
-   The same circle sits on top of the "Your name" dialog (.me-photo). */
-.face { position: relative; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
-.face .cam
-{
-    position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--on-accent); background: var(--accent); border: 2px solid var(--head);
-}
-.face .cam svg { width: 15px; height: 15px; }
-.face:hover .av { filter: brightness(0.95); }
-.me-photo       { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 14px; }
-.me-photo .face .cam { border-color: var(--card); }
+/* Options (owner): the circle (.face, app.css) and the name are the buttons
+   that change them. The same circle sits on top of the "Your name" dialog
+   (.face-pick, app.css). */
 .info-top .name-btn
 {
     padding: 2px 8px; border: none; border-radius: var(--radius-s); background: none;
@@ -866,16 +856,71 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen.video.live.peer-cam-off .call-remote { opacity: 0; }
 .call-screen.video.live:not(.peer-cam-off) .call-top .av { display: none; }
 .call-screen.video.live:not(.peer-cam-off) .call-top { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
-.call-screen .call-self
+/* My picture: a box in one corner (.at-tl / tr / bl / br), clear of the name
+   at the top and the buttons at the bottom. */
+.call-screen .call-pip
 {
-    position: absolute; z-index: 3; right: 14px; bottom: calc(110px + env(safe-area-inset-bottom));
-    width: 28vw; max-width: 170px; aspect-ratio: 3 / 4; object-fit: cover;
+    position: absolute; z-index: 3;
+    width: 28vw; max-width: 170px; aspect-ratio: 3 / 4;
     border-radius: var(--radius-m); background: #000; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
 }
+.call-screen .call-pip[hidden] { display: none; }
+.call-screen .call-pip.at-tl { left: 14px;  top: calc(14px + env(safe-area-inset-top)); }
+.call-screen .call-pip.at-tr { right: 14px; top: calc(14px + env(safe-area-inset-top)); }
+.call-screen .call-pip.at-bl { left: 14px;  bottom: calc(110px + env(safe-area-inset-bottom)); }
+.call-screen .call-pip.at-br { right: 14px; bottom: calc(110px + env(safe-area-inset-bottom)); }
+.call-screen .call-self { display: block; width: 100%; height: 100%; object-fit: cover; }
 .call-screen .call-self.mirror { transform: scaleX(-1); }
-.call-screen.video:not(.live) .call-self
+
+/* A triangle in each corner of the box moves it to that corner. 44px to
+   the finger, a 24px triangle to the eye (16px with a mouse). */
+.call-screen .call-corner
+{
+    position: absolute; width: 44px; height: 44px; padding: 0; border: none;
+    background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.call-screen .call-corner::before
+{
+    content: ""; position: absolute; width: 24px; height: 24px;
+    background: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+}
+.call-screen .call-corner.tl { left: 0;  top: 0; }
+.call-screen .call-corner.tr { right: 0; top: 0; }
+.call-screen .call-corner.bl { left: 0;  bottom: 0; }
+.call-screen .call-corner.br { right: 0; bottom: 0; }
+/* 6px in: the box's round corner would cut the tip. */
+.call-screen .call-corner.tl::before { left: 6px;  top: 6px;    clip-path: polygon(0 0, 100% 0, 0 100%); }
+.call-screen .call-corner.tr::before { right: 6px; top: 6px;    clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.call-screen .call-corner.bl::before { left: 6px;  bottom: 6px; clip-path: polygon(0 0, 100% 100%, 0 100%); }
+.call-screen .call-corner.br::before { right: 6px; bottom: 6px; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.call-screen .call-corner:hover::before,
+.call-screen .call-corner:focus-visible::before { background: #fff; }
+@media (pointer: fine)
+{
+    .call-screen .call-corner         { width: 32px; height: 32px; }
+    .call-screen .call-corner::before { width: 16px; height: 16px; }
+}
+/* The corner it is in has nothing to do. */
+.call-screen .call-pip.at-tl .call-corner.tl,
+.call-screen .call-pip.at-tr .call-corner.tr,
+.call-screen .call-pip.at-bl .call-corner.bl,
+.call-screen .call-pip.at-br .call-corner.br { display: none; }
+
+.call-screen.video:not(.live) .call-pip
 {
     /* Before it connects: my own camera fills the screen, as on a phone. */
-    inset: 0; right: 0; bottom: 0; width: 100%; max-width: none; height: 100%; aspect-ratio: auto;
-    border-radius: 0; z-index: 0; opacity: 0.55;
+    inset: 0; width: 100%; max-width: none; height: 100%; aspect-ratio: auto;
+    border-radius: 0; box-shadow: none; z-index: 0; opacity: 0.55;
 }
+.call-screen.video:not(.live) .call-corner { display: none; }
+
+/* "New chat": a Nayive user's row has two targets - the circle (my picture
+   for that account) and the rest (open the chat). */
+.row.split          { cursor: default; }
+.row.split > .body  { align-self: stretch; display: flex; flex-direction: column; justify-content: center;
+                      padding: 0; border: none; background: none;
+                      color: inherit; font: inherit; text-align: left; cursor: pointer; }
+/* "New person": the address book's cards under the form. */
+.pane .book-lbl     { padding: 18px 0 4px; }
+.pane .book-rows    { overflow: visible; margin: 0 -16px; }

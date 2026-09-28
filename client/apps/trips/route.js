@@ -17,11 +17,12 @@ function ensureRouteCoords( trip )
     trip.stages.forEach( function( st )
     {
         if( st.lat === undefined && st.location.trim() )
-            geocodeInto( trip.id, 'stage', st.id, st.location );
+            geocodeInto( trip.id, 'stage', st.id, st.location, st.startDate );
     });
 }
 
-async function geocodeInto( tripId, sKind, id, sQuery )
+// sDate: a stage's start date, so its weather comes in the same call (location.js).
+async function geocodeInto( tripId, sKind, id, sQuery, sDate )
 {
     const key = tripId + ':' + sKind + ':' + id;
 
@@ -29,7 +30,7 @@ async function geocodeInto( tripId, sKind, id, sQuery )
         return;
 
     pendingGeocodes.add( key );
-    const result = await geocodeLocation( sQuery );
+    const result = await geocodeLocation( sQuery, sDate );
     pendingGeocodes.delete( key );
 
     if( selectedTripId !== tripId )
@@ -121,13 +122,13 @@ function renderMapSheet()
 }
 
 // "My location" (list header): what places you on the Journey maps - the
-// location URL, drawn and kept by NayiveUI.locationSection (shared/ui.js).
+// location URL, drawn and kept by locationSection (my-location.js).
 function openMyLocation()
 {
     const sheet = document.getElementById( 'locSheet' );
     sheet.innerHTML = '';
     buildSheetHeader( T( 'trips.myLocation' ), 'locSheetBackdrop', sheet );
-    sheet.insertBefore( NayiveUI.locationSection(), sheet.querySelector( '.sheet-actions' ) );
+    sheet.insertBefore( locationSection(), sheet.querySelector( '.sheet-actions' ) );
     openSheet( 'locSheetBackdrop' );
 }
 

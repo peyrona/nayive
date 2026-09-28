@@ -31,6 +31,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
@@ -257,6 +258,11 @@
     <div id="app" class="app" style="display: none;">
 
         <header class="topbar">
+            <!-- Inside a game: the way back to the nine cards, before the app icon
+                 (as in Trips, Split and eMail). paint() shows it. -->
+            <button id="gamesBack" class="icon-btn" type="button" hidden data-i18n-attr="title:games.backToGames, aria-label:games.backToGames">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59c-.08.67-.7 5.87-.7 7.41a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.41.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.54-.62-6.74-.7-7.41A4 4 0 0 0 17.32 5z"></path></svg>
             <h1 id="appTitle">Games</h1>
 
@@ -397,6 +403,7 @@
             // launcher link is on the h1 itself and steps aside for any button
             // inside the header, so the two never fight over the same click.
             titleEl.classList.toggle( 'has-game', game );
+            document.getElementById( 'gamesBack' ).hidden = ! game;
             if( game )
             {
                 titleEl.innerHTML = '';
@@ -610,7 +617,7 @@
             var live    = false;                   // is this the pane on screen?
             var held    = '';                      // the state a pause interrupted
             var runs    = o.runs  || [ 'playing' ];
-            var flush   = o.flush || noop;         // Invaders writes its record as it goes
+            var flush   = o.flush || noop;         // puts the record up at a pause (each game's own)
             var palette = o.palette || noop;
             var fit     = o.fit     || noop;
             var els     = o.els;
@@ -715,6 +722,7 @@
             {
                 live = false;
                 pause();
+                loop.halt();                   // pause() skips "over", whose dust would still settle behind the Games screen
                 o.clearKeys();
                 flush();
 
@@ -1310,14 +1318,31 @@
             add: function ( name, mod ) { MODS[ name ] = mod; }
         };
 
+        // One game that does not load (a 404, a cut connection) is null here,
+        // and only its own card goes - the other eight still open.
         var fetched = Promise.all( FILES.map( function ( name )
         {
             return fetch( name + '.html' ).then( function ( r )
             {
                 if( ! r.ok ) throw new Error( name + '.html: HTTP ' + r.status );
                 return r.text();
-            } );
+            } ).catch( function ( e ) { console.error( e ); return null; } );
         } ) );
+
+        // What stands in for a game whose file failed: start() and loadData()
+        // then run exactly as they do with all nine, and nobody can reach it
+        // because its card is gone.
+        function missingGame( name )
+        {
+            var tile = document.querySelector( '.game-tile[data-game="' + name + '"]' );
+
+            if( tile ) tile.remove();        // removed, not hidden: the help lists the cards it finds
+            MODS[ name ] = {
+                init:       function () { return {}; },
+                adoptBest:  function ( n ) { return n; },
+                adoptTimes: function () { return {}; }
+            };
+        }
 
         // The style goes into <head>, after this file's own; the pane into
         // #gameHost; and the script is made again, because a parsed script
@@ -1406,8 +1431,13 @@
             // alone and stay unloaded - writing now is exactly what would
             // overwrite the real file with an empty one.
 
-            // Both directions at once: a record set on another device is
-            // adopted, and one set here since the last read is written back.
+            adoptAll();
+        }
+
+        // Both directions at once: a record set on another device is
+        // adopted, and one set here since the last read is written back.
+        function adoptAll()
+        {
             saveBest( 'g2048',    G2048.adoptBest(    Number( data.best.g2048    ) || 0 ) );
             saveBest( 'invaders', Invaders.adoptBest( Number( data.best.invaders ) || 0 ) );
             saveBest( 'asteroids', Asteroids.adoptBest( Number( data.best.asteroids ) || 0 ) );
@@ -1421,6 +1451,36 @@
 
             var solTimes = Solitaire.adoptTimes( data.times );
             Object.keys( solTimes ).forEach( function ( k ) { saveTime( k, solTimes[ k ] ); } );
+        }
+
+        // Two devices saved from the same copy (shared/store.js MERGE): each
+        // record keeps the better of the two - the higher score, the shorter
+        // time - and any other key takes the side that changed it. null = a
+        // side that is not an object: nothing is merged over it.
+        function mergeGames( path, base, mine, theirs )
+        {
+            var parse = function ( t )
+            {
+                try { var v = JSON.parse( t ); return ( v && typeof v === 'object' && ! Array.isArray( v ) ) ? v : null; }
+                catch ( e ) { return null; }
+            };
+            var m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
+            if( ! m || ! t ) return null;
+
+            var pickEach = function ( x, y, better )
+            {
+                var out = Object.assign( {}, y || {}, x || {} );
+                Object.keys( y || {} ).forEach( function ( k )
+                {
+                    var a = Number( ( x || {} )[ k ] ), c = Number( y[ k ] );
+                    if( ! isFinite( a ) || ( isFinite( c ) && better( c, a ) ) ) out[ k ] = y[ k ];
+                } );
+                return out;
+            };
+            var merged = NayiveStore.mergeFields( b, m, t );
+            merged.best  = pickEach( m.best,  t.best,  function ( c, a ) { return c > a; } );
+            merged.times = pickEach( m.times, t.times, function ( c, a ) { return c < a; } );
+            return JSON.stringify( merged, null, 2 );
         }
 
         // Writes the local copy now and queues the upload; the store flushes it
@@ -1497,6 +1557,7 @@
             }
 
             soundBtn.addEventListener( 'click', function () { Sfx.set( ! Sfx.isOn() ); paintSound(); } );
+            document.getElementById( 'gamesBack' ).addEventListener( 'click', goHome );
             paintSound();
 
             document.addEventListener( 'keydown', function ( e )
@@ -1549,7 +1610,19 @@
 
         Promise.all( [ NayiveI18n.ready, fetched ] ).then( function ( got )
         {
-            FILES.forEach( function ( name, i ) { mount( name, got[ 1 ][ i ] ); } );
+            FILES.forEach( function ( name, i )
+            {
+                try
+                {
+                    if( got[ 1 ][ i ] === null ) throw new Error( name + '.html did not load' );
+                    mount( name, got[ 1 ][ i ] );
+                }
+                catch ( e )
+                {
+                    console.error( e );
+                    missingGame( name );
+                }
+            } );
 
             G2048     = MODS.g2048;
             Mines     = MODS.mines;
@@ -1561,7 +1634,19 @@
             Solitaire = MODS.solitaire;
             Checkers  = MODS.checkers;
 
-            store = NayiveStore.createStore( { apiBase: GumApi.API_FILES } );
+            store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true, merge: mergeGames } );
+
+            // Another device's records merged in: this file from now on, and
+            // each game adopts its new best.
+            store.onMerged( function ( path, body )
+            {
+                if( path !== FILE ) return;
+                try { data = JSON.parse( body ); } catch ( e ) { return; }
+                if( ! data.best  || typeof data.best  !== 'object' ) data.best  = {};
+                if( ! data.times || typeof data.times !== 'object' ) data.times = {};
+                loaded = true;
+                adoptAll();
+            } );
 
             start();
 
@@ -1580,7 +1665,7 @@
             // nothing cached; otherwise it opens on the local cache and the
             // store syncs once the connection is back.
             NayiveUI.bootWithStore( store, loadData );
-        } );
+        } ).catch( function ( e ) { console.error( e ); } );
     } )();
     </script>
 

@@ -477,6 +477,7 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})
+	traced(h, "call-push", len(jobs)) // tests only (chat.go testHook)
 	if len(jobs) > 0 {
 		go h.sendCallPushes(jobs)
 	}

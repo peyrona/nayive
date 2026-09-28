@@ -45,6 +45,10 @@ package main
 //	PUT    contacts/<id>/photo | groups/<id>/photo   the raw JPEG of their picture
 //	DELETE contacts/<id>/photo | groups/<id>/photo
 //	PUT    me/photo | DELETE me/photo       the owner's own picture (avatar "o")
+//	PUT    users/<account>/photo | DELETE   the owner's picture for another Nayive account
+//	                                        (avatar "u-<account>", the owner's eyes only)
+//	PUT    cards/photo?uid=<UID>            the raw JPEG/PNG: that card's PHOTO in the
+//	                                        Contacts app's data/contacts.vcf
 //	PUT    autodelete                       {"days"}: delete messages older than that (0 = never)
 //	POST   conv/<c>/messages/<id>/keep      {"dir"}: move that photo into the owner's
 //	                                        files/<dir> and show it from there -> {"path"}
@@ -67,6 +71,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"html"
 	"io"
 	"math"
@@ -279,8 +284,13 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 	case len(rest) == 2 && rest[0] == "me" && rest[1] == "photo":
 		s.chatPhoto(w, r, "me", "o", resolve, ownerOnly)
 
-	case len(rest) == 3 && (rest[0] == "contacts" || rest[0] == "groups") && rest[2] == "photo":
+	case len(rest) == 3 && (rest[0] == "contacts" || rest[0] == "groups" || rest[0] == "users") && rest[2] == "photo":
 		s.chatPhoto(w, r, rest[0], rest[1], resolve, ownerOnly)
+
+	case len(rest) == 2 && rest[0] == "cards" && rest[1] == "photo":
+		if method(http.MethodPut) {
+			s.chatCardPhoto(w, r, resolve, ownerOnly)
+		}
 
 	case len(rest) == 2 && rest[0] == "avatar":
 		if method(http.MethodGet) {
@@ -337,6 +347,7 @@ type chatContactOut struct {
 	Name    string   `json:"name"`
 	Token   string   `json:"token"`
 	User    string   `json:"user,omitempty"` // a Nayive account (no link)
+	Card    string   `json:"card,omitempty"` // the Contacts app's card (UID) they came from
 	Created int64    `json:"created"`
 	Opened  int64    `json:"opened,omitempty"`
 	Push    bool     `json:"push"`
@@ -481,6 +492,12 @@ func (h *ChatHub) unreadIn(o *chatOwner, pid string) int {
 
 // chatWait is the long-poll. It does not hold the lock while it waits.
 func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (chatActor, bool)) {
+	// At most waitCapMax at once per link or session (waitcap.go).
+	key := chatWaitKey(r)
+	if !takeWait(w, r, key) {
+		return
+	}
+	defer waits.release(key)
 	h := s.chat
 	v, _ := strconv.ParseInt(queryValue(r, "v"), 10, 64)
 	// The page's device id and the last call signal it read (chat_call.go).
@@ -638,7 +655,7 @@ func (s *Server) chatPush(w http.ResponseWriter, r *http.Request, resolve func(f
 // -----------------------------------------------------------------------------
 
 func (h *ChatHub) contactOut(o *chatOwner, c *ChatContact) chatContactOut {
-	out := chatContactOut{ID: c.ID, Name: c.Name, Token: c.Token, User: c.User, Created: c.Created,
+	out := chatContactOut{ID: c.ID, Name: c.Name, Token: c.Token, User: c.User, Card: c.Card, Created: c.Created,
 		Opened: c.Opened, Push: len(c.Subs) > 0, Groups: []string{}}
 	if c.User != "" {
 		out.Push = len(h.users.UserPush(c.User).Subs) > 0
@@ -658,6 +675,7 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 	var body struct {
 		Name string `json:"name"`
 		User string `json:"user"`
+		Card string `json:"card"` // POST: the Contacts app's card they are picked from
 	}
 	if r.Method == http.MethodPost && len(rest) == 0 || r.Method == http.MethodPatch {
 		if err := readJSON(w, r, &body); err != nil {
@@ -680,7 +698,8 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 				return
 			}
 			h.ensureIndex()
-			c := &ChatContact{ID: newChatID(), Name: name, Token: newToken(), Created: time.Now().Unix()}
+			c := &ChatContact{ID: newChatID(), Name: name, Token: newToken(), Card: cleanCardUID(body.Card),
+				Created: time.Now().Unix()}
 			a.o.data.Contacts = append(a.o.data.Contacts, c)
 			if err := h.saveData(a.o); err != nil {
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
@@ -903,6 +922,15 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 	resolve func(func(chatActor)), ownerOnly func(chatActor) bool) {
 
 	h := s.chat
+	// A Nayive account's picture: the owner's own, avatars/u-<account>.jpg.
+	file := id
+	if kind == "users" {
+		if !ValidUsername(id) || !contains(h.users.ListUserNames(), id) {
+			sendError(w, r, http.StatusNotFound, "no existe ese usuario")
+			return
+		}
+		file = faceKey(id)
+	}
 	var clean string
 	if r.Method == http.MethodPut {
 		if r.ContentLength <= 0 || r.ContentLength > chatMaxPhoto {
@@ -949,7 +977,13 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 			return
 		}
 		var photo *int64
+		var face int64 // kind "users": the map's value, put back below
 		switch kind {
+		case "users":
+			if id != a.o.user {
+				face = a.o.data.Faces[id]
+				photo = &face
+			}
 		case "me":
 			photo = &a.o.data.Me.Photo
 		case "contacts":
@@ -965,7 +999,7 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 			sendError(w, r, http.StatusNotFound, "no existe")
 			return
 		}
-		path := filepath.Join(a.o.dir, "avatars", id+".jpg")
+		path := filepath.Join(a.o.dir, "avatars", file+".jpg")
 		if clean != "" {
 			if err := os.Rename(clean, path); err != nil {
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
@@ -976,10 +1010,72 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 			os.Remove(path)
 			*photo = 0
 		}
+		if kind == "users" {
+			if face > 0 {
+				if a.o.data.Faces == nil {
+					a.o.data.Faces = map[string]int64{}
+				}
+				a.o.data.Faces[id] = face
+			} else {
+				delete(a.o.data.Faces, id)
+			}
+		}
 		h.saveData(a.o)
 		a.o.changed(true)
 		sendJSON(w, r, http.StatusOK, map[string]int64{"photo": *photo})
 	})
+}
+
+// cleanCardUID is a vCard UID as Chat keeps it: trimmed, one line, not huge.
+func cleanCardUID(uid string) string {
+	uid = strings.TrimSpace(uid)
+	if len(uid) > 200 || strings.ContainsAny(uid, "\r\n") {
+		return ""
+	}
+	return uid
+}
+
+// chatCardPhoto makes the raw JPEG or PNG in the body the PHOTO of one card
+// of the owner's address book (the Contacts app): a picture chosen in Chat
+// for a person picked from there is that card's too (setCardPhoto).
+func (s *Server) chatCardPhoto(w http.ResponseWriter, r *http.Request,
+	resolve func(func(chatActor)), ownerOnly func(chatActor) bool) {
+
+	uid := cleanCardUID(r.URL.Query().Get("uid"))
+	if uid == "" {
+		sendError(w, r, http.StatusBadRequest, "falta la tarjeta")
+		return
+	}
+	if r.ContentLength <= 0 || r.ContentLength > cardPhotoMax {
+		sendError(w, r, http.StatusRequestEntityTooLarge, "foto no válida")
+		return
+	}
+	img, err := io.ReadAll(http.MaxBytesReader(w, r.Body, r.ContentLength))
+	if err != nil || int64(len(img)) != r.ContentLength {
+		sendError(w, r, http.StatusBadRequest, "el envío llegó cortado")
+		return
+	}
+	if imageKind(img) == "" {
+		sendError(w, r, http.StatusBadRequest, "no es una foto JPEG o PNG")
+		return
+	}
+	user := ""
+	resolve(func(a chatActor) {
+		if ownerOnly(a) {
+			user = a.o.user
+		}
+	})
+	if user == "" {
+		return
+	}
+	switch err := setCardPhoto(filepath.Join(s.cfg.HomesDir, user, "data", "contacts.vcf"), uid, img); {
+	case errors.Is(err, errCardNotFound):
+		sendError(w, r, http.StatusNotFound, "no existe esa tarjeta")
+	case err != nil:
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+	default:
+		sendJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
+	}
 }
 
 // chatAvatar sends a person's or group's picture to whoever may see it.
@@ -1799,13 +1895,15 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 			sendError(w, r, http.StatusTooManyRequests, "demasiados envíos seguidos")
 			return
 		}
-		if q := h.users.UserQuotaBytes(a.o.user); q != nil && h.users.UserUsageBytes(a.o.user)+size > *q {
-			sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
-			return
-		}
 		mediaDir, owner, allowed = filepath.Join(c.dir, "media"), a.o.user, true
 	})
 	if !allowed {
+		return
+	}
+	// The quota OUTSIDE the lock: past its cache, the usage figure is a walk of
+	// the whole home, and every chat would wait on it (S2-#17).
+	if q := h.users.UserQuotaBytes(owner); q != nil && h.users.UserUsageBytes(owner)+size > *q {
+		sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
 		return
 	}
 	if err := os.MkdirAll(mediaDir, 0o755); err != nil {

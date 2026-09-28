@@ -26,7 +26,7 @@ async function openFilePicker( onPick )
     }
     catch( err )
     {
-        filePickerFilesNode = String( err && err.message ).indexOf( 'HTTP 404' ) !== -1
+        filePickerFilesNode = err && err.status === 404
                             ? { path: 'files', nodes: [] } : undefined;
     }
 

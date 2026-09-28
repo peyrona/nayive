@@ -6,7 +6,8 @@
      launcher (../index.html, framed); then one button per open window, in the order
      they were opened, named after the document it shows; on its right a clock
      ("<weekday> <hh:mm>" by default) - a press on it opens a countdown, whose
-     time left then sits on the bar just before the clock. The desktop's settings - per device: how it
+     time left then sits on the bar just before the clock; after the clock a "?" opens
+     the desktop's help card. The desktop's settings - per device: how it
      starts, the bar and its font, the clock - open from two places only:
      the round button in the menu's bottom-left corner, and a right-click on an
      empty spot of the desk (not the bar).
@@ -23,7 +24,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script>if( window.matchMedia( '(max-width: 640px)' ).matches ) location.replace( '../index.html' );</script>
+    <!-- No password yet (a remembered session, a new tab: login.html never ran):
+         every app window would get 403, so go to the launcher, which asks for one. -->
+    <script>
+        fetch( '/api/whoami', { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
+            .then( function ( r ) { return r.ok ? r.json() : null; } )
+            .then( function ( me )
+            {
+                if( ! me || ! me.must_set_password ) return;
+                try { sessionStorage.setItem( 'nayive-must-set', '1' ); } catch ( e ) {}
+                location.replace( '../index.html' );
+            } )
+            .catch( function () {} );
+    </script>
     <script src="../shared/i18n.js"></script>
+    <script src="tiling.js"></script>
     <title>Nayive</title>
     <link rel="icon" type="image/png" href="../icons/icon-192.png">
 
@@ -32,6 +47,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
     <script>
         if( 'serviceWorker' in navigator )
@@ -64,12 +80,14 @@
             --desk-edge:   color-mix(in srgb, var(--line) 64%, var(--bg));
             --desk-focus:  color-mix(in srgb, var(--line) 52%, var(--accent));
             --desk-shadow: rgba(0, 0, 0, 0.55);
+            --win-scale:   #1E90FF;     /* the Scale / Resize button (DodgerBlue); the other window buttons use --warn / --ok / --danger */
         }
         :root[data-theme="light"] .desktop
         {
             --desk-bg:     color-mix(in oklab, var(--bg) 76%, var(--line));
             --desk-bar:    color-mix(in oklab, var(--desk-bg) 76%, var(--line));
             --desk-shadow: color-mix(in srgb, var(--line) 38%, transparent);
+            --win-scale:   #1873CC;     /* DodgerBlue, one step darker for a light bar */
         }
 
         /* THE DESK - where the windows live. The Nayive logo sits engraved in
@@ -103,6 +121,8 @@
         .desk.busy iframe { pointer-events: none; }
         .desk.busy-frame .win:not(.dragging) iframe { pointer-events: none; }
         body.busy         { user-select: none; }
+        /* A press on a title bar shows the grabbing hand until let go (grabCursor). */
+        html.win-grab, html.win-grab * { cursor: grabbing !important; }
 
         /* Where a dragged window will land when let go at an edge. */
         .snap-ghost
@@ -120,10 +140,11 @@
             min-width: 320px; min-height: 200px;
             border: 2px solid var(--desk-edge); border-radius: var(--radius-m);
             background: var(--card); box-shadow: 0 12px 32px var(--desk-shadow);
+            transform-origin: 0 0;      /* Scale (see SCALE): a shrunk window is drawn from its top-left corner */
         }
         .win.focused { border-color: var(--desk-focus); box-shadow: 0 20px 52px var(--desk-shadow); }
         .win.max { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important;
-                   border-radius: 0; border-width: 0; box-shadow: none; }
+                   border-radius: 0; border-width: 0; box-shadow: none; transform: none !important; }   /* maximised: always 1:1 */
 
         .win-bar
         {
@@ -138,9 +159,6 @@
             font-size: 0.9rem; font-weight: 600; color: var(--text-dim);
         }
         .win.focused .win-title { color: var(--text); }
-        /* A window behind the others greys its dots - as html.is-window-back does
-           for the dots inside an app's own row (shared/app.css, WINDOWED). */
-        .win:not(.focused) .win-bar .win-dots:not(:hover) button { background: var(--line); }
         .win-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg);
                      border-radius: 0 0 var(--radius-m) var(--radius-m); }
         .win.max .win-frame { border-radius: 0; }
@@ -150,17 +168,20 @@
         .win.chromeless .win-frame { border-radius: var(--radius-m); }
         .win.chromeless.max .win-frame { border-radius: 0; }
 
-        /* Resize grips: four edges + four corners, invisible, just past the border. */
+        /* Resize grips: four edges + four corners, invisible, just past the border.
+           Sized in --win-px, one SCREEN pixel: a window shrunk by Scale keeps
+           full-size grips, so even a tiny one can always be pulled bigger again. */
+        .win  { --win-px: calc(1px / var(--win-s, 1)); }
         .grip { position: absolute; z-index: 2; }
-        .grip.n, .grip.s { left: 8px; right: 8px; height: 8px; cursor: ns-resize; }
-        .grip.e, .grip.w { top: 8px; bottom: 8px; width: 8px; cursor: ew-resize; }
-        .grip.n { top: -4px; }    .grip.s { bottom: -4px; }
-        .grip.e { right: -4px; }  .grip.w { left: -4px; }
-        .grip.ne, .grip.nw, .grip.se, .grip.sw { width: 14px; height: 14px; }
-        .grip.nw { left: -4px;  top: -4px;    cursor: nwse-resize; }
-        .grip.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
-        .grip.ne { right: -4px; top: -4px;    cursor: nesw-resize; }
-        .grip.sw { left: -4px;  bottom: -4px; cursor: nesw-resize; }
+        .grip.n, .grip.s { left: calc(8 * var(--win-px)); right: calc(8 * var(--win-px)); height: calc(8 * var(--win-px)); cursor: ns-resize; }
+        .grip.e, .grip.w { top: calc(8 * var(--win-px)); bottom: calc(8 * var(--win-px)); width: calc(8 * var(--win-px)); cursor: ew-resize; }
+        .grip.n { top: calc(-4 * var(--win-px)); }    .grip.s { bottom: calc(-4 * var(--win-px)); }
+        .grip.e { right: calc(-4 * var(--win-px)); }  .grip.w { left: calc(-4 * var(--win-px)); }
+        .grip.ne, .grip.nw, .grip.se, .grip.sw { width: calc(14 * var(--win-px)); height: calc(14 * var(--win-px)); }
+        .grip.nw { left: calc(-4 * var(--win-px));  top: calc(-4 * var(--win-px));    cursor: nwse-resize; }
+        .grip.se { right: calc(-4 * var(--win-px)); bottom: calc(-4 * var(--win-px)); cursor: nwse-resize; }
+        .grip.ne { right: calc(-4 * var(--win-px)); top: calc(-4 * var(--win-px));    cursor: nesw-resize; }
+        .grip.sw { left: calc(-4 * var(--win-px));  bottom: calc(-4 * var(--win-px)); cursor: nesw-resize; }
         .win.max .grip { display: none; }
 
         /* THE BAR - its height and font come from the settings. */
@@ -171,8 +192,22 @@
             border-top: 1px solid var(--desk-edge); background: var(--desk-bar);
             font-family: var(--bar-font, var(--font-sans));
         }
-        .bar button { font-family: inherit; position: relative; }   /* position: holds the Chat dot */
-        .bar .chat-dot { top: 3px; right: 3px; }
+        .bar button { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
+        /* Unread Chat (red) and eMail (blue), see CHAT and EMAIL below. On the
+           menu button: a plain dot, Chat top-right, eMail top-left. On the app's
+           own bar button: a disc with the count on the app icon, so it never
+           takes room from the name or covers the close (x). */
+        .bar .chat-dot           { top: 3px; right: 3px; width: 8px; height: 8px; box-shadow: 0 0 0 1.5px var(--bg); }
+        .bar .chat-dot.mail-dot  { right: auto; left: 3px; background: var(--busy); }
+        .bar .chat-dot.has-count
+        {
+            top: 0; right: 0; left: auto;
+            width: auto; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; line-height: 1; color: #fff;
+        }
+        .bar .task > .chat-dot.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon, clear of the name */
+        .bar .chat-dot[hidden]   { display: none; }   /* .has-count's flex would beat app.css's */
 
         /* The menu button carries the Nayive logo, sized to the bar. */
         #menuBtn       { width: calc(var(--bar-h) - 8px); height: calc(var(--bar-h) - 8px); }
@@ -191,11 +226,51 @@
         .task.front { color: var(--text); border-color: var(--accent);
                       background: color-mix(in srgb, var(--accent) 12%, transparent); }
         .task.min   { opacity: 0.6; }
-        /* The window's close (x) at the button's right end: a small .icon-btn, sized to the bar. */
-        .task          { padding-right: 3px; }
-        .task > .task-x, #cdChip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
-        .task > .task-x svg, #cdChip > .task-x svg { width: 12px; height: 12px; color: inherit; }
-        .task > .task-x:hover, #cdChip > .task-x:hover { color: var(--text); }
+        /* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - at the
+           right end of the bar button of the window IN FRONT only (the others show
+           just their icon and name): small .icon-btn's sized to the bar, each in the
+           colour the old title-bar dots had, Scale / Resize in blue (--win-scale). */
+        .task           { padding-right: 3px; }
+        /* The one in front keeps the others' size (190px) while its name, 1rem and
+           its buttons fit in it - the buttons then at its right end. A longer name
+           widens it, 1rem always between name and buttons, up to 300px; past that
+           the name is cut (...). */
+        .task.front     { flex: 0 1 auto; min-width: 190px; max-width: 300px; }
+        .task.front > span:first-of-type { margin-right: calc(1rem - 6px); }   /* + .text-btn's 6px gap = 1rem */
+        .task > .task-ctl { display: flex; flex: 0 0 auto; margin-left: auto; overflow: visible; }
+        .task:not(.front) > .task-ctl { display: none; }
+        .task-ctl > .task-x, #cdChip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
+        .task-ctl > .task-x   { margin-left: 0; }
+        .task-ctl > .task-x svg { width: 14px; height: 14px; color: inherit; }
+        .task-ctl > [data-win="scale"] { color: var(--win-scale); }
+        .task-ctl > [data-win="min"]   { color: var(--warn); }
+        .task-ctl > [data-win="max"]   { color: var(--ok); }
+        .task-ctl > [data-win="close"] { color: var(--danger); }
+        #cdChip > .task-x svg   { width: 12px; height: 12px; color: inherit; }
+        #cdChip > .task-x:hover { color: var(--text); }
+
+        /* The "⋮" sits closer to its neighbours: half the room a plain .icon-btn
+           leaves on each side (his call for the "?" it replaced, 2026-09-28).
+           Margins only - the button is the shared .icon-btn. Its right side counts
+           the sync dot when it shows, the bar's end when it does not. */
+        #moreBtn { margin: 0 -8px 0 -13px; }
+        #moreBtn:has(+ #syncIndicator:not([hidden])) { margin-right: -10px; }
+        #moreBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 14%, transparent); }
+        /* Its menu: the shared .top-menu, above the windows; the Free/Tile switch
+           is a row of it, as tall as a .menu-item. */
+        #moreMenu { z-index: 100000; }
+        #moreMenu .tile-sw { padding: 8px 12px; }
+
+        /* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile" - the shared .switch
+           between two words. A word picks its side, the switch flips; the side in
+           force reads bold; the word Tile while tiled tiles again. Greyed while
+           there is no window on the desk. */
+        .tile-sw      { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 4px; }
+        .tile-word    { font-size: 0.85rem; font-weight: 500; color: var(--text-dim); cursor: pointer; user-select: none; white-space: nowrap; }
+        .tile-sw:not(.on) .tile-word[data-tile="off"],
+        .tile-sw.on .tile-word[data-tile="on"] { color: var(--text); font-weight: 600; }
+        .tile-sw.idle { opacity: 0.5; }
+        .tile-sw.idle .tile-word { cursor: default; }
 
         /* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
            .text-btn.ghost with no border: a press opens the countdown dialog. */
@@ -288,11 +363,29 @@
             <div class="tasks" id="tasks"></div>
             <button id="cdChip" class="text-btn ghost" type="button" hidden><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button>
             <button id="clock" class="text-btn ghost" type="button"><span></span><b></b></button>
+            <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
+                 bar (Free/Tile, the "?") and what has no room there (Lock now).
+                 More rows will come; see MORE below. -->
+            <button id="moreBtn" class="icon-btn" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
             <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
             <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="title:ui.synced"></button>
         </div>
 
         <div class="menu" id="menu" hidden></div>
+
+        <div class="top-menu" id="moreMenu" role="menu" hidden>
+            <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile.
+                 Not a button, so flipping it leaves the menu open. -->
+            <div class="tile-sw" id="tileSw" data-i18n-attr="title:desktop.tileTip">
+                <span class="tile-word" data-tile="off" data-i18n="desktop.tileFree"></span>
+                <label class="switch sm"><input type="checkbox" id="tileChk" data-i18n-attr="aria-label:desktop.tileTip"><span class="track"></span></label>
+                <span class="tile-word" data-tile="on" data-i18n="desktop.tileOn"></span>
+            </div>
+            <div class="menu-sep"></div>
+            <button class="menu-item" id="lockNowBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span data-i18n="desktop.lockNow"></span></button>
+            <!-- HELP - the shared help card (NayiveUI.firstRun, see HELP below). -->
+            <button class="menu-item" id="helpBtn" data-intro-open type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span data-i18n="ui.help"></span></button>
+        </div>
 
         <!-- WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER). -->
         <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
@@ -423,7 +516,9 @@
     Object.assign( set, store( SET_KEY ) || {} );
     // Until 2026-09-26 the desktop had its own colour schemes; they now follow the account's.
     delete set.scheme; delete set.active; delete set.schemes;
-    function saveSet() { store( SET_KEY, set ); }
+    // `scaleNew` (new windows start with Scale on) is set by the launcher's My
+    // account, in the menu's frame: read fresh, never written back from here.
+    function saveSet() { set.scaleNew = !! ( store( SET_KEY ) || {} ).scaleNew; store( SET_KEY, set ); }
 
     var FONTS = {
         system:  '',
@@ -481,6 +576,10 @@
     var zTop  = 10;
     var front = null;
 
+    // The smallest a window gets (.win's min-width / min-height too). With Scale
+    // on there is no smallest: it shrinks what it shows instead (see SCALE).
+    var MIN_W = 320, MIN_H = 200;
+
     function deskRect() { return { w: desk.clientWidth, h: desk.clientHeight }; }
 
     // opts.fresh: a new window even if the app has one; opts.geom: {l,t,w,h} to
@@ -494,7 +593,8 @@
                 if( wins[ i ].app === app ) { reuse( wins[ i ], url, opts.nav ); return wins[ i ]; }
 
         var info = APPS[ app ] || { name: app ? app.charAt( 0 ).toUpperCase() + app.slice( 1 ) : 'Nayive', svg: ICON_WIN };
-        var w = { app: app, name: info.name, svg: info.svg, url: '', pre: null };
+        var w = { app: app, name: info.name, svg: info.svg, url: '', pre: null,
+                  scale: !! ( store( SET_KEY ) || {} ).scaleNew, nat: null, s: 1, g: null };     // see SCALE; My account sets the default
 
         var el = document.createElement( 'div' );
         el.className = 'win';
@@ -503,13 +603,13 @@
             '<iframe class="win-frame"></iframe>' +
             [ 'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw' ].map( function ( d ) { return '<div class="grip ' + d + '" data-dir="' + d + '"></div>'; } ).join( '' );
         el.querySelector( '.win-title' ).textContent = info.name;
-        // The same three dots as in an app's own row, at the start of ours.
-        el.querySelector( '.win-bar' ).insertBefore( makeDots( document, w ), el.querySelector( '.win-bar' ).firstChild );
 
         var g = opts.geom;
         if( g )
         {
-            el.style.left = g.l; el.style.top = g.t; el.style.width = g.w; el.style.height = g.h;
+            // a saved window: "123px" strings, plus its Scale (see SCALE)
+            w.scale = !! g.scale; w.nat = g.nat || null;
+            g = { l: parseFloat( g.l ) || 0, t: parseFloat( g.t ) || 0, w: parseFloat( g.w ) || 0, h: parseFloat( g.h ) || 0 };
         }
         else
         {
@@ -517,30 +617,36 @@
             var r = deskRect();
             var W = Math.min( 1100, Math.round( r.w * 0.7 ) ), H = Math.min( 780, Math.round( r.h * 0.82 ) );
             var n = wins.length % 6;
-            el.style.width  = W + 'px';
-            el.style.height = H + 'px';
-            el.style.left   = Math.max( 0, Math.round( ( r.w - W ) / 2 ) - 80 + n * 32 ) + 'px';
-            el.style.top    = Math.max( 0, 24 + n * 32 ) + 'px';
+            g = { l: Math.max( 0, Math.round( ( r.w - W ) / 2 ) - 80 + n * 32 ), t: Math.max( 0, 24 + n * 32 ), w: W, h: H };
         }
 
         var btn = document.createElement( 'button' );
         btn.className = 'text-btn ghost task';
-        btn.innerHTML = info.svg + '<span></span>' +
-            '<span class="icon-btn task-x" role="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span>';
+        btn.innerHTML = info.svg + '<span></span><span class="task-ctl">' +
+            CTL.map( function ( d ) { return '<span class="icon-btn task-x" role="button" data-win="' + d[ 0 ] + '">' + d[ 3 ] + '</span>'; } ).join( '' ) +
+            '</span>';
         btn.querySelector( 'span' ).textContent = info.name;
         btn.title = info.name;
-        btn.querySelector( '.task-x' ).title = t( 'ui.close', 'Close' );
-        btn.querySelector( '.task-x' ).setAttribute( 'aria-label', t( 'ui.close', 'Close' ) );
+        CTL.forEach( function ( d )
+        {
+            if( ! d[ 1 ] ) return;              // Scale / Resize: see paintScale
+            var b = btn.querySelector( '[data-win="' + d[ 0 ] + '"]' );
+            b.title = t( d[ 1 ], d[ 2 ] );
+            b.setAttribute( 'aria-label', b.title );
+        } );
 
         w.el = el; w.btn = btn; w.frame = el.querySelector( 'iframe' );
         wins.push( w );
         desk.appendChild( el );
+        place( w, g );
         tasks.appendChild( btn );
 
         wire( w );
         if( url ) w.frame.src = url;
         focus( w );
         placeUnread();
+        placeMail();
+        retile();
         return w;
     }
 
@@ -572,13 +678,16 @@
 
     function focus( w )
     {
-        if( w.el.hidden ) w.el.hidden = false;
+        var back = w.el.hidden;     // brought back from the bar: it was minimised
+        if( back ) w.el.hidden = false;
         w.el.style.zIndex = ++zTop;
         var was = front;
         front = w;
         paint();
         saveWins();
+        if( back ) { queueMeasure( w ); retile(); }
         if( was && was !== w && was.app === 'chat' ) pokeUnread();
+        if( was && was !== w && was.app === 'email' ) askMail();
     }
 
     function minimise( w )
@@ -587,6 +696,7 @@
         if( front === w ) front = topmost();
         paint();
         saveWins();
+        retile();
     }
 
     function close( w )
@@ -596,7 +706,12 @@
         if( front === w ) front = topmost();
         paint();
         placeUnread();
+        placeMail();
+        if( w.app === 'email' ) askMail();
+        if( tiled ) { tiled.snaps.delete( w ); if( ! wins.length ) tiled = null; }
+        paintTile();
         saveWins();
+        retile();
     }
 
     function topmost()
@@ -614,25 +729,29 @@
             w.el.classList.toggle( 'focused', isFront );
             w.btn.classList.toggle( 'front', isFront );
             w.btn.classList.toggle( 'min', w.el.hidden );
-            try { w.frame.contentDocument.documentElement.classList.toggle( 'is-window-back', ! isFront ); } catch( e ) {}
+            paintScale( w );
         } );
+        paintTile();
     }
 
     function act( w, what )
     {
         if( what === 'min' )   minimise( w );
-        if( what === 'max' )   { w.el.classList.toggle( 'max' ); saveWins(); }
+        if( what === 'max' )   setMax( w, ! isMax( w ) );
         if( what === 'close' ) close( w );
+        if( what === 'scale' ) setScale( w, ! w.scale );
     }
 
     function wire( w )
     {
         var el = w.el;
 
-        // The bar button: bring forward - or, when already in front, minimise.
+        // The bar button: bring forward - or, when already in front, minimise. Its
+        // window's buttons (in front only) do their own job.
         w.btn.addEventListener( 'click', function ( e )
         {
-            if( e.target.closest( '.task-x' ) ) { close( w ); return; }
+            var b = e.target.closest( '[data-win]' );
+            if( b ) { act( w, b.getAttribute( 'data-win' ) ); return; }
             if( w === front && ! el.hidden ) minimise( w ); else focus( w );
         } );
 
@@ -668,6 +787,7 @@
             w.el.classList.remove( 'chromeless' );
             cw.addEventListener( 'pointerdown', function () { closeMenu(); if( front !== w ) focus( w ); }, true );
             hookAlt( cw );
+            hookInner( w, cw );
             // Taking the keys out of a frame drops its caret: kept here for giveKeys.
             cw.document.addEventListener( 'focusin', function ( e ) { w.lastFocus = e.target; }, true );
             // A plain link to the launcher (Planner's name) opens the menu instead.
@@ -682,7 +802,43 @@
             trackTitle( w, cw );
             adoptHead( w, cw );
             paint();
+            // Scale: the new page is measured, and again each time it changes -
+            // its data came in, a panel opened (see SCALE).
+            new cw.MutationObserver( function () { if( w.scale && w.frame.contentWindow === cw ) queueMeasure( w ); } )
+                .observe( cw.document.documentElement, { childList: true, subtree: true, characterData: true,
+                                                         attributes: true, attributeFilter: [ 'class', 'style', 'hidden' ] } );
+            if( w.scale ) queueMeasure( w );
         } );
+    }
+
+    // Frames inside the window's page (Planner's Calendar / Tasks / Habits): a
+    // press there never reaches the page's own listener, so each inner page -
+    // at any depth, also one that loads later - brings the window forward too.
+    function hookInner( w, cw )
+    {
+        function hook( f )
+        {
+            if( f._deskHooked ) return;
+            f._deskHooked = true;
+            function on()
+            {
+                var icw;
+                try { icw = f.contentWindow; icw.document; } catch( e ) { return; }
+                if( ! icw || icw._deskHooked ) return;
+                icw._deskHooked = true;
+                icw.addEventListener( 'pointerdown', function () { closeMenu(); closeMore(); if( front !== w ) focus( w ); }, true );
+                hookAlt( icw );
+                hookInner( w, icw );
+            }
+            f.addEventListener( 'load', on );
+            on();
+        }
+        function scan( root ) { if( root.tagName === 'IFRAME' ) hook( root ); else if( root.querySelectorAll ) root.querySelectorAll( 'iframe' ).forEach( hook ); }
+        scan( cw.document.documentElement );
+        new cw.MutationObserver( function ( recs )
+        {
+            recs.forEach( function ( r ) { r.addedNodes.forEach( scan ); } );
+        } ).observe( cw.document.documentElement, { childList: true, subtree: true } );
     }
 
     // The bar button says which DOCUMENT the window shows: Write / Calc / Text
@@ -694,7 +850,8 @@
         {
             if( w.frame.contentWindow !== cw ) return;
             var name = label ? label.textContent.trim() : '';
-            var tt   = doc.title && doc.title !== 'about:blank' ? doc.title : '';
+            // Chat's "(3) Chat": the count is already on the button's red disc.
+            var tt   = doc.title && doc.title !== 'about:blank' ? doc.title.replace( /^\(\d+\+?\)\s*/, '' ) : '';
             var text = name || tt || w.name;
             setTitle( w, text, text === w.name ? w.name : w.name + ' - ' + text );
         }
@@ -711,6 +868,20 @@
     // A move let go at the desk's left / right edge fills that half of it, at
     // the top edge the whole of it; dragging a half-window again gives it back
     // its old size.
+    // The grabbing hand, from the press on a title bar until it is let go. An
+    // app's own row lives in its frame, so the rule goes into that page too.
+    function grabCursor( doc, on )
+    {
+        if( on && ! doc.getElementById( 'winGrabCss' ) )
+        {
+            var st = doc.createElement( 'style' );
+            st.id = 'winGrabCss';
+            st.textContent = 'html.win-grab, html.win-grab * { cursor: grabbing !important; }';
+            doc.head.appendChild( st );
+        }
+        doc.documentElement.classList.toggle( 'win-grab', on );
+    }
+
     function drag( w, e, dir )
     {
         var el = w.el, inFrame = e.target.ownerDocument !== document;
@@ -718,19 +889,22 @@
         // app may redraw its row mid-drag (Trips does) and take that element away.
         var tgt = inFrame ? e.target.ownerDocument.documentElement : e.target;
         var x0 = e.screenX, y0 = e.screenY;
-        var L = el.offsetLeft, T = el.offsetTop, W = el.offsetWidth, H = el.offsetHeight;
+        var L = w.g.l, T = w.g.t, W = w.g.w, H = w.g.h;
         var r = deskRect(), zone = '';
+        var minW = w.scale ? 1 : MIN_W, minH = w.scale ? 1 : MIN_H;     // Scale on: no smallest size
 
         // Where the pointer is on the desk (a move only needs this for the edges).
         var dr = desk.getBoundingClientRect(), px, py;
-        if( inFrame ) { var fr = w.frame.getBoundingClientRect(); px = fr.left + e.clientX - dr.left; py = fr.top + e.clientY - dr.top; }
+        // (a page shrunk by Scale counts in its own, bigger pixels: times w.s)
+        if( inFrame ) { var fr = w.frame.getBoundingClientRect(); px = fr.left + e.clientX * w.s - dr.left; py = fr.top + e.clientY * w.s - dr.top; }
         else          { px = e.clientX - dr.left; py = e.clientY - dr.top; }
         if( ! dir && w.pre )
         {
             var fx = ( px - L ) / W;
             W = w.pre.w; H = w.pre.h; L = Math.round( px - fx * W );
-            el.style.width = W + 'px'; el.style.height = H + 'px'; el.style.left = L + 'px';
             w.pre = null;
+            place( w, { l: L, t: T, w: W, h: H } );
+            W = w.g.w; H = w.g.h;
         }
 
         e.preventDefault();
@@ -739,6 +913,7 @@
         el.classList.add( 'dragging' );
         desk.classList.add( inFrame ? 'busy-frame' : 'busy' ); document.body.classList.add( 'busy' );
         if( inFrame ) tgt.ownerDocument.documentElement.style.userSelect = 'none';
+        if( ! dir ) { grabCursor( document, true ); if( inFrame ) grabCursor( tgt.ownerDocument, true ); }
 
         function showZone( z )
         {
@@ -757,36 +932,39 @@
             var dx = ev.screenX - x0, dy = ev.screenY - y0;
             if( ! dir )
             {
-                // keep at least the top row reachable
-                el.style.left = Math.min( r.w - 80, Math.max( 80 - W, L + dx ) ) + 'px';
-                el.style.top  = Math.min( r.h - 38, Math.max( 0, T + dy ) ) + 'px';
+                // keep at least the top row reachable (all of a window smaller than that)
+                var kx = Math.min( 80, W ), ky = Math.min( 38, H );
+                moveTo( w, Math.min( r.w - kx, Math.max( kx - W, L + dx ) ), Math.min( r.h - ky, Math.max( 0, T + dy ) ) );
                 var cx = px + dx, cy = py + dy;
                 showZone( cx <= 6 ? 'left' : cx >= r.w - 6 ? 'right' : cy <= 6 ? 'top' : '' );
                 return;
             }
             var nl = L, nt = T, nw = W, nh = H;
-            if( dir.indexOf( 'e' ) >= 0 ) nw = Math.max( 320, W + dx );
-            if( dir.indexOf( 's' ) >= 0 ) nh = Math.max( 200, H + dy );
-            if( dir.indexOf( 'w' ) >= 0 ) { nw = Math.max( 320, W - dx ); nl = L + W - nw; }
-            if( dir.indexOf( 'n' ) >= 0 ) { nh = Math.max( 200, H - dy ); nt = Math.max( 0, T + H - nh ); nh = T + H - nt; }
-            el.style.left = nl + 'px'; el.style.top = nt + 'px';
-            el.style.width = nw + 'px'; el.style.height = nh + 'px';
+            if( dir.indexOf( 'e' ) >= 0 ) nw = Math.max( minW, W + dx );
+            if( dir.indexOf( 's' ) >= 0 ) nh = Math.max( minH, H + dy );
+            if( dir.indexOf( 'w' ) >= 0 ) { nw = Math.max( minW, W - dx ); nl = L + W - nw; }
+            if( dir.indexOf( 'n' ) >= 0 ) { nh = Math.max( minH, H - dy ); nt = Math.max( 0, T + H - nh ); nh = T + H - nt; }
+            place( w, { l: nl, t: nt, w: nw, h: nh } );
+            // A shrunk window that cannot stretch further one way (NayiveTiling.fit's
+            // cap) keeps the edge that is not being pulled where it was.
+            if( dir.indexOf( 'w' ) >= 0 && w.g.w !== nw ) moveTo( w, nl + nw - w.g.w, w.g.t );
+            if( dir.indexOf( 'n' ) >= 0 && w.g.h !== nh ) moveTo( w, w.g.l, nt + nh - w.g.h );
         }
         function up()
         {
             el.classList.remove( 'dragging' );
             desk.classList.remove( 'busy', 'busy-frame' ); document.body.classList.remove( 'busy' );
             if( inFrame ) tgt.ownerDocument.documentElement.style.userSelect = '';
+            if( ! dir ) { grabCursor( document, false ); if( inFrame ) grabCursor( tgt.ownerDocument, false ); }
             tgt.removeEventListener( 'pointermove', move );
             tgt.removeEventListener( 'pointerup', up );
             tgt.removeEventListener( 'pointercancel', up );
-            if( zone === 'top' ) { el.style.left = L + 'px'; el.style.top = T + 'px'; el.classList.add( 'max' ); }
+            if( zone === 'top' ) { moveTo( w, L, T ); setMax( w, true ); }
             else if( zone )
             {
                 w.pre = { w: W, h: H };
                 var half = Math.round( r.w / 2 );
-                el.style.left = ( zone === 'right' ? half : 0 ) + 'px'; el.style.top = '0px';
-                el.style.width = ( zone === 'right' ? r.w - half : half ) + 'px'; el.style.height = r.h + 'px';
+                place( w, { l: zone === 'right' ? half : 0, t: 0, w: zone === 'right' ? r.w - half : half, h: r.h } );
             }
             showZone( '' );
             saveWins();
@@ -797,43 +975,41 @@
     }
 
     //------------------------------------------------------------------------//
-    // THE APP'S OWN TOP ROW AS TITLE BAR. Every app opens with a row holding
-    // its icon, its name and its toolbar; in a window that row also carries the
-    // window's close / minimise / maximise (.win-dots, shared/app.css) at its
-    // start, drags the window from any empty spot, and maximises on a double
-    // click. The row is the first one that holds the app's icon - also when it
-    // is only a column (Chat's list) or sits in a card (Trips). A page with no
-    // such row (a document opened blank) keeps the desktop's own bar.
-
-    var HEAD_SEL    = '.topbar, .header, .trip-header';
-    var INTERACTIVE = 'button, a, input, select, textarea, label, [contenteditable], [role="button"], [tabindex], .win-dots';
-    var DOTS = [
-        [ 'close', 'ui.close',         'Close',    '<svg viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2.5" y1="2.5" x2="7.5" y2="7.5"/><line x1="7.5" y1="2.5" x2="2.5" y2="7.5"/></svg>' ],
-        [ 'min',   'desktop.minimise', 'Minimise', '<svg viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="5" x2="8" y2="5"/></svg>' ],
-        [ 'max',   'desktop.maximise', 'Maximise', '<svg viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="5" y1="2" x2="5" y2="8"/><line x1="2" y1="5" x2="8" y2="5"/></svg>' ]
+    // THE WINDOW'S BUTTONS live on the bar, on the bar button of the window in
+    // front (see .task-ctl): Scale / Resize, minimise, maximise, close. Scale /
+    // Resize is two-state: its icon and tooltip say which way the window is now.
+    var SVG_OPEN     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">';
+    var ICON_SCALE   = SVG_OPEN + '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M14 15H9v-5"/><path d="M16 3h5v5"/><path d="M21 3 9 15"/></svg>';
+    var ICON_RESIZE  = SVG_OPEN + '<polyline points="5 11 5 5 11 5"/><polyline points="19 13 19 19 13 19"/><line x1="5" y1="5" x2="19" y2="19"/></svg>';
+    var ICON_TILE    = SVG_OPEN + '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="12" y1="12" x2="21" y2="12"/></svg>';
+    var CTL = [
+        [ 'scale', '',                 '',         ICON_RESIZE ],
+        [ 'min',   'desktop.minimise', 'Minimise', SVG_OPEN + '<line x1="5" y1="12" x2="19" y2="12"/></svg>' ],
+        [ 'max',   'desktop.maximise', 'Maximise', SVG_OPEN + '<rect x="5" y="5" width="14" height="14" rx="2"/></svg>' ],
+        [ 'close', 'ui.close',         'Close',    SVG_OPEN + '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' ]
     ];
 
-    // Close / minimise / maximise for window `w`, built in `doc` (ours, or the app's).
-    function makeDots( doc, w )
+    function paintScale( w )
     {
-        var dots = doc.createElement( 'div' );
-        dots.className = 'win-dots';
-        DOTS.forEach( function ( d )
-        {
-            var b = doc.createElement( 'button' );
-            b.type = 'button';
-            b.setAttribute( 'data-win', d[ 0 ] );
-            b.title = t( d[ 1 ], d[ 2 ] );
-            b.innerHTML = d[ 3 ];
-            dots.appendChild( b );
-        } );
-        dots.addEventListener( 'click', function ( e )
-        {
-            var b = e.target.closest( 'button' );
-            if( b ) act( w, b.getAttribute( 'data-win' ) );
-        } );
-        return dots;
+        var b = w.btn.querySelector( '[data-win="scale"]' ), on = !! w.scale;
+        if( ! b || b.getAttribute( 'aria-pressed' ) === String( on ) ) return;
+        b.setAttribute( 'aria-pressed', String( on ) );
+        b.innerHTML = on ? ICON_SCALE : ICON_RESIZE;
+        b.title = on ? t( 'desktop.scaleOn',  'Scale: a smaller window shrinks everything in it' )
+                     : t( 'desktop.scaleOff', 'Resize: a smaller window rearranges its content' );
+        b.setAttribute( 'aria-label', b.title );
     }
+
+    //------------------------------------------------------------------------//
+    // THE APP'S OWN TOP ROW AS TITLE BAR. Every app opens with a row holding
+    // its icon, its name and its toolbar; in a window that row drags the window
+    // from any empty spot and maximises it on a double click. The row is the
+    // first one that holds the app's icon - also when it is only a column
+    // (Chat's list) or sits in a card (Trips). A page with no such row (a
+    // document opened blank) keeps the desktop's own bar.
+
+    var HEAD_SEL    = '.topbar, .header, .trip-header';
+    var INTERACTIVE = 'button, a, input, select, textarea, label, [contenteditable], [role="button"], [tabindex]';
 
     function findHead( doc )
     {
@@ -850,23 +1026,16 @@
     {
         var doc = cw.document, head = null;
 
-        // Put the dots in - and back in. Some apps draw their row only once their
-        // data is in, and some redraw it (Trips empties its header on every render),
-        // so this runs on every change of the page. Once found, the same row stays
-        // the title bar while it is on the page: Trips keeps its header box when a
-        // trip is open, even though the app icon is gone from it then.
+        // Find the row - and find it again. Some apps draw their row only once
+        // their data is in, and some redraw it, so this runs on every change of
+        // the page. Once found, the same row stays the title bar while it is on
+        // the page: Trips keeps its header box when a trip is open, even though
+        // the app icon is gone from it then.
         function ensure()
         {
             if( w.frame.contentWindow !== cw ) { mo.disconnect(); return; }
             if( ! head || ! head.isConnected ) head = findHead( doc );
             if( ! head ) return;
-            var first = head.firstElementChild;
-            if( ! first || ! first.classList.contains( 'win-dots' ) )
-            {
-                var old = head.querySelector( ':scope > .win-dots' );
-                if( old ) old.remove();
-                head.insertBefore( makeDots( doc, w ), head.firstChild );
-            }
             if( ! w.el.classList.contains( 'chromeless' ) ) { w.el.classList.add( 'chromeless' ); paint(); }
         }
         // style / hidden too: an app that starts with its whole page hidden
@@ -882,12 +1051,17 @@
         // A press only becomes a drag once it moves 4px: Calc, Write and Text
         // fill most of the row with their file name, which a plain click edits,
         // and Trips with its name, which a plain click takes to the menu.
-        // The empty strip ABOVE the row drags too.
+        // The empty strip ABOVE the row drags too, and so does any empty spot
+        // of a layer that covers the row (data-win-drag: Chat's call screen),
+        // except its own boxes (data-win-nodrag: the picture in the corner).
         doc.addEventListener( 'pointerdown', function ( e )
         {
-            if( ! head || e.button !== 0 || e.target.closest( INTERACTIVE ) || w.el.classList.contains( 'max' ) ) return;
-            if( ! head.contains( e.target ) && e.clientY >= head.getBoundingClientRect().top ) return;
+            if( e.button !== 0 || e.target.closest( INTERACTIVE ) || w.el.classList.contains( 'max' ) ) return;
+            var cover = e.target.closest( '[data-win-drag]' );
+            if( cover ? e.target.closest( '[data-win-nodrag]' ) : ! head ) return;
+            if( ! cover && ! head.contains( e.target ) && e.clientY >= head.getBoundingClientRect().top ) return;
             var x0 = e.screenX, y0 = e.screenY;
+            grabCursor( doc, true );                              // the hand shows on the press, not the 4px
             function move( ev )
             {
                 if( Math.abs( ev.screenX - x0 ) + Math.abs( ev.screenY - y0 ) < 4 ) return;
@@ -902,6 +1076,7 @@
             }
             function stop()
             {
+                grabCursor( doc, false );                         // drag() puts it back if a drag starts
                 doc.removeEventListener( 'pointermove', move, true );
                 doc.removeEventListener( 'pointerup', stop, true );
             }
@@ -946,18 +1121,23 @@
                 .sort( function ( a, b ) { return +a.el.style.zIndex - +b.el.style.zIndex; } )
                 .map( function ( w )
                 {
-                    var s = w.el.style;
-                    return { url: w.url, l: s.left, t: s.top, w: s.width, h: s.height,
-                             max: w.el.classList.contains( 'max' ), min: !! w.el.hidden, pre: w.pre };
+                    var rec = { url: w.url, l: px( w.g.l ), t: px( w.g.t ), w: px( w.g.w ), h: px( w.g.h ),
+                                max: isMax( w ), min: !! w.el.hidden, pre: w.pre };
+                    if( w.scale ) { rec.scale = true; rec.nat = w.nat; }
+                    if( tiled && tiled.snaps.has( w ) ) rec.snap = tiled.snaps.get( w );
+                    return rec;
                 } );
             store( WINS_KEY, list );
+            store( TILE_KEY, tiled ? { dw: tiled.dw, dh: tiled.dh } : null );
         }, 300 );
     }
 
     function restoreWins()
     {
         var list = store( WINS_KEY ) || [];
+        var tl   = store( TILE_KEY );
         restoring = true;
+        if( tl ) tiled = { snaps: new Map(), dw: tl.dw, dh: tl.dh };
         var minimised = [];
         list.forEach( function ( s )
         {
@@ -965,13 +1145,288 @@
             var w = openApp( s.url, { fresh: true, geom: s } );
             w.url = s.url;
             w.pre = s.pre || null;
-            if( s.max ) w.el.classList.add( 'max' );
+            if( s.max ) { w.el.classList.add( 'max' ); place( w, w.g ); }
             if( s.min ) minimised.push( w );
+            if( tiled && s.snap ) tiled.snaps.set( w, s.snap );
         } );
         minimised.forEach( function ( w ) { w.el.hidden = true; } );
         front = topmost();
         paint();
         restoring = false;
+        if( tiled && ! wins.length ) tiled = null;
+        // tiled on a desk of another size (the browser window changed meanwhile)
+        if( tiled && ( desk.clientWidth !== tiled.dw || desk.clientHeight !== tiled.dh ) ) retile( true );
+    }
+
+    //------------------------------------------------------------------------//
+    // SCALE - per window (w.scale), off by default. Off (Resize), a window is
+    // what it always was: never smaller than MIN_W x MIN_H, and a smaller window
+    // rearranges its page. On (Scale), there is no smallest size, and a window
+    // made smaller shrinks like a picture of itself, chrome and all, from the
+    // size it had at 1:1 (his call, 2026-09-28: the apps rearrange themselves
+    // down to phone size, so "shrink only where scrollbars would appear" never
+    // showed). That size is its NATURAL size (w.nat): the window stays laid out
+    // at it and is drawn smaller by a CSS transform from its top-left corner
+    // (NayiveTiling.fit). Clicks, typing and the apps' own menus keep working:
+    // the browser maps them through the transform.
+    //
+    // w.nat is kept while the window is shrunk - moved, tiled, maximised and
+    // restored - and let go when the window is pulled back out to it (1:1 again,
+    // at whatever size it then gets) or Scale is switched. Maximised, it is
+    // always 1:1 - the sure way back to a readable window; restored, it is
+    // shrunk again as before. Laid out at a fixed size, a shrunk page never
+    // re-wraps, so there is nothing to chase.
+    //
+    // One more reason to shrink: a page too WIDE for its window (a fixed-width
+    // sheet) is measured (NayiveTiling.need) a moment after the window or the
+    // page changes, and the window shrinks to show all of its width - the
+    // natural width only ever grows that way. Height never counts: pages scroll.
+    // "A moment" is two frames: some apps size parts of their page from
+    // JavaScript on a resize, and a reading taken at once would see their old size.
+
+    function isMax( w ) { return w.el.classList.contains( 'max' ); }
+    function px( n )    { return Math.round( n * 100 ) / 100 + 'px'; }
+
+    // Where a window shows on the desk: g = { l, t, w, h }, desk pixels. Every
+    // change of a window's size comes through here; moveTo only moves it.
+    function place( w, g )
+    {
+        g = { l: Math.round( g.l ), t: Math.round( g.t ), w: Math.max( 1, g.w ), h: Math.max( 1, g.h ) };
+        var f = { s: 1, lw: g.w, lh: g.h };
+        if( isMax( w ) ) { /* the CSS makes it the whole desk, 1:1; g is where it goes back to */ }
+        else if( ! w.scale )
+        {
+            g.w = f.lw = Math.max( MIN_W, g.w );
+            g.h = f.lh = Math.max( MIN_H, g.h );
+        }
+        else
+        {
+            // made smaller than it is at 1:1: that 1:1 size becomes the natural one
+            if( ! w.nat && w.g && w.s === 1 && ( g.w < w.g.w || g.h < w.g.h ) )
+                w.nat = { w: Math.max( MIN_W, w.g.w ), h: Math.max( MIN_H, w.g.h ) };
+            if( ! w.nat && ( g.w < MIN_W || g.h < MIN_H ) ) w.nat = { w: MIN_W, h: MIN_H };
+            if( w.nat )
+            {
+                var r = deskRect();
+                f = NayiveTiling.fit( g.w, g.h, w.nat, { w: 2 * r.w, h: 2 * r.h } );
+                if( f.s >= 1 ) w.nat = null;             // pulled back out to full size: 1:1 from here
+                g.w = f.w; g.h = f.h;
+            }
+            queueMeasure( w );
+        }
+        w.g = g;
+        w.s = f.s;
+        var st = w.el.style;
+        st.left  = px( g.l );  st.top    = px( g.t );
+        st.width = px( f.lw ); st.height = px( f.lh );
+        st.transform = f.s < 1 ? 'scale(' + f.s + ')' : '';
+        if( f.s < 1 ) st.setProperty( '--win-s', f.s ); else st.removeProperty( '--win-s' );
+    }
+
+    function moveTo( w, l, t )
+    {
+        w.g.l = Math.round( l ); w.g.t = Math.round( t );
+        w.el.style.left = px( w.g.l ); w.el.style.top = px( w.g.t );
+    }
+
+    // Maximise / restore: maximised is always 1:1; restored, a shrunk window is shrunk again as before.
+    function setMax( w, on )
+    {
+        w.el.classList.toggle( 'max', on );
+        place( w, w.g );
+        saveWins();
+    }
+
+    // Scale on / off. Switched on, the window's size now is its natural one:
+    // made smaller from here, it shrinks (and a page too wide for it shrinks at
+    // once). Switched off, the page is 1:1 again and the window at least
+    // MIN_W x MIN_H.
+    function setScale( w, on )
+    {
+        w.scale = !! on;
+        w.nat = null;
+        place( w, w.g );
+        paint();
+        saveWins();
+    }
+
+    function queueMeasure( w )
+    {
+        if( w.measuring ) return;
+        w.measuring = true;
+        requestAnimationFrame( function () { requestAnimationFrame( function () { w.measuring = false; measure( w ); } ); } );
+    }
+
+    function measure( w )
+    {
+        if( ! w.scale || isMax( w ) || w.el.hidden || wins.indexOf( w ) < 0 ) return;
+        var de;
+        try { de = w.frame.contentDocument && w.frame.contentDocument.documentElement; } catch( e ) { return; }
+        if( ! de ) return;
+        var r = deskRect();
+        var n = NayiveTiling.need( { outW:  w.el.offsetWidth, outH:  w.el.offsetHeight,     // laid-out size, not drawn
+                                     viewW: de.clientWidth,   viewH: de.clientHeight,
+                                     fullW: de.scrollWidth,   fullH: de.scrollHeight,
+                                     deskW: r.w,              deskH: r.h } );
+        // Only a page too wide for the window counts, and only to widen the natural size.
+        var nat = w.nat || { w: MIN_W, h: Math.max( MIN_H, w.g.h ) };
+        if( ! ( n.w > nat.w ) ) return;
+        w.nat = { w: n.w, h: nat.h };
+        place( w, w.g );
+        saveWins();
+    }
+
+    //------------------------------------------------------------------------//
+    // TILE / UNTILE - one switch for the whole desk. Tile deals the desk out
+    // among the windows on it (minimised ones stay minimised), in the order of
+    // their bar buttons (NayiveTiling.tile). Each window just gets a box: one
+    // with Scale on shrinks to fit it, one without shows scrollbars, as always.
+    // Untile puts every window back EXACTLY as it was before: place, size,
+    // maximised, minimised, Scale and its factor. Whatever was done to them
+    // while tiled is dropped. The stacking order is not put back: the window
+    // in front stays in front.
+    //
+    // The "before" (tiled.snaps) is kept here, by the desktop, not by the
+    // window, and it survives a reload (in each window's saved record). It is
+    // taken for every window when Tile is switched on, and for a window opened
+    // while tiled the first time the layout places it - so Untile sends that
+    // one to where a new window opens.
+    //
+    // While tiled, opening, closing, minimising or bringing back a window deals
+    // the desk out again (RETILE; false = a new window floats until the next
+    // Tile), and so does a new desk size (the browser window, the bar).
+
+    var RETILE   = true;
+    var TILE_GAP = 0;               // pixels between two tiled windows
+    var TILE_KEY = 'balata-desktop-tile';
+    var tiled    = null;            // while tiled: { snaps: Map( window -> its state before ), dw, dh: the desk tiled }
+    var retiling = false;
+
+    function stateOf( w )
+    {
+        return { g: { l: w.g.l, t: w.g.t, w: w.g.w, h: w.g.h }, max: isMax( w ), min: !! w.el.hidden,
+                 pre: w.pre ? { w: w.pre.w, h: w.pre.h } : null,
+                 scale: !! w.scale, nat: w.nat ? { w: w.nat.w, h: w.nat.h } : null, s: w.s };
+    }
+
+    function tile()
+    {
+        var list = wins.filter( function ( w ) { return ! w.el.hidden; } );
+        if( ! tiled && ! list.length ) return false;      // nothing on the desk to deal out
+        if( ! tiled )
+        {
+            tiled = { snaps: new Map() };
+            wins.forEach( function ( w ) { tiled.snaps.set( w, stateOf( w ) ); } );
+        }
+        var r = deskRect();
+        tiled.dw = r.w; tiled.dh = r.h;
+        NayiveTiling.tile( list.length, r.w, r.h, { gap: TILE_GAP, minW: MIN_W, minH: MIN_H } ).forEach( function ( g, i )
+        {
+            var w = list[ i ];
+            if( ! tiled.snaps.has( w ) ) tiled.snaps.set( w, stateOf( w ) );
+            // a maximised window shrinks (Scale) from the whole desk it showed
+            if( isMax( w ) ) { w.el.classList.remove( 'max' ); w.g = { l: 0, t: 0, w: r.w, h: r.h }; w.nat = null; w.s = 1; }
+            w.pre = null;
+            place( w, g );
+        } );
+        paintTile();
+        saveWins();
+        return true;
+    }
+
+    function untile()
+    {
+        if( ! tiled ) return false;
+        var snaps = tiled.snaps;
+        tiled = null;
+        snaps.forEach( function ( st, w )
+        {
+            if( wins.indexOf( w ) < 0 ) return;           // closed while tiled
+            w.el.classList.toggle( 'max', !! st.max );
+            w.el.hidden = !! st.min;
+            w.pre   = st.pre || null;
+            w.scale = !! st.scale;
+            w.nat   = st.nat || null;
+            w.g     = { l: st.g.l, t: st.g.t, w: st.g.w, h: st.g.h };   // exactly as before: no "made smaller" here
+            place( w, st.g );
+        } );
+        if( ! front || front.el.hidden ) front = topmost();
+        paint();
+        saveWins();
+        return true;
+    }
+
+    // Deal the desk out again, once, on the next frame. `always`: even with RETILE off.
+    function retile( always )
+    {
+        if( ! tiled || restoring || retiling || ! ( RETILE || always ) ) return;
+        retiling = true;
+        requestAnimationFrame( function () { retiling = false; if( tiled ) tile(); } );
+    }
+
+    new ResizeObserver( function ()
+    {
+        if( tiled && ( desk.clientWidth !== tiled.dw || desk.clientHeight !== tiled.dh ) ) retile( true );
+    } ).observe( desk );
+
+    // THE SWITCH on the bar: "Free ()== Tile". A word picks its side, the switch
+    // flips. The word Tile while tiled deals the desk out again - after windows
+    // were moved or maximised by hand, say.
+    var tileSw = document.getElementById( 'tileSw' ), tileChk = document.getElementById( 'tileChk' );
+
+    function paintTile()
+    {
+        var idle = ! tiled && ! wins.some( function ( w ) { return ! w.el.hidden; } );
+        tileChk.checked  = !! tiled;
+        tileChk.disabled = idle;
+        tileSw.classList.toggle( 'on', !! tiled );
+        tileSw.classList.toggle( 'idle', idle );
+    }
+
+    tileChk.addEventListener( 'change', function () { if( tileChk.checked ) tile(); else untile(); paintTile(); } );
+    tileSw.addEventListener( 'click', function ( e )
+    {
+        var word = e.target.closest( '.tile-word' );
+        if( ! word || tileChk.disabled ) return;
+        if( word.getAttribute( 'data-tile' ) === 'on' ) tile(); else untile();
+        paintTile();
+    } );
+    paintTile();
+
+    //------------------------------------------------------------------------//
+    // MORE - the "⋮" after the clock (2026-09-28): the shared .top-menu
+    // (NayiveUI.wireMenu), set just off the bar's edge: above it, or below it
+    // when the bar is at the top.
+    // Holds the Free/Tile switch, Lock now and the "?" help; more to come.
+
+    var moreBtn = document.getElementById( 'moreBtn' ), moreMenu = document.getElementById( 'moreMenu' );
+    var more = null;
+
+    document.addEventListener( 'DOMContentLoaded', function ()     // ui.js is deferred
+    {
+        if( ! window.NayiveUI ) return;
+        more = NayiveUI.wireMenu( { btn: moreBtn, menu: moreMenu, onPick: function ( b )
+        {
+            if( b.id === 'lockNowBtn' && window.NayiveLock ) NayiveLock.lock();
+        } } );
+        moreBtn.addEventListener( 'click', function ()             // after wireMenu's own: it placed it under the button
+        {
+            if( moreMenu.hidden ) return;
+            var r = document.getElementById( 'bar' ).getBoundingClientRect();
+            moreMenu.style.top = ( document.body.classList.contains( 'bar-top' )
+                                   ? r.bottom + 6 : Math.max( 6, r.top - 6 - moreMenu.offsetHeight ) ) + 'px';
+        } );
+    } );
+
+    // A press inside a window's frame never reaches this document.
+    function closeMore() { if( more ) more.close(); }
+
+    // A window by its place on the bar (0, 1...), its app's folder ("drive"), or itself.
+    function winOf( which )
+    {
+        if( typeof which === 'number' ) return wins[ which ] || null;
+        if( typeof which === 'string' ) return wins.filter( function ( w ) { return w.app === which; } )[ 0 ] || null;
+        return wins.indexOf( which ) >= 0 ? which : null;
     }
 
     //------------------------------------------------------------------------//
@@ -1530,8 +1985,8 @@
     //------------------------------------------------------------------------//
     // CHAT - shared/ui.js asks the server for the unread count (every minute,
     // on a push, on coming back) and tells us (nayive:chatunread). The red dot
-    // sits on Chat's bar button, or on the menu button while Chat is not open;
-    // it blinks when the count goes up.
+    // sits on Chat's bar button with the count, or plain on the menu button
+    // while Chat is not open; it blinks when the count goes up.
 
     var unreadDot = document.createElement( 'span' ), unread = -1;
     unreadDot.className = 'chat-dot';
@@ -1542,9 +1997,16 @@
     {
         if( ! ( unread > 0 ) ) { unreadDot.hidden = true; return; }
         var chat = wins.filter( function ( w ) { return w.app === 'chat'; } )[ 0 ];
-        var host = chat ? chat.btn : menuBtn;
-        if( unreadDot.parentNode !== host ) host.appendChild( unreadDot );
-        unreadDot.hidden = false;
+        showDot( unreadDot, chat ? chat.btn : menuBtn, unread );
+    }
+    // On an app's bar button the dot carries the count; on the menu button it is plain.
+    function showDot( dot, host, n )
+    {
+        if( dot.parentNode !== host ) host.appendChild( dot );
+        var counted = host !== menuBtn;
+        dot.classList.toggle( 'has-count', counted );
+        dot.textContent = counted ? ( n > 99 ? '99+' : String( n ) ) : '';
+        dot.hidden = false;
     }
     document.addEventListener( 'nayive:chatunread', function ( e )
     {
@@ -1563,6 +2025,58 @@
     {
         try { navigator.serviceWorker.dispatchEvent( new MessageEvent( 'message', { data: { chat: 'new' } } ) ); } catch( e ) {}
     }
+
+    //------------------------------------------------------------------------//
+    // EMAIL - the unread count of every account's Inbox (/api/mail/unread, the
+    // launcher's eMail number): a plain blue dot on the menu button's top-left,
+    // or the count on eMail's bar button while eMail is open. Asked at load, every
+    // minute, on a mail push (sw.js), on coming back, and on leaving the eMail
+    // window. It blinks when the count goes up. The admin (403) stops asking.
+
+    var mailDot = document.createElement( 'span' ), mailN = -1, mailStopped = false, mailAsking = false;
+    mailDot.className = 'chat-dot mail-dot';
+    mailDot.hidden = true;
+    mailDot.setAttribute( 'aria-hidden', 'true' );
+
+    function placeMail()
+    {
+        if( ! ( mailN > 0 ) ) { mailDot.hidden = true; return; }
+        var em = wins.filter( function ( w ) { return w.app === 'email'; } )[ 0 ];
+        showDot( mailDot, em ? em.btn : menuBtn, mailN );
+    }
+    function askMail()
+    {
+        if( mailStopped || mailAsking || document.hidden ) return;
+        mailAsking = true;
+        fetch( '/api/mail/unread', { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
+            .then( function ( r )
+            {
+                if( r.status === 401 || r.status === 403 ) mailStopped = true;
+                return r.ok ? r.json() : null;
+            } )
+            .then( function ( j )
+            {
+                if( ! j ) return;
+                var before = mailN;
+                mailN = j.n || 0;
+                placeMail();
+                if( before >= 0 && mailN > before )
+                {
+                    mailDot.classList.remove( 'blink' );
+                    void mailDot.offsetWidth;
+                    mailDot.classList.add( 'blink' );
+                }
+            } )
+            .catch( function () {} )
+            .then( function () { mailAsking = false; } );
+    }
+    askMail();
+    setInterval( askMail, 60000 );
+    document.addEventListener( 'visibilitychange', askMail );
+    if( navigator.serviceWorker ) navigator.serviceWorker.addEventListener( 'message', function ( e )
+    {
+        if( e.data && e.data.mail === 'new' ) askMail();
+    } );
 
     // A tapped notification: the worker (sw.js) hands its page to the desktop.
     function openTarget( url ) { appsReady.then( function () { openApp( url, { nav: true } ); } ); }
@@ -1632,6 +2146,54 @@
             catch( e ) { /* a window mid-navigation must not stop the others */ }
         } );
         setTimeout( mirrorSync, 300 );
+    } );
+
+    //------------------------------------------------------------------------//
+    // HELP - the "?" after the clock opens the shared help card: one row per
+    // thing on the bar, then what has no button (moving windows, Alt, settings).
+
+    var CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+
+    // After DOMContentLoaded: ui.js is deferred, this script is not.
+    document.addEventListener( 'DOMContentLoaded', function () { ( window.NayiveI18n && NayiveI18n.ready ? NayiveI18n.ready : Promise.resolve() ).then( function ()
+    {
+        if( ! window.NayiveUI ) return;
+        NayiveUI.firstRun( {
+            app:   'desktop',
+            title: 'Nayive',
+            lead:  t( 'desktop.helpLead' ),
+            buttons: [
+                { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
+                { svg: ICON_WIN,  name: t( 'desktop.helpWinName' ),    text: t( 'desktop.helpWin' ) },
+                { svg: ICON_SCALE, name: t( 'desktop.helpScaleName' ), text: t( 'desktop.helpScale' ) },
+                { icon: 'fullscr', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ) },
+                { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ) },
+                { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ) },
+                { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
+                { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) },
+                { sel: '#syncIndicator:not([hidden])', text: t( 'desktop.helpSync' ) },
+                { icon: 'gear',    name: t( 'desktop.settings' ),       text: t( 'desktop.helpSettings' ) }
+            ]
+        } );
+    } ); } );
+
+    // SCALE and TILE for the buttons to come (the desktop has none for them yet).
+    Object.assign( window.NayiveDesktop, {
+        windows: function ()
+        {
+            return wins.map( function ( w )
+            {
+                return { app: w.app, name: w.btn.querySelector( 'span' ).textContent, scale: !! w.scale, factor: w.s,
+                         max: isMax( w ), min: !! w.el.hidden, box: { l: w.g.l, t: w.g.t, w: w.g.w, h: w.g.h },
+                         nat: w.nat, tiled: !! tiled && tiled.snaps.has( w ) };
+            } );
+        },
+        open:       function ( url ) { return !! openApp( url, { fresh: true } ); },
+        scale:      function ( which, on ) { var w = winOf( which ); if( w ) setScale( w, on === undefined ? ! w.scale : on ); return !! w; },
+        tile:       tile,
+        untile:     untile,
+        toggleTile: function () { return tiled ? untile() : tile(); },
+        isTiled:    function () { return !! tiled; }
     } );
 
     appsReady.then( restoreWins );

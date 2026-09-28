@@ -15,11 +15,41 @@ package main
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// loginReturn is the sign-in page for a signed-out visit to `u`. Only a
+// ONE-SHOT target comes back after the sign-in (login.html keeps the same
+// list): a chat notice or a link shared to Chat (chat/?c=, ?text=) and a
+// "¿Dónde estás?" answer (/?here=). Any other page - the stale app tab iPhone
+// Safari restores - lands on the launcher, so it gets no ?return= at all. Only
+// the one-shot parameters are carried; the share inbox needs none (the
+// launcher takes the user there itself).
+func loginReturn(u *url.URL) string {
+	login := URLPrefix + "/login.html"
+	q := u.Query()
+	keep := url.Values{}
+	switch u.Path {
+	case URLPrefix + "/chat/", URLPrefix + "/chat/index.html":
+		for _, k := range []string{"c", "text"} {
+			if v := q.Get(k); v != "" {
+				keep.Set(k, v)
+			}
+		}
+	case URLPrefix + "/", URLPrefix + "/index.html":
+		if v := q.Get("here"); v != "" {
+			keep.Set("here", v)
+		}
+	}
+	if len(keep) == 0 {
+		return login
+	}
+	return login + "?return=" + quotePath(u.Path+"?"+keep.Encode())
+}
 
 // publicStatic are the files served WITHOUT a session: the login page and just
 // enough to paint it.
@@ -121,7 +151,7 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rel := unquotePath(r.PathValue("path"))
+	rel := r.PathValue("path") // already unescaped by the mux
 	parts := splitPath(rel)
 	if hasDotDot(parts) {
 		sendText(w, r, http.StatusForbidden, "Forbidden.\n")
@@ -148,8 +178,7 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	if !isPublicStatic(parts) {
 		if _, signedIn := s.session(r); !signedIn {
 			if strings.Contains(r.Header.Get("Accept"), "text/html") {
-				redirect(w, http.StatusFound,
-					URLPrefix+"/login.html?return="+quotePath(r.URL.Path))
+				redirect(w, http.StatusFound, loginReturn(r.URL))
 				return
 			}
 			sendError(w, r, http.StatusUnauthorized, "not signed in")

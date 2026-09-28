@@ -100,12 +100,23 @@ try
     console.log( "BOOT" );
     ok( await openMail( c ), "eMail opens with the account's Inbox" );
     await shot( c, "01-inbox" );
+    const trays = await c.evaluate( "[...document.querySelectorAll('#trays .mail-tray')].map( b => b.getAttribute('data-tray') + '=' + b.querySelector('.mail-tray-n').textContent )" );
+    ok( trays.length === 5 && trays.every( t => /=\d+\/\d+$/.test( t ) ), "every tray shows not read / all", trays );
+    const srv = await c.evaluate( "fetch('/api/mail/' + encodeURIComponent( NayiveMail.S.acct ) + '/trays').then( r => r.json() ).then( j => j.trays.find( t => t.role === 'inbox' ) )" );
+    ok( trays.includes( `inbox=${srv.unread}/${srv.total}` ) && srv.total > 0, "the Inbox's numbers are the server's", { trays, srv } );
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 400, height: 800, deviceScaleFactor: 1, mobile: true } );
+    await sleep( 300 );
+    ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth" ), "phone: the trays fit (no side scroll)" );
+    await shot( c, "01b-trays-phone" );
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false } );
 
     // -----------------------------------------------------------------------
     console.log( "THE CLIP (Chat's panel)" );
     await c.evaluate( "document.getElementById('composeBtn').click(); true" );
     await waitFor( c, "!document.getElementById('composeView').hidden" );
     ok( await c.evaluate( "!document.getElementById('cDrive')" ), "no folder button any more" );
+    ok( await c.evaluate( "document.getElementById('cTo').placeholder === 'Una o más direcciones, separadas por comas'" ), "To says more than one address fits",
+        await c.evaluate( "document.getElementById('cTo').placeholder" ) );
     ok( await c.evaluate( "document.getElementById('cAttach').title === 'Adjuntar'" ), "the clip's tooltip is 'Adjuntar'",
         await c.evaluate( "document.getElementById('cAttach').title" ) );
     await c.evaluate( "document.getElementById('cAttach').click(); true" );
@@ -217,16 +228,47 @@ try
     ok( await c.evaluate( "/src=\"data:image\\/png;base64/.test( document.querySelector('#readBody iframe').srcdoc )" ), "its own picture (cid:) comes in as data:" );
     ok( await c.evaluate( "/url\\(&quot;data:image\\/png;base64/.test( document.querySelector('#readBody iframe').srcdoc )" ), "…in a style's url() too",
         await c.evaluate( "( document.querySelector('#readBody iframe').srcdoc.match( /id=\"bg\"[^>]*/ ) || [''] )[0].slice( 0, 160 )" ) );
-    ok( await c.evaluate( "!document.getElementById('imagesBar').hidden" ), "the 'pictures are hidden' bar shows" );
+    ok( await c.evaluate( "!document.getElementById('imagesBar') && !document.getElementById('imagesBtn').hidden" ), "no 'pictures are hidden' bar: the toolbar's button shows" );
+    // the head: subject, chevron, labels; From/To/Date folded away
+    const head = await c.evaluate( `( () => { const s = document.getElementById('readSubject').getClientRects(), b = document.getElementById('metaBtn').getBoundingClientRect();
+        const last = s[ s.length - 1 ];
+        return { meta: document.getElementById('readMeta').hidden, exp: document.getElementById('metaBtn').getAttribute('aria-expanded'),
+                 beside: b.left >= last.right - 1 && b.left - last.right < 16 && b.top < last.bottom && b.bottom > last.top }; } )()` );
+    ok( head.meta && head.exp === "false", "From/To/Date start folded", head );
+    ok( head.beside, "the chevron sits right after the subject", head );
+    await shot( c, "04a-head-closed" );
+    // a phone, a long subject and a label: the chevron still after the last word
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 400, height: 800, deviceScaleFactor: 1, mobile: true } );
+    await c.evaluate( `document.getElementById('readSubject').textContent = 'A rather long subject line that has to wrap over two or three lines on a phone';
+        NayiveMail.S.labels = ( NayiveMail.S.labels || [] ).concat( [ { id: 'lt', name: 'Trabajo', color: 'blue' } ] ); NayiveMail.renderReadLabels( [ 'lt' ] ); true` );
+    await sleep( 300 );
+    const phone = await c.evaluate( `( () => { const s = document.getElementById('readSubject').getClientRects(), b = document.getElementById('metaBtn').getBoundingClientRect();
+        const last = s[ s.length - 1 ], l = document.getElementById('readLabels');
+        return { lines: s.length, beside: b.left >= last.right - 1 && b.left - last.right < 16 && b.top < last.bottom && b.bottom > last.top,
+                 label: !l.hidden && l.textContent, fits: document.documentElement.scrollWidth <= innerWidth }; } )()` );
+    ok( phone.lines > 1 && phone.beside && phone.fits, "phone, long subject: chevron after the last word, no side scroll", phone );
+    await shot( c, "04b-head-phone" );
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false } );
+    await c.evaluate( "document.getElementById('metaBtn').click(); true" );
+    await sleep( 400 );
+    ok( await c.evaluate( "!document.getElementById('readMeta').hidden && document.querySelectorAll('#readMeta dt').length >= 3 && document.getElementById('metaBtn').classList.contains('open')" ), "the chevron shows them" );
+    await shot( c, "04a-head-open" );
+    await c.evaluate( "document.getElementById('readSubject').click(); true" );
+    ok( await c.evaluate( "document.getElementById('readMeta').hidden && document.getElementById('metaBtn').getAttribute('aria-expanded') === 'false'" ), "the subject folds them again" );
     await sleep( 800 );
     let hits = await get( "/e2e/hits" );
     ok( ( hits || [] ).length === 0, "pictures hidden: nothing loads", hits );
-    await c.evaluate( "document.getElementById('imagesBarBtn').click(); true" );
+    await c.evaluate( "document.getElementById('imagesBtn').click(); true" );
     await sleep( 1500 );
     hits = await get( "/e2e/hits" ) || [];
     ok( hits.every( h => ! h.cookie ), "shown: whatever loads carries NO session cookie", hits );
     ok( await c.evaluate( "fetch('/api/whoami').then( r => r.status )" ) === 200, "…and the reader is still signed in" );
+    ok( await c.evaluate( "( b => !b.hidden && b.classList.contains('is-active') && b.title === 'Ocultar imágenes' )( document.getElementById('imagesBtn') )" ),
+        "the picture button stays, now to hide them", await c.evaluate( "document.getElementById('imagesBtn').title" ) );
     await shot( c, "04-pictures" );
+    await c.evaluate( "document.getElementById('imagesBtn').click(); true" );
+    ok( await waitFor( c, "/img-src data:;/.test( document.querySelector('#readBody iframe').srcdoc ) && document.getElementById('imagesBtn').title === 'Mostrar imágenes'", 5000 ),
+        "pressed again: hidden again" );
     // a link opens a new tab: the frame is another origin (its own target):
     // the link's box from inside it, the click on the page, where it is drawn
     const before = ( await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json() ).length;
@@ -311,12 +353,45 @@ try
     await c.evaluate( "document.querySelector('.mail-newpass input').value = 'abcdefghijklmnop'; document.querySelector('.mail-newpass .text-btn').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /Contraseña cambiada/.test( t ) )", 8000 ), "the right one is kept", await lastToast( c ) );
     await shot( c, "05-settings" );
-    await c.evaluate( "document.querySelector('#setSheet [data-tab=general]').click(); document.getElementById('showImagesAlways').click(); true" );
+    const pick = v => c.evaluate( `( () => { const s = document.getElementById('imagesDefault'); s.value = '${v}'; s.dispatchEvent( new Event('change') ); return true; } )()` );
+    await c.evaluate( "document.querySelector('#setSheet [data-tab=general]').click(); true" );
+    ok( await c.evaluate( "document.getElementById('imagesDefault').value === 'hide' && /no sabe/.test( document.getElementById('imagesHint').textContent )" ),
+        "pictures: Hidden, and why", await c.evaluate( "document.getElementById('imagesHint').textContent" ) );
+    await pick( "show" );
     await sleep( 600 );
-    ok( ( await c.evaluate( "fetch('/api/mail/settings').then( r => r.json() )" ) ).showImages === true, "'always show pictures' is saved" );
-    await c.evaluate( "document.getElementById('showImagesAlways').click(); true" );
+    ok( ( await c.evaluate( "fetch('/api/mail/settings').then( r => r.json() )" ) ).showImages === true, "'Shown' is saved" );
+    ok( await c.evaluate( "/puede saber/.test( document.getElementById('imagesHint').textContent )" ), "…and its hint says what it means" );
+    await pick( "hide" );
     await sleep( 400 );
+    await c.evaluate( "var x = document.getElementById('signature'); x.value = 'Ana  \\nTel 1\\n'; x.dispatchEvent( new Event('input') ); true" );
+    await shot( c, "05a-general" );
+    await sleep( 1400 );
+    const st = await c.evaluate( "fetch('/api/mail/settings').then( r => r.json() )" );
+    ok( st.signature === "Ana\nTel 1" && st.showImages === false, "the signature is saved (cleaned)", st );
     await c.evaluate( "NayiveUI.close('setSheet'); true" );
+
+    // -----------------------------------------------------------------------
+    console.log( "SIGNATURE" );
+    await c.evaluate( "window.__toasts = []; document.getElementById('composeBtn').click(); true" );
+    await waitFor( c, "!document.getElementById('composeView').hidden" );
+    ok( await c.evaluate( "document.getElementById('cText').value" ) === "\n\n-- \nAna\nTel 1", "a new message has it, under a '-- ' line",
+        await c.evaluate( "document.getElementById('cText').value" ) );
+    await c.evaluate( "var t = document.getElementById('cTo'); t.value = 'x'; t.dispatchEvent( new Event('input') ); t.value = ''; t.dispatchEvent( new Event('input') ); document.getElementById('backBtn').click(); true" );
+    ok( await waitFor( c, "document.getElementById('composeView').hidden", 5000 ), "only the signature: ← leaves" );
+    await sleep( 800 );
+    ok( ! ( await c.evaluate( "window.__toasts.join('|')" ) ).includes( "Borradores" ), "…and keeps no draft", await c.evaluate( "window.__toasts" ) );
+    await c.evaluate( row( "Pictures" ) + ".click(); true" );
+    await waitFor( c, "document.querySelector('#readBody iframe')" );
+    await c.evaluate( "document.getElementById('actReply').click(); true" );
+    await waitFor( c, "!document.getElementById('composeView').hidden" );
+    const rtext = await c.evaluate( "document.getElementById('cText').value" );
+    ok( /^\n\n-- \nAna\nTel 1\n\n.*\n> /.test( rtext ), "a reply: the signature above the quote", rtext.slice( 0, 120 ) );
+    ok( await waitFor( c, "document.activeElement.id === 'cText' && document.getElementById('cText').selectionStart === 0", 3000 ), "…the caret over it",
+        await c.evaluate( "document.activeElement.id + ' ' + document.getElementById('cText').selectionStart" ) );
+    await c.evaluate( "document.getElementById('cDiscard').click(); true" );
+    await waitFor( c, "document.getElementById('composeView').hidden" );
+    await c.evaluate( "NayiveUI.undoSettle(); true" );
+    await c.evaluate( "fetch('/api/mail/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({signature:''})}).then( r => r.status )" );
 
     // -----------------------------------------------------------------------
     console.log( "START WITHOUT THE SERVER" );

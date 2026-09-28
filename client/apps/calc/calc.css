@@ -190,10 +190,9 @@ html, body { height: 100%; overflow: hidden; }
 #nameBox    { width: 88px; text-align: center; }
 #formulaBar { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); }
 
-/* A phone only. Anywhere wider the formula editor (FORMULA EDITOR in the
-   script) takes over while a formula is typed, and the row goes; a phone
-   has no room for that panel and keeps the row. */
-@media (min-width: 641px) { #formulaRow { display: none; } }
+/* On every screen. Wider than a phone the formula editor (FORMULA EDITOR in
+   the script) opens over the cells as well while a formula is typed; the
+   row stays above it, and the bar mirrors what is typed in the cell. */
 
 /* A linked cell. The underline says "link"; the colour is the accent so it
    reads as one in either scheme. Ctrl/Cmd-click follows it — a plain click

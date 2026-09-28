@@ -33,9 +33,13 @@ package main
 // a JPEG. cleanImage picks by the file's first bytes, not its name: a browser
 // does too.
 //
-// Not handled: AVIF (its Exif is an item the file's index points at, which
-// cannot be left out without rewriting that index) and GIF (phones write no
-// GPS there; an XMP application block would pass).
+// An AVIF (or any HEIF) keeps its Exif and XMP as items its index (iloc)
+// points at; leaving one out would mean rewriting that index, so they are
+// blanked in place as for a JPEG: the GPS IFD of the Exif item, all of an XMP
+// item (exifstrip_avif.go). One this cannot walk is refused.
+//
+// Not handled: GIF (phones write no GPS there; an XMP application block would
+// pass) and BMP (it has no metadata at all).
 //
 // exifmeta.go READS the same blocks, with the same walkers.
 
@@ -80,6 +84,14 @@ const jpegPlansMax = 4096
 // cleanJPEG is `file` as a stranger may read it. `key` names the file (its
 // absolute path) for the cache.
 func cleanJPEG(key string, file *os.File, info os.FileInfo) (*cleanReader, error) {
+	return cleanBlanked(key, file, info, planJPEG)
+}
+
+// cleanBlanked is `file` with what `planner` finds blanked and cut, the plan
+// cached per file version.
+func cleanBlanked(key string, file *os.File, info os.FileInfo,
+	planner func(io.ReaderAt, int64) (jpegPlan, error)) (*cleanReader, error) {
+
 	key += "|" + itoa64(info.Size()) + "|" + itoa64(info.ModTime().UnixNano())
 
 	jpegPlans.Lock()
@@ -88,7 +100,7 @@ func cleanJPEG(key string, file *os.File, info os.FileInfo) (*cleanReader, error
 
 	if !found {
 		var err error
-		if plan, err = planJPEG(file, info.Size()); err != nil {
+		if plan, err = planner(file, info.Size()); err != nil {
 			return nil, err
 		}
 		jpegPlans.Lock()
@@ -406,14 +418,15 @@ var errBadImage = errors.New("not an image this can walk")
 
 var pngSignature = []byte("\x89PNG\r\n\x1a\n")
 
-// cleanImage is a public photo as a stranger may read it: a JPEG, PNG or WebP
-// without its position, anything else as it is. `key` names the file (its
-// absolute path) for the cache.
+// cleanImage is a public photo as a stranger may read it: a JPEG, PNG, WebP
+// or AVIF without its position, anything else as it is. `key` names the file
+// (its absolute path) for the cache.
 //
 // By its first bytes, never its name - except that a NAME this cleans (ctype
-// image/jpeg, png or webp) whose content is none of the three is refused
-// (errBadImage): a HEIC or TIFF renamed .png would otherwise go out with its
-// GPS, and a browser would show it anyway.
+// image/jpeg, png, webp or avif) whose content is none of the four is refused
+// (errBadImage): a TIFF renamed .png would otherwise go out with its GPS, and
+// a browser would show it anyway. Any ISOBMFF file (ftyp) goes to planAVIF,
+// which refuses one that is not HEIF - an MP4 renamed .gif is not sent.
 func cleanImage(key string, file *os.File, info os.FileInfo, ctype string) (io.ReadSeeker, error) {
 	head := make([]byte, 12)
 	n, _ := file.ReadAt(head, 0)
@@ -425,7 +438,9 @@ func cleanImage(key string, file *os.File, info os.FileInfo, ctype string) (io.R
 		return cleanSpliced(key, file, info, planPNG)
 	case n == 12 && string(head[:4]) == "RIFF" && string(head[8:]) == "WEBP":
 		return cleanSpliced(key, file, info, planWebP)
-	case ctype == "image/jpeg" || ctype == "image/png" || ctype == "image/webp":
+	case n >= 8 && string(head[4:8]) == "ftyp":
+		return cleanBlanked(key, file, info, planAVIF)
+	case ctype == "image/jpeg" || ctype == "image/png" || ctype == "image/webp" || ctype == "image/avif":
 		return nil, errBadImage
 	}
 	return file, nil

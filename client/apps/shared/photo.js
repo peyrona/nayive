@@ -85,6 +85,15 @@
         return IMG_EXT.indexOf( e ) !== -1;
     }
 
+    // PNG, WebP, AVIF: shown by every browser, and may be see-through.
+    function keepsAlpha( file )
+    {
+        var type = String( ( file && file.type ) || "" ).toLowerCase();
+        if ( type === "image/png" || type === "image/webp" || type === "image/avif" ) return true;
+        var e = extOf( file && file.name );
+        return ! type && ( e === "png" || e === "webp" || e === "avif" );
+    }
+
     function isJpeg( file )
     {
         var type = String( ( file && file.type ) || "" ).toLowerCase();
@@ -433,8 +442,11 @@
         if ( ! w || ! h ) { closeBitmap( bmp ); return out; }
 
         // Already small enough AND already a JPEG: re-encoding would only
-        // throw quality away for nothing.
-        if ( w <= max && h <= max && isJpeg( file ) ) { closeBitmap( bmp ); return out; }
+        // throw quality away for nothing. A PNG, WebP or AVIF that fits stays
+        // as it is too: every browser shows it, and a JPEG would lose its
+        // transparency and its name. (A fitting BMP, TIFF or HEIC still
+        // becomes a JPEG: less disk, and one every browser can show.)
+        if ( w <= max && h <= max && ( isJpeg( file ) || keepsAlpha( file ) ) ) { closeBitmap( bmp ); return out; }
 
         var blob;
         try { blob = await shrinkToJpeg( bmp, { maxW: max, maxH: max } ); }
@@ -458,10 +470,35 @@
         return out;
     }
 
+    /* A face: a person's or a contact's picture (his rule, 2026-09-27): a PNG
+     * or a JPEG of at most 300 x 300 px. One that already is goes as it is;
+     * anything else (bigger, WebP, GIF...) is drawn into a JPEG that fits.
+     * opts.jpeg: a JPEG always (the chat server takes nothing else).
+     * Returns a Blob whose type is "image/png" or "image/jpeg". */
+    var FACE = 300;
+
+    async function face( blob, opts )
+    {
+        opts = opts || {};
+        var head = new Uint8Array( await blob.slice( 0, 8 ).arrayBuffer() );
+        var png  = head[ 0 ] === 0x89 && head[ 1 ] === 0x50 && head[ 2 ] === 0x4E && head[ 3 ] === 0x47;
+        var jpg  = head[ 0 ] === 0xFF && head[ 1 ] === 0xD8;
+        if ( ( jpg || ( png && ! opts.jpeg ) ) && window.createImageBitmap )
+        {
+            var bmp = null;
+            try { bmp = await decode( blob ); } catch ( e ) {}
+            var fits = bmp && bmp.width <= FACE && bmp.height <= FACE;
+            closeBitmap( bmp );
+            if ( fits ) return new Blob( [ blob ], { type: png ? "image/png" : "image/jpeg" } );
+        }
+        return shrinkToJpeg( blob, { maxW: FACE, maxH: FACE, quality: 0.85 } );
+    }
+
     //------------------------------------------------------------------------//
 
     window.NayivePhoto =
     {
+        face:         face,
         limit:        limit,
         prepare:      prepare,
         shrinkToJpeg: shrinkToJpeg,

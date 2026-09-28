@@ -28,7 +28,7 @@
  *   } );
  *   find.open( withReplace )   find.close()   find.isOpen()
  */
-import { runRects } from './proofing-overlay.js';
+import { runRects, runIndex } from './proofing-overlay.js';
 
 const TYPE_MS   = 150;      // after the last key in the find box
 const EDIT_MS   = 300;      // after the last edit to the document
@@ -194,7 +194,10 @@ export function createFindBar( o )
 
         for( let i = list.length - 1; i >= 0; i-- ) if( ! putOver( ed, list[ i ], repl.value ) ) failed++;
 
+        // How many, and that Undo takes them back one at a time (quirks.js,
+        // replaceAllOneStepPerMatch) - fifty Ctrl+Z are a surprise otherwise.
         if( failed ) NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+        else if( list.length ) NayiveUI.toast( NayiveUI.tf( 'write.find.replaced', { n: list.length } ) );
         search( false );
     }
 
@@ -213,10 +216,11 @@ export function createFindBar( o )
         const origin = layer.getBoundingClientRect();
         const view   = scroller.getBoundingClientRect();
         const frag   = document.createDocumentFragment();
+        const spans  = runIndex( scroller );       // once per paint, not once per match
 
         matches.forEach( function( m, i )
         {
-            for( const r of runRects( scroller, m.blockId, m.start, m.start + m.length ) )
+            for( const r of runRects( scroller, m.blockId, m.start, m.start + m.length, spans ) )
             {
                 if( r.bottom < view.top - view.height || r.top > view.bottom + view.height ) continue;
 

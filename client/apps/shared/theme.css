@@ -56,6 +56,11 @@
     --warn:        #E0A21E;               /* sync dot: offline / changes pending (gold) */
     --busy:        #2179CF;               /* sync dot: a GET/PUT is in flight (blue) */
     --shadow:      rgba(0, 0, 0, 0.35);   /* drop-shadow colour, lighter in the light scheme */
+
+    /* The empty part of a bar (uploads, seek, volume) under an --accent fill.
+       Derived, so every scheme - custom ones too - keeps the fill readable:
+       --line was the same brown as the accent on beige. */
+    --track:       color-mix(in srgb, var(--accent) 18%, var(--bg));
 }
 
 :root[data-theme="light"]
@@ -212,7 +217,7 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 .transfer-row            { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: center; }
 .transfer-row.can-stop   { grid-template-columns: minmax(0, 1fr) auto; }
 .transfer-text           { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.transfer-track          { grid-column: 1; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.transfer-track          { grid-column: 1; display: block; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .transfer-fill           { display: block; height: 100%; width: 0; background: var(--accent);
                            transition: width 0.2s; }
 .transfer-stop           { grid-column: 2; grid-row: 1 / span 2; }

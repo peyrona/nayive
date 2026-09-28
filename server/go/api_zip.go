@@ -119,7 +119,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusBadRequest, "missing ?file=")
 		return
 	}
-	virt := strings.Join(splitPath(unquotePath(q.Get("file"))), "/")
+	virt := strings.Join(splitPath(q.Get("file")), "/")
 
 	src, ok := s.users.Resolve(role, user, virt)
 	if !ok {
@@ -617,7 +617,7 @@ func zipVirts(paths []string) []string {
 	var virts []string
 	seen := map[string]bool{}
 	for _, p := range paths {
-		v := strings.Join(splitPath(unquotePath(p)), "/")
+		v := strings.Join(splitPath(p), "/")
 		if v != "" && !seen[v] {
 			seen[v] = true
 			virts = append(virts, v)

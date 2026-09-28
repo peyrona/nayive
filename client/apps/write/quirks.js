@@ -108,8 +108,18 @@ export const QUIRKS =
     },
     {
         id: 'pageBreakNotRepainted', kind: 'api', value: true,
-        what: 'insert.pageBreak WRITES the break correctly - <w:br w:type="page"/> lands immediately before the caret\'s paragraph and Word / LibreOffice honour it - but the engine often does not re-lay-out the pages on screen: the paragraph stays where it was and the sheet count does not change. On the test file it repainted in 2 of 6 places. One undo always takes it back out. Nothing Write can do from the public API; re-check on a bump.',
-        since: '2026-09-20', verifiedOn: '2.21.0', site: 'pageBreakBtn, insert.pageBreak'
+        what: 'insert.pageBreak WRITES the break correctly - <w:br w:type="page"/> at the caret, Word / LibreOffice honour it. Re-checked 2026-09-28 on three real files: in the middle of a document the pages repaint (every one of 18 places, at a paragraph\'s start or end; relayout() changes nothing). What does not: a break as the very LAST thing in the document gets no page of its own until something follows it, so the caret stays on the old page. Write then splits the paragraph after the break (editor.surface.splitParagraph - Word also puts a paragraph there): the new page appears with the caret on it, and undo takes two steps.',
+        since: '2026-09-20', verifiedOn: '2.21.0', site: 'landAfterPageBreak (runSlot)'
+    },
+    {
+        id: 'paintedDom', kind: 'api', value: true,
+        what: 'nothing public says where a word is painted, so Write reads the engine\'s own page DOM: each run of text is a <span class="layout-run-text"> carrying data-paragraph-id (the surface\'s paragraph id, NOT the command contract\'s paraId) and data-start (where it starts in that paragraph), inside a .docx-page. The spelling underlines and its right-click, the find bar\'s marks, autocorrect\'s look back and the paste caret all read it; a bump that renames any of it breaks them quietly.',
+        since: '2026-09-18', verifiedOn: '2.21.0', site: 'proofing-overlay.js, find.js paint, paintedText, onContextMenu'
+    },
+    {
+        id: 'caretOffsetsOnSurface', kind: 'api', value: true,
+        what: 'the command contract\'s selection names paragraphs only (snapshot().selection.from.paraId); the caret\'s offsets are in editor.surface.state().selection (anchor / head: paragraphId + offset), and setSelection takes that shape back. `surface` is the engine\'s seam for hosts, as with the links: re-check it on a bump.',
+        since: '2026-09-19', verifiedOn: '2.21.0', site: 'caretNow, onBeforeInput, caretAfterPaste, landAfterPageBreak'
     }
 ];
 

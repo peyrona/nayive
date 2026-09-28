@@ -6,7 +6,8 @@
 NayiveI18n.ready.then( function()
 {
     API_FILES = GumApi.API_FILES;
-    store     = NayiveStore.createStore( { apiBase: API_FILES } );
+    store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeTrip } );
+    store.onMerged( onTripMerged );   // see persistence.js
 
     document.addEventListener( 'keydown', function( e )
     {

@@ -116,7 +116,7 @@
         catch( e )
         {
             if( ! call ) return;
-            if( e.status === 409 && /ocupado/.test( e.message ) ) { finish( "busy" ); return; }
+            if( e.status === 409 && e.body && e.body.busy ) { finish( "busy" ); return; }   // chat_call.go: {"busy": true}
             drop();
             if( e.status === 409 ) C.toast( "chat.inCall", 2600 );
             else C.fail( e );
@@ -559,11 +559,13 @@
 
     function show()
     {
-        var el = call.el = h( "div", { class: "call-screen" + ( call.video ? " video" : "" ), attrs: { role: "dialog", "aria-modal": "true" } } );
+        // data-win-drag: in a desktop window this screen covers Chat's top row
+        // (the window's title bar), so any empty spot of it drags the window.
+        var el = call.el = h( "div", { class: "call-screen" + ( call.video ? " video" : "" ), attrs: { role: "dialog", "aria-modal": "true", "data-win-drag": "" } } );
         el.appendChild( h( "video", { class: "call-remote", attrs: { playsinline: "", autoplay: "" } } ) );
         el.appendChild( h( "audio", { attrs: { autoplay: "" } } ) );
         el.appendChild( h( "div", { class: "call-top" } ) );
-        el.appendChild( h( "video", { class: "call-self", attrs: { playsinline: "", autoplay: "", muted: "" } } ) );
+        el.appendChild( pip() );
         el.appendChild( h( "button", { class: "text-btn call-hear", attrs: { type: "button", hidden: true }, text: T( "chat.tapToHear" ),
                                        on: { click: function () { this.hidden = true; attachRemote(); } } } ) );
         el.appendChild( h( "div", { class: "call-btns" } ) );
@@ -572,6 +574,30 @@
         var stay = function () { if( call && call.el === el ) C.pushNav( "call", stay ); };
         C.pushNav( "call", stay );
         render();
+    }
+
+    // My own picture, small, in a corner of theirs. A triangle in each of its
+    // corners moves it to that corner of the screen (the one it is in hides);
+    // the choice is kept for the next call.
+    var PIP_KEY = "nayive.chat.pip", CORNERS = { tl: "chat.pipTopLeft", tr: "chat.pipTopRight", bl: "chat.pipBottomLeft", br: "chat.pipBottomRight" };
+
+    function pipCorner()
+    {
+        var c = "";
+        try { c = localStorage.getItem( PIP_KEY ) || ""; } catch( _ ) {}
+        return CORNERS[ c ] ? c : "br";
+    }
+
+    function pip()
+    {
+        var box = h( "div", { class: "call-pip at-" + pipCorner(), attrs: { "data-win-nodrag": "" } } );
+        box.appendChild( h( "video", { class: "call-self", attrs: { playsinline: "", autoplay: "", muted: "" } } ) );
+        Object.keys( CORNERS ).forEach( function ( c )
+        {
+            box.appendChild( h( "button", { class: "call-corner " + c, attrs: { type: "button", title: T( CORNERS[ c ] ), "aria-label": T( CORNERS[ c ] ) },
+                                            on: { click: function () { box.className = "call-pip at-" + c; try { localStorage.setItem( PIP_KEY, c ); } catch( _ ) {} } } } ) );
+        } );
+        return box;
     }
 
     function render()
@@ -594,7 +620,7 @@
         var self = el.querySelector( ".call-self" );
         self.muted = true;
         if( call.local && call.video && self.srcObject !== call.local ) { self.srcObject = call.local; self.play().catch( function () {} ); }
-        self.hidden = ! ( call.video && call.local && call.cam );
+        self.parentNode.hidden = ! ( call.video && call.local && call.cam );
         self.classList.toggle( "mirror", call.facing !== "environment" );
 
         var btns = el.querySelector( ".call-btns" );

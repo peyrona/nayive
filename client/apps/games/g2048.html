@@ -195,6 +195,7 @@
             // sixth reads as a bug rather than as a decision.
             var paused = false;
             var live  = false;                 // is this the pane on screen? (the arrow keys)
+            var dirty = false;                 // the record has moved and is not written yet
 
             var cells = [];
             var boardEl, overEl, overTitleEl, overScoreEl, overBtnEl, scoreEl, bestEl, pauseBtn;
@@ -279,7 +280,9 @@
 
             function move( dir )
             {
-                if( over || paused ) return;
+                // ! overEl.hidden: the "2048!" card is up, and a move behind it
+                // would be one the player never saw.
+                if( over || paused || ! overEl.hidden ) return;
 
                 var next = grid.slice(), gained = 0, moved = false, merged = [];
 
@@ -301,7 +304,7 @@
 
                 grid   = next;
                 score += gained;
-                if( score > best ) { best = score; saveBest( 'g2048', best ); }
+                if( score > best ) { best = score; dirty = true; }
 
                 // Heard before the new tile is dealt, so `merged` still points at
                 // the tiles it made.
@@ -311,8 +314,19 @@
                 // The goal is shown once and then the game carries on. Checking
                 // it first can hide a board that is also finished, so hideOver()
                 // asks again when the player taps through.
-                if( ! won && grid.indexOf( GOAL ) !== -1 ) { won = true; showOver( 'win' ); sfx.play( 'win', null, 0.15 ); }
-                else if( ! canMove() ) { over = true; showOver( 'lost' ); sfx.play( 'over', null, 0.15 ); }
+                if( ! won && grid.indexOf( GOAL ) !== -1 ) { won = true; flush(); showOver( 'win' ); sfx.play( 'win', null, 0.15 ); }
+                else if( ! canMove() ) { over = true; flush(); showOver( 'lost' ); sfx.play( 'over', null, 0.15 ); }
+            }
+
+            // The record is put up at every PAUSE in the game and not on every
+            // move that beats it: saveBest() rewrites the whole file and queues
+            // an upload. The same rule the canvas games follow - the win, the
+            // end, the pause button, another pane, a hidden tab, a new game.
+            function flush()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                saveBest( 'g2048', best );
             }
 
             // A swish for a move that only slides; one that merges pops once for
@@ -333,6 +347,7 @@
             {
                 var i;
 
+                flush();
                 grid  = [];
                 for( i = 0; i < CELLS; i++ ) grid.push( 0 );
                 score = 0;
@@ -388,6 +403,7 @@
                 if( paused || over ) return;
 
                 paused = true;
+                flush();
                 overTitleEl.textContent = T( 'games.paused' );
                 overScoreEl.textContent = TF( 'games.scoreIs', { n: score } );
                 overBtnEl.textContent   = T( 'games.resume' );
@@ -477,6 +493,7 @@
             function leave()
             {
                 live = false;
+                flush();
                 document.removeEventListener( 'keydown', onKey );
             }
 
@@ -517,6 +534,10 @@
 
                 boardEl.addEventListener( 'touchstart', onTouchStart, { passive: true } );
                 boardEl.addEventListener( 'touchend',   onTouchEnd,   { passive: true } );
+
+                // 2048 has no clock to stop, so a hidden tab does not pause it -
+                // but it is the last moment the record can be sure to go up.
+                document.addEventListener( 'visibilitychange', function () { if( document.hidden ) flush(); } );
 
                 document.getElementById( 'g2048New' ).addEventListener( 'click', newGame );
                 pauseBtn.addEventListener( 'click', function () { if( paused ) resume(); else pause(); } );

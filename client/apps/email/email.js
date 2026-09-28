@@ -68,7 +68,7 @@
             title: "eMail",
             lead:  T( "mail.introLead" ),
             buttons: [
-                { name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTrays" ) },
+                { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTrays" ) },
                 { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introRead" ) },
                 { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ) },
                 { sel: "#composeBtn", text: T( "mail.introCompose" ) },
@@ -107,7 +107,11 @@
         E.$( "noAcctAdd" ).addEventListener( "click", function () { E.openSettings( "accounts" ); } );
         E.$( "addBtn" ).addEventListener( "click", E.addAccount );
         E.$( "imagesBtn" ).addEventListener( "click", E.showImages );
-        E.$( "imagesBarBtn" ).addEventListener( "click", E.showImages );
+        E.$( "metaBtn" ).addEventListener( "click", E.toggleMeta );
+        E.$( "readSubject" ).addEventListener( "click", function ()
+        {
+            if( ! String( getSelection() ) ) E.toggleMeta();     // not while its words are being selected
+        } );
         E.$( "acctSel" ).addEventListener( "change", function ( e ) { E.openAccount( e.target.value ); } );
         E.$( "syncIndicator" ).addEventListener( "click", function () { E.refresh( true ); } );
 

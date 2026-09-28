@@ -14,10 +14,9 @@ package main
 //
 // THIS IS THE SECURITY CORE. Two ideas to hold onto:
 //
-//  1. PASSWORDS ARE STORED IN PLAINTEXT in JSON files. That is a deliberate
-//     (documented) choice for a three-person personal server, carried over from
-//     the Python unchanged - hashing them here would lock every existing
-//     account out. It remains the biggest single design smell in the project.
+//  1. PASSWORDS ARE STORED HASHED (PBKDF2-SHA256, password_hash.go). One from
+//     before hashing is still plaintext in its file: it signs in as before,
+//     and that first good sign-in rewrites it hashed (Authenticate).
 //
 //  2. ResolvePath is the ONLY thing standing between "?file=../../etc/passwd"
 //     and the filesystem. It works by splitting the path into segments,
@@ -136,6 +135,9 @@ type PushSub struct {
 	Lang     string   `json:"lang"`
 	Label    string   `json:"label"`
 	Created  int64    `json:"created"`
+	// The device's own IANA zone: a floating calendar event rings at ITS wall
+	// clock there (reminders.go). "" = the account's zone, as before.
+	TZ string `json:"tz,omitempty"`
 }
 
 // pushFile is the on-disk shape of push.json.
@@ -484,7 +486,7 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	if opts.ClearPassword {
 		cfg.Password = ""
 	} else if opts.Password != "" {
-		cfg.Password = opts.Password
+		cfg.Password = hashPassword(opts.Password)
 	}
 	// No password given = keep the current one. An account may also have none
 	// at all: the person signs in with a blank password and the launcher then
@@ -704,35 +706,88 @@ func (u *Users) Authenticate(user, password string) string {
 			adminName, adminPassword = s.Admin.Name, s.Admin.Password
 		}
 	})
-	if adminPassword != "" && user == adminName && sameSecret(password, adminPassword) {
-		return "admin"
+	ranHash := false // the admin's own check already took a hash's time
+	if adminPassword != "" && user == adminName {
+		ranHash = true
+		if ok, rehash := checkPassword(password, adminPassword); ok {
+			if rehash { // stored before hashing: store it hashed now
+				hashed := hashPassword(password)
+				if err := u.cfg.Update(func(s *ServerConfig) {
+					// Only if nobody changed it meanwhile: a newer one wins.
+					if s.Admin != nil && s.Admin.Name == adminName && s.Admin.Password == adminPassword {
+						s.Admin.Password = hashed
+					}
+				}); err != nil {
+					u.log.Error("cannot hash the admin password", "err", err)
+				}
+			}
+			return "admin"
+		}
 	}
 
 	// A regular user: homes/<user>/data/config.json must exist with a matching
 	// password. The SAME name rule as account creation - which is also what
 	// keeps the name from escaping homes/ (no "/", "\" or ".." can pass it).
 	if !ValidUsername(user) {
+		if !ranHash {
+			checkPassword(password, pwDummyHash()) // the same time as a real account
+		}
 		return ""
 	}
 	path := u.cfgPath(user)
 	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		if !ranHash {
+			checkPassword(password, pwDummyHash())
+		}
 		return ""
 	}
 	stored := readUserConfig(path).Password
 	if stored != "" {
-		if sameSecret(password, stored) {
-			return "user"
+		ok, rehash := checkPassword(password, stored)
+		if !ok {
+			return ""
 		}
-		return ""
+		if rehash { // stored before hashing: store it hashed now
+			hashed := hashPassword(password)
+			u.cfgMu.Lock()
+			updateUserConfig(path, func(c *UserConfig) {
+				if c.Password == stored { // a password changed meanwhile wins
+					c.Password = hashed
+				}
+			})
+			u.cfgMu.Unlock()
+		}
+		return "user"
 	}
 
 	// A password-less account (freshly created by the admin): a blank password
 	// signs the person in. The launcher then makes them set a real one before
-	// they can do anything - see NeedsPassword.
-	if password == "" {
+	// they can do anything - see NeedsPassword. Only a file that really says
+	// so: one that does not parse, or a password that is not a string, reads
+	// as "" too, and must never let a blank password in.
+	if password == "" && passwordUnset(path) {
 		return "user"
 	}
 	return ""
+}
+
+// passwordUnset: config.json parses as an object and its "password" is absent,
+// null or "". A broken file or a non-string password is NOT unset.
+func passwordUnset(path string) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return false
+	}
+	pw, found := fields["password"]
+	if !found || string(pw) == "null" {
+		return true
+	}
+	var str string
+	return json.Unmarshal(pw, &str) == nil && str == ""
 }
 
 // NeedsPassword reports a regular account that exists but still has no password
@@ -746,7 +801,7 @@ func (u *Users) NeedsPassword(role, user string) bool {
 	if info, err := os.Stat(path); err != nil || info.IsDir() {
 		return false
 	}
-	return readUserConfig(path).Password == ""
+	return passwordUnset(path)
 }
 
 // SetPassword changes the password of the signed-in account (the admin's goes
@@ -755,6 +810,7 @@ func (u *Users) SetPassword(role, user, newPassword string) bool {
 	if newPassword == "" {
 		return false
 	}
+	hashed := hashPassword(newPassword)
 	if role == "admin" {
 		err := u.cfg.Update(func(s *ServerConfig) {
 			name := user
@@ -763,14 +819,14 @@ func (u *Users) SetPassword(role, user, newPassword string) bool {
 			}
 			// Rebuild the whole admin block from scratch - anything else that
 			// was in it (there should not be) is dropped.
-			s.Admin = &AdminAccount{Name: name, Password: newPassword}
+			s.Admin = &AdminAccount{Name: name, Password: hashed}
 		})
 		return err == nil
 	}
 
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	return updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Password = newPassword })
+	return updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Password = hashed })
 }
 
 // -----------------------------------------------------------------------------
@@ -1048,6 +1104,7 @@ func cleanSub(raw PushSub) (PushSub, bool) {
 		Lang:     lang,
 		Label:    label,
 		Created:  created,
+		TZ:       cleanTZ(raw.TZ),
 	}, true
 }
 
@@ -1108,6 +1165,17 @@ func (u *Users) SetPushWindow(user string, minutes json.RawMessage) (int, bool) 
 // one, and re-subscribing the same profile (permission re-granted, a
 // pushsubscriptionchange, a fresh login) must REPLACE in place, not append.
 func (u *Users) AddPushSub(user, endpoint, p256dh, auth, lang, label string, window json.RawMessage) string {
+	return u.RenewPushSub(user, "", endpoint, p256dh, auth, lang, label, window)
+}
+
+// RenewPushSub is AddPushSub for a subscription the browser REPLACED (the
+// service worker's pushsubscriptionchange): `old` is the endpoint it had. The
+// worker cannot know the language picked in Nayive, nor the device's label, so
+// when `old` is one of this user's devices its lang, label and age go to the
+// new endpoint and the old one is dropped - in the same locked write, before
+// the MaxPushSubs cut, so the renewal never pushes out another device. An old
+// endpoint we do not know (or "") is a plain add.
+func (u *Users) RenewPushSub(user, old, endpoint, p256dh, auth, lang, label string, window json.RawMessage) string {
 	fresh, ok := cleanSub(PushSub{
 		Endpoint: endpoint,
 		Keys:     PushKeys{P256dh: p256dh, Auth: auth},
@@ -1132,6 +1200,18 @@ func (u *Users) AddPushSub(user, endpoint, p256dh, auth, lang, label string, win
 	}
 
 	data := u.UserPush(user)
+	if old = strings.TrimSpace(old); old != "" && old != fresh.Endpoint {
+		for i, s := range data.Subs {
+			if s.Endpoint == old {
+				fresh.Lang, fresh.Label, fresh.TZ = s.Lang, s.Label, s.TZ
+				if s.Created != 0 {
+					fresh.Created = s.Created
+				}
+				data.Subs = append(data.Subs[:i], data.Subs[i+1:]...)
+				break
+			}
+		}
+	}
 	hit := -1
 	for i, s := range data.Subs {
 		if s.Endpoint == fresh.Endpoint {
@@ -1153,6 +1233,9 @@ func (u *Users) AddPushSub(user, endpoint, p256dh, auth, lang, label string, win
 	} else {
 		if data.Subs[hit].Created != 0 {
 			fresh.Created = data.Subs[hit].Created
+		}
+		if fresh.TZ == "" {
+			fresh.TZ = data.Subs[hit].TZ // a re-post without a zone keeps it
 		}
 		data.Subs[hit] = fresh
 		result = "updated"
@@ -1201,6 +1284,43 @@ func (u *Users) RemovePushSub(user, endpoint string) bool {
 	return atomicWriteJSON(path, data, 4) == nil
 }
 
+// cleanTZ is a zone name this server can load, or "".
+func cleanTZ(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 64 {
+		return ""
+	}
+	if _, err := time.LoadLocation(name); err != nil {
+		return ""
+	}
+	return name
+}
+
+// SetPushSubTZ records the IANA zone of ONE device (api_push.go, right after
+// RenewPushSub). An unknown zone or device changes nothing.
+func (u *Users) SetPushSubTZ(user, endpoint, tz string) {
+	tz = cleanTZ(tz)
+	if tz == "" {
+		return
+	}
+	path := u.pushPath(user)
+	u.cfgMu.Lock()
+	defer u.cfgMu.Unlock()
+	data := u.UserPush(user)
+	for i, s := range data.Subs {
+		if s.Endpoint == strings.TrimSpace(endpoint) {
+			if s.TZ == tz {
+				return
+			}
+			data.Subs[i].TZ = tz
+			if err := atomicWriteJSON(path, data, 4); err != nil {
+				u.log.Error("cannot save push.json", "user", user, "err", err)
+			}
+			return
+		}
+	}
+}
+
 // HasPushSub answers "is THIS browser already registered?" for the Mi cuenta
 // sheet.
 func (u *Users) HasPushSub(user, endpoint string) bool {
@@ -1224,7 +1344,7 @@ func (u *Users) HasPushSub(user, endpoint string) bool {
 // anything under "shared/". Asked on the four operations an "add" grant must
 // still refuse: overwrite, delete, rename/move and re-share.
 func IsSharedPath(reqPath string) bool {
-	parts := splitPath(unquotePath(reqPath))
+	parts := splitPath(reqPath)
 	return len(parts) > 0 && parts[0] == "shared"
 }
 
@@ -1241,7 +1361,7 @@ func IsSharedPath(reqPath string) bool {
 // The answer also carries the ROOT the containment check was made against, so
 // every operation on the path can go through os.Root - see sandbox.go.
 func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
-	parts := splitPath(unquotePath(reqPath))
+	parts := splitPath(reqPath)
 	if hasDotDot(parts) {
 		return Resolved{}, false
 	}

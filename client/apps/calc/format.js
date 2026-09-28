@@ -8,7 +8,7 @@
 
 import
 {
-    encodeCell, formatNumber
+    encodeCell, decodeCell, formatNumber
 }
 from './lib/xlsx-format_v2.4.1.js';
 import
@@ -19,7 +19,7 @@ import
 from './calc.js';
 import
 {
-    table, activeSheet, lastSelection, localMarks, undoStep
+    table, activeSheet, lastSelection, localMarks, undoStep, lineStyle, styleOf
 }
 from './grid.js';
 
@@ -37,59 +37,304 @@ function forEachSelectedCell( fn )
             fn( encodeCell( { r: r, c: c } ) );
 }
 
-function toggleStyleField( field )
+const MAX_COLS = 16384;     // Excel's columns, A..XFD
+
+// The look every column shares after a whole sheet was formatted (one
+// object on all 16,384 of them), or null.
+function allColumnsStyle( sh )
+{
+    const cs    = sh.colStyles || [];
+    const first = cs[ 0 ];
+    if( ! first ) return null;
+
+    for( let c = 1; c < MAX_COLS; c++ ) if( cs[ c ] !== first ) return null;
+    return first;
+}
+
+// What a change of look lands on (see THE LOOK OF A CELL in grid.js):
+//   addrs  cells - the selection, or for whole lines the cells in them that
+//          have a look of their own, plus each cell where a styled line
+//          crosses a changed one and would otherwise hide the change (a
+//          row's look beats its columns': formatting column B leaves B7 of
+//          a styled row 7 alone unless B7 gets the change as its own);
+//   rows / cols  the whole lines, from the headers; the corner (or Ctrl+A)
+//          is every column and every styled row;
+//   edge   the selection the border picker measures edges against - a
+//          whole line has no first or last cell along it.
+// Worked out BEFORE the change: a crossing depends on what was styled.
+function lookTargets()
+{
+    const sel = lastSelection;
+    const sh  = activeSheet;
+    const t   = { addrs: [], rows: [], cols: [], lines: sel ? sel.lines : null, edge: sel, base: null };
+    if( ! sel ) return t;
+
+    if( ! sel.lines ) { forEachSelectedCell( function( a ) { t.addrs.push( a ); } ); return t; }
+
+    const rows = sh.rowStyles || ( sh.rowStyles = [] );
+    const cols = sh.colStyles || ( sh.colStyles = [] );
+    const all  = sel.lines === 'all';
+    const inRows = function( r ) { return all || ( sel.lines === 'rows' && r >= sel.r1 && r <= sel.r2 ); };
+    const inCols = function( c ) { return all || ( sel.lines === 'cols' && c >= sel.c1 && c <= sel.c2 ); };
+    const seen   = {};
+    const add    = function( a ) { if( ! seen[ a ] ) { seen[ a ] = true; t.addrs.push( a ); } };
+
+    Object.keys( sh.cellStyles ).forEach( function( a )
+    {
+        const rc = decodeCell( a );
+        if( inRows( rc.r ) || inCols( rc.c ) ) add( a );
+    });
+
+    if( all )
+    {
+        rows.forEach( function( st, r ) { t.rows.push( r ); } );
+        for( let c = 0; c < MAX_COLS; c++ ) t.cols.push( c );
+        t.edge = { r1: -Infinity, r2: Infinity, c1: -Infinity, c2: Infinity };
+        return t;
+    }
+
+    if( sel.lines === 'rows' )
+    {
+        // A row with no look yet starts from the one every column shares,
+        // so a formatted sheet stays formatted; any other styled column
+        // crossing it keeps its own look where they meet (in the columns
+        // the grid has - past them nothing is on screen).
+        t.base = allColumnsStyle( sh );
+        const width = Math.min( table.countCols(), MAX_COLS );
+
+        for( let r = sel.r1; r <= sel.r2; r++ )
+        {
+            t.rows.push( r );
+            if( rows[ r ] ) continue;
+            for( let c = 0; c < width; c++ )
+                if( cols[ c ] && cols[ c ] !== t.base && ! sh.cellStyles[ encodeCell( { r: r, c: c } ) ] ) add( encodeCell( { r: r, c: c } ) );
+        }
+        t.edge = { r1: sel.r1, r2: sel.r2, c1: -Infinity, c2: Infinity };
+        return t;
+    }
+
+    for( let c = sel.c1; c <= sel.c2; c++ ) t.cols.push( c );
+    rows.forEach( function( st, r )
+    {
+        for( let c = sel.c1; c <= sel.c2; c++ )
+            if( ! sh.cellStyles[ encodeCell( { r: r, c: c } ) ] ) add( encodeCell( { r: r, c: c } ) );
+    });
+    t.edge = { r1: -Infinity, r2: Infinity, c1: sel.c1, c2: sel.c2 };
+    return t;
+}
+
+// Apply `fn( st, r, c )` - it edits the one style object it is handed - to
+// every target. A cell with no look of its own starts from the one it
+// showed (its row's or column's), so the change adds to that look instead
+// of replacing it, and gets an own style only if the change did something.
+// A line gets a new object each time, never an edited one; lines that
+// shared an object before share the new one (a whole sheet: one object).
+// An empty result takes the style away. `r` / `c` are NaN along a line.
+function changeLook( t, fn )
+{
+    const sh   = activeSheet;
+    const copy = function( st ) { return st ? JSON.parse( JSON.stringify( st ) ) : {}; };
+
+    t.addrs.forEach( function( a )
+    {
+        const rc  = decodeCell( a );
+        const own = sh.cellStyles[ a ];
+        if( own ) { fn( own, rc.r, rc.c ); return; }
+
+        const was = lineStyle( sh, rc.r, rc.c );
+        const st  = copy( was );
+        fn( st, rc.r, rc.c );
+        if( JSON.stringify( st ) !== JSON.stringify( was || {} ) ) sh.cellStyles[ a ] = st;
+    });
+
+    // Only the corner changes every line alike (no edge along either way),
+    // so only there is one new object made per old one.
+    const made = ( t.lines === 'all' ) ? new Map() : null;
+    const line = function( list, i, base, r, c )
+    {
+        const old = list[ i ] || base || null;
+        let   st;
+
+        if( made && made.has( old ) ) st = made.get( old );
+        else
+        {
+            st = copy( old );
+            fn( st, r, c );
+            if( ! Object.keys( st ).length ) st = null;
+            if( made ) made.set( old, st );
+        }
+
+        if( st ) list[ i ] = st;
+        else     delete list[ i ];
+    };
+
+    t.rows.forEach( function( r ) { line( sh.rowStyles, r, t.base, r, NaN ); } );
+    t.cols.forEach( function( c ) { line( sh.colStyles, c, null,   NaN, c ); } );
+
+    // An EMPTY cell whose own look now matches its line's adds nothing but
+    // one more styled <c> in the file: it goes. (A cell with a value keeps
+    // its own - it is its look, whatever its line does next.)
+    if( t.lines ) t.addrs.forEach( function( a )
+    {
+        const rc  = decodeCell( a );
+        const own = sh.cellStyles[ a ];
+        const ln  = lineStyle( sh, rc.r, rc.c );
+        const v   = table.getSourceDataAtCell( rc.r, rc.c );
+        if( own && ln && ( v === '' || v == null ) && JSON.stringify( own ) === JSON.stringify( ln ) ) delete sh.cellStyles[ a ];
+    });
+}
+
+// Ctrl+Z for a change of look - bold, a colour, a border, a number format:
+// the styles of the targets before `change` ran and after, as one step
+// (grid.js, undoStep). A colour picker fires on every move of the
+// pointer; while its step is still the last one done, a move of the same
+// picker over the same cells grows that step instead of adding another.
+let lookStep = null;     // { key, step, state } of the last change of look
+
+function withLookUndo( key, change, t )
+{
+    const sheet = activeSheet;
+    const addrs = t.addrs;
+    const lines = t.rows.length || t.cols.length;
+
+    // Line styles are never edited in place (see changeLook), so a copy of
+    // the two lists is enough; a cell's own style is.
+    const copy = function( st ) { return st ? JSON.parse( JSON.stringify( st ) ) : null; };
+    const snap = function()
+    {
+        const o = { cells: {} };
+        addrs.forEach( function( a ) { o.cells[ a ] = copy( sheet.cellStyles[ a ] ); } );
+        if( lines ) { o.rows = sheet.rowStyles.slice(); o.cols = sheet.colStyles.slice(); }
+        return o;
+    };
+    const put  = function( s )
+    {
+        for( const a in s.cells ) { if( s.cells[ a ] ) sheet.cellStyles[ a ] = copy( s.cells[ a ] ); else delete sheet.cellStyles[ a ]; }
+        if( s.rows ) { sheet.rowStyles = s.rows.slice(); sheet.colStyles = s.cols.slice(); }
+    };
+
+    const ur   = table.getPlugin( 'undoRedo' );
+    const top  = ur && ur.doneActions ? ur.doneActions[ ur.doneActions.length - 1 ] : null;
+    const same = key && lastSelection ? key + '@' + lastSelection.r1 + ',' + lastSelection.c1 + ':' + lastSelection.r2 + ',' + lastSelection.c2 + ':' + lastSelection.lines : null;
+
+    if( same && lookStep && lookStep.key === same && lookStep.step && lookStep.step === top )
+    {
+        change();
+        lookStep.state.after = snap();
+        return;
+    }
+
+    const before = snap();
+    change();
+    const state  = { after: snap() };
+    const step   = undoStep( function() { put( before ); }, function() { put( state.after ); } );
+
+    lookStep = { key: same, step: step, state: state };
+}
+
+// A change of look to the selection: the targets, the undo step, the redraw.
+function restyle( key, fn, seen )
 {
     if( ! lastSelection ) return;
 
-    // Mirror the anchor cell's current state, so a mixed selection turns fully on.
-    const anchorAddr = encodeCell( { r: lastSelection.r1, c: lastSelection.c1 } );
-    const turnOn      = ! ( activeSheet.cellStyles[ anchorAddr ] && activeSheet.cellStyles[ anchorAddr ][ field ] );
-
-    forEachSelectedCell( function( addr )
-    {
-        activeSheet.cellStyles[ addr ] = activeSheet.cellStyles[ addr ] || {};
-        activeSheet.cellStyles[ addr ][ field ] = turnOn;
-    });
+    const t = lookTargets();
+    if( seen ) seen( t );
+    withLookUndo( key, function() { changeLook( t, fn ); }, t );
 
     table.render();
     updateToolbarActiveState();
     scheduleAutosave();
 }
 
-function setStyleField( field, value )
+function toggleStyleField( field )
 {
     if( ! lastSelection ) return;
 
-    forEachSelectedCell( function( addr )
-    {
-        activeSheet.cellStyles[ addr ] = activeSheet.cellStyles[ addr ] || {};
-        activeSheet.cellStyles[ addr ][ field ] = value;
-    });
+    // Mirror the anchor cell's current state, so a mixed selection turns fully on.
+    const anchor = styleOf( activeSheet, lastSelection.r1, lastSelection.c1 );
+    const turnOn = ! ( anchor && anchor[ field ] );
 
-    table.render();
-    updateToolbarActiveState();
-    scheduleAutosave();
+    restyle( null, function( st ) { st[ field ] = turnOn; } );
+}
+
+function setStyleField( field, value )
+{
+    // The two colour pickers fire on every move (see withLookUndo).
+    const picker = ( field === 'color' || field === 'bg' ) ? field : null;
+
+    restyle( picker, function( st ) { st[ field ] = value; } );
 }
 
 function clearSelectionStyle()
 {
     if( ! lastSelection ) return;
 
+    const sheet = activeSheet;
+    const t     = lookTargets();
+
+    // Whole lines: their looks go, and so does every look of their own
+    // inside them - where another styled line crosses, the cell is kept
+    // plain ({}), or that line's look would show through.
+    if( t.lines )
+    {
+        // Every crossing this time, not only the ones a change needs.
+        if( t.lines !== 'all' )
+        {
+            const have  = new Set( t.addrs );
+            const cross = function( r, c ) { const a = encodeCell( { r: r, c: c } ); if( ! have.has( a ) ) { have.add( a ); t.addrs.push( a ); } };
+            const width = Math.min( table.countCols(), MAX_COLS );
+
+            if( t.lines === 'rows' ) t.rows.forEach( function( r ) { for( let c = 0; c < width; c++ ) if( sheet.colStyles[ c ] ) cross( r, c ); } );
+            else sheet.rowStyles.forEach( function( st, r ) { t.cols.forEach( function( c ) { cross( r, c ); } ); } );
+        }
+
+        withLookUndo( null, function()
+        {
+            t.addrs.forEach( function( a ) { delete sheet.cellStyles[ a ]; } );
+            t.rows.forEach( function( r ) { delete sheet.rowStyles[ r ]; } );
+            t.cols.forEach( function( c ) { delete sheet.colStyles[ c ]; } );
+            t.addrs.forEach( function( a )
+            {
+                const rc = decodeCell( a );
+                if( lineStyle( sheet, rc.r, rc.c ) ) sheet.cellStyles[ a ] = {};
+            });
+        }, t );
+
+        table.render();
+        updateToolbarActiveState();
+        scheduleAutosave();
+        return;
+    }
+
     // Ctrl+Z puts the formats back (undoStep), under any style set on those
     // cells since - that one stays on top. The sheet itself is kept: a sort
-    // gives it a new cellStyles object (and clears Ctrl+Z anyway).
-    const sheet = activeSheet;
+    // gives it a new cellStyles object (and clears Ctrl+Z anyway). A cell in
+    // a styled row or column is kept plain ({}) rather than bare, or the
+    // line's look would come straight back.
     const was   = {};
+    const plain = function( a ) { const rc = decodeCell( a ); return !! lineStyle( sheet, rc.r, rc.c ); };
 
     forEachSelectedCell( function( addr )
     {
-        if( sheet.cellStyles[ addr ] ) was[ addr ] = sheet.cellStyles[ addr ];
-        delete sheet.cellStyles[ addr ];
+        const own = sheet.cellStyles[ addr ];
+        if( own && ! Object.keys( own ).length && plain( addr ) ) return;    // already plain
+
+        if( own || plain( addr ) ) was[ addr ] = own || null;
+        if( plain( addr ) ) sheet.cellStyles[ addr ] = {};
+        else                delete sheet.cellStyles[ addr ];
     } );
 
     if( Object.keys( was ).length ) undoStep(
-        function() { for( const a in was ) sheet.cellStyles[ a ] = Object.assign( {}, was[ a ], sheet.cellStyles[ a ] ); },
-        function() { for( const a in was ) delete sheet.cellStyles[ a ]; } );
+        function()
+        {
+            for( const a in was )
+            {
+                const now = sheet.cellStyles[ a ];
+                if( was[ a ] ) sheet.cellStyles[ a ] = Object.assign( {}, was[ a ], now );
+                else if( now && ! Object.keys( now ).length ) delete sheet.cellStyles[ a ];
+            }
+        },
+        function() { for( const a in was ) { if( plain( a ) ) sheet.cellStyles[ a ] = {}; else delete sheet.cellStyles[ a ]; } } );
 
     table.render();
     updateToolbarActiveState();
@@ -101,24 +346,11 @@ function clearSelectionStyle()
 // option means "back to default", not a literal value to persist.
 function setOrClearStyleField( field, value )
 {
-    if( ! lastSelection ) return;
-
-    forEachSelectedCell( function( addr )
+    restyle( null, function( st )
     {
-        if( value === '' || value == null )
-        {
-            if( activeSheet.cellStyles[ addr ] ) delete activeSheet.cellStyles[ addr ][ field ];
-        }
-        else
-        {
-            activeSheet.cellStyles[ addr ] = activeSheet.cellStyles[ addr ] || {};
-            activeSheet.cellStyles[ addr ][ field ] = value;
-        }
-    });
-
-    table.render();
-    updateToolbarActiveState();
-    scheduleAutosave();
+        if( value === '' || value == null ) delete st[ field ];
+        else                                st[ field ] = value;
+    } );
 }
 
 // Paints the small bar under the text/fill colour glyphs to match the picked
@@ -131,8 +363,7 @@ function setColorBar( input )
 
 function updateToolbarActiveState()
 {
-    const anchorAddr = lastSelection ? encodeCell( { r: lastSelection.r1, c: lastSelection.c1 } ) : null;
-    const style      = anchorAddr ? activeSheet.cellStyles[ anchorAddr ] : null;
+    const style = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
 
     document.getElementById( 'fmtBoldBtn'         ).classList.toggle( 'active', !! ( style && style.bold )      );
     document.getElementById( 'fmtItalicBtn'       ).classList.toggle( 'active', !! ( style && style.italic )    );
@@ -146,8 +377,9 @@ function updateToolbarActiveState()
     document.getElementById( 'fmtValignMiddleBtn' ).classList.toggle( 'active', !! style && style.valign === 'middle' );
     document.getElementById( 'fmtValignBottomBtn' ).classList.toggle( 'active', !! style && style.valign === 'bottom' );
 
-    document.getElementById( 'fmtFontColor'  ).value = '#' + ( ( style && style.color ) || 'E7E7E8' );
-    document.getElementById( 'fmtFillColor'  ).value = '#' + ( ( style && style.bg )    || '202124' );
+    const ink = gridColors();
+    document.getElementById( 'fmtFontColor'  ).value = '#' + ( ( style && style.color ) || ink.text  );
+    document.getElementById( 'fmtFillColor'  ).value = '#' + ( ( style && style.bg )    || ink.paper );
     setColorBar( document.getElementById( 'fmtFontColor' ) );
     setColorBar( document.getElementById( 'fmtFillColor' ) );
     document.getElementById( 'fmtFontFamily' ).value = ( style && style.fontFamily ) || '';
@@ -162,6 +394,47 @@ function updateToolbarActiveState()
     // yes/no question - "¿ajustar texto?", "¿algo inmovilizado?" - hand their
     // light to the button that opens the card (calc.js, groups).
     syncGroupTriggers();
+}
+
+// What a cell with no colours of its own is drawn in - the theme's text on
+// the grid's paper - as "RRGGBB", for the two pickers to start from: the
+// dark theme's pair showed in the light theme too. Read off the page, since
+// the light paper is a color-mix() only the browser can work out (a 1x1
+// canvas turns any CSS colour into its bytes). Kept until the theme or the
+// colour scheme changes.
+let inkKey = null;
+let ink    = null;
+
+function gridColors()
+{
+    const root = getComputedStyle( document.documentElement );
+    const key  = root.getPropertyValue( '--text' ) + '|' + root.getPropertyValue( '--calc-paper' ) + '|' + root.getPropertyValue( '--bg' ) +
+                 '|' + root.getPropertyValue( '--card2' );
+    if( ink && key === inkKey ) return ink;
+
+    const probe = document.createElement( 'span' );
+    probe.style.cssText = 'position:absolute;visibility:hidden;color:var(--text);background-color:var(--calc-paper)';
+    document.body.appendChild( probe );
+    const cs = getComputedStyle( probe );
+
+    const cv  = document.createElement( 'canvas' );
+    cv.width  = cv.height = 1;
+    const ctx = cv.getContext( '2d', { willReadFrequently: true } );
+    const hex = function( css, fallback )
+    {
+        if( ! ctx || ! css ) return fallback;
+        ctx.clearRect( 0, 0, 1, 1 );
+        ctx.fillStyle = '#000';
+        ctx.fillStyle = css;
+        ctx.fillRect( 0, 0, 1, 1 );
+        const px = ctx.getImageData( 0, 0, 1, 1 ).data;
+        return Array.prototype.slice.call( px, 0, 3 ).map( function( b ) { return ( '0' + b.toString( 16 ) ).slice( -2 ); } ).join( '' ).toUpperCase();
+    };
+
+    ink    = { text: hex( cs.color, 'E7E7E9' ), paper: hex( cs.backgroundColor, '1E1F23' ) };
+    inkKey = key;
+    probe.remove();
+    return ink;
 }
 
 // Merged range membership has no direct query API, so the anchor cell's
@@ -191,9 +464,12 @@ function toggleFreezeColumns()
 {
     if( ! lastSelection ) return;
 
-    const frozen = table.getSettings().fixedColumnsStart > 0;
+    const was = table.getSettings().fixedColumnsStart;
+    const now = was > 0 ? 0 : ( lastSelection.c1 + 1 );
 
-    table.updateSettings( { fixedColumnsStart: frozen ? 0 : ( lastSelection.c1 + 1 ) } );
+    table.updateSettings( { fixedColumnsStart: now } );
+    undoStep( function() { table.updateSettings( { fixedColumnsStart: was } ); },
+              function() { table.updateSettings( { fixedColumnsStart: now } ); } );
 
     updateToolbarActiveState();
     scheduleAutosave();
@@ -206,9 +482,12 @@ function toggleFreezeRows()
 {
     if( ! lastSelection ) return;
 
-    const frozen = table.getSettings().fixedRowsTop > 0;
+    const was = table.getSettings().fixedRowsTop;
+    const now = was > 0 ? 0 : ( lastSelection.r1 + 1 );
 
-    table.updateSettings( { fixedRowsTop: frozen ? 0 : ( lastSelection.r1 + 1 ) } );
+    table.updateSettings( { fixedRowsTop: now } );
+    undoStep( function() { table.updateSettings( { fixedRowsTop: was } ); },
+              function() { table.updateSettings( { fixedRowsTop: now } ); } );
 
     updateToolbarActiveState();
     scheduleAutosave();
@@ -301,40 +580,29 @@ function applyBorder( pos )
 
     const weight = borderWeight;
     const color  = borderColorValue;
-    const sel    = lastSelection;
 
-    for( let r = sel.r1; r <= sel.r2; r++ )
+    // A whole row or column has no first or last cell along it, so "outer"
+    // draws only its two long edges there (see lookTargets, edge).
+    let edge = null;
+
+    restyle( null, function( st, r, c )
     {
-        for( let c = sel.c1; c <= sel.c2; c++ )
-        {
-            const addr = encodeCell( { r: r, c: c } );
+        if( pos === 'none' ) { delete st.border; return; }
 
-            if( pos === 'none' )
-            {
-                if( activeSheet.cellStyles[ addr ] ) delete activeSheet.cellStyles[ addr ].border;
-                continue;
-            }
+        const cur  = ( typeof st.border === 'object' && st.border ) ? st.border : {};
+        const next = { top: cur.top, right: cur.right, bottom: cur.bottom, left: cur.left };
 
-            const cur  = ( activeSheet.cellStyles[ addr ] && typeof activeSheet.cellStyles[ addr ].border === 'object' ) ? activeSheet.cellStyles[ addr ].border : {};
-            const next = { top: cur.top, right: cur.right, bottom: cur.bottom, left: cur.left };
+        borderSidesFor( pos, r, c, edge ).forEach( function( side ) { next[ side ] = true; } );
 
-            borderSidesFor( pos, r, c, sel ).forEach( function( side ) { next[ side ] = true; } );
+        [ 'top', 'right', 'bottom', 'left' ].forEach( function( side ) { if( ! next[ side ] ) delete next[ side ]; } );
 
-            [ 'top', 'right', 'bottom', 'left' ].forEach( function( side ) { if( ! next[ side ] ) delete next[ side ]; } );
+        if( ! Object.keys( next ).length ) return;   // this cell isn't on the picked edge
 
-            if( ! Object.keys( next ).length ) continue;   // this cell isn't on the picked edge
+        next.style = weight;
+        next.color = color;
+        st.border  = next;
+    }, function( t ) { edge = t.edge; } );
 
-            next.style = weight;
-            next.color = color;
-
-            activeSheet.cellStyles[ addr ] = activeSheet.cellStyles[ addr ] || {};
-            activeSheet.cellStyles[ addr ].border = next;
-        }
-    }
-
-    table.render();
-    updateToolbarActiveState();
-    scheduleAutosave();
     closeBorderPopup();
 }
 
@@ -440,8 +708,7 @@ function cancelNumFmt()
 {
     NayiveUI.close( 'numFmtBackdrop' );
 
-    const anchor = lastSelection ? encodeCell( { r: lastSelection.r1, c: lastSelection.c1 } ) : null;
-    const st     = anchor ? activeSheet.cellStyles[ anchor ] : null;
+    const st = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
 
     document.getElementById( 'fmtNumFormat' ).value = numFmtCategory( st && st.numFmt );
 }

@@ -420,6 +420,31 @@ func (d *Devices) SetEndpoint(owner, id, endpoint string) bool {
 	return false
 }
 
+// FollowEndpoint: `owner`'s browser renewed its push subscription (sw.js
+// pushsubscriptionchange -> /api/push with old_endpoint). The phone whose TWA
+// held the old endpoint now holds the new one, at once - not only when the app
+// next sends it (PUT /api/device/<id>). Until then SkipCallPush / HasApp would
+// not know that Chrome, and a call would ring twice. True when a row moved.
+func (d *Devices) FollowEndpoint(owner, old, endpoint string) bool {
+	if old = strings.TrimSpace(old); old == "" || endpoint == "" || old == endpoint || len(endpoint) > 1024 || !chatPushHostOK(endpoint) {
+		return false
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	moved := false
+	for i := range d.rows {
+		if d.rows[i].Owner == owner && d.rows[i].Endpoint == old {
+			d.rows[i].Endpoint = endpoint
+			moved = true
+		}
+	}
+	if moved {
+		d.save()
+	}
+	return moved
+}
+
 // Revoke forgets one phone of `owner`; its token dies with it.
 func (d *Devices) Revoke(owner, id string) bool {
 	d.mu.Lock()
@@ -1030,6 +1055,12 @@ func (s *Server) deviceFindStart(w http.ResponseWriter, r *http.Request, user st
 
 // deviceWait is the phone's long poll. It never holds a lock while it waits.
 func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceRow) {
+	// At most waitCapMax at once per phone (waitcap.go).
+	key := "device:" + dev.Hash
+	if !takeWait(w, r, key) {
+		return
+	}
+	defer waits.release(key)
 	seen := queryValue(r, "v")
 	deadline := time.Now().Add(deviceHold)
 	for {

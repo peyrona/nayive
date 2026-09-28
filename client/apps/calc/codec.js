@@ -9,12 +9,12 @@
 import
 {
     read, write, createWorkbook, appendSheet, decodeRange, encodeRange, encodeCell,
-    decodeCell, decodeCol, encodeCol
+    decodeCell, decodeCol, encodeCol, arrayToSheet
 }
 from './lib/xlsx-format_v2.4.1.js';
 import
 {
-    table, newSheet, newDoc, doc, activeSheet
+    table, newSheet, newDoc, doc, activeSheet, defaultSheetName, lineStyle
 }
 from './grid.js';
 
@@ -357,7 +357,9 @@ function shiftFormula( f, dr, dc )
 // What the library's parse leaves out of the cells, read straight from the
 // sheet's XML: each cell's style number (for the style parts the library
 // cannot read, see readStyleParts), the text of a t="d" date, the
-// formulas of a shared-formula group, and the sheet's default column width.
+// formulas of a shared-formula group, the sheet's default column width, and
+// the style numbers of whole rows and columns (<row s= customFormat="1">,
+// <col style=>), which the library does not read at all.
 //
 // A shared formula is written ONCE, on the first cell of its group
 // (<f t="shared" ref="D6:D19" si="0">E6/C6</f>); every other cell of the
@@ -367,7 +369,8 @@ function shiftFormula( f, dr, dc )
 // the distance between the two cells, the way Excel expands the group.
 function scanSheetXml( zip, partPath )
 {
-    const out = { xf: {}, dates: {}, shared: {}, rows: [], hiddenRows: [], hiddenCols: [], colWidth: null, rowHeight: null };
+    const out = { xf: {}, dates: {}, shared: {}, rows: [], hiddenRows: [], hiddenCols: [], colWidth: null, rowHeight: null,
+                  rowXf: [], colXf: [], plainWidth: [] };
     if( ! zip || ! zip.files || ! partPath || ! zip.files[ partPath ] ) return out;
 
     const xml = new TextDecoder().decode( zip.files[ partPath ] );
@@ -413,13 +416,32 @@ function scanSheetXml( zip, partPath )
         const ht = /\bht=["']([\d.]+)["']/.exec( attrs );
         if( r && ht ) out.rows[ +r[ 1 ] - 1 ] = parseFloat( ht[ 1 ] );
         if( r && /\bhidden=["'](?:1|true)["']/.test( attrs ) ) out.hiddenRows.push( +r[ 1 ] - 1 );
+
+        // A whole row's look: its s= counts only with customFormat on.
+        const s = /\bs=["'](\d+)["']/.exec( attrs );
+        if( r && s && +s[ 1 ] > 0 && /\bcustomFormat=["'](?:1|true)["']/.test( attrs ) ) out.rowXf[ +r[ 1 ] - 1 ] = +s[ 1 ];
         return tag;
     } );
     ( xml.match( /<(?:\w+:)?col\b[^>]*>/g ) || [] ).forEach( function( tag )
     {
         const min = /\bmin=["'](\d+)["']/.exec( tag ), max = /\bmax=["'](\d+)["']/.exec( tag );
-        if( ! min || ! max || ! /\bhidden=["'](?:1|true)["']/.test( tag ) ) return;
-        for( let c = +min[ 1 ] - 1; c < Math.min( +max[ 1 ], 16384 ); c++ ) out.hiddenCols.push( c );
+        if( ! min || ! max ) return;
+
+        const hidden = /\bhidden=["'](?:1|true)["']/.test( tag );
+        const st     = /\bstyle=["'](\d+)["']/.exec( tag );
+
+        // A formatted column at Excel's default width, which is how Calc
+        // writes a column that has a look but no width of its own (see
+        // sheetToWorksheet): not a width to keep, so it opens at Calc's
+        // default like its neighbours instead of narrower.
+        const plain  = !! st && ! /\bcustomWidth=["'](?:1|true)["']/.test( tag ) && /\bwidth=["']9\.140625["']/.test( tag );
+
+        for( let c = +min[ 1 ] - 1; c < Math.min( +max[ 1 ], 16384 ); c++ )
+        {
+            if( hidden ) out.hiddenCols.push( c );
+            if( st && +st[ 1 ] > 0 ) out.colXf[ c ] = +st[ 1 ];
+            if( plain ) out.plainWidth.push( c );
+        }
     });
 
     const groups  = {};    // si -> the group's formula and the cell it is written on
@@ -662,6 +684,30 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
     const endRow = Math.max( 0, range.e.r );
     const endCol = Math.max( 0, range.e.c );
 
+    // Whole rows and columns with a look (see THE LOOK OF A CELL in grid.js).
+    // One object per style number, shared by every line that has it: a
+    // formatted sheet is 16,384 columns of the same one (never edited in
+    // place, see format.js).
+    // A line whose look is the file's own default one (xf 0) has no look:
+    // LibreOffice puts such a style= on columns it only sized.
+    const lineLooks = {};
+    const xfLook    = function( n ) { return ( parts && parts.libStyle ) ? xlsxStyleToObj( parts.libStyle( n ), parts.xfs[ n ] ) : null; };
+    const plainLook = JSON.stringify( xfLook( 0 ) );
+    const lineLook  = function( n )
+    {
+        if( ! ( n in lineLooks ) )
+        {
+            const st = xfLook( n );
+            lineLooks[ n ] = ( st && JSON.stringify( st ) !== plainLook ) ? st : null;
+        }
+        return lineLooks[ n ];
+    };
+    if( scan )
+    {
+        scan.rowXf.forEach( function( n, r ) { const st = lineLook( n ); if( st ) sh.rowStyles[ r ] = st; } );
+        scan.colXf.forEach( function( n, c ) { const st = lineLook( n ); if( st ) sh.colStyles[ c ] = st; } );
+    }
+
     for( let r = 0; r <= endRow; r++ )
     {
         const row = [];
@@ -691,8 +737,14 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
             // there is something to see - a fill or a box. The rest (a font,
             // a number format waiting for a value) would only swell the file:
             // one of his sheets has 28,000 such cells.
+            // In a styled row or column every cell the file has keeps its own
+            // look, even an empty one: the line's would show instead. One with
+            // none of its own (no s=) is plain there in Excel - its own xf 0
+            // wins over the line's - and is kept plain, {}.
             const bare = ! cell || cell.t === 'z';
-            if( style && ( ! bare || style.bg || style.border ) ) sh.cellStyles[ addr ] = style;
+            const line = lineStyle( sh, r, c );
+            if( style && ( ! bare || style.bg || style.border || line ) ) sh.cellStyles[ addr ] = style;
+            else if( ! style && cell && line ) sh.cellStyles[ addr ] = {};
 
             // A note and a link are cell facts the grid can show, so they
             // belong on the sheet entry like everything else.
@@ -736,6 +788,15 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
             sh.colsSrc[ c ] = scan.colWidth;
         }
     }
+
+    // A formatted column written at Excel's default width has no width of
+    // its own (see scanSheetXml).
+    else if( scan ) scan.plainWidth.forEach( function( c )
+    {
+        if( sh.colsSrc[ c ] !== 9.140625 ) return;
+        delete sh.cols[ c ];
+        delete sh.colsSrc[ c ];
+    });
 
     ( ws[ '!rows' ] || [] ).forEach( function( row, r )
     {
@@ -781,16 +842,195 @@ function worksheetToSheet( ws, name, scan, parts, date1904 )
     return sh;
 }
 
+// A .csv into a one-sheet workbook. The library reads CSV only from a string,
+// and only comma-separated (it took the bytes for a broken .xlsx, so no .csv
+// ever opened), so it is split here (splitCsv), keeping each field's own
+// text for the save (writeCsv). The bytes are UTF-8, or else Windows' own Latin-1 (what
+// Excel writes in Spain); the separator is whichever of , ; or tab the first
+// line that has any has most of, outside quotes - the header, as a rule (a
+// bank's export may start with a title line that has none; the amounts under
+// the header may be written "12,50"). A field becomes a number only when it is
+// written as one ("-32.50", "1e5") and a number would not change it: a
+// leading zero ("08001" is a postcode), a "+" (a phone) and more than 15
+// digits stay text, as when typed (grid.js, TYPED NUMBERS AND DATES).
+function readCsv( buf )
+{
+    const bytes = ( typeof buf === 'string' ) ? null : new Uint8Array( buf );
+    let text, latin1 = false;
+
+    if( ! bytes ) text = buf;
+    else
+    {
+        try { text = new TextDecoder( 'utf-8', { fatal: true } ).decode( bytes ); }
+        catch( _ ) { text = new TextDecoder( 'windows-1252' ).decode( bytes ); latin1 = true; }
+    }
+
+    const bom = ( !! bytes && bytes[ 0 ] === 0xEF && bytes[ 1 ] === 0xBB && bytes[ 2 ] === 0xBF );
+    text = text.replace( /^\uFEFF/, '' );
+
+    const head = text.slice( 0, 20000 ).replace( /"(?:[^"]|"")*"/g, '' ).split( /\r\n|\r|\n/ )
+                     .filter( function( line ) { return /[,;\t]/.test( line ); } )[ 0 ] || '';
+    let sep = ',', most = 0;
+    [ ',', ';', '\t' ].forEach( function( ch )
+    {
+        const n = head.split( ch ).length - 1;
+        if( n > most ) { most = n; sep = ch; }
+    });
+
+    const fields = splitCsv( text, sep );
+    const rows   = fields.map( function( row )
+    {
+        return row.map( function( f )
+        {
+            const v = f.value;
+            const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE][-+]?\d+)?$/.exec( v );
+            if( ! m || ( m[ 2 ].length > 1 && m[ 2 ].charAt( 0 ) === '0' ) || m[ 2 ].length + ( m[ 3 ] || '' ).length > 15 ) return v;
+            const n = Number( v );
+            return isFinite( n ) ? n : v;
+        });
+    });
+
+    const name = defaultSheetName();
+    const wb   = { SheetNames: [ name ], Sheets: {} };
+    wb.Sheets[ name ] = arrayToSheet( rows.length ? rows : [ [ '' ] ] );
+
+    // Each field's text as the file has it, by address; its value is filled
+    // in once the sheet is built (decodeToDoc). The line break is the first
+    // one the file uses.
+    const raw = {};
+    fields.forEach( function( row, r ) { row.forEach( function( f, c ) { raw[ encodeCell( { r: r, c: c } ) ] = { raw: f.raw }; } ); } );
+
+    const eol = /\r\n|\n|\r/.exec( text );
+
+    // A Latin-1 file was made for Excel, which reads UTF-8 right only with
+    // the mark in front: the save writes UTF-8, so it gets one.
+    return { wb: wb, sep: sep, bom: bom || latin1, raw: raw,
+             eol: eol ? eol[ 0 ] : '\n', endEol: /(?:\r\n|\n|\r)$/.test( text ) };
+}
+
+// A CSV text as rows of fields, each { value, raw }: the value is what the
+// field says ("a,b" for "\"a,b\""), the raw text is the field exactly as
+// written, quotes and all. A line break ends a row unless it is inside
+// quotes; the break after the last row makes no empty row of its own.
+function splitCsv( text, sep )
+{
+    const rows = [];
+    let row = [];
+    let i   = 0;
+    const n = text.length;
+    const end = function( ch ) { return ch === sep || ch === '\r' || ch === '\n'; };
+
+    while( i < n )
+    {
+        const start = i;
+        let value   = '';
+
+        if( text.charAt( i ) === '"' )
+        {
+            for( i++; i < n; i++ )
+            {
+                const ch = text.charAt( i );
+                if( ch !== '"' ) { value += ch; continue; }
+                if( text.charAt( i + 1 ) === '"' ) { value += '"'; i++; continue; }
+                i++;
+                break;
+            }
+            // Anything between the closing quote and the separator is kept.
+            while( i < n && ! end( text.charAt( i ) ) ) value += text.charAt( i++ );
+        }
+        else
+        {
+            while( i < n && ! end( text.charAt( i ) ) ) i++;
+            value = text.slice( start, i );
+        }
+
+        row.push( { value: value, raw: text.slice( start, i ) } );
+
+        if( i < n && text.charAt( i ) === sep )
+        {
+            i++;
+            if( i === n ) row.push( { value: '', raw: '' } );      // "a,b," at the very end
+            continue;
+        }
+
+        rows.push( row );
+        row = [];
+        if( text.charAt( i ) === '\r' && text.charAt( i + 1 ) === '\n' ) i += 2;
+        else if( i < n ) i++;
+    }
+    if( row.length ) rows.push( row );
+
+    return rows;
+}
+
+// A .csv save of the sheet `sh`. When it was opened from a .csv
+// (sh.csvRaw), every field the user did not change goes back exactly as the
+// file had it: "-32.50" stays "-32.50", not the number's own -32.5, and
+// text from the file never gets an apostrophe. The rest - an edited cell, a
+// new one, every cell of a sheet from an .xlsx - is what the library writes,
+// field by field (`lib`, its CSV of the worksheet `ws`), with one change:
+// text that begins with = + - @ (a formula, to a spreadsheet opening the
+// file) gets an apostrophe in front, the usual guard. Rows and fields run as
+// far as the file's or the sheet's, whichever is longer, with the file's own
+// line break.
+function writeCsv( sh, ws, lib, csv )
+{
+    const fresh = splitCsv( lib, csv.sep );
+    const raw   = sh.csvRaw || {};
+    const data  = sh.data || [];
+
+    const guard = function( r, c, field )
+    {
+        const cell = ws[ encodeCell( { r: r, c: c } ) ];
+        const text    = cell && cell.t === 's' && /^[=+\-@\t\r]/.test( String( cell.v ) );
+        const formula = cell && cell.f && cell.v === undefined;      // no result: written as "=…"
+        if( ! text && ! formula ) return field;
+        return field.charAt( 0 ) === '"' ? '"\'' + field.slice( 1 ) : "'" + field;
+    };
+
+    const width = [];
+    const grow  = function( r, c ) { if( ! ( width[ r ] > c ) ) width[ r ] = c + 1; };
+    Object.keys( raw ).forEach( function( addr ) { const rc = decodeCell( addr ); grow( rc.r, rc.c ); } );
+    data.forEach( function( row, r )
+    {
+        ( row || [] ).forEach( function( v, c ) { if( v !== '' && v !== null && v !== undefined ) grow( r, c ); } );
+    });
+
+    const lines = [];
+    for( let r = 0; r < width.length; r++ )
+    {
+        const fields = [];
+        for( let c = 0; c < ( width[ r ] || 0 ); c++ )
+        {
+            const was = raw[ encodeCell( { r: r, c: c } ) ];
+            const now = data[ r ] ? data[ r ][ c ] : undefined;
+            const same = was && ( now === was.value || ( ( now === '' || now == null ) && ( was.value === '' || was.value == null ) ) );
+
+            if( same ) fields.push( was.raw );
+            else       fields.push( ( fresh[ r ] && fresh[ r ][ c ] ) ? guard( r, c, fresh[ r ][ c ].raw ) : '' );
+        }
+        lines.push( fields.join( csv.sep ) );
+    }
+
+    return lines.join( csv.eol ) + ( csv.endEol && lines.length ? csv.eol : '' );
+}
+
 // Read a file into the workbook model. Still one sheet on the grid — the
 // tabs come later — but the doc shape, the source bytes and the loss list
 // are all in place from here on.
 async function decodeToDoc( buf, ext )
 {
     // sheetStubs: a cell with a style and no value (a painted or boxed empty
-    // cell) is otherwise skipped by the parse, and its look lost.
-    const wb = await read( buf, { type: 'array', cellFormula: true, cellStyles: true, keepZip: true, sheetStubs: true } );
+    // cell) is otherwise skipped by the parse, and its look lost. A .csv
+    // takes its own way in (readCsv).
+    const csv = ( ext === 'csv' ) ? readCsv( buf ) : null;
+    const wb  = csv ? csv.wb
+                    : await read( buf, { type: 'array', cellFormula: true, cellStyles: true, keepZip: true, sheetStubs: true } );
 
     const d = newDoc();
+
+    // How the .csv was written, so a save writes it the same way (encodeFromGrid).
+    if( csv ) d.csv = { sep: csv.sep, bom: csv.bom, eol: csv.eol, endEol: csv.endEol };
 
     d.srcZip = wb._zip || null;
     d.lossy  = detectLossy( wb );
@@ -801,11 +1041,15 @@ async function decodeToDoc( buf, ext )
     // back so; written as 1900, every date in it moved four years.
     d.date1904 = !! ( wb.Workbook && wb.Workbook.WBProps && wb.Workbook.WBProps.date1904 );
 
-    const names = ( wb.SheetNames && wb.SheetNames.length ) ? wb.SheetNames : [ 'Hoja1' ];
+    const names = ( wb.SheetNames && wb.SheetNames.length ) ? wb.SheetNames : [ defaultSheetName() ];
     const state = ( wb.Workbook && wb.Workbook.Sheets ) || [];
 
     const parts  = sheetPartsByName( d.srcZip );
     const styles = readStyleParts( d.srcZip );
+
+    // The library's reading of one style number, for whole rows and columns
+    // (worksheetToSheet): it reads them only off cells itself.
+    if( styles ) styles.libStyle = wb._xfStyle || null;
 
     d.sheets = names.map( function( name, i )
     {
@@ -827,6 +1071,20 @@ async function decodeToDoc( buf, ext )
     });
 
     if( d.sheets.some( function( sh ) { return sh.unread; } ) ) d.lossy.push( 'calc.lossyUnread' );
+
+    // Each field of a .csv, with the value the grid holds for it: a field
+    // whose cell still holds that value is written back as it was (writeCsv).
+    if( csv )
+    {
+        const sh = d.sheets[ 0 ];
+        Object.keys( csv.raw ).forEach( function( addr )
+        {
+            const rc  = decodeCell( addr );
+            const row = sh.data[ rc.r ];
+            csv.raw[ addr ].value = row ? row[ rc.c ] : undefined;
+        });
+        sh.csvRaw = csv.raw;
+    }
 
     // Open on the first sheet the user can actually see.
     d.active = Math.max( 0, d.sheets.findIndex( function( sh ) { return ! sh.hidden; } ) );
@@ -915,7 +1173,11 @@ function sheetToWorksheet( sh, xlsx )
 
             const addr  = encodeCell( { r: r, c: c } );
             const cell  = valueToCell( raw );
-            const style = objToXlsxStyle( sh.cellStyles[ addr ] );
+
+            // A cell with no look of its own goes out with its row's or
+            // column's as its own s=, as Excel writes a value typed into a
+            // formatted row: in the file an own s= - even none - wins.
+            const style = objToXlsxStyle( sh.cellStyles[ addr ] || lineStyle( sh, r, c ) );
 
             // A formula is written with its last result beside it. Excel
             // recalculates on open and never notices, but anything that
@@ -949,11 +1211,15 @@ function sheetToWorksheet( sh, xlsx )
         if( ws[ addr ] ) return;
 
         const style = objToXlsxStyle( sh.cellStyles[ addr ] );
-        if( ! style ) return;
+        const rc    = decodeCell( addr );
+
+        // An empty cell kept plain in a styled row or column ({}, see
+        // THE LOOK OF A CELL in grid.js) goes out as a bare <c r=".."/>:
+        // its own xf 0 is what keeps the line's look off it.
+        if( ! style && ! lineStyle( sh, rc.r, rc.c ) ) return;
 
         // t 'z': an empty cell, <c r=".." s=".."/> - not a text cell with no text.
-        const rc = decodeCell( addr );
-        ws[ addr ] = { t: 'z', s: style };
+        ws[ addr ] = style ? { t: 'z', s: style } : { t: 'z', z: 'General' };
 
         if( rc.r > maxRow ) maxRow = rc.r;
         if( rc.c > maxCol ) maxCol = rc.c;
@@ -1029,13 +1295,42 @@ function sheetToWorksheet( sh, xlsx )
         rows[ r ] = hidden ? { hpt: hpt, hidden: true } : { hpt: hpt };
     }
 
+    // Whole rows and columns with a look (see THE LOOK OF A CELL in grid.js):
+    // style= on the <col>, s= customFormat="1" on the <row>. No cell is
+    // written for them and the used range does not grow; a column that has
+    // no width of its own goes out at Excel's default (the writer). Not in
+    // a .csv. Lines a shift pushed past the sheet's edge are dropped.
+    if( xlsx )
+    {
+        const looks = new Map();       // one written style per object: 16,384 columns may share one
+        const look  = function( st )
+        {
+            if( ! looks.has( st ) ) looks.set( st, objToXlsxStyle( st ) );
+            return looks.get( st );
+        };
+
+        ( sh.colStyles || [] ).forEach( function( st, c )
+        {
+            const xs = look( st );
+            if( ! xs || c > 16383 ) return;
+            cols[ c ] = Object.assign( {}, cols[ c ], { s: xs } );
+        });
+        ( sh.rowStyles || [] ).forEach( function( st, r )
+        {
+            const xs = look( st );
+            if( ! xs || r > 1048575 ) return;
+            rows[ r ] = Object.assign( {}, rows[ r ], { s: xs } );
+        });
+    }
+
     if( cols.length ) ws[ '!cols' ] = cols;
     if( rows.length ) ws[ '!rows' ] = rows;
 
     // A row with a height of its own (or hidden) and no cell in it: the
     // writer puts out a <row> only around cells, so its height was lost.
     // One empty cell in column A carries it (<c r="A5"/>, nothing more).
-    // Not in a .csv, where it would only add blank lines.
+    // Not in a .csv, where it would only add blank lines. A row with only
+    // a look needs none: the writer puts that <row> out by itself.
     if( xlsx && rows.length )
     {
         const filled = new Set();
@@ -1043,7 +1338,7 @@ function sheetToWorksheet( sh, xlsx )
 
         rows.forEach( function( rw, r )
         {
-            if( filled.has( r ) ) return;
+            if( filled.has( r ) || ( rw.hpt == null && ! rw.hidden ) ) return;
             ws[ encodeCell( { r: r, c: 0 } ) ] = { t: 'z', z: 'General' };
             if( r > maxRow ) maxRow = r;
         });
@@ -1094,7 +1389,7 @@ async function encodeFromGrid( ext )
 
     sheets.forEach( function( sh )
     {
-        appendSheet( wb, sheetToWorksheet( sh, bookType === 'xlsx' ), sh.name || 'Hoja1' );
+        appendSheet( wb, sheetToWorksheet( sh, bookType === 'xlsx' ), sh.name || defaultSheetName() );
     });
 
     // A sheet hidden in the original stays hidden.
@@ -1121,8 +1416,25 @@ async function encodeFromGrid( ext )
     if( names.length )    wb.Workbook.Names   = names;
     if( doc.date1904 )    wb.Workbook.WBProps = { date1904: true };     // see decodeToDoc
 
-    return await write( wb, { type: 'array', bookType: bookType, cellStyles: true,
-                              preserve: doc.srcZip } );
+    // A .csv goes back with the separator and the byte-order mark it came
+    // with (see readCsv); a new one, or one saved from an .xlsx, with commas.
+    // The library's own guard against formulas in a .csv is off: it put an
+    // apostrophe in front of every negative NUMBER too. writeCsv guards the
+    // text written from here instead.
+    const csv = ( bookType === 'csv' && doc.csv ) || { sep: ',', eol: '\n', endEol: false };
+    let   out = await write( wb, { type: 'array', bookType: bookType, cellStyles: true,
+                                   preserve: doc.srcZip, FS: csv.sep, escapeFormulae: false } );
+
+    // A sheet that came from a .csv keeps every field it was not edited in.
+    if( bookType === 'csv' && sheets[ 0 ] )
+        out = new TextEncoder().encode( writeCsv( sheets[ 0 ], wb.Sheets[ wb.SheetNames[ 0 ] ], new TextDecoder().decode( out ), csv ) );
+
+    if( ! csv.bom ) return out;
+
+    const withBom = new Uint8Array( out.length + 3 );
+    withBom.set( [ 0xEF, 0xBB, 0xBF ] );
+    withBom.set( out, 3 );
+    return withBom;
 }
 
 // `iso` is the cell's own text when it is a t="d" date (see scanSheetXml).

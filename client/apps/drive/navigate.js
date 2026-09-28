@@ -216,7 +216,7 @@ async function loadListing( path )
         listingLoading = false;
         curListing = { path: path, nodes: [] };
         render();
-        if( String( err && err.message ).indexOf( '401' ) >= 0 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
         NayiveUI.toast( T( 'drive.openFolderFailed' ) );
     }
 }

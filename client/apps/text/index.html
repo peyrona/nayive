@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
          then modes and add-ons, then the deferred module script below. -->
@@ -444,7 +445,7 @@
             <h2 data-i18n="ui.saveAs"></h2>
             <div class="field">
                 <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" placeholder="nuevo.txt" autocomplete="off">
+                <input type="text" id="saveName" data-i18n-attr="placeholder:text.defaultFile" autocomplete="off">
             </div>
             <div class="field">
                 <label for="saveFormat" data-i18n="text.format"></label>
@@ -616,15 +617,19 @@
             store      : store,
             appDir     : APP_DIR,
             openRoot   : OPEN_ROOT,
-            defaultName: 'nuevo.txt',
+            defaultName: T( 'text.defaultFile' ),
             canOpen    : textCanOpen,              // what the Open dialog lists
             emptyKey   : 'text.noTextFiles',
             encode     : function() { return getEditorText(); },
             load       : loadText,
             blank      : blankText,
             finishName : textSaveName,
-            onSavedAs  : function( p ) { if( editor && ! store.isBlocked( p ) ) editor.setOption( 'readOnly', false ); },   // a UTF-8 copy is ours to edit (WHAT IS IN THE FILE)
-            sameNameRefused: function( name ) { return NayiveUI.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the non-UTF-8 file itself
+            onSavedAs  : function( p )
+            {
+                if( tooBig ) { store.block( p ); return; }   // the copy is just as big: read-only too
+                if( editor && ! store.isBlocked( p ) ) editor.setOption( 'readOnly', false );   // a UTF-8 copy is ours to edit (WHAT IS IN THE FILE)
+            },
+            sameNameRefused: function( name ) { return tooBig ? tooBigText( name ) : NayiveUI.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the blocked file itself
             onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
             focus      : function() { if( editor && ! mdReading ) editor.focus(); }
         } );
@@ -880,6 +885,27 @@
             return document.documentElement.dataset.theme === 'light' ? 'default' : 'dracula';
         }
 
+        // The find / replace / go-to bars speak the interface language (CodeMirror's
+        // own words are English).
+        function cmPhrases()
+        {
+            return {
+                'Search:'                            : T( 'text.cm.search' ),
+                '(Use /re/ syntax for regexp search)': T( 'text.cm.reHint' ),
+                'Replace:'                           : T( 'text.cm.replace' ),
+                'Replace all:'                       : T( 'text.cm.replaceAll' ),
+                'With:'                              : T( 'text.cm.with' ),
+                'Replace with:'                      : T( 'text.cm.replaceWith' ),
+                'Replace?'                           : T( 'text.cm.replaceQ' ),
+                'Yes'                                : T( 'text.cm.yes' ),
+                'No'                                 : T( 'text.cm.no' ),
+                'All'                                : T( 'text.cm.all' ),
+                'Stop'                               : T( 'text.cm.stop' ),
+                'Jump to line:'                      : T( 'text.cm.jumpTo' ),
+                '(Use line:column or scroll% syntax)': T( 'text.cm.lineHint' )
+            };
+        }
+
         function initEditor()
         {
             editor = CodeMirror.fromTextArea( document.getElementById( 'editor' ),
@@ -901,6 +927,7 @@
                 foldGutter         : true,
                 gutters            : [ 'CodeMirror-linenumbers', 'CodeMirror-foldgutter' ],
                 placeholder        : T( 'text.emptyDoc' ),
+                phrases            : cmPhrases(),
                 extraKeys          :
                 {
                     'Ctrl-S'      : function() { saveNow(); },
@@ -995,9 +1022,15 @@
             try { localStorage.setItem( MARGIN_KEY, String( marginCols ) ); } catch( _ ) {}
         }
 
+        // Lines end as the file ends them: CodeMirror reads "\r\n" and hands back
+        // "\n", so a Windows file would change on every line at its first save.
+        let eol = '\n';
+
         function setEditorText( text )
         {
             editor.setOption( 'readOnly', false );   // another document: only loadText says it is not ours to write
+            tooBig = false;
+            eol = ( text || '' ).indexOf( '\r\n' ) !== -1 ? '\r\n' : '\n';
             suppressChange = true;
             editor.setValue( text || '' );
             editor.clearHistory();
@@ -1007,7 +1040,7 @@
 
         function getEditorText()
         {
-            return editor.getValue();
+            return editor.getValue( eol );
         }
 
         // The MIMEs the language <select> offers — also the only values setLanguage()
@@ -1425,6 +1458,7 @@
         {
             const why = store.isBlocked( session.path() );
             if( why === 'loading' ) return;   // still being read: nothing to save yet
+            if( why && tooBig ) { NayiveUI.toast( tooBigText( O.baseName( session.path() ) ), { ms: 5000 } ); return; }   // a copy would be just as big
             if( why ) { session.openSaveAs(); return; }
             session.saveNow();
         }
@@ -1471,9 +1505,18 @@
             try     { setPreview( isMarkdown() ); }   // a .md file opens as a document, not as source
             finally { mdOpening = null; }
 
+            // Too big to autosave: every save sends the whole text again (a 300 MB
+            // log, over and over). It opens to read; nothing is written back.
+            if( how === 'open' && ( text || '' ).length > TOO_BIG )
+            {
+                store.block( name );
+                tooBig = true;
+                editor.setOption( 'readOnly', true );
+                NayiveUI.toast( tooBigText( O.baseName( name ) ), { ms: 5000 } );
+            }
             // Not UTF-8, or no way to tell: on screen as it really reads, but a
             // save would write it back as UTF-8 - so it is not written at all.
-            if( how === 'open' && enc !== 'UTF-8' )
+            else if( how === 'open' && enc !== 'UTF-8' )
             {
                 store.block( name );
                 editor.setOption( 'readOnly', true );
@@ -1500,6 +1543,10 @@
         // uses - are refused.
 
         const SNIFF_BYTES = 8000;
+        const TOO_BIG     = 20e6;   // characters: above this a file opens read-only (see loadText)
+        let   tooBig      = false;  // the document on screen is one of those (setEditorText clears it)
+
+        function tooBigText( name ) { return TF( 'text.tooBig', { name: name, mb: Math.round( TOO_BIG / 1e6 ) } ); }
 
         // bytes -> { text, enc }; throws notText() for a binary file.
         function decodeText( bytes, name )

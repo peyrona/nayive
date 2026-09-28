@@ -37,9 +37,16 @@ async function _tryAutoAccess_()
         pollConvert();   // a conversion may still be running from an earlier upload
         refreshDiskGauge();                                 // fill the server-HD bar under the title
     }
-    catch( _ )
+    catch( err )
     {
-        GumApi.loginRedirect();
+        // Only a 401 means "not signed in". Anything else - offline, a server
+        // hiccup, a bad ?sel= - leaves Drive where it is and says so; a press
+        // on the plug tries again (reload()).
+        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        console.error( err );
+        document.getElementById( 'app' ).style.display = '';
+        setSyncStatus( false );
+        setStatus( T( 'drive.reloadError' ) );
     }
 }
 

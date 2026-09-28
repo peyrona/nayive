@@ -151,12 +151,6 @@ func TestSharedPathStaysInsideTheGrant(t *testing.T) {
 		slug + "/../../data/config.json", // ana's password, one level up
 		slug + "/../../../etc/passwd",
 		slug + "/..",
-		// "%2e%2e" must be caught as "..", never taken for a filename. This
-		// calls ResolvePath DIRECTLY, which decodes once; over HTTP the query
-		// parser has already decoded once more, so the doubly-encoded spelling
-		// is checked through a real request in TestSharedPathRefusesEveryWrite.
-		slug + "/%2e%2e/secreto.txt",
-		slug + "/%2e%2e/%2e%2e/data/config.json",
 		// "~" lends a shared TRIP's linked documents. This is a photo album, so
 		// it lends nothing that way - and may not be used to address her home.
 		slug + "/~/files/secreto.txt",
@@ -167,6 +161,19 @@ func TestSharedPathStaysInsideTheGrant(t *testing.T) {
 	}
 	for _, path := range refused {
 		if got, _ := users.ResolvePath("user", "beto", path); got != "" {
+			t.Errorf("ResolvePath(%q) ESCAPED the lent folder to %q", path, got)
+		}
+	}
+	// ResolvePath takes an already-decoded path (S2-#5): "%2e%2e" here is a
+	// literal name, which may resolve - but only INSIDE the album. Over HTTP the
+	// query parser turns it into "..", checked through a real request in
+	// TestSharedPathRefusesEveryWrite.
+	for _, path := range []string{
+		slug + "/%2e%2e/secreto.txt",
+		slug + "/%2e%2e/%2e%2e/data/config.json",
+	} {
+		got, _ := users.ResolvePath("user", "beto", path)
+		if got != "" && !isInside(filepath.Join(home, "files", "album"), got) {
 			t.Errorf("ResolvePath(%q) ESCAPED the lent folder to %q", path, got)
 		}
 	}
@@ -341,9 +348,9 @@ func TestSharedPathRefusesEveryWrite(t *testing.T) {
 	}
 
 	// Traversal through the REAL request path, where the query parser decodes
-	// once and ResolvePath decodes again - so the doubly-encoded spelling is
-	// the one that becomes "..". Whatever it decodes to, the secret next door
-	// must never come back.
+	// once (and only once: S2-#5) - so "%2e%2e" becomes "..", and the
+	// doubly-encoded spelling a literal name. Whatever it decodes to, the
+	// secret next door must never come back.
 	secret := filepath.Join(srv.cfg.HomesDir, "ana", "files", "secreto.txt")
 	os.WriteFile(secret, []byte("la clave de ana"), 0o644)
 	for _, tail := range []string{

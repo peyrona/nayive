@@ -67,6 +67,10 @@ var (
 	// convert.go's ffmpeg output while it is being written. Same shape and
 	// same 0600-until-done rule as an upload's temp.
 	convertNameRE = regexp.MustCompile(`^\.convert-[a-z0-9_]{8}$`)
+	// The chat's upload, cleaned-photo and forward temps (api_chat.go), made
+	// by os.CreateTemp: its random part is a decimal number. Swept only inside
+	// homes/<u>/data/chat/, and only while still 0600 (S2-#45).
+	chatTempRE = regexp.MustCompile(`^\.(?:up|jpg|fw)-\d{1,20}$`)
 )
 
 // isTempName reports a leftover from an atomic write or a streamed upload.
@@ -113,6 +117,8 @@ func NewFileTree(baseDir, homesDir, configDir string, shares *Shares) *FileTree 
 //	                         own file never has it.
 //	".convert-<8 chars>"     convert.go's ffmpeg output. Same rules as
 //	                         ".upload-": anywhere, and only while still 0600.
+//	".up-<n>" ".jpg-<n>"     the chat's temps (os.CreateTemp's shape). Only
+//	".fw-<n>"                under homes/<u>/data/chat/, only while 0600.
 //
 // This is a deliberate difference from the Python, which sweeps both shapes
 // everywhere - see docs/go-port.md, "Deliberate differences".
@@ -125,13 +131,26 @@ func (t *FileTree) SweepStaleTemp() int {
 	}
 
 	jsonDirs := []string{t.configDir, filepath.Join(t.baseDir, ".trash")}
+	var chatDirs []string
 	if homes, err := os.ReadDir(t.homesDir); err == nil {
 		for _, h := range homes {
 			if h.IsDir() {
 				home := filepath.Join(t.homesDir, h.Name())
 				jsonDirs = append(jsonDirs, filepath.Join(home, "data"), filepath.Join(home, ".trash"))
+				chatDirs = append(chatDirs, filepath.Join(home, "data", "chat"))
 			}
 		}
+	}
+	for _, dir := range chatDirs {
+		filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || !d.Type().IsRegular() || !chatTempRE.MatchString(d.Name()) {
+				return nil
+			}
+			if info, err := d.Info(); err == nil && info.Mode().Perm()&0o077 == 0 {
+				remove(path)
+			}
+			return nil
+		})
 	}
 	for _, dir := range jsonDirs {
 		entries, err := os.ReadDir(dir)

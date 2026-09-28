@@ -22,7 +22,11 @@
     <link rel="stylesheet" href="shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="shared/theme.js" defer></script>
+    <script src="shared/locker.js"></script>
     <script src="shared/ui.js" defer></script>
+    <!-- Only for signing a regular account out (the 403 below): its saves
+         still waiting here, as the launcher's sign-out does. -->
+    <script src="shared/store.js" defer></script>
 
     <style>
         /* Base reset + fonts from ../shared/app.css. Standalone admin panel -
@@ -39,7 +43,7 @@
         {
             display: flex; align-items: center; gap: 10px; margin: 4px 0 22px;
         }
-        /* the icon + title go back to the launcher, as in every app (shared/ui.js) */
+        /* the icon + title go home, as in every app (shared/ui.js) - here: this page */
         .brand > svg { width: 26px; height: 26px; }
         /* the one page-wide Save lives at the right of the title */
         .brand-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -139,9 +143,34 @@
         .hide { display: none !important; }
         @media ( max-width: 560px )
         {
-            .col-pass, thead .col-pass { display: none; }
             .row2 { flex-direction: column; gap: 0; }
             .brand { flex-wrap: wrap; }
+
+            /* A phone: one card per user. As a table it was wider than the
+               screen (usage and delete off to the right) and it had to hide
+               the Password column, so no password could be set from a phone.
+               Each field gets its column's name above it, like a label. */
+            #usersSec table, #usersSec tbody, #usersSec tr, #usersSec td { display: block; width: auto; }
+            #usersSec thead { display: none; }
+            #usersSec tr { position: relative; padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
+            #usersSec td { border: none; padding: 4px 0; }
+            #usersSec td.col-user  { padding-right: 96px; }
+            #usersSec td.col-act   { position: absolute; top: 10px; right: 0; padding: 0; }
+            #usersSec td.col-quota input,
+            #usersSec td.col-photo input { width: 100%; text-align: left; }
+            #usersSec td.col-quota::before,
+            #usersSec td.col-photo::before,
+            #usersSec td.col-use::before,
+            #usersSec td.col-pass::before
+            {
+                display: block; margin: 0 0 4px 2px; font-size: 0.72rem; color: var(--text-dim);
+                text-transform: uppercase; letter-spacing: 0.04em;
+            }
+            #usersSec td.col-quota::before { content: "Quota GiB"; }
+            #usersSec td.col-photo::before { content: "Photo px"; }
+            #usersSec td.col-use::before   { content: "Usage"; }
+            #usersSec td.col-pass::before  { content: "Password"; }
+            #usersSec td.col-use .pct { display: inline; margin-left: 6px; }
         }
     </style>
 </head>
@@ -368,6 +397,19 @@
         if ( b ) showTab( b.dataset.tab );
     } );
 
+    // -- home ---------------------------------------------------------------
+    // The icon and the title lead home, as in every app (shared/ui.js) - but
+    // the admin's home is this page: at the launcher every tile answers 403 to
+    // it. A regular account (the 403 below) still goes to the launcher.
+    var IS_ADMIN = false;
+    document.querySelector( '.brand' ).addEventListener( 'click', function ( e )
+    {
+        if ( ! IS_ADMIN || ! e.target.closest( '.app-icon, .app-title' ) ) return;
+        e.preventDefault();
+        e.stopPropagation();
+        location.href = '/nayive/admin.html';
+    }, true );
+
     // -- load ---------------------------------------------------------------
     var CONFIGURED = false;
     var SITES_ORIG = '';      // the web sites folder as loaded / last saved
@@ -402,12 +444,19 @@
 
     // The account signed in here is a regular one (the 403 below): what this
     // browser keeps for it goes before the logout, as the launcher's sign-out
-    // does - its push subscription (DELETE needs the session), the trip PDFs
-    // and the share inbox. Capped at 3 s: a sign-out never hangs.
+    // does - the saves and drafts still only here (shared/store.js, SIGNING
+    // OUT - the link asked first), its push subscription (DELETE needs the
+    // session), the trip PDFs and the share inbox. Capped at 3 s: a sign-out
+    // never hangs.
     function forgetThisBrowser()
     {
         var work = ( async function ()
         {
+            try
+            {
+                if ( window.NayiveStore ) await NayiveStore.clearLocal();
+            }
+            catch ( e ) {}
             try
             {
                 var reg = ( 'serviceWorker' in navigator ) ? await navigator.serviceWorker.getRegistration( '/nayive/' ) : null;
@@ -427,8 +476,41 @@
                                                           caches.delete( 'nayive-share-inbox' ) ] );
             }
             catch ( e ) {}
+            try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
         } )();
         return Promise.race( [ work, new Promise( function ( r ) { setTimeout( r, 3000 ); } ) ] );
+    }
+
+    // The launcher's sign-out, step for step (index.html, logoutBtn): the
+    // saves still waiting here get their chance to go up (up to 10 s while
+    // one is being sent, no wait offline), what is left is counted, and the
+    // link asks before signing out deletes it.
+    var signingOut = false;
+    async function signOut()
+    {
+        if ( signingOut ) return;
+        signingOut = true;
+        try
+        {
+            if ( window.NayiveStore )
+            {
+                var n = 0;
+                try
+                {
+                    await NayiveStore.sendWaiting( 10000 );
+                    n = await NayiveStore.localCount();
+                }
+                catch ( err ) {}
+                if ( n > 0 && ! await NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
+                                                          body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
+                                                          confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } ) )
+                    return;
+            }
+            await forgetThisBrowser();
+            try { await fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } catch ( err ) {}
+            location.href = '/nayive/login.html';
+        }
+        finally { signingOut = false; }
     }
 
     async function load()
@@ -439,7 +521,7 @@
 
         if ( res.status === 401 )
         {
-            location.href = '/nayive/login.html?return=' + encodeURIComponent( '/nayive/admin.html' );
+            location.href = '/nayive/login.html';   // the admin lands here by its role
             return;
         }
         if ( res.status === 403 )
@@ -454,10 +536,7 @@
             $( 'fatal' ).querySelector( 'a' ).addEventListener( 'click', function ( e )
             {
                 e.preventDefault();
-                forgetThisBrowser()
-                    .then( function () { return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } )
-                    .catch( function () {} )
-                    .then( function () { location.href = '/nayive/login.html'; } );
+                signOut();
             } );
             return;
         }
@@ -465,6 +544,7 @@
 
         var data = await res.json();
         CONFIGURED = !!data.configured;
+        IS_ADMIN   = true;
 
         $( 'firstRunBanner' ).classList.toggle( 'hide', CONFIGURED );
         $( 'adminName' ).value = ( data.admin && data.admin.name ) || '';
@@ -650,10 +730,11 @@
         if ( errs.length )
             flash( $( 'saveMsg' ), errs.join( ' · ' ), 'err' );
         else
-        {
             flash( $( 'saveMsg' ), 'Saved.', 'ok' );
-            if ( CONFIGURED ) refresh();
-        }
+        // Even after an error: what did save shows as saved (a user just
+        // created, a password now set - not sent again with the next Save).
+        // A new row that failed stays, in its own tbody, as it was typed.
+        if ( CONFIGURED ) refresh();
     }
 
     // -- external storage -----------------------------------------------

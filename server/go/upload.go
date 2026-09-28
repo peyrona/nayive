@@ -18,11 +18,13 @@ import (
 	"compress/gzip"
 	"crypto/rand"
 	"errors"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -142,7 +144,7 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	answer := map[string]string{"message": "saved"}
 	if queryValue(r, "convert") == "mp4" && role == "user" && !IsSharedPath(fileRel) &&
 		IsConvertible(target.Abs) &&
-		s.convert.Enqueue(user, strings.Join(splitPath(unquotePath(fileRel)), "/")) {
+		s.convert.Enqueue(user, strings.Join(splitPath(fileRel), "/")) {
 		answer["convert"] = "queued"
 	}
 	sendJSON(w, r, http.StatusOK, answer)
@@ -151,7 +153,7 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// public link (photo_position.go). After the answer, on its own goroutine:
 	// best effort, never in the way of the upload.
 	if role == "user" && !IsSharedPath(fileRel) && isJPEGName(target.Abs) {
-		go s.photoUploaded(user, strings.Join(splitPath(unquotePath(fileRel)), "/"), target)
+		go s.photoUploaded(user, strings.Join(splitPath(fileRel), "/"), target)
 	}
 }
 
@@ -288,16 +290,81 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
 		return 0, err
 	}
+	// On disk before it takes the real name: a power cut must never leave an
+	// empty file where the old one was (S2-#23).
+	if err := tmp.Sync(); err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
+		return 0, err
+	}
 	if err := tmp.Close(); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
 		return 0, err
+	}
+
+	// CHANGED WHILE THE BODY STREAMED? filesWrite checked If-Unmodified-Since
+	// before the body, so a second save sent at the same moment passed it too.
+	// The same check again, and the rename, under this path's lock: of two
+	// saves from the same base, the later one now gets 412 instead of silently
+	// winning (S2-#8). (HTTP dates are whole seconds: a save and a re-open
+	// inside the same second still cannot be told apart.)
+	unlock := lockPath(target.Abs)
+	defer unlock()
+	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
+		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
+			sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
+			return 0, errors.New("changed while the body streamed")
+		}
+	}
+	// The time the file had, for the whole-second rule below.
+	var prev time.Time
+	if info, err := target.Stat(); err == nil {
+		prev = info.ModTime()
 	}
 	// Atomic: readers never see a partial file.
 	if err := root.Rename(tmpName, target.Rel); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 		return 0, err
 	}
+	nextSecond(root, target.Rel, prev)
 	return written, nil
+}
+
+// nextSecond: HTTP dates are whole seconds, so two saves of one file inside
+// the same second would carry the same Last-Modified, and a third save based
+// on the first would pass If-Unmodified-Since and undo the second. Each save
+// therefore moves the file's time on to a new second: when the new time is not
+// past the old one's second, it becomes that second + 1. Called under the
+// path's lock (lockPath), right after the rename. A burst of saves can put the
+// time a few seconds ahead of the clock; the next quiet save is back on it.
+// Best effort: a file whose time cannot be set is saved all the same.
+func nextSecond(root *os.Root, rel string, prev time.Time) {
+	if prev.IsZero() {
+		return
+	}
+	info, err := root.Stat(rel)
+	if err != nil {
+		return
+	}
+	floor := prev.Truncate(time.Second)
+	if info.ModTime().Truncate(time.Second).After(floor) {
+		return
+	}
+	next := floor.Add(time.Second)
+	root.Chtimes(rel, next, next)
+}
+
+// pathLocks serialises the final check-and-rename of uploads to one path. A
+// fixed set of stripes, picked by a hash of the path: nothing to create or
+// forget per file, and two paths sharing a stripe only wait a rename apart.
+var pathLocks [64]sync.Mutex
+
+// lockPath takes the stripe of `abs` and returns its unlock.
+func lockPath(abs string) func() {
+	h := fnv.New32a()
+	h.Write([]byte(abs))
+	m := &pathLocks[h.Sum32()%uint32(len(pathLocks))]
+	m.Lock()
+	return m.Unlock
 }
 
 // cappedWriter refuses to write past `ceiling`, so a zip bomb costs us the

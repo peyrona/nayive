@@ -597,12 +597,30 @@
 
     // Another Nayive user: tap = the chat the two of us already have (whoever
     // started it), or a new one in my home. Their dot: online in our chat.
+    // Their circle (a camera on it) = my own picture for that account, kept
+    // for ever, whichever home our chat lives in (2026-09-27, his ask).
     function userRow( u )
     {
         var c = userConv( u.user );
         var av = c ? C.withDot( C.avatar( c.id, u.name ), c.id ) : C.avatar( "u:" + u.user, u.name, null, null );
-        return h( "button", { class: "row", attrs: { type: "button" }, on: { click: function () { C.chatWithUser( u.user ); } } },
-            av, h( "div", { class: "body" }, h( "span", { class: "name", text: u.name } ) ) );
+        var face = h( "button", { class: "face sm", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+                                  on: { click: function () { userFace( u.user ); } } }, av, h( "span", { class: "cam" }, C.ic( "camera" ) ) );
+        return h( "div", { class: "row split" }, face,
+            h( "button", { class: "body", attrs: { type: "button" }, on: { click: function () { C.chatWithUser( u.user ); } } },
+                h( "span", { class: "name", text: u.name } ) ) );
+    }
+
+    async function userFace( user )
+    {
+        var file = await C.pickImage( T( "chat.changePhoto" ) );
+        if( ! file ) return;
+        try
+        {
+            await C.putPicture( "users/" + encodeURIComponent( user ) + "/photo", await C.facePicture( file ) );
+            await C.loadSummary();
+            C.refreshSide();
+        }
+        catch( e ) { C.fail( e ); }
     }
 
     // The 1:1 chat with a Nayive account, in my home or in theirs.
@@ -625,7 +643,11 @@
         catch( e ) { C.fail( e ); }
     };
 
-    // "New person": a name, then their link, to send or to scan.
+    // "New person": a name - typed, or one of the address book's cards (the
+    // Contacts app), listed under it and narrowed as the name is typed - and
+    // a picture (the circle), then their link, to send or to scan. A card
+    // brings its own picture; a picture chosen here for a card becomes that
+    // card's too, for ever (2026-09-27, his ask).
     C.openNewPerson = function ()
     {
         var view = h( "div", { class: "view" } );
@@ -633,12 +655,81 @@
         var pane = h( "div", { class: "pane" } );
         var input = h( "input", { attrs: { type: "text", id: "npName", maxlength: "60", autocomplete: "off" } } );
         var create = h( "button", { class: "text-btn wide", attrs: { type: "button" }, text: T( "chat.makeLink" ) } );
+        var card = null;           // the address book's card picked, or null
+        var pick = null, url = ""; // a picture chosen here (a Blob and its URL)
+        var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
+                                  on: { click: choose } } );
+        var bin = h( "button", { class: "text-btn ghost danger", attrs: { type: "button" },
+                                 on: { click: function () { pick = null; showFace(); } } }, C.ic( "trash" ), T( "chat.removePhoto" ) );
+        var cards = h( "div", { class: "rows book-rows" } );
         var form = h( "div", {},
+            h( "div", { class: "face-pick" }, face, bin ),
             h( "div", { class: "field" }, h( "label", { attrs: { for: "npName" }, text: T( "chat.name" ) } ), input ),
             h( "p", { class: "hint", text: T( "chat.nameSeen" ) } ),
-            create );
+            create,
+            h( "div", { class: "lbl book-lbl", text: T( "chat.fromContacts" ) } ),
+            cards );
         pane.appendChild( form );
         view.appendChild( pane );
+
+        function showFace()
+        {
+            var name = input.value.trim() || "?";
+            var src = pick ? url : card && card.photo ? card.photo : "";
+            var av = C.avatar( "x" + name, name, "xl", null );
+            if( src )
+            {
+                av.textContent = "";
+                av.classList.add( "has-photo" );
+                av.appendChild( h( "img", { attrs: { src: src, alt: "" } } ) );
+            }
+            face.replaceChildren( av, h( "span", { class: "cam" }, C.ic( "camera" ) ) );
+            bin.hidden = ! pick;
+        }
+        async function choose()
+        {
+            var file = await C.pickImage( T( "chat.changePhoto" ) );
+            if( ! file ) return;
+            try
+            {
+                pick = await C.facePicture( file );
+                if( url ) URL.revokeObjectURL( url );
+                url = URL.createObjectURL( pick );
+                showFace();
+            }
+            catch( e ) { C.fail( e ); }
+        }
+
+        // Every card with a name; the typed name narrows them (not while it is
+        // the picked card's own name: then they all stay, to pick another).
+        var book = [];
+        function drawCards()
+        {
+            var typed = input.value.trim();
+            var q = card && typed === card.name ? "" : C.fold( typed );
+            var shown = book.filter( function ( c ) { return ! q || C.fold( c.name ).indexOf( q ) >= 0; } ).slice( 0, 200 );
+            cards.textContent = "";
+            if( ! shown.length ) cards.appendChild( h( "p", { class: "list-note", text: T( book.length ? "chat.noMatch" : "chat.noContacts" ) } ) );
+            shown.forEach( function ( c )
+            {
+                var on  = c === card;
+                var chk = h( "span", { class: "chk" + ( on ? " on" : "" ) } );
+                if( on ) chk.appendChild( C.ic( "check" ) );
+                cards.appendChild( h( "button", { class: "row", attrs: { type: "button" }, on: { click: function () { pickCard( c ); } } },
+                    C.cardAvatar( c ),
+                    h( "div", { class: "body" }, h( "span", { class: "name", text: c.name } ),
+                        c.tels[ 0 ] || c.emails[ 0 ] ? h( "span", { class: "state", text: c.tels[ 0 ] || c.emails[ 0 ] } ) : null ),
+                    chk ) );
+            } );
+        }
+        function pickCard( c )
+        {
+            card = card === c ? null : c;
+            if( card ) input.value = card.name;
+            showFace();
+            drawCards();
+        }
+        C.ownerBook().then( function ( all ) { book = all; drawCards(); } );
 
         async function go()
         {
@@ -647,16 +738,28 @@
             create.disabled = true;
             try
             {
-                var ct = await C.api( "POST", "contacts", { name: name } );
+                var uid = card && card.uid || "";
+                var ct = await C.api( "POST", "contacts", uid ? { name: name, card: uid } : { name: name } );
                 S.contacts.push( ct );
                 form.remove();
                 pane.appendChild( C.linkBox( ct ) );
+                // The picture: the one chosen here (the card's too), or the card's own.
+                try
+                {
+                    var pic = pick || ( card && card.photo ? await C.facePicture( await ( await fetch( card.photo ) ).blob() ) : null );
+                    if( pic ) await C.putPicture( "contacts/" + ct.id + "/photo", pic );
+                    if( pick && uid ) await C.cardPicture( uid, pick );
+                }
+                catch( e ) { C.fail( e ); }
+                if( url ) URL.revokeObjectURL( url );
                 C.loadSummary().catch( function () {} );
             }
             catch( e ) { C.fail( e ); create.disabled = false; }
         }
         create.addEventListener( "click", go );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) go(); } );
+        input.addEventListener( "input", function () { showFace(); drawCards(); } );
+        showFace();
         C.openSide( view );
         setTimeout( function () { input.focus(); }, 50 );
     };
@@ -875,7 +978,7 @@
             if( ! file ) return;
             try
             {
-                pick = await NayivePhoto.shrinkToJpeg( file, { maxW: 512, maxH: 512, quality: 0.85 } );
+                pick = await C.facePicture( file );
                 if( url ) URL.revokeObjectURL( url );
                 url = URL.createObjectURL( pick );
                 drop = false;
@@ -886,18 +989,13 @@
         show();
 
         var name = await C.askText( { title: T( "chat.yourProfile" ), label: T( "chat.name" ), value: S.owner, hint: T( "chat.myNameHint" ),
-                                      top: h( "div", { class: "me-photo" }, face, bin ), more: mottoField } );
+                                      top: h( "div", { class: "face-pick" }, face, bin ), more: mottoField } );
         if( url ) URL.revokeObjectURL( url );
         if( ! name ) return;
         var mot = motto.value.trim();
         try
         {
-            if( pick )
-            {
-                var res = await fetch( S.api + "/me/photo", { method: "PUT", credentials: "same-origin",
-                                                               headers: { "Content-Type": "image/jpeg" }, body: pick } );
-                if( ! res.ok ) throw { status: res.status };
-            }
+            if( pick ) await C.putPicture( "me/photo", pick );
             else if( drop ) await C.api( "DELETE", "me/photo" );
             if( name !== S.owner || mot !== was ) await C.api( "PUT", "me", { name: name, motto: mot } );
             if( pick || drop || name !== S.owner || mot !== was ) await C.loadSummary();

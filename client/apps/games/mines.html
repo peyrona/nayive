@@ -409,7 +409,14 @@
             function runClock()
             {
                 if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
-                ticker = setInterval( function () { timeEl.textContent = clock( seconds() ); }, 250 );
+                ticker = setInterval( function ()
+                {
+                    // Any dialog over the app pauses it - the help sheet, the
+                    // install prompt, "session expired" - the same rule the
+                    // canvas games follow: time under a sheet is not played.
+                    if( document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
+                    timeEl.textContent = clock( seconds() );
+                }, 250 );
             }
 
             function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
@@ -658,6 +665,19 @@
                 cells[ cursor ].focus();
             }
 
+            // A square the mouse or a finger chose is where the cursor is now,
+            // or "f" flags the one the arrows last left it on. Safari does not
+            // focus a button it clicks, so the click moves it too.
+            function takeCursor( e )
+            {
+                var i = indexOf( e );
+
+                if( i < 0 || i === cursor ) return;
+                cells[ cursor ].tabIndex = -1;
+                cursor = i;
+                cells[ cursor ].tabIndex = 0;
+            }
+
             function onKey( e )
             {
                 var c, r;
@@ -737,6 +757,8 @@
                     } );
                 } );
 
+                boardEl.addEventListener( 'focusin',       takeCursor );
+                boardEl.addEventListener( 'click',         takeCursor );
                 boardEl.addEventListener( 'click',         onClick );
                 boardEl.addEventListener( 'contextmenu',   onMenu );
                 boardEl.addEventListener( 'pointerdown',   onDown );

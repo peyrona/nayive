@@ -42,7 +42,7 @@ func (s *Server) apiOffice(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusBadRequest, "missing ?file=")
 		return
 	}
-	virt := strings.Join(splitPath(unquotePath(q.Get("file"))), "/")
+	virt := strings.Join(splitPath(q.Get("file")), "/")
 	twinName, ok := OfficeTwinName(path.Base(virt))
 	if !ok {
 		sendError(w, r, http.StatusBadRequest, "no es un documento de LibreOffice que se pueda convertir")

@@ -83,10 +83,8 @@ function renderTripSheet()
         delBtn.title = T( 'trips.deleteTrip' );
         delBtn.disabled = tripSheetBusy;
         delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
-        delBtn.addEventListener( 'click', function()
-        {
-            openConfirm( T( 'trips.deleteTrip' ), TF( 'trips.deleteTripBody', { name: tripDraft.destination } ), NayiveUI.t( 'ui.delete' ), deleteTrip );
-        });
+        // Already inside a dialog: no second question, it goes at once with an Undo.
+        delBtn.addEventListener( 'click', deleteTrip );
         actions.appendChild( delBtn );
     }
 
@@ -165,7 +163,7 @@ async function runStageTzLookup()
 {
     const loc    = stageDraft.location.trim();
     const mySeq  = ++stageTzLookupSeq;
-    const result = await geocodeLocation( loc );
+    const result = await geocodeLocation( loc, stageDraft.startDate );
 
     if( mySeq !== stageTzLookupSeq || ! stageDraft )
         return;   // superseded by a newer lookup, or the sheet was closed meanwhile

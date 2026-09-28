@@ -5,7 +5,7 @@ package main
 // =============================================================================
 //
 //	GET    -> {"vapid_public", "window_minutes", "subscribed", "count"}
-//	POST   -> save {"subscription"?, "window_minutes"?, "lang"?}
+//	POST   -> save {"subscription"?, "window_minutes"?, "lang"?, "label"?, "old_endpoint"?, "tz"?}
 //	DELETE -> ?endpoint=...   forget one device
 //
 // Regular users only: the admin has no calendar and no home directory, so
@@ -37,6 +37,11 @@ type pushRequest struct {
 	WindowMinutes json.RawMessage `json:"window_minutes"`
 	Lang          string          `json:"lang"`
 	Label         string          `json:"label"`
+	// The endpoint this subscription REPLACES (sw.js pushsubscriptionchange):
+	// its lang and label carry over and it is dropped - see RenewPushSub.
+	OldEndpoint string `json:"old_endpoint"`
+	// The device's IANA zone: floating events ring at its wall clock there.
+	TZ string `json:"tz"`
 }
 
 func (s *Server) apiPush(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +123,7 @@ func (s *Server) pushSave(w http.ResponseWriter, r *http.Request, user string) {
 		return
 	}
 
-	res := s.users.AddPushSub(user, body.Subscription.Endpoint,
+	res := s.users.RenewPushSub(user, body.OldEndpoint, body.Subscription.Endpoint,
 		body.Subscription.Keys.P256dh, body.Subscription.Keys.Auth,
 		body.Lang, body.Label, body.WindowMinutes)
 
@@ -130,6 +135,9 @@ func (s *Server) pushSave(w http.ResponseWriter, r *http.Request, user string) {
 		sendError(w, r, http.StatusInternalServerError, "sin carpeta de usuario")
 		return
 	}
+	s.users.SetPushSubTZ(user, body.Subscription.Endpoint, body.TZ)
+	// A renewal: the phone row that knew the old endpoint follows it (devices.go).
+	s.devices.FollowEndpoint(user, body.OldEndpoint, body.Subscription.Endpoint)
 
 	cfg := s.users.UserPush(user)
 	s.log.Info("push: device registered", "result", res, "user", user, "total", len(cfg.Subs))

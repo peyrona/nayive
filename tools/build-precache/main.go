@@ -51,6 +51,7 @@ var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/menubar.js",
 	"shared/ical.js", "shared/media.js",
 	"shared/photo.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js", "shared/tz-geo.json",
+	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/stars.js", "shared/lockers/life.js",
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",

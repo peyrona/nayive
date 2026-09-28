@@ -33,7 +33,7 @@ async function loadTrips()
         {
             // No data/trips folder yet (a fresh account) = no trips, not
             // "offline": don't fall back to the cache in that case.
-            paths = String( err && err.message ).indexOf( 'HTTP 404' ) !== -1 ? [] : null;
+            paths = err && err.status === 404 ? [] : null;
         }
 
         // Trips other people shared with us. They live in THEIR home and we
@@ -117,6 +117,59 @@ async function sharedTripPaths()
             .map( function( g ) { sharedOwners[ g.path ] = g.by; return g.path + '/trip.json'; } );
     }
     catch( _ ) { return []; }
+}
+
+// TWO DEVICES, ONE TRIP (shared/store.js MERGE). Both saved trip.json from the
+// same copy: both changes are kept - stages and documents one by one, by id; a
+// stage or document changed on both takes, field by field, the side that changed
+// it, mine when both did; the trip's own fields likewise. null = a side that is
+// not a trip: nothing is merged over it.
+function mergeTrip( path, base, mine, theirs )
+{
+    const S     = NayiveStore;
+    const parse = function( t ) { try { const v = JSON.parse( t ); return v && typeof v === 'object' && ! Array.isArray( v ) ? v : null; } catch( _ ) { return null; } };
+    const m = parse( mine ), t = parse( theirs ), b = base == null ? null : parse( base );
+    if( ! m || ! t ) return null;
+
+    const byId = function( x ) { return x && x.id; };
+    const list = function( bl, ml, tl, both )
+    {
+        return S.mergeLists( Array.isArray( bl ) ? bl : ( b ? [] : null ), Array.isArray( ml ) ? ml : [], Array.isArray( tl ) ? tl : [],
+                             { id: byId, both: both || S.mergeFields } );
+    };
+    const docs  = function( bl, ml, tl ) { return list( bl, ml, tl ); };
+    const stage = function( bs, ms, ts ) { return S.mergeFields( bs, ms, ts, { documents: docs } ); };
+
+    const merged = S.mergeFields( b, m, t );
+    // The lists always, not only where both sides changed them: one side's new
+    // stage and the other's edited one are both changes inside `stages`.
+    if( m.stages || t.stages )       merged.stages    = list( b && b.stages, m.stages, t.stages, stage );
+    if( m.documents || t.documents ) merged.documents = docs( b && b.documents, m.documents, t.documents );
+    return JSON.stringify( merged, null, 2 );
+}
+
+// The store merged another device's save of a trip in: that trip from now on.
+// An open trip sheet keeps what it has edited and takes the rest (a stage the
+// other device added) from the merged trip, or saving it would drop that.
+function onTripMerged( path, body )
+{
+    let t;
+    try { t = JSON.parse( body ); } catch( _ ) { return; }
+    if( ! t || typeof t !== 'object' ) return;
+    t._base = path.replace( /\/trip\.json$/, '' );
+    t._ro   = t._base.indexOf( 'shared/' ) === 0;
+
+    const old = trips.find( function( x ) { return tripBase( x ) === t._base; } );
+    if( ! old ) return;
+
+    if( tripDraft && tripDraft.id === old.id )
+        Object.keys( t ).forEach( function( k )
+        {
+            if( JSON.stringify( tripDraft[ k ] ) === JSON.stringify( old[ k ] ) ) tripDraft[ k ] = t[ k ];
+        } );
+
+    trips = trips.map( function( x ) { return x === old ? t : x; } );
+    if( ! anySheetOpen() ) renderAll();
 }
 
 // Writes ONE trip's full current state back to its own trip/{dirName}/trip.json.

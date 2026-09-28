@@ -217,15 +217,20 @@ func TestChatUserGroupAndPresence(t *testing.T) {
 	// beto's page waits on ana's home: ana sees him online.
 	var first struct{ V int64 }
 	f.call(t, beto, "GET", "/api/chat/via/ana/wait?v=-1", "", 200, &first)
-	short := &http.Client{Jar: beto.Jar, Timeout: 1500 * time.Millisecond} // the test server's Close waits for it
+	// Cancelled once seen, and joined: the test server's Close would wait for it.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	waited := make(chan struct{})
+	defer func() { cancel(); <-waited }()
 	go func() {
-		resp, err := short.Get(f.base + "/api/chat/via/ana/wait?v=" + itoa(int(first.V)))
+		defer close(waited)
+		req, _ := http.NewRequestWithContext(ctx, "GET", f.base+"/api/chat/via/ana/wait?v="+itoa(int(first.V)), nil)
+		resp, err := (&http.Client{Jar: beto.Jar}).Do(req)
 		if err == nil {
 			resp.Body.Close()
 		}
 	}()
 	var on bool
-	for i := 0; i < 50 && !on; i++ {
+	for i := 0; i < 500 && !on; i++ { // up to 10 s
 		time.Sleep(20 * time.Millisecond)
 		var sum struct{ Online []string }
 		f.call(t, f.owner, "GET", "/api/chat", "", 200, &sum)
@@ -285,7 +290,7 @@ func TestChatUserPush(t *testing.T) {
 	}
 
 	f.call(t, f.owner, "POST", "/api/chat/conv/"+st.Conv+"/messages", `{"kind":"text","text":"hola"}`, 201, nil)
-	for i := 0; i < 50 && count("/beto") < 1; i++ {
+	for i := 0; i < 250 && count("/beto") < 1; i++ { // up to 10 s
 		time.Sleep(40 * time.Millisecond)
 	}
 	if count("/beto") != 1 {
@@ -347,9 +352,11 @@ func TestChatUserAdmin(t *testing.T) {
 		t.Fatalf("after the rename bruno sees %v", vsum)
 	}
 	var disk chatData
-	loadJSONFile(filepath.Join(home, "ana", "data", "chat", "chat.json"), &disk)
+	if !loadJSONFile(filepath.Join(home, "ana", "data", "chat", "chat.json"), &disk) {
+		t.Fatal("ana's chat.json cannot be read")
+	}
 	if len(disk.Contacts) != 3 || disk.Contacts[2].User != "bruno" {
-		t.Fatalf("ana's chat.json after the rename = %+v", disk.Contacts[2])
+		t.Fatalf("ana's chat.json after the rename = %+v", disk.Contacts)
 	}
 
 	os.RemoveAll(filepath.Join(home, "bruno"))

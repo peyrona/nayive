@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -113,21 +114,9 @@
         #goToRow .field:has( #gMonth ) { flex: 1 1 130px; }
         #goToRow .field:has( #gDay )   { flex: 0 1 68px; }
 
-        /* "Hoy" in that dialog. The one deliberate exception to the round icon-only
-           action row (shared/theme.css): it took over from a toolbar button, so it has
-           to read as a shortcut at a glance - accent fill, the word spelled out, and
-           the row's own 44px height so it still lines up with the X and the check. */
-        .today-pill
-        {
-            display: flex; align-items: center; justify-content: center;
-            height: 44px; padding: 0 22px; flex: 0 0 auto;
-            border: none; border-radius: var(--radius-pill); cursor: pointer;
-            font: inherit; font-size: 1rem; font-weight: 700; letter-spacing: 0.01em;
-            background: var(--accent); color: var(--on-accent);
-            transition: filter var(--tr-fast);
-        }
-        .today-pill:hover  { filter: brightness(1.13); }
-        .today-pill:active { filter: brightness(0.92); }
+        /* "Hoy" in that dialog is the shared .text-btn (shared/app.css): the one
+           deliberate exception to the round icon-only action row (shared/theme.css) -
+           it took over from a toolbar button, so it reads as a word at a glance. */
 
         /* Settings' "Export to file": from, to, format and the ✓ that downloads, all on
            one line - which is why this sheet is a .sheet--wide one. A phone wraps it
@@ -142,26 +131,16 @@
         #setExportRow .field-format  { flex: 0 1 108px; min-width: 96px; }
         #setExportRow .sheet-actions { position: static; margin: 0; padding: 0; border-top: 0; background: none; }
 
-        .switch { position: relative; width: 44px; height: 26px; flex: 0 0 auto; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .switch .track { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
-        .switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-        .switch input:checked + .track { background: var(--accent); }
-        .switch input:checked + .track::before { transform: translateX(18px); }
+        /* The "all day" switch is the shared .switch (shared/app.css). */
 
         /* The "más campos" fold is the shared .more-toggle block (shared/app.css). */
 
+        /* The day buttons are the shared .pill (shared/app.css), .is-active when on. */
         .dow-picker { display: flex; gap: 6px; flex-wrap: wrap; }
-        .dow-btn
-        {
-            width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2);
-            color: var(--text-dim); font-size: 0.82rem; cursor: pointer;
-        }
-        .dow-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
         .radio-row { display: flex; flex-direction: column; gap: 8px; }
         .radio-opt { display: flex; align-items: center; gap: 8px; font-size: 0.94rem; }
-        .radio-opt input { width: 17px; height: 17px; }
+        .radio-opt input[type="radio"] { width: 17px; height: 17px; }
         .radio-opt .inline-input { max-width: 90px; }
         .radio-opt .dt-field-inline { width: 90px; margin-left: 4px; }
 
@@ -464,6 +443,9 @@
                 <textarea id="fNotes" data-i18n-attr="placeholder:calendar.optional"></textarea>
             </div>
 
+            <!-- Editing a series edits all of it: said here too, where it shows with "More" shut. -->
+            <div class="tz-hint" id="seriesHint" data-i18n="calendar.editsSeries" hidden></div>
+
             <button type="button" id="moreToggle" class="more-toggle" aria-expanded="false" aria-controls="moreSection">
                 <span class="more-pill">
                     <span id="moreChevron" class="more-chevron">&#8250;</span>
@@ -622,11 +604,11 @@
             </div>
 
             <!-- "Hoy" is the shortcut this dialog replaced the toolbar button with, so it is
-                 a LABELLED pill (not one more round icon): the one control here you can hit
+                 a LABELLED button (not one more round icon): the one control here you can hit
                  without filling in the three fields above. .sheet-actions-left pins it to the
                  left margin, away from the cancel / go pair. -->
             <div class="sheet-actions">
-                <button id="goToTodayBtn" type="button" class="today-pill sheet-actions-left" data-i18n="calendar.today"></button>
+                <button id="goToTodayBtn" type="button" class="text-btn sheet-actions-left" data-i18n="calendar.today"></button>
                 <button id="goToCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button id="goToGoBtn"     data-act="primary" data-i18n-attr="title:calendar.go"></button>
             </div>
@@ -659,6 +641,19 @@
     <div id="settingsBackdrop" class="sheet-backdrop">
         <div class="sheet sheet--wide">
             <h2 data-i18n="ui.settings"></h2>
+
+            <!-- How long before each event the push comes (/api/push window_minutes;
+                 moved here from the launcher's My account 2026-09-27). Saves on
+                 change; works with this device's alerts off. Hidden when the
+                 server cannot answer (an admin, no VAPID key). -->
+            <div id="setRemind" class="share-sect" hidden>
+                <p class="share-head" data-i18n="calendar.set.remindHead"></p>
+                <div class="field">
+                    <label for="setRemindMin" data-i18n="calendar.set.remindMin"></label>
+                    <input type="number" id="setRemindMin" min="1" max="1440" inputmode="numeric">
+                </div>
+                <p class="share-note" data-i18n="calendar.set.remindNote"></p>
+            </div>
 
             <!-- Export every event between two dates: PDF (the browser's own print
                  dialog), plain text, or .ics. See EXPORT in the module below. -->
@@ -791,8 +786,8 @@
         await NayiveI18n.ready;
 
         // ICS model + DST-safe recurrence engine — shared with the tasks app (see ../shared/ical.js).
-        import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, eventDefsToIcs,
-                 expandEventDef, instantiate, pad2 } from '../shared/ical.js';
+        import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, excludeOne, mergeIcs,
+                 eventDefsToIcs, expandEventDef, instantiate, pad2 } from '../shared/ical.js';
 
         //------------------------------------------------------------------------//
         // STATE
@@ -800,8 +795,11 @@
         const API_FILES = GumApi.API_FILES;
         const CAL_FILE   = 'data/calendar.ics';
 
-        // Offline-capable persistence for CAL_FILE (see ../shared/store.js).
-        const store = NayiveStore.createStore( { apiBase: API_FILES } );
+        // Offline-capable persistence for CAL_FILE (see ../shared/store.js). A save
+        // made from an old copy (the phone offline, the PC saved since) is merged
+        // event by event with the server's, not written over it (mergeIcs).
+        const store = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true,
+            merge: ( path, base, mine, theirs ) => path === CAL_FILE ? mergeIcs( base, mine, theirs ) : null } );
 
         // Interface strings: every one of them lives in shared/i18n/*.json.
         const T  = k           => NayiveUI.t( k );
@@ -818,7 +816,7 @@
             {
                 const b = document.createElement( 'button' );
                 b.type          = 'button';
-                b.className     = 'dow-btn';
+                b.className     = 'pill';
                 b.dataset.dow   = code;
                 b.textContent   = NayiveUI.weekday( i + 1, 'narrow' );
                 b.title         = NayiveUI.weekday( i + 1 );
@@ -855,12 +853,14 @@
 
         let eventDefs   = [];   // source of truth: array of event definitions (see makeEventDef)
         let calFile     = null;    // calendar.ics as read, so a save keeps what eventDefs does not model (null: no file yet)
+        let calBody     = null;    // the text calFile and eventDefs were parsed from (a re-read of the same text is skipped)
         let whoUser     = '';      // who is signed in (Settings' by-hand "User" row)
         let calBadSaid  = false;   // the "cannot understand this file" toast was shown for this bad spell
         let dragBusy    = false;   // a finger / mouse is down on an event (press through drop)
         let dragMoving  = false;   // ...and FullCalendar has started dragging / resizing it
         let refetchHeld = false;   // a re-read landed meanwhile; repaint once the drop is done
         let editingKey   = null;   // key (uid + recurrence-id) of the event being edited in the sheet, or null when adding
+        let editingOcc   = null;   // ...and the occurrence it was opened from (occKey), for "delete only this one"
         let undoHold     = false;  // an Undo is on show: no re-read until it goes (see undoable)
         let calendar     = null;
 
@@ -874,6 +874,18 @@
 
             // The store's state machine drives the header plug for every read and write.
             store.onState( NayiveUI.syncIndicator() );
+
+            // A save met the other device's: the merged file is the calendar now. An
+            // Undo on show would put back events of the old read - it is final now.
+            // Mid-drag, the repaint waits for the drop (see `read` below).
+            store.onMerged( function( path, body )
+            {
+                if( path !== CAL_FILE ) return;
+                if( undoHold ) NayiveUI.undoSettle();
+                if( ! applyCalendar( { body: body, source: 'cache' } ) ) return;
+                if( dragBusy ) refetchHeld = true;
+                else if( calendar ) refetchAll();
+            } );
 
             // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
             // path (shared/ui.js). `eventDefs` is this tab's private snapshot and every
@@ -891,7 +903,7 @@
                 // the dropped one - hold the repaint until the drop is done.
                 read:  async function()
                 {
-                    await loadCalendar();
+                    if( ! await loadCalendar() ) return;   // the file as it was: nothing to repaint
                     if( dragBusy ) refetchHeld = true;
                     else           refetchAll();
                 },
@@ -918,9 +930,22 @@
         //------------------------------------------------------------------------//
         // PERSISTENCE
 
+        // true when what is on screen may have changed. A focus re-read of the same
+        // bytes is not parsed again: 4000 events took over a second each time.
         async function loadCalendar()
         {
-            const res = await store.read( CAL_FILE );
+            return applyCalendar( await store.read( CAL_FILE ) );
+        }
+
+        // One read (store.read's answer, or a merged body) into the model.
+        function applyCalendar( res )
+        {
+            if( res.body !== null && res.body === calBody )
+            {
+                if( calBadSaid ) store.block( CAL_FILE );   // the read lifted it; the file is still not understood
+                return false;
+            }
+            calBody = res.body;
 
             if( res.source === 'empty' )
             {
@@ -948,6 +973,7 @@
             // exactly the bug that let the next save overwrite the real file. The
             // store blocks the path meanwhile, and refuseEdit() keeps the app from
             // pretending an edit worked.
+            return true;
         }
 
         // A calendar.ics this tab could not read (offline with nothing cached, signed
@@ -1103,7 +1129,7 @@
                     openSheetForNew( arg.start, arg.allDay, arg.end );
                 },
 
-                eventClick: function( arg ) { openSheetForEdit( arg.event.extendedProps.key ); },
+                eventClick: function( arg ) { openSheetForEdit( arg.event.extendedProps.key, arg.event.extendedProps.occ ); },
 
                 eventDragStart:   function() { dragBusy = dragMoving = true; },
                 eventResizeStart: function() { dragBusy = dragMoving = true; },
@@ -1199,8 +1225,17 @@
                 allDay: inst.allDay,
                 startEditable: ! isRecurring,
                 durationEditable: ! isRecurring,
-                extendedProps: { key: inst.def.key, showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
+                extendedProps: { key: inst.def.key, occ: occKey( inst ), showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
             };
+        }
+
+        // An occurrence as its series' own wall clock, "yyyy-mm-dd" (all day) or
+        // "yyyy-mm-ddThh:mm": what excludeOne (shared/ical.js) takes out.
+        function occKey( inst )
+        {
+            if( inst.allDay ) return inst.start;
+            const d = DateTime.fromMillis( inst.startMs, { zone: inst.def.floating ? VIEWER_TZ : inst.def.tzid } );
+            return d.toISODate() + 'T' + d.toFormat( 'HH:mm' );
         }
 
         function zoneAbbrev( zone )
@@ -1257,22 +1292,26 @@
             if( ! def ) return;
 
             const key = def.key;
-            const was = JSON.stringify( { start: def.start, end: def.end } );
+            const was = JSON.stringify( { start: def.start, end: def.end, allDay: def.allDay } );
 
             const zone = def.floating ? VIEWER_TZ : def.tzid;
 
+            // The drop decides all-day or timed: an all-day event dropped into the
+            // time grid (or the other way) is one now, or a refetch snaps it back.
             if( fcEvent.allDay )
             {
-                def.start.date = DateTime.fromJSDate( fcEvent.start ).toISODate();
                 const endExclusive = fcEvent.end ? DateTime.fromJSDate( fcEvent.end ) : DateTime.fromJSDate( fcEvent.start ).plus({days:1});
-                def.end.date = endExclusive.minus( { days: 1 } ).toISODate();
+                def.allDay = true;
+                def.start  = { date: DateTime.fromJSDate( fcEvent.start ).toISODate(), time: null };
+                def.end    = { date: endExclusive.minus( { days: 1 } ).toISODate(), time: null };
             }
             else
             {
                 const s = DateTime.fromJSDate( fcEvent.start ).setZone( zone );
-                const e = DateTime.fromJSDate( fcEvent.end || fcEvent.start ).setZone( zone );
-                def.start = { date: s.toISODate(), time: s.toFormat( 'HH:mm' ) };
-                def.end   = { date: e.toISODate(), time: e.toFormat( 'HH:mm' ) };
+                const e = fcEvent.end ? DateTime.fromJSDate( fcEvent.end ).setZone( zone ) : s.plus( { hours: 1 } );   // from all-day: no end yet
+                def.allDay = false;
+                def.start  = { date: s.toISODate(), time: s.toFormat( 'HH:mm' ) };
+                def.end    = { date: e.toISODate(), time: e.toFormat( 'HH:mm' ) };
             }
 
             saveCalendar();
@@ -1283,8 +1322,9 @@
                 if( ! d ) return false;
 
                 const old = JSON.parse( was );
-                d.start = old.start;
-                d.end   = old.end;
+                d.start  = old.start;
+                d.end    = old.end;
+                d.allDay = old.allDay;
             } );
         }
 
@@ -1421,10 +1461,10 @@
             // matters more than the spelling. PC / tablet keep the full name.
             if( view.type === 'dayGridMonth' || view.type === 'listMonth' )
                 label.textContent = start.toFormat( PHONE ? 'LLL yyyy' : 'LLLL yyyy' );
-            else if( view.type === 'rollWeek' )
-                label.textContent = start.toFormat( 'LLL d' ) + ' – ' + DateTime.fromJSDate( view.currentEnd ).minus({days:1}).toFormat( 'LLL d' );
+            else if( view.type === 'rollWeek' )   // days as the house writes them: yyyy-mm-dd
+                label.textContent = start.toFormat( 'yyyy-MM-dd' ) + ' – ' + DateTime.fromJSDate( view.currentEnd ).minus({days:1}).toFormat( 'yyyy-MM-dd' );
             else
-                label.textContent = start.toFormat( 'LLL d' );
+                label.textContent = start.toFormat( 'yyyy-MM-dd' );
         }
 
         function highlightActiveView( type )
@@ -1624,7 +1664,7 @@
                 btn.type      = 'button';
                 btn.className = 'dl-row';
                 btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
-                btn.addEventListener( 'click', () => openSheetForEdit( inst.def.key ) );
+                btn.addEventListener( 'click', () => openSheetForEdit( inst.def.key, occKey( inst ) ) );
                 box.appendChild( btn );
             }
         }
@@ -1686,9 +1726,9 @@
                 setMoreOpen( ! this.classList.contains( 'open' ) );
             });
 
-            document.querySelectorAll( '.dow-btn' ).forEach( function( btn )
+            document.querySelectorAll( '#dowPicker .pill' ).forEach( function( btn )
             {
-                btn.addEventListener( 'click', function() { btn.classList.toggle( 'active' ); } );
+                btn.addEventListener( 'click', function() { btn.classList.toggle( 'is-active' ); } );
             });
 
             document.getElementById( 'cancelBtn' ).addEventListener( 'click', closeSheet );
@@ -1730,10 +1770,12 @@
             {
                 fillExportRange();
                 davSync.refresh( whoUser );
+                loadRemind();
                 NayiveUI.open( 'settingsBackdrop' );
             });
             document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', closeSettings );
             document.getElementById( 'exportGoBtn' ).addEventListener( 'click', commitExport );
+            document.getElementById( 'setRemindMin' ).addEventListener( 'change', saveRemind );
 
             document.getElementById( 'searchBtn' ).addEventListener( 'click', openSearch );
             document.getElementById( 'searchCloseBtn' ).addEventListener( 'click', closeSearch );
@@ -1872,10 +1914,12 @@
             {
                 closeSearch();
 
+                // occ.start, not its millis: an all-day one is a bare date, and
+                // UTC midnight is the day before west of UTC.
                 if( occ && calendar )
-                    calendar.gotoDate( new Date( occ.startMs ) );
+                    calendar.gotoDate( occ.start );
 
-                openSheetForEdit( def.key );
+                openSheetForEdit( def.key, occ ? occKey( occ ) : null );
             });
 
             return row;
@@ -1922,6 +1966,49 @@
         }
 
         function closeSettings() { NayiveUI.close( 'settingsBackdrop' ); }
+
+        // "Remind me N min before each event": one number per account, the same
+        // for every device (/api/push). Read each time Settings opens.
+        let remindSaved = 30;
+
+        async function loadRemind()
+        {
+            const sect = document.getElementById( 'setRemind' );
+            try
+            {
+                const r = await fetch( '/api/push', { credentials: 'same-origin' } );
+                const d = await r.json().catch( () => ( {} ) );
+                if( ! r.ok ) { sect.hidden = true; return; }
+                remindSaved = d.window_minutes || 30;
+                document.getElementById( 'setRemindMin' ).value = remindSaved;
+                sect.hidden = false;
+            }
+            catch( e ) { sect.hidden = true; }      // offline: nothing to show
+        }
+
+        async function saveRemind()
+        {
+            const inp = document.getElementById( 'setRemindMin' );
+            let v = parseInt( inp.value, 10 );
+            if( ! Number.isFinite( v ) ) { inp.value = remindSaved; return; }
+            v = Math.max( 1, Math.min( 1440, v ) );
+            inp.disabled = true;
+            try
+            {
+                const r = await fetch( '/api/push',
+                {
+                    method:      'POST',
+                    headers:     { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body:        JSON.stringify( { window_minutes: v } )
+                } );
+                const d = await r.json().catch( () => ( {} ) );
+                if( r.ok ) { remindSaved = d.window_minutes; inp.value = remindSaved; }
+                else       { inp.value = remindSaved; NayiveUI.toast( d.error || T( 'ui.saveFailed' ) ); }
+            }
+            catch( e ) { inp.value = remindSaved; NayiveUI.toast( T( 'login.noServer' ) ); }
+            inp.disabled = false;
+        }
 
         function commitExport()
         {
@@ -2012,7 +2099,7 @@
 
         function dayHeading( iso )
         {
-            return DateTime.fromISO( iso ).toFormat( 'cccc, d LLLL yyyy' );
+            return DateTime.fromISO( iso ).toFormat( 'cccc, yyyy-MM-dd' );
         }
 
         // "  (→ 2026-09-02)" for an entry that runs past the day it is listed under.
@@ -2025,19 +2112,24 @@
 
         //---- .ics --------------------------------------------------------------//
 
+        // A TZID needs its VTIMEZONE block, which this file would not carry: a
+        // pinned occurrence goes out in UTC ("...Z"), the same instant with no zone
+        // to explain. eventDefsToIcs writes UTC as ";TZID=UTC:", hence the rewrite.
         function occurrencesToIcs( rows )
         {
-            return eventDefsToIcs( rows.map( r => flattenOccurrence( r.inst ) ) );
+            return eventDefsToIcs( rows.map( r => flattenOccurrence( r.inst ) ) )
+                   .replace( /;TZID=UTC:(\d{8}T\d{6})(?=\r?\n)/g, ':$1Z' );
         }
 
-        // One occurrence as a standalone (RRULE-less) event def. Wall-clock fields are
-        // rebuilt in the event's own zone, so eventDefsToIcs writes back the same
-        // TZID / floating time the event was created with.
+        // One occurrence as a standalone (RRULE-less) event def. A floating one keeps
+        // its wall clock; a pinned one is written in UTC (see occurrencesToIcs).
         function flattenOccurrence( inst )
         {
             const def  = inst.def;
-            const zone = def.floating ? VIEWER_TZ : def.tzid;
+            const zone = def.floating ? VIEWER_TZ : 'UTC';
             const out  = Object.assign( {}, def, { uid: def.uid + '-' + inst.startMs, rrule: null } );
+
+            if( ! def.floating ) out.tzid = 'UTC';
 
             if( def.allDay )
             {
@@ -2167,6 +2259,7 @@
             if( refuseEdit() ) return;
 
             editingKey = null;
+            editingOcc = null;
 
             const d  = DateTime.fromJSDate( date );
             const e  = endDate ? DateTime.fromJSDate( endDate ) : d.plus( allDay ? { days: 1 } : { minutes: 30 } );
@@ -2191,12 +2284,13 @@
             openSheet();
         }
 
-        function openSheetForEdit( key )
+        function openSheetForEdit( key, occ )
         {
             const def = findDef( key );
             if( ! def ) return;
 
             editingKey = key;
+            editingOcc = occ || null;
 
             resetSheet();
             document.getElementById( 'sheetTitle' ).textContent = T( 'calendar.editEvent' );
@@ -2213,6 +2307,8 @@
             document.getElementById( 'fFloating' ).value = def.floating ? '1' : '0';
             document.getElementById( 'fTzid' ).value = def.tzid || VIEWER_TZ;
 
+            document.getElementById( 'seriesHint' ).hidden = ! def.rrule;
+
             if( def.rrule && def.rrule.custom )
             {
                 setRepeatCustom( true );
@@ -2222,9 +2318,9 @@
                 document.getElementById( 'fRepeat' ).value = def.rrule.freq.toLowerCase();
                 document.getElementById( 'fInterval' ).value = def.rrule.interval || 1;
 
-                document.querySelectorAll( '.dow-btn' ).forEach( function( btn )
+                document.querySelectorAll( '#dowPicker .pill' ).forEach( function( btn )
                 {
-                    btn.classList.toggle( 'active', !!(def.rrule.byweekday && def.rrule.byweekday.includes( btn.dataset.dow )) );
+                    btn.classList.toggle( 'is-active', !!(def.rrule.byweekday && def.rrule.byweekday.includes( btn.dataset.dow )) );
                 });
 
                 if( def.rrule.until )
@@ -2278,7 +2374,7 @@
         {
             return [ document.getElementById( 'fRepeat' ).value,
                      document.getElementById( 'fInterval' ).value,
-                     Array.from( document.querySelectorAll( '.dow-btn.active' ) ).map( b => b.dataset.dow ).join( ',' ),
+                     Array.from( document.querySelectorAll( '#dowPicker .pill.is-active' ) ).map( b => b.dataset.dow ).join( ',' ),
                      document.querySelector( 'input[name=endMode]:checked' ).value,
                      document.getElementById( 'fUntil' ).value,
                      document.getElementById( 'fCount' ).value ].join( '|' );
@@ -2339,10 +2435,11 @@
             setRepeatCustom( false );
             document.getElementById( 'fRepeat' ).value = 'none';
             document.getElementById( 'fInterval' ).value = 1;
-            document.querySelectorAll( '.dow-btn' ).forEach( b => b.classList.remove( 'active' ) );
+            document.querySelectorAll( '#dowPicker .pill' ).forEach( b => b.classList.remove( 'is-active' ) );
             document.querySelector( 'input[name=endMode][value=never]' ).checked = true;
             document.getElementById( 'fUntil' ).value = '';
             document.getElementById( 'fCount' ).value = 10;
+            document.getElementById( 'seriesHint' ).hidden = true;
             updateRepeatDetails();
             setMoreOpen( false );
         }
@@ -2449,7 +2546,7 @@
             }
             else
             {
-                const byweekday = Array.from( document.querySelectorAll( '.dow-btn.active' ) ).map( b => b.dataset.dow );
+                const byweekday = Array.from( document.querySelectorAll( '#dowPicker .pill.is-active' ) ).map( b => b.dataset.dow );
                 const endMode = document.querySelector( 'input[name=endMode]:checked' ).value;
                 const wkst    = def.rrule && def.rrule.wkst;   // the file's week start, which the sheet does not show
 
@@ -2470,14 +2567,39 @@
         }
 
         // By key: a moved occurrence (RECURRENCE-ID) goes on its own. Deleting the
-        // series itself also takes its moved occurrences, as before.
-        function deleteFromSheet()
+        // series itself also takes its moved occurrences, as before. A series
+        // opened from one of its days asks first: only that day (an EXDATE), or
+        // all of it.
+        async function deleteFromSheet()
         {
             if( ! editingKey ) return;
             if( refuseEdit() ) return;
 
             const key  = editingKey;
-            const gone = findDef( key );
+            let   gone = findDef( key );
+
+            if( gone && gone.rrule && ! gone.rid && editingOcc )
+            {
+                const occ  = editingOcc;
+                const seen = gone.allDay || gone.floating ? occ.replace( 'T', ' ' )     // the day / time as this screen shows it
+                           : DateTime.fromISO( occ, { zone: gone.tzid } ).setZone( VIEWER_TZ ).toFormat( 'yyyy-MM-dd HH:mm' );
+                const how  = await NayiveUI.confirm( { title: T( 'calendar.delRepeatTitle' ), body: TF( 'calendar.delRepeatBody', { date: seen } ),
+                                                      other: T( 'calendar.delThisOne' ), otherIcon: 'trash',
+                                                      confirm: T( 'calendar.delAllOfIt' ), danger: true } );
+                if( ! how ) return;                                   // cancelled: the sheet stays open
+                if( refuseEdit() ) return;
+                gone = findDef( key );                                // a merge may have re-read it meanwhile
+                if( ! gone ) { closeSheet(); return; }               // ...without it: deleted on the other device
+                if( how === 'other' )
+                {
+                    const undo = excludeOne( gone, occ );
+                    closeSheet();
+                    refetchAll();
+                    saveCalendar();
+                    undoable( T( 'ui.toast.deleted' ), function() { undo(); } );
+                    return;
+                }
+            }
             const goes = d => d.key === key || ( gone && ! gone.rid && d.uid === gone.uid );
 
             // What leaves and where it stood, for the Undo. The same def objects: a

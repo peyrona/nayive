@@ -230,9 +230,10 @@ func TestPublicStatic(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("index.html without a session = %d, want a 302", resp.StatusCode)
 	}
-	loc := resp.Header.Get("Location")
-	if !strings.Contains(loc, "/login.html?return=/nayive/index.html") {
-		t.Errorf("Location = %q - the ?return= path must keep its slashes", loc)
+	// No ?return=: only one-shot targets come back after a sign-in
+	// (auth_b4_return_test.go); a plain page lands on the launcher.
+	if loc := resp.Header.Get("Location"); loc != "/nayive/login.html" {
+		t.Errorf("Location = %q, want the plain sign-in page", loc)
 	}
 
 	// The same URL asked for by fetch(), which wants JSON and not a login page.

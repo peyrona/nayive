@@ -39,7 +39,7 @@
         label:    "",      // a label's list on screen instead of a tray ("" = a tray)
         labels:   [],      // [{ id, name, color }] - Nayive's own, every account's
         colors:   [],      // the eight a label can have
-        settings: { trashDays: 30, showImages: false },
+        settings: { trashDays: 30, showImages: false, signature: "" },
         selecting: false,  // picking several (actions.js)
         sel:      new Set(),  // the rows picked (items of S.items)
         // out of sight while their Undo is on show - a re-read never brings
@@ -175,7 +175,8 @@
         compose:'<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path>',
         reply:  '<polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>',
         replyAll:'<polyline points="7 17 2 12 7 7"></polyline><polyline points="12 17 7 12 12 7"></polyline><path d="M22 18v-2a4 4 0 0 0-4-4H7"></path>',
-        forward:'<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>'
+        forward:'<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>',
+        chevron:'<polyline points="6 9 12 15 18 9"></polyline>'
     };
 
     // Every [data-icon] button of the page gets its glyph: ours, or the shared one.

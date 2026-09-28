@@ -45,12 +45,24 @@ let table          = null;  // Handsontable instance
 // re-pointed in exactly one place (setActiveSheet), so the sheet tabs
 // will have nothing new to wire up.
 
+// A new sheet's name in the interface language ("Hoja1", "Sheet1"). The
+// shared NayiveUI.t, not T: the first newDoc() below runs at load, before
+// calc.js exists and before the dictionary is in - when t() answers with the
+// key itself.
+function defaultSheetName()
+{
+    const name = NayiveUI.t( 'calc.defaultSheet' );
+    return ( name && name !== 'calc.defaultSheet' ) ? name : 'Sheet1';
+}
+
 function newSheet( name )
 {
     return {
-        name       : name || 'Hoja1',
+        name       : name || defaultSheetName(),
         data       : [ [ '' ] ],
         cellStyles : {},                 // { "A1": {bold,size,color,bg,align,…} }
+        rowStyles  : [],                 // a whole row's look, sparse by row index (see THE LOOK OF A CELL)
+        colStyles  : [],                 // a whole column's look, sparse by column index
         merges     : [],                 // [{row,col,rowspan,colspan}, …]
         cols       : [],                 // px widths,  sparse by column index
         rows       : [],                 // px heights, sparse by row index
@@ -69,6 +81,7 @@ function newSheet( name )
         noteAuthors: null,               // { "note text": "author" } from the file (codec.js)
         links      : {},                 // { "A1": { target, tooltip } }
         unread     : false,              // the codec could not read it: it opened EMPTY (calc.js, loadSheet)
+        csvRaw     : null,               // { "A1": { raw, value } }: a .csv's fields as the file has them (codec.js, writeCsv)
         raw        : null                // xlsx fragments Calc cannot model, kept verbatim
     };
 }
@@ -104,9 +117,33 @@ function setActiveSheet( i )
 }
 
 //------------------------------------------------------------------------//
+// THE LOOK OF A CELL
+//
+// A cell looks like its own style if it has one, else its row's, else its
+// column's - the order Excel reads them in (<c s=>, <row s= customFormat>,
+// <col style=>). A whole row or column formatted at once keeps ONE style on
+// the line instead of one per cell: each of those cells used to be written
+// as an empty styled <c>, and the file and its used range grew with them.
+// An own style of {} is a cell kept plain on purpose inside a styled line.
+//
+// A line style is never edited in place: a whole sheet shares one object
+// across all 16,384 columns, so a change always puts in a new object.
+
+function lineStyle( sh, r, c )
+{
+    return ( sh.rowStyles && sh.rowStyles[ r ] ) || ( sh.colStyles && sh.colStyles[ c ] ) || null;
+}
+
+function styleOf( sh, r, c )
+{
+    return sh.cellStyles[ encodeCell( { r: r, c: c } ) ] || lineStyle( sh, r, c );
+}
+
+//------------------------------------------------------------------------//
 // GRID
 
-let lastSelection = null;   // {r1,c1,r2,c2} — captured on selection, since toolbar buttons steal focus
+let lastSelection = null;   // {r1,c1,r2,c2,lines} — captured on selection, since toolbar buttons steal focus
+                            // lines: 'rows' / 'cols' / 'all' when picked from the headers or the corner
 
 // Handsontable's theme class follows the shared colour scheme. The --ht-* variables in
 // the stylesheet are wired to the app tokens for both classes; swapping the class here
@@ -367,6 +404,19 @@ function applyRowOrder( first, last, order )
     });
     activeSheet.links = links;
 
+    // A .csv's fields as the file has them go with their rows too.
+    if( activeSheet.csvRaw )
+    {
+        const raw = {};
+        Object.keys( activeSheet.csvRaw ).forEach( function( addr )
+        {
+            const rc = decodeCell( addr );
+            const to = ( rc.r >= first && rc.r <= last ) ? moveTo[ rc.r ] : rc.r;
+            raw[ encodeCell( { r: to, c: rc.c } ) ] = activeSheet.csvRaw[ addr ];
+        });
+        activeSheet.csvRaw = raw;
+    }
+
     // Notes live in cell meta while the sheet is on screen, so they are read
     // from there rather than from the last stash.
     const notes = {};
@@ -395,6 +445,15 @@ function applyRowOrder( first, last, order )
     activeSheet.rows       = heights;
     activeSheet.rowsSrc    = heightsSrc;
     activeSheet.hiddenRows = hidden;
+
+    // A row's own look goes with it too, like its height: the cells in it
+    // that have no look of their own wear it.
+    const looks = [];
+    ( activeSheet.rowStyles || [] ).forEach( function( st, r )
+    {
+        looks[ ( r >= first && r <= last ) ? moveTo[ r ] : r ] = st;
+    });
+    activeSheet.rowStyles = looks;
 
     // loadData shows every column again: read the hidden ones off the plugin
     // (the sheet entry only catches up at the next stash) and hide them after.
@@ -575,7 +634,7 @@ function shiftAddrMap( map, axis, at, n, taken )
     return out;
 }
 
-// A sparse width/height array after the move.
+// A sparse width/height/line-style array after the move.
 function shiftSizes( list, at, n, taken )
 {
     const out = [];
@@ -620,16 +679,19 @@ function moveRowsOrCols( axis, at, n, source )
 {
     const sizesKey = axis === 'row' ? 'rows'    : 'cols';
     const srcKey   = axis === 'row' ? 'rowsSrc' : 'colsSrc';
+    const lineKey  = axis === 'row' ? 'rowStyles' : 'colStyles';
     const raw      = activeSheet.raw;
-    const taken    = { axis: axis, at: at, n: -n, styles: {}, links: {}, sizes: {}, sizesSrc: {},
+    const taken    = { axis: axis, at: at, n: -n, styles: {}, links: {}, csvRaw: {}, sizes: {}, sizesSrc: {}, lines: {},
                        merges:     activeSheet.merges,
                        raw:        raw ? { cf: raw.cf, dv: raw.dv } : null,
                        autofilter: activeSheet.autofilter };
 
     activeSheet.cellStyles  = shiftAddrMap( activeSheet.cellStyles, axis, at, n, taken.styles );
     activeSheet.links       = shiftAddrMap( activeSheet.links,      axis, at, n, taken.links );
+    if( activeSheet.csvRaw ) activeSheet.csvRaw = shiftAddrMap( activeSheet.csvRaw, axis, at, n, taken.csvRaw );
     activeSheet[ sizesKey ] = shiftSizes( activeSheet[ sizesKey ], at, n, taken.sizes );
     activeSheet[ srcKey ]   = shiftSizes( activeSheet[ srcKey ],   at, n, taken.sizesSrc );
+    activeSheet[ lineKey ]  = shiftSizes( activeSheet[ lineKey ] || [], at, n, taken.lines );
     activeSheet.merges      = shiftMerges( activeSheet.merges, axis, at, n );
 
     if( raw ) { raw.cf = shiftRawXml( raw.cf, axis, at, n ); raw.dv = shiftRawXml( raw.dv, axis, at, n ); }
@@ -648,11 +710,21 @@ function moveRowsOrCols( axis, at, n, source )
         return;
     }
 
+    // A new row or column takes the look of the one before it (above, to
+    // the left), as in Excel - or of the one after it at the very top or
+    // left edge. Without it a formatted sheet had a bare gap where it went.
+    if( source !== 'UndoRedo.undo' )
+    {
+        const lines = activeSheet[ lineKey ];
+        const from  = lines[ at > 0 ? at - 1 : at + n ];
+        if( from ) for( let i = at; i < at + n; i++ ) lines[ i ] = from;
+        return;
+    }
+
     // Undo of a removal: the same rows are back where they were, so what
     // they took goes back on them. What is not keyed by one cell - the
     // merges, the kept ranges, the filter - is put back as it was: nothing
     // else can change those between a removal and its undo.
-    if( source !== 'UndoRedo.undo' ) return;
 
     for( let i = removedStash.length - 1; i >= 0; i-- )
     {
@@ -663,8 +735,10 @@ function moveRowsOrCols( axis, at, n, source )
 
         Object.assign( activeSheet.cellStyles, s.styles );
         Object.assign( activeSheet.links,      s.links );
+        if( activeSheet.csvRaw ) Object.assign( activeSheet.csvRaw, s.csvRaw );
         Object.keys( s.sizes    ).forEach( function( k ) { activeSheet[ sizesKey ][ k ] = s.sizes[ k ]; } );
         Object.keys( s.sizesSrc ).forEach( function( k ) { activeSheet[ srcKey ][ k ]   = s.sizesSrc[ k ]; } );
+        Object.keys( s.lines    ).forEach( function( k ) { activeSheet[ lineKey ][ k ]  = s.lines[ k ]; } );
         activeSheet.merges     = s.merges;
         activeSheet.autofilter = s.autofilter;
         if( raw && s.raw ) { raw.cf = s.raw.cf; raw.dv = s.raw.dv; }
@@ -761,11 +835,45 @@ function showNumber( v, fmt )
 {
     if( fmt )
     {
+        // Excel's built-in short date (format 14, "m/d/yy") means "the
+        // system's short date": in the interface language's order, not the
+        // US one the library writes it in (see shortDate).
+        if( fmt === 'm/d/yy' )           fmt = shortDate();
+        else if( fmt === 'm/d/yy h:mm' ) fmt = shortDate() + ' h:mm';
+
         try { return localMarks( formatNumber( fmt, v, { date1904: !! doc.date1904 } ), fmt ); }
         catch( _ ) { /* a format the library cannot read: shown plain */ }
     }
 
     return editNumber( Number.isInteger( v ) ? v : Number( v.toPrecision( 15 ) ) );
+}
+
+let shortFor  = null;    // the locale shortDate() last looked at
+let shortCode = null;    // its format code, "dd/mm/yyyy" in Spanish
+
+// The interface language's short date as a format code: 31/12/2026 in
+// Spanish, 12/31/2026 in English, 31.12.2026 in German.
+function shortDate()
+{
+    const loc = NayiveI18n.locale();
+    if( loc === shortFor ) return shortCode;
+
+    let code = '';
+    try
+    {
+        new Intl.DateTimeFormat( loc, { year: 'numeric', month: '2-digit', day: '2-digit' } ).formatToParts( new Date( 2026, 11, 31 ) ).forEach( function( p )
+        {
+            if( p.type === 'day' )          code += 'dd';
+            else if( p.type === 'month' )   code += 'mm';
+            else if( p.type === 'year' )    code += 'yyyy';
+            else if( p.type === 'literal' ) code += p.value.replace( /[^\/.\- ]/g, '' );
+        });
+    }
+    catch( _ ) {}
+
+    shortFor  = loc;
+    shortCode = /dd/.test( code ) && /mm/.test( code ) && /yyyy/.test( code ) ? code : 'dd/mm/yyyy';
+    return shortCode;
 }
 
 // A number as it is edited: every digit it has, the language's decimal mark
@@ -788,7 +896,7 @@ function editText( v, r, c )
     // A leading apostrophe of its own needs one more ('=, see codec.js, does not).
     const s     = String( v );
     const quote = ( s.charAt( 0 ) === "'" && s.charAt( 1 ) !== '=' ) ||
-                  !! typedValue( s, activeSheet.cellStyles[ encodeCell( { r: r, c: c } ) ] );
+                  !! typedValue( s, styleOf( activeSheet, r, c ) );
     return quote ? "'" + s : s;
 }
 
@@ -878,7 +986,7 @@ function typedValues( changes, source )
         if( ch[ 3 ].charAt( 0 ) === "'" && ch[ 3 ].charAt( 1 ) !== '=' ) { ch[ 3 ] = ch[ 3 ].slice( 1 ); return; }
 
         const addr  = encodeCell( { r: ch[ 0 ], c: ch[ 1 ] } );
-        const style = activeSheet.cellStyles[ addr ];
+        const style = styleOf( activeSheet, ch[ 0 ], ch[ 1 ] );     // its row's or column's look too
         const got   = typedValue( ch[ 3 ], style );
         if( ! got ) return;
 
@@ -915,7 +1023,7 @@ function undoTypedFormats( action, redo )
             if( ! Object.keys( style ).length ) delete activeSheet.cellStyles[ addr ];
         }
         if( redo && ( ! style || style.numFmt === t.was ) )
-            activeSheet.cellStyles[ addr ] = Object.assign( {}, style, { numFmt: t.set } );
+            activeSheet.cellStyles[ addr ] = Object.assign( {}, style || lineStyle( activeSheet, ch[ 0 ], ch[ 1 ] ), { numFmt: t.set } );
     });
 
     table.render();
@@ -926,19 +1034,33 @@ function undoTypedFormats( action, redo )
 // does it once more. In the plugin's lists, so Ctrl+Z walks back through the
 // cell edits and these in order; loadData (a sort, another sheet) clears them.
 // done() is called whatever happens - until it is, the plugin takes no more.
+// Returns the step, so a caller can tell whether it is still the last one done.
+//
+// Every Ctrl+Z also takes one step back in the formula engine's own list
+// (the formulas plugin calls its undo() on every undo, whatever the step
+// is), so each of these steps puts an empty one there as well. Without it
+// the Ctrl+Z of a format took back the engine's last cell edit instead, and
+// once the engine's list ran dry, threw.
 function undoStep( back, again )
 {
     const ur = table && table.getPlugin( 'undoRedo' );
-    if( ! ur || ! ur.isEnabled() ) return;
+    if( ! ur || ! ur.isEnabled() ) return null;
 
+    let step = null;
     ur.done( function()
     {
-        return {
+        step = {
             actionType : 'nayive',
             undo       : function( hot, done ) { try { back();  hot.render(); updateToolbarActiveState(); } finally { done(); } },
             redo       : function( hot, done ) { try { again(); hot.render(); updateToolbarActiveState(); } finally { done(); } }
         };
+        return step;
     } );
+
+    const hf = formulaEngine();
+    if( hf ) hf.batch( function() {} );
+
+    return step;
 }
 
 // Right-click "Delete note": what Handsontable's own item does (every note in
@@ -1070,7 +1192,7 @@ function initGrid( d )
         // DATE(), YEAR() and friends would be four years out.
         formulas    : { engine: doc.date1904 ? { hyperformula: HyperFormula, nullDate: { year: 1904, month: 1, day: 1 } }
                                              : HyperFormula,
-                        sheetName: activeSheet.name || 'Hoja1' },
+                        sheetName: activeSheet.name || defaultSheetName() },
         width       : '100%',
         height      : '100%',
         // The cell's look is this app's, not Handsontable's - see CLIPBOARD
@@ -1135,7 +1257,15 @@ function initGrid( d )
         },
         afterSelectionEnd : function( row, col, row2, col2 )
         {
-            lastSelection = { r1: Math.min( row, row2 ), c1: Math.min( col, col2 ), r2: Math.max( row, row2 ), c2: Math.max( col, col2 ) };
+            // A header or the corner reports its own row/column as -1: the
+            // cells start at 0, and `lines` says the whole line was picked
+            // (format.js puts a look on the line itself, not on each cell).
+            const hs = table.selection;
+            lastSelection = { r1: Math.max( 0, Math.min( row, row2 ) ), c1: Math.max( 0, Math.min( col, col2 ) ),
+                              r2: Math.max( row, row2 ), c2: Math.max( col, col2 ),
+                              lines: ! hs ? null : hs.isSelectedByCorner()       ? 'all'
+                                                 : hs.isSelectedByRowHeader()    ? 'rows'
+                                                 : hs.isSelectedByColumnHeader() ? 'cols' : null };
             updateToolbarActiveState();
             refreshNameBox();
             refreshFormulaBar();
@@ -1215,7 +1345,7 @@ function clipBlock( coords )
     return ( c && c.startRow >= 0 && c.startCol >= 0 ) ? c : null;
 }
 
-function styleAt( r, c )    { return activeSheet.cellStyles[ encodeCell( { r: r, c: c } ) ] || null; }
+function styleAt( r, c )    { return styleOf( activeSheet, r, c ); }
 
 function stashClipStyles( data, coords )
 {
@@ -1277,8 +1407,10 @@ function applyClipStyles( data, coords )
 
             // A fresh object per cell: the styles map is edited in place by the
             // toolbar, and two cells must never end up sharing one entry.
-            if( s ) activeSheet.cellStyles[ addr ] = JSON.parse( JSON.stringify( s ) );
-            else    delete activeSheet.cellStyles[ addr ];
+            // A plain cell pasted into a styled row or column stays plain.
+            if( s )                                 activeSheet.cellStyles[ addr ] = JSON.parse( JSON.stringify( s ) );
+            else if( lineStyle( activeSheet, r, k ) ) activeSheet.cellStyles[ addr ] = {};
+            else                                    delete activeSheet.cellStyles[ addr ];
         }
 
     table.render();
@@ -1314,7 +1446,7 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
 {
     Handsontable.renderers.getRenderer( 'text' )( instance, td, row, col, prop, value, cellProperties );
 
-    const style = activeSheet.cellStyles[ encodeCell( { r: row, c: col } ) ];
+    const style = styleOf( activeSheet, row, col );     // its own, or its row's or column's
 
     td.style.fontWeight      = ( style && style.bold )      ? 'bold'      : '';
     td.style.fontStyle       = ( style && style.italic )    ? 'italic'    : '';
@@ -1859,7 +1991,7 @@ function showFormulaResult( ed )
         let v;
         try
         {
-            const id = hf.getSheetId( activeSheet.name || 'Hoja1' );
+            const id = hf.getSheetId( activeSheet.name || defaultSheetName() );
             v = hf.calculateFormula( text, id === undefined ? 0 : id );
         }
         catch( _ ) { v = undefined; }           // not a formula yet: "=SUM(" or "=A1+"
@@ -1894,7 +2026,7 @@ function feShow( v, ed )
 
     if( typeof v === 'number' )
     {
-        const style = activeSheet.cellStyles[ encodeCell( { r: ed.row, c: ed.col } ) ];
+        const style = styleOf( activeSheet, ed.row, ed.col );
         return showNumber( v, style && style.numFmt );
     }
 
@@ -1992,7 +2124,7 @@ function wireFormulaPanel()
 
 export
 {
-    table, newSheet, newDoc, doc, activeSheet, gridBooting, lastSelection, htThemeName,
+    table, newSheet, newDoc, doc, activeSheet, defaultSheetName, gridBooting, lastSelection, htThemeName,
     CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
-    editText, localMarks, undoStep
+    editText, localMarks, undoStep, lineStyle, styleOf
 };

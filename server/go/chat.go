@@ -69,7 +69,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -77,6 +76,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -124,6 +124,7 @@ type ChatContact struct {
 	Name    string    `json:"name"`
 	Token   string    `json:"token,omitempty"`
 	User    string    `json:"user,omitempty"` // a Nayive account: no link, their own Chat reads it (via)
+	Card    string    `json:"card,omitempty"` // the Contacts app's card they were picked from (its UID)
 	Created int64     `json:"created"`
 	Opened  int64     `json:"opened,omitempty"` // first time their link was used (unix s)
 	Photo   int64     `json:"photo,omitempty"`  // their picture's version (avatars/<id>.jpg); 0 = none
@@ -156,7 +157,16 @@ type chatData struct {
 	Groups      []*ChatGroup   `json:"groups"`
 	DeleteAfter int            `json:"deleteAfter,omitempty"` // days a message lives; 0 = for ever
 	Later       []*ChatLater   `json:"later,omitempty"`       // texts waiting for their time (sendDue)
+	// Faces: the picture the owner chose for another Nayive account (account ->
+	// its version; avatars/u-<account>.jpg). Theirs only, and for ever: it
+	// shows wherever the two chat - in this home or in the other's - and
+	// stays when that chat is deleted.
+	Faces map[string]int64 `json:"faces,omitempty"`
 }
+
+// faceKey is the avatar id (and file name, + ".jpg") of the owner's picture
+// for a Nayive account. Never a contact's id: those are hex.
+func faceKey(user string) string { return "u-" + user }
 
 // ChatLater is a text scheduled by its sender for a time to come. It is not a
 // message yet: no id, no rev; nobody but its sender sees it until it goes.
@@ -390,7 +400,7 @@ func (h *ChatHub) resetIndex() {
 
 // RenameUser follows an account the admin renamed: its own chat is read again
 // under the new name, and every other home that holds it as a contact now
-// points at the new name.
+// points at the new name - the picture a home chose for it too.
 func (h *ChatHub) RenameUser(old, name string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -403,6 +413,13 @@ func (h *ChatHub) RenameUser(old, name string) {
 				c.User, moved = name, true
 			}
 		}
+		if v, ok := o.data.Faces[old]; ok { // the picture chosen for them follows
+			dir := filepath.Join(o.dir, "avatars")
+			os.Rename(filepath.Join(dir, faceKey(old)+".jpg"), filepath.Join(dir, faceKey(name)+".jpg"))
+			delete(o.data.Faces, old)
+			o.data.Faces[name] = v
+			moved = true
+		}
 		if moved {
 			h.saveData(o)
 			o.changed(true)
@@ -411,7 +428,8 @@ func (h *ChatHub) RenameUser(old, name string) {
 }
 
 // DeleteUser follows an account the admin deleted: every other home that held
-// it as a contact deletes that contact, as the owner's "delete person" would.
+// it as a contact deletes that contact, as the owner's "delete person" would,
+// and the picture it chose for that account.
 func (h *ChatHub) DeleteUser(name string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -424,6 +442,11 @@ func (h *ChatHub) DeleteUser(name string) {
 				h.dropContact(o, c)
 				moved = true
 			}
+		}
+		if _, ok := o.data.Faces[name]; ok {
+			os.Remove(filepath.Join(o.dir, "avatars", faceKey(name)+".jpg"))
+			delete(o.data.Faces, name)
+			moved = true
 		}
 		if moved {
 			h.saveData(o)
@@ -720,6 +743,11 @@ func (o *chatOwner) avatarsFor(pid string) map[string]int64 {
 			out[c.ID] = c.Photo
 		}
 	}
+	if pid == "o" { // the owner's own pictures of other accounts: nobody else's
+		for u, v := range o.data.Faces {
+			out[faceKey(u)] = v
+		}
+	}
 	return out
 }
 
@@ -965,34 +993,9 @@ const chatFindAgain = 10 * time.Minute
 
 // findKept is the owner's file known by `id`, as "files/...", or "".
 // The bin is not looked in: a binned photo is gone until it is restored.
+// One walk of the home answers a burst of lookups (keptindex.go, S2-#16).
 func (h *ChatHub) findKept(user string, id keptID) string {
-	home := filepath.Join(h.cfg.HomesDir, user)
-	found, seen := "", 0
-	filepath.WalkDir(filepath.Join(home, "files"), func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if seen++; seen > chatFindMax {
-			return filepath.SkipAll
-		}
-		if d.IsDir() {
-			if d.Name() == ".trash" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.Type().IsRegular() {
-			return nil
-		}
-		if info, err := d.Info(); err == nil && keptIDOf(info) == id {
-			if rel, err := filepath.Rel(home, path); err == nil {
-				found = filepath.ToSlash(rel)
-			}
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return found
+	return findKeptIndexed(filepath.Join(h.cfg.HomesDir, user), id)
 }
 
 // -----------------------------------------------------------------------------
@@ -1705,6 +1708,18 @@ func (h *ChatHub) nameOf(o *chatOwner, pid string) string {
 	return ""
 }
 
+// testHook is for tests only (server 75): it hears what a request decided to
+// do after its answer - pushes, a photo's position - so a test can prove that
+// NOTHING was sent without sleeping first. `who` is the *ChatHub or *Server it
+// happened in, `ev` the event, `n` how many. Nil in production: one atomic load.
+var testHook atomic.Pointer[func(who any, ev string, n int)]
+
+func traced(who any, ev string, n int) {
+	if f := testHook.Load(); f != nil {
+		(*f)(who, ev, n)
+	}
+}
+
 // announce pushes a new message to whoever is away, and re-checks the ones who
 // looked present. Caller holds h.mu; the sending happens on its own goroutine.
 func (h *ChatHub) announce(o *chatOwner, c *chatConv, m *ChatMsg) {
@@ -1723,6 +1738,8 @@ func (h *ChatHub) announce(o *chatOwner, c *chatConv, m *ChatMsg) {
 	for _, p := range now {
 		jobs = append(jobs, h.pushTargets(o, c, m, p)...)
 	}
+	traced(h, "push-now", len(jobs))
+	traced(h, "push-later", len(later))
 	if len(jobs) > 0 {
 		go h.sendPushes(o.user, jobs)
 	}
@@ -1821,6 +1838,7 @@ func (h *ChatHub) sendPushes(owner string, jobs []chatPushJob) {
 			}
 		})
 	}
+	traced(h, "pushed", len(jobs)) // every device asked, the dead ones forgotten
 }
 
 func removeSub(c *ChatContact, endpoint string) bool {

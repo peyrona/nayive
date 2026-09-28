@@ -20,6 +20,7 @@ package main
 //	       ?file=<path>                the file itself
 //	       (nothing)                   the whole tree
 //	POST   ?old=&new=                  rename / move
+//	       ?from=&new=                 copy (copy.go)
 //	       ?trash=restore|empty        undelete / empty
 //	PUT    ?type=dir&name=&parent=     mkdir
 //	       ?file=<path>                upload
@@ -82,6 +83,14 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	// ---- PUT ?type=dir&name=&parent=  -> mkdir ----------------------------
 	if r.Method == http.MethodPut && q.Get("type") == "dir" {
 		s.filesMkdir(w, r, role, user, q)
+		return
+	}
+
+	// ---- POST ?from=&new=  -> copy (copy.go) ------------------------------
+	// Not ?old=&copy=1: a server older than the copy would read that as a
+	// MOVE. Without ?old= an old server answers 400 and nothing moves.
+	if r.Method == http.MethodPost && q.Has("from") && q.Has("new") {
+		s.filesCopy(w, r, role, user, q)
 		return
 	}
 
@@ -174,6 +183,9 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead:
 		s.filesRead(w, r, target, q)
 	case http.MethodPut:
+		if !saveOwnerOK(w, r, role, user) { // queued under another account: store_owner.go
+			return
+		}
 		s.filesWrite(w, r, role, user, fileRel, target)
 	default:
 		sendError(w, r, http.StatusMethodNotAllowed, r.Method+" not allowed")
@@ -441,6 +453,10 @@ func (s *Server) filesMove(w http.ResponseWriter, r *http.Request, role, user st
 		sendError(w, r, http.StatusInternalServerError, "no se pudo mover")
 		return
 	}
+	// What the owner lent (shares, public trip links) goes with it (S2-#7).
+	if owner, from, to := s.movedInHome(role, user, oldRel, newRel); owner != "" {
+		s.shares.MoveRoot(owner, from, to)
+	}
 	if role == "admin" { // may have crossed from one home to another
 		for _, owner := range []string{s.users.HomeOwner(src.Abs), s.users.HomeOwner(dst.Abs)} {
 			if owner != "" {
@@ -449,6 +465,22 @@ func (s *Server) filesMove(w http.ResponseWriter, r *http.Request, role, user st
 		}
 	}
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "moved"})
+}
+
+// movedInHome turns a move's two API paths into the home owner and the two
+// home-relative paths grants are keyed by. A user's paths already are; the
+// admin's carry "homes/<owner>/" in front, and a move from one home to another
+// takes nothing lent along (the grant belongs to the first owner). "" when
+// there is no one owner.
+func (s *Server) movedInHome(role, user, oldRel, newRel string) (owner, from, to string) {
+	if role != "admin" {
+		return user, oldRel, newRel
+	}
+	a, b := splitPath(oldRel), splitPath(newRel)
+	if len(a) < 3 || len(b) < 3 || a[0] != "homes" || b[0] != "homes" || a[1] != b[1] {
+		return "", "", ""
+	}
+	return a[1], strings.Join(a[2:], "/"), strings.Join(b[2:], "/")
 }
 
 // filesDelete moves paths to the trash can, or - with &purge=1 - really deletes
@@ -498,7 +530,7 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 			return
 		}
 		if purge {
-			parts := splitPath(unquotePath(rel))
+			parts := splitPath(rel)
 			if len(parts) == 0 || parts[0] != "data" {
 				sendError(w, r, http.StatusForbidden, "purge solo bajo data/: "+rel)
 				return

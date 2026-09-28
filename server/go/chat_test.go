@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
@@ -109,6 +110,11 @@ func TestChatPersonTalksToOwner(t *testing.T) {
 	if again.ID != m.ID {
 		t.Fatalf("a retried send made message %d, want %d", again.ID, m.ID)
 	}
+	var unread map[string]int
+	f.call(t, f.owner, "GET", "/api/chat/unread", "", 200, &unread)
+	if unread["n"] != 1 { // one message in, however often it was sent
+		t.Fatalf("unread before reading = %v, want 1", unread)
+	}
 
 	var list msgList
 	f.call(t, f.owner, "GET", "/api/chat/conv/"+conv+"/messages", "", 200, &list)
@@ -126,8 +132,7 @@ func TestChatPersonTalksToOwner(t *testing.T) {
 		t.Fatalf("since rev gave %+v", delta.Msgs)
 	}
 
-	// Unread for the owner was 1, then read.
-	var unread map[string]int
+	// Unread for the owner was 1 (above), then read.
 	f.call(t, f.owner, "GET", "/api/chat/unread", "", 200, &unread)
 	if unread["n"] != 0 { // the owner's own reply moved their read cursor past it
 		t.Fatalf("unread = %v", unread)
@@ -238,6 +243,7 @@ func TestChatSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { srv2.Close() })
 	ts2 := httptest.NewServer(srv2.routes())
 	defer ts2.Close()
 	resp := do(t, anonymous(), "GET", ts2.URL+"/api/c/"+f.carmen+"/conv/"+conv+"/messages", nil, nil)
@@ -361,11 +367,14 @@ func TestChatWait(t *testing.T) {
 	f.call(t, guest, "GET", "/api/c/"+f.carmen+"/wait?v=-1", "", 200, &first)
 	v := int64(first["v"].(float64))
 
+	// The goroutine only reports back: t.Fatalf belongs to the test's own.
 	done := make(chan map[string]any, 1)
 	go func() {
-		resp := do(t, guest, "GET", fmt.Sprintf("%s/api/c/%s/wait?v=%d", f.base, f.carmen, v), nil, nil)
 		var out map[string]any
-		json.Unmarshal(readBody(t, resp), &out)
+		if resp, err := guest.Get(fmt.Sprintf("%s/api/c/%s/wait?v=%d", f.base, f.carmen, v)); err == nil {
+			json.NewDecoder(resp.Body).Decode(&out)
+			resp.Body.Close()
+		}
 		done <- out
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -373,14 +382,9 @@ func TestChatWait(t *testing.T) {
 	f.call(t, f.owner, "POST", "/api/chat/conv/d-"+f.ids["Carmen"]+"/messages", `{"kind":"text","text":"despierta"}`, 201, nil)
 	select {
 	case out := <-done:
-		revs := out["revs"].(map[string]any)
-		if revs["d-"+f.ids["Carmen"]] == float64(0) || time.Since(start) > 5*time.Second {
+		revs, _ := out["revs"].(map[string]any)
+		if rev, _ := revs["d-"+f.ids["Carmen"]].(float64); rev <= 0 || time.Since(start) > 5*time.Second {
 			t.Fatalf("wait woke with %v", out)
-		}
-		online := out["online"].([]any)
-		if len(online) != 1 || online[0] != "o" {
-			// the owner has no wait open, but Carmen sees... nobody online is also fine
-			_ = online
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the wait did not wake on a new message")
@@ -459,6 +463,47 @@ func TestChatDataIsNotAFile(t *testing.T) {
 	}
 }
 
+// traceEv is one testHook event (chat.go) of the hub or server a test watches.
+type traceEv struct {
+	ev string
+	n  int
+}
+
+// traceEvents hears testHook's events of `who` (a *ChatHub or *Server) until
+// the test ends: "nothing was sent" is then read off the server's own decision,
+// not guessed after a sleep.
+func traceEvents(t *testing.T, who any) <-chan traceEv {
+	ch := make(chan traceEv, 256)
+	f := func(w any, ev string, n int) {
+		if w == who {
+			select {
+			case ch <- traceEv{ev, n}:
+			default: // a test that stopped listening never blocks the server
+			}
+		}
+	}
+	testHook.Store(&f)
+	t.Cleanup(func() { testHook.Store(nil) })
+	return ch
+}
+
+// waitEv waits for the next `ev` (others are skipped) and returns its count.
+func waitEv(t *testing.T, ch <-chan traceEv, ev string) int {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case e := <-ch:
+			if e.ev == ev {
+				return e.n
+			}
+		case <-deadline:
+			t.Fatalf("no %q event in 10 s", ev)
+			return 0
+		}
+	}
+}
+
 // TestChatPush: a person who is away gets the new message on their devices; a
 // device the push service calls gone is forgotten; a muted chat stays quiet;
 // someone looking at the chat right now is not buzzed.
@@ -487,6 +532,7 @@ func TestChatPush(t *testing.T) {
 	keys := PushKeys{P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
 		Auth: base64.RawURLEncoding.EncodeToString(auth)}
 	h := f.srv.chat
+	evs := traceEvents(t, h)
 	h.mu.Lock()
 	carmen := h.owner("ana").contact(f.ids["Carmen"])
 	carmen.Subs = []PushSub{{Endpoint: push.URL + "/good", Keys: keys, Lang: "es"},
@@ -499,7 +545,7 @@ func TestChatPush(t *testing.T) {
 	}
 	waitHits := func(p string, n int) {
 		t.Helper()
-		for i := 0; i < 50 && count(p) < n; i++ {
+		for i := 0; i < 250 && count(p) < n; i++ { // up to 10 s: a slow box, not a flake
 			time.Sleep(40 * time.Millisecond)
 		}
 		if count(p) < n {
@@ -510,7 +556,7 @@ func TestChatPush(t *testing.T) {
 	send("hola")
 	waitHits("/good", 1)
 	waitHits("/gone", 1)
-	time.Sleep(100 * time.Millisecond)
+	waitEv(t, evs, "pushed") // both asked, and the 410 already acted on
 	h.mu.Lock()
 	left := len(carmen.Subs)
 	h.mu.Unlock()
@@ -521,7 +567,9 @@ func TestChatPush(t *testing.T) {
 	// Muted: nothing.
 	f.call(t, anonymous(), "POST", "/api/c/"+f.carmen+"/conv/"+conv+"/prefs", `{"mute":true}`, 200, nil)
 	send("silencio")
-	time.Sleep(300 * time.Millisecond)
+	if now, later := waitEv(t, evs, "push-now"), waitEv(t, evs, "push-later"); now != 0 || later != 0 {
+		t.Fatalf("a muted chat was pushed: %d devices now, %d people later", now, later)
+	}
 	if count("/good") != 1 {
 		t.Fatalf("a muted chat was pushed: %d", count("/good"))
 	}
@@ -530,13 +578,35 @@ func TestChatPush(t *testing.T) {
 	// Looking at it (a wait open): not now.
 	var first map[string]any
 	f.call(t, anonymous(), "GET", "/api/c/"+f.carmen+"/wait?v=-1", "", 200, &first)
+	// Cancelled and joined at the end; it reports nothing, so no t.Fatalf in it.
+	ctx, cancel := context.WithCancel(context.Background())
+	waited := make(chan struct{})
+	defer func() { cancel(); <-waited }()
 	go func() {
-		resp := do(t, anonymous(), "GET", fmt.Sprintf("%s/api/c/%s/wait?v=%d", f.base, f.carmen, int64(first["v"].(float64))), nil, nil)
-		readBody(t, resp)
+		defer close(waited)
+		req, _ := http.NewRequestWithContext(ctx, "GET",
+			fmt.Sprintf("%s/api/c/%s/wait?v=%d", f.base, f.carmen, int64(first["v"].(float64))), nil)
+		if resp, err := anonymous().Do(req); err == nil {
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
 	}()
-	time.Sleep(150 * time.Millisecond)
+	// Her long poll is open (not only the grace after the first one).
+	for end := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		h.mu.Lock()
+		open := h.owner("ana").waits[f.ids["Carmen"]] > 0
+		h.mu.Unlock()
+		if open {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatal("Carmen's wait never opened")
+		}
+	}
 	send("¿estás?")
-	time.Sleep(300 * time.Millisecond)
+	if now, later := waitEv(t, evs, "push-now"), waitEv(t, evs, "push-later"); now != 0 || later != 1 {
+		t.Fatalf("someone looking at the chat: %d devices now (want 0), %d people re-checked later (want 1)", now, later)
+	}
 	if count("/good") != 1 {
 		t.Fatalf("someone looking at the chat was pushed: %d", count("/good"))
 	}

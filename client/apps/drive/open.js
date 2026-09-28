@@ -26,10 +26,11 @@ function openNode( node )
     const toText  = TEXT_IMPORT.includes( ext );
 
     // A file in a format an editor opens natively: open it in place, from
-    // wherever it lives. Non-native formats (csv) fall through to the
-    // import/conversion routing below.
+    // wherever it lives. Calc opens a .csv as it is too (it saves it back as
+    // a .csv, and says first what a .csv cannot keep). Anything else falls
+    // through to the import/conversion routing below.
     if( ext === 'docx' ) { openDoc( '../write/index.html?file=' + encodeURIComponent( node.path ) ); return true; }
-    if( ext === 'xlsx' ) { openDoc( '../calc/index.html?file='  + encodeURIComponent( node.path ) ); return true; }
+    if( ext === 'xlsx' || ext === 'csv' ) { openDoc( '../calc/index.html?file=' + encodeURIComponent( node.path ) ); return true; }
     if( toText )         { openDoc( '../text/index.html?file='  + encodeURIComponent( node.path ) ); return true; }
 
     // A .zip: the list of what is inside, with "Extract here" (zip.js).
@@ -109,10 +110,10 @@ async function officeTwin( path, replace )
 // What to say when the server said no (the codes: api_office.go).
 function officeFailText( err, name )
 {
-    const m = String( err && err.message );
-    if( m.indexOf( '503' ) >= 0 ) return T( 'drive.officeOff' );
-    if( m.indexOf( '507' ) >= 0 ) return TF( 'drive.officeQuota',    { name: name } );
-    if( m.indexOf( '403' ) >= 0 ) return TF( 'drive.officeReadOnly', { name: name } );
+    const st = err && err.status;
+    if( st === 503 ) return T( 'drive.officeOff' );
+    if( st === 507 ) return TF( 'drive.officeQuota',    { name: name } );
+    if( st === 403 ) return TF( 'drive.officeReadOnly', { name: name } );
     return TF( 'drive.officeFailed', { name: name } );
 }
 

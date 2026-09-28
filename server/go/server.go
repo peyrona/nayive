@@ -227,6 +227,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/logout", s.apiLogout)
 	mux.HandleFunc("/api/whoami", s.apiWhoami)
 	mux.HandleFunc("/api/password", s.apiPassword)
+	mux.HandleFunc("/api/unlock", s.apiUnlock) // the screen locker
 
 	// --- per-account settings ----------------------------------------------
 	mux.HandleFunc("/api/lang", s.apiLang)
@@ -362,6 +363,9 @@ func (s *Server) requireSession(w http.ResponseWriter, r *http.Request) (Session
 	sess, ok := s.session(r)
 	if !ok {
 		sendError(w, r, http.StatusUnauthorized, "not signed in")
+		return Session{}, false
+	}
+	if s.mustSetPasswordFirst(w, r, sess) { // api_auth.go
 		return Session{}, false
 	}
 	return sess, true

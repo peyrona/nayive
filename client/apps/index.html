@@ -21,12 +21,15 @@
          with a mouse or touchpad, unless this device's desktop settings say
          otherwise (localStorage "balata-desktop" .start: auto | desktop | launcher).
          Never inside a frame (the desktop's own menu IS this page), never on a
-         phone, and never with a query or hash (?here=, enrolment...: this page acts on it). -->
+         phone, never with a query or hash (?here=, enrolment...: this page acts on it), and
+         never for an account that must pick its password first (login.html's
+         "nayive-must-set": the desktop's apps would all be refused). -->
     <script>
     try
     {
         if( window.top === window && ! location.search && ! location.hash &&
-            ! window.matchMedia( '(max-width: 640px)' ).matches )
+            ! window.matchMedia( '(max-width: 640px)' ).matches &&
+            sessionStorage.getItem( 'nayive-must-set' ) !== '1' )
         {
             var dkStart = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ) || {} ).start || 'auto';
             var dkBig   = window.matchMedia( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' ).matches;
@@ -46,6 +49,7 @@
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
     <script src="shared/ui.js" defer></script>
+    <script src="shared/store.js" defer></script>
     <script>
     NayiveI18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -81,6 +85,7 @@
         }
     }catch( e ){}</script>
     <script src="shared/theme.js" defer></script>
+    <script src="shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL.
          This one service worker (apps/sw.js) also serves the tasks / calendar / contact / planner shells offline. -->
@@ -225,23 +230,9 @@
         /* The desktop's menu: Office's and Records' corner caret, a bit bigger than the toolbar's. */
         :root.in-desktop .tile.has-popup::after { right: 4px; bottom: 4px; border-width: 4px 4px 0; }
 
-        .theme-btn
-        {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            border: 1px solid var(--line);
-            background: var(--card2);
-            color: var(--text-dim);
-            cursor: pointer;
-            padding: 0;
-            text-decoration: none;
-        }
-        .theme-btn:hover  { color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--card2)); }
-        .theme-btn:active { transform: scale(0.94); }
+        /* The settings row and "Buscar mi móvil" are shared .icon-btn buttons;
+           only their size is local - the row's geometry is built on 42px. */
+        .tools .icon-btn, .find-btn { width: 42px; height: 42px; }
 
         /* Settings row: the gear sits dead-centre on its own. Pressing it rolls the gear
            along to the left border - it spins the whole way - while the other tool
@@ -289,7 +280,7 @@
         .tools.open #gearBtn { transform: translateX(0) translateY(-50%); }   /* at the left edge */
 
         /* Inset ring so .tools' overflow:hidden can't swallow the keyboard focus outline. */
-        .theme-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+        .tools .icon-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 
         /* Each extra button is a zero-width slot until the row opens, then it widens in.
            Staggered delays make them arrive (and, on close, leave) one after another. */
@@ -347,7 +338,7 @@
         button.tile { border: 0; background: none; font: inherit; cursor: pointer; }
 
         /* "Buscar mi móvil" (2026-09-21, his ask: the panel's bottom-right corner).
-           The settings row's own round .theme-btn, on that row's line at the right
+           The settings row's own round .icon-btn, on that row's line at the right
            edge - not a floating button over the content. Always there since
            2026-09-23, but disabled - dimmed and deaf, like the shared
            .icon-btn:disabled - until there is something to find (a phone with the
@@ -355,9 +346,6 @@
            settings row is open: the row's buttons need that end of the line. */
         .find-btn { position: absolute; right: 30px; bottom: 26px; transition: opacity .2s ease, visibility .2s; }
         .find-btn svg { width: 20px; height: 20px; }
-        .find-btn:disabled { opacity: 0.45; cursor: default; }
-        .find-btn:disabled:hover  { color: var(--text-dim); background: var(--card2); }
-        .find-btn:disabled:active { transform: none; }
         .panel:has(.tools.open) .find-btn { opacity: 0; visibility: hidden; }
 
         /* Office's and Records' popups: the shared .top-menu card, laid out as ONE
@@ -399,6 +387,7 @@
         .pw-wrap .scm-input { margin: 0; padding-right: 42px; }
         .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
         .scm-check-row[hidden] { display: none; }
+        :root:not(.in-desktop) #deskScaleWrap { display: none; }
         .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; }
         .scm-check-row .scm-check { margin: 0; }
         .scm-check input { flex: 0 0 auto; }
@@ -411,30 +400,11 @@
         .pw-eye:hover { color: var(--text); }
         .pw-eye svg { width: 18px; height: 18px; }
 
-        /* ---- "Esquemas de color" dialog ------------------------------- */
-        /* Shell follows the shared Nayive dialog convention: .sheet / .sheet-backdrop
-           here, .sheet-actions + .btn / .sheet-close from shared/theme.css, and the
-           lone close button cornered by shared/ui.js (NayiveUI.applySheetButtons). */
-        .sheet-backdrop
-        {
-            position: fixed; inset: 0; z-index: 100;
-            display: flex; overflow-y: auto;
-            padding: 24px 16px;
-            background: var(--scrim);
-        }
-        .sheet-backdrop[hidden] { display: none; }
-        #scmBackdrop { z-index: 101; }   /* opened from "Mi cuenta": it must sit on top of it */
-
-        .sheet
-        {
-            position: relative;
-            margin: auto;                 /* centres both axes; scrolls when taller than the viewport */
-            width: 100%; max-width: 400px;
-            background: var(--card); border: 1px solid var(--line);
-            border-radius: var(--radius-l); padding: 20px 20px 18px;
-            box-shadow: 0 16px 40px var(--shadow);
-        }
-        .sheet h2 { margin: 0; padding-right: 40px; font-size: 1.05rem; font-weight: 600; }
+        /* ---- The three dialogs (Esquemas de color, Mi cuenta, Buscar mi móvil) ----
+           The shared shell: app.css .sheet-backdrop / .sheet, opened and closed with
+           NayiveUI.open / close, so shared/ui.js gives them its Escape, focus, drag
+           and "a dialog is open" guards. Esquemas sits AFTER Mi cuenta in the page:
+           opened from it, it is the top one (drawn over it, closed first by Escape). */
         .scm-h
         {
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
@@ -462,13 +432,7 @@
         /* Look from app.css (FORM FIELD); only width and the gap are local. */
         .scm-input { width: 100%; margin: 10px 0; }
 
-        .scm-seg { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; width: max-content; }
-        .scm-seg button
-        {
-            font: inherit; font-size: 0.82rem; padding: 7px 16px; border: none;
-            background: var(--card2); color: var(--text-dim); cursor: pointer;
-        }
-        .scm-seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+        .scm-seg { display: flex; align-items: center; gap: 6px; }   /* two .pill buttons */
 
         /* Name field and the Dark / Light switch share one row; both take the row's height. */
         .scm-name-row { display: flex; align-items: stretch; gap: 8px; margin: 10px 0; }
@@ -484,11 +448,10 @@
         .scm-tok input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
         .scm-tok input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
         .scm-tok code { flex: 1 1 auto; font-size: 0.82rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; }
-        .scm-tok input[type="text"]
+        .scm-tok input[type="text"]      /* the shared field look (app.css); a hex code's layout only */
         {
             width: 96px; flex: 0 0 auto; text-align: center; text-transform: uppercase;
-            font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; padding: 6px;
-            border-radius: 7px; border: 1px solid var(--line); background: var(--card2); color: var(--text);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
         }
         .scm-tok input[type="text"].bad { border-color: var(--danger); color: var(--danger); }
         /* Action row + buttons: shared .sheet-actions / .btn (../shared/theme.css). */
@@ -497,11 +460,9 @@
 
         .scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
         .scm-assign.scm-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
-        .scm-assign select
-        {
-            font: inherit; font-size: 0.85rem; padding: 7px 9px; border-radius: var(--radius-s);
-            border: 1px solid var(--line); background: var(--card2); color: var(--text); max-width: 190px;
-        }
+        .scm-assign select { max-width: 190px; }   /* the shared field look (app.css) */
+        #lockText { max-width: 190px; }            /* the screen locker's clock line */
+        #lockSel  { min-width: 0; }
         /* Colour schemes: the dark and light pickers share one row, half each. */
         .scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
         .scm-assign-row .scm-assign { margin: 0; min-width: 0; }
@@ -621,7 +582,7 @@
 
         <div class="tools" id="tools">
 
-            <button class="theme-btn" id="gearBtn" type="button" aria-expanded="false"
+            <button class="icon-btn" id="gearBtn" type="button" aria-expanded="false"
                     aria-controls="tools" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3"></circle>
@@ -629,9 +590,9 @@
                 </svg>
             </button>
 
-            <button class="theme-btn tool-extra" data-theme-toggle type="button" data-i18n-attr="title:ui.theme, aria-label:ui.themeToggle"></button>
+            <button class="icon-btn tool-extra" data-theme-toggle type="button" data-i18n-attr="title:ui.theme, aria-label:ui.themeToggle"></button>
 
-            <button class="theme-btn tool-extra" id="accountBtn" type="button" data-i18n-attr="title:ui.account, aria-label:ui.account">
+            <button class="icon-btn tool-extra" id="accountBtn" type="button" data-i18n-attr="title:ui.account, aria-label:ui.account">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                     <circle cx="12" cy="7" r="4"></circle>
@@ -639,7 +600,7 @@
             </button>
             <!-- Removed from the DOM by the script below when Nayive already runs
                  installed (so it also drops out of the help list). -->
-            <button class="theme-btn tool-extra" id="installBtn" type="button" data-i18n-attr="title:launcher.installApp, aria-label:launcher.installApp">
+            <button class="icon-btn tool-extra" id="installBtn" type="button" data-i18n-attr="title:launcher.installApp, aria-label:launcher.installApp">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
@@ -647,7 +608,7 @@
                 </svg>
             </button>
 
-            <a class="theme-btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
+            <a class="icon-btn tool-extra" id="logoutBtn" href="#" data-i18n-attr="title:launcher.logout, aria-label:launcher.logout">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </a>
 
@@ -655,7 +616,7 @@
 
         <!-- "Buscar mi móvil": the panel's bottom-right corner; disabled until the
              script below finds a phone or a last known position. -->
-        <button class="theme-btn find-btn" id="findBtn" type="button" disabled data-i18n-attr="title:find.title, aria-label:find.title">
+        <button class="icon-btn find-btn" id="findBtn" type="button" disabled data-i18n-attr="title:find.title, aria-label:find.title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"></rect><line x1="12" y1="17" x2="12.01" y2="17"></line><path d="M20.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M3.5 9a4.5 4.5 0 0 0 0 6"></path></svg>
         </button>
 
@@ -663,51 +624,8 @@
 
     </div>
 
-    <!-- "Esquemas de color" dialog - opened by the palette button in the settings row. -->
-    <div class="sheet-backdrop" id="scmBackdrop" hidden>
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.colorSchemes">
-            <h2 data-i18n="ui.colorSchemes"></h2>
-
-            <p class="scm-h" data-i18n="scm.saved"></p>
-            <div class="scm-list" id="scmList"></div>
-
-            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-dot" data-i18n-attr="data-info:scm.info"></button></p>
-            <div class="scm-name-row">
-                <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
-                <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
-                    <button type="button" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
-                    <button type="button" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
-                </div>
-            </div>
-            <div id="scmTokens">
-                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
-                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
-            </div>
-            <p class="scm-msg" id="scmAccentMsg" hidden></p>
-            <div class="sheet-actions">
-                <button id="scmDelete"  class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:scm.deleteThis"></button>
-                <button id="scmSaveNew" type="button" data-act="secondary:saveas" data-i18n-attr="title:scm.saveAsNew"></button>
-                <button id="scmSave"    type="button" data-act="primary" data-i18n-attr="title:scm.saveChanges"></button>
-            </div>
-            <p class="scm-msg" id="scmMsg" hidden></p>
-
-            <p class="scm-h" data-i18n="scm.assignHead"></p>
-            <div class="scm-assign-row">
-                <label class="scm-assign"><span data-i18n="scm.dark"></span><select id="scmActiveDark"></select></label>
-                <label class="scm-assign"><span data-i18n="scm.light"></span><select id="scmActiveLight"></select></label>
-            </div>
-
-            <div class="sheet-actions">
-                <button id="scmCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
     <!-- "Mi cuenta" dialog - opened by the account button in the settings row. -->
-    <div class="sheet-backdrop" id="pwBackdrop" hidden>
+    <div class="sheet-backdrop" id="pwBackdrop">
         <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.account">
             <h2 data-i18n="ui.account"></h2>
 
@@ -762,13 +680,32 @@
             </div>
             <p class="scm-msg" id="autoThemeMsg" hidden></p>
 
-            <label class="scm-assign" for="trashDaysAcct">
-                <span data-i18n="acct.autoDeleteAfter"></span>
+            <!-- Desktop mode only (html.in-desktop): new windows start with Scale
+                 on or off. DEVICE state, like the desktop's own settings
+                 (localStorage "balata-desktop" .scaleNew; desktop/index.html). -->
+            <div class="scm-check-row" id="deskScaleWrap">
+                <label class="scm-check">
+                    <input type="checkbox" id="deskScaleChk">
+                    <span data-i18n="acct.deskScale"></span>
+                </label>
+                <button class="info-dot" data-i18n-attr="data-info:acct.deskScaleInfo"></button>
+            </div>
+
+            <!-- Screen locker (shared/locker.js): which one + after how many idle
+                 minutes, in ONE row. DEVICE state (localStorage "nayive-locker").
+                 The clock's own line of text only shows with the clock. -->
+            <div class="scm-assign" id="lockRow">
+                <span data-i18n="acct.locker"></span>
                 <span class="trash-days-field">
-                    <input class="scm-num" id="trashDaysAcct" type="number" min="1" max="90" value="30" inputmode="numeric"> <span data-i18n="acct.days"></span>
+                    <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
+                    <input class="scm-num" id="lockMin" type="number" min="1" max="999" step="1" inputmode="numeric"
+                           data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span>
                 </span>
+            </div>
+            <label class="scm-assign" for="lockText" id="lockTextWrap" hidden>
+                <span data-i18n="acct.lockerText"></span>
+                <input id="lockText" type="text" maxlength="60" spellcheck="false">
             </label>
-            <p class="scm-msg" id="trashDaysMsg" hidden></p>
 
             <label class="scm-assign" for="tripDaysAcct">
                 <span data-i18n="acct.remindTrip"></span>
@@ -785,12 +722,8 @@
                 </label>
                 <button class="info-dot" data-i18n-attr="data-info:acct.notifsInfo"></button>
             </div>
-            <label class="scm-assign scm-assign-inline" for="pushWindow">
-                <span data-i18n="acct.notifyMe"></span>
-                <span class="trash-days-field">
-                    <input class="scm-num" id="pushWindow" type="number" min="1" max="1440" value="30" inputmode="numeric"> <span data-i18n="acct.minBefore"></span>
-                </span>
-            </label>
+            <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
+                 only events use it. -->
             <p class="scm-msg" id="pushMsg" hidden></p>
 
             <!-- Phones with the Android app (server/go/devices.go); only when there is one. -->
@@ -819,10 +752,53 @@
         </div>
     </div>
 
+    <!-- "Esquemas de color" dialog - opened by the palette button in the settings row. -->
+    <div class="sheet-backdrop" id="scmBackdrop">
+        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.colorSchemes">
+            <h2 data-i18n="ui.colorSchemes"></h2>
+
+            <p class="scm-h" data-i18n="scm.saved"></p>
+            <div class="scm-list" id="scmList"></div>
+
+            <p class="scm-h" id="scmEditTitle"><span data-i18n="scm.edit"></span><button class="info-dot" data-i18n-attr="data-info:scm.info"></button></p>
+            <div class="scm-name-row">
+                <input class="scm-input" id="scmName" spellcheck="false" autocomplete="off" data-i18n-attr="placeholder:scm.namePh">
+                <div class="scm-seg" role="group" data-i18n-attr="aria-label:scm.kind">
+                    <button type="button" class="pill" data-kind="dark" id="scmKindDark" data-i18n="scm.dark"></button>
+                    <button type="button" class="pill" data-kind="light" id="scmKindLight" data-i18n="scm.light"></button>
+                </div>
+            </div>
+            <div id="scmTokens">
+                <label class="scm-tok"><input type="color" data-k="--bg" aria-label="--bg"><code>--bg</code><input type="text" data-k="--bg" maxlength="7" spellcheck="false" aria-label="--bg hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card" aria-label="--card"><code>--card</code><input type="text" data-k="--card" maxlength="7" spellcheck="false" aria-label="--card hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--card2" aria-label="--card2"><code>--card2</code><input type="text" data-k="--card2" maxlength="7" spellcheck="false" aria-label="--card2 hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--line" aria-label="--line"><code>--line</code><input type="text" data-k="--line" maxlength="7" spellcheck="false" aria-label="--line hex"></label>
+                <label class="scm-tok"><input type="color" data-k="--accent" aria-label="--accent"><code>--accent</code><input type="text" data-k="--accent" maxlength="7" spellcheck="false" aria-label="--accent hex"></label>
+            </div>
+            <p class="scm-msg" id="scmAccentMsg" hidden></p>
+            <div class="sheet-actions">
+                <button id="scmDelete"  class="sheet-actions-left" type="button" data-act="danger" data-i18n-attr="title:scm.deleteThis"></button>
+                <button id="scmSaveNew" type="button" data-act="secondary:saveas" data-i18n-attr="title:scm.saveAsNew"></button>
+                <button id="scmSave"    type="button" data-act="primary" data-i18n-attr="title:scm.saveChanges"></button>
+            </div>
+            <p class="scm-msg" id="scmMsg" hidden></p>
+
+            <p class="scm-h" data-i18n="scm.assignHead"></p>
+            <div class="scm-assign-row">
+                <label class="scm-assign"><span data-i18n="scm.dark"></span><select id="scmActiveDark"></select></label>
+                <label class="scm-assign"><span data-i18n="scm.light"></span><select id="scmActiveLight"></select></label>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="scmCloseBtn" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- "Buscar mi móvil" (server/go/devices.go): ring a phone that has the
          Android app, see where the owner was last seen (from every source), and
          ask the other devices "¿Dónde estás?". Filled by the script below. -->
-    <div class="sheet-backdrop" id="findBackdrop" hidden>
+    <div class="sheet-backdrop" id="findBackdrop">
         <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:find.title">
             <h2 data-i18n="find.title"></h2>
             <div id="findPhonesWrap" hidden>
@@ -859,7 +835,14 @@
                 fetch( tile[ 1 ], { credentials: 'same-origin', headers: { Accept: 'application/json' } } )
                     .then( function ( r )
                     {
-                        if( r.status === 403 ) { btn.style.visibility = 'hidden'; return null; }
+                        // 403: the admin, who has no Chat / eMail - or an account
+                        // refused only until it picks its password: keep the tile.
+                        if( r.status === 403 )
+                            return r.json().catch( function () { return {}; } ).then( function ( j )
+                            {
+                                if( ! j.must_set_password ) btn.style.visibility = 'hidden';
+                                return null;
+                            } );
                         return r.ok ? r.json() : null;
                     } )
                     .then( function ( j )
@@ -973,7 +956,7 @@
 
             document.addEventListener( 'keydown', function ( e )
             {
-                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && scmBack.hidden ) setOpen( false );
+                if( e.key === 'Escape' && tools.classList.contains( 'open' ) && ! scmBack.classList.contains( 'open' ) ) setOpen( false );
             } );
 
             /* ---- "Esquemas de color" ---------------------------------- */
@@ -1152,9 +1135,15 @@
                 } );
 
                 if( document.activeElement !== nameEl ) nameEl.value = draft.name;
-                titleEl.textContent = NayiveUI.tf( 'scm.editing', { name: draft.name || NayiveUI.t( 'scm.unnamed' ) } );
+                // Into the title's own span: the info dot beside it stays.
+                // Its data-i18n goes, so a later translation pass keeps the name.
+                var titleSpan = titleEl.querySelector( 'span' );
+                titleSpan.removeAttribute( 'data-i18n' );
+                titleSpan.textContent = NayiveUI.tf( 'scm.editing', { name: draft.name || NayiveUI.t( 'scm.unnamed' ) } );
                 kindDark.setAttribute( 'aria-pressed', draft.kind === 'dark'  ? 'true' : 'false' );
                 kindLite.setAttribute( 'aria-pressed', draft.kind === 'light' ? 'true' : 'false' );
+                kindDark.classList.toggle( 'is-active', draft.kind === 'dark' );
+                kindLite.classList.toggle( 'is-active', draft.kind === 'light' );
 
                 NKEYS.forEach( function ( k )
                 {
@@ -1194,21 +1183,23 @@
                 editingId = ( root.getAttribute( 'data-theme' ) === 'light' ) ? data.activeLight : data.activeDark;
                 loadDraft();
                 clearMsg();
-                scmBack.hidden = false;
+                NayiveUI.open( 'scmBackdrop' );
                 render();
             }
-            function closeDialog()
+            function closeDialog() { NayiveUI.close( 'scmBackdrop' ); }
+
+            // However it closes - its x, or Escape through shared/ui.js (which
+            // closes the top dialog without asking) - the live preview goes.
+            new MutationObserver( function ()
             {
-                scmBack.hidden = true;
+                if( scmBack.classList.contains( 'open' ) ) return;
                 NKEYS.forEach( function ( k ){ root.style.removeProperty( k ); } );
                 root.style.removeProperty( '--on-accent' );
                 if( window.BalataTheme ) window.BalataTheme.refresh();
-            }
+            } ).observe( scmBack, { attributes: true, attributeFilter: [ 'class' ] } );
 
             openBtn.addEventListener( 'click', openDialog );
             closeBtn.addEventListener( 'click', closeDialog );
-            // preventDefault: "Mi cuenta", open underneath, must not close on the same key.
-            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! scmBack.hidden ) { e.preventDefault(); closeDialog(); } } );
 
             listEl.addEventListener( 'click', function ( e )
             {
@@ -1297,7 +1288,7 @@
                     if( wasDark )  data.activeDark  = s.id;
                     if( wasLight ) data.activeLight = s.id;
                     persist();
-                    if( scmBack.hidden ) { if( window.BalataTheme ) window.BalataTheme.refresh(); return; }
+                    if( ! scmBack.classList.contains( 'open' ) ) { if( window.BalataTheme ) window.BalataTheme.refresh(); return; }
                     editingId = s.id;
                     loadDraft(); clearMsg(); render();
                 } );
@@ -1345,13 +1336,10 @@
             var msgEl   = document.getElementById( 'pwMsg' );
             var saveBtn = document.getElementById( 'pwSave' );
             var cancel  = document.getElementById( 'pwCancel' );
-            var daysEl  = document.getElementById( 'trashDaysAcct' );
-            var daysMsg = document.getElementById( 'trashDaysMsg' );
             var tripEl  = document.getElementById( 'tripDaysAcct' );
             var tripMsg = document.getElementById( 'tripDaysMsg' );
             var pushChk   = document.getElementById( 'pushChk' );
             var pushWrap  = document.getElementById( 'pushChkWrap' );
-            var pushWin   = document.getElementById( 'pushWindow' );
             var pushMsgEl = document.getElementById( 'pushMsg' );
             var langSel = document.getElementById( 'langSel' );
             var langMsg = document.getElementById( 'langMsg' );
@@ -1428,12 +1416,6 @@
                 msgEl.textContent = t;
                 msgEl.hidden = ! t;
                 msgEl.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function dmsg( t, ok )
-            {
-                daysMsg.textContent = t;
-                daysMsg.hidden = ! t;
-                daysMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
             }
             function tmsg( t, ok )
             {
@@ -1533,7 +1515,7 @@
                                          { method: 'POST', credentials: 'same-origin' } );
                     var d = await r.json().catch( function (){ return {}; } );
                     if( r.ok ) { tzSaved = d.tz || ''; tzSel.value = tzSaved; tzmsg( '' ); }
-                    else { fillZones( tzSaved ); tzmsg( d.error || NayiveUI.t( 'acct.tzFailed' ) ); }
+                    else { fillZones( tzSaved ); tzmsg( NayiveUI.t( 'acct.tzFailed' ) ); }
                 }
                 catch ( e ) { fillZones( tzSaved ); tzmsg( NayiveUI.t( 'login.noServer' ) ); }
                 tzSel.disabled = false;
@@ -1638,20 +1620,52 @@
                 askGeo();
             } );
 
-            var daysSaved = null;          // last value confirmed by the server
-            var tripSaved = null;
-
-            async function loadDays()
+            // Desktop mode: do new windows start with Scale on? (see #deskScaleWrap)
+            var deskChk = document.getElementById( 'deskScaleChk' );
+            function deskSet()
             {
-                daysEl.value = '30'; dmsg( '' );          // 30 días is the default until the server says otherwise
-                try
-                {
-                    var r = await fetch( '/api/files?trash=days', { credentials: 'same-origin' } );
-                    var d = await r.json();
-                    if( r.ok ) { daysSaved = d.days; daysEl.value = d.days; }
-                }
-                catch ( e ) { /* keep the 30-day default shown */ }
+                try { return JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ) || {}; }
+                catch( e ) { return {}; }
             }
+            function loadDeskScale() { deskChk.checked = !! deskSet().scaleNew; }
+            deskChk.addEventListener( 'change', function ()
+            {
+                var d = deskSet();
+                d.scaleNew = deskChk.checked;
+                try { localStorage.setItem( 'balata-desktop', JSON.stringify( d ) ); } catch( e ) {}
+            } );
+
+            // Screen locker (see #lockRow): saved at once, on this device.
+            var lockSel  = document.getElementById( 'lockSel' );
+            var lockMin  = document.getElementById( 'lockMin' );
+            var lockText = document.getElementById( 'lockText' );
+            function loadLocker()
+            {
+                var s = NayiveLock.settings();
+                lockSel.innerHTML = '';
+                [ '' ].concat( NayiveLock.LOCKERS ).forEach( function ( id )
+                {
+                    var o = document.createElement( 'option' );
+                    o.value = id;
+                    o.textContent = NayiveUI.t( id ? 'scrlock.' + id : 'scrlock.none' );
+                    lockSel.appendChild( o );
+                } );
+                lockSel.value  = s.id;
+                lockMin.value  = s.min;
+                lockText.value = s.text;
+                lockMin.disabled = ! s.id;
+                document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
+            }
+            lockSel.addEventListener( 'change', function () { NayiveLock.save( { id: lockSel.value } ); loadLocker(); } );
+            lockMin.addEventListener( 'change', function ()      // never below 1
+            {
+                var n = Math.floor( Number( lockMin.value ) );
+                NayiveLock.save( { min: n >= 1 ? Math.min( n, 999 ) : 1 } );
+                loadLocker();
+            } );
+            lockText.addEventListener( 'input', function () { NayiveLock.save( { text: lockText.value } ); } );
+
+            var tripSaved = null;
 
             async function loadTripDays()
             {
@@ -1670,7 +1684,7 @@
             // the user turns this on once on each phone, tablet and PC. The
             // server only ever sees an endpoint + two keys (see /api/push).
             var pushState = {
-                vapid: '', why: '', window_minutes: 30, subscribed: false, sub: null,
+                vapid: '', why: '', subscribed: false, sub: null,
                 supported: ( 'serviceWorker' in navigator ) && ( 'PushManager' in window )
                            && ( 'Notification' in window )
             };
@@ -1715,21 +1729,77 @@
                     method:      'POST',
                     headers:     { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
+                    // No window_minutes: Planner › Settings owns it; the server keeps it.
+                    // tz: a floating event rings at THIS device's clock (reminders.go).
                     body: JSON.stringify( { subscription:    sub.toJSON(),
-                                            window_minutes:  pushState.window_minutes,
                                             lang:  ( NayiveUI.lang ? NayiveUI.lang() : 'es' ),
-                                            label: navigator.platform || '' } )
+                                            label: navigator.platform || '',
+                                            tz:    NayiveUI.viewerTz() } )
                 } );
                 var d = await r.json().catch( function (){ return {}; } );
                 if( r.ok )
                 {
                     pushState.subscribed = true;
+                    pushNote( sub );
                     // This phone's app row names this Chrome's endpoint: a new
                     // subscription (after a sign-out) must reach it now, not at
                     // the next launcher load - or a call rings here twice.
                     if( window.NayiveDevices ) NayiveDevices.moveEndpoint();
                 }
                 return { ok: r.ok, data: d };
+            }
+
+            // What this device last registered: its endpoint, language and
+            // account. healPush() below compares against it.
+            var PUSH_NOTE = 'nayive-push-note';
+
+            function pushNote( sub )
+            {
+                try
+                {
+                    if( ! sub ) { localStorage.removeItem( PUSH_NOTE ); return; }
+                    localStorage.setItem( PUSH_NOTE, JSON.stringify( {
+                        ep:   sub.endpoint,
+                        lang: NayiveUI.lang ? NayiveUI.lang() : 'es',
+                        tz:   NayiveUI.viewerTz(),
+                        who:  ( window.NayiveStore && NayiveStore.me ) || '' } ) );
+                }
+                catch ( e ) {}
+            }
+
+            // The SELF-HEAL on every launcher load (loadPush below runs only
+            // with Mi cuenta). A new endpoint (the browser renewed it - sw.js
+            // resubscribe, whose POST may have met an expired session and
+            // cannot know the language), another language (a change reloads
+            // the page), another time zone (a trip), or no subscription left although this account had one
+            // here (Firefox renews with no oldSubscription): registered again.
+            // Nothing changed = no request at all.
+            async function healPush()
+            {
+                if( ! pushState.supported || Notification.permission !== 'granted' ) return;
+                try
+                {
+                    var note = JSON.parse( localStorage.getItem( PUSH_NOTE ) || 'null' );
+                    var who  = ( window.NayiveStore && NayiveStore.me ) || '';
+                    var lang = NayiveUI.lang ? NayiveUI.lang() : 'es';
+                    var reg  = await navigator.serviceWorker.getRegistration();
+                    if( ! reg || ! reg.pushManager ) return;
+                    var sub  = await reg.pushManager.getSubscription();
+                    if( sub )
+                    {
+                        if( note && note.ep === sub.endpoint && note.lang === lang && note.who === who &&
+                            note.tz === NayiveUI.viewerTz() ) return;   // a trip to another zone re-posts
+                        await postSub( sub );
+                        return;
+                    }
+                    if( ! note || note.who !== who ) return;
+                    var first = await pushGet( '' );
+                    if( ! first.ok || ! first.data.vapid_public ) return;
+                    sub = await reg.pushManager.subscribe( { userVisibleOnly: true,
+                                                             applicationServerKey: b64ToU8( first.data.vapid_public ) } );
+                    await postSub( sub );
+                }
+                catch ( e ) {}
             }
 
             // Runs every time the sheet opens. Fetching the VAPID key HERE is
@@ -1750,14 +1820,12 @@
                     if( ! first.ok )
                     {
                         pushState.vapid = '';
-                        pushState.why   = first.data.error || '';
+                        pushState.why   = NayiveUI.t( 'ui.loadFailed' );
                         pushmsg( pushState.why );
                         renderPush();
                         return;
                     }
                     pushState.vapid          = first.data.vapid_public || '';
-                    pushState.window_minutes = first.data.window_minutes || 30;
-                    pushWin.value            = pushState.window_minutes;
 
                     var reg = await navigator.serviceWorker.ready;
                     var sub = await reg.pushManager.getSubscription();
@@ -1855,7 +1923,7 @@
                     {
                         try { await sub.unsubscribe(); } catch ( e ) {}   // leave no orphan
                         pushState.subscribed = false;
-                        pushmsg( res.data.error || NayiveUI.t( 'ui.saveFailed' ) );
+                        pushmsg( NayiveUI.t( 'ui.saveFailed' ) );
                     }
                 }
                 // Say what the browser said: "No se pudo guardar." alone left
@@ -1882,6 +1950,7 @@
                 catch ( e ) {}
                 pushState.sub        = null;
                 pushState.subscribed = false;
+                pushNote( null );
                 renderPush();
             }
 
@@ -1890,51 +1959,6 @@
                 {
                     return pushChk.checked ? enablePush() : disablePush();
                 } );
-
-            // "avisarme N minutos antes" saves on change, like the trash and trip
-            // periods - it has to work with notifications switched OFF, which is
-            // exactly when someone goes looking for the setting.
-            pushWin.addEventListener( 'change', async function ()
-            {
-                var v = parseInt( pushWin.value, 10 );
-                if( ! isFinite( v ) ) { pushWin.value = pushState.window_minutes; return; }
-                v = Math.max( 1, Math.min( 1440, v ) );
-                pushWin.disabled = true;
-                try
-                {
-                    var r = await fetch( '/api/push',
-                    {
-                        method:      'POST',
-                        headers:     { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
-                        body: JSON.stringify( { window_minutes: v } )
-                    } );
-                    var d = await r.json().catch( function (){ return {}; } );
-                    if( r.ok ) { pushState.window_minutes = d.window_minutes; pushWin.value = d.window_minutes; }
-                    else pushmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) );
-                }
-                catch ( e ) { pushmsg( NayiveUI.t( 'login.noServer' ) ); }
-                pushWin.disabled = false;
-            } );
-
-            daysEl.addEventListener( 'change', async function ()
-            {
-                var v = parseInt( daysEl.value, 10 );
-                if( ! isFinite( v ) ) { daysEl.value = ( daysSaved == null ? '' : daysSaved ); return; }
-                v = Math.max( 1, Math.min( 90, v ) );
-
-                daysEl.disabled = true;
-                try
-                {
-                    var q = new URLSearchParams( { trash: 'days', value: String( v ) } ).toString();
-                    var r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
-                    var d = await r.json().catch( function (){ return {}; } );
-                    if( r.ok ) { daysSaved = d.days; daysEl.value = d.days; dmsg( NayiveUI.tf( 'acct.autoDeleteMsg', { n: d.days } ), true ); }
-                    else { daysEl.value = ( daysSaved == null ? '' : daysSaved ); dmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) ); }
-                }
-                catch ( e ) { daysEl.value = ( daysSaved == null ? '' : daysSaved ); dmsg( NayiveUI.t( 'login.noServer' ) ); }
-                daysEl.disabled = false;
-            } );
 
             tripEl.addEventListener( 'change', async function ()
             {
@@ -1953,7 +1977,7 @@
                         tripSaved = d.days; tripEl.value = d.days;
                         tmsg( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : NayiveUI.t( 'acct.tripNone' ), true );
                     }
-                    else { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( d.error || NayiveUI.t( 'ui.saveFailed' ) ); }
+                    else { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( NayiveUI.t( 'ui.saveFailed' ) ); }
                 }
                 catch ( e ) { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( NayiveUI.t( 'login.noServer' ) ); }
                 tripEl.disabled = false;
@@ -1971,32 +1995,67 @@
 
                 loadTz();
                 loadAuto();
-                loadDays();
-                loadTripDays();
-                loadPush();
-                if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
-                back.hidden = false;
+                loadDeskScale();
+                loadLocker();
+                // Until it has a password the server refuses this account every
+                // other API (trip days, notifications, phones): those rows wait.
+                accountRows( ! mandatory );
+
+                NayiveUI.open( 'pwBackdrop' );
 
                 // Normally the password field, the top of the dialog. Reopened
                 // after a language change it is the language box instead: that
                 // is where the user was, and landing on a password field would
-                // pop the keyboard up on a phone for no reason.
+                // pop the keyboard up on a phone for no reason. Right here, in
+                // the same turn as open(): shared/ui.js then leaves this focus
+                // alone instead of putting the caret in the first field.
                 var asked   = ( opts && opts.focus ) || null;
                 var focusEl = mandatory ? newEl : asked || curEl;
-                setTimeout( function ()
-                {
-                    focusEl.focus();
-                    // Only for a field asked for by name - the dialog scrolls,
-                    // and the two default targets are at the top anyway.
-                    if( ! mandatory && asked && asked.scrollIntoView )
-                        asked.scrollIntoView( { block: 'center' } );
-                }, 0 );
+                focusEl.focus();
+                // Opened at boot the page may still be hidden until its words
+                // are in (shared/i18n.js), and a hidden field takes no focus:
+                // give it once the page shows.
+                if( document.activeElement !== focusEl && window.NayiveI18n && NayiveI18n.ready )
+                    NayiveI18n.ready.then( function ()
+                    {
+                        if( back.classList.contains( 'open' ) && ! back.contains( document.activeElement ) )
+                            focusEl.focus();
+                    } );
+                // Only for a field asked for by name - the dialog scrolls,
+                // and the two default targets are at the top anyway.
+                if( ! mandatory && asked && asked.scrollIntoView )
+                    asked.scrollIntoView( { block: 'center' } );
             }
             function close()
             {
                 if( mandatory ) return;          // can't leave without a password
-                back.hidden = true;
+                NayiveUI.close( 'pwBackdrop' );
             }
+
+            // The rows that need a password first: shown and loaded, or hidden.
+            var tripRow = tripEl.closest( '.scm-assign' );
+            function accountRows( on )
+            {
+                tripRow.hidden = ! on;
+                if( ! on )
+                {
+                    if( pushWrap ) pushWrap.hidden = true;
+                    document.getElementById( 'devWrap' ).hidden = true;
+                    return;
+                }
+                loadTripDays();
+                loadPush();
+                if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
+            }
+
+            // Escape closes the top dialog (shared/ui.js) - never this one while
+            // it is mandatory. Capture phase: ahead of ui.js's own listener.
+            document.addEventListener( 'keydown', function ( e )
+            {
+                if( e.key !== 'Escape' || ! mandatory ) return;
+                var open = document.querySelectorAll( '.sheet-backdrop.open' );
+                if( open.length && open[ open.length - 1 ] === back ) e.preventDefault();
+            }, true );
 
             // Let the whoami check (further down) force this open for a new user,
             // or reopen it on the far side of a language change.
@@ -2125,13 +2184,13 @@
             // so the login question would only ask the same thing twice.
             window.checkPushOnBoot = function ()
             {
+                healPush();
                 if( nudgeDue() ) { clearJustIn(); nudgePush(); return; }
                 if( justIn() ) askAfterLogin();
             };
 
             openBtn.addEventListener( 'click', function (){ open(); } );
             cancel.addEventListener( 'click', close );
-            document.addEventListener( 'keydown', function ( e ){ if( e.key === 'Escape' && ! e.defaultPrevented && ! back.hidden ) close(); } );
 
             saveBtn.addEventListener( 'click', async function ()
             {
@@ -2163,12 +2222,22 @@
                         if( res.ok )
                         {
                             if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
-                            // Mandatory lock lifted: restore the normal dialog.
+                            // Mandatory lock lifted: restore the normal dialog,
+                            // and a big screen may start on the desktop again.
+                            if( mandatory )
+                                try { sessionStorage.removeItem( 'nayive-must-set' ); } catch ( e ) {}
                             mandatory = false;
                             curWrap.hidden = false;
                             cancel.hidden  = false;
                         }
-                        else { msg( data.error || NayiveUI.t( 'acct.changeFailed' ) ); saveBtn.disabled = false; return; }
+                        else
+                        {
+                            // The server's own words are Spanish: say it in the user's language.
+                            msg( NayiveUI.t( res.status === 401 ? 'acct.curWrong'
+                                           : res.status === 400 ? 'acct.tooShort' : 'acct.changeFailed' ) );
+                            saveBtn.disabled = false;
+                            return;
+                        }
                     }
                     catch ( e ) { msg( NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
                 }
@@ -2198,10 +2267,30 @@
         // trip's PDFs and the share inbox. Before the logout: the DELETE needs
         // the session. getRegistration(), not .ready - .ready never settles
         // with no service worker, and a sign-out must never hang (3 s cap).
+        // Also the saves and drafts still only here (shared/store.js, SIGNING
+        // OUT - the button asked first), and THIS phone's link to the account:
+        // unlinked, the Android app asks to be linked again, and the next
+        // person to sign in on it gets it (server/go/devices.go, ENROLMENT).
         function forgetThisBrowser()
         {
             var work = ( async function ()
             {
+                try
+                {
+                    if( window.NayiveStore ) await NayiveStore.clearLocal();
+                }
+                catch ( e ) {}
+                try
+                {
+                    var phone = JSON.parse( localStorage.getItem( 'nayive-device' ) || 'null' );
+                    if( phone && phone.id )
+                    {
+                        var r = await fetch( '/api/device/' + encodeURIComponent( phone.id ),
+                                             { method: 'DELETE', credentials: 'same-origin' } );
+                        if( r.ok || r.status === 404 ) localStorage.removeItem( 'nayive-device' );
+                    }
+                }
+                catch ( e ) {}
                 try
                 {
                     var reg = ( 'serviceWorker' in navigator ) ? await navigator.serviceWorker.getRegistration() : null;
@@ -2215,6 +2304,7 @@
                     }
                 }
                 catch ( e ) {}
+                try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
                 try
                 {
                     if( window.caches ) await Promise.all( [ caches.delete( 'nayive-trips-docs' ),
@@ -2227,13 +2317,38 @@
 
         // Sign out is a POST (a GET could be fired by a picture in an email,
         // or a link on another site): the link only works through this.
-        document.getElementById( 'logoutBtn' ).addEventListener( 'click', function ( e )
+        //
+        // First the saves still waiting here get one more chance to go up
+        // (NayiveStore.sendWaiting: up to 10 s while one is being sent, no
+        // wait offline); what is left - saves and untitled drafts - is
+        // counted, and the button asks before signing out deletes it.
+        var signingOut = false;
+        document.getElementById( 'logoutBtn' ).addEventListener( 'click', async function ( e )
         {
             e.preventDefault();
-            forgetThisBrowser()
-                .then( function () { return fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } )
-                .catch( function () {} )
-                .then( function () { location.href = '/nayive/login.html'; } );
+            if( signingOut ) return;
+            signingOut = true;
+            try
+            {
+                if( window.NayiveStore )
+                {
+                    var n = 0;
+                    try
+                    {
+                        await NayiveStore.sendWaiting( 10000 );
+                        n = await NayiveStore.localCount();
+                    }
+                    catch ( err ) {}
+                    if( n > 0 && ! await NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
+                                                             body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
+                                                             confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } ) )
+                        return;
+                }
+                await forgetThisBrowser();
+                try { await fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } catch ( err ) {}
+                location.href = '/nayive/login.html';
+            }
+            finally { signingOut = false; }
         } );
 
         fetch( '/api/whoami', { credentials: 'same-origin' } )
@@ -2270,6 +2385,26 @@
                                { method: 'POST', credentials: 'same-origin' } )
                             .catch( function () {} );
                 }
+
+                // Photos shared to Nayive while signed out wait in the share
+                // inbox (sw.js handleShare), and the sign-in lands here, not
+                // there (login.html ignores ?return=): take the user back to
+                // them. Once per share - a launcher opened again after leaving
+                // them there is not sent back.
+                if( ! me.must_set_password && window.caches )
+                    caches.open( 'nayive-share-inbox' )
+                        .then( function ( c ) { return c.match( new URL( 'share-target/inbox/manifest.json', location.href ).toString() ); } )
+                        .then( function ( r ) { return r ? r.json() : null; } )
+                        .then( function ( m )
+                        {
+                            if( ! m || ! ( m.count > 0 ) ) return;
+                            var seen = null;
+                            try { seen = sessionStorage.getItem( 'nayive-inbox-resumed' ); } catch ( e ) {}
+                            if( seen === String( m.at ) ) return;
+                            try { sessionStorage.setItem( 'nayive-inbox-resumed', String( m.at ) ); } catch ( e ) {}
+                            location.href = 'share-target/';
+                        } )
+                        .catch( function () {} );
 
                 // Brand-new user, no password yet: make them set one right now.
                 // That beats the reopen - the note is already cleared either way.
@@ -2371,7 +2506,16 @@
                             toast( T( 'dev.enrolled' ), 3500 );
                             refreshButton();
                         }
-                        else if( j._status === 400 ) put( 'nayive-enrol', null );   // not a token at all
+                        // Refused for good - not a token at all (400), no phones for
+                        // this account (403), too many already (409): said once,
+                        // not re-sent on every load. A 401, no answer, or an account
+                        // that has yet to pick its password tries again.
+                        else if( j.must_set_password ) return;
+                        else if( j._status === 400 || j._status === 403 || j._status === 409 )
+                        {
+                            put( 'nayive-enrol', null );
+                            if( j._status !== 400 ) toast( T( j._status === 409 ? 'dev.tooMany' : 'ui.saveFailed' ), 6000 );
+                        }
                     } );
                 } ).catch( function () {} );
             }
@@ -2471,7 +2615,7 @@
                     if( j._status !== 200 ) return;          // the admin (403), or signed out
                     state = j;
                     findBtn.disabled = ! worthIt( j );
-                    if( ! back.hidden ) render();
+                    if( isOpen() ) render();
                 } ).catch( function () {} );
             }
 
@@ -2538,8 +2682,8 @@
             function poll()
             {
                 clearTimeout( pollT );
-                if( back.hidden ) return;
-                refreshButton().then( function () { if( ! back.hidden && busy() ) pollT = setTimeout( poll, 3000 ); } );
+                if( ! isOpen() ) return;
+                refreshButton().then( function () { if( isOpen() && busy() ) pollT = setTimeout( poll, 3000 ); } );
             }
 
             function openFind()
@@ -2549,17 +2693,17 @@
                     others = ( state && state.push ) || 0;
                     if( ep ) others--;                      // this browser is not "another device"
                     render();
-                    back.hidden = false;
+                    NayiveUI.open( 'findBackdrop' );
                     poll();
                 } );
             }
-            function closeFind() { back.hidden = true; clearTimeout( pollT ); }
+            function isOpen()    { return back.classList.contains( 'open' ); }
+            function closeFind() { NayiveUI.close( 'findBackdrop' ); clearTimeout( pollT ); }
 
             findBtn.addEventListener( 'click', openFind );
 
+            // Escape reaches it through shared/ui.js, which clicks this x.
             document.getElementById( 'findClose' ).addEventListener( 'click', closeFind );
-            back.addEventListener( 'click', function ( e ) { if( e.target === back ) closeFind(); } );
-            document.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' && ! back.hidden ) closeFind(); } );
 
             back.addEventListener( 'click', function ( e )
             {
@@ -2573,7 +2717,7 @@
                 req.then( function ( j )
                 {
                     if( act === 'ask' && j._status === 200 && ! j.asked ) toast( T( 'find.askedNone' ), 3500 );
-                    else if( j._status !== 200 ) toast( j.error || T( 'ui.saveFailed' ) );
+                    else if( j._status !== 200 ) toast( T( 'ui.saveFailed' ) );
                     poll();
                 } ).catch( function () { toast( T( 'login.noServer' ) ); b.disabled = false; } );
             } );
@@ -2599,7 +2743,7 @@
                     return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) );
                 } ).join( '' );
             }
-            function redraw() { drawAccount(); if( ! back.hidden ) render(); }
+            function redraw() { drawAccount(); if( isOpen() ) render(); }
             // A delete inside a dialog acts at once: no second question. Its token
             // dies (the phone must enrol again), so the row only hides now; the
             // real DELETE goes when the Undo is gone for good.
@@ -2630,7 +2774,7 @@
                 }
                 req.then( function ( j )
                 {
-                    if( j._status !== 204 && j._status !== 404 ) { failed( j.error || T( 'ui.saveFailed' ) ); return; }
+                    if( j._status !== 204 && j._status !== 404 ) { failed( T( 'ui.saveFailed' ) ); return; }
                     loadAccount();              // `gone` keeps its id: a phone that enrols again gets a new one
                     refreshButton();
                 } ).catch( function () { failed( T( 'login.noServer' ) ); } );

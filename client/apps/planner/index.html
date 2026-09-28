@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Shared header behaviour + the "?" help dialog. Planner keeps no data of
          its own, so this is the only shared script it needs. -->
@@ -178,10 +179,10 @@
         </div>
         <div class="panes" id="panes">
             <iframe id="calendarPane" data-src="../calendar/index.html" title="Calendar"></iframe>
-            <div class="splitter" id="splitter"></div>
+            <div class="splitter" id="splitter" data-i18n-attr="title:ui.dragResize"></div>
             <div class="right" id="rightCol">
                 <iframe id="tasksPane" data-src="../tasks/index.html" title="Tasks"></iframe>
-                <div class="hsplitter" id="hsplitter"></div>
+                <div class="hsplitter" id="hsplitter" data-i18n-attr="title:ui.dragResize"></div>
                 <iframe id="habitsPane" data-src="../habits/index.html" title="Habits"></iframe>
                 <button class="pane-restore" id="habitsRestore" type="button" data-i18n-attr="title:planner.showHabits, aria-label:planner.showHabits">
                     <svg class="sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path></svg>
@@ -309,8 +310,15 @@
             // One drag routine for both handles: `compute` turns the pointer position
             // into a percentage, `apply` sets it, `name` says which key remembers it
             // (resolved when the drag starts - the screen cannot turn mid-drag).
-            function wireSplitter( handle, compute, apply, name, min, max )
+            function wireSplitter( handle, compute, apply, name, min, max, def )
             {
+                // Double click: back to the CSS default, remembered for this screen.
+                handle.addEventListener( 'dblclick', function()
+                {
+                    apply( def );
+                    try { localStorage.setItem( splitKey( name ), def ); } catch( err ) {}
+                } );
+
                 handle.addEventListener( 'pointerdown', function( evt )
                 {
                     evt.preventDefault();
@@ -343,13 +351,13 @@
             {
                 var rect = panes.getBoundingClientRect();
                 return ((e.clientX - rect.left) / rect.width) * 100;
-            }, applyPct, 'calPct', MIN_PCT, MAX_PCT );
+            }, applyPct, 'calPct', MIN_PCT, MAX_PCT, DEF_CAL );
 
             wireSplitter( hsplitter, function( e )
             {
                 var rect = rightCol.getBoundingClientRect();
                 return ((e.clientY - rect.top) / rect.height) * 100;
-            }, applyTasksPct, 'tasksPct', MIN_TASKS, MAX_TASKS );
+            }, applyTasksPct, 'tasksPct', MIN_TASKS, MAX_TASKS, DEF_TASKS );
 
             // FOLD HABITS AWAY.  The Habits frame posts { nayive: 'pane-collapse' }
             // when its [v] button is pressed; the strip under it puts the pane

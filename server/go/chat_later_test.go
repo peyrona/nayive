@@ -110,6 +110,7 @@ func TestChatLaterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { srv2.Close() })
 	ts2 := httptest.NewServer(srv2.routes())
 	defer ts2.Close()
 	srv2.chat.sendDue(time.Now().Add(2 * time.Hour))

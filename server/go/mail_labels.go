@@ -10,7 +10,7 @@ package main
 //
 //	labels.json    {"labels": [{id,name,color}], "tags": {"<acct>|<message-id>": tag}}
 //	trash.json     {"<acct>|<message-id>": {"at", "from"}}
-//	settings.json  {"trashDays": 30}
+//	settings.json  {"trashDays": 30, "showImages": false, "signature": ""}
 //
 // A MESSAGE is known by its Message-ID header: it stays the same when the
 // message moves between trays, where the provider's own address (the ref)
@@ -144,8 +144,32 @@ type mailTrashEntry struct {
 }
 
 type MailSettings struct {
-	TrashDays  int  `json:"trashDays"`
-	ShowImages bool `json:"showImages"` // pictures from the internet shown at once (the sender may learn it was opened)
+	TrashDays  int    `json:"trashDays"`
+	ShowImages bool   `json:"showImages"` // pictures from the internet shown at once (the sender may learn it was opened)
+	Signature  string `json:"signature"`  // plain text, put under what is written (compose.js)
+}
+
+// mailSignatureMax is the longest signature kept, in characters.
+const mailSignatureMax = 2000
+
+// cleanSignature: one kind of line end, no spaces at the end of a line or
+// of the whole, no control characters, at most mailSignatureMax characters.
+func cleanSignature(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 && r != '\n' && r != '\t' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	if utf8.RuneCountInString(s) > mailSignatureMax {
+		s = string([]rune(s)[:mailSignatureMax])
+	}
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
 func mailKey(acct, mid string) string { return acct + "|" + mid }
@@ -630,6 +654,7 @@ func (h *MailHub) Settings(user string) MailSettings {
 
 func (h *MailHub) SetSettings(user string, s MailSettings) (MailSettings, error) {
 	s.TrashDays = clampTrashDays(s.TrashDays)
+	s.Signature = cleanSignature(s.Signature)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	u := h.userLocked(user)

@@ -22,7 +22,8 @@ client/.trash/
 # The private VPS address deploy.sh reads (user, host, SSH port).
 deploy.local.sh
 
-# Design notes - kept local only.
+# Design notes - kept local only. Some hold private data (the VPS login, the
+# domain, real names, QR codes): scrub them before this line is ever removed.
 /docs/
 
 # VPS backup script + systemd units - kept local only.

@@ -57,7 +57,8 @@ function renderCurrencySheet()
         rateNote.className = 'calc-rate';
         rateNote.textContent = TF( 'trips.fxVerified', {
             a: lookup.verified.sourceA.source, b: lookup.verified.sourceB.source,
-            tol: RATE_TOLERANCE_ABS, rate: lookup.verified.rate.toFixed( 4 ), code: lookup.code } )
+            tol: rateToleranceText( lookup.verified.sourceA.rate, lookup.verified.sourceB.rate ),
+            rate: lookup.verified.rate.toFixed( 4 ), code: lookup.code } )
             + ( asOf ? TF( 'trips.fxAsOf', { date: asOf } ) : '' ) + '.';
         sheet.appendChild( rateNote );
     }
@@ -66,7 +67,8 @@ function renderCurrencySheet()
         const warn = document.createElement( 'p' );
         warn.className = 'calc-warn';
         warn.textContent = lookup.compared.length
-            ? TF( 'trips.fxUnverified', { tol: RATE_TOLERANCE_ABS } )
+            ? TF( 'trips.fxUnverified', { tol: rateToleranceText( lookup.compared[ lookup.compared.length - 1 ].a.rate,
+                                                                 lookup.compared[ lookup.compared.length - 1 ].b.rate ) } )
             : T( 'trips.fxNoSource' );
         sheet.appendChild( warn );
     }

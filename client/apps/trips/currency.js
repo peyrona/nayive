@@ -121,17 +121,34 @@ function currencyPlacement( trip )
 // LIVE EXCHANGE RATE - a priority-ordered list of independent, free, no-key services.
 // Verification protocol (exact, per explicit instruction - do not "improve" this):
 //   1. Fetch sources in order, skipping any that return no data.
-//   2. Compare the 1st and 2nd sources that DID return data. If |rate1 - rate2| <= 0.01,
-//      the rate is verified (their average is used).
+//   2. Compare the 1st and 2nd sources that DID return data. If |rate1 - rate2| <= the
+//      tolerance (0.01, or 0.25 % of the rate when that is more), the rate is verified
+//      (their average is used).
 //   3. Otherwise compare the 2nd and 3rd, then the 3rd and 4th, and so on - always the
 //      next CONSECUTIVE pair, never re-trying an earlier one against a later one.
 //   4. If the list runs out with no pair agreeing, say plainly that the rate could not
 //      be verified. Never fall back to a guessed or hard-coded number - this is money.
-const RATE_TOLERANCE_ABS = 0.01;   // absolute difference between two quoted rates, e.g. 172.40 vs 172.41 is fine, 172.40 vs 172.52 is not
+// The tolerance is RELATIVE for big rates (his call, 2026-09-28): an absolute 0.01 asked
+// 1 EUR = 179 JPY, 29 500 VND or 20 400 IDR to agree to 0.005 % or less, which no two
+// sources ever do (live, that day: JPY 179.28 vs 179.19, VND 29 528 vs 29 590 - 0.05 %
+// and 0.21 %). Rates near 1 keep the 0.01 floor: 1.1385 vs 1.1392 is fine.
+const RATE_TOLERANCE_ABS = 0.01;     // the floor: two quoted rates may always differ this much
+const RATE_TOLERANCE_REL = 0.0025;   // ...or 0.25 % of the bigger rate, when that is more
+
+function rateTolerance( a, b )
+{
+    return Math.max( RATE_TOLERANCE_ABS, RATE_TOLERANCE_REL * Math.max( Math.abs( a ), Math.abs( b ) ) );
+}
+
+// The tolerance for the sheet's words, two significant figures: 0.01, 0.45, 74.
+function rateToleranceText( a, b )
+{
+    return String( Number( rateTolerance( a, b ).toPrecision( 2 ) ) );
+}
 
 function ratesAgree( a, b )
 {
-    return Math.abs( a - b ) <= RATE_TOLERANCE_ABS;
+    return Math.abs( a - b ) <= rateTolerance( a, b );
 }
 
 async function fetchRateFrankfurter( sCurrency )

@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/photo.js" defer></script>
@@ -294,9 +295,9 @@ async function upload()
         }
         catch ( err )
         {
-            const msg = String( err && err.message || err );
-            if( msg.indexOf( "401" ) !== -1 ) { GumApi.loginRedirect(); return; }
-            if( msg.indexOf( "507" ) !== -1 ) quota = true;
+            const status = err && err.status;
+            if( status === 401 ) { GumApi.loginRedirect(); return; }
+            if( status === 507 ) quota = true;
             failed.push( { it: it, why: quota ? "" : err && err.status ? "HTTP " + err.status : NayiveUI.t( 'st.noConnection' ) } );
         }
         $( "#barFill" ).style.width = Math.round( ( ( i + 1 ) / ITEMS.length ) * 100 ) + "%";
@@ -329,8 +330,16 @@ async function upload()
     await clearInbox();
     NayiveUI.toast( NayiveUI.tf( done === 1 ? "st.oneUploaded" : "st.nUploaded", { n: done } ) );
 
-    // Remember this album as the Photos folder, then open it there.
-    try { await GumApi.writeJson( "data/photos/config.json", { folder: DEST } ); }
+    // Remember this album as the Photos folder, then open it there. Only
+    // `folder` changes: the file's other keys are kept, and an unreadable one
+    // (not a 404) is left as it is rather than written over.
+    try
+    {
+        const cfg  = await GumApi.readJson( "data/photos/config.json" );   // null = no file yet
+        const next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
+        next.folder = DEST;
+        await GumApi.writeJson( "data/photos/config.json", next );
+    }
     catch ( _ ) {}
 
     location.replace( "../photos/?dir=" + encodeURIComponent( DEST ) );
@@ -378,7 +387,7 @@ async function boot()
     }
     catch ( err )
     {
-        if( String( err && err.message ).indexOf( "401" ) !== -1 ) { GumApi.loginRedirect(); return; }
+        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
     }
     setDest( folder );
 

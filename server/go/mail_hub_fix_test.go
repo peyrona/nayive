@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/emersion/go-imap/v2"
 )
@@ -384,9 +385,18 @@ func TestMailHubSettingsMerge(t *testing.T) {
 	if st.TrashDays != 5 || !st.ShowImages {
 		t.Fatalf("after two PUTs = %+v", st)
 	}
+	f.call(t, f.owner, "PUT", "/api/mail/settings", `{"signature":"Ana  \r\n\u0007Tel 1 \n\n"}`, 200, &st)
+	if st.Signature != "Ana\nTel 1" || st.TrashDays != 5 || !st.ShowImages {
+		t.Fatalf("signature = %q, %+v", st.Signature, st)
+	}
 	f.call(t, f.owner, "PUT", "/api/mail/settings", `{"trashDays":9}`, 200, &st)
-	if st.TrashDays != 9 || !st.ShowImages {
-		t.Fatalf("trashDays alone lost showImages: %+v", st)
+	if st.TrashDays != 9 || !st.ShowImages || st.Signature != "Ana\nTel 1" {
+		t.Fatalf("trashDays alone lost showImages or the signature: %+v", st)
+	}
+	long := strings.Repeat("ñ", mailSignatureMax+50)
+	f.call(t, f.owner, "PUT", "/api/mail/settings", `{"signature":"`+long+`"}`, 200, &st)
+	if utf8.RuneCountInString(st.Signature) != mailSignatureMax {
+		t.Fatalf("a long signature keeps %d characters", utf8.RuneCountInString(st.Signature))
 	}
 }
 

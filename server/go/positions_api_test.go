@@ -31,6 +31,7 @@ func TestPhotoUploadPlacesOwner(t *testing.T) {
 	srv, base, client, _ := makeLink(t)
 	tripDir := filepath.Join(srv.cfg.HomesDir, "ana", publicTripDir)
 	positions := filepath.Join(tripDir, tripPositionsFile)
+	evs := traceEvents(t, srv)
 
 	put := func(path string, data []byte) {
 		t.Helper()
@@ -48,7 +49,9 @@ func TestPhotoUploadPlacesOwner(t *testing.T) {
 	put("files/otras/fuera.jpg", photo(fix))                                 // not the trip's photo folder
 	put("files/fotos/porto/vieja.jpg", photo(time.Now().AddDate(0, 0, -10))) // before the trip
 	put("files/fotos/porto/sin-gps.jpg", exifJPEG(t, []ifdEntry{asciiEntry(0x9003, "2026:09:14 10:00:00")}, nil))
-	time.Sleep(400 * time.Millisecond)
+	for i := 0; i < 3; i++ { // all three read to the end
+		waitEv(t, evs, "photo")
+	}
 	if _, err := os.Stat(positions); !os.IsNotExist(err) {
 		t.Fatalf("a photo that should place nobody wrote positions: %+v", readPositionsDoc(tripDir))
 	}

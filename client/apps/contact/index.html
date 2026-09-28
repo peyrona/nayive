@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Installable / offline-capable. Only takes effect over HTTPS; a no-op on the plain-HTTP LAN URL. -->
     <link rel="manifest" href="manifest.json">
@@ -55,6 +56,7 @@
 
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
     <script src="../shared/store.js" defer></script>
+    <script src="../shared/photo.js" defer></script>
 
     <style>
         /* Base reset, card shell (.page/.page-inner/.card), .header, .app-icon,
@@ -62,6 +64,7 @@
            ../shared/app.css. Only what is unique to the address book lives here. */
 
         #detailBackdrop { z-index: 110; }   /* a contact opened from the Duplicates sheet floats above it */
+        #editBackdrop   { z-index: 115; }   /* ...and so does its Edit, which replaces it */
         /* ...but a dialog built on the fly by shared/ui.js (confirm, alert,
            folder picker - the only backdrops that carry role="dialog") is
            always the top-most thing on screen, above the detail card. */
@@ -171,6 +174,9 @@
             font-size: 0.86rem; font-weight: 700; color: #fff; user-select: none;
         }
         .avatar.lg { width: 60px; height: 60px; font-size: 1.35rem; }
+        .avatar.xl { width: 96px; height: 96px; font-size: 2rem; }
+        .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .face-pick-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
         /* --- Pick-several mode (see MANUAL MERGE in the script) --------------
            The duplicate scanner only finds what it can prove; two cards that
@@ -224,14 +230,7 @@
             display: flex; align-items: center; gap: 8px;
             font-size: 0.80rem; color: var(--text-dim); margin: 8px 0 6px;
         }
-        .add-mini
-        {
-            flex: 0 0 auto; width: 15px; height: 15px; padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            border: none; border-radius: 50%; background: var(--accent); color: var(--on-accent);
-            cursor: pointer;
-        }
-        .add-mini:active { filter: brightness(0.9); }
+        /* The "+" is the shared .icon-btn.sm. */
 
         /* The "más campos" fold is the shared .more-toggle block (shared/app.css). */
 
@@ -276,11 +275,7 @@
             margin-bottom: 12px; background: var(--card2);
         }
         .dup-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-        .dup-chip
-        {
-            font-size: 0.72rem; padding: 3px 9px; border-radius: var(--radius-pill);
-            background: var(--card); border: 1px solid var(--line); color: var(--text-dim);
-        }
+        /* The reasons are the shared read-only .tag. */
         .dup-conf { font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-pill); }
         .dup-conf.alta  { background: var(--accent); color: var(--on-accent); }
         .dup-conf.media { background: transparent; color: var(--text-dim); border: 1px solid var(--line); }
@@ -404,6 +399,20 @@
         <div class="sheet">
             <h2 id="editTitle" data-i18n="contact.newContact"></h2>
 
+            <!-- The card's picture: the circle takes one from this device; Nayive's
+                 files and "remove" sit under it (see PICTURE in the script). -->
+            <div class="face-pick">
+                <button id="fPhotoBtn" class="face" type="button" data-i18n-attr="title:contact.changePhoto, aria-label:contact.changePhoto">
+                    <span id="fPhotoAv" class="avatar xl"></span>
+                    <span class="cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+                </button>
+                <div class="face-pick-btns">
+                    <button id="fPhotoNayive" class="text-btn ghost" type="button"></button>
+                    <button id="fPhotoDrop" class="text-btn ghost danger" type="button"></button>
+                </div>
+                <input type="file" id="fPhotoInput" accept="image/*" style="display:none;">
+            </div>
+
             <div class="field-row">
                 <div class="field">
                     <label for="fGiven" data-i18n="contact.firstName"></label>
@@ -430,16 +439,16 @@
 
             <div class="section-head">
                 <span data-i18n="contact.phones"></span>
-                <button type="button" class="add-mini" data-add="tel" data-i18n-attr="title:contact.addPhone">
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <button type="button" class="icon-btn sm" data-add="tel" data-i18n-attr="title:contact.addPhone">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
             </div>
             <div id="telRows"></div>
 
             <div class="section-head">
                 <span data-i18n="contact.emails"></span>
-                <button type="button" class="add-mini" data-add="email" data-i18n-attr="title:contact.addEmail">
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <button type="button" class="icon-btn sm" data-add="email" data-i18n-attr="title:contact.addEmail">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
             </div>
             <div id="emailRows"></div>
@@ -455,16 +464,16 @@
             <div id="moreSection" style="display:none;">
                 <div class="section-head">
                     <span data-i18n="contact.addresses"></span>
-                    <button type="button" class="add-mini" data-add="adr" data-i18n-attr="title:contact.addAddress">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <button type="button" class="icon-btn sm" data-add="adr" data-i18n-attr="title:contact.addAddress">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
                 </div>
                 <div id="adrRows"></div>
 
                 <div class="section-head">
                     <span data-i18n="contact.websites"></span>
-                    <button type="button" class="add-mini" data-add="url" data-i18n-attr="title:contact.addWebsite">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <button type="button" class="icon-btn sm" data-add="url" data-i18n-attr="title:contact.addWebsite">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
                 </div>
                 <div id="urlRows"></div>
@@ -639,7 +648,7 @@
         // own value (it is prepended as an extra <option> so nothing is silently lost).
         // Built on demand: the labels come from the dictionary, which lands after
         // this script has been parsed.
-        const TEL_TYPES   = () => [ [ 'CELL', T( 'contact.typeMobile' ) ], [ 'HOME', T( 'contact.typeHome' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'FAX', 'Fax' ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
+        const TEL_TYPES   = () => [ [ 'CELL', T( 'contact.typeMobile' ) ], [ 'HOME', T( 'contact.typeHome' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'FAX', T( 'contact.typeFax' ) ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
         const ADR_TYPES   = () => [ [ 'HOME', T( 'contact.typeHome' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
         const EMAIL_TYPES = () => [ [ 'HOME', T( 'contact.typePersonal' ) ], [ 'WORK', T( 'contact.typeWork' ) ], [ 'OTHER', T( 'contact.typeOther' ) ] ];
 
@@ -662,7 +671,8 @@
         NayiveI18n.ready.then( function()
         {
             API_FILES = GumApi.API_FILES;
-            store     = NayiveStore.createStore( { apiBase: API_FILES } );
+            store     = NayiveStore.createStore( { apiBase: API_FILES, conflicts: true, merge: mergeBook } );
+            store.onMerged( onBookMerged );
 
             wireStaticUI();
 
@@ -780,6 +790,85 @@
 
         function dismissKey( u1, u2 ) { return [ u1, u2 ].sort().join( ' ' ); }
 
+        // TWO DEVICES, ONE ADDRESS BOOK (shared/store.js MERGE). Both saved from
+        // the same copy: both changes are kept, card by card, by UID. A card is
+        // compared as the text it is in the file - a card nobody touched is
+        // written back line for line, so only real edits differ - and one
+        // changed on both keeps the later REV (mine when there is none). Cards
+        // with no UID (a card the parser could not read) are told apart by their
+        // text. The "not duplicates" pairs merge as a set. null = a side that
+        // is not an address book: nothing is merged over it.
+        function mergeBook( path, base, mine, theirs )
+        {
+            const S = NayiveStore;
+
+            if( path === META_FILE )
+            {
+                const pairs = t => { try { const v = JSON.parse( t ); return v && Array.isArray( v.notDuplicate ) ? v.notDuplicate : null; } catch( _ ) { return null; } };
+                const m = pairs( mine ), t = pairs( theirs );
+                if( ! m || ! t ) return null;
+                const notDuplicate = S.mergeLists( base == null ? null : pairs( base ), m, t,
+                                                   { id: p => Array.isArray( p ) ? dismissKey( p[ 0 ], p[ 1 ] ) : null } );
+                return JSON.stringify( { notDuplicate }, null, 2 );
+            }
+
+            const m = vcfCards( mine ), t = vcfCards( theirs );
+            if( ! m || ! t ) return null;
+            const merged = S.mergeLists( base == null ? null : vcfCards( base ), m, t,
+                                         { id: c => c.uid, stamp: c => c.rev || null } );
+            return merged.length ? merged.map( c => c.text ).join( '\r\n' ) + '\r\n' : '';
+        }
+
+        // The cards of a .vcf as they are written: [{ text, uid, rev }], rev as
+        // bare digits so "2026-09-28T10:00:00Z" and "20260928T100000Z" compare.
+        // null = text that holds no card at all.
+        function vcfCards( text )
+        {
+            const cards = [];
+            let   cur   = null;
+            const done  = () =>
+            {
+                const one  = cur.join( '\r\n' );
+                const flat = one.replace( /\r\n[ \t]/g, '' );
+                const val  = name => { const x = new RegExp( '^(?:[\\w-]+\\.)?' + name + '(?:;[^:\\r\\n]*)?:(.*)$', 'im' ).exec( flat ); return x ? x[ 1 ].trim() : ''; };
+                cards.push( { text: one, uid: val( 'UID' ), rev: val( 'REV' ).replace( /\D/g, '' ) } );
+                cur = null;
+            };
+
+            for( const l of String( text || '' ).replace( /\r\n?/g, '\n' ).split( '\n' ) )
+            {
+                const tag = l.trim().toUpperCase();
+                if( tag === 'BEGIN:VCARD' ) { if( cur ) done(); cur = [ l ]; continue; }
+                if( ! cur ) continue;
+                cur.push( l );
+                if( tag === 'END:VCARD' ) done();
+            }
+            if( cur ) done();
+
+            return cards.length || ! String( text || '' ).trim() ? cards : null;
+        }
+
+        // The store merged another device's save in: the book (or the "not
+        // duplicates" set) from now on. The list is not redrawn under an open
+        // sheet; edits there find their card by UID.
+        function onBookMerged( path, body )
+        {
+            if( path === META_FILE )
+            {
+                try { dismissed = new Set( ( JSON.parse( body ).notDuplicate || [] ).map( p => dismissKey( p[ 0 ], p[ 1 ] ) ) ); }
+                catch( _ ) {}
+                return;
+            }
+            if( path !== CONTACTS_FILE ) return;
+
+            const unparsed = [];
+            contacts      = vcfToContacts( body, unparsed );
+            unparsedCards = unparsed;
+            nextPos       = contacts.length + unparsed.length;
+            bookRead      = true;
+            if( ! document.querySelector( '.sheet-backdrop.open' ) ) render();
+        }
+
         function saveContacts()
         {
             // Writes the local cache now and queues the upload; the store flushes
@@ -818,6 +907,7 @@
         //   urls:   [ { value } ],
         //   bday,                                 // 'YYYY-MM-DD', '--MM-DD' (no year) or ''
         //   note,
+        //   photo,                                // 'data:image/jpeg|png;base64,...' or '' (see photoOf)
         //   src,                                  // the card as read from the file, or null (see parseVCard)
         //   pos,                                  // its place in the file (Infinity: not placed yet, goes last)
         //   rev                                   // when it was last edited here ('' : not in this session)
@@ -831,7 +921,7 @@
                 n    : { family: '', given: '' },
                 org  : '', title: '',
                 tels : [], emails: [], adrs: [], urls: [],
-                bday : '', note: '',
+                bday : '', note: '', photo: '',
                 src  : null, pos: Infinity, rev: ''
             };
         }
@@ -849,6 +939,7 @@
             let   block = null;     // content lines of the card being read
             let   begin = '';       // its BEGIN:VCARD line, as written
             let   pos   = 0;        // cards met so far
+            const made  = {};       // made-up UIDs so far -> how many (see below)
 
             const keepRaw = extra =>
             {
@@ -876,6 +967,17 @@
                         try
                         {
                             const c = normalizeContact( parseVCard( block ) );
+
+                            // No UID in the card: one made from its own text, not a
+                            // random one, so every device makes the SAME one and a
+                            // merge (mergeBook) does not take the card for two. A
+                            // second identical card gets "-2", and so on.
+                            if( ! c.src.uidRead )
+                            {
+                                const h = 'contact-h' + NayiveStore.hashText( [ begin ].concat( ...block.map( l => l.phys ), cl.phys[ 0 ] ).join( '\n' ) );
+                                made[ h ] = ( made[ h ] || 0 ) + 1;
+                                c.uid = made[ h ] === 1 ? h : h + '-' + made[ h ];
+                            }
 
                             c.src.begin = begin;
                             c.src.end   = cl.phys[ 0 ];
@@ -985,7 +1087,7 @@
         // The model field each vCard property feeds. Any other property is kept as
         // its lines and written back untouched.
         const FIELD_OF = { UID: 'uid', FN: 'fn', N: 'n', ORG: 'org', TITLE: 'title', TEL: 'tels', EMAIL: 'emails',
-                           ADR: 'adrs', URL: 'urls', BDAY: 'bday', NOTE: 'note' };
+                           ADR: 'adrs', URL: 'urls', BDAY: 'bday', NOTE: 'note', PHOTO: 'photo' };
 
         // Reads one card's content lines into a contact. Each line is labelled on
         // the way (its group, its property name, the field it feeds and, for a
@@ -1085,6 +1187,10 @@
                     case 'UID':
                         if( value.trim() ) { c.uid = value.trim(); uidRead = true; }
                         break;
+
+                    case 'PHOTO':
+                        if( ! c.photo ) c.photo = photoOf( value, params );
+                        break;
                 }
             }
 
@@ -1099,6 +1205,29 @@
             c.src = { lines: blockLines, nParts: nParts, suffix: suffix, uidRead: uidRead };
 
             return c;
+        }
+
+        // A PHOTO's picture as a data: URL, or '' for one this page cannot show
+        // (a link to the web: its line stays in the card as it was). Read in the
+        // three ways phones write it - 3.0 "PHOTO;ENCODING=b;TYPE=JPEG:<base64>",
+        // 2.1 "PHOTO;ENCODING=BASE64;JPEG:<base64>" and 4.0 "PHOTO:data:image/...".
+        // A 2.1 fold leaves spaces inside the base64: they go.
+        function photoOf( value, params )
+        {
+            const v = value.replace( /\s+/g, '' );
+            const d = /^data:image\/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+\/=]+)$/i.exec( v );
+
+            if( d ) return 'data:image/' + d[ 1 ].toLowerCase().replace( 'jpg', 'jpeg' ) + ';base64,' + d[ 2 ];
+
+            if( params.some( p => p.key === 'VALUE' && /^UR[IL]$/.test( p.val ) ) || ! /^[A-Za-z0-9+\/=]+$/.test( v ) || v.length < 16 )
+                return '';
+
+            const t    = params.filter( p => p.key === 'TYPE' ).map( p => p.val.replace( /^IMAGE\//, '' ) );
+            const mime = t.includes( 'PNG' ) || /^iVBOR/.test( v ) ? 'png'
+                       : t.includes( 'GIF' ) || /^R0lG/.test( v )  ? 'gif'
+                       : 'jpeg';
+
+            return 'data:image/' + mime + ';base64,' + v;
         }
 
         // Fill in whatever the source card left implicit so the rest of the app can rely on it.
@@ -1240,7 +1369,7 @@
                        .map( x => x.text ).join( '\r\n' ) + '\r\n';
         }
 
-        const FIELDS = [ 'uid', 'fn', 'n', 'org', 'title', 'tels', 'emails', 'adrs', 'urls', 'bday', 'note' ];
+        const FIELDS = [ 'uid', 'fn', 'n', 'org', 'title', 'tels', 'emails', 'adrs', 'urls', 'bday', 'note', 'photo' ];
         const MULTI  = new Set( [ 'tels', 'emails', 'adrs', 'urls' ] );
 
         // Each field of the model as one string, so a save can tell which ones an
@@ -1249,7 +1378,7 @@
         function snapshot( c )
         {
             const s = { uid: c.uid, fn: c.fn, n: JSON.stringify( [ c.n.family, c.n.given ] ),
-                        org: c.org, title: c.title, bday: c.bday, note: c.note };
+                        org: c.org, title: c.title, bday: c.bday, note: c.note, photo: c.photo };
 
             for( const f of MULTI )
                 s[ f ] = JSON.stringify( c[ f ].map( e => entryKey( f, e ) ) );
@@ -1387,9 +1516,17 @@
                 case 'title': return c.title ? [ 'TITLE:' + escapeText( c.title ) ] : [];
                 case 'bday':  return c.bday  ? [ 'BDAY:'  + c.bday ]                : [];
                 case 'note':  return c.note  ? [ 'NOTE:'  + escapeText( c.note ) ]  : [];
+                case 'photo': return photoLines( c.photo );
             }
 
             return c[ f ].map( e => entryLine( f, e ) ).filter( Boolean );
+        }
+
+        // The picture as vCard 3.0 writes it: PHOTO;ENCODING=b;TYPE=JPEG:<base64>.
+        function photoLines( photo )
+        {
+            const d = /^data:image\/([a-z]+);base64,(.+)$/.exec( photo || '' );
+            return d ? [ 'PHOTO;ENCODING=b;TYPE=' + d[ 1 ].toUpperCase() + ':' + d[ 2 ] ] : [];
         }
 
         function entryLine( f, e )
@@ -1554,6 +1691,23 @@
         // Many countries use two surnames (father's + mother's). Take the FIRST
         // word of the given name and the FIRST word of the family name, so
         // "Ana Sofía Pérez Ruiz" gives 'AP', not 'AR'.
+        // A card's circle: its picture, or its initials on the name's colour.
+        function paintAvatar( av, c, sName )
+        {
+            av.textContent = '';
+            av.style.background = avatarColor( sName );
+
+            if( c.photo )
+            {
+                const img = document.createElement( 'img' );
+                img.src = c.photo;
+                img.alt = '';
+                img.loading = 'lazy';
+                av.appendChild( img );
+            }
+            else av.textContent = initials( c, sName );
+        }
+
         function initials( c, sName )
         {
             const firstWord = s => ( s || '' ).trim().split( /\s+/ )[ 0 ] || '';
@@ -2056,8 +2210,7 @@
 
             const av = document.createElement( 'div' );
             av.className = 'avatar';
-            av.style.background = avatarColor( name );
-            av.textContent = initials( c, name );
+            paintAvatar( av, c, name );
             row.appendChild( av );
 
             const meta = document.createElement( 'div' );
@@ -2219,9 +2372,7 @@
 
             const name = displayName( c );
 
-            const av = document.getElementById( 'detailAvatar' );
-            av.style.background = avatarColor( name );
-            av.textContent = initials( c, name );
+            paintAvatar( document.getElementById( 'detailAvatar' ), c, name );
 
             document.getElementById( 'detailName' ).textContent = name;
 
@@ -2252,7 +2403,7 @@
             if( adrGroup ) body.appendChild( adrGroup );
 
             const urlGroup = buildDetailGroup( c.urls.filter( u => u.value.trim() ).map( u => ({
-                label: 'Web', value: u.value, href: /^https?:/i.test( u.value ) ? u.value : 'https://' + u.value
+                label: T( 'contact.web' ), value: u.value, href: /^https?:/i.test( u.value ) ? u.value : 'https://' + u.value
             })) );
             if( urlGroup ) body.appendChild( urlGroup );
 
@@ -2379,6 +2530,75 @@
         // only those that differ from how openEditForExisting filled them.
         let formWas = null;
 
+        // PICTURE. The form's picture, a data: URL or '' (none): the circle
+        // takes one from this device, "From Nayive" from the user's files (the
+        // Photos folder first), the bin drops it. Kept in the card itself, as
+        // its PHOTO (see photoLines): a PNG or a JPEG of 300 x 300 px at most
+        // (NayivePhoto.face). Saved with the form, like every other field.
+        let formPhoto = '';
+
+        const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;   // what a browser can draw (no HEIC)
+
+        function showFormPhoto()
+        {
+            const name = [ document.getElementById( 'fGiven' ).value, document.getElementById( 'fFamily' ).value ].join( ' ' ).trim();
+            paintAvatar( document.getElementById( 'fPhotoAv' ), { photo: formPhoto, n: { given: '', family: '' } }, name || '?' );
+            document.getElementById( 'fPhotoDrop' ).hidden = ! formPhoto;
+        }
+
+        async function takeFormPhoto( blob )
+        {
+            try
+            {
+                const pic = await NayivePhoto.face( blob );
+                formPhoto = await new Promise( ( ok, no ) =>
+                {
+                    const r = new FileReader();
+                    r.onload  = () => ok( r.result );
+                    r.onerror = () => no( r.error );
+                    r.readAsDataURL( pic );
+                });
+                showFormPhoto();
+            }
+            catch( _ ) { flashToast( T( 'contact.notImage' ) ); }
+        }
+
+        async function formPhotoFromNayive()
+        {
+            let dir = 'files';
+            try { const cfg = await GumApi.readJson( 'data/photos/config.json' ); if( cfg && cfg.folder ) dir = cfg.folder; } catch( _ ) {}
+
+            const f = await NayiveUI.pickFile( { title: T( 'contact.changePhoto' ), dir: dir, only: name => IMAGE_EXT.test( name ) } );
+            if( ! f ) return;
+            if( ! IMAGE_EXT.test( f.name ) ) { flashToast( T( 'contact.notImage' ) ); return; }
+
+            try   { await takeFormPhoto( new Blob( [ await GumApi.readFileBytes( f.path ) ] ) ); }
+            catch { flashToast( T( 'ui.store.notRead' ) ); }
+        }
+
+        function wireFormPhoto()
+        {
+            const input = document.getElementById( 'fPhotoInput' );
+            const nay   = document.getElementById( 'fPhotoNayive' );
+            const drop  = document.getElementById( 'fPhotoDrop' );
+
+            nay.innerHTML  = NayiveUI.icon( 'folder' );
+            nay.append( T( 'contact.fromNayive' ) );
+            drop.innerHTML = NayiveUI.icon( 'trash' );
+            drop.append( T( 'contact.removePhoto' ) );
+
+            document.getElementById( 'fPhotoBtn' ).addEventListener( 'click', () => input.click() );
+            input.addEventListener( 'change', () =>
+            {
+                const file = input.files && input.files[ 0 ];
+                input.value = '';
+                if( file ) takeFormPhoto( file );
+            });
+            nay.addEventListener( 'click', formPhotoFromNayive );
+            drop.addEventListener( 'click', () => { formPhoto = ''; showFormPhoto(); } );
+            [ 'fGiven', 'fFamily' ].forEach( id => document.getElementById( id ).addEventListener( 'input', showFormPhoto ) );
+        }
+
         function formState()
         {
             const v    = id => document.getElementById( id ).value;
@@ -2391,7 +2611,8 @@
                 adrs  : JSON.stringify( readMultiRows( 'adrRows',   'adr' ) ),
                 urls  : JSON.stringify( readMultiRows( 'urlRows',   'url' ) ),
                 bday  : bday.value + '|' + ( bday.dataset.noYear || '' ),
-                note  : v( 'fNote' )
+                note  : v( 'fNote' ),
+                photo : formPhoto
             };
         }
 
@@ -2402,6 +2623,9 @@
             document.getElementById( 'fOrg'      ).value = c.org;
             document.getElementById( 'fJobTitle' ).value = c.title;
             document.getElementById( 'fNote'     ).value = c.note;
+
+            formPhoto = c.photo || '';
+            showFormPhoto();
 
             // <input type=date> cannot hold a birthday without a year ('--MM-DD'):
             // it waits here, shown by the overlay, until a date is picked.
@@ -2465,7 +2689,7 @@
                 const cityRow = document.createElement( 'div' );
                 cityRow.style.display = 'flex';
                 cityRow.style.gap = '6px';
-                cityRow.appendChild( makeInput( 'text', 'C.P.', data.postal || '' ) );
+                cityRow.appendChild( makeInput( 'text', T( 'contact.postal' ), data.postal || '' ) );
                 cityRow.appendChild( makeInput( 'text', T( 'contact.cityPh' ), data.city || '' ) );
                 fields.appendChild( cityRow );
 
@@ -2610,6 +2834,7 @@
             if( touched( 'urls' ) )   c.urls   = readMultiRows( 'urlRows', 'url' );
             if( touched( 'bday' ) )   c.bday   = document.getElementById( 'fBday' ).value || document.getElementById( 'fBday' ).dataset.noYear || '';
             if( touched( 'note' ) )   c.note   = document.getElementById( 'fNote' ).value.trim();
+            if( touched( 'photo' ) )  c.photo  = formPhoto;
 
             if( Object.keys( now ).some( touched ) )
                 c.rev = revStamp();   // its REV, kept by later saves of the book (see revLine)
@@ -2696,9 +2921,18 @@
             });
         }
 
-        function openDedupSheet()
+        // `groups`: already found (an import just looked), so not scanned again.
+        function openDedupSheet( groups )
         {
             openBackdrop( 'dedupBackdrop' );
+
+            if( Array.isArray( groups ) )
+            {
+                dupGroups = groups;
+                renderDedupSheet();
+                return;
+            }
+
             renderDedupScanning();
 
             // Yield twice so the sheet + progress bar actually paint before the
@@ -2765,7 +2999,7 @@
             g.reasons.forEach( r =>
             {
                 const chip = document.createElement( 'span' );
-                chip.className = 'dup-chip';
+                chip.className = 'tag';
                 chip.textContent = r;
                 chips.appendChild( chip );
             });
@@ -2781,8 +3015,7 @@
 
                 const av = document.createElement( 'div' );
                 av.className = 'avatar';
-                av.style.background = avatarColor( name );
-                av.textContent = initials( c, name );
+                paintAvatar( av, c, name );
                 row.appendChild( av );
 
                 const meta = document.createElement( 'div' );
@@ -2975,7 +3208,7 @@
             mergeCheckSection( body, T( 'contact.phones' ),   'tel',   m.tels,   t => [ typeLabel( TEL_TYPES(), t.type ),   t.value ] );
             mergeCheckSection( body, T( 'contact.emails' ),     'email', m.emails, e => [ typeLabel( EMAIL_TYPES(), e.type ), e.value ] );
             mergeCheckSection( body, T( 'contact.addresses' ), 'adr',   m.adrs,   a => [ typeLabel( ADR_TYPES(), a.type ),   formatAddress( a ) ] );
-            mergeCheckSection( body, T( 'contact.websites' ),  'url',   m.urls,   u => [ 'Web', u.value ] );
+            mergeCheckSection( body, T( 'contact.websites' ),  'url',   m.urls,   u => [ T( 'contact.web' ), u.value ] );
 
             if( m.bday )
             {
@@ -3120,6 +3353,7 @@
             merged.urls   = collectChecked( 'url' );
             merged.bday   = m.bday;
             merged.note   = m.notes.join( '\n———\n' );
+            merged.photo  = nameSrc.photo || firstNonEmpty( m.members.map( c => c.photo ) );
             merged.src    = mergedSource( m.members, nameSrc );
             merged.pos    = Math.min( ...m.members.map( c => c.pos ) );   // where its first member stood in the file
             merged.rev    = revStamp();
@@ -3214,7 +3448,7 @@
             const a    = document.getElementById( 'downloadAnchor' );
 
             a.href     = url;
-            a.download = 'contactos.vcf';
+            a.download = T( 'contact.exportFile' );
             a.click();
 
             setTimeout( () => URL.revokeObjectURL( url ), 1000 );
@@ -3236,16 +3470,21 @@
                 return;
             }
 
-            const byUid = new Map( contacts.map( c => [ c.uid, c ] ) );
+            const before  = structuredClone( contacts );   // for the Undo
+            const posWas  = nextPos;
+            const byUid   = new Map( contacts.map( c => [ c.uid, c ] ) );
             let   added = 0, updated = 0;
 
             // In the imported file's order: a new card goes after the book's last
-            // one; an updated card keeps its place.
+            // one; an updated card keeps its place. A card edited since the file
+            // was made (a newer REV here) is kept: re-importing an old export must
+            // not take the edits back.
             for( const inc of incoming.slice().sort( ( a, b ) => a.pos - b.pos ) )
             {
                 if( byUid.has( inc.uid ) )
                 {
                     const old = byUid.get( inc.uid );
+                    if( revKey( revOf( inc ) ) < revKey( revOf( old ) ) ) continue;
                     Object.assign( old, inc, { pos: old.pos } );
                     updated++;
                 }
@@ -3261,11 +3500,35 @@
             render();
             await saveContacts();
 
-            flashToast( TF( 'contact.imported', { added: added, updated: updated } ) );
+            flashUndo( TF( 'contact.imported', { added: added, updated: updated } ), function()
+            {
+                if( ! canSave() ) return;
+                contacts = before;
+                nextPos  = posWas;
+                render();
+                saveContacts();
+                refreshDedupIfOpen();
+            } );
 
             // Imports are where duplicates are actually created — surface them right away.
-            if( findDuplicateGroups( contacts ).length )
-                openDedupSheet();
+            const groups = findDuplicateGroups( contacts );
+            if( groups.length )
+                openDedupSheet( groups );
+        }
+
+        // When a card was last changed: its REV as edited here, else as read from
+        // the file ('' : none). revKey() makes "2026-09-28T10:15:00Z" and
+        // "20260928T101500Z" compare alike; no REV sorts as the oldest.
+        function revOf( c )
+        {
+            if( c.rev ) return c.rev;
+            const l = c.src && c.src.lines.find( x => x.name === 'REV' );
+            return l ? l.text.slice( l.text.indexOf( ':' ) + 1 ) : '';
+        }
+
+        function revKey( rev )
+        {
+            return String( rev || '' ).replace( /[^0-9]/g, '' ).slice( 0, 14 ).padEnd( 14, '0' );
         }
 
         //------------------------------------------------------------------------//
@@ -3282,6 +3545,7 @@
             wireAzRail();
 
             wireSettingsSheet();
+            wireFormPhoto();
 
             document.getElementById( 'importInput' ).addEventListener( 'change', function()
             {

@@ -55,9 +55,8 @@ type Logger interface {
 
 // AdminAccount is the "admin" block of config/server.json.
 //
-// The password is stored in PLAINTEXT. That is a deliberate, documented choice
-// for a three-person personal server, carried over from the Python unchanged -
-// changing it here would lock every existing account out.
+// The password is a PBKDF2 hash (password_hash.go); an old plaintext one still
+// signs in once and is rewritten hashed then.
 type AdminAccount struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
@@ -447,11 +446,23 @@ func atomicWriteJSON(path string, obj any, indent int) error {
 	}
 	// Encoder already ends with "\n", which is what Python writes too.
 
-	dir := filepath.Dir(path)
-	tmp := filepath.Join(dir, fmt.Sprintf("%s.%d.%d.tmp",
-		filepath.Base(path), os.Getpid(), tmpCounter.Add(1)))
+	tmp := atomicTempName(path)
 
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
+	// Synced before the rename: a power cut right after it must find the new
+	// file whole, never an empty shares.json or config.json (S2-#23).
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(buf.Bytes())
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -459,6 +470,14 @@ func atomicWriteJSON(path string, obj any, indent int) error {
 		return err
 	}
 	return nil
+}
+
+// atomicTempName is the temp atomicWriteJSON writes before the rename, beside
+// `path`: "<name>.<pid>.<n>.tmp" - the shape isTempName and the startup sweep
+// know (filetree.go).
+func atomicTempName(path string) string {
+	return filepath.Join(filepath.Dir(path), fmt.Sprintf("%s.%d.%d.tmp",
+		filepath.Base(path), os.Getpid(), tmpCounter.Add(1)))
 }
 
 // loadJSONFile fills `dst` from the JSON object at `path`. A missing,

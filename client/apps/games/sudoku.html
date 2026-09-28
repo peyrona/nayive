@@ -134,19 +134,17 @@
            because over-filling it is exactly the kind of mistake the red digit
            above is there to show. */
         .sudoku-pad { display: flex; gap: 4px; width: var(--board); }
+        /* The look is the shared .text-btn.ghost (app.css); the size and the
+           digit's type are the pad's own. */
         .spad
         {
-            flex: 1 1 0; min-width: 0; height: calc( var(--board) * 0.115 );
-            display: flex; align-items: center; justify-content: center;
+            flex: 1 1 0; min-width: 0; height: calc( var(--board) * 0.115 ); padding: 0;
             box-sizing: border-box;
-            border: 1px solid var(--line); border-radius: var(--radius-s);
-            background: var(--card2); color: var(--text);
             font: 600 calc( var(--board) * 0.055 ) / 1 var(--font-sans);
             font-variant-numeric: tabular-nums;
-            cursor: pointer; touch-action: manipulation;
+            touch-action: manipulation;
         }
         .spad svg           { width: calc( var(--board) * 0.055 ); height: calc( var(--board) * 0.055 ); }
-        .spad:hover         { border-color: color-mix( in srgb, var(--accent) 55%, transparent ); }
         .spad:focus         { outline: none; }
         .spad:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
         .spad.is-done       { background: transparent; color: var(--text-faint); }
@@ -536,7 +534,14 @@
             function runClock()
             {
                 if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
-                ticker = setInterval( function () { timeEl.textContent = clock( seconds() ); }, 250 );
+                ticker = setInterval( function ()
+                {
+                    // Any dialog over the app pauses it - the help sheet, the
+                    // install prompt, "session expired" - the same rule the
+                    // canvas games follow: time under a sheet is not played.
+                    if( document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
+                    timeEl.textContent = clock( seconds() );
+                }, 250 );
             }
 
             function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
@@ -893,7 +898,7 @@
                 {
                     el = document.createElement( 'button' );
                     el.type        = 'button';
-                    el.className   = 'spad';
+                    el.className   = 'text-btn ghost spad';
                     el.dataset.v   = String( i );
                     el.textContent = String( i );
                     pads.push( el );
@@ -902,7 +907,7 @@
 
                 el = document.createElement( 'button' );
                 el.type      = 'button';
-                el.className = 'spad';
+                el.className = 'text-btn ghost spad';
                 el.dataset.v = '0';
                 el.innerHTML = RUB;
                 el.title     = T( 'games.sudokuErase' );

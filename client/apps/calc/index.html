@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../shared/app.css">
     <script>try{ if( localStorage.getItem( 'balata-theme' ) !== 'dark' ) document.documentElement.setAttribute( 'data-theme', 'light' ); }catch( e ){}</script>
     <script src="../shared/theme.js" defer></script>
+    <script src="../shared/locker.js"></script>
 
     <!-- Vendored libs (all pinned, no build step). Order matters: classic scripts run before the deferred module script below. -->
     <script src="lib/handsontable_v18.0.0.full.min.js"></script>
@@ -121,8 +122,7 @@
 
         <!-- The pull-down bar. Built and wired by shared/menubar.js from the
              MENUS table in the script below; empty (and hidden) in toolbar mode.
-             In menu mode the name box moves in here, at the right end - it is the
-             one toolbar control that has no menu entry, because you type into it. -->
+             The name box stays in the formula row below in both modes. -->
         <div id="menuBar" role="menubar" hidden></div>
 
         <!-- Same left-to-right order as Write's toolbar, so a button shared by the
@@ -328,7 +328,7 @@
             <h2 data-i18n="ui.saveAs"></h2>
             <div class="field">
                 <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" placeholder="hoja.xlsx" autocomplete="off">
+                <input type="text" id="saveName" autocomplete="off" data-i18n-attr="placeholder:calc.defaultFile">
             </div>
             <div class="field">
                 <label for="saveFormat" data-i18n="calc.format"></label>

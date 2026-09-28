@@ -7,9 +7,9 @@
 // ACTIONS: MOVE TO… / COPY TO…
 //
 // Both open the same folder chooser. "Move" is one server rename() per
-// item (old path -> new parent). "Copy" has no server verb, so Drive
-// reads every file's bytes and writes them under the destination,
-// recreating any sub-folder structure as it goes.
+// item (old path -> new parent). "Copy" is one server copy per item
+// (POST ?from=&new=, server/go/copy.go): the bytes go disk to
+// disk, never through the browser, so a big video cannot fill the tab.
 
 let pickerMode     = null;              // 'move' | 'copy'
 let pickerDest     = null;              // chosen folder path (FS_ROOT = Drive root); null = nothing chosen
@@ -301,7 +301,7 @@ async function doCopy( paths, dest )
     showProgress( T( 'drive.copying' ) );
 
     let files = 0;
-    const copied = [];        // [src, dst] of every file copied whole, for its photo note
+    const copied = [];        // [src, dst] of every item copied, for its photo notes
 
     try
     {
@@ -315,55 +315,18 @@ async function doCopy( paths, dest )
             const topName = uniqueName( nameOf( node ), taken );
             taken.add( topName );
 
-            if( ! isDir( node ) )
-            {
-                const bytes = await withBusy( GumApi.readFileBytes( p ) );
-                const to    = joinPath( dest, topName );
-                await withBusy( GumApi.writeFileBytes( to, bytes ) );
-                copied.push( [ p, to ] );
-                files++;
-                continue;
-            }
+            // A folder comes whole, sub-folders and all. The server never
+            // copies over anything: a name taken meanwhile is a 409.
+            const to  = joinPath( dest, topName );
+            const q   = new URLSearchParams( { from: p, 'new': to } ).toString();
+            const res = JSON.parse( await withBusy( GumApi.fetchText( GumApi.API_FILES + '?' + q, { method: 'POST' } ) ) );
+            files += ( res && res.files ) || 0;
 
-            // Folder: recreate it (renamed if the name is taken) and copy
-            // every file inside, rebuilding the sub-folder structure first.
-            // The folders-only tree has no file nodes — fetch the subtree.
-            const sub     = await withBusy( GumApi.listDirRecursive( p ) );
-            const entries = [];
-            collectEntries( pruneTreeInPlace( { path: p, nodes: sub.nodes || [] } ), topName, entries );
-
-            const dirs = new Set( [ topName ] );
-            entries.forEach( function( e )
-            {
-                const segs = e.zipPath.split( '/' );
-                let acc = '';
-                for( let i = 0; i < segs.length - 1; i++ ) { acc = acc ? acc + '/' + segs[i] : segs[i]; dirs.add( acc ); }
-            });
-
-            const ordered = Array.from( dirs ).sort( function( a, b ) { return a.split( '/' ).length - b.split( '/' ).length; } );
-
-            for( const d of ordered )
-            {
-                const segs   = d.split( '/' );
-                const name   = segs.pop();
-                const rel    = segs.join( '/' );
-                const parent = rel ? joinPath( dest, rel ) : dest;
-                try { await withBusy( GumApi.makeDir( parent, name ) ); }
-                catch( _ ) { /* already exists — fine */ }
-            }
-
-            for( const e of entries )
-            {
-                const bytes = await withBusy( GumApi.readFileBytes( e.fullPath ) );
-                await withBusy( GumApi.writeFileBytes( joinPath( dest, e.zipPath ), bytes ) );
-                files++;
-            }
-
-            // ONE pair for the whole folder: copyPaths() re-keys by
-            // prefix, so this carries the photo note of every file
-            // inside it — the same single pair doMove() pushes for a
-            // moved folder. Without it a copied album arrives blank.
-            copied.push( [ p, joinPath( dest, topName ) ] );
+            // ONE pair per item: copyPaths() re-keys by prefix, so a
+            // folder's pair carries the photo note of every file inside
+            // it - the same single pair doMove() pushes for a moved
+            // folder. Without it a copied album arrives blank.
+            copied.push( [ p, to ] );
         }
 
         await NayiveMedia.copyPaths( copied );
@@ -374,7 +337,8 @@ async function doCopy( paths, dest )
     catch( err )
     {
         await NayiveMedia.copyPaths( copied );      // same as doMove: keep what did copy
-        NayiveUI.toast( TF( 'drive.copyFailed', { err: err && err.message || err } ) );
+        if( err && err.status === 507 ) NayiveUI.toast( T( 'ui.room.none' ) );
+        else                            NayiveUI.toast( TF( 'drive.copyFailed', { err: err && err.message || err } ) );
         await reload();
     }
     finally

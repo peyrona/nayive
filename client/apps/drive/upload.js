@@ -293,9 +293,10 @@ function startConvertPoll()
 }
 
 //------------------------------------------------------------------------//
-// APP IMPORTS: a .ics / .vcf dropped at the top level of an upload is merged
-// into the Calendar (data/calendar.ics) / Contacts (data/contacts.vcf) file
-// instead of being stored as a plain file in the tree.
+// APP IMPORTS: a .ics / .vcf dropped at the top level of an upload may be
+// merged into the Calendar (data/calendar.ics) / Contacts (data/contacts.vcf)
+// file instead of being stored as a plain file in the tree. Drive asks each
+// time (askAppImport): add, or keep as a file.
 
 function isAppImport( it )
 {
@@ -304,14 +305,34 @@ function isAppImport( it )
     return n.endsWith( '.ics' ) || n.endsWith( '.vcf' );
 }
 
+// calendar.ics / contacts.vcf are read and written through the same store
+// Calendar and Contacts use. Its read sees an edit an open Calendar has queued
+// but not sent yet, and the merged file then takes that queued write's place
+// in the shared outbox (one per path). A direct PUT raced it instead: the
+// queued write went up after the merge and took the imported events away.
+let appFileStore = null;
+
+function appStore()
+{
+    return appFileStore || ( appFileStore = NayiveStore.createStore( { apiBase: GumApi.API_FILES } ) );
+}
+
 async function readTextOrEmpty( path )
 {
-    try { return await GumApi.readFile( path ); }
-    catch( err )
-    {
-        if( /\b404\b/.test( String( err && err.message ) ) ) return '';
-        throw err;
-    }
+    const res = await appStore().read( path );
+    if( res.source === 'empty' ) return '';                            // no such file yet
+    if( res.body === null ) throw new Error( T( 'ui.store.notRead' ) );  // never merge into nothing
+    return res.body;
+}
+
+// Written as text, the way Calendar and Contacts write it. Offline, or any
+// answer the store keeps the write for, is queued and goes up later: only a
+// write it refuses or drops is a failure.
+async function writeAppFile( path, text )
+{
+    const res = await appStore().write( path, text );
+    if( res.blocked )   throw new Error( T( 'ui.store.notRead' ) );
+    if( res.forbidden ) throw new Error( 'HTTP 403' );
 }
 
 // Unfold RFC 5545 / RFC 6350 continuation lines; normalise EOLs to \n.
@@ -393,8 +414,7 @@ async function mergeIntoContacts( incomingText )
         else { blocks.push( b ); if( u ) byUid.set( u, blocks.length - 1 ); }
     }
 
-    await GumApi.writeFileBytes( 'data/contacts.vcf',
-        new TextEncoder().encode( blocks.join( '\r\n' ) + '\r\n' ) );
+    await writeAppFile( 'data/contacts.vcf', blocks.join( '\r\n' ) + '\r\n' );
     return incoming.length;
 }
 
@@ -478,9 +498,29 @@ async function mergeIntoCalendar( incomingText )
     }
 
     const text = out.join( '\n' ).replace( /\r\n/g, '\n' ).replace( /\n/g, eol );
-    await GumApi.writeFileBytes( 'data/calendar.ics',
-        new TextEncoder().encode( /\n$/.test( text ) ? text : text + eol ) );
+    await writeAppFile( 'data/calendar.ics', /\n$/.test( text ) ? text : text + eol );
     return events.length;
+}
+
+// Add to Calendar / Contacts, or keep as a file? One question for every
+// .ics / .vcf in the drop. Resolves true (add), "other" (keep as files) or
+// false (cancel, or Escape: the whole upload stops, as askReplace's cancel).
+function askAppImport( imports )
+{
+    const ics  = imports.some( function( it ) { return /\.ics$/i.test( it.relPath ); } );
+    const vcf  = imports.some( function( it ) { return /\.vcf$/i.test( it.relPath ); } );
+    const app  = ics && vcf ? 'Calendar' + T( 'drive.and' ) + 'Contacts' : ( ics ? 'Calendar' : 'Contacts' );
+
+    const SHOWN = 12;
+    const names = imports.slice( 0, SHOWN ).map( function( it ) { return it.relPath; } );
+    if( imports.length > SHOWN ) names.push( TF( 'drive.andNMore', { n: imports.length - SHOWN } ) );
+
+    return NayiveUI.confirm( {
+        title:     TF( 'drive.importAskTitle', { app: app } ),
+        body:      names.join( '\n' ) + '\n\n' + TF( 'drive.importAskBody', { app: app } ),
+        confirm:   T( 'drive.importAdd' ),
+        other:     T( 'drive.importKeep' ),
+        otherIcon: 'doc' } );
 }
 
 async function runAppImports( imports )
@@ -543,27 +583,26 @@ async function uploadItems( items )
 {
     if( ! items.length ) return;
 
-    // LibreOffice kinds with no app here (Impress, Draw, Math, Base) are
-    // refused, all named in one message; the rest goes on. `notes` are
-    // said again in the last message, so a long upload cannot bury them.
+    // `notes` are said again in the last message, so a long upload cannot
+    // bury them. LibreOffice kinds with no app here (Impress, Draw, Math,
+    // Base) upload as they are: only Writer and Calc files get a twin.
     const notes   = [];
-    const refused = items.filter( function( it ) { return officeKind( extOf( it.relPath ) ) === 'refuse'; } );
-    if( refused.length )
-    {
-        items = items.filter( function( it ) { return refused.indexOf( it ) === -1; } );
-        notes.push( TF( 'drive.officeRefused',
-                        { names: refused.map( function( it ) { return it.relPath.split( '/' ).pop(); } ).join( ', ' ) } ) );
-        NayiveUI.toast( notes[0], { ms: 6000 } );
-        if( ! items.length ) return;
-    }
 
-    // Pull out .ics / .vcf files — they go to Calendar / Contacts, not the tree.
+    // .ics / .vcf files: ONE question for all of them - add them to
+    // Calendar / Contacts, or keep them as files (they then go on with the
+    // rest, as any other file).
     const imports = items.filter( isAppImport );
     if( imports.length )
     {
-        items = items.filter( function( it ) { return ! isAppImport( it ); } );
-        await runAppImports( imports );
-        if( ! items.length ) { setStatus( '' ); await reload(); return; }
+        const choice = await askAppImport( imports );
+        if( choice === false ) { setStatus( '' ); return; }        // cancel: nothing is uploaded
+
+        if( choice === true )
+        {
+            items = items.filter( function( it ) { return ! isAppImport( it ); } );
+            await runAppImports( imports );
+            if( ! items.length ) { setStatus( '' ); await reload(); return; }
+        }
     }
 
     // Warn before overwriting anything that already exists at the destination.
@@ -670,7 +709,7 @@ async function uploadItems( items )
         }
         catch( err )
         {
-            if( String( err && err.message ).indexOf( '507' ) >= 0 )
+            if( err && err.status === 507 )
             {
                 NayiveUI.toast( TF( 'drive.uploadQuota', { name: it.relPath } ) );
                 break;
@@ -692,7 +731,7 @@ async function uploadItems( items )
             try { await officeTwin( toOffice[i].path, true ); done.push( toOffice[i].name ); }
             catch( err )
             {
-                if( String( err && err.message ).indexOf( '503' ) >= 0 ) off = true;   // no LibreOffice: none will
+                if( err && err.status === 503 ) off = true;   // no LibreOffice: none will
                 else failed.push( toOffice[i].name );
             }
         }

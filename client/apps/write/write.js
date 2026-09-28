@@ -8,9 +8,13 @@
  * (classic scripts) have set window.GumApi / NayiveUI / NayiveOffice.
  *
  * The engine under lib/docx-editor/ is vendored and pinned (Apache-2.0, its
- * fonts OFL); see lib/docx-editor/BUILD.md. Only its PUBLIC API is used here -
+ * fonts OFL); see lib/docx-editor/BUILD.md. Its PUBLIC API does the work here -
  * createDocxEditor, load / save / exec / snapshot / on and the toolbar helpers -
  * which is what keeps a version bump one command (docs/write-docx-editor-plan.md).
+ * Where that API has no answer Write reaches past it - editor.surface (links,
+ * the caret's offsets), the painted pages' DOM (spelling, find, autocorrect) and
+ * the typing in its contenteditable - and every such place is a record in
+ * quirks.js, to walk after a bump.
  *
  * The toolbar is ours (toolbar.js), and so are the menus, the dialogs, the
  * find bar (find.js), the right-click menu, the spelling underlines
@@ -23,7 +27,7 @@ import { createDocxEditor, packagedFonts, runToolbarCommand, toolbarCommandState
 import { createToolbar } from './toolbar.js';
 import { createPatcher } from './docx-patch.js';
 import { createFindBar } from './find.js';
-import { PROOF_LANGS, setPersonalWords, isPersonalWord, makeSpellProvider, suggestionsFor } from './proofing.js';
+import { PROOF_LANGS, setPersonalWords, isPersonalWord, makeSpellProvider, suggestionsFor, resetProofing } from './proofing.js';
 import { createSpellOverlay } from './proofing-overlay.js';
 // Every place Write works around the engine, as data - see quirks.js.
 import { Q } from './quirks.js';
@@ -187,7 +191,8 @@ const session = NayiveOffice.session( {
     store      : store,
     appDir     : DOC_DIR,
     openRoot   : OPEN_ROOT,
-    defaultName: 'documento.docx',
+    // Read when "Guardar como" opens: at module load the language is not in yet.
+    get defaultName() { return NayiveUI.t( 'write.defaultFile' ); },
     encode     : function() { return exportBytes(); },
     load       : loadBody,
     blank      : loadBlank,
@@ -545,7 +550,8 @@ async function loadIntoEditor( bytes )
         loadedRevision = editor.getDocumentHandle().revision;
         ready = true;
         refreshToolbar();
-        if( spell ) spell.reset();       // another document: nothing it knew applies
+        resetProofing();                 // another document: nothing it knew applies
+        if( spell ) spell.reset();
     }
 
     focusEditor();
@@ -633,6 +639,7 @@ function changeProofLangs( raw )
     proofLangs = raw ? raw.split( ',' ) : [];
 
     try { localStorage.setItem( PROOF_LANG_KEY, proofLangs.join( ',' ) ); } catch( _ ) {}
+    resetProofing();
     if( spell ) spell.reset();
 }
 
@@ -1017,7 +1024,9 @@ async function renderTemplates( dir )
 }
 
 // A template opens as an UNTITLED document, so the first save asks where it goes
-// - the template itself is never overwritten. An untitled document with edits
+// - the template itself is never overwritten. It is named "<name> (copia)", so
+// "Guardar como" in the templates folder never offers the template's own name
+// either. An untitled document with edits
 // is only in the device draft, and the template takes its place: as with New,
 // it goes at once and the toast's Undo brings it back. One the session cannot
 // keep for that (a password on it) gets New's question instead, while the list
@@ -1038,7 +1047,8 @@ async function useTemplate( path )
         await loadIntoEditor( await fetchBytes( path ) );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
-        session.untitled( baseName( path ), { dirty: true } );
+        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: baseName( path ).replace( /\.docx$/i, '' ) } ) ),
+                          { dirty: true } );
         if( kept ) session.offerBack( kept );
     }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
@@ -1095,7 +1105,7 @@ function renderSymbols()
     {
         const b = document.createElement( 'button' );
         b.type        = 'button';
-        b.className   = 'sym-tab' + ( i === symTab ? ' is-active' : '' );
+        b.className   = 'pill sym-tab' + ( i === symTab ? ' is-active' : '' );
         b.textContent = NayiveUI.t( 'write.sym.' + set.key );
         b.addEventListener( 'click', function() { symTab = i; renderSymbols(); } );
         tabs.appendChild( b );
@@ -1234,6 +1244,9 @@ function showLineSpacing( ls )
     const extra = sel.querySelector( 'option[data-extra]' );
     if( extra ) extra.remove();
 
+    // The multiples in the markup are labelled in the language's own way: "1,5" or "1.5".
+    for( const o of sel.options ) o.textContent = fmtNum( parseFloat( o.value ) );
+
     if( ! ls ) { sel.value = ''; return; }
 
     const v = ls.rule === 'multiple' ? String( Math.round( ls.value * 100 ) / 100 ) : ls.rule + ':' + ls.value;
@@ -1249,25 +1262,31 @@ function showLineSpacing( ls )
 
 // The list part: which level of the caret's list, and how it is numbered. The
 // numbering lives in the saved package, so it is read from there (a save is a
-// few milliseconds) and the fields fill in when it answers.
+// few milliseconds) and the fields fill in when it answers - greyed until then,
+// so a pick made meanwhile is not overwritten by the answer.
+let paraListAsk = 0;     // the newest fillParagraphList: an older answer is dropped
+
 async function fillParagraphList()
 {
     const note  = document.getElementById( 'paListNote' );
     const level = document.getElementById( 'paListLevel' );
     const fmt   = document.getElementById( 'paListFormat' );
+    const mine  = ++paraListAsk;
 
-    level.value = '1';
-    fmt.value   = 'decimal';
-    note.hidden = true;
+    level.value    = '1';
+    fmt.value      = 'decimal';
+    note.hidden    = true;
+    level.disabled = fmt.disabled = false;
 
     let paraId = null;
     try { const sel = editor.snapshot().selection; paraId = sel && sel.from && sel.from.paraId; } catch( _ ) {}
     if( ! paraId || ! slotState( 'list.numbered' ).active ) return;
 
+    level.disabled = fmt.disabled = true;
     try
     {
         const info = patcher.listInfo( new Uint8Array( await editor.save() ), paraId );
-        if( ! info ) return;
+        if( ! info || mine !== paraListAsk ) return;
 
         paraList    = Object.assign( { paraId: paraId }, info );
         level.value = String( Math.min( info.ilvl + 1, level.options.length ) );
@@ -1275,6 +1294,7 @@ async function fillParagraphList()
         showListFormat();
     }
     catch( e ) { console.error( 'Write: list format -', e ); }
+    finally { if( mine === paraListAsk ) level.disabled = fmt.disabled = false; }
 }
 
 // The format select follows the level select: level 2 of a "1, 2, 3" list may
@@ -1403,6 +1423,10 @@ async function applyListFormat()
 
     try
     {
+        // The dialog's other changes armed the autosave: it goes now, not in
+        // the middle of the load below.
+        await session.flush();
+
         const bytes = patcher.withListFormat( new Uint8Array( await editor.save() ), paraList, ilvl, fmt );
         if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
 
@@ -1493,8 +1517,12 @@ function modOnly( e )
            && ! e.altKey && ! e.shiftKey;
 }
 
+// AltGr is Ctrl+Alt to the browser on Windows, so AltGr+2 ("@" on a Spanish or
+// French keyboard) would read as Ctrl+Alt+2. When the keys TYPE something other
+// than the digit, the typing wins. (A Mac needs ⌘, which AltGr never is.)
 function modAlt( e )
 {
+    if( ! IS_MAC && e.key && e.key.length === 1 && ! /[0-9]/.test( e.key ) ) return false;
     return ( IS_MAC ? e.metaKey : e.ctrlKey ) && e.altKey && ! e.shiftKey;
 }
 
@@ -1579,7 +1607,32 @@ function runSlot( slot, value )
         NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
         return;
     }
+    if( slot === 'insert.pageBreak' ) landAfterPageBreak();
     focusEditor();
+}
+
+// A page break as the very last thing in the document gets no page of its own
+// until something follows it, so the caret stays on the old page (quirks.js,
+// pageBreakNotRepainted). Word puts a new paragraph after the break there, and
+// so does Write: the new page appears, with the caret on it. Undo is then two
+// steps, that paragraph and the break.
+function landAfterPageBreak()
+{
+    if( ! Q.pageBreakNotRepainted || ! editor ) return;
+
+    try
+    {
+        const paras = editor.query( { type: 'paragraphs' } ) || [];
+        const last  = paras[ paras.length - 1 ];
+        const snap  = editor.snapshot();
+        const sel   = caretNow();
+
+        if( ! last || ! snap.selection || snap.selection.from.paraId !== last.paraId || ! /\f$/.test( last.text ) ) return;
+        if( ! sel || sel.anchor.offset !== last.text.length || sel.head.offset !== last.text.length ) return;
+
+        editor.surface.splitParagraph();
+    }
+    catch( e ) { console.error( 'Write: page break -', e ); }
 }
 
 // A slot the engine would run but Write holds back. A footnote with text
@@ -2373,12 +2426,12 @@ function caretNow()    { try { return editor.surface.state().selection; } catch(
 function revisionNow() { try { return editor.getDocumentHandle().revision; } catch( _ ) { return -1; } }
 
 // One paragraph's text as painted, character by character (a gap stays empty).
+// Only that paragraph's spans are read - this runs on every space typed.
 function paintedText( pid )
 {
     const out = [];
-    for( const span of document.querySelectorAll( '#editor .layout-run-text[data-paragraph-id][data-start]' ) )
+    for( const span of document.querySelectorAll( '#editor .layout-run-text[data-paragraph-id="' + CSS.escape( String( pid ) ) + '"][data-start]' ) )
     {
-        if( span.getAttribute( 'data-paragraph-id' ) !== pid ) continue;
         const at = Number( span.getAttribute( 'data-start' ) ), t = span.textContent;
         for( let i = 0; i < t.length; i++ ) out[ at + i ] = t[ i ];
     }
@@ -2513,6 +2566,8 @@ function showLinkMenu( act )
 // .docx for good. The engine's insert is asynchronous (it decodes the picture),
 // so it goes through executeImageCommand, not exec.
 
+// What the engine puts into the .docx as it is. Anything else the browser can
+// draw (AVIF, TIFF, HEIC on an iPhone ...) is re-encoded to JPEG first.
 const IMAGE_MIMES = [ 'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/webp' ];
 
 function pickImage()
@@ -2527,9 +2582,13 @@ async function insertPickedImage( file )
 
     try
     {
-        const blob = await shrinkImage( file );
-        const mime = blob.type === 'image/jpg' ? 'image/jpeg' : blob.type;
-        if( IMAGE_MIMES.indexOf( mime ) < 0 ) { NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) ); return; }
+        let   blob = await shrinkImage( file );
+        let   mime = blob.type === 'image/jpg' ? 'image/jpeg' : blob.type;
+        if( IMAGE_MIMES.indexOf( mime ) < 0 )
+        {
+            try { blob = await NayivePhoto.shrinkToJpeg( blob, { maxW: IMAGE_MAX_EDGE, maxH: IMAGE_MAX_EDGE } ); mime = 'image/jpeg'; }
+            catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) ); return; }
+        }
 
         const size = await imagePoints( blob );
         const r = await executeImageCommand( editor, { type: 'insertImage', data: new Uint8Array( await blob.arrayBuffer() ),
@@ -2807,7 +2866,7 @@ function onTbOutside( e )
 const CM_PER_IN = 2.54;
 const TWIPS_PER_IN = 1440;
 
-function fmtCm( v ) { return ( Math.round( v * 100 ) / 100 ).toString().replace( '.', ',' ); }
+function fmtCm( v ) { return fmtNum( v ); }     // "2,5" in Spanish, "2.5" in English
 
 // `max` defaults to 10 cm, which is right for a MARGIN. A custom page size has
 // to pass its own ceiling, or a 15 x 20 cm page comes out 10 x 10.
@@ -2931,9 +2990,14 @@ function confirmPageSetup()
 //----------------------------------------------------------------------------//
 // SAVE
 
+// A .docx is a zip, so it starts "PK". Anything else - an empty buffer, above
+// all - is never handed to the saver: it would empty the file. The throw makes
+// the save fail out loud ("could not be saved"), and the next edit tries again.
 async function exportBytes()
 {
-    return new Uint8Array( await editor.save() );
+    const bytes = new Uint8Array( await editor.save() );
+    if( bytes.length < 4 || bytes[ 0 ] !== 0x50 || bytes[ 1 ] !== 0x4B ) throw new Error( 'Write: the engine gave no .docx to save (' + bytes.length + ' bytes)' );
+    return bytes;
 }
 
 // Ctrl-S / the menu: save now. An untitled or someone else's document goes to
