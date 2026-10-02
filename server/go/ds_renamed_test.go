@@ -7,6 +7,7 @@ package main
 // person of the same name (L1 L2 L3).
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -314,9 +315,10 @@ func TestDS_L1_DeleteUserDropsConversions(t *testing.T) {
 
 // TestDS_L1_DroppedRunningJobTellsNobody: the job converting right now when
 // its owner is deleted leaves the queue at once (nothing shows it as
-// running), and its end is told to nobody - the name may be a new person's.
+// running), and its end is told to nobody - the name may be a new person's:
+// a new ana with a phone, given the name while it ran, gets no push of it.
 func TestDS_L1_DroppedRunningJobTellsNobody(t *testing.T) {
-	srv, _, _ := newTestServer(t)
+	srv, ts, _ := newTestServer(t)
 	job := ConvertJob{User: "ana", Path: "files/Pelis/prueba.avi", Added: time.Now().Unix()}
 	next := ConvertJob{User: "beto", Path: "files/suya.avi", Added: time.Now().Unix()}
 	srv.convert.mu.Lock()
@@ -330,5 +332,20 @@ func TestDS_L1_DroppedRunningJobTellsNobody(t *testing.T) {
 	}
 	if srv.convert.stillQueued(job) {
 		t.Fatalf("the dropped job still counts as queued: its end would be pushed to the name")
+	}
+
+	// The home goes and a NEW ana gets the name, with a phone. Then the
+	// dropped run ends: her home has no such film, so it fails - and the
+	// failure is what would be pushed to her.
+	adminCall(t, ts.URL, `{"action":"delete-user","name":"ana"}`, http.StatusOK)
+	adminCall(t, ts.URL, `{"action":"create-user","name":"ana","password":"nueva123"}`, http.StatusOK)
+	pushed := zoneRingService(t, srv)
+	sub := testSub(t, "https://fcm.googleapis.com/fcm/send/nueva-ana")
+	if got := srv.users.AddPushSub("ana", sub.Endpoint, sub.Keys.P256dh, sub.Keys.Auth, "es", "Móvil", nil); got != "added" {
+		t.Fatalf("the new ana's phone: %s", got)
+	}
+	srv.convert.runOne(context.Background(), job)
+	if got := pushed(); len(got) != 0 {
+		t.Fatalf("the new ana was told of the deleted person's film: pushes to %v", got)
 	}
 }

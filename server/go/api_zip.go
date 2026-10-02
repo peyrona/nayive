@@ -127,14 +127,15 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
+	// A home the admin moved under the request: 503, never 404 (sendMissing).
 	info, err := src.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		sendError(w, r, http.StatusNotFound, "no existe")
+		sendMissing(w, r, err, "no existe")
 		return
 	}
 	f, err := src.Open()
 	if err != nil {
-		sendError(w, r, http.StatusNotFound, "no existe")
+		sendMissing(w, r, err, "no existe")
 		return
 	}
 	defer f.Close()
@@ -645,13 +646,16 @@ func (s *Server) zipSources(role, user string, virts []string) (items []zipSourc
 		if !ok {
 			return items, total, firstDir, roots, http.StatusForbidden, "forbidden"
 		}
+		// A home the admin moved under the request: 503, never 404 (missingStatus).
 		info, err := src.Stat()
 		if err != nil || !(info.Mode().IsRegular() || info.IsDir()) {
-			return items, total, firstDir, roots, http.StatusNotFound, "no existe"
+			status, msg = missingStatus(err, "no existe")
+			return items, total, firstDir, roots, status, msg
 		}
 		rt, err := src.open()
 		if err != nil {
-			return items, total, firstDir, roots, http.StatusNotFound, "no existe"
+			status, msg = missingStatus(err, "no existe")
+			return items, total, firstDir, roots, status, msg
 		}
 		roots = append(roots, rt)
 		if i == 0 {

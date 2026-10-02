@@ -65,9 +65,10 @@ func (s *Server) filesCopy(w http.ResponseWriter, r *http.Request, role, user st
 		sendError(w, r, http.StatusForbidden, "no se puede copiar esa carpeta")
 		return
 	}
+	// A home the admin moved under the request: 503, never 404 (sendMissing).
 	info, err := src.Stat()
 	if err != nil || !(info.Mode().IsRegular() || info.IsDir()) {
-		sendError(w, r, http.StatusNotFound, "source not found")
+		sendMissing(w, r, err, "source not found")
 		return
 	}
 	// A folder into itself would copy for ever.
@@ -83,7 +84,7 @@ func (s *Server) filesCopy(w http.ResponseWriter, r *http.Request, role, user st
 
 	srcRoot, err := src.open()
 	if err != nil {
-		sendError(w, r, http.StatusNotFound, "source not found")
+		sendMissing(w, r, err, "source not found")
 		return
 	}
 	defer srcRoot.Close()

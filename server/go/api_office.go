@@ -55,8 +55,9 @@ func (s *Server) apiOffice(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
+	// A home the admin moved under the request: 503, never 404 (sendMissing).
 	if info, err := src.Stat(); err != nil || !info.Mode().IsRegular() {
-		sendError(w, r, http.StatusNotFound, "no existe")
+		sendMissing(w, r, err, "no existe")
 		return
 	}
 	twinVirt := path.Join(path.Dir(virt), twinName)

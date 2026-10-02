@@ -150,11 +150,13 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// Drive's "Subir y convertir": hand the video to convert.go's queue. Only a
 	// user's own file - never in a shared folder (the job ends by moving the
 	// original to the papelera, and nothing is ever taken out of a shared
-	// folder) and never the admin's (no devices to tell).
+	// folder) and never the admin's (no devices to tell). With the path's
+	// epoch: an account renamed while the body streamed queues nothing under
+	// its old name (EnqueueAt).
 	answer := map[string]string{"message": "saved"}
 	if queryValue(r, "convert") == "mp4" && role == "user" && !IsSharedPath(fileRel) &&
 		IsConvertible(target.Abs) &&
-		s.convert.Enqueue(user, strings.Join(splitPath(fileRel), "/")) {
+		s.convert.EnqueueAt(user, strings.Join(splitPath(fileRel), "/"), target.epoch) {
 		answer["convert"] = "queued"
 	}
 	sendJSON(w, r, http.StatusOK, answer)
@@ -377,6 +379,16 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	// moment passed it too. The same check again, and the rename, under this
 	// path's lock: of two saves from the same base, the later one now gets 412
 	// instead of silently winning (S2-#8).
+	//
+	// The stripe is the path's as it was APPROVED. Should the admin rename the
+	// account while the body streams, this write follows the open folder into
+	// the renamed home, while a save of the same file sent from the new name
+	// takes the new path's stripe: two If-Match saves from one version, one
+	// on each side of the rename, could then both pass. Known and left: it
+	// needs a save from the old name still streaming when the renamed person,
+	// signed in again, saves the same file. Keying the stripe by the file
+	// instead would have to change every lockPath caller (the bin, a move,
+	// the Office twin...) at once, or this one would stop excluding them.
 	unlock := lockPath(target.Abs)
 	defer unlock()
 	if staleBase(r, func() (os.FileInfo, error) { return root.Stat(target.Rel) }) {

@@ -601,8 +601,11 @@ func (s *Server) mediaEnd(w http.ResponseWriter, r *http.Request, dev *deviceRow
 	if isJPEGName(rel) {
 		go s.photoUploaded(dev.Owner, rel, target)
 	}
+	// With `home`'s epoch - the path approved when this request came in, not
+	// `target`, stamped just now: an account renamed or deleted meanwhile
+	// queues nothing under its old name (EnqueueAt).
 	if IsConvertible(rel) {
-		s.convert.Enqueue(dev.Owner, rel)
+		s.convert.EnqueueAt(dev.Owner, rel, home.epoch)
 	}
 }
 
