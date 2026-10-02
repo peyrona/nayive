@@ -53,6 +53,12 @@ var (
 	// the job is done, but a leftover stayed (SaveDraft: the old draft)
 	errMailLeftover = errors.New("mail: done, but the old copy stayed")
 	errMailRejected = errors.New("mail: the server refused it")
+	// in none of the five trays, but still on the server (archived on the
+	// phone, moved to a folder of its own): its labels stay (I3)
+	errMailElsewhere = errors.New("mail: that message is in another folder")
+	// the message was handed over and the line died before the server said
+	// it took it: it MAY have gone - never "not sent" (I6)
+	errMailUnsure = errors.New("mail: no answer once the message was handed over: it may have gone")
 )
 
 // mailRejectError: the mail server REFUSED (an unknown recipient, too big, a
@@ -157,6 +163,11 @@ type MailMessage struct {
 	Cc      []MailAddr `json:"cc,omitempty"`
 	Bcc     []MailAddr `json:"bcc,omitempty"` // only a draft has it
 	ReplyTo []MailAddr `json:"replyTo,omitempty"`
+	// a draft's To, Cc and Bcc as typed, when some of it was not an address
+	// yet ("juan"): the writer shows these instead (mail_compose.go draftAddrs)
+	ToText  string `json:"toText,omitempty"`
+	CcText  string `json:"ccText,omitempty"`
+	BccText string `json:"bccText,omitempty"`
 	// the thread so far (its References header), for a reply to carry on
 	References []string   `json:"references,omitempty"`
 	Text       string     `json:"text,omitempty"`
@@ -268,6 +279,28 @@ type MailProvider interface {
 
 	// Close drops the connection, if any.
 	Close()
+}
+
+// mailAnywhere: a provider that can tell whether a Message-ID is anywhere at
+// all on the server - not only in the five trays (Find). A label's tag is
+// dropped only when it is nowhere (data-safety I3). A name it cannot search
+// for ("h:") answers true: the safe side.
+type mailAnywhere interface {
+	Anywhere(ctx context.Context, messageID string) (bool, error)
+}
+
+// mailFinderAll: a provider that can name EVERY copy of a Message-ID in a
+// tray (Find gives only the newest): a mail to yourself deleted from the
+// Inbox and from Sent sits in the Trash twice (data-safety I9).
+type mailFinderAll interface {
+	FindAll(ctx context.Context, messageID string, role MailRole) ([]MailSummary, error)
+}
+
+// mailTrashGuess: a provider whose Trash may be a guess by its name (IMAP
+// with no SPECIAL-USE): the purge deletes for good only from the folder it
+// first took for the Trash (data-safety I7).
+type mailTrashGuess interface {
+	trashFolder(ctx context.Context) (folder string, marked bool, err error)
 }
 
 // mailSendChecker: a provider that can check, before an account is kept,

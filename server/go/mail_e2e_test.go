@@ -15,6 +15,7 @@ package main
 //	/e2e/sent            the mails "sent" (the SMTP is a fake)
 //	/e2e/draft?fail=1    the next draft saves fail (0: they work again)
 //	/e2e/draft?slow=MS   draft saves wait MS first
+//	/e2e/send?nocopy=1   sends go, but their copy in Sent fails (0: it works again)
 // =============================================================================
 
 import (
@@ -41,11 +42,26 @@ type e2eState struct {
 	sent      []sentMail
 	draftFail bool
 	draftSlow time.Duration
+	noCopy    bool
 }
 
 type e2eProvider struct {
 	*imapProvider
 	st *e2eState
+}
+
+// Send: as the real one - or, /e2e/send?nocopy=1, sent with no copy in Sent.
+func (p e2eProvider) Send(ctx context.Context, raw, copy []byte, from string, rcpts []string) error {
+	p.st.mu.Lock()
+	noCopy := p.st.noCopy
+	p.st.mu.Unlock()
+	if noCopy {
+		if err := p.smtp(ctx, p.acct, from, rcpts, raw); err != nil {
+			return err
+		}
+		return errMailNoCopy
+	}
+	return p.imapProvider.Send(ctx, raw, copy, from, rcpts)
 }
 
 func (p e2eProvider) SaveDraft(ctx context.Context, raw []byte, mid string, old *MailRef) (MailRef, []MailPart, error) {
@@ -162,6 +178,14 @@ func TestMailE2EServe(t *testing.T) {
 			out = append(out, map[string]any{"from": m.from, "rcpts": m.rcpts, "raw": m.raw})
 		}
 		json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("/e2e/send", func(w http.ResponseWriter, r *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if v := r.URL.Query().Get("nocopy"); v != "" {
+			st.noCopy = v == "1"
+		}
+		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/e2e/draft", func(w http.ResponseWriter, r *http.Request) {
 		st.mu.Lock()

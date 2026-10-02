@@ -19,6 +19,9 @@
  * the writer back as it was. A page closed before that sends NOTHING: the
  * mail stays in Drafts. When the draft cannot be saved first (offline, a
  * change typed during that save), it is sent at once, as before, no Undo.
+ * One draft goes once: a Send again of it in the next minutes (its answer
+ * lost on the way) is refused by the server ("sent"); sent with no copy in
+ * Sent, its draft stays and a toast says so (data-safety I5, I6).
  *
  * FILES: the clip opens Chat's panel - a document from this device, one from
  * Nayive (a Drive path - the server reads it), or pictures from the gallery -
@@ -40,7 +43,8 @@
  *
  * ADDRESSES: typed freely ("Ana <ana@x.es>, bob@y.com"); the Contacts app's
  * addresses that fit the word being typed show under the field (arrows +
- * Enter, or a tap). The server checks them all before sending.
+ * Enter, or a tap). The server checks them all before sending; a draft
+ * keeps them as typed, also "juan" (msg.toText - data-safety I1).
  *
  * NEVER LOST (data-safety I1, I4): what the writer holds is also kept on
  * this device as it is typed (THE COPY ON THIS DEVICE, below) until the
@@ -182,8 +186,10 @@
                 C.files.push( { kind: "keep", acct: acct, ref: msg.ref, part: p.id, name: p.name, size: p.size } );
             } );
             // its HTML (ours, or one made elsewhere - cleaned down to what
-            // the editor keeps), else its plain text
-            show( { to: addrs( msg.to ), cc: addrs( msg.cc ), bcc: addrs( msg.bcc ), subject: msg.subject || "",
+            // the editor keeps), else its plain text. Its fields as typed when
+            // some of it was no address yet ("juan": a draft keeps it, I1)
+            show( { to: msg.toText || addrs( msg.to ), cc: msg.ccText || addrs( msg.cc ), bcc: msg.bccText || addrs( msg.bcc ),
+                    subject: msg.subject || "",
                     html: msg.html ? bodyOf( msg.html ) : null, text: msg.text || "" } );
             C.typed = true;
         }
@@ -586,7 +592,9 @@
         var fd = new FormData(), keep = [], drive = [], up = [];
         mine.files.forEach( function ( f )
         {
-            if( f.kind === "keep" )  { out.keep.push( { acct: f.acct, ref: f.ref, part: f.part } ); keep.push( f ); }
+            // its name and size: the server finds it again in the newest draft when another
+            // device replaced the one it is kept from (api_mail.go mailKeptAgain)
+            if( f.kind === "keep" )  { out.keep.push( { acct: f.acct, ref: f.ref, part: f.part, name: f.name, size: f.size } ); keep.push( f ); }
             if( f.kind === "drive" ) { out.drive.push( f.path ); drive.push( f ); }
             if( f.kind === "up" )    { fd.append( "file", f.file, f.name ); up.push( f ); }
         } );
@@ -864,11 +872,13 @@
         E.$( "cStatus" ).textContent = E.T( "mail.sending" );
         try
         {
-            await post( mine.acct, "send", form( mine.acct, mine ) );
+            var r = await post( mine.acct, "send", form( mine.acct, mine ) );
             if( mine.draftAcct && mine.draftAcct !== mine.acct ) dropDraft( mine.draftAcct, mine.draftRef );   // written in the other account
             if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );
             E.plug( "synced" );
-            NayiveUI.toast( E.T( "mail.sent" ) );
+            // no copy in Sent: its draft stayed, the only copy of the words (I5)
+            if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
+            else NayiveUI.toast( E.T( "mail.sent" ) );
             leave( true );
         }
         catch( err )
@@ -907,16 +917,19 @@
     }
 
     // The real send, the Undo gone. No toast when it went (one would take the
-    // place of another Undo on show); when it failed, the writer comes back
-    // saying why - its draft is still in Drafts - or, while another one is
-    // being written, a toast says so.
+    // place of another Undo on show) - but when its copy in Sent failed, the
+    // server kept its draft (the only copy of the words) and that IS said
+    // (data-safety I5). When it failed, the writer comes back saying why -
+    // its draft is still in Drafts - or, while another one is being written,
+    // a toast says so.
     function sendNow( mine, fields )
     {
         E.plug( "saving" );
-        post( mine.acct, "send", form( mine.acct, mine, fields ) ).then( function ()
+        post( mine.acct, "send", form( mine.acct, mine, fields ) ).then( function ( r )
         {
             mine.sending = false;
             E.plug( "synced" );
+            if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
             if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! S.selecting ) E.loadList( false );
         }, function ( err )
         {

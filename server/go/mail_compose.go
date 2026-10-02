@@ -68,6 +68,11 @@ type mailKeepRef struct {
 	Acct string `json:"acct"`
 	Ref  string `json:"ref"`
 	Part string `json:"part"`
+	// the file as the writer knows it: its name and size in bytes - to find
+	// it again in the newest draft when this draft was replaced elsewhere
+	// (api_mail.go mailKeptAgain)
+	Name string `json:"name,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 type mailOutFile struct {
@@ -124,19 +129,96 @@ func splitAddrs(s string) []string {
 	return out
 }
 
-// buildMail writes the message. draft: keep Bcc in it.
+// The headers that keep a draft's To, Cc and Bcc AS TYPED when some of it is
+// not an address yet ("juan", "ana@", a name half written): see draftAddrs.
+// Only a draft ever has them.
+const (
+	mailTypedTo  = "X-Nayive-To"
+	mailTypedCc  = "X-Nayive-Cc"
+	mailTypedBcc = "X-Nayive-Bcc"
+)
+
+// draftAddrs reads a draft's typed list: the addresses in it, and - when a
+// piece of it is not one - the whole field as typed, to keep beside them
+// (typedAddrs gives it back). A draft is never refused for an address: a To
+// like "juan" (to look up later) made EVERY save fail, and the whole mail
+// lived only in the open page (data-safety I1, mail-chat #1). Only Send
+// refuses one (parseAddrs).
+func draftAddrs(s string) ([]*netmail.Address, string) {
+	var out []*netmail.Address
+	odd := false
+	for _, one := range splitAddrs(s) {
+		if a, err := netmail.ParseAddress(one); err == nil {
+			out = append(out, a)
+		} else {
+			odd = true
+		}
+	}
+	if !odd {
+		return out, ""
+	}
+	// one header line: no line breaks or control characters, not endless
+	typed := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+	return out, clipRunes(strings.TrimSpace(typed), 2000)
+}
+
+// typedAddrs is a draft's field as it was typed (from its X-Nayive-... header),
+// when the addresses in it are still the ones the draft's real header holds -
+// another mail program that changed the draft's To since leaves our note
+// stale, and the real header wins then. "" = show the addresses.
+func typedAddrs(typed string, have []MailAddr) string {
+	typed = strings.TrimSpace(typed)
+	if typed == "" {
+		return ""
+	}
+	var a, b []string
+	for _, one := range splitAddrs(typed) {
+		if x, err := netmail.ParseAddress(one); err == nil {
+			a = append(a, strings.ToLower(x.Address))
+		}
+	}
+	for _, x := range have {
+		b = append(b, strings.ToLower(x.Addr))
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	if strings.Join(a, ",") != strings.Join(b, ",") {
+		return ""
+	}
+	return typed
+}
+
+// keepTyped fills a draft's typed fields (MailMessage.ToText...) from its
+// X-Nayive-... headers, where they still hold (typedAddrs).
+func (m *MailMessage) keepTyped(to, cc, bcc string) {
+	m.ToText, m.CcText, m.BccText = typedAddrs(to, m.To), typedAddrs(cc, m.Cc), typedAddrs(bcc, m.Bcc)
+}
+
+// buildMail writes the message. draft: keep Bcc in it, and the fields as
+// typed where an address does not parse yet (draftAddrs).
 func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string, draft bool) ([]byte, []*netmail.Address, error) {
-	to, err := parseAddrs(m.To)
-	if err != nil {
-		return nil, nil, err
-	}
-	cc, err := parseAddrs(m.Cc)
-	if err != nil {
-		return nil, nil, err
-	}
-	bcc, err := parseAddrs(m.Bcc)
-	if err != nil {
-		return nil, nil, err
+	var to, cc, bcc []*netmail.Address
+	var typed [3]string
+	if draft {
+		to, typed[0] = draftAddrs(m.To)
+		cc, typed[1] = draftAddrs(m.Cc)
+		bcc, typed[2] = draftAddrs(m.Bcc)
+	} else {
+		var err error
+		if to, err = parseAddrs(m.To); err != nil {
+			return nil, nil, err
+		}
+		if cc, err = parseAddrs(m.Cc); err != nil {
+			return nil, nil, err
+		}
+		if bcc, err = parseAddrs(m.Bcc); err != nil {
+			return nil, nil, err
+		}
 	}
 	rcpts := append(append(append([]*netmail.Address{}, to...), cc...), bcc...)
 
@@ -151,6 +233,11 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 	}
 	if draft && len(bcc) > 0 {
 		h.SetAddressList("Bcc", bcc)
+	}
+	for i, k := range []string{mailTypedTo, mailTypedCc, mailTypedBcc} {
+		if typed[i] != "" {
+			h.SetText(k, typed[i]) // RFC 2047 words for what is not ASCII
+		}
 	}
 	h.SetSubject(strings.TrimSpace(m.Subject))
 	h.SetMessageID(mid)

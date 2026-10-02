@@ -11,6 +11,10 @@ package main
 //	labels.json    {"labels": [{id,name,color}], "tags": {"<acct>|<message-id>": tag}}
 //	trash.json     {"<acct>|<message-id>": {"at", "from"}}
 //	settings.json  {"trashDays": 30, "showImages": false, "signature": ""}
+//	state.json     {"sent": {"<acct>|<message-id>": at}, "trash": {"<acct>": folder}, "purgeAt": at}
+//	               what the server notes for itself: the drafts sent lately (a
+//	               second Send of one is refused, I6), each account's Trash folder
+//	               when it is only a guess by its name (I7), the purge's last run (J8)
 //
 // A MESSAGE is known by its Message-ID header: it stays the same when the
 // message moves between trays, where the provider's own address (the ref)
@@ -41,6 +45,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -293,7 +298,91 @@ func (h *MailHub) loadExtraLocked(name string, u *mailUser, file string, first b
 		}
 		settings.TrashDays = clampTrashDays(settings.TrashDays)
 		u.settings = settings
+	case "state.json":
+		var state mailStateFile
+		if !h.loadMailFile(name, u, file, &state) && !first {
+			return
+		}
+		if state.Sent == nil {
+			state.Sent = map[string]time.Time{}
+		}
+		if state.Trash == nil {
+			state.Trash = map[string]string{}
+		}
+		u.state = state
 	}
+}
+
+// mailStateFile is state.json (see the top).
+type mailStateFile struct {
+	Sent    map[string]time.Time `json:"sent"`
+	Trash   map[string]string    `json:"trash"`
+	PurgeAt time.Time            `json:"purgeAt"`
+}
+
+func (h *MailHub) saveStateLocked(user string, u *mailUser) error {
+	return h.writeMailFile(user, "state.json", u.state)
+}
+
+// -----------------------------------------------------------------------------
+// one draft goes once (data-safety I6)
+// -----------------------------------------------------------------------------
+
+// mailSentHold: how long a draft sent stays "sent" - a Send of the same
+// draft (its Message-ID) in that time is refused.
+const mailSentHold = 10 * time.Minute
+
+// claimSend: may this draft go now? Not while another Send of it is on its
+// way, nor when it went less than mailSentHold ago: its answer lost on the
+// way brought the writer back "not sent", and Send again would send it twice.
+// True: it is the caller's - then sendDone or sendUndo, always.
+func (h *MailHub) claimSend(user, acct, mid string) bool {
+	key := mailKey(acct, mid)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked(user)
+	if u.sending[key] {
+		return false
+	}
+	if at, ok := u.state.Sent[key]; ok {
+		// either way: a clock put back must not let it go again at once
+		if d := time.Since(at); d < mailSentHold && d > -mailSentHold {
+			return false
+		}
+	}
+	if u.sending == nil {
+		u.sending = map[string]bool{}
+	}
+	u.sending[key] = true
+	return true
+}
+
+// sendDone: it went (or may have): held as sent, on disk too - a restart
+// keeps it. The old ones are let go.
+func (h *MailHub) sendDone(user, acct, mid string) {
+	key := mailKey(acct, mid)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked(user)
+	delete(u.sending, key)
+	now := time.Now().UTC().Truncate(time.Second)
+	for k, at := range u.state.Sent {
+		if d := now.Sub(at); d >= mailSentHold || d <= -mailSentHold {
+			delete(u.state.Sent, k)
+		}
+	}
+	u.state.Sent[key] = now
+	if err := h.saveStateLocked(user, u); err != nil {
+		// held in memory still: only a restart in the next minutes forgets it
+		h.log.Warn("mail: noting a mail sent", "user", user, "err", err)
+	}
+}
+
+// sendUndo: it did not go (refused, or no line before it was handed over).
+func (h *MailHub) sendUndo(user, acct, mid string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.userLocked(user).sending, mailKey(acct, mid))
 }
 
 func clampTrashDays(n int) int {
@@ -718,12 +807,22 @@ func (h *MailHub) Settings(user string) MailSettings {
 }
 
 func (h *MailHub) SetSettings(user string, s MailSettings) (MailSettings, error) {
-	s.TrashDays = clampTrashDays(s.TrashDays)
-	s.Signature = cleanSignature(s.Signature)
+	return h.PatchSettings(user, func(st *MailSettings) { *st = s })
+}
+
+// PatchSettings changes the settings as `change` says, read and written under
+// one hold of the lock: a read here and a write later let two devices saving
+// two settings at once put back each other's old value (data-safety I10,
+// mail-chat #14).
+func (h *MailHub) PatchSettings(user string, change func(*MailSettings)) (MailSettings, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	u := h.userLocked(user)
 	before := u.settings
+	s := before
+	change(&s)
+	s.TrashDays = clampTrashDays(s.TrashDays)
+	s.Signature = cleanSignature(s.Signature)
 	u.settings = s
 	if err := h.writeMailFile(user, "settings.json", s); err != nil {
 		u.settings = before
@@ -736,12 +835,36 @@ func (h *MailHub) SetSettings(user string, s MailSettings) (MailSettings, error)
 // than the user's days - or everything, for "Empty Trash" (all). It answers
 // how many went.
 func (h *MailHub) purgeAccount(ctx context.Context, user string, a *mailAcct, all bool) (int, error) {
+	if !all { // "Empty Trash" is the user's own ask, on what he sees in the Trash
+		if err := h.purgeClockOK(user); err != nil {
+			return 0, err
+		}
+		if g, ok := a.prov.(mailTrashGuess); ok {
+			folder, marked, err := g.trashFolder(ctx)
+			if err != nil {
+				return 0, err
+			}
+			if folder != "" && !marked {
+				if err := h.trashFirstUse(user, a.ID, folder); err != nil {
+					return 0, err
+				}
+			}
+		}
+	}
 	rows, err := a.prov.Scan(ctx, RoleTrash)
 	if err != nil {
 		return 0, err
 	}
 	h.mu.Lock()
 	u := h.userLocked(user)
+	// The account must still be this user's own: the Trash scan above may
+	// span a delete of the user (or of the account) and a new one of the
+	// same name - whose clocks, labels and "a1" belong to someone else. The
+	// purge stops (L1).
+	if !slices.Contains(u.accts, a) {
+		h.mu.Unlock()
+		return 0, errMailGone
+	}
 	// The clocks (trash.json) or the user's days (settings.json) unread: the
 	// days would be the default and the clocks would restart, so the
 	// automatic purge could delete mail kept for longer on purpose. It waits
@@ -791,6 +914,85 @@ func (h *MailHub) purgeAccount(ctx context.Context, user string, a *mailAcct, al
 	done := mailDone(doomedRows, failed)
 	h.forget(user, a.ID, done, true)
 	return len(done), nil
+}
+
+var (
+	errMailClock      = errors.New("mail: purge skipped: the clock is far ahead of its last run")
+	errMailTrashMoved = errors.New("mail: purge skipped: the Trash guessed now is not the one of first use")
+)
+
+// purgeClockOK: may the automatic purge trust the clock now? Each purge
+// measures how long mail has been in the Trash against the server's clock,
+// and a clock that jumped forward at boot (no battery clock, NTP late, a VPS
+// restored from a snapshot with a wrong date) would make every Trash clock
+// look old and delete for good what the user still has days to get back
+// (data-safety J8, mail-chat #25). So its last run's time is kept on disk
+// (state.json purgeAt): more than a day beyond the usual round since then,
+// and it waits - logged - until the clock has kept step with the monotonic
+// one for a whole round (a wrong clock is put right by then). Note: a server
+// that was really off for days waits that one round too.
+func (h *MailHub) purgeClockOK(user string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked(user)
+	if u.damaged["state.json"] != nil { // its last run unknown: no guess
+		return fmt.Errorf("mail: purge skipped: %w", errDamaged)
+	}
+	now := time.Now()
+	if last := u.state.PurgeAt; !last.IsZero() && now.Sub(last) > mailPurgeEvery+24*time.Hour {
+		if u.clockJump.IsZero() || !clockSteady(u.clockJump, now) {
+			if u.clockJump.IsZero() {
+				h.log.Warn("mail: the clock is far ahead of the purge's last run - no purge until it has kept time for a round",
+					"user", user, "last", last, "now", now.UTC())
+			}
+			u.clockJump = now
+			return errMailClock
+		}
+		h.log.Warn("mail: the clock kept time for a round - the purge runs again", "user", user, "last", last)
+	}
+	u.clockJump = time.Time{}
+	u.state.PurgeAt = now.UTC().Truncate(time.Second)
+	if err := h.saveStateLocked(user, u); err != nil {
+		h.log.Warn("mail: saving state.json", "user", user, "err", err)
+	}
+	return nil
+}
+
+// clockSteady: from `since` to `now` (both with their monotonic reading) a
+// whole purge round passed, and the wall clock moved as much as the
+// monotonic one - nobody put it right in between.
+func clockSteady(since, now time.Time) bool {
+	mono := now.Sub(since)
+	drift := now.Round(0).Sub(since.Round(0)) - mono
+	return mono >= mailPurgeEvery-time.Minute && drift < time.Minute && drift > -time.Minute
+}
+
+// trashFirstUse: the automatic purge deletes for good from a Trash that is
+// only a guess by its name (no SPECIAL-USE) only when it is the folder taken
+// for the Trash the first time - kept in state.json. Another one since (a
+// folder named "Bin" made later, listed before the real one): no purge, and
+// the log says so (data-safety I7, mail-chat #6).
+func (h *MailHub) trashFirstUse(user, acct, folder string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked(user)
+	if !slices.ContainsFunc(u.accts, func(x *mailAcct) bool { return x.ID == acct }) {
+		return errMailGone // not this user's any more (L1): nothing noted for it
+	}
+	switch first := u.state.Trash[acct]; {
+	case first == "":
+		u.state.Trash[acct] = folder
+		if err := h.saveStateLocked(user, u); err != nil {
+			delete(u.state.Trash, acct)
+			return err
+		}
+		h.log.Info("mail: the Trash is a guess by its name; the purge keeps to that folder", "user", user, "account", acct, "folder", folder)
+	case first != folder:
+		h.log.Warn("mail: the Trash guessed now is not the one of first use - no purge",
+			"user", user, "account", acct, "first", first, "now", folder)
+		return errMailTrashMoved
+	}
+	return nil
 }
 
 // mailDone is the rows the provider did not name as refused.

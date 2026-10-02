@@ -104,8 +104,10 @@
         var code = err && err.code;
         var words = err && err.text ? ": " + err.text : "";
         if( code === "rejected" || code === "smtp" ) return E.T( "mail.err." + code ) + words;
+        // damaged: a mail file the server never writes over; elsewhere: in no tray, its labels
+        // kept; unsure / sent: a mail that may have gone, never sent twice (data-safety I3, I6)
         if( [ "auth", "gone", "dup", "bad", "hosts", "blocked", "notray", "addr", "big", "norcpt", "url", "offline",
-              "toobig", "private", "key" ].indexOf( code ) >= 0 )
+              "toobig", "private", "key", "damaged", "elsewhere", "unsure", "sent" ].indexOf( code ) >= 0 )
             return E.T( "mail.err." + code );
         return E.T( "mail.err.down" );
     };

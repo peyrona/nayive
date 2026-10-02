@@ -85,6 +85,13 @@ type mailUser struct {
 	labels   mailLabelsFile            // mail_labels.go
 	trash    map[string]mailTrashEntry // "<acct>|<message-id>" -> when, from where
 	settings MailSettings
+	state    mailStateFile // what the server notes for itself (mail_labels.go)
+	// sending: the mails being sent right now ("<acct>|<draft message-id>"),
+	// so a second Send of one cannot start while the first is on its way (I6)
+	sending map[string]bool
+	// clockJump: when the purge last found the clock far ahead of its last
+	// run (J8) - with the monotonic reading, to tell a clock put right since
+	clockJump time.Time
 	// damaged: the files that were there but could not be read or parsed
 	// (file name -> why). writeMailFile never writes over one (F4): what
 	// memory holds of it is empty, and the file still has every account, label
@@ -238,7 +245,7 @@ func (h *MailHub) userLocked(name string) *mailUser {
 	}
 	u := &mailUser{}
 	h.loadAccountsLocked(name, u, true)
-	for _, file := range []string{"labels.json", "trash.json", "settings.json"} {
+	for _, file := range []string{"labels.json", "trash.json", "settings.json", "state.json"} {
 		h.loadExtraLocked(name, u, file, true)
 	}
 	h.owners[name] = u
@@ -337,6 +344,10 @@ func mailErrCode(err error) string {
 		return "auth"
 	case errors.Is(err, errMailGone):
 		return "gone"
+	case errors.Is(err, errMailElsewhere):
+		return "elsewhere"
+	case errors.Is(err, errMailUnsure):
+		return "unsure"
 	case errors.Is(err, errMailNoTray):
 		return "notray"
 	case errors.Is(err, errMailKey):
@@ -590,11 +601,20 @@ func (h *MailHub) Remove(user, id string) (bool, error) {
 				delete(u.labels.Tags, key)
 			}
 		}
+		for key := range u.state.Sent {
+			if strings.HasPrefix(key, id+"|") {
+				delete(u.state.Sent, key)
+			}
+		}
+		delete(u.state.Trash, id)
 		if err := h.saveTrashLocked(user, u); err != nil {
 			h.log.Warn("mail: saving trash.json", "user", user, "err", err)
 		}
 		if err := h.saveLabelsLocked(user, u); err != nil {
 			h.log.Warn("mail: saving labels", "user", user, "err", err)
+		}
+		if err := h.saveStateLocked(user, u); err != nil {
+			h.log.Warn("mail: saving state.json", "user", user, "err", err)
 		}
 		return true, nil
 	}

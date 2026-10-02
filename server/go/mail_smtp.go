@@ -140,6 +140,12 @@ func smtpSend(ctx context.Context, a MailAccount, from string, rcpts []string, r
 		return err
 	}
 	if err := w.Close(); err != nil {
+		var te *textproto.Error
+		if !errors.As(err, &te) {
+			// the end of the message went, the server's answer did not
+			// come: it may have taken it - never "not sent" (I6)
+			return fmt.Errorf("%w: %v", errMailUnsure, err)
+		}
 		return smtpRefused(err, "")
 	}
 	c.Quit() // it is sent: a server that hangs up without its 221 changes nothing

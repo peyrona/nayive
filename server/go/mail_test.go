@@ -334,11 +334,12 @@ func TestMailFoldersBySpecialUse(t *testing.T) {
 		{Mailbox: "Sent", Delim: '/'},
 		{Mailbox: "[Gmail]/Borradores", Delim: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrDrafts}},
 		{Mailbox: "[Gmail]/Spam", Delim: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrJunk}},
-		{Mailbox: "[Gmail]/Papelera", Delim: '/'},
+		{Mailbox: "[Gmail]/Papelera", Delim: '/'}, // nested and unmarked: never a guess (I7)
+		{Mailbox: "Papelera", Delim: '/'},
 		{Mailbox: "Work", Delim: '/'},
 	})
 	want := map[MailRole]string{RoleInbox: "INBOX", RoleSent: "[Gmail]/Sent Mail", RoleDrafts: "[Gmail]/Borradores",
-		RoleSpam: "[Gmail]/Spam", RoleTrash: "[Gmail]/Papelera"}
+		RoleSpam: "[Gmail]/Spam", RoleTrash: "Papelera"}
 	for r, w := range want {
 		if got[r] != w {
 			t.Errorf("%s = %q, want %q", r, got[r], w)

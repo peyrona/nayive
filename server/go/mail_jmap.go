@@ -730,6 +730,10 @@ type jmapEmail struct {
 	HTMLBody      []jmapPart               `json:"htmlBody"`
 	Attachments   []jmapPart               `json:"attachments"`
 	BodyValues    map[string]jmapBodyValue `json:"bodyValues"`
+	// a draft's fields as typed (mail_compose.go draftAddrs): asked for by name
+	TypedTo  *string `json:"header:X-Nayive-To:asText"`
+	TypedCc  *string `json:"header:X-Nayive-Cc:asText"`
+	TypedBcc *string `json:"header:X-Nayive-Bcc:asText"`
 }
 
 type jmapBodyValue struct {
@@ -1033,7 +1037,8 @@ func jmapParts(e *jmapEmail, htm string) []MailPart {
 }
 
 var jmapFullProps = append(append([]string{}, jmapRowProps...), "cc", "bcc", "replyTo", "references",
-	"textBody", "htmlBody", "attachments", "bodyValues")
+	"textBody", "htmlBody", "attachments", "bodyValues",
+	"header:"+mailTypedTo+":asText", "header:"+mailTypedCc+":asText", "header:"+mailTypedBcc+":asText")
 
 // jmapPartProps: enough to find any part of an Email.
 var jmapPartProps = []string{"id", "attachments", "textBody", "htmlBody"}
@@ -1059,6 +1064,15 @@ func (p *jmapProvider) Message(ctx context.Context, ref MailRef) (MailMessage, e
 		ReplyTo: jmapAddrs(e.ReplyTo), References: e.References}
 	msg.Text, msg.HTML, msg.Cut = jmapBodies(e)
 	msg.Parts = jmapParts(e, msg.HTML)
+	if refRole(msg.Ref) == RoleDrafts {
+		text := func(p *string) string {
+			if p == nil {
+				return ""
+			}
+			return *p
+		}
+		msg.keepTyped(text(e.TypedTo), text(e.TypedCc), text(e.TypedBcc))
+	}
 	if !msg.Seen {
 		if done, _, err := p.update(ctx, map[string]map[string]any{e.ID: {"keywords/$seen": true}}); err == nil && len(done) == 1 {
 			msg.Seen = true
@@ -1338,6 +1352,7 @@ func (p *jmapProvider) expunge(ctx context.Context, refs []MailRef) (map[string]
 		return nil, err
 	}
 	var doomed []string
+	out := map[string]map[string]any{}
 	for _, e := range list {
 		role := want[e.ID]
 		p.mu.Lock()
@@ -1347,7 +1362,24 @@ func (p *jmapProvider) expunge(ctx context.Context, refs []MailRef) (map[string]
 			bad[e.ID] = jmapSetError{Type: jmapMoved}
 			continue
 		}
+		// In another Mailbox too (a Fastmail folder or label the user
+		// still sees it in - a Delete here keeps those, by design): it only
+		// leaves this one. Destroying the Email took it out of that folder
+		// too (data-safety I8, mail-chat #8).
+		if len(e.MailboxIDs) > 1 {
+			out[e.ID] = map[string]any{"mailboxIds/" + box: nil}
+			continue
+		}
 		doomed = append(doomed, e.ID)
+	}
+	if len(out) > 0 {
+		_, refused, err := p.update(ctx, out)
+		if err != nil {
+			return nil, err
+		}
+		for id, e := range refused {
+			bad[id] = e
+		}
 	}
 	if len(doomed) == 0 {
 		return bad, nil
@@ -1428,6 +1460,61 @@ func (p *jmapProvider) Find(ctx context.Context, messageID string, roles []MailR
 		}
 	}
 	return found, errMailGone
+}
+
+// FindAll (mailFinderAll) is every Email with this Message-ID in one tray,
+// newest first (data-safety I9).
+func (p *jmapProvider) FindAll(ctx context.Context, messageID string, role MailRole) ([]MailSummary, error) {
+	var out []MailSummary
+	if messageID == "" || strings.HasPrefix(messageID, "h:") {
+		return out, nil
+	}
+	box, err := p.box(ctx, role)
+	if err != nil || box == "" {
+		return out, err
+	}
+	ids, err := p.query(ctx, map[string]any{"operator": "AND", "conditions": []any{
+		map[string]any{"inMailbox": box}, map[string]any{"header": []string{"Message-ID", "<" + messageID + ">"}}}}, 50)
+	if err != nil {
+		return out, err
+	}
+	list, err := p.getEmails(ctx, ids, jmapRowProps, nil)
+	if err != nil {
+		return out, err
+	}
+	byID := map[string]*jmapEmail{}
+	for i := range list {
+		byID[list[i].ID] = &list[i]
+	}
+	for _, id := range ids { // the query's order: newest first
+		if e := byID[id]; e != nil && e.MailboxIDs[box] && contains(e.MessageID, messageID) {
+			out = append(out, e.summary(role))
+		}
+	}
+	return out, nil
+}
+
+// Anywhere (mailAnywhere): an Email with this Message-ID in any Mailbox at
+// all - the query is not limited to the trays. Its answer decides whether a
+// message's labels are dropped for good (I3).
+func (p *jmapProvider) Anywhere(ctx context.Context, messageID string) (bool, error) {
+	if messageID == "" || strings.HasPrefix(messageID, "h:") {
+		return true, nil // a made-up name cannot be searched for
+	}
+	ids, err := p.query(ctx, map[string]any{"header": []string{"Message-ID", "<" + messageID + ">"}}, 50)
+	if err != nil {
+		return false, err
+	}
+	list, err := p.getEmails(ctx, ids, []string{"id", "messageId"}, nil)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range list {
+		if contains(e.MessageID, messageID) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Scan is every message of a tray, page after page until the query's total.
@@ -1625,18 +1712,27 @@ func (p *jmapProvider) Send(ctx context.Context, raw, copy []byte, from string, 
 		Created    map[string]any          `json:"created"`
 		NotCreated map[string]jmapSetError `json:"notCreated"`
 	}
-	if err == nil {
+	if err != nil {
+		var je *jmapError
+		var re *mailRejectError
+		if !errors.As(err, &je) && !errors.As(err, &re) {
+			// No answer (the line died, a timeout, a 500): the server may
+			// have taken it. Its copy stays where it is - never destroyed on
+			// a doubt, or a mail that went leaves no trace in Sent (I6)
+			return fmt.Errorf("%w: %v", errMailUnsure, err)
+		}
+	} else {
 		json.Unmarshal(res["sub"], &got)
 		if _, ok := got.Created["s"]; !ok {
-			if e, refused := got.NotCreated["s"]; refused {
-				err = e.reject()
-			} else {
-				err = errors.New("jmap: the submission gave no answer")
+			e, refused := got.NotCreated["s"]
+			if !refused { // answered, but not about it: the same doubt
+				return fmt.Errorf("%w: the submission gave no answer", errMailUnsure)
 			}
+			err = e.reject()
 		}
 	}
 	if err != nil {
-		p.destroy(ctx, []string{id}) // not sent: no "sent" copy either
+		p.destroy(ctx, []string{id}) // refused: not sent, so no "sent" copy either
 		return err
 	}
 	if noCopy {

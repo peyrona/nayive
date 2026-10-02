@@ -68,6 +68,7 @@ type imapProvider struct {
 	slots   chan struct{}       // side connections open now (at most mailSideMax)
 	c       *imapclient.Client  // the shared connection; only while holding lock
 	folders map[MailRole]string // role -> real folder name, found once per connection
+	marked  map[MailRole]bool   // ...and those the server marked itself (SPECIAL-USE), not guessed
 	sel     string              // the folder selected on c ("" = none)
 	selData *imap.SelectData
 
@@ -166,7 +167,7 @@ func (p *imapProvider) dropLocked() {
 	if p.c != nil {
 		p.c.Close()
 	}
-	p.c, p.folders, p.sel, p.selData = nil, nil, "", nil
+	p.c, p.folders, p.marked, p.sel, p.selData = nil, nil, nil, "", nil
 }
 
 // do runs fn on the live, logged-in shared connection, retried once on a
@@ -326,9 +327,22 @@ func (p *imapProvider) folderFor(c *imapclient.Client, role MailRole) (string, e
 		if err != nil {
 			return "", err
 		}
-		p.folders = mapIMAPFolders(list)
+		p.folders, p.marked = mapIMAPFoldersMarked(list)
 	}
 	return p.folders[role], nil
+}
+
+// trashFolder (mailTrashGuess): the Trash's real folder, and whether the
+// server marked it \Trash itself - false: a guess by its name (I7).
+func (p *imapProvider) trashFolder(ctx context.Context) (string, bool, error) {
+	folder, marked := "", false
+	err := p.do(ctx, func(c *imapclient.Client) error {
+		var err error
+		folder, err = p.folderFor(c, RoleTrash)
+		marked = p.marked[RoleTrash]
+		return err
+	})
+	return folder, marked, err
 }
 
 var mailFolderNames = map[MailRole][]string{
@@ -339,7 +353,14 @@ var mailFolderNames = map[MailRole][]string{
 }
 
 func mapIMAPFolders(list []*imap.ListData) map[MailRole]string {
-	out := map[MailRole]string{}
+	out, _ := mapIMAPFoldersMarked(list)
+	return out
+}
+
+// mapIMAPFoldersMarked is mapIMAPFolders, and the roles the server itself
+// marked (SPECIAL-USE) - the others are guesses by name.
+func mapIMAPFoldersMarked(list []*imap.ListData) (map[MailRole]string, map[MailRole]bool) {
+	out, marked := map[MailRole]string{}, map[MailRole]bool{}
 	byAttr := map[imap.MailboxAttr]MailRole{
 		imap.MailboxAttrSent: RoleSent, imap.MailboxAttrDrafts: RoleDrafts,
 		imap.MailboxAttrJunk: RoleSpam, imap.MailboxAttrTrash: RoleTrash,
@@ -361,7 +382,7 @@ func mapIMAPFolders(list []*imap.ListData) map[MailRole]string {
 		}
 		for _, a := range m.Attrs {
 			if r, ok := byAttr[a]; ok && out[r] == "" {
-				out[r] = m.Mailbox
+				out[r], marked[r] = m.Mailbox, true
 			}
 		}
 	}
@@ -370,11 +391,20 @@ func mapIMAPFolders(list []*imap.ListData) map[MailRole]string {
 			continue
 		}
 		for _, m := range selectable {
-			leaf := m.Mailbox
+			leaf, parent := m.Mailbox, ""
 			if m.Delim != 0 {
 				if i := strings.LastIndexByte(leaf, byte(m.Delim)); i >= 0 {
-					leaf = leaf[i+1:]
+					leaf, parent = leaf[i+1:], leaf[:i]
 				}
+			}
+			// The Trash and Spam (whose mail Nayive deletes for good) are
+			// guessed only at the top, or right under INBOX (Courier's and
+			// cPanel's "INBOX.Trash") - never inside a folder of the user's
+			// own: "Archive/Bin" or "Clientes/Papelera" taken as THE Trash
+			// got Inbox mail moved into it, and the purge deleted what the
+			// user keeps there (data-safety I7, mail-chat #6).
+			if (role == RoleTrash || role == RoleSpam) && parent != "" && !strings.EqualFold(parent, "INBOX") {
+				continue
 			}
 			if contains(names, strings.ToLower(leaf)) {
 				out[role] = m.Mailbox
@@ -382,7 +412,7 @@ func mapIMAPFolders(list []*imap.ListData) map[MailRole]string {
 			}
 		}
 	}
-	return out
+	return out, marked
 }
 
 // selectFolder selects `folder` read-write (opening a message marks it read).
@@ -718,7 +748,7 @@ func (p *imapProvider) Message(ctx context.Context, ref MailRef) (MailMessage, e
 		}
 		uid := imap.UIDSetNum(imap.UID(ref.UID))
 		thread := &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
-			HeaderFields: []string{"References", "In-Reply-To"}, Peek: true}
+			HeaderFields: []string{"References", "In-Reply-To", mailTypedTo, mailTypedCc, mailTypedBcc}, Peek: true}
 		opts := *mailListFetch
 		opts.BodySection = []*imap.FetchItemBodySection{thread}
 		got, err := c.Fetch(uid, &opts).Collect()
@@ -742,6 +772,9 @@ func (p *imapProvider) Message(ctx context.Context, ref MailRef) (MailMessage, e
 			if irt := parseMsgIDs(head, "In-Reply-To"); len(irt) == 1 {
 				msg.References = irt
 			}
+		}
+		if ref.Role == RoleDrafts {
+			msg.keepTyped(headerText(head, mailTypedTo), headerText(head, mailTypedCc), headerText(head, mailTypedBcc))
 		}
 
 		body, parts, _ := splitMailParts(m.BodyStructure)
@@ -1281,16 +1314,127 @@ func (p *imapProvider) Find(ctx context.Context, messageID string, roles []MailR
 	}
 	err := p.do(ctx, func(c *imapclient.Client) error {
 		for _, role := range roles {
-			folder, err := p.folderFor(c, role)
+			hits, err := p.findIn(c, role, messageID)
 			if err != nil {
 				return err
 			}
-			if folder == "" {
+			if len(hits) > 0 {
+				found = hits[0]
+				return nil
+			}
+		}
+		return errMailGone
+	})
+	return found, err
+}
+
+// FindAll (mailFinderAll) is every copy with this Message-ID in one tray,
+// newest first: a mail to yourself deleted from the Inbox and from Sent sits
+// in the Trash twice, and an Undo brings back both (data-safety I9).
+func (p *imapProvider) FindAll(ctx context.Context, messageID string, role MailRole) ([]MailSummary, error) {
+	var out []MailSummary
+	if messageID == "" || strings.HasPrefix(messageID, "h:") {
+		return out, nil
+	}
+	err := p.do(ctx, func(c *imapclient.Client) error {
+		var err error
+		out, err = p.findIn(c, role, messageID)
+		return err
+	})
+	return out, err
+}
+
+// findIn is every message with exactly this Message-ID in one tray, newest
+// first.
+func (p *imapProvider) findIn(c *imapclient.Client, role MailRole, messageID string) ([]MailSummary, error) {
+	folder, err := p.folderFor(c, role)
+	if err != nil || folder == "" {
+		return nil, err
+	}
+	sel, err := p.selectFolder(c, folder, true)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.UIDSearch(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{
+		{Key: "Message-ID", Value: messageID}}}, nil).Wait()
+	if err != nil {
+		return nil, err
+	}
+	uids := res.AllUIDs()
+	if len(uids) == 0 {
+		return nil, nil
+	}
+	// SEARCH HEADER is a substring match ("12@x.com" finds "412@x.com"
+	// too): only the exact ones count
+	msgs, err := c.Fetch(imap.UIDSetNum(uids...), mailRowFetch).Collect()
+	if err != nil {
+		return nil, err
+	}
+	msgs = withEnvelope(msgs)
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].UID > msgs[j].UID })
+	var out []MailSummary
+	for _, m := range msgs {
+		if strings.Trim(m.Envelope.MessageID, "<> ") == messageID {
+			out = append(out, imapSummary(m, sel.UIDValidity, role))
+		}
+	}
+	return out, nil
+}
+
+// Anywhere (mailAnywhere): is a message with this Message-ID in ANY folder
+// of the account - Gmail's All Mail (\All: everything but Spam and the Trash,
+// which Find saw) where the server has one, else every folder that is no
+// tray? Read-only (EXAMINE). Its answer decides whether a message's labels
+// are dropped for good (I3): any doubt is an error, never "nowhere".
+func (p *imapProvider) Anywhere(ctx context.Context, messageID string) (bool, error) {
+	if messageID == "" || strings.HasPrefix(messageID, "h:") {
+		return true, nil // a made-up name cannot be searched for
+	}
+	found := false
+	err := p.do(ctx, func(c *imapclient.Client) error {
+		found = false
+		var opts *imap.ListOptions
+		if caps := c.Caps(); caps.Has(imap.CapSpecialUse) && caps.Has(imap.CapListExtended) {
+			opts = &imap.ListOptions{ReturnSpecialUse: true}
+		}
+		list, err := c.List("", "*", opts).Collect()
+		if err != nil {
+			return err
+		}
+		trays := map[string]bool{}
+		for _, role := range mailRoles {
+			f, err := p.folderFor(c, role)
+			if err != nil {
+				return err
+			}
+			trays[f] = true
+		}
+		var all, others []string
+		for _, m := range list {
+			ok := true
+			for _, a := range m.Attrs {
+				switch a {
+				case imap.MailboxAttrNoSelect, imap.MailboxAttrNonExistent:
+					ok = false
+				case imap.MailboxAttrAll:
+					all = append(all, m.Mailbox)
+				}
+			}
+			if ok && !trays[m.Mailbox] {
+				others = append(others, m.Mailbox)
+			}
+		}
+		if len(all) > 0 {
+			others = all[:1]
+		}
+		defer func() { p.sel, p.selData = "", nil }() // EXAMINEd: the next call selects again
+		for _, folder := range others {
+			d, err := c.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait()
+			if err != nil {
+				return err
+			}
+			if d.NumMessages == 0 {
 				continue
-			}
-			sel, err := p.selectFolder(c, folder, true)
-			if err != nil {
-				return err
 			}
 			res, err := c.UIDSearch(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{
 				{Key: "Message-ID", Value: messageID}}}, nil).Wait()
@@ -1301,21 +1445,18 @@ func (p *imapProvider) Find(ctx context.Context, messageID string, roles []MailR
 			if len(uids) == 0 {
 				continue
 			}
-			// SEARCH HEADER is a substring match ("12@x.com" finds
-			// "412@x.com" too): only the exact one counts, the newest of them
-			msgs, err := c.Fetch(imap.UIDSetNum(uids...), mailRowFetch).Collect()
+			msgs, err := c.Fetch(imap.UIDSetNum(uids...), &imap.FetchOptions{UID: true, Envelope: true}).Collect()
 			if err != nil {
 				return err
 			}
-			sort.Slice(msgs, func(i, j int) bool { return msgs[i].UID > msgs[j].UID })
 			for _, m := range msgs {
 				if m.Envelope != nil && strings.Trim(m.Envelope.MessageID, "<> ") == messageID {
-					found = imapSummary(m, sel.UIDValidity, role)
+					found = true
 					return nil
 				}
 			}
 		}
-		return errMailGone
+		return nil
 	})
 	return found, err
 }
@@ -1429,6 +1570,24 @@ func withSection(msgs []*imapclient.FetchMessageBuffer, sec *imap.FetchItemBodyS
 		}
 	}
 	return nil
+}
+
+// headerText reads one plain-text header out of a header block: unfolded,
+// its RFC 2047 words decoded ("" when it is not there).
+func headerText(raw []byte, name string) string {
+	text := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n ", " "), "\r\n\t", " ")
+	for _, line := range strings.Split(text, "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if !ok || !strings.EqualFold(strings.TrimSpace(k), name) {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if dec, err := mailWordDecoder.DecodeHeader(v); err == nil {
+			v = dec
+		}
+		return v
+	}
+	return ""
 }
 
 // parseMsgIDs reads one header of message ids ("References: <a> <b>",

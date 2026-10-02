@@ -485,4 +485,39 @@ ok( await openMail() && await settles( COPIES + ".then( l => ! l.includes( 'Lejo
     await c.evaluate( COPIES ) );
 ok( ! await c.evaluate( ASKED ) && ! await writing(), "no question, no writer" );
 
+section( "S3b I1 - A TO LIKE 'juan': THE DRAFT IS SAVED, AND COMES BACK AS TYPED" );
+await c.evaluate( FORGET );
+ok( await openMail(), "eMail again" );
+await compose( "juan, bob@example.com", "Para Juan", "<div>un texto para juan</div>" );
+await c.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; window.__toasts = []; true" );
+await saveNow();
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a To of 'juan' does not stop the save", await status() );
+ok( ! /No se guardó/.test( await toasts() ), "…and no 'not saved' is said", await toasts() );
+await closeWriter();
+ok( await readDrafts() && await c.until( "NayiveMail.S.items.some( m => m.subject === 'Para Juan' )" ), "the draft is in Drafts" );
+await c.evaluate( "NayiveMail.openDraft( NayiveMail.S.items.find( m => m.subject === 'Para Juan' ) ); true" );
+ok( await c.until( "! document.getElementById( 'composeView' ).hidden && document.getElementById( 'cTo' ).value === 'juan, bob@example.com'" ),
+    "opened again: To as typed, 'juan' and all", await c.evaluate( "document.getElementById( 'cTo' ).value" ) );
+await closeWriter();
+
+section( "S3b I5 - SENT WITH NO COPY IN SENT: SAID, AND THE DRAFT STAYS" );
+await fetch( s.base + "/e2e/send?nocopy=1" );
+await c.evaluate( "NayiveMail.openTray( 'inbox' ); true" );
+await compose( "bob@example.com", "Sin copia", "<div>el texto sin copia</div>" );
+await c.evaluate( "window.__toasts = []; document.getElementById( 'cSend' ).click(); true" );
+ok( await c.until( "document.getElementById( 'composeView' ).hidden && !! document.querySelector( '#toast .toast-undo' )", 15000 ), "Send: saved, then its Undo" );
+await c.evaluate( "NayiveUI.undoSettle(); true" );         // the Undo's 6 s, now
+ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudo guardar una copia en Enviados/.test( t ) )", 15000 ),
+    "it went, and the toast says no copy was kept in Sent", await toasts() );
+ok( await until( async () => ( await rows( "drafts" ) ).some( m => m.subject === "Sin copia" ) ), "its draft stays in Drafts (the only copy of the words)" );
+await fetch( s.base + "/e2e/send?nocopy=0" );
+
+section( "S3b - THE SERVER'S NEW ANSWERS ARE SAID IN WORDS" );
+const said = async code => c.evaluate( `NayiveMail.errText( { code: ${JSON.stringify( code )} } )` );
+const down = await said( "down" );
+ok( /dañado/.test( await said( "damaged" ) ), "a damaged mail file: said so (not 'the server does not answer')", await said( "damaged" ) );
+ok( /etiquetas se conservan/.test( await said( "elsewhere" ) ), "a mail in another folder: its labels are kept", await said( "elsewhere" ) );
+ok( /Mira en Enviados/.test( await said( "unsure" ) ) && await said( "unsure" ) !== down, "a send with no answer: look in Sent first", await said( "unsure" ) );
+ok( /no se envía dos veces/.test( await said( "sent" ) ), "a second Send of one draft: refused, said why", await said( "sent" ) );
+
 await done( c, s );
