@@ -599,7 +599,7 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 
 	done := 0
 	ids := []string{}    // the bin entry of each item trashed, so an app's Undo can restore it
-	failed := []string{} // the items the bin could not take (they stay put)
+	failed := []string{} // the items the bin could not take, or a purge delete (they stay put)
 	damaged := false     // ...because the bin's index cannot be read
 	for _, j := range resolved {
 		info, err := j.p.Lstat()
@@ -623,6 +623,13 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 			}
 			freed = info.Size()
 			if err := j.p.Remove(); err != nil {
+				// Not deleted: never answered "purged". A file gone since
+				// the look is simply gone - but not one whose home moved
+				// under the request (errRootGone reads as "not there" too):
+				// it is still in the renamed home.
+				if errors.Is(err, errRootGone) || !errors.Is(err, fs.ErrNotExist) {
+					failed = append(failed, j.rel)
+				}
 				continue
 			}
 		} else {
@@ -651,19 +658,22 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 		}
 	}
 
-	if purge {
-		sendJSON(w, r, http.StatusOK, map[string]any{"message": "purged", "count": done})
-		return
-	}
 	if len(failed) > 0 {
 		// An error, with what DID go to the bin (its ids, for an Undo) and
-		// what did not: those stay in their folders.
+		// what did not: those stay in their folders. A purge too: what it
+		// could not delete is never answered "purged".
 		msg := "no se pudo llevar a la papelera: " + strings.Join(failed, ", ")
-		if damaged {
+		if purge {
+			msg = "no se pudo borrar: " + strings.Join(failed, ", ")
+		} else if damaged {
 			msg = errTrashText
 		}
 		sendJSON(w, r, http.StatusInternalServerError,
 			map[string]any{"error": msg, "count": done, "ids": ids, "failed": failed})
+		return
+	}
+	if purge {
+		sendJSON(w, r, http.StatusOK, map[string]any{"message": "purged", "count": done})
 		return
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"message": "trashed", "count": done, "ids": ids})

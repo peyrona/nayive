@@ -97,11 +97,17 @@ var errRootGone = fmt.Errorf("the folder this path was approved in moved or went
 // could then save an empty start over the renamed person's real file. By the
 // retry the session is gone (the admin signs the account out first): 401.
 func sendMissing(w http.ResponseWriter, r *http.Request, err error, msg string) {
+	code, text := missingStatus(err, msg)
+	sendError(w, r, code, text)
+}
+
+// missingStatus is sendMissing's answer, for a caller that hands the status
+// back instead of answering (zipSources).
+func missingStatus(err error, msg string) (int, string) {
 	if errors.Is(err, errRootGone) {
-		sendError(w, r, http.StatusServiceUnavailable, "la cuenta acaba de cambiar: vuelve a intentarlo")
-		return
+		return http.StatusServiceUnavailable, "la cuenta acaba de cambiar: vuelve a intentarlo"
 	}
-	sendError(w, r, http.StatusNotFound, msg)
+	return http.StatusNotFound, msg
 }
 
 // mkdirInHome makes `dir`, a folder inside homes/<user>/ named by its path,

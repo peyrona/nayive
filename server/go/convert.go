@@ -165,11 +165,33 @@ func (c *Converter) Available() bool { return c.ffmpeg != "" }
 
 // Enqueue adds one uploaded file. The same path twice is one job. False when
 // the feature is off.
+//
+// It takes the name as it is, never asking whether it is still the same
+// person's: a caller holding the file's Resolved should use EnqueueAt.
 func (c *Converter) Enqueue(user, rel string) bool {
+	return c.EnqueueAt(user, rel, accountEpoch{})
+}
+
+// EnqueueAt is Enqueue for a file approved in `user`'s home at `at` (its
+// Resolved's epoch). False, and nothing queued, once the admin renamed,
+// deleted or re-created that account since: an upload whose body was still
+// streaming then lands in the renamed home, but `user` is the OLD name - a
+// job under it would never find the film, and a new person given the name
+// would inherit it (L1). The film stays as uploaded, unconverted.
+//
+// Checked under mu: the admin moves the counter BEFORE RenameUser or DropUser
+// take mu (Users.RenameAccount; DropUser below), so a job is either refused
+// here or already queued when they move or drop the name's jobs.
+func (c *Converter) EnqueueAt(user, rel string, at accountEpoch) bool {
 	if !c.Available() {
 		return false
 	}
 	c.mu.Lock()
+	if at.moved() {
+		c.mu.Unlock()
+		c.log.Warn("convert: not queued, its account changed hands meanwhile", "user", user, "path", rel)
+		return false
+	}
 	for _, j := range c.queue {
 		if j.User == user && j.Path == rel {
 			c.mu.Unlock()
@@ -238,6 +260,11 @@ func (c *Converter) RenameUser(oldName, newName string) {
 // finished job only when it is still the very same value at the head, and
 // runOne tells nobody of a job that left the queue (stillQueued).
 func (c *Converter) DropUser(name string) {
+	// The name's counter moves first (the admin moves it again just after,
+	// which changes nothing): an upload that reaches EnqueueAt after the
+	// drop must find it moved, or it would queue its film under the deleted
+	// name for whoever is given it next.
+	c.users.EndRequests(name)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	kept := make([]ConvertJob, 0, len(c.queue))
