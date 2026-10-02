@@ -456,12 +456,16 @@ func (s *Server) filesMove(w http.ResponseWriter, r *http.Request, role, user st
 	// The check above is not enough on its own: a file saved or uploaded to
 	// dst a moment after it would be replaced by a plain rename (D10). Only a
 	// case-only rename - one file under two spellings - renames plainly.
+	// The source's upload stripe: a save of it cannot land between the
+	// link and the unlink of renameNoReplace and be unlinked with it.
+	unlock := lockPath(src.Abs)
 	var err error
 	if caseOnly {
 		err = renameResolved(src, dst)
 	} else {
 		err = renameResolvedNoReplace(src, dst)
 	}
+	unlock()
 	if errors.Is(err, fs.ErrExist) {
 		sendError(w, r, http.StatusConflict, taken)
 		return

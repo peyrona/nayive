@@ -32,15 +32,37 @@ import (
 func dsTakeAtPlacement(t *testing.T, name, body string) *atomic.Int32 {
 	t.Helper()
 	var fired atomic.Int32
-	hook := func(root *os.Root, to string) {
-		if filepath.Base(to) == name && fired.Add(1) == 1 {
+	hook := func(root *os.Root, from, to string, linked bool) {
+		if !linked && filepath.Base(to) == name && fired.Add(1) == 1 {
 			if err := root.WriteFile(to, []byte(body), 0o644); err != nil {
 				t.Errorf("the test could not take %s: %v", to, err)
 			}
 		}
 	}
-	testBeforePlace.Store(&hook)
-	t.Cleanup(func() { testBeforePlace.Store(nil) })
+	testPlaceHook.Store(&hook)
+	t.Cleanup(func() { testPlaceHook.Store(nil) })
+	return &fired
+}
+
+// dsSaveAtSourceMidMove makes the next move of a file named `name` meet a
+// save at its OLD place between the link and the unlink: a new file holding
+// `body` is renamed over `from`, as an upload does.
+func dsSaveAtSourceMidMove(t *testing.T, name, body string) *atomic.Int32 {
+	t.Helper()
+	var fired atomic.Int32
+	hook := func(root *os.Root, from, to string, linked bool) {
+		if linked && filepath.Base(from) == name && fired.Add(1) == 1 {
+			tmp := from + ".saving"
+			if err := root.WriteFile(tmp, []byte(body), 0o644); err != nil {
+				t.Errorf("the test could not save %s: %v", from, err)
+			}
+			if err := root.Rename(tmp, from); err != nil {
+				t.Errorf("the test could not save %s: %v", from, err)
+			}
+		}
+	}
+	testPlaceHook.Store(&hook)
+	t.Cleanup(func() { testPlaceHook.Store(nil) })
 	return &fired
 }
 
@@ -398,6 +420,76 @@ func TestDS_D10_MoveNameTakenAtPlacement(t *testing.T) {
 	if dsRead(filepath.Join(files, "b.txt")) != "saved meanwhile" || dsRead(filepath.Join(files, "a.txt")) != "moving" {
 		t.Error("a file was lost or replaced")
 	}
+}
+
+// TestDS_D10_SaveAtSourceMidMoveKept: a file is moved (Drive) or binned while
+// a save of it lands at its old place between the link and the unlink: the
+// moved file is the old one, and the new save stays where it was saved.
+func TestDS_D10_SaveAtSourceMidMoveKept(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
+
+	os.WriteFile(filepath.Join(files, "a.txt"), []byte("old"), 0o644)
+	fired := dsSaveAtSourceMidMove(t, "a.txt", "saved meanwhile")
+	if code, body := callJSON(t, client, "POST", ts.URL+"/api/files?old=files/a.txt&new=files/b.txt", ""); code != 200 {
+		t.Fatalf("move = %d %s", code, body)
+	}
+	if fired.Load() == 0 {
+		t.Fatal("the move did not go through renameNoReplace")
+	}
+	if dsRead(filepath.Join(files, "b.txt")) != "old" || dsRead(filepath.Join(files, "a.txt")) != "saved meanwhile" {
+		t.Errorf("move: b.txt = %q, a.txt = %q; want old / saved meanwhile",
+			dsRead(filepath.Join(files, "b.txt")), dsRead(filepath.Join(files, "a.txt")))
+	}
+
+	os.WriteFile(filepath.Join(files, "c.txt"), []byte("old"), 0o644)
+	dsSaveAtSourceMidMove(t, "c.txt", "saved meanwhile")
+	dsBinIDs(t, client, ts.URL, "files/c.txt")
+	if got := dsRead(filepath.Join(files, "c.txt")); got != "saved meanwhile" {
+		t.Errorf("bin: c.txt = %q, want the save made while it was binned", got)
+	}
+}
+
+// dsWaitsForStripe: `act` (a request) touches the file at `abs`; while that
+// file's upload stripe is held it must wait, and finish once it is let go.
+func dsWaitsForStripe(t *testing.T, abs, what string, act func() int) {
+	t.Helper()
+	unlock := lockPath(abs)
+	done := make(chan int, 1)
+	go func() { done <- act() }()
+	// Proving something does NOT happen needs a bounded wait: 300 ms is far
+	// longer than the whole request takes when nothing holds the stripe.
+	select {
+	case code := <-done:
+		unlock()
+		t.Fatalf("%s ran (%d) while a save held the file's stripe", what, code)
+	case <-time.After(300 * time.Millisecond):
+	}
+	unlock()
+	if code := <-done; code != 200 {
+		t.Errorf("%s = %d after the stripe was let go", what, code)
+	}
+}
+
+// TestDS_D10_MoveAndBinWaitForUploadStripe: a move or a bin of a file waits
+// for an upload of that file to finish its rename (lockPath).
+func TestDS_D10_MoveAndBinWaitForUploadStripe(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
+	os.WriteFile(filepath.Join(files, "a.txt"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(files, "c.txt"), []byte("c"), 0o644)
+	abs := func(rel string) string { p, _ := srv.users.ResolvePath("user", "ana", rel); return p }
+
+	dsWaitsForStripe(t, abs("files/a.txt"), "the move", func() int {
+		code, _ := callJSON(t, client, "POST", ts.URL+"/api/files?old=files/a.txt&new=files/b.txt", "")
+		return code
+	})
+	dsWaitsForStripe(t, abs("files/c.txt"), "the bin", func() int {
+		code, _ := callJSON(t, client, "DELETE", ts.URL+"/api/files?paths=files/c.txt", "")
+		return code
+	})
 }
 
 // TestDS_D10_MediaPartNameTakenAtPlacement: a phone's photo filed into the

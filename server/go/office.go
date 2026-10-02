@@ -413,7 +413,12 @@ func placeFile(from string, dst Resolved, replace bool) error {
 		return err
 	}
 	if replace {
+		// A replacing rename takes the path's upload stripe, as an upload's
+		// does: a Drive move of the old twin, mid-way, must not unlink this
+		// new one with it (renameNoReplace).
+		unlock := lockPath(dst.Abs)
 		err = root.Rename(tmpRel, dst.Rel)
+		unlock()
 	} else {
 		err = renameNoReplace(root, tmpRel, dst.Rel)
 	}

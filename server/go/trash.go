@@ -304,7 +304,13 @@ func (t *Trash) MoveIn(role, user string, p Resolved, origRel string) (string, e
 		return "", err
 	}
 
-	if err := moveResolved(p, dest); err != nil {
+	// The file's upload stripe (lockPath, upload.go), so a save of it cannot
+	// land between the link and the unlink of the move and go with it. Order:
+	// t.mu, then the stripe - nothing holding a stripe calls into the bin.
+	unlock := lockPath(p.Abs)
+	err = moveResolved(p, dest)
+	unlock()
+	if err != nil {
 		// A failed move must never leave a dangling row: roll it back.
 		index.remove(entryID)
 		saveIndex(tdir, index)

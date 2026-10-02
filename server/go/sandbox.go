@@ -187,10 +187,11 @@ func renameResolvedNoReplace(src, dst Resolved) error {
 	return renameNoReplace(root, src.Rel, dst.Rel)
 }
 
-// testBeforePlace is for tests only (nil in the server): it runs inside
-// renameNoReplace just before the name is taken, so a test can put a file
-// there in the one instant no earlier check can see - and prove it survives.
-var testBeforePlace atomic.Pointer[func(root *os.Root, to string)]
+// testPlaceHook is for tests only (nil in the server). renameNoReplace calls
+// it just before the link (linked false: a test puts a file at `to`) and just
+// after it (linked true: a test saves a new file at `from`) - the instants no
+// earlier check can see - to prove neither file is lost.
+var testPlaceHook atomic.Pointer[func(root *os.Root, from, to string, linked bool)]
 
 // renameNoReplace moves `from` to `to` and NEVER replaces what is at `to`: a
 // taken name answers fs.ErrExist and nothing moves. A plain rename destroys
@@ -203,6 +204,13 @@ var testBeforePlace atomic.Pointer[func(root *os.Root, to string)]
 // (a kept Chat photo still finds it). Should the unlink fail, both names
 // stay: a duplicate, never a loss.
 //
+// The two steps are not one, as a rename is: a save that lands at `from`
+// between them (an upload's rename, a server write) is a NEW file there, and
+// unlinking it would lose it. So `from` goes only while it is still the file
+// that was linked - else it stays, as if saved just after a rename. Callers
+// moving a user's own path also hold its lockPath stripe (filesMove,
+// Trash.MoveIn), which uploads take for their rename.
+//
 // The rest goes the old way, a check and then the rename: a folder (no hard
 // links to folders), and a disk that refuses hard links (FAT external
 // storage, a cross-disk pair - the caller still sees EXDEV). For a folder the
@@ -214,12 +222,19 @@ func renameNoReplace(root *os.Root, from, to string) error {
 	if err != nil {
 		return err
 	}
-	if hook := testBeforePlace.Load(); hook != nil {
-		(*hook)(root, to)
+	hook := testPlaceHook.Load()
+	if hook != nil {
+		(*hook)(root, from, to, false)
 	}
 	if !info.IsDir() {
 		err := root.Link(from, to)
 		if err == nil {
+			if hook != nil {
+				(*hook)(root, from, to, true)
+			}
+			if now, err := root.Lstat(from); err != nil || !os.SameFile(info, now) {
+				return nil // moved; what is at `from` now is a newer file
+			}
 			return root.Remove(from)
 		}
 		if errors.Is(err, fs.ErrExist) {
