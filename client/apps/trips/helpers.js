@@ -11,7 +11,18 @@ function fmtRange( sStart, sEnd ) { return sStart + ' – ' + sEnd; }
 // a stage's end can be checked against its start even when only the date differs.
 function stageDateTimeKey( sDate, sTime ) { return sDate + 'T' + (sTime || '00:00'); }
 
-function newId() { return Date.now() + Math.floor( Math.random() * 1000 ); }
+// A number no other call on this page gave: two rows added in the same
+// millisecond (or one apart, with the random part) got ONE id, and the
+// uploads then wrote one file name on both rows (storedNames). Still a
+// number, as ids always were (persistence.js checks Number.isFinite).
+let lastNewId = 0;
+function newId()
+{
+    let id = Date.now() + Math.floor( Math.random() * 1000 );
+    if( id <= lastNewId ) id = lastNewId + 1;
+    lastNewId = id;
+    return id;
+}
 function round2( n ) { return Math.round( n * 100 ) / 100; }
 // The OLD slug (accented letters dropped: "Córdoba" -> "c-rdoba"). Only for a
 // legacy document's file name, which was made with it and must still be found.

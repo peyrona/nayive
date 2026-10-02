@@ -273,12 +273,24 @@ function readStrict()
     } );
 }
 
+// Whose page this is: the "nayive_who" cookie as the page loaded, as GumApi
+// and shared/store.js send it (X-Nayive-User). A dialog left open while
+// another account signed in on this browser gets 423 - never writes these
+// settings into that other person's home (L5).
+var OWNER = ( function ()
+{
+    try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
+    catch ( e ) { return ""; }
+} )();
+
 function write( s )
 {
     s = normalise( s );
     keepLocal( s );
+    var h = { "Content-Type": "application/json" };
+    if( OWNER ) h[ "X-Nayive-User" ] = OWNER;
     return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+                  { method: "PUT", credentials: "same-origin", headers: h,
                     body: JSON.stringify( s, null, 2 ) } )
         .then( function ( r ) { if( ! r.ok ) throw new Error( "status " + r.status ); return s; } );
 }

@@ -24,9 +24,6 @@ const RECENT_N = 15;
 let data    = emptyData();
 let loaded  = false;    // false = we do not know what is in the file: never write it
 let store   = null;     // NayiveStore, set by boot.js
-let base    = null;     // the file as the server last had it (text): the common ancestor of a merge
-let sent    = null;     // the body of our newest write; it becomes `base` once the server has it
-let merging = false;    // a conflict is being merged: reads and writes wait for it
 
 function T( k )     { return NayiveUI.t( k ); }
 function TF( k, v ) { return NayiveUI.tf( k, v ); }
@@ -159,10 +156,11 @@ function cleanTags( tags )
     return out;
 }
 
-// The file as written: no "_" fields, root first.
-function serialize()
+// The file as written: no "_" fields, root first. `d`: another tree than
+// the one on screen (a merge's).
+function serialize( d )
 {
-    return JSON.stringify( data, function( k, v ) { return k.charAt( 0 ) === '_' ? undefined : v; }, 2 );
+    return JSON.stringify( d || data, function( k, v ) { return k.charAt( 0 ) === '_' ? undefined : v; }, 2 );
 }
 
 //------------------------------------------------------------------------//
@@ -171,15 +169,12 @@ function serialize()
 
 async function loadData()
 {
-    if( merging ) return;
     const res = await store.read( FILE );
-    if( merging ) return;
 
     if( res.source === 'empty' )
     {
         data   = emptyData();
         loaded = true;
-        base   = null;
     }
     else if( res.body !== null && res.body !== undefined )
     {
@@ -187,7 +182,6 @@ async function loadData()
         {
             data   = repair( JSON.parse( res.body ) );
             loaded = true;
-            if( res.source === 'network' ) base = res.body;
         }
         catch( e )
         {
@@ -203,8 +197,10 @@ async function loadData()
     pruneState();
     render();
 
-    // Held back by a flush from another page: merge it now.
-    if( loaded && await store.conflicted( FILE ) ) resolveConflict();
+    // A save still held back as a conflict - by a Bookmarks from before
+    // the store merged it (TWO DEVICES): saved again, it goes as a merging
+    // one, checked against the version it was made from.
+    if( loaded && await store.conflicted( FILE ) ) save();
 }
 
 // Say so, and answer false, while the file is not known: an edit then would
@@ -219,64 +215,54 @@ function canEdit()
 function save()
 {
     if( ! canEdit() ) return false;
-    // During a merge too: the write only joins the held-back one (not sent),
-    // and keeps the edit safe if the merge fails; the merge's own write
-    // replaces it.
-    // `base` becomes this body once THIS file's PUT has gone through (H5,
-    // list-apps #19): from the write's own answer, here, and - for a save
-    // queued offline and sent later by the store - from "synced" (watchBase).
-    // "synced" alone waited for the whole outbox to be empty, which any other
-    // waiting save (an office document held back, another app's) put off: the
-    // next merge then started from an older copy and undid another device's
-    // newer change to the same bookmark. Both are needed.
-    const body = serialize();
-    sent = body;
-    store.write( FILE, body ).then( function( r ) { if( r && r.ok && ! merging ) base = body; } );
+    store.write( FILE, serialize() );
     return true;
-}
-
-// The store says "synced" when the outbox is empty: our last write is the
-// server's file now (a save that waited offline included; see save()).
-function watchBase( s )
-{
-    if( s === 'synced' && sent !== null && ! merging ) base = sent;
 }
 
 // A deep copy of the whole file, for Replace all's Undo.
 function snapshot() { return JSON.parse( JSON.stringify( data ) ); }
 
 //------------------------------------------------------------------------//
-// TWO DEVICES  -  the store sends If-Unmodified-Since, so a save over a file
-// changed elsewhere since our last read is refused (412) and held back. It is
-// then merged here, node by node, against `base` (the file as the server last
-// had it): a side that did not touch a node takes the other side's; both
-// touched it, ours wins; a node one side deleted and the other did not touch
-// goes. Without a base (the page was opened with the write already held back)
-// nothing counts as deleted: both sides' nodes stay. repair() then makes one
-// clean tree of it. Checked by tools/bookmarks-test.
+// TWO DEVICES  -  every save says which version of the file it was made
+// from; a save over a file changed elsewhere since is refused (412). The
+// STORE then reads the server's copy and asks mergeFile (boot.js: the
+// store's `merge`), node by node, against the version this page's save was
+// made from - the store keeps it with the save, also across a reload and
+// a save queued offline: a side that did not touch a node takes the other
+// side's; both touched it, ours wins; a node one side deleted and the other
+// did not touch goes. Without that version (a save queued by an older
+// store) nothing counts as deleted: both sides' nodes stay. repair() then
+// makes one clean tree of it, and it goes up checked against the copy just
+// read. The page then shows it (onMerged). Checked by tools/bookmarks-test.
+//
+// Until 2026-10-02 the page did this itself: it dropped the held-back save
+// (forget) BEFORE writing the merged one - a tab closed in between lost
+// every edit since the last sync - and the merged save went up with no
+// check (C5, list-apps #20).
 
-async function resolveConflict()
+function mergeFile( path, base, mine, theirs )
 {
-    if( merging ) return;
-    merging = true;
-    let ok = false;
+    if( path !== FILE ) return null;
     try
     {
-        const theirs = await GumApi.readFile( FILE );
         const t = repair( JSON.parse( theirs ) );
-        const b = base !== null ? repair( JSON.parse( base ) ) : null;
-        await store.forget( FILE );                 // drops the held-back write; ours is `data`
-        data = merge3( b, repair( JSON.parse( serialize() ) ), t );
-        base = theirs;
-        ok = true;
+        const b = typeof base === 'string' ? repair( JSON.parse( base ) ) : null;
+        return serialize( merge3( b, repair( JSON.parse( mine ) ), t ) );
     }
-    catch( e ) {}                                   // unreadable now: stays held back, tried on the next load
-    merging = false;
-    if( ! ok ) return;
-    save();
+    catch( e ) { return null; }                     // unreadable: held back, never written over - tried again on the next load
+}
+
+// The store merged a save of this page (or another page's save took ours
+// in): that body is the file now. The toast waits for an Undo on show -
+// it must not make it final (Replace all, a delete).
+function onFileMerged( path, body )
+{
+    if( path !== FILE ) return;
+    try { data = repair( JSON.parse( body ) ); loaded = true; }
+    catch( e ) { return; }
     pruneState();
     render();
-    NayiveUI.toast( T( 'bookmarks.merged' ) );
+    NayiveUI.toast( T( 'bookmarks.merged' ), { keepUndo: true } );
 }
 
 function sameJson( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); }
