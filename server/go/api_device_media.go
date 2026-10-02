@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"os"
@@ -621,6 +622,9 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 	// A rename replaces what is there: two phones filing "IMG_1.jpg" into one
 	// folder at once must not both find the name free. Its own lock, never a
 	// lockPath stripe - the caller already holds one, and two stripes can be one.
+	// The lock stops other phones only, not a Drive upload or move of that name
+	// in the instant between the look and the move (D10): renameNoReplace
+	// refuses a name taken then, and the next one is tried.
 	mediaFileMu.Lock()
 	defer mediaFileMu.Unlock()
 	for i := 1; i < 10000; i++ {
@@ -634,7 +638,9 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 		} else if !os.IsNotExist(err) {
 			return "", err
 		}
-		if err := root.Rename(partRel, filepath.FromSlash(rel)); err != nil {
+		if err := renameNoReplace(root, partRel, filepath.FromSlash(rel)); errors.Is(err, fs.ErrExist) {
+			continue
+		} else if err != nil {
 			return "", err
 		}
 		// Durable before the phone is told "filed" and may let it go (K1).

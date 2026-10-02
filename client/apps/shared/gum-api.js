@@ -147,7 +147,8 @@
         catch ( e ) {}
     }
 
-    function putBinary( url, bytes )
+    // `headers` (optional): extra request headers, { name: value }.
+    function putBinary( url, bytes, headers )
     {
         var size = ( bytes && ( bytes.size !== undefined ? bytes.size : bytes.byteLength ) ) || 0;
 
@@ -161,6 +162,7 @@
                 function end() { announceUpload( { id: id, done: true } ); }
 
                 xhr.open( "PUT", url );
+                for( var h in ( headers || {} ) ) xhr.setRequestHeader( h, headers[ h ] );
                 xhr.upload.onprogress = function ( e )
                 {
                     announceUpload( { id: id, loaded: e.loaded,
@@ -235,6 +237,18 @@
         var url = fileUrl( path );
         if( opts && opts.convert ) url += "&convert=" + encodeURIComponent( opts.convert );
         return putBinary( url, bytes ).then( changed( [ path ], false ) );
+    }
+
+    // writeFileBytes for a NEW file only: it never replaces one. When the name
+    // is taken - even by a file another device put there a moment ago - the
+    // server writes nothing and answers 412 (If-None-Match: *, server/go/
+    // upload.go): the error has err.status === 412, and the caller asks the
+    // user (replace / keep both) instead of overwriting blind.
+    // NOTE: like every PUT it is re-sent after a dropped connection; if the
+    // first try had in fact landed, the re-send meets that very file: 412.
+    function createFileBytes( path, bytes )
+    {
+        return putBinary( fileUrl( path ), bytes, { "If-None-Match": "*" } ).then( changed( [ path ], false ) );
     }
 
     // Small JSON sidecar helpers (data/<app>/config.json and friends). readJson
@@ -472,6 +486,7 @@
         readFile:        readFile,
         readFileBytes:   readFileBytes,
         writeFileBytes:  writeFileBytes,
+        createFileBytes: createFileBytes,
         readJson:        readJson,
         writeJson:       writeJson,
         listDir:         listDir,

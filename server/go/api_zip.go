@@ -46,8 +46,9 @@ package main
 // size, and one cappedWriter shared by every entry stops the whole job at the
 // room there is - a zip bomb costs that and an error, never the disk.
 //
-// A job that fails half way (room, a damaged entry, the browser gone) takes its
-// folder away again: this request made it, so nothing else is in it.
+// A job that fails half way (room, a damaged entry, the browser gone) takes
+// back what it made, and only that: the folder shows in Drive at once, and a
+// file the user moved into it meanwhile stays (madeHere, copy.go).
 //
 // Every write goes through ONE os.Root on the folder the zip is in
 // (sandbox.go), so whatever a name inside the zip says, the kernel keeps the
@@ -198,9 +199,10 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 	destRel := filepath.Join(parent.Rel, name)
 	destVirt := path.Join(dirVirt, name)
 
-	written, files, skipped, err := unzipInto(r.Context(), root, destRel, plan, room)
+	made := &madeHere{root: root, dirs: []string{destRel}} // claimFolder made the top
+	written, files, skipped, err := unzipInto(r.Context(), made, destRel, plan, room)
 	if err != nil {
-		root.RemoveAll(destRel)
+		made.undo() // only what this job made: never a file moved in meanwhile (G5)
 		if owner := s.users.HomeOwner(parent.Abs); owner != "" {
 			s.users.ForgetUsage(owner)
 		}
@@ -423,10 +425,12 @@ func claimFolder(root *os.Root, parentRel, base string) (string, error) {
 // unzipInto makes every item of the plan under destRel, which exists and is
 // empty. A name it cannot make (the zip's second copy of a name, a file where
 // the zip wants a folder) is skipped; failing to READ an entry, or running
-// past `room`, ends the job with an error.
-func unzipInto(ctx context.Context, root *os.Root, destRel string, plan zipPlan,
+// past `room`, ends the job with an error. Everything it made is noted in
+// `made`, for the caller to take back on that error.
+func unzipInto(ctx context.Context, made *madeHere, destRel string, plan zipPlan,
 	room int64) (written int64, files, skipped int, err error) {
 
+	root := made.root
 	cw := &cappedWriter{ceiling: room}
 	for _, it := range plan.items {
 		if err := ctx.Err(); err != nil {
@@ -442,16 +446,16 @@ func unzipInto(ctx context.Context, root *os.Root, destRel string, plan zipPlan,
 		rel := filepath.Join(append([]string{destRel}, parts...)...)
 
 		if it.dir {
-			if root.MkdirAll(rel, 0o755) != nil {
+			if made.mkdirAll(destRel, rel) != nil {
 				skipped++
 			}
 			continue
 		}
-		if root.MkdirAll(filepath.Dir(rel), 0o755) != nil {
+		if made.mkdirAll(destRel, filepath.Dir(rel)) != nil {
 			skipped++
 			continue
 		}
-		out, err := root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		out, err := made.create(rel)
 		if err != nil {
 			skipped++
 			continue
