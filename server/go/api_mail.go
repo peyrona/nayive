@@ -19,7 +19,8 @@ package main
 //	GET    <a>/msg/<ref>                one message (marked read); its HTML already cleaned
 //	GET    <a>/att/<ref>/<part>         one attachment; ?inline=1: a picture, shown in place
 //	GET    <a>/msg/<ref>?mid=<id>       ...and when it moved since: found again by its Message-ID
-//	                                    (nowhere at all: 404 "gone", and its labels are dropped)
+//	                                    (nowhere at all: 404 "gone", and its labels are dropped;
+//	                                    only in a folder that is no tray: 404 "elsewhere", labels kept)
 //	POST   <a>/set                      {"refs",["seen"],["flagged"],["tray"]} -> {"moved": {old: new}}
 //	                                    tray "trash" starts its Trash clock (mail_labels.go)
 //	POST   <a>/restore                  {"refs"} | {"mids"}: out of the Trash, each back where it was
@@ -32,7 +33,11 @@ package main
 //	                                    mids (the refs' Message-IDs, same order): a ref the server no
 //	                                    longer knows (a label's stale row) is changed by its tag -> known
 //	POST   <a>/send                     multipart: "json" = MailOut (mail_compose.go) + "file" uploads
-//	POST   <a>/draft                    the same, into Drafts -> {"ref","mid","parts"}
+//	                                    -> {"ok","mid"}; "noCopy": sent, but no copy in Sent - its draft
+//	                                    stays. One draft (its "mid") goes once: 409 "sent" within
+//	                                    mailSentHold; 502 "unsure": no answer once it was handed over
+//	POST   <a>/draft                    the same, into Drafts -> {"ref","mid","parts"} - never refused
+//	                                    for an address that is not one yet: kept as typed (toRest...)
 //	POST   <a>/draft/delete             {"ref"}: a draft, gone for good
 //	GET    contacts                     {"contacts": [{name,email}]}: the "To" field's suggestions
 //
@@ -115,8 +120,7 @@ func (s *Server) apiMail(w http.ResponseWriter, r *http.Request) {
 			found, err := s.mail.Remove(user, rest[1])
 			switch {
 			case err != nil:
-				s.log.Error("mail: removing an account", "user", user, "err", err)
-				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				s.mailSaveFail(w, r, user, "accounts (removing one)", err)
 			case !found:
 				sendError(w, r, http.StatusNotFound, "no such account")
 			default:
@@ -200,7 +204,22 @@ func (s *Server) mailAccountRoute(w http.ResponseWriter, r *http.Request, user, 
 					msg, err = prov.Message(ctx, ref)
 				}
 			} else if errors.Is(err, errMailGone) {
-				s.mail.DropTag(user, acct, mid) // in no tray at all: its labels have nothing to hold
+				// In none of the five trays. Its labels go only when the
+				// server says it is NOWHERE: one archived on the phone
+				// (Gmail's All Mail) or moved to a folder of its own keeps
+				// them, and the app hears "elsewhere" (data-safety I3,
+				// mail-chat #3). Cannot tell: kept.
+				if an, ok := prov.(mailAnywhere); ok {
+					var there bool
+					if there, err = an.Anywhere(ctx, mid); err == nil {
+						if there {
+							err = errMailElsewhere
+						} else {
+							s.mail.DropTag(user, acct, mid)
+							err = errMailGone
+						}
+					}
+				}
 			}
 		}
 		if err != nil {
@@ -341,6 +360,10 @@ func (s *Server) mailFail(w http.ResponseWriter, r *http.Request, user, acct str
 		status, msg = http.StatusConflict, "hay que escribir otra vez la contraseña de esta cuenta"
 	case "smtp":
 		msg = "se entra, pero no se puede enviar (servidor SMTP)"
+	case "unsure":
+		msg = "no se sabe si el correo salió: mira en Enviados"
+	case "elsewhere":
+		status, msg = http.StatusNotFound, "ese correo está en otra carpeta del servidor"
 	}
 	if errors.Is(err, context.Canceled) {
 		return // the app left; nobody to tell
@@ -349,6 +372,19 @@ func (s *Server) mailFail(w http.ResponseWriter, r *http.Request, user, acct str
 		s.log.Warn("mail: server call failed", "user", user, "account", acct, "err", err)
 	}
 	sendJSON(w, r, status, map[string]string{"error": msg, "code": code, "text": clipRunes(mailErrText(err), 300)})
+}
+
+// mailSaveFail answers for one of the user's mail files that could not be
+// written: code "damaged" when that file failed to load (it is never written
+// over, F4 - the app says to tell the administrator), else a plain 500.
+func (s *Server) mailSaveFail(w http.ResponseWriter, r *http.Request, user, what string, err error) {
+	s.log.Error("mail: saving "+what, "user", user, "err", err)
+	if errors.Is(err, errDamaged) {
+		sendJSON(w, r, http.StatusInternalServerError, map[string]string{
+			"error": "no se pudo guardar: un archivo del correo está dañado (avisa al administrador)", "code": "damaged"})
+		return
+	}
+	sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 }
 
 // clipRunes cuts s to at most n bytes, never in the middle of a letter.
@@ -539,9 +575,31 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 	case "restore":
 		var rows []MailSummary
 		if len(in.Mids) > 0 { // an Undo: the refs in the Trash may not be known
+			// One Message-ID asked n times (a mail to yourself deleted from
+			// the Inbox and from Sent): its n newest copies in the Trash -
+			// each ref once. Find alone gave the newest twice, counted two
+			// restored for one, and the other copy was purged later
+			// (data-safety I9, mail-chat #12).
+			asked, order := map[string]int{}, []string{}
 			for _, mid := range in.Mids {
-				if row, err := prov.Find(ctx, mid, []MailRole{RoleTrash}); err == nil {
-					rows = append(rows, row)
+				if asked[mid]++; asked[mid] == 1 {
+					order = append(order, mid)
+				}
+			}
+			all, _ := prov.(mailFinderAll)
+			taken := map[string]bool{}
+			for _, mid := range order {
+				var hits []MailSummary
+				if all != nil {
+					hits, _ = all.FindAll(ctx, mid, RoleTrash)
+				} else if row, err := prov.Find(ctx, mid, []MailRole{RoleTrash}); err == nil {
+					hits = []MailSummary{row}
+				}
+				for _, row := range hits[:min(asked[mid], len(hits))] {
+					if !taken[row.Ref] {
+						taken[row.Ref] = true
+						rows = append(rows, row)
+					}
 				}
 			}
 		} else {
@@ -614,8 +672,7 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 				sendError(w, r, http.StatusBadRequest, "no such label")
 				return
 			}
-			s.log.Error("mail: saving labels", "user", user, "err", err)
-			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			s.mailSaveFail(w, r, user, "labels", err)
 			return
 		}
 		// a ref the server no longer knows (a label's stale row): its tag,
@@ -633,8 +690,7 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		known := map[string][]string{}
 		if len(lost) > 0 {
 			if known, err = s.mail.TagKnown(user, acct, lost, in.Add, in.Remove); err != nil {
-				s.log.Error("mail: saving labels", "user", user, "err", err)
-				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				s.mailSaveFail(w, r, user, "labels", err)
 				return
 			}
 		}
@@ -664,8 +720,7 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 		case errors.Is(err, errMailLabelNone):
 			sendError(w, r, http.StatusNotFound, "no such label")
 		default:
-			s.log.Error("mail: saving labels", "user", user, "err", err)
-			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			s.mailSaveFail(w, r, user, "labels", err)
 		}
 	}
 	var in struct {
@@ -736,20 +791,21 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 		if !body() {
 			return
 		}
-		st := s.mail.Settings(user) // what is left out stays as it was
-		if in.TrashDays != 0 {
-			st.TrashDays = in.TrashDays
-		}
-		if in.ShowImages != nil {
-			st.ShowImages = *in.ShowImages
-		}
-		if in.Signature != nil {
-			st.Signature = *in.Signature
-		}
-		st, err := s.mail.SetSettings(user, st)
+		// what is left out stays as it was - merged under the hub's lock: two
+		// devices saving two settings at once each keep theirs (I10)
+		st, err := s.mail.PatchSettings(user, func(st *MailSettings) {
+			if in.TrashDays != 0 {
+				st.TrashDays = in.TrashDays
+			}
+			if in.ShowImages != nil {
+				st.ShowImages = *in.ShowImages
+			}
+			if in.Signature != nil {
+				st.Signature = *in.Signature
+			}
+		})
 		if err != nil {
-			s.log.Error("mail: saving settings", "user", user, "err", err)
-			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			s.mailSaveFail(w, r, user, "settings", err)
 			return
 		}
 		sendJSON(w, r, http.StatusOK, st)
@@ -804,7 +860,11 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 		files = append(files, f)
 		return total <= mailMaxAttach
 	}
-	for _, k := range in.Keep {
+	draftMID := strings.Trim(in.MID, "<> ")
+	kept := make([]*mailOutFile, len(in.Keep))
+	var lost []int // kept parts whose draft is gone: found again below
+	read := 0
+	for i, k := range in.Keep {
 		from := prov
 		if k.Acct != "" && k.Acct != acct {
 			if from = s.mail.provider(user, k.Acct); from == nil {
@@ -818,11 +878,28 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 			return
 		}
 		part, data, err := from.Attachment(ctx, ref, k.Part)
+		if errors.Is(err, errMailGone) && ref.Role == RoleDrafts && mailIDOK(draftMID) && k.Name != "" && k.Size > 0 {
+			lost = append(lost, i)
+			continue
+		}
 		if err != nil {
 			s.mailFail(w, r, user, acct, err)
 			return
 		}
-		if !add(mailOutFile{Name: part.Name, Type: part.Type, Data: data}) {
+		kept[i] = &mailOutFile{Name: part.Name, Type: part.Type, Data: data}
+		if read += len(data); read > mailMaxAttach {
+			code(http.StatusRequestEntityTooLarge, "big", "los adjuntos pasan de 25 MB")
+			return
+		}
+	}
+	if len(lost) > 0 {
+		if err := s.mailKeptAgain(ctx, user, acct, draftMID, in.Keep, lost, kept); err != nil {
+			s.mailFail(w, r, user, acct, err)
+			return
+		}
+	}
+	for _, f := range kept {
+		if !add(*f) {
 			code(http.StatusRequestEntityTooLarge, "big", "los adjuntos pasan de 25 MB")
 			return
 		}
@@ -939,14 +1016,49 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 			copy = c
 		}
 	}
+	// One draft goes once: its Message-ID (the writer's own, the same in
+	// every save) is held while it is being sent and for a while after. An
+	// answer lost on the way brings the writer back "not sent"; Send again
+	// then would send it twice (data-safety I6, mail-chat #13).
+	guard := mailIDOK(draftMID)
+	if guard && !s.mail.claimSend(user, acct, draftMID) {
+		code(http.StatusConflict, "sent", "ese correo ya se envió hace un momento")
+		return
+	}
+	held := guard // let go on every way out (a panic too) unless noted as sent
+	defer func() {
+		if held {
+			s.mail.sendUndo(user, acct, draftMID)
+		}
+	}()
+	sent := func() {
+		if held {
+			s.mail.sendDone(user, acct, draftMID)
+			held = false
+		}
+	}
+	noCopy := false
 	if err := prov.Send(ctx, raw, copy, a.Email, to); err != nil {
-		if !errors.Is(err, errMailNoCopy) {
+		switch {
+		case errors.Is(err, errMailNoCopy):
+			noCopy = true
+		case errors.Is(err, errMailUnsure): // it may have gone: held as sent, and its draft stays
+			sent()
+			s.log.Warn("mail: sent or not - no answer once it was handed over; its draft stays", "user", user, "account", acct, "err", err)
+			s.mailFail(w, r, user, acct, err)
+			return
+		default: // not sent: let go (above)
 			s.mailFail(w, r, user, acct, err)
 			return
 		}
-		s.log.Warn("mail: sent, but no copy in Sent", "user", user, "account", acct)
 	}
-	if old != nil {
+	sent()
+	if noCopy {
+		// The copy in Sent failed (a full mailbox, no Sent folder): its
+		// draft is then the ONLY copy of what was written - it stays, and
+		// the app says so (data-safety I5, mail-chat #5)
+		s.log.Warn("mail: sent, but no copy in Sent - its draft stays", "user", user, "account", acct)
+	} else if old != nil {
 		// it has gone: the draft goes too, even if the app leaves now (a
 		// draft left behind invites a second send)
 		after, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
@@ -956,5 +1068,103 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 		cancel()
 	}
 	s.log.Info("mail: sent", "user", user, "account", acct, "to", len(to), "files", len(files))
-	sendJSON(w, r, http.StatusOK, map[string]any{"ok": true, "mid": mid})
+	out := map[string]any{"ok": true, "mid": mid}
+	if noCopy {
+		out["noCopy"] = true
+	}
+	sendJSON(w, r, http.StatusOK, out)
+}
+
+// mailKeptAgain finds the kept files whose draft is gone (lost: their places
+// in keep) in the NEWEST draft with this writer's Message-ID, into kept.
+// Another device saved this draft again meanwhile, so the draft these files
+// were kept from was replaced: every save and Send of this writer answered
+// "gone" for good - its words could never reach the server again (data-safety
+// I1, mail-chat #2). A file comes back only when that draft holds one under
+// the same name and of the same size - its length in bytes, or the size the
+// server lists for it (IMAP's is an estimate from the encoded length: what a
+// writer holds after opening a draft) - exactly as many of them as this
+// writer misses, each fitting one of its files only. Never another file of
+// the same name of another size (the other device may have put its own
+// "image.png" in place of ours); otherwise still "gone" (and the app mends it
+// by itself, saying which file to add again). Only names and sizes are
+// compared: two different files of one name and one size would pass.
+func (s *Server) mailKeptAgain(ctx context.Context, user, acct, mid string, keep []mailKeepRef, lost []int, kept []*mailOutFile) error {
+	byAcct := map[string][]int{}
+	for _, i := range lost {
+		a := keep[i].Acct
+		if a == "" {
+			a = acct
+		}
+		byAcct[a] = append(byAcct[a], i)
+	}
+	for a, idx := range byAcct {
+		from := s.mail.provider(user, a)
+		if from == nil {
+			return errMailGone
+		}
+		row, err := from.Find(ctx, mid, []MailRole{RoleDrafts})
+		if err != nil {
+			return err
+		}
+		ref, ok := parseMailRef(row.Ref)
+		if !ok {
+			return errMailGone
+		}
+		msg, err := from.Message(ctx, ref)
+		if err != nil {
+			return err
+		}
+		names := map[string]bool{}
+		for _, i := range idx {
+			names[keep[i].Name] = true
+		}
+		type cand struct {
+			file     *mailOutFile
+			bytes    int64 // its real length
+			listed   int64 // the size the server lists for it
+			assigned bool
+		}
+		var cands []*cand
+		for _, p := range msg.Parts {
+			if p.Inline || !names[p.Name] {
+				continue
+			}
+			part, data, err := from.Attachment(ctx, ref, p.ID)
+			if err != nil {
+				return err
+			}
+			cands = append(cands, &cand{file: &mailOutFile{Name: p.Name, Type: part.Type, Data: data},
+				bytes: int64(len(data)), listed: p.Size})
+		}
+		// the writer's missing files by name and size, in their order
+		groups, order := map[string][]int{}, []string{}
+		for _, i := range idx {
+			k := keep[i].Name + "\x00" + strconv.FormatInt(keep[i].Size, 10)
+			if groups[k] == nil {
+				order = append(order, k)
+			}
+			groups[k] = append(groups[k], i)
+		}
+		for _, k := range order {
+			want := keep[groups[k][0]]
+			var fit []*cand
+			for _, c := range cands {
+				if c.file.Name == want.Name && (c.bytes == want.Size || c.listed == want.Size) {
+					fit = append(fit, c)
+				}
+			}
+			if len(fit) != len(groups[k]) { // none, or not one for one: never a guess
+				return errMailGone
+			}
+			for j, c := range fit {
+				if c.assigned { // it fits two of the writer's files: no guess either
+					return errMailGone
+				}
+				c.assigned = true
+				kept[groups[k][j]] = c.file
+			}
+		}
+	}
+	return nil
 }

@@ -65,6 +65,7 @@ type fakeJMAP struct {
 	refuseDestroy map[string]string
 	importErr     string // Email/import answers notCreated with this type
 	subErr        string // EmailSubmission/set answers notCreated with this type
+	subLost       bool   // EmailSubmission/set is done (sent), then the answer is a 500
 	failGets      int    // the next n Email/get answer serverFail
 	fail503       int    // the next n API requests answer 503 (Retry-After: 0)
 	fail429       int    // the same, 429
@@ -255,6 +256,10 @@ func (f *fakeJMAP) serve(w http.ResponseWriter, r *http.Request) {
 				out = append(out, []any{"error", map[string]any{"type": e}, id})
 			} else {
 				out = append(out, []any{name, res, id})
+			}
+			if name == "EmailSubmission/set" && f.subLost {
+				w.WriteHeader(http.StatusInternalServerError) // done, but its answer never comes
+				return
 			}
 		}
 		json.NewEncoder(w).Encode(map[string]any{"methodResponses": out})
@@ -463,6 +468,14 @@ func (f *fakeJMAP) emailJSON(e *fakeEmail, values bool, capBytes int) map[string
 	}
 	if mid == "" {
 		m["messageId"] = nil
+	}
+	// "header:<name>:asText" (RFC 8621 4.1.3): null when there is none
+	for _, k := range []string{"X-Nayive-To", "X-Nayive-Cc", "X-Nayive-Bcc"} {
+		if v, _ := p.h.Text(k); v != "" {
+			m["header:"+k+":asText"] = v
+		} else {
+			m["header:"+k+":asText"] = nil
+		}
 	}
 	if values {
 		bv := map[string]any{}

@@ -72,7 +72,7 @@
         catch( err )
         {
             if( S.open !== m ) return;
-            E.plug( err.code === "gone" ? "synced" : "offline" );
+            E.plug( err.code === "gone" || err.code === "elsewhere" ? "synced" : "offline" );
             E.$( "readBody" ).textContent = "";
             E.$( "readBody" ).appendChild( h( "p", { class: "mail-problem", text: E.errText( err ) } ) );
             // a label's row whose message is nowhere any more: the server

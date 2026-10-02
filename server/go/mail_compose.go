@@ -25,6 +25,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime"
@@ -68,6 +69,11 @@ type mailKeepRef struct {
 	Acct string `json:"acct"`
 	Ref  string `json:"ref"`
 	Part string `json:"part"`
+	// the file as the writer knows it: its name and size in bytes - to find
+	// it again in the newest draft when this draft was replaced elsewhere
+	// (api_mail.go mailKeptAgain)
+	Name string `json:"name,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 type mailOutFile struct {
@@ -124,19 +130,87 @@ func splitAddrs(s string) []string {
 	return out
 }
 
-// buildMail writes the message. draft: keep Bcc in it.
+// The headers that keep what a draft's To, Cc and Bcc hold that is not an
+// address yet ("juan", "ana@", a name half written): see draftAddrs. Only a
+// draft ever has them, and only those pieces - the addresses go in the real
+// headers (a mail program that sends a draft as it is, X- headers and all,
+// must not show the Bcc's addresses in one).
+const (
+	mailTypedTo  = "X-Nayive-To"
+	mailTypedCc  = "X-Nayive-Cc"
+	mailTypedBcc = "X-Nayive-Bcc"
+)
+
+// draftAddrs reads a draft's typed list: the addresses in it, and the pieces
+// that are none, as typed (", " between them; "" = none) - the draft keeps
+// them in its X-Nayive-... header, and reopened it shows them after its
+// addresses (MailMessage.ToRest...). A draft is never refused for an
+// address: a To like "juan" (to look up later) made EVERY save fail, and the
+// whole mail lived only in the open page (data-safety I1, mail-chat #1). Only
+// Send refuses one (parseAddrs).
+func draftAddrs(s string) ([]*netmail.Address, string) {
+	var out []*netmail.Address
+	var odd []string
+	for _, one := range splitAddrs(s) {
+		if a, err := netmail.ParseAddress(one); err == nil {
+			out = append(out, a)
+		} else {
+			odd = append(odd, one)
+		}
+	}
+	// one header line: no line breaks or control characters, not endless
+	rest := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.Join(odd, ", "))
+	return out, clipRunes(strings.TrimSpace(rest), 2000)
+}
+
+// mailHeaderWords writes a header's text as RFC 2047 words of at most 45
+// bytes each (whole letters), space between them: a long value is then folded
+// only at those spaces, which reading it drops - folding a long run with no
+// space in it would put one there.
+func mailHeaderWords(s string) string {
+	var words []string
+	for s != "" {
+		n := min(len(s), 45)
+		for n < len(s) && n > 0 && !utf8.RuneStart(s[n]) {
+			n--
+		}
+		words = append(words, "=?utf-8?b?"+base64.StdEncoding.EncodeToString([]byte(s[:n]))+"?=")
+		s = s[n:]
+	}
+	return strings.Join(words, " ")
+}
+
+// keepRest fills a draft's pieces that are no address yet (MailMessage.ToRest
+// ...) from its X-Nayive-... headers.
+func (m *MailMessage) keepRest(to, cc, bcc string) {
+	m.ToRest, m.CcRest, m.BccRest = strings.TrimSpace(to), strings.TrimSpace(cc), strings.TrimSpace(bcc)
+}
+
+// buildMail writes the message. draft: keep Bcc in it, and the fields as
+// typed where they are no address yet (draftAddrs).
 func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string, draft bool) ([]byte, []*netmail.Address, error) {
-	to, err := parseAddrs(m.To)
-	if err != nil {
-		return nil, nil, err
-	}
-	cc, err := parseAddrs(m.Cc)
-	if err != nil {
-		return nil, nil, err
-	}
-	bcc, err := parseAddrs(m.Bcc)
-	if err != nil {
-		return nil, nil, err
+	var to, cc, bcc []*netmail.Address
+	var rest [3]string
+	if draft {
+		to, rest[0] = draftAddrs(m.To)
+		cc, rest[1] = draftAddrs(m.Cc)
+		bcc, rest[2] = draftAddrs(m.Bcc)
+	} else {
+		var err error
+		if to, err = parseAddrs(m.To); err != nil {
+			return nil, nil, err
+		}
+		if cc, err = parseAddrs(m.Cc); err != nil {
+			return nil, nil, err
+		}
+		if bcc, err = parseAddrs(m.Bcc); err != nil {
+			return nil, nil, err
+		}
 	}
 	rcpts := append(append(append([]*netmail.Address{}, to...), cc...), bcc...)
 
@@ -151,6 +225,11 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 	}
 	if draft && len(bcc) > 0 {
 		h.SetAddressList("Bcc", bcc)
+	}
+	for i, k := range []string{mailTypedTo, mailTypedCc, mailTypedBcc} {
+		if rest[i] != "" {
+			h.Set(k, mailHeaderWords(rest[i]))
+		}
 	}
 	h.SetSubject(strings.TrimSpace(m.Subject))
 	h.SetMessageID(mid)

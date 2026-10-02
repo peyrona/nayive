@@ -243,6 +243,14 @@ var (
 	reMailCSSExpr   = regexp.MustCompile(`(?i)expression\s*\(|-moz-binding|behavior\s*:`)
 	reMailCID       = regexp.MustCompile(`(?i)(["'(\s=])cid:([^"')\s>]+)`)
 	reMailCtl       = regexp.MustCompile(`[\x00-\x20]+`)
+	// The cleaning pass's tags, read with their quotes - a ">" inside a
+	// quoted value (title=">") does not end one, so what follows it is still
+	// cleaned - and a <style> element whole, its CSS to its end (or to the end
+	// of everything when left open: the browser reads the rest as CSS). A
+	// "<style>" inside an attribute's quotes is no element: the tag around it
+	// is matched first. reMailTagQOne: one such tag, at the start.
+	reMailTagQ    = regexp.MustCompile(`(?is)<style\b(?:[^>"']|"[^"]*"|'[^']*')*>.*?(?:</style\s*>|$)|<(?:[^>"']|"[^"]*"|'[^']*')*>`)
+	reMailTagQOne = regexp.MustCompile(`(?s)^<(?:[^>"']|"[^"]*"|'[^']*')*>`)
 )
 
 // cleanMailTag cleans the inside of one tag: its on* handlers (repeated:
@@ -279,20 +287,36 @@ func sanitizeMailHTML(src string, cidURL func(cid string) string) string {
 		}
 		s = t
 	}
-	s = reMailTag.ReplaceAllStringFunc(s, cleanMailTag) // inside tags only: text is text
-	s = reMailJSURL.ReplaceAllString(s, "blocked:")
-	s = reMailDataHTML.ReplaceAllString(s, "blocked:")
-	s = reMailCSSExpr.ReplaceAllString(s, "blocked(")
-	s = reMailCID.ReplaceAllStringFunc(s, func(m string) string {
-		sub := reMailCID.FindStringSubmatch(m)
-		u := ""
-		if cidURL != nil {
-			u = cidURL(sub[2])
+	// Inside tags and <style> CSS only - never in the words between them.
+	// Text is text: run over the whole page, these rewrote the user's OWN
+	// words in his drafts and in the HTML he sends ("Expected behavior: it
+	// saves" became "Expected blocked( it saves"; "JavaScript: the good
+	// parts" became "blocked: the good parts") - data-safety I2, mail-chat #4.
+	neuter := func(m string) string {
+		m = reMailJSURL.ReplaceAllString(m, "blocked:")
+		m = reMailDataHTML.ReplaceAllString(m, "blocked:")
+		m = reMailCSSExpr.ReplaceAllString(m, "blocked(")
+		return reMailCID.ReplaceAllStringFunc(m, func(m string) string {
+			sub := reMailCID.FindStringSubmatch(m)
+			u := ""
+			if cidURL != nil {
+				u = cidURL(sub[2])
+			}
+			if u == "" {
+				u = "about:blank"
+			}
+			return sub[1] + u
+		})
+	}
+	inTag := func(tag string) string { return neuter(cleanMailTag(tag)) }
+	s = reMailTagQ.ReplaceAllStringFunc(s, func(m string) string {
+		if open := reMailTagQOne.FindString(m); len(open) < len(m) { // a <style> element: its tag, then its CSS
+			return inTag(open) + neuter(m[len(open):])
 		}
-		if u == "" {
-			u = "about:blank"
-		}
-		return sub[1] + u
+		return inTag(m)
 	})
-	return s
+	// ...and once more as plain "<" to ">": a tag whose quote never closes
+	// is no match above, but a browser still reads it as one. Done twice is
+	// the same; words between tags are still never touched.
+	return reMailTag.ReplaceAllStringFunc(s, inTag)
 }
