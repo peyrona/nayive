@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- "Upload new photos and videos" (Media, MediaJob). USER_SELECTED is
+         declared only to SEE Android 14's "Select photos": not enough for the
+         camera's new ones, and the setup screen says so. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
 
     <application
         android:name=".NayiveApp"
@@ -136,6 +144,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps one long-poll connection to the user's own Nayive server, to ring on incoming calls and on 'find my phone' with the screen off." />
         </service>
+
+        <!-- The daily photo upload, on Wi-Fi. -->
+        <service
+            android:name=".MediaJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <receiver
             android:name=".BootReceiver"

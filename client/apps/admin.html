@@ -115,7 +115,7 @@
         th
         {
             text-align: left; font-size: 0.7rem; text-transform: uppercase;
-            letter-spacing: 0.04em; color: var(--text-dim);
+            letter-spacing: 0.04em; color: var(--text-faint);
             padding: 0 8px 8px; border-bottom: 1px solid var(--line);
         }
         td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -210,7 +210,7 @@
         <div class="row2">
             <div class="field">
                 <label for="adminName">Username</label>
-                <input id="adminName" type="text" autocapitalize="none" autocorrect="off" spellcheck="false">
+                <input id="adminName" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="field">
                 <label for="adminPass">Password</label>
@@ -580,22 +580,9 @@
     }
 
     // -- admin account ----------------------------------------------------
-    // Inline show / hide eye on the password field (same as login.html).
-    ( function ()
-    {
-        var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
-        var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
-        var eye = $( 'adminPwEye' ), pw = $( 'adminPass' );
-        eye.innerHTML = EYE;
-        eye.addEventListener( 'click', function ()
-        {
-            var show = pw.type === 'password';
-            pw.type = show ? 'text' : 'password';
-            eye.innerHTML = show ? EYE_OFF : EYE;
-            eye.setAttribute( 'aria-label', show ? 'Hide password' : 'Show password' );
-            pw.focus();
-        } );
-    } )();
+    // Inline show / hide eye on the password field (shared/ui.js, deferred:
+    // at DOMContentLoaded it is there).
+    document.addEventListener( 'DOMContentLoaded', function () { NayiveUI.pwEye( $( 'adminPwEye' ), $( 'adminPass' ) ); } );
 
     // -- the one Save button (top-right) ------------------------------
     // Commits, in order: the admin account, then - once an admin exists - the

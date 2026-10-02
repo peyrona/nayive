@@ -15,8 +15,7 @@ package main
 // JMAPURL is its session resource, "" = the user types their server. Blocked: the
 // provider no longer lets any app in with a password at all - Microsoft
 // turned it off for Outlook.com / Hotmail / Live in September 2024 and only
-// takes its own OAuth sign-in now, which Nayive does not do (yet). Proton
-// only speaks IMAP through its Bridge program, on a computer.
+// takes its own OAuth sign-in now, which Nayive does not do (yet).
 
 import (
 	"errors"
@@ -61,15 +60,7 @@ var mailPresets = []mailPreset{
 	{ID: "gmx", Name: "GMX", Domains: []string{"gmx.com", "gmx.us"},
 		IMAPHost: "imap.gmx.com", IMAPPort: 993, SMTPHost: "mail.gmx.com", SMTPPort: 587,
 		Pass: "normal"},
-	{ID: "fastmail", Name: "Fastmail", Domains: []string{"fastmail.com", "fastmail.fm"},
-		IMAPHost: "imap.fastmail.com", IMAPPort: 993, SMTPHost: "smtp.fastmail.com", SMTPPort: 465,
-		Pass: "app", Help: "https://app.fastmail.com/settings/security/apps"},
-	{ID: "fastmailjmap", Name: "Fastmail (JMAP)", Domains: []string{},
-		Kind: "jmap", JMAPURL: "https://api.fastmail.com/jmap/session",
-		Pass: "token", Help: "https://www.fastmail.help/hc/en-us/articles/5254602856719-API-tokens"},
 	{ID: "jmap", Name: "JMAP", Domains: []string{}, Kind: "jmap", Pass: "normal"},
-	{ID: "proton", Name: "Proton Mail", Domains: []string{"proton.me", "protonmail.com", "pm.me"},
-		Pass: "normal", Blocked: true},
 }
 
 // presetByID is the provider picked in the dialog; nil for "" or "other".

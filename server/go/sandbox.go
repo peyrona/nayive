@@ -5,8 +5,8 @@ package main
 // =============================================================================
 //
 // ResolvePath decides WHETHER a path is allowed: it follows every symlink and
-// checks the result is still inside the caller's root. That is the Python's
-// check, and on its own it has a gap - between the check and the use, another
+// checks the result is still inside the caller's root. On its own that check
+// has a gap - between the check and the use, another
 // process could swap a folder for a symlink pointing out of the root, and a
 // plain os.Open would follow it.
 //
@@ -17,7 +17,7 @@ package main
 //
 // The path handed to os.Root is the ALREADY-RESOLVED one, relative to the
 // resolved root. That keeps every operation landing on exactly the file the
-// Python would touch - a symlink that stays inside the home still works, and
+// check approved - a symlink that stays inside the home still works, and
 // renaming one moves the file it points at - so os.Root only ADDS a refusal.
 //
 // Trust: the root itself (a user's home, a shared folder, apps/, the base

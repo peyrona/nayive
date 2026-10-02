@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- Tetris --------------------------------------------------------
@@ -143,15 +143,6 @@
             .tet-hint { display: none; }
             .tet-key  { height: 38px; }
         }
-
-
-        /* The HEADER is two rows on every phone now - the game's toolbar takes
-           one of its own under 640px - and the pane paid for exactly that by
-           handing the toolbar over, so the two cancel and the well keeps the
-           height it had. Under 377px there is no third row to fear any more,
-           which is why this block only ever makes the board BIGGER: a width
-           breakpoint standing in for a height one, because the thing that costs
-           the height here is the width. */
     </style>
 
             <!-- Tetris. The third canvas game and the odd one of the three: a
@@ -205,7 +196,7 @@
                         <div class="tet-fit">
                             <div class="tet-stage">
                                 <canvas class="tet-canvas" id="tetCanvas" tabindex="0" data-i18n-attr="aria-label:games.tetris"></canvas>
-                                <div class="game-cover tappable tet-over" id="tetOver" hidden>
+                                <div class="game-cover tappable" id="tetOver" hidden>
                                     <p class="game-cover-t" id="tetOverTitle"></p>
                                     <p class="game-cover-s" id="tetOverSub"></p>
                                     <button class="text-btn" id="tetOverBtn" type="button"></button>
@@ -247,7 +238,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -655,13 +646,6 @@
 
             function step()
             {
-                // Any dialog over the app pauses it, the same rule the other two
-                // canvas games have: the help sheet, the install prompt and
-                // "session expired" all cover the pane and swallow the keys, and
-                // a piece that cannot be steered is a piece landing where the
-                // player did not put it.
-                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
-
                 if( state !== 'playing' ) return;
 
                 if( clearing )

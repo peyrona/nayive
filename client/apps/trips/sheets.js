@@ -48,6 +48,9 @@ function renderTripSheet()
     trackLab.className = 'share-add';
     const trackBox = document.createElement( 'input' );
     trackBox.type    = 'checkbox';
+    // Tie the <label> to the switch, or a click in it goes to the (i).
+    trackBox.id      = 'tripTrackSw';
+    trackLab.htmlFor = trackBox.id;
     trackBox.checked = tripDraft.track !== false;
     trackBox.addEventListener( 'change', function()
     {
@@ -56,9 +59,16 @@ function renderTripSheet()
     const trackInfo = document.createElement( 'button' );
     trackInfo.className = 'info-dot';
     trackInfo.setAttribute( 'data-info', T( 'trips.trackInfo' ) );
-    trackLab.appendChild( trackBox );
+    // An on / off option: the text, its (i), then the shared .switch.
+    const trackSw = document.createElement( 'span' );
+    trackSw.className = 'switch sm';
+    const trackTrack = document.createElement( 'span' );
+    trackTrack.className = 'track';
+    trackSw.appendChild( trackBox );
+    trackSw.appendChild( trackTrack );
     trackLab.appendChild( document.createTextNode( T( 'trips.track' ) ) );
     trackLab.appendChild( trackInfo );
+    trackLab.appendChild( trackSw );
     sheet.appendChild( trackLab );
 
     // A plain "Documentos" heading: the "+" and the info dot live beside the one

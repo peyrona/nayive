@@ -2,13 +2,15 @@
  * core.js - the Chat app's shared basics: state, the server, icons, dates,
  * names, the back button. The other chat/*.js files add to the same object:
  *
- *     core.js    this file
- *     list.js    the list of chats, the live loop, new chat / person / group
- *     conv.js    one conversation: bubbles, writing, holding a message down
- *     extras.js  photos, files, location, contact cards, polls, info screens
- *     call.js    voice and video calls (the call screen, its bubble)
- *     guest.js   a person's first visit (notifications, home-screen icon)
- *     chat.js    start()
+ *     core.js     this file
+ *     list.js     the list of chats, the live loop, new chat / person / group
+ *     conv.js     one conversation: its top bar, loading it, the bubbles
+ *     compose.js  writing, holding a message down, searching a conversation
+ *     media.js    photos, files, location, contact cards, polls
+ *     info.js     a chat's info screen, and the app's help
+ *     call.js     voice and video calls (the call screen, its bubble)
+ *     guest.js    a person's first visit (notifications, home-screen icon)
+ *     chat.js     start()
  *
  * All classic scripts (defer), one global: window.NayiveChat (below: C). A
  * function of one file calls another's as C.name(), at call time - load order
@@ -160,6 +162,7 @@
         "chev-l":    '<polyline points="15 18 9 12 15 6"/>',
         "chev-up":   '<polyline points="18 15 12 9 6 15"/>',
         "chev-down": '<polyline points="6 9 12 15 18 9"/>',
+        minimize:    '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
         nav:         '<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
         live:        '<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>',
         poll:        '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
@@ -397,7 +400,7 @@
         return av;
     };
 
-    function pad( n ) { return ( n < 10 ? "0" : "" ) + n; }
+    var pad = NayiveUI.pad2;
 
     C.dayKey = function ( ms )
     {

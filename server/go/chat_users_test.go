@@ -7,17 +7,10 @@ package main
 
 import (
 	"context"
-	"crypto/ecdh"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
-	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 )
@@ -31,10 +24,7 @@ type chatUserStart struct {
 // signedIn is a new cookie jar signed in as `user`.
 func (f *chatFixture) signedIn(t *testing.T, user, password string) *http.Client {
 	t.Helper()
-	jar, _ := cookiejar.New(nil)
-	c := &http.Client{Jar: jar, Transport: &http.Transport{DisableCompression: true}}
-	signIn(t, c, f.base, user, password)
-	return c
+	return signedInClient(t, f.base, user, password)
 }
 
 // addHome makes one more account on the test server.
@@ -245,31 +235,12 @@ func TestChatUserGroupAndPresence(t *testing.T) {
 // link to his own Chat; a ringing call too.
 func TestChatUserPush(t *testing.T) {
 	f := newCallFixture(t)
-	var mu sync.Mutex
-	hits := map[string]int{}
-	push := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		hits[r.URL.Path]++
-		mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer push.Close()
-	count := func(p string) int { mu.Lock(); defer mu.Unlock(); return hits[p] }
-	// The endpoint must name a real push service (cleanSub); dial the test
-	// server whatever host the request names.
-	tr := push.Client().Transport.(*http.Transport).Clone()
-	tr.TLSClientConfig.InsecureSkipVerify = true
-	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, network, push.Listener.Addr().String())
-	}
-	f.srv.chat.push.client = &http.Client{Transport: tr}
+	// The endpoint must name a real push service (cleanSub): a TLS service
+	// that answers whatever host the request names.
+	push := newFakePush(t, true, nil)
+	push.wire(f.srv.chat.push)
 
-	key, _ := ecdh.P256().GenerateKey(rand.Reader)
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	sub := PushSub{Endpoint: "https://fcm.googleapis.com/beto", Lang: "es", Keys: PushKeys{
-		P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
-		Auth:   base64.RawURLEncoding.EncodeToString(auth)}}
+	sub := testSub(t, "https://fcm.googleapis.com/beto")
 	raw, _ := json.Marshal(map[string]any{"subs": []PushSub{sub}})
 	os.WriteFile(filepath.Join(f.srv.cfg.HomesDir, "beto", "data", "push.json"), raw, 0o644)
 
@@ -290,12 +261,7 @@ func TestChatUserPush(t *testing.T) {
 	}
 
 	f.call(t, f.owner, "POST", "/api/chat/conv/"+st.Conv+"/messages", `{"kind":"text","text":"hola"}`, 201, nil)
-	for i := 0; i < 250 && count("/beto") < 1; i++ { // up to 10 s
-		time.Sleep(40 * time.Millisecond)
-	}
-	if count("/beto") != 1 {
-		t.Fatalf("beto's device got %d pushes, want 1", count("/beto"))
-	}
+	push.waitHits(t, "/beto", 1)
 
 	// A call rings on his account's devices and links to his own Chat.
 	h.mu.Lock()
@@ -331,7 +297,8 @@ func TestChatUserCall(t *testing.T) {
 	}
 }
 
-// TestChatUserAdmin: the admin renames or deletes an account; the chats other
+// TestChatUserAdmin: an account renamed or deleted - the hub's side of the
+// admin's rename-user and delete-user (RenameUser, DeleteUser); the chats other
 // homes hold with it follow.
 func TestChatUserAdmin(t *testing.T) {
 	f := newChatFixture(t)

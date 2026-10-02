@@ -98,7 +98,9 @@
     /* "12,30" / "12.30" / "1.234,56" / "1,234.56" / "1234" -> minor units, or
      * null when the text is not an amount. Negative numbers are not amounts.
      * A lone separator followed by exactly three digits is read as a thousands
-     * separator ("1.234" = 1234) unless the currency really has 3 decimals. */
+     * separator ("1.234" = 1234) unless the currency really has 3 decimals.
+     * With nothing but zeros before it ("0,125") it can be neither: no
+     * thousands start with 0, and the currency has no third decimal - refused. */
     function parseAmount( text, code )
     {
         var d = digits( code );
@@ -125,6 +127,7 @@
             var onlyOne = s.indexOf( other ) === -1;
             if( onlyOne && fracPart.length === 3 && d < 3 )        // "1.234" is a thousand
             {
+                if( ! /[1-9]/.test( intPart ) ) return null;       // "0,125": not 125
                 intPart  = intPart + fracPart;
                 fracPart = "";
             }
@@ -327,8 +330,9 @@
             }
             else
             {
-                add( net, e.paidBy, entryBase( e, base ) );
                 var sh = sharesBase( e, base );
+                if( ! Object.keys( sh ).length ) return;       // shared by nobody: no one owes, no one is owed
+                add( net, e.paidBy, entryBase( e, base ) );
                 Object.keys( sh ).forEach( function ( id ) { add( net, id, -sh[ id ] ); } );
             }
         } );
@@ -352,6 +356,8 @@
 
         entries( group ).forEach( function ( e )
         {
+            var sh = e.type === "payment" ? null : shares( e );
+            if( sh && ! Object.keys( sh ).length ) return;     // shared by nobody (see balances)
             var code = e.currency || group.currency;
             var net  = bucket( code );
             if( e.type === "payment" )
@@ -362,17 +368,17 @@
             else
             {
                 add( net, e.paidBy, e.amount );
-                var sh = shares( e );
                 Object.keys( sh ).forEach( function ( id ) { add( net, id, -sh[ id ] ); } );
             }
         } );
         return out;
     }
 
-    /* Turn a balance map into the fewest transfers that settle it:
+    /* Turn a balance map into a short list of transfers that settles it:
      * [ { from, to, amount } ]. Greedy: the biggest debtor pays the biggest
      * creditor as much as either can, repeat. Never more than (people - 1)
-     * transfers, and no one pays anyone they do not need to. */
+     * transfers, and no one pays anyone they do not need to - but not always
+     * the fewest possible (that is a much harder search). */
     function settle( net )
     {
         var debtors = [], creditors = [];
@@ -439,6 +445,24 @@
         } );
     }
 
+    /* How many expenses a member only SHARES (never paid, never in a payment):
+     * they can be removed and those expenses split among the rest. -1 when
+     * they cannot: they paid, took part in a payment, or are the only one
+     * sharing an expense. */
+    function sharedOnly( group, memberId )
+    {
+        var n = 0;
+        var ok = entries( group ).every( function ( e )
+        {
+            if( e.paidBy === memberId || e.from === memberId || e.to === memberId ) return false;
+            var ids = participants( e ).ids;
+            if( ids.indexOf( memberId ) === -1 ) return true;
+            n++;
+            return ids.length > 1;
+        } );
+        return ok ? n : -1;
+    }
+
     /* Every currency the group's entries use, the group's own first. */
     function usedCurrencies( group )
     {
@@ -457,7 +481,7 @@
         allocate: allocate, participants: participants, shares: shares,
         toBase: toBase, entryBase: entryBase, sharesBase: sharesBase,
         balances: balances, balancesByCurrency: balancesByCurrency, settle: settle,
-        memberTotals: memberTotals, hasMovements: hasMovements, usedCurrencies: usedCurrencies
+        memberTotals: memberTotals, hasMovements: hasMovements, sharedOnly: sharedOnly, usedCurrencies: usedCurrencies
     };
 
     root.SplitMoney = api;

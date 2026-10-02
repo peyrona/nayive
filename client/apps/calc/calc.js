@@ -40,21 +40,13 @@ from './codec.js';
 //------------------------------------------------------------------------//
 // STATE
 
-// Folder for "Guardar como". Drive opens Calc with ?dir=<folder> so a new
-// sheet saves in the folder the user is in; from the launcher (no ?dir=)
-// it defaults to the user's files/ root.
 const O = NayiveOffice;   // paths, the file label, the Open browser (../shared/office.js)
 
 // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
 const APP_DIR = O.appDirFromUrl();
 
-// Extensions the "Abrir documento" browser shows. xlsx / csv open
-// straight away; a file in CONVERT_EXTS (LibreOffice Calc .ods, legacy
-// .xls, …) would be converted to .xlsx on the server first — that isn't
-// wired up yet, so CONVERT_EXTS is empty and only the two appear.
-const OPEN_EXTS     = [ 'xlsx', 'csv' ];
-const CONVERT_EXTS  = [];
-const OPENABLE_EXTS = OPEN_EXTS.concat( CONVERT_EXTS );
+// Extensions the "Abrir documento" browser shows: the two Calc opens.
+const OPEN_EXTS = [ 'xlsx', 'csv' ];
 
 // The browser never walks above the user's files/ root (the first path
 // segment of APP_DIR — "files" when Calc is opened from the launcher).
@@ -71,10 +63,9 @@ let borderColorValue = '8B8E93';
 // is attempted, so a caducated session or a dropped connection can no
 // longer lose the sheet: it goes up on the next flush (reconnect, tab
 // focus, or right after signing in again). binary:true - the bodies here
-// are .xlsx/.ods bytes, not text.
+// are .xlsx/.csv bytes, not text.
 // Interface strings: every one of them lives in shared/i18n/*.json.
-const T  = k           => NayiveUI.t( k );
-const TF = ( k, vars ) => NayiveUI.tf( k, vars );
+const T = k => NayiveUI.t( k );
 
 // conflicts: a save over a sheet changed on another device since it was
 // opened is refused (shared/store.js, CONFLICTS).
@@ -94,7 +85,7 @@ const session = O.session( {
     openRoot   : OPEN_ROOT,
     defaultName: T( 'calc.defaultFile' ),
     canOpen    : isOpenable,                                    // what the Open dialog lists
-    onPick     : function( p ) { openPickedFile( p ); },        // a foreign format is converted first
+    onPick     : function( p ) { openPickedFile( p ); },        // any other format is turned away
     emptyKey   : 'calc.noSheets',
     // A draft is always .xlsx: a .csv would lose the formatting.
     encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
@@ -128,24 +119,14 @@ const session = O.session( {
 
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 
-// AYUDA, wherever it is asked for: the pull-down Ayuda menu and the toolbar's
-// "?" show the SAME three entries, each clicking its own real button - so the
-// two chromes cannot drift and there is still one set of handlers.
-const HELP_ITEMS =
-[
-    { key: 'write.stats',       el: 'statsBtn' },
-    { key: 'write.shortcuts',   el: 'scBtn'    },
-    { key: 'ui.toolbarButtons', el: 'guideBtn' }
-];
-const HELP_IDS = HELP_ITEMS.map( function( it ) { return it.el; } );
-
 const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
                                ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'scBtn' ] } );
 
-// Ayuda on the "?" - the three entries HELP_ITEMS names. setHelpMenu tells
-// shared/ui.js to leave the click to this menu instead of opening the guide
-// card itself; the card is the third entry.
-const helpMenu = O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: HELP_IDS } );
+// Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
+// Ayuda menu shows the same ones). setHelpMenu tells shared/ui.js to leave
+// the click to this menu instead of opening the guide card itself; the card
+// is the third entry.
+const helpMenu = O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
 NayiveUI.setHelpMenu( true );
 
 // ---- the toolbar's group cards (shared/office.js, groupPopup) ----
@@ -235,6 +216,31 @@ function wireStaticUI()
         if( pop.classList.contains( 'open' ) && ! pop.contains( e.target ) && ! e.target.closest( '#fmtBorderBtn' ) )
             closeBorderPopup();
     });
+
+    // A press anywhere off the grid - the header (the window's title bar on
+    // the desktop, dragged from there too), the toolbar, the sheet tabs -
+    // took the keys away from the cells, so Ctrl+Z and the arrows did
+    // nothing until a cell was clicked again. They go back to the grid after
+    // the press and after the click it ends in (a drag eats that click),
+    // unless that press moved them somewhere that wants them: a field, an
+    // open menu, popup or dialog, or a cell being typed into.
+    const backToGrid = function( e )
+    {
+        if( ! e.target || ! e.target.closest || e.target.closest( '#gridHost' ) ) return;
+        setTimeout( function()
+        {
+            if( ! table || matchMedia( '(pointer: coarse)' ).matches ) return;
+            const ed = table.getActiveEditor();
+            if( ed && ed.isOpened() ) return;
+            const a = document.activeElement;
+            if( a && a.matches( 'input, select, textarea, [contenteditable=""], [contenteditable="true"]' ) && ! a.closest( '#gridHost' ) ) return;
+            if( document.querySelector( '.popup.open, .sheet-backdrop.open, .top-menu:not([hidden])' ) ) return;
+            table.listen();
+            table.getFocusManager().focusOnHighlightedCell();
+        }, 0 );
+    };
+    document.addEventListener( 'pointerdown', backToGrid );
+    document.addEventListener( 'click',       backToGrid );
     document.addEventListener( 'keydown', function( e )
     {
         // Ctrl/Cmd+S: save now (an untitled sheet goes to "Guardar como"), as in Text and Write.
@@ -942,30 +948,16 @@ window.addEventListener( 'balata:themechange', function()
 // OPEN  (the shared folder browser - shared/office.js - lists the files Calc
 // can open; see OPEN_EXTS)
 
-function isOpenable( path ) { return OPENABLE_EXTS.indexOf( O.extOf( path ) ) !== -1; }
+function isOpenable( path ) { return OPEN_EXTS.indexOf( O.extOf( path ) ) !== -1; }
 
-// Open a file the user picked: xlsx / csv directly, anything else
-// via a server-side conversion to .xlsx first.
+// Open a file the user picked. The Open dialog lists only xlsx / csv, but
+// "Recientes" hands over any path the session ever opened (a ?file= from
+// Drive included), so anything else is still turned away here.
 async function openPickedFile( path )
 {
-    if( OPEN_EXTS.indexOf( O.extOf( path ) ) !== -1 )
-    {
-        await session.open( path );
-        return;
-    }
+    if( isOpenable( path ) ) { await session.open( path ); return; }
 
-    const nativePath = await convertForOpen( path );
-    if( nativePath ) await session.open( nativePath );
-}
-
-// Convert a non-native spreadsheet (LibreOffice Calc .ods, legacy .xls,
-// …) to .xlsx on the server, save it next to the original and return its
-// path. The LibreOffice-backed endpoint isn't deployed yet, so
-// CONVERT_EXTS is empty and this is never reached.
-async function convertForOpen( path )
-{
     NayiveUI.toast( T( 'write.formatUnsupported' ) + '.' );
-    return null;
 }
 
 //------------------------------------------------------------------------//
@@ -986,40 +978,14 @@ async function convertForOpen( path )
 // all live in shared/menubar.js - Write uses the same code. What is here
 // is only Calc's own table of menus.
 
-const CALC_CFG = 'data/calc/config.json';
-
-let cfgToldUnread = false;   // "your settings could not be read" was said once already
-
-// Only a missing file (a fresh account) reads as empty - readJson gives null
-// on a 404 alone. Any other failure (offline, a 5xx, bad JSON) throws, and
-// the caller must not treat it as "nothing there".
-async function readCalcCfg()
-{
-    return ( await GumApi.readJson( CALC_CFG ) ) || {};
-}
-
-// The patch goes over what is on the server. When that cannot be read, it
-// is not written at all: an empty {} plus the patch would be saved over
-// whatever else the file holds.
-async function writeCalcCfg( patch )
-{
-    let cfg;
-    try { cfg = await readCalcCfg(); }
-    catch( _ )
-    {
-        if( ! cfgToldUnread ) { cfgToldUnread = true; NayiveUI.toast( T( 'ui.settingsNotRead' ) ); }
-        return null;
-    }
-
-    Object.assign( cfg, patch );
-    try { await GumApi.writeJson( CALC_CFG, cfg ); } catch( _ ) {}
-    return cfg;
-}
+// data/calc/config.json, read-modify-write (shared/office.js, appConfig): a
+// file that cannot be read is never written over with just the patch.
+const calcCfg = O.appConfig( 'data/calc/config.json', 'ui.settingsNotRead' );
 
 // The key combos shown on the right of an entry. Calc's shortcuts are the
 // handful wired in wireStaticUI() plus the ones Handsontable itself
 // handles (copy / cut / paste, undo / redo).
-const IS_MAC = navigator.platform.indexOf( 'Mac' ) === 0;
+const IS_MAC = NayiveUI.isMac;
 const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
 const SC  =
 {
@@ -1142,12 +1108,9 @@ function selectItems( id )
     };
 }
 
-// Excel's own first row of colours. The names are keys because no
-// interface string lives in the source (docs/i18n.md).
-const MENU_COLORS = [ [ '#000000', 'black'  ], [ '#808080', 'gray'   ], [ '#C00000', 'red'    ],
-                      [ '#E36C0A', 'orange' ], [ '#FFC000', 'yellow' ], [ '#00B050', 'green'  ],
-                      [ '#0070C0', 'blue'   ], [ '#7030A0', 'purple' ], [ '#FFFFFF', 'white'  ] ];
-
+// The text colours are Excel's own first row (NayiveMenus.COLORS, Write's
+// too); the fills are Calc's. The names are keys because no interface
+// string lives in the source (docs/i18n.md).
 const MENU_FILLS  = [ [ '#FFFF00', 'yellow' ], [ '#00B050', 'green'  ], [ '#00FFFF', 'cyan'   ],
                       [ '#FF66FF', 'pink'   ], [ '#FF9900', 'orange' ], [ '#BFBFBF', 'gray'   ],
                       [ '#FFFFFF', 'white'  ] ];
@@ -1155,9 +1118,9 @@ const MENU_FILLS  = [ [ '#FFFF00', 'yellow' ], [ '#00B050', 'green'  ], [ '#00FF
 // Same idea for the two <input type="color"> pickers: the swatch sets the
 // input and fires its 'input' handler, so the colour travels the one path
 // that also paints the little bar under the toolbar glyph.
-function colorItems( id, table )
+function colorItems( id, list )
 {
-    return table.map( function( c )
+    return list.map( function( c )
     {
         return {
             key     : 'ui.color.' + c[1],
@@ -1349,7 +1312,7 @@ const MENUS =
         { key: 'calc.fontFamily', sub: selectItems( 'fmtFontFamily' ) },
         { key: 'calc.fontSize',   sub: selectItems( 'fmtFontSize'   ) },
         { sep: true },
-        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', MENU_COLORS ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
+        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', NayiveMenus.COLORS ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
         { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS  ), iconOf: '.fmt-color-btn:has(#fmtFillColor) svg' },
         { sep: true },
         { key: 'calc.alignment', iconOf: '#fmtAlignLeftBtn', sub:
@@ -1378,7 +1341,7 @@ const MENUS =
 },
 {
     key: 'ui.menu.help',
-    items: HELP_ITEMS
+    items: O.HELP_ITEMS
 }
 ];
 
@@ -1393,8 +1356,8 @@ const CHROME = NayiveMenus.chrome(
 {
     key   : 'nayive-calc-chrome',
     menus : menus,
-    load  : async function() { return ( await readCalcCfg() ).chrome; },
-    save  : function( mode ) { return writeCalcCfg( { chrome: mode } ); },
+    load  : async function() { return ( await calcCfg.read() ).chrome; },
+    save  : function( mode ) { return calcCfg.write( { chrome: mode } ); },
 
     // What CSS cannot do: the toolbar's height changed, so the grid has to
     // re-measure, and the "?" has to move somewhere still visible. The name

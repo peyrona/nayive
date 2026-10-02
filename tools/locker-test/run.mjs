@@ -3,7 +3,7 @@
  * Needs a server with /api/unlock and the test/test account, e.g. a scratch
  * run-root on 4471 (see the verify-harness notes):   node tools/locker-test/run.mjs [base]
  */
-import { browser, attach } from "../locktest/cdp.mjs";
+import { browser, attach } from "../cdp.mjs";
 import os from "node:os";
 import fs from "node:fs";
 const B = process.argv[ 2 ] || "http://127.0.0.1:4471/nayive/";
@@ -87,6 +87,20 @@ try
     await a.key( "x" );
     await sleep( 300 );
     ok( await a.evaluate( "!document.querySelector('.lock-card').hidden && document.activeElement.type==='password' && document.activeElement.value==='x'" ), "a key shows the box and is typed into it" );
+    // --- Esc or a press outside hides the box; the locker runs on; a key brings it back
+    await a.send( "Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", windowsVirtualKeyCode: 27 } );
+    await a.send( "Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", windowsVirtualKeyCode: 27 } );
+    await sleep( 200 );
+    ok( await a.evaluate( "document.querySelector('.lock-card').hidden && document.querySelector('.lock-card input').value==='' && !!document.querySelector('dialog.lock-dlg[open]') && document.querySelector('.lock-host').children.length>0" ), "Esc hides the box, locker runs on" );
+    await a.key( "x" );
+    await sleep( 200 );
+    for( const type of [ "mouseMoved", "mousePressed", "mouseReleased" ] )
+        await a.send( "Input.dispatchMouseEvent", { type, x: 20, y: 20, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 } );
+    await sleep( 200 );
+    ok( await a.evaluate( "document.querySelector('.lock-card').hidden && !!document.querySelector('dialog.lock-dlg[open]')" ), "a press outside hides the box" );
+    await a.key( "x" );
+    await sleep( 300 );
+    ok( await a.evaluate( "!document.querySelector('.lock-card').hidden && document.activeElement.value==='x'" ), "a key brings the box back" );
     await a.send( "Input.insertText", { text: "yz" } );
     await a.send( "Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", windowsVirtualKeyCode: 13 } );
     await sleep( 1500 );

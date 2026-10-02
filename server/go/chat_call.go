@@ -51,8 +51,8 @@ import (
 	"time"
 )
 
-// Timeouts are vars, not consts, so the tests can shorten them.
-var (
+// Timeouts. The tests move the clock (callTick's `now`), not these.
+const (
 	chatCallRing = 45 * time.Second // ringing with no answer: missed
 	chatCallLost = 60 * time.Second // a side's page not seen this long: the call is over
 	chatCallKeep = 60 * time.Second // an ended call stays visible this long
@@ -240,7 +240,8 @@ type chatTurn struct {
 	secret []byte
 }
 
-// turnConf reads turn_uris and config/turn_secret once.
+// turnConf reads turn_uris and config/turn_secret once, at the first call: a
+// change to either one takes a restart of the server.
 func (h *ChatHub) turnConf() *chatTurn {
 	h.turnOnce.Do(func() {
 		var uris []string
@@ -251,7 +252,7 @@ func (h *ChatHub) turnConf() *chatTurn {
 		raw, err := os.ReadFile(filepath.Join(h.cfg.ConfigDir, "turn_secret"))
 		secret := strings.TrimSpace(string(raw))
 		if err != nil || secret == "" {
-			h.log.Error("chat calls OFF: turn_uris is set but config/turn_secret cannot be read", "err", err)
+			h.log.Error("chat calls OFF: turn_uris is set but config/turn_secret cannot be read (restart after fixing it)", "err", err)
 			return
 		}
 		t := chatTurn{secret: []byte(secret)}
@@ -264,7 +265,7 @@ func (h *ChatHub) turnConf() *chatTurn {
 			}
 		}
 		if len(t.turn) == 0 {
-			h.log.Error("chat calls OFF: turn_uris has no turn: address")
+			h.log.Error("chat calls OFF: turn_uris has no turn: address (restart after fixing it)")
 			return
 		}
 		h.turn = t
@@ -513,17 +514,12 @@ func (h *ChatHub) endCall(o *chatOwner, c *chatCall, reason string, now time.Tim
 			before = last.ID
 		}
 		m := &ChatMsg{ID: cv.st.Next, At: nowMs(), From: c.From, Kind: "call", Call: info}
-		cv.st.Next = m.ID + 1
-		cv.msgs = append(cv.msgs, m)
-		cv.byID[m.ID] = m
-		cv.st.Read[c.From] = m.ID
 		// A call both of them had is not news to either: it must not light
 		// the unread badge. A missed one is exactly the news.
 		if was == "active" && cv.st.Read[c.To] >= before {
 			cv.st.Read[c.To] = m.ID
 		}
-		o.bump(cv, m)
-		h.saveMonth(cv, m)
+		h.record(o, cv, m) // no push: the call itself did the ringing
 	}
 
 	keep := o.cs().sigs[:0]
@@ -706,16 +702,6 @@ func (h *ChatHub) sendCallPushes(jobs []chatCallPush) {
 			deliverPush(h.push, h.users, h.log, j.user, j.sub, j.payload, j.ttl)
 			continue
 		}
-		owner, person, endpoint := j.user, j.person, j.sub.Endpoint
-		deliverPushTo(h.push, h.log, j.sub, j.payload, j.ttl, func() {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			if o := h.owners[owner]; o != nil {
-				if c := o.contact(person); c != nil && removeSub(c, endpoint) {
-					h.saveData(o)
-					o.changed(true)
-				}
-			}
-		})
+		deliverPushTo(h.push, h.log, j.sub, j.payload, j.ttl, h.forgetGuestSub(j.user, j.person, j.sub.Endpoint))
 	}
 }

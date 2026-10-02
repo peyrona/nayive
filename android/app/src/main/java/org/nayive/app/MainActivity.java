@@ -37,10 +37,10 @@ public class MainActivity extends Activity {
 
     static final String ACTION_SETUP = "org.nayive.app.SETUP";
 
-    private static final int REQ_NOTIF = 1, REQ_LOC = 2, REQ_BG = 3;
+    private static final int REQ_NOTIF = 1, REQ_LOC = 2, REQ_BG = 3, REQ_MEDIA = 4;
 
     /** How many times each request was answered "no" - after that, Settings. */
-    private final int[] refused = new int[4];
+    private final int[] refused = new int[5];
 
     private final List<Runnable> refreshers = new ArrayList<>();
     private TextView missing;
@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------
-    // the four permissions
+    // the permissions
     // ------------------------------------------------------------------
 
     private boolean notifOk() {
@@ -123,6 +123,17 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean mediaOk() { return Media.allowed(this); }
+
+    /** Photos and videos: all of them (not Android 14's "Select photos"), and their places. */
+    private void askMedia() {
+        if (!Media.partial(this) && refused[3] < 2) {
+            requestPermissions(Media.wanted(), REQ_MEDIA);
+        } else {
+            appSettings();
+        }
+    }
+
     private void askBatt() {
         try {
             startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
@@ -148,7 +159,11 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
         boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
-        if (!granted && code >= 1 && code <= 3) refused[code - 1]++;
+        if (!granted && code >= 1 && code <= 4) refused[code - 1]++;
+        if (code == REQ_MEDIA && Media.allowed(this)) {
+            Notes.cancel(this, Notes.MEDIA_FIX);
+            if (Media.on(this)) MediaJob.schedule(this);
+        }
         for (Runnable r : refreshers) r.run();
     }
 
@@ -203,6 +218,7 @@ public class MainActivity extends Activity {
         add(step(R.string.step_notif_title, R.string.step_notif_why, this::notifOk, this::askNotif), 18);
         add(step(R.string.step_loc_title, R.string.step_loc_why, this::locOk, this::askLoc), 10);
         add(step(R.string.step_batt_title, R.string.step_batt_why, this::battOk, this::askBatt), 10);
+        add(step(R.string.step_media_title, R.string.step_media_why, this::mediaOk, this::askMedia), 10);
         if (Build.VERSION.SDK_INT >= 34) {
             add(step(R.string.step_full_title, R.string.step_full_why, this::fullOk, this::askFull), 10);
         }
@@ -210,7 +226,7 @@ public class MainActivity extends Activity {
         missing = text(getString(R.string.setup_missing), 13, R.color.nayive_dim);
         add(missing, 14);
         refreshers.add(() -> missing.setVisibility(
-                notifOk() && locOk() && battOk() && fullOk() ? View.GONE : View.VISIBLE));
+                notifOk() && locOk() && battOk() && fullOk() && mediaOk() ? View.GONE : View.VISIBLE));
 
         // What is left of the screen goes here, so "Continuar" is at the bottom.
         page.addView(new View(this), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -330,6 +346,8 @@ public class MainActivity extends Activity {
             // Location granted "while in use" only: say what is still missing.
             if (name == R.string.step_loc_title && !ok && Tracker.allowed(this)) {
                 w.setText(R.string.step_loc_bg);
+            } else if (name == R.string.step_media_title && !ok && Media.partial(this)) {
+                w.setText(R.string.step_media_partial);   // "Select photos": say "Allow all"
             } else {
                 w.setText(why);
             }

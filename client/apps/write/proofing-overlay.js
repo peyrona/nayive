@@ -307,10 +307,7 @@ export function createSpellOverlay( o )
     scroller.addEventListener( 'scroll', refresh, { passive: true } );
     new ResizeObserver( refresh ).observe( document.getElementById( 'editorHost' ) );
 
-    // The words with a red line right now (for the console and the checks).
-    function words() { return drawn.map( function( d ) { return d.word; } ); }
-
-    return { changed: changed, refresh: refresh, reset: reset, forget: forget, pass: pass, words: words, itemsAt: itemsAt };
+    return { changed: changed, refresh: refresh, reset: reset, forget: forget, itemsAt: itemsAt };
 }
 
 // Where characters [a, b) of paragraph `pid` are painted, as client rects: the

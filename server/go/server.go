@@ -4,17 +4,13 @@ package main
 // Server - everything the process owns, and the URL table.
 // =============================================================================
 //
-// lib/config.py builds module-level CONFIG, SESSIONS and a logger that every
-// other module imports: a set of singletons. Here they are FIELDS OF Server and
-// are passed in at construction, which is what lets a test - or a side-by-side
-// parity run against the Python - stand two servers up in one process.
+// No singletons: the config, the sessions, the logger and the rest are FIELDS
+// OF Server, passed in at construction, which is what lets a test stand two
+// servers up in one process.
 //
-// ROUTING. The Python funnels every method into one _dispatch() with a chain of
-// `if path == ...` tests, so the ORDER of that chain is the priority and moving
-// a line changes behaviour. http.ServeMux sorts patterns by specificity
-// instead, so "/api/login" beats "/api/" no matter what order they were
-// registered in. The registrations below are still written in the Python's
-// order, purely so the two files read the same way.
+// ROUTING. http.ServeMux sorts patterns by specificity, so "/api/login" beats
+// "/api/" no matter what order they were registered in; the order below only
+// groups them for the reader.
 
 import (
 	"context"
@@ -109,10 +105,8 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 	// Movies, a 500 MB download over a slow line, a phone uploading a video.
 	// The client cannot tell that from the network dropping.
 	//
-	// The Python has no such cap. Its sock.settimeout(30) is an IDLE timeout -
-	// it resets on every read or write that makes progress - so a transfer may
-	// take as long as it takes while it keeps moving. Zero here is the closest
-	// honest equivalent, and it leaves the two servers behaving the same.
+	// So there is no such cap: a transfer may take as long as it takes while
+	// it keeps moving.
 	//
 	// A request BODY has its own deadline instead, set per request and lifted
 	// once the body is in, so a long-poll can still wait as long as it likes:
@@ -135,7 +129,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 
 	if err := s.configureTLS(); err != nil {
 		// Missing file, unreadable key (letsencrypt directories are root-only),
-		// bad PEM. Do not crash - say why and serve plain HTTP, like server.py.
+		// bad PEM. Do not crash - say why and serve plain HTTP.
 		log.Warn("TLS disabled, serving plain HTTP", "err", err)
 	}
 	return s, nil
@@ -180,8 +174,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		// Give in-flight requests a moment to finish before we pull the rug.
-		// Shutdown stops accepting, then waits for the live ones - the Python's
-		// server_close() does neither.
+		// Shutdown stops accepting, then waits for the live ones.
 		grace, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := s.httpd.Shutdown(grace); err != nil {
@@ -222,12 +215,13 @@ func (s *Server) routes() http.Handler {
 
 	// --- sessions ----------------------------------------------------------
 	// Registered WITHOUT a method in the pattern, so a GET to /api/login gets
-	// the Python's answer rather than the mux's own 405.
+	// the route's own answer rather than the mux's 405.
 	mux.HandleFunc("/api/login", s.apiLogin)
 	mux.HandleFunc("/api/logout", s.apiLogout)
 	mux.HandleFunc("/api/whoami", s.apiWhoami)
 	mux.HandleFunc("/api/password", s.apiPassword)
-	mux.HandleFunc("/api/unlock", s.apiUnlock) // the screen locker
+	mux.HandleFunc("/api/unlock", s.apiUnlock)          // the screen locker
+	mux.HandleFunc("/api/culture/{what}", s.apiCulture) // the Salon locker's sources (api_culture.go)
 
 	// --- per-account settings ----------------------------------------------
 	mux.HandleFunc("/api/lang", s.apiLang)
@@ -285,8 +279,7 @@ func (s *Server) routes() http.Handler {
 	// "/api" with NO trailing slash has to be registered explicitly, and this is
 	// not a stylistic choice. Without it http.ServeMux sees a request for the
 	// subtree pattern "/api/" minus its slash and answers its own 307 redirect
-	// to "/api/" - where handler.py, whose `path.startswith("/api/")` is simply
-	// false for "/api", falls through to the same plain-text 404 as any other
+	// to "/api/", where "/api" should be the same plain-text 404 as any other
 	// unknown URL. Registering the exact pattern is what suppresses the mux's
 	// redirect. (Same reason URLPrefix is registered both with and without its
 	// slash, a few lines down.)
@@ -309,22 +302,17 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/", s.handleRoot)
 
 	// Read the chain INSIDE OUT: bodyDeadline runs first, then recoverPanic, then
-	// the request log, then the security headers, then the chunked refusal, then
-	// the traversal guard, then the mux. The security headers must sit OUTSIDE
-	// both guards, or a refused request would go out without them - which is the
-	// one response where they matter most. Wrapping in the other order would put
-	// the panic guard inside the logger and a panic would skip the log line.
+	// the request log, then the security headers, then the traversal guard, then
+	// the mux. The security headers must sit OUTSIDE the guard, or a refused
+	// request would go out without them - which is the one response where they
+	// matter most. Wrapping in the other order would put the panic guard inside
+	// the logger and a panic would skip the log line.
 	//
 	// collapsePath goes INSIDE refuseTraversal, so the ".." guard still reads the
 	// raw path: collapsing first would let "/nayive/..//config" past it.
-	//
-	// refuseChunked goes OUTSIDE refuseTraversal because _dispatch tests
-	// Transfer-Encoding before it looks at the path at all: a chunked request to
-	// a traversal URL is a 411 on both servers, not a 403.
 	var h http.Handler = mux
 	h = collapsePath(h)
 	h = refuseTraversal(h)
-	h = refuseChunked(h)
 	h = securityHeaders(h)
 	h = logRequest(s.log, h)
 	h = recoverPanic(s.log, h)
@@ -358,7 +346,7 @@ func (s *Server) session(r *http.Request) (Session, bool) {
 }
 
 // requireSession answers 401 and reports false when nobody is signed in. Every
-// API route starts with it, mirroring the Python's `if not session:` prelude.
+// API route that needs a session starts with it.
 func (s *Server) requireSession(w http.ResponseWriter, r *http.Request) (Session, bool) {
 	sess, ok := s.session(r)
 	if !ok {

@@ -12,19 +12,17 @@ html, body { height: 100%; overflow: hidden; }
    PC / tablet - it is hidden in the ≤640px phone layout below. */
 .brand { display: inline-flex; flex-direction: column; align-items: stretch; flex: 0 0 auto; margin-right: 10px; }
 .brand-row { display: flex; align-items: center; }
+/* Desktop window: the drag strip after the app name (shared/app.css) goes on
+   the wrapper, so the disk bar keeps the name's width. */
+html.is-windowed .topbar h1 { margin-right: 0; }
+html.is-windowed .brand     { margin-right: 1.5rem; }
 .disk-bar { height: 7px; margin-top: 3px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .disk-bar > i { display: block; height: 100%; width: 0; border-radius: 1px; background: var(--disk-fill, var(--ok)); transition: width .3s ease, background-color .3s ease; }
 /* Nearly full with something in the papelera: the bar becomes a button
    that empties it (see offerEmptyTrash). */
 .disk-bar--offer { cursor: pointer; box-shadow: 0 0 0 2px color-mix( in srgb, var(--danger) 35%, transparent ); }
-.topbar .sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); flex: 0 0 auto; }
-
-/* The selection group. display: contents so its rule and its six buttons go on
-   laying themselves out as children of the .topbar - nothing moves by a pixel
-   when it comes and goes. The hidden attribute wins over this (app.css) and
-   takes the whole group, rule included, in one go. */
-#selActions { display: contents; }
 .status-label { flex: 0 1 auto; min-width: 0; font-size: 0.85rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; text-align: right; }
+.status-label:empty { padding: 0; }   /* no text, no width: a 320px phone keeps the bar on one row */
 
 /* "Moved to the bin" used to be words in the status slot. Now the papelera
    itself answers: two slow gulps (swell, settle, duck, settle) tinted
@@ -42,14 +40,8 @@ html, body { height: 100%; overflow: hidden; }
 }
 .icon-btn.bin-gulp { animation: bin-gulp 1.5s ease-in-out 2; }
 
-/* Look from app.css (FORM FIELD); only the width is Drive's. The wrapper
-   carries it, so the advanced-search magnifier can sit inside the right end. */
-.search-wrap { position: relative; flex: 0 0 auto; width: 190px; }
-.search-wrap .topbar-search { width: 100%; padding-right: 32px; }   /* clears the magnifier */
-.search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
-/* Shared .icon-btn.sm, one size down so it fits inside the field's height. */
-.search-wrap .icon-btn.sm { width: 26px; height: 26px; }
-.search-wrap .icon-btn.sm svg { width: 15px; height: 15px; }
+/* The search field is the shared SEARCH FOLD (app.css): the funnel and the ×
+   inside its right end are made there too (NayiveUI.searchFold). */
 
 /* While an advanced search is in force this button stands in for the box
    (advsearch.js): the field's own look with an accent edge, so it reads as
@@ -57,7 +49,7 @@ html, body { height: 100%; overflow: hidden; }
 .adv-chip
 {
     display: flex; align-items: center; gap: 6px; width: 100%;
-    padding: 7px 32px 7px 10px;
+    padding: 7px 60px 7px 10px;    /* clears the funnel and the × (SEARCH FOLD) */
     font: inherit; font-size: var(--field-fs); text-align: left;
     color: var(--accent); background: var(--card2);
     border: 1px solid var(--accent); border-radius: var(--radius-s);
@@ -65,7 +57,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 .adv-chip svg  { flex: 0 0 auto; }
 .adv-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.search-wrap.adv-on .icon-btn { color: var(--accent); }
+.search-wrap.adv-on #searchBuilderBtn { color: var(--accent); }
 
 /* Advanced search dialog. Layout only: every control in it is a shared one
    (.field, .pill, .text-btn, .icon-btn, .dt-field). */
@@ -126,6 +118,14 @@ html, body { height: 100%; overflow: hidden; }
 .list-pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 
 .breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 0.85rem; flex: 0 0 auto; }
+/* What the shared .crumb pill used to give these segments (Photos / Music /
+   Movies dropped it, 2026-09-30); the line after it overrides the rest. */
+.breadcrumb .crumb { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0;
+                     margin: 0 var(--space-2) 0 0; border: 0; background: var(--card2); font: inherit;
+                     font-size: 0.82rem; transition: background-color var(--tr-fast), color var(--tr-fast); }
+.breadcrumb .crumb svg  { width: 14px; height: 14px; flex: 0 0 auto; }
+.breadcrumb .crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb .crumb:empty { display: none; }
 .breadcrumb .crumb { color: var(--text-dim); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
 .breadcrumb .crumb:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
 .breadcrumb .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
@@ -278,8 +278,7 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
     font-size: 0.85rem; color: var(--text-dim);
 }
 .replace-list li { padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.replace-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 0.88rem; color: var(--text); cursor: pointer; margin-bottom: 4px; }
-.replace-opt input { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+.replace-opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.88rem; color: var(--text); cursor: pointer; margin-bottom: 4px; }
 .convert-nopush { font-size: 0.88rem; }
 .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--link); text-decoration: underline; cursor: pointer; }
 .row-convert { color: var(--accent); font-weight: 600; margin-right: 6px; }
@@ -339,19 +338,6 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
 .media-backdrop video[hidden], .media-backdrop .media-audio-box[hidden] { display: none; }
 .media-backdrop .media-audio-box svg { color: rgba(255, 255, 255, 0.5); }
 .media-backdrop audio { width: min(78vw, 420px); }
-
-/* Built-in image editor (TOAST UI Image Editor, loaded on demand). Full-screen,
-   always dark — like the lightbox its colours are fixed and do not follow the theme.
-   Used only for the formats the library can re-encode (png / jpg / webp); every
-   other image type still opens in the plain lightbox above. */
-/* The chrome itself is the shared IMAGE EDITOR block in shared/app.css
-   (Photos opens the same editor). Only the layer it sits on is Drive's:
-   over the folder sheet (95) and UNDER the dialogs (.sheet-backdrop, 100)
-   — "Guardar copia" and the unsaved-changes question both open FROM the
-   editor, so they have to land on top of it. Nothing else can be open
-   behind it: a file is opened from a listing row, never from the tree
-   sheet, a dialog or a context menu. */
-.editor-backdrop { z-index: 99; }
 
 /* Indeterminate progress dialog (shown while Drive builds a ZIP) */
 .progress-sheet { max-width: 320px; text-align: center; }
@@ -415,7 +401,8 @@ body.trash-mode #copyToBtn,  body.trash-mode #copyLinkBtn,
 body.trash-mode #compressBtn, body.trash-mode #propsBtn,
 body.trash-mode #downloadBtn, body.trash-mode #deleteBtn,
 body.trash-mode #shareBtn,   body.trash-mode #bigFilesBtn,
-body.trash-mode .topbar .sep,
+body.trash-mode #selActions,
+body.trash-mode #driveTools::before,
 body.trash-mode .tree-pane { display: none; }
 
 .trash-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -425,15 +412,14 @@ body.trash-mode .tree-pane { display: none; }
    all but one digit, so "30" read as "3" */
 .trash-bar .trash-days input { width: 5em; padding-inline: 8px 4px; text-align: center; }
 /* Every button in the bar is a shared one: "←" an .icon-btn, "Vaciar
-   papelera" a .text-btn.ghost.danger, the days hint an .info-dot. */
-.trash-bar .info-dot svg { width: 19px; height: 19px; }
+   papelera" a .text-btn.ghost.danger, the days hint an .info-dot (its size
+   lives in app.css, so every (i) looks like this one). */
 
 /* Restore / delete-forever: two shared .icon-btn.sm (the second .danger) */
 .row .row-trash-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 
 /* --- Responsive: phone layout (≤640px). New elements below are hidden here
        and only revealed inside the @media block, so desktop is untouched. --- */
-#searchToggleBtn { display: none; }
 .tree-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90; display: none; }
 
 @media (max-width: 640px)
@@ -444,19 +430,18 @@ body.trash-mode .tree-pane { display: none; }
     .topbar h1 { font-size: 1rem; margin-right: 6px; white-space: nowrap; }
     .brand { margin-right: 2px; }
     .disk-bar { display: none; }
-    .topbar .sep { display: none; }
     .topbar { gap: 2px; padding: 6px 6px; }
+    /* The line between the groups (app.css HEADER) costs the 11px that
+       sends the buttons to a second row on a 320px phone. */
+    .topbar-actions > .tb-group::before { display: none; }
 
-    /* B2 — search collapses behind a magnifier button */
-    #searchToggleBtn { display: flex; }
-    .search-wrap { display: none; }
-    .topbar.searching .search-wrap { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
-    /* Fingers: the magnifier inside grows as far as the taller field allows. */
+    /* B2 — the search fold (app.css). Fingers: the funnel and the × inside
+       grow as far as the taller field allows. */
     .search-wrap .topbar-search,
-    .adv-chip { padding-right: 38px; }
+    .adv-chip { padding-right: 70px; }
     .adv-chip { font-size: 16px; }      /* the same height as the 16px phone field it stands in for */
     .sb-rule select { width: 128px; }
-    .search-wrap .icon-btn.sm { width: 32px; height: 32px; }
+    .search-wrap .search-ends .icon-btn.sm { width: 32px; height: 32px; }
 
     /* B4 — the folder tree becomes a slide-in sheet */
     .tree-pane
@@ -489,6 +474,7 @@ body.trash-mode .tree-pane { display: none; }
        even with something selected. */
     #shareBtn, #bigFilesBtn, #trashViewBtn { display: none; }
     #moreBtn { display: flex; }
+    .search-tight #moreBtn { display: none; }   /* the search fold (app.css) sends it aside with the rest */
 
     /* B7 — roomier rows, ⋮ action button, no size/date column */
     .row { padding: 11px 12px 11px 6px; gap: 8px; }

@@ -13,7 +13,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { browser, attach } from "../locktest/cdp.mjs";
+import { browser, attach } from "../cdp.mjs";
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
 const APPS = path.resolve( here, "../../client/apps" );
@@ -162,6 +162,8 @@ try
     // ----- 1b. The window's buttons: on the bar button of the window in front, not in title bars
     const frontBtn = what => `document.querySelector( '#tasks .task.front [data-win="${what}"]' )`;
     async function press( expr ) { const r = await rectOf( expr ); await click( r.left + r.width / 2, r.top + r.height / 2 ); }
+    // The Free/Tile switch lives in the "⋮" menu: opened first when shut.
+    async function pressTile( expr ) { if( await ev( "document.getElementById( 'moreMenu' ).hidden" ) ) await press( "document.getElementById( 'moreBtn' )" ); await press( expr ); }
     check( "no dots left in any title bar", await ev( `! document.querySelector( '.win-dots' ) && [].every.call( document.querySelectorAll( '#desk iframe' ),
            function ( f ) { return ! f.contentDocument.querySelector( '.win-dots' ); } )` ) === true );
     check( "only the bar button in front shows its buttons", await ev( `[].filter.call( document.querySelectorAll( '#tasks .task-ctl' ),
@@ -265,7 +267,7 @@ try
     await press( "document.querySelectorAll( '#tasks .task' )[ 1 ]" );          // B's bar button: B to the front
     await press( frontBtn( "max" ) );
     const before = await wins();
-    await press( "document.querySelector( '#tileSw .track' )" );               // the switch: Free -> Tile
+    await pressTile( "document.querySelector( '#tileSw .track' )" );               // the switch: Free -> Tile
     check( "Tile switch: on, bold Tile", await ev( "document.getElementById( 'tileChk' ).checked && document.getElementById( 'tileSw' ).classList.contains( 'on' )" ) === true );
     await settle();
     w = await wins();
@@ -292,7 +294,7 @@ try
     await dragMouse( want[ 0 ].l + 200, want[ 0 ].t + 22, want[ 0 ].l + 140, want[ 0 ].t + 62 );
     w = await wins();
     check( "Tiled: a window moved by hand stays moved", w[ 0 ].box.t === 40, w[ 0 ].box );
-    await press( "document.querySelector( '#tileSw .tile-word[data-tile=\"on\"]' )" );
+    await pressTile( "document.querySelector( '#tileSw .tile-word[data-tile=\"on\"]' )" );
     w = await wins();
     check( "The word Tile, while tiled: tiles again", near( w[ 0 ].box.l, want[ 0 ].l, 0.01 ) && near( w[ 0 ].box.t, want[ 0 ].t, 0.01 ), w[ 0 ].box );
     // ...and a manual move again, to be dropped by Untile.
@@ -325,7 +327,7 @@ try
     // ----- 6. Untile: exactly as before. (A reload puts the bar in stacking
     // order - as it always has - so windows are matched by name from here on.)
     check( "Reload while tiled: the switch says Tile", await ev( "document.getElementById( 'tileChk' ).checked" ) === true );
-    await press( "document.querySelector( '#tileSw .tile-word[data-tile=\"off\"]' )" );   // the word "Free"
+    await pressTile( "document.querySelector( '#tileSw .tile-word[data-tile=\"off\"]' )" );   // the word "Free"
     await settle(); await settle();
     w = await wins();
     const at = name => w.findIndex( x => x.name === name );
@@ -389,22 +391,83 @@ try
     const f2 = await frontName();
     check( "Nested frames: a click in the inner page puts its window in front", /Nest/.test( f2 ), f2 );
 
-    // ----- 10. My account's "New windows start with Scale on" (launcher, in the menu's frame)
-    await ev( "NayiveDesktop.menu(); true" );
-    await waitFor( "( function () { try { var d = document.querySelector( '.menu iframe' ).contentDocument; return d.documentElement.classList.contains( 'in-desktop' ) && !! d.getElementById( 'deskScaleChk' ); } catch( e ) { return false; } } )()", 10000, "launcher in the menu" );
-    const md = "document.querySelector( '.menu iframe' ).contentDocument";
-    check( "My account: the Scale default shows in desktop mode", await ev( `getComputedStyle( ${md}.getElementById( 'deskScaleWrap' ) ).display !== 'none'` ) === true );
-    await ev( `( function () { var k = ${md}.getElementById( 'deskScaleChk' ); k.checked = true; k.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
-    check( "My account: ticked, it is stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).scaleNew" ) === true );
-    await ev( "NayiveDesktop.menu(); true" ); await settle();
+    // ----- 10. "Scale on open" (the "⋮" menu; it left My account 2026-09-28)
+    await ev( "( function () { var k = document.getElementById( 'scaleNewChk' ); k.checked = true; k.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
+    check( "Scale on open: ticked, it is stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).scaleNew" ) === true );
     await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=G' )" ); await settle();
     let nw = await ev( "NayiveDesktop.windows()" );
     check( "Scale default on: a new window starts with Scale on", nw[ nw.length - 1 ].scale === true, nw[ nw.length - 1 ] );
     check( "Scale default on: the windows restored keep their own", nw[ 0 ].scale === false && nw[ 1 ].scale === false );
-    await ev( `( function () { var k = ${md}.getElementById( 'deskScaleChk' ); k.checked = false; k.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+    await ev( "( function () { var k = document.getElementById( 'scaleNewChk' ); k.checked = false; k.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
     await ev( "NayiveDesktop.open( '/nayive/fixture/box.html?w=300&h=200&n=H' )" ); await settle();
     nw = await ev( "NayiveDesktop.windows()" );
     check( "Scale default off: a new window starts with Resize", nw[ nw.length - 1 ].scale === false, nw[ nw.length - 1 ] );
+
+    // ----- 11. Sticky windows (the "⋮" menu): an edge offers that half of the desk
+    const dk = await ev( "JSON.stringify( [ document.getElementById( 'desk' ).clientWidth, document.getElementById( 'desk' ).clientHeight, document.getElementById( 'desk' ).getBoundingClientRect().top ] )" ).then( JSON.parse );
+    const [ DW, DH, DT ] = dk;
+    const boxI = () => ev( `[].indexOf.call( document.querySelectorAll( '#desk > .win' ), ${boxAt} )` );
+    const ghostBox = () => ev( "( function () { var g = document.getElementById( 'snapGhost' ); return JSON.stringify( g.hidden ? null : { l: g.offsetLeft, t: g.offsetTop, w: g.offsetWidth, h: g.offsetHeight, b: getComputedStyle( g ).borderTopStyle } ); } )()" ).then( JSON.parse );
+    check( "Sticky windows: on by default", await ev( "document.getElementById( 'stickyChk' ).checked" ) === true );
+    const edges = { left: [ 1, 400 ], right: [ 1899, 400 ], top: [ 900, DT + 1 ], bottom: [ 900, DT + DH - 1 ] };
+    const halves = { left: [ 0, 0, DW / 2, DH ], right: [ DW / 2, 0, DW / 2, DH ], top: [ 0, 0, DW, DH / 2 ], bottom: [ 0, DH / 2, DW, DH / 2 ] };
+    for( const z of Object.keys( edges ) )
+    {
+        const r0 = await rectOf( boxAt ), x0 = r0.left + 200, y0 = r0.top + 22, [ x1, y1 ] = edges[ z ];
+        await mouse( "mouseMoved", x0, y0 ); await mouse( "mousePressed", x0, y0, 1 );
+        for( let i = 1; i <= 10; i++ ) await mouse( "mouseMoved", x0 + ( x1 - x0 ) * i / 10, y0 + ( y1 - y0 ) * i / 10, 1 );
+        await settle();
+        const g = await ghostBox(), h = halves[ z ];
+        check( `Sticky ${z}: a dotted area offers that half`, !! g && g.b === "dotted" && near( g.l, h[ 0 ], 2 ) && near( g.t, h[ 1 ], 2 ) && near( g.w, h[ 2 ], 2 ) && near( g.h, h[ 3 ], 2 ), g );
+        await mouse( "mouseReleased", x1, y1 ); await settle();
+        const wb = ( await win( await boxI() ) ).box;
+        check( `Sticky ${z}: dropped, the window takes it`, near( wb.l, h[ 0 ], 2 ) && near( wb.t, h[ 1 ], 2 ) && near( wb.w, h[ 2 ], 2 ) && near( wb.h, h[ 3 ], 2 ), wb );
+        check( `Sticky ${z}: the area is gone`, await ghostBox() === null );
+    }
+
+    // Bottom, the way a person does it: only until the window's lower edge crosses the desk's.
+    {
+        const rm = await rectOf( boxAt );                    // out of the bottom half first, to mid-desk
+        await dragMouse( rm.left + 200, rm.top + 22, 700, 150 );
+        const r0 = await rectOf( boxAt ), x0 = r0.left + 200, y0 = r0.top + 22;
+        const y1 = y0 + ( DT + DH - r0.bottom ) + 20;       // the lower edge 20px past the desk
+        await mouse( "mouseMoved", x0, y0 ); await mouse( "mousePressed", x0, y0, 1 );
+        for( let i = 1; i <= 10; i++ ) await mouse( "mouseMoved", x0, y0 + ( y1 - y0 ) * i / 10, 1 );
+        await settle();
+        const g = await ghostBox();
+        check( "Sticky bottom: the window's lower edge at the border is enough", !! g && near( g.t, DH / 2, 2 ), { g, y1, DH } );
+        await mouse( "mouseReleased", x0, y1 ); await settle();
+    }
+
+    // Off: no area, the window stays where it is dropped.
+    await ev( "document.getElementById( 'moreBtn' ).click(); true" ); await settle();
+    check( "More menu: Sticky windows row shows", await ev( "! document.getElementById( 'moreMenu' ).hidden && document.getElementById( 'stickyChk' ).closest( 'label' ).offsetHeight > 0" ) === true );
+    const sr = await rectOf( "document.getElementById( 'stickyChk' ).closest( 'label' )" );
+    await click( sr.left + 20, sr.top + sr.height / 2 );
+    check( "Sticky windows: a click turns it off, the menu stays open", await ev( "! document.getElementById( 'stickyChk' ).checked && ! document.getElementById( 'moreMenu' ).hidden" ) === true );
+    check( "Sticky windows: stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).sticky" ) === false );
+    // A press inside a window's page closes the menu.
+    const fr2 = await rectOf( boxAt );
+    await click( fr2.left + fr2.width / 2, fr2.top + fr2.height - 30 );
+    check( "More menu: a press inside a window hides it", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
+    {
+        const r0 = await rectOf( boxAt ), x0 = r0.left + 200, y0 = r0.top + 22;
+        await mouse( "mouseMoved", x0, y0 ); await mouse( "mousePressed", x0, y0, 1 );
+        for( let i = 1; i <= 10; i++ ) await mouse( "mouseMoved", x0 + ( 1 - x0 ) * i / 10, y0 + ( 400 - y0 ) * i / 10, 1 );
+        await settle();
+        check( "Sticky off: no area at the edge", await ghostBox() === null );
+        await mouse( "mouseReleased", 1, 400 ); await settle();
+        const wb = ( await win( await boxI() ) ).box;
+        check( "Sticky off: the window keeps its size", ! near( wb.h, DH, 2 ), wb );
+    }
+    await ev( "document.getElementById( 'moreBtn' ).click(); true" ); await settle();
+    await ev( "document.getElementById( 'desk' ).dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ); true" );
+    check( "More menu: a click on the desk hides it", await ev( "document.getElementById( 'moreMenu' ).hidden" ) === true );
+
+    // "?" sits on the bar right after the "⋮" (the settings dialog is gone: its rows are in the menu).
+    check( "Help: on the bar, right after the dots", await ev( "document.getElementById( 'moreBtn' ).nextElementSibling === document.getElementById( 'helpBtn' ) && document.getElementById( 'helpBtn' ).offsetWidth > 0" ) === true );
+    check( "Help: gone from the menu", await ev( "! document.querySelector( '#moreMenu [data-intro-open]' )" ) === true );
+    await shot( "bar-end" );
 
     const bad = c.logs.filter( l => /^EXCEPTION/.test( l ) );
     check( "no page errors", bad.length === 0, bad );

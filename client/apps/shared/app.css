@@ -205,18 +205,30 @@ a:hover            { text-decoration: underline; opacity: 0.85; }
 /* -----------------------------------------------------------------------------
  * HEADER
  *
- * Same shape in every app, same order left to right:
+ * Same shape in every app, same order left to right (his call, 2026-09-30:
+ * "look on the left, act on the right"):
  *
- *     [.app-icon]  [<h1> app name]  ... app controls ...  [.sync-indicator]
+ *   [<- back] [.app-icon] <h1> [file name] [.tb-modes] [pager]  ...
+ *        ... .topbar-actions [ selection | search, + new, tools | more, settings, ? ]  [.sync-indicator]
  *
+ * - LEFT, after the title: what you LOOK at - the view switch (.tb-modes:
+ *   grid / list, day / week / month...), then a pager (Calendar's dates).
+ *   The <- of a sub-view goes before the icon.
+ * - RIGHT, one .topbar-actions / .header-actions: what you DO, in .tb-group
+ *   boxes, in this order: the actions on a selection or the open item (only
+ *   while there is one), then the search magnifier, + new, the app's other
+ *   tools, then .tb-sys: more (...), settings, help (?). A thin line between
+ *   two groups that show, drawn here - never a hand-placed .sep.
+ *   A selection group that comes and goes grows the bar leftwards, so the
+ *   buttons after it never move.
  * - .topbar is the tool-shell header. It is ONE row while everything fits; when
  *   the viewport is too narrow the button bar wraps onto the next line(s) - the
  *   same way a toolbar overflows - and the title always stays fully readable
  *   (it wraps its own text before it is ever clipped). Divider underneath.
- *   Card-shell apps (.header) use a plain flex row with the same parts and the
- *   same wrap behaviour, and `margin-bottom: var(--space-4)` instead of a border.
- * - .app-icon: an inline SVG in --accent. Render it 20px in a .topbar, 26px in
- *   a card header.
+ *   Card-shell apps (.header) LOOK the same (his call, 2026-09-30): the card's
+ *   top row, edge to edge, same padding, same divider, sticky while the list
+ *   scrolls under it. See "Card-shell header" below.
+ * - .app-icon: an inline SVG in --accent, 20px in either header.
  * - The <h1> (or .app-title) is ALWAYS --accent, 1.1rem, weight 700, no margin.
  *   Do not colour it --text; do not size it per app. Never give it
  *   `text-overflow: ellipsis` - the title is not allowed to be truncated.
@@ -309,16 +321,14 @@ html.is-embedded .header                 { justify-content: flex-end; }
 
    Nothing has to move to make room: calendar's .topbar starts with the icon,
    tasks' always-open compose field (flex-grow) still pushes the buttons to the
-   right edge, and habits' .tabs already carry margin-right: auto. Two details
-   though. The icon is trimmed to 20px - the card headers draw it at 26px, which
-   is more than a narrow pane can spare (habits' header, already the fullest
-   row, wraps its buttons to a second line in a 25% pane either way). And the
-   header packs from the LEFT again: the flex-end above was written for a header
+   right edge, and habits' .tabs already carry margin-right: auto. One detail
+   though (the icon is 20px in every header now, so no trim is needed; habits'
+   header, already the fullest row, wraps its buttons to a second line in a 25%
+   pane either way): the header packs from the LEFT again: the flex-end above was written for a header
    that began with a button, and it parked the icon at the right end of its row
    the moment the row wrapped. */
 html.is-embedded.is-embedded-wide .topbar > .app-icon,
 html.is-embedded.is-embedded-wide .header > .app-icon { display: block; }
-html.is-embedded.is-embedded-wide .header > .app-icon { width: 20px; height: 20px; }
 html.is-embedded.is-embedded-wide .header             { justify-content: flex-start; }
 
 /* A framed card app (tasks, habits) fills its pane. The card shell centres a
@@ -340,17 +350,6 @@ html.is-windowed .page > .page-inner > .card
     border: none;
     border-radius: 0;
     box-shadow: none;
-}
-/* In a window the card's top row is the title bar, so it must not scroll away
-   with the page (Contacts, Tasks, Habits, Split). It takes over the card's top
-   padding and its own gap below, both opaque, so rows slide under it unseen.
-   shared/ui.js puts its height in --win-head-h for an app's own sticky heads. */
-html.is-windowed .page > .page-inner > .card > .header
-{
-    position: sticky; top: 0; z-index: 20;
-    margin-top: -20px; padding-top: 20px;
-    margin-bottom: 0; padding-bottom: var(--space-4);
-    background: var(--card);
 }
 
 /* -----------------------------------------------------------------------------
@@ -376,32 +375,62 @@ html.is-windowed .sync-indicator { display: none; }
     margin-left: auto;          /* hug the right edge while it shares the title's line */
 }
 
-/* In a desktop window the top row is the window's title bar (desktop/index.html
- * drags it from any empty spot). A text field after the app name - the document
- * name in Calc / Text / Write, a search box, Tasks' compose line - keeps an empty
- * strip after it to grab the window by: at least 2rem, more as the window widens. */
-html.is-windowed .file-label,
-html.is-windowed .file-label-input,
-html.is-windowed .topbar .search-wrap,
-html.is-windowed .tb-end .topbar-search:not(.show),
-html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
+/* The right-hand groups (see HEADER). A group with nothing shown takes no room,
+   and the line before a group only draws when a group before it shows. */
+.tb-group                                   { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.tb-group[hidden],
+.tb-group:not(:has(> :not([hidden])))       { display: none; }
+:is(.topbar-actions, .header-actions) > .tb-group:not([hidden]):has(> :not([hidden])) ~ .tb-group::before
+{
+    content: "";
+    align-self: stretch;
+    width: 1px;
+    margin: 6px 4px;
+    background: var(--line);
+}
 
-/* Card-shell header: same parts, no divider. */
+/* In a desktop window the top row is the window's title bar (desktop/index.html
+ * drags it from any empty spot). The app name keeps an empty strip after it to
+ * grab the window by - 1.5rem - so every
+ * control after it stays together. Drive and Planner wrap their name, so the
+ * wrapper carries the strip there (drive.css, planner/index.html). */
+html.is-windowed .topbar h1,
+html.is-windowed .header h1,
+html.is-windowed .app-title { margin-right: 1.5rem; }
+
+/* Card-shell header (Contacts, Tasks, Habits, Split): the same bar as a tool
+   app's .topbar (his call, 2026-09-30) - same padding, gaps, icon size and
+   divider - laid over the card's top padding, edge to edge. It never scrolls
+   away: sticky, opaque, the rows slide under it unseen (in a desktop window it
+   is also the title bar). The floating sync chip lands under its divider, as
+   it does in every other app. shared/ui.js puts its height in --win-head-h for
+   an app's own sticky heads (Contacts' letters). */
 .header
 {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: 2px;
     row-gap: 4px;
     margin-bottom: var(--space-4);
 }
+.page > .page-inner > .card > .header
+{
+    position: sticky; top: 0; z-index: 20;
+    margin: -20px -16px var(--space-4);          /* the card's padding: 20px 16px */
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    border-top-left-radius: inherit;             /* the card's own corners - none on a phone */
+    border-top-right-radius: inherit;
+    background: var(--card);
+}
+.header .app-icon  { width: 20px; height: 20px; margin-right: 6px; }
 .header h1,
 .header .app-title
 {
     flex: 1 1 auto;
     min-width: min-content;     /* wrap the title, never clip it; buttons wrap below instead */
-    margin: 0;
+    margin: 0 10px 0 0;
     font-size: 1.1rem;
     font-weight: 700;
     color: var(--accent);
@@ -410,64 +439,42 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 
 
 /* -----------------------------------------------------------------------------
- * FOLDER CRUMB  (.crumb)  and  VIEW BAR INFO  (.bar-info)
+ * FOLDER-BACKED VIEWERS  (Photos, Music, Movies)  -  one header row
  *
- * Folder-backed viewers (Photos, Music, Movies) share ONE header layout:
+ *   .topbar: [icon] <h1> [folder ?] [.tb-modes]  ...  .topbar-actions [ search, tools, rescan | ? ]  [sync dot]
  *
- *   row 1   [icon] <h1>   [.crumb  (folder) path]   ............   [sync dot]
- *   row 2   [.bar-info  item counts / genres / totals]
- *   row 3   .view-bar: [.tb-modes view/filter] [.tb-actions] [.tb-end: search, reload, help]
+ * The toolbar lives IN the header, as in Drive - the header is also the
+ * desktop window's title bar. It follows the HEADER order: folder-? and the
+ * modes on the left, the rest in .topbar-actions. An app that shows no
+ * tools yet (Music / Movies before a folder is picked) hides its .tb-tools
+ * boxes (display: contents).
  *
- * - .crumb is a button in the .topbar. It carries a folder icon + the folder
- *   path and opens the change-folder picker. It shows the PATH ONLY - never a
- *   count, never a hint. Put an <svg> then a <span> inside it.
- * - .bar-info is the ONE place for item counts, genres, totals and the like.
- *   It is the LAST child of the .topbar and rides its own row, flush under the
- *   title + crumb. Empty -> hidden. Never repeat the folder path here.
- * - .view-bar is row 3 itself. It holds .tb-modes (the buttons that switch what
- *   is shown), then .tb-actions (the buttons that act on it, behind a .tb-sep),
- *   then .tb-end. Photos hangs it under the header; Music and Movies put it at
- *   the top of their library pane so it does not stretch over the queue - both
- *   are right, the bar belongs to whatever it filters. An app whose content is
- *   indented more than 16px re-states padding-inline, nothing else.
- * - .tb-end groups the search field + reload + help right after the view/filter
- *   buttons. Only the sync dot stays up in the header. On a phone
- *   the search field collapses behind a magnifier (.search-toggle); tapping it
- *   toggles `.show` on the field. The rescan button is #reloadBtn in all three.
+ * - The folder-? button (.icon-btn.has-popup) opens a .top-menu.folder-menu
+ *   (NayiveMedia.wireFolderInfo): #crumb, a .menu-item with the folder icon +
+ *   the folder PATH that opens the change-folder picker, then #subStrip, a
+ *   .menu-info line with the item counts / genres / totals. Nothing else
+ *   shows the path or the counts.
+ * - .tb-modes holds the buttons that switch what is shown; the right-hand
+ *   group starts with the search (it folds behind a magnifier, SEARCH FOLD
+ *   below), then the app's tools, then the rescan button (#reloadBtn in all
+ *   three); help is in the .tb-sys group after it.
+ * - The games still use .view-bar as a row of its own (below).
  * ---------------------------------------------------------------------------*/
-.crumb
-{
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 1 auto;
-    min-width: 0;
-    margin: 0 var(--space-2) 0 0;
-    padding: 4px 10px;
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: var(--card2);
-    color: var(--text-dim);
-    font: inherit;
-    font-size: 0.82rem;
-    cursor: pointer;
-    transition: background-color var(--tr-fast), color var(--tr-fast);
-}
-.crumb svg    { width: 14px; height: 14px; flex: 0 0 auto; }
-.crumb span   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crumb:hover  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
-.crumb:empty  { display: none; }
+.tb-tools:not([hidden]) { display: contents; }
+/* The .topbar's gap is a toolbar's 2px; its groups keep the 8px the old row had. */
+.topbar .tb-modes,
+.topbar .tb-actions     { margin-right: 6px; }
 
-.bar-info
+.folder-menu            { max-width: min(360px, calc(100vw - 12px)); }
+.folder-menu #crumb span { overflow-wrap: anywhere; }
+.menu-info
 {
-    flex: 1 0 100%;               /* own row, full width, flush under title + crumb */
-    margin: 3px 0 0;
-    text-align: left;
+    padding: 4px 12px 6px;
     font-size: 0.8rem;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
 }
-.bar-info:empty { display: none; }
+.menu-info:empty        { display: none; }
 
 /* The trailing group of the view/filter toolbar: search + reload + help.
    Sits right after the view/filter buttons - not pushed to the right edge. */
@@ -477,12 +484,8 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
     align-items: center;
     gap: 2px;
 }
-/* Desktop shows the text field, so the magnifier stays hidden. Each app's own
-   narrow-viewport @media flips this (field -> .search-toggle) at its breakpoint. */
-.search-toggle { display: none; }
-
-/* Row 3 of a folder-backed viewer. .tb-modes switches WHAT is shown, .tb-actions
-   acts ON what is shown (introduced by a .tb-sep), .tb-end closes the row. The
+/* A row of toolbar groups (the games' option bars). .tb-modes switches WHAT is
+   shown, .tb-actions acts ON it (introduced by a .tb-sep), .tb-end closes it. The
    action group carries its own divider inside it, so a group whose buttons are
    all hidden takes the divider with it instead of leaving it hanging. */
 .view-bar
@@ -503,12 +506,78 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 /* Scoped, NOT a bare .tb-sep: text uses that name for a vertical divider of its
    own and write for a HORIZONTAL one inside .tb-popup - a global width: 1px
    would squash write's to a sliver. */
-.view-bar .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
+.view-bar .tb-sep,
+.tb-actions > .tb-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex: 0 0 auto; }
 
-/* One search field for all three viewers - the apps used to set 200/220/240.
-   Only the WIDTH lives here: the look (padding, font size, fill, border) is the
-   one shared input rule - see FORM FIELD below. */
-.tb-end .topbar-search { flex: 0 1 220px; min-width: 0; }
+/* -----------------------------------------------------------------------------
+ * SEARCH FOLD  - every toolbar search field (NayiveUI.searchFold, ui.js)
+ *
+ * At rest only the magnifier (.search-fold-toggle) shows. Opened, the field
+ * (.search-fold.is-open) stands in its place and takes the room the bar has
+ * left, up to 360px; the bar (.searching) stops wrapping so "too narrow" can
+ * be measured. When the field would get under 180px the bar turns
+ * .search-tight and its other icons step aside. Inside the field, right: a
+ * funnel button (.search-mark, only for a field with a filter dialog:
+ * .has-filter), then the × (.search-shut) that folds it away. The field's
+ * look is the shared input rule - see FORM FIELD below.
+ * ---------------------------------------------------------------------------*/
+.search-fold                { display: none; position: relative; flex: 1 1 auto; width: auto;
+                              min-width: 0; max-width: 360px; }
+.search-fold.is-open        { display: block; }
+.search-fold > input        { width: 100%; padding-right: 34px; }
+.search-fold.has-filter > input { padding-right: 60px; }
+.search-fold .search-ends   { position: absolute; top: 0; bottom: 0; right: 2px;
+                              display: flex; align-items: center; }
+.search-fold .search-ends .icon-btn.sm     { width: 26px; height: 26px; }
+.search-fold .search-ends .icon-btn.sm svg { width: 15px; height: 15px; }
+/* How many items match (fold.count), before the funnel and the ×. */
+.search-fold .search-count  { padding: 0 4px; font-size: 0.75rem; color: var(--text-dim);
+                              white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
+.search-fold .search-count[hidden] { display: none; }
+/* Filters in force (the app sets .filter-on): the funnel lit. */
+.search-fold.filter-on .search-mark { color: var(--accent); }
+.search-fold-bar.searching  { flex-wrap: nowrap; }
+.searching .search-fold-toggle { display: none; }
+/* The group holding the field grows with it: the header's buttons stay at
+   the right edge, the view bar's right after the field. */
+.topbar-actions:has(.search-fold.is-open),
+.tb-group:has(> .search-fold.is-open)       { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+.tb-end:has(> .search-fold.is-open)         { flex: 1 1 auto; min-width: 0; }
+.search-tight .icon-btn:not(.search-fold .icon-btn),
+.search-tight .sep,
+.search-tight .tb-sep,
+.search-tight .tb-group::before { display: none; }
+
+
+/* -----------------------------------------------------------------------------
+ * GROWING WASH  - the hover of EVERY icon-only button in every app
+ *
+ * .icon-btn, .pop-btn, .transport-btn, the sync button, the toolbar buttons of
+ * Calc (.fmt-btn), Text (.tb-btn) and Write (#toolbarRow .icon-btn) and Chat's
+ * emoji grid. Nothing at rest; on hover a round --accent 14% wash grows from
+ * the centre to full size; pressed --accent 24%. One rule, so the look never
+ * drifts: a button's own rule sets its size and shape (round), never its
+ * background, except a state that must win (.is-active, :disabled, .danger).
+ * ---------------------------------------------------------------------------*/
+.icon-btn, .pop-btn, .transport-btn, button.sync-indicator,
+.tb-btn, .fmt-btn, .fmt-color-btn, .emojis button
+{
+    --ib-wash: color-mix(in srgb, var(--accent) 14%, transparent);
+    background: radial-gradient(circle closest-side, var(--ib-wash) calc(100% - 1px), transparent) center / 0% 0% no-repeat;
+    transition: background-size var(--tr-fast), color var(--tr-fast);
+}
+.icon-btn:hover, .pop-btn:hover, .transport-btn:hover, button.sync-indicator:hover,
+.tb-btn:hover, .fmt-btn:hover, .fmt-color-btn:hover, .emojis button:hover
+{
+    background-size: 100% 100%;
+    color: var(--text);
+}
+.icon-btn:active, .pop-btn:active, .transport-btn:active, button.sync-indicator:active,
+.tb-btn:active, .fmt-btn:active, .fmt-color-btn:active, .emojis button:active
+{
+    --ib-wash: color-mix(in srgb, var(--accent) 24%, transparent);
+    background-size: 100% 100%;
+}
 
 
 /* -----------------------------------------------------------------------------
@@ -517,10 +586,11 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
  * A round, borderless, icon-only button used in headers, toolbars and rows.
  *
  *   size        36px (use .icon-btn.sm = 30px for dense toolbars)
- *   shape       circle, no border, transparent background
+ *   shape       circle, no border
+ *   rest        no background
  *   colour      --text-dim at rest, --text on hover
- *   hover       a neutral --text 9% wash (NEVER an accent tint)
- *   pressed     --text 14%
+ *   hover       the GROWING WASH above (round --accent 14%)
+ *   pressed     --accent 24%
  *   focus       a visible --accent ring for keyboard users
  *   disabled    opacity 0.45, no pointer, no hover
  *
@@ -547,14 +617,10 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: transparent;
     color: var(--text-dim);
     cursor: pointer;
-    transition: background-color var(--tr-fast), color var(--tr-fast);
 }
 .icon-btn svg           { width: 19px; height: 19px; display: block; }
-.icon-btn:hover         { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
-.icon-btn:active        { background: color-mix(in srgb, var(--text) 14%, transparent); }
 .icon-btn:focus         { outline: none; }
 .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .icon-btn:disabled      { opacity: 0.45; cursor: default; background: transparent; color: var(--text-dim); }
@@ -564,7 +630,7 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 
 /* There is no accent variant of .icon-btn. The "new / add" button in Tasks,
  * Habits, Calendar, Contacts and Split is a plain one: same --text-dim glyph,
- * same grey hover as every other button in the row. Its icon says what it does.
+ * same hover as every other button in the row. Its icon says what it does.
  * (.danger below is the one colour variant, and it is a warning, not emphasis.) */
 
 .icon-btn.danger        { color: var(--danger); }
@@ -587,10 +653,9 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 .icon-btn.solid-danger:active { filter: brightness(0.9); }
 
 /* TOOLBAR BUTTON - a related but distinct component, NOT styled here.
- * calc (.fmt-btn), text (.tb-btn) and write (#writeTools .icon-btn) each define
- * their own: a 30-32px rounded SQUARE (--radius-s), --text-dim icon, and an
- * ACCENT-tinted hover (color-mix(--accent 14%)) / active (--accent 24%) because
- * the button acts on document content, not app chrome. It stays per-app on
+ * calc (.fmt-btn), text (.tb-btn) and write (#toolbarRow .icon-btn) each define
+ * their own size: a 30-32px circle, --text-dim icon. Hover and press are the
+ * GROWING WASH above, like every icon button. It stays per-app on
  * purpose - the three toolbars differ enough that a shared class earns nothing.
  * If you add a fourth, copy one of the existing three. */
 
@@ -608,6 +673,7 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
  *                     papelera"): --danger text and a --danger-tinted border.
  *   .text-btn.dashed  an "add another" affordance: dashed accent border on a
  *                     faint accent wash (trip's "Añadir etapa").
+ *   .text-btn.small   tighter, for a secondary action in a dialog's button row.
  * ---------------------------------------------------------------------------*/
 .text-btn
 {
@@ -649,6 +715,7 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
     border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .text-btn.dashed:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); filter: none; }
+.text-btn.small  { padding: 8px 12px; font-size: 0.82rem; }     /* a secondary action inside a dialog row */
 
 
 /* -----------------------------------------------------------------------------
@@ -789,16 +856,18 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
 
 /* SWITCH - an on / off slider: <label class="switch"><input type="checkbox">
  * <span class="track"></span></label>, or the same as a <span> inside a label.
- * Calendar's "all day", the desktop's Tile. */
-.switch { position: relative; width: 44px; height: 26px; flex: 0 0 auto; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch .track { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
+ * Every on / off option is one (2026-09-30); a tick box is only for picking
+ * items from a list. inline-block so its size holds outside a flex row; the
+ * input is out of flow, or the checkbox / .field width rules below give it room. */
+.switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: 0 0 auto; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.switch .track { position: absolute; inset: 0; background: rgba(128,128,128,0.35); background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
 .switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .switch input:checked + .track { background: var(--accent); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
-.switch input:disabled + .track { cursor: default; }
-/* .switch.sm - a shorter one, for a bar or a line of small text (the desktop's Tile). */
+.switch input:disabled + .track { cursor: default; opacity: 0.5; }
+/* .switch.sm - the shorter one, and the one every on / off row uses (2026-09-30). */
 .switch.sm { width: 32px; height: 18px; }
 .switch.sm .track::before { width: 14px; height: 14px; left: 2px; top: 2px; }
 .switch.sm input:checked + .track::before { transform: translateX(14px); }
@@ -876,7 +945,6 @@ html.is-windowed .todo-input { margin-right: clamp(2rem, 6vw, 5rem); }
     font-size: 0.8rem;
     line-height: 1.35;
 }
-.field-error[hidden] { display: none; }
 
 /* A field's control fills the row. Scoped to .field so it never stretches a
  * toolbar / search input that lives outside a form. */
@@ -1136,6 +1204,8 @@ input[type="range"]
  *
  * A small uppercase heading over a group of fields or rows ("DOCUMENTOS",
  * "ETAPAS"). The one place uppercase + letter-spacing is used. Keep it short.
+ * --text-faint, one step dimmer than an .icon-btn, so a label beside buttons
+ * never reads as one of them.
  * ---------------------------------------------------------------------------*/
 .section-label
 {
@@ -1144,7 +1214,7 @@ input[type="range"]
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-faint);
 }
 
 
@@ -1171,7 +1241,7 @@ input[type="range"]
  * line. Keep it to a sentence or two - anything longer belongs in a dialog.
  *
  * COLOUR: --link (info-blue) for both the dot and the popup's border, so it
- * stays legible at 17px in both schemes and never reads as the green --accent
+ * stays legible at 16px in both schemes and never reads as the green --accent
  * (reserved for active / primary). The dot goes --accent only on hover / while
  * its popup is open.
  * ---------------------------------------------------------------------------*/
@@ -1181,8 +1251,8 @@ input[type="range"]
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 17px;                /* 15% smaller than the old 20px box */
-    height: 17px;
+    width: 16px;                /* one size for every (i) */
+    height: 16px;
     padding: 0;
     margin: 0 0 0 4px;
     border: none;
@@ -1193,7 +1263,12 @@ input[type="range"]
     cursor: pointer;
     transition: color var(--tr-fast);
 }
-.info-dot svg           { width: 16px; height: 16px; display: block; }
+/* :root lifts it above any container's "<class> svg" rule (.menu-item svg
+   made the menu's dots grey and smaller): a dot looks the same everywhere. */
+:root .info-dot svg     { width: 16px; height: 16px; display: block; flex: 0 0 auto; color: inherit; }
+/* A menu row already spaces its items (gap 10px): no extra margin, so the dot
+   sits as close to its label as in the Drive bin bar (gap 6 + margin 4). */
+.menu-item > .info-dot  { margin-left: 0; }
 .info-dot:hover,
 .info-dot.is-open       { color: var(--accent); }
 .info-dot:focus         { outline: none; }
@@ -1220,7 +1295,10 @@ input[type="range"]
 /* -----------------------------------------------------------------------------
  * SYNC INDICATOR + TOAST  - defined in theme.css
  *
- * .sync-indicator  a filled-circle SVG in the header. Toggle the state class:
+ * .sync-indicator  the plug glyph in the header (shared/ui.js draws it). It is
+ *                  hidden while all is well and floats as a chip just off the
+ *                  bar's end when not (theme.css, FLOATING CHIP).
+ *                  Toggle the state class:
  *     (none)     --danger red   not synced yet (the safe start state)
  *     .synced    --ok green     saved
  *     .busy      --busy blue    a GET / PUT is in flight
@@ -1231,14 +1309,6 @@ input[type="range"]
  * for errors that need the user to act.
  * ---------------------------------------------------------------------------*/
 
-
-/* -----------------------------------------------------------------------------
- * (Removed) TOOLTIP PEEK + FIRST-VISIT HELP NUDGE
- *
- * The old touch-only long-press "peek" overlay and the ~9 s idle "nudge" card
- * were dropped for being too intrusive. The one-time first-run intro card
- * (.intro-*, below) stays, and the "?" dot next to each app title re-opens it.
- * ---------------------------------------------------------------------------*/
 
 /* -----------------------------------------------------------------------------
  * PANE RESIZER  (.pane-resizer)
@@ -1509,7 +1579,7 @@ button { -webkit-touch-callout: none; }
     width: 64px;
     height: 64px;
     margin: 2px auto 10px;
-    border-radius: 16px;
+    border-radius: var(--radius-l);
     box-shadow: var(--elev-card);
 }
 .install-title { text-align: center; }
@@ -1592,7 +1662,7 @@ button { -webkit-touch-callout: none; }
     gap: 5px;
     padding: 2px 8px;
     border: 1px solid var(--line);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--card);
     font-size: 0.78rem;
     color: var(--text-dim);
@@ -1670,7 +1740,7 @@ button { -webkit-touch-callout: none; }
     min-width: 0;
     padding: 8px;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-s);
     cursor: pointer;
 }
 .share-user span  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1689,6 +1759,7 @@ button { -webkit-touch-callout: none; }
     cursor: pointer;
 }
 .share-add input { flex: 0 0 auto; width: auto; margin: 0; }
+.share-add > .switch { margin-left: auto; }   /* an on / off row: the text, then the switch */
 .share-user.on    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .share-user input { flex: 0 0 auto; width: auto; margin: 0; }
 
@@ -1718,7 +1789,6 @@ button { -webkit-touch-callout: none; }
 .loc-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 .loc-link  { display: inline-flex; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 6px 12px; font-size: 0.8rem; color: var(--link); text-decoration: none; }
 .loc-link:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
-.loc-off   { margin-top: 16px; }
 /* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
 .share-link-app .share-link-url.has-info { flex: 0 1 auto; }
 .share-link-app .info-dot                { margin-right: auto; }
@@ -1751,6 +1821,24 @@ button { -webkit-touch-callout: none; }
 .empty-state .empty-title,
 .empty-state p:first-of-type { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
 .empty-state .text-btn   { margin-top: 14px; }
+
+
+/* -----------------------------------------------------------------------------
+ * IDENTITY COLOURS  ([data-c="0"] ... [data-c="7"]  ->  var(--id-color))
+ *
+ * The theme has one accent; people (Split) and habits (Habits) have to be told
+ * apart at a glance, so each gets one of eight fixed hues by its index. They
+ * are identity colours, not theme colours: the same in light and dark, and
+ * white text reads on all of them. The page paints with var(--id-color).
+ * ---------------------------------------------------------------------------*/
+[data-c="0"] { --id-color: hsl(170 40% 38%); }
+[data-c="1"] { --id-color: hsl(215 45% 50%); }
+[data-c="2"] { --id-color: hsl(345 45% 52%); }
+[data-c="3"] { --id-color: hsl(35 55% 46%); }
+[data-c="4"] { --id-color: hsl(275 35% 52%); }
+[data-c="5"] { --id-color: hsl(95 35% 40%); }
+[data-c="6"] { --id-color: hsl(15 50% 52%); }
+[data-c="7"] { --id-color: hsl(200 25% 45%); }
 
 
 /* -----------------------------------------------------------------------------
@@ -1800,13 +1888,11 @@ button { -webkit-touch-callout: none; }
     flex: 0 0 auto;
     padding: 0;
     border: none;
-    border-radius: var(--radius-s);
-    background: transparent;
+    border-radius: 50%;
     color: var(--text-dim);
     font: inherit;
     cursor: pointer;
 }
-.pop-btn:hover           { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
 .pop-btn.active,
 .pop-btn.is-active       { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 .pop-btn:disabled        { opacity: 0.45; cursor: default; background: transparent; color: var(--text-dim); }
@@ -1833,7 +1919,7 @@ button { -webkit-touch-callout: none; }
  * position: fixed and anchored under its button by shared/ui.js, so a .topbar
  * with overflow never clips it. One action per row: an 18px glyph + a label.
  * `.mi-check` marks the current choice in a radio-style menu; `.menu-sep` is a
- * hairline between groups; `.danger` is a destructive row.
+ * hairline between groups, `.menu-label` a small heading over one; `.danger` is a destructive row.
  * ---------------------------------------------------------------------------*/
 .top-menu
 {
@@ -1873,6 +1959,7 @@ button { -webkit-touch-callout: none; }
 .menu-item.danger,
 .menu-item.danger svg    { color: var(--danger); }
 .menu-sep                { height: 1px; margin: 4px 6px; background: var(--line); }
+.menu-label              { padding: 6px 12px 2px; font-size: 0.75rem; font-weight: 600; color: var(--text-dim); }
 
 /* A row for a button that IS on the bar on a PC and only disappears on a
    phone (Write's print, page setup, comments...). The menu carries it for
@@ -1893,7 +1980,8 @@ button { -webkit-touch-callout: none; }
  *
  * Each app keeps its own `#app.is-menus …` rule for collapsing its toolbar -
  * what has to disappear differs, and Write's strip must collapse with
- * visibility:hidden rather than display:none (SuperDoc measures its width).
+ * visibility:hidden rather than display:none (its buttons stay in the DOM,
+ * measured, for the menu entries that click them).
  * ---------------------------------------------------------------------------*/
 #menuBar
 {
@@ -1902,7 +1990,6 @@ button { -webkit-touch-callout: none; }
     gap: 1px; padding: 2px 6px;
     border-bottom: 1px solid var(--line); background: var(--card);
 }
-#menuBar[hidden] { display: none; }
 
 .menu-top
 {
@@ -2037,6 +2124,23 @@ button { -webkit-touch-callout: none; }
     white-space: nowrap;
 }
 .file-label-input        { flex: 1 1 auto; min-width: 0; }
+
+/* The two phone toggles of Calc and Write (each app shows them in its own
+ * phone block): the header's "Aa" (#fmtBtn) folds the toolbar away while you
+ * type - a TEXT button, not an icon one: "Aa" says "formato" at a glance - and
+ * the toolbar's own "⋮" (#moreToolsBtn) opens the rest of it in place; open,
+ * it takes the tint of a property that is on. Write's is also matched inside
+ * #toolbarRow, to outweigh that row's own button rule. */
+#fmtBtn
+{
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.5px;
+}
+#moreToolsBtn[aria-expanded="true"],
+#toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 
 /* "Guardado 12:04" / "Borrador 12:04" before the sync plug (NayiveOffice.autosave)
  * - a quiet readout, not a control. Its own element: the plug's title is
@@ -2268,12 +2372,9 @@ button { -webkit-touch-callout: none; }
     height: 36px;
     border: none;
     border-radius: 50%;
-    background: transparent;
     color: var(--text-dim);
     cursor: pointer;
-    transition: background-color var(--tr-fast), color var(--tr-fast);
 }
-.transport-btn:hover          { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
 .transport-btn:disabled       { opacity: 0.4; cursor: default; }
 .transport-btn:disabled:hover { background: transparent; color: var(--text-dim); }
 .transport-btn svg            { width: 18px; height: 18px; }
@@ -2308,6 +2409,7 @@ input[type=range]::-webkit-slider-thumb
     background: var(--accent);
     cursor: pointer;
 }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--track); }
 input[type=range]::-moz-range-thumb  { width: 12px; height: 12px; border: none; border-radius: 50%;
                                        background: var(--accent); cursor: pointer; }
 input[type=range]::-moz-range-track  { height: 4px; border-radius: 2px; background: var(--track); }
@@ -2322,7 +2424,7 @@ input[type=range]:disabled           { opacity: 0.5; }
 
 /* -----------------------------------------------------------------------------
  * IMAGE EDITOR CHROME  (.editor-backdrop > .editor-bar / .editor-canvas /
- *                        .editor-comment)  -  Drive, Photos and Chat
+ *                        .editor-comment)  -  Image (which Drive and Photos open) and Chat
  *
  * The frame around the TOAST UI Image Editor, which the apps load on first use.
  * It is a FIXED DARK surface in both schemes - literal colours on purpose, never
@@ -2330,8 +2432,8 @@ input[type=range]:disabled           { opacity: 0.5; }
  * reason Drive's lightbox is always dark. That is the one place in Nayive where
  * a hex colour is the right answer.
  *
- * The apps differ only in the stacking context they open over, so each sets
- * its own `z-index` on .editor-backdrop (Drive 99, Photos 60, Chat 170).
+ * Chat opens it over its own screens, so it sets a `z-index` on .editor-backdrop
+ * (170). Image uses only .editor-canvas + .editor-comment, under its own header.
  * ---------------------------------------------------------------------------*/
 .editor-backdrop
 {
@@ -2496,19 +2598,23 @@ input[type=range]:disabled           { opacity: 0.5; }
  * ---------------------------------------------------------------------------*/
 @media (max-width: 640px)
 {
-    /* A text field under 16px makes iOS Safari zoom the whole page in when it
-       gets focus - and it never zooms back out. So on a phone every field is at
-       least 16px. Attribute selectors: this must beat an app's single-class
-       rule (a .search-input, a .scm-num ...), and an element selector would not. */
-    input[type]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
-    input:not([type]),
-    select,
-    textarea           { font-size: 16px; }
-
     /* Fingers, not pointers: the dense 30px toolbar button grows to 36px, and
        the toolbar select grows with it so the row stays one height. */
     .icon-btn.sm       { width: 36px; height: 36px; }
     .tb-select         { height: 36px; }
+}
+/* A text field under 16px makes iOS Safari zoom the whole page in when it gets
+   focus - and it never zooms back out. So on a touch phone every field is at
+   least 16px. Touch only: a narrow pane on a PC (Tasks inside Planner, a small
+   desktop window) is not a phone, and a 16px field there stood taller than
+   every other control around it. Attribute selectors: this must beat an app's
+   single-class rule (a .search-input, a .scm-num ...). */
+@media (max-width: 640px) and (pointer: coarse)
+{
+    input[type]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+    input:not([type]),
+    select,
+    textarea           { font-size: 16px; }
 }
 
 /* A phone in either orientation (narrow, or short when turned sideways): a
@@ -2594,6 +2700,7 @@ html.nv-locked body { visibility: hidden; }
     margin: 0; padding: 0; border: 0;
     background: #000; overflow: hidden;
     color-scheme: dark;
+    outline: none;                /* it takes the focus back when the password box hides */
 }
 .lock-dlg::backdrop { background: #000; }
 .lock-host { position: absolute; inset: 0; overflow: hidden; }

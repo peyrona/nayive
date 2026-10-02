@@ -10,7 +10,7 @@
     <title>Calendar</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E">
 
-    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
+    <!-- Shared colour scheme (light default, opt-in dark). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
@@ -28,7 +28,7 @@
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
     </script>
 
-    <!-- Vendored libs (all pinned, no build step). luxon + rrule live in shared/lib/ (tasks loads the same two files, so one download + one cache entry). Order matters: classic scripts run before the deferred module script below. -->
+    <!-- Vendored libs (all pinned, no build step). luxon + rrule live in shared/lib/ (tasks loads the same luxon, so one download + one cache entry). Order matters: classic scripts run before the deferred module script below. -->
     <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
     <script src="../shared/lib/rrule_v2.8.1.min.js"></script>
     <script src="lib/fullcalendar-core_v6.1.21.min.js"></script>
@@ -42,9 +42,8 @@
     <script src="lib/fullcalendar-locale-pt_v6.1.21.min.js"></script>
     <script src="lib/fullcalendar-locale-fr_v6.1.21.min.js"></script>
     <script src="lib/fullcalendar-locale-de_v6.1.21.min.js"></script>
-    <script src="lib/fullcalendar-locale-it_v6.1.21.min.js"></script>
 
-    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <!-- File-API helpers: the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
@@ -93,6 +92,7 @@
         .app { position: relative; }                 /* containing block for the dropdown menu */
         .topbar { padding: 8px 6px; }                 /* tighter - the bar is button-heavy */
 
+        /* The pager is centred in the room between the view switch and the actions. */
         .date-nav { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; justify-content: center; }
         .topbar .range-label { font-size: 0.82rem; color: var(--text-dim); flex: 0 1 auto; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
 
@@ -118,17 +118,18 @@
            deliberate exception to the round icon-only action row (shared/theme.css) -
            it took over from a toolbar button, so it reads as a word at a glance. */
 
-        /* Settings' "Export to file": from, to, format and the ✓ that downloads, all on
-           one line - which is why this sheet is a .sheet--wide one. A phone wraps it
-           onto two. The button row is not the sheet's bottom bar, so it never takes
-           the phone's sticky look. */
-        /* 460px (the default) and even .sheet--wide's 560 leave the ✗ / ✓ wrapping
-           onto a line of its own; 600 is what the four of them need (the ✗ is the
-           sheet's own, up in the corner). */
-        #settingsBackdrop .sheet     { max-width: 600px; }
+        /* Settings is a narrow card on every device: "Export to file" puts From + To
+           on one line, Format + ✓ on the next. Inputs may shrink below their own
+           width so nothing pushes the card past the screen. The button row is not
+           the sheet's bottom bar, so it never takes the phone's sticky look. */
+        #settingsBackdrop .sheet     { max-width: min(340px, calc(100vw - 32px)); }
+        .remind-row                  { display: flex; align-items: center; gap: 8px; }
+        .remind-row input            { width: 90px; flex: 0 0 auto; }
+        .remind-row label            { margin: 0; }
         #setExportRow                { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 4px; }
-        #setExportRow .field         { flex: 1 1 130px; min-width: 120px; margin-bottom: 0; }
-        #setExportRow .field-format  { flex: 0 1 108px; min-width: 96px; }
+        #setExportRow .field         { flex: 1 1 120px; min-width: 0; margin-bottom: 0; }
+        #setExportRow input,
+        #setExportRow select         { width: 100%; min-width: 0; }
         #setExportRow .sheet-actions { position: static; margin: 0; padding: 0; border-top: 0; background: none; }
 
         /* The "all day" switch is the shared .switch (shared/app.css). */
@@ -261,7 +262,7 @@
                navigator gives ground first: with flex-wrap, a `flex-basis: auto`
                child breaks the line at its CONTENT width. Zero basis lets the
                month label ellipsis instead ("sept… 2026"), keeping one row. */
-            .date-nav { flex-basis: 0; }
+            .date-nav { flex: 1 1 0; justify-content: center; }
 
             #moreBtn { display: flex; }
 
@@ -287,7 +288,7 @@
             .phone-month #dayList { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; border-top: 1px solid var(--line); }
 
             .dl-head { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding: 4px 6px 4px 12px; }
-            .dl-head .dl-date { flex: 1 1 auto; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+            .dl-head .dl-date { flex: 1 1 auto; font-size: 0.8rem; font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
             .dl-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
             .dl-row
             {
@@ -381,24 +382,29 @@
                 </button>
             </div>
 
-            <button id="searchBtn" class="icon-btn" data-i18n-attr="title:calendar.searchEvent">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            </button>
-            <button id="gotoBtn" class="icon-btn" data-i18n-attr="title:calendar.goTo">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
-            </button>
-
-            <!-- Settings: sync with phones (CalDAV) + export. The launcher's gear glyph. -->
-            <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            </button>
-            <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
-            </button>
-            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            </button>
-            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+            <div class="topbar-actions">
+                <div class="tb-group">
+                    <button id="searchBtn" class="icon-btn" data-i18n-attr="title:calendar.searchEvent">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                    <button id="gotoBtn" class="icon-btn" data-i18n-attr="title:calendar.goTo">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="13" height="13" rx="2"></rect><line x1="3" y1="9" x2="16" y2="9"></line><line x1="7" y1="2" x2="7" y2="6"></line><line x1="12" y1="2" x2="12" y2="6"></line><circle cx="17" cy="17" r="4"></circle><line x1="20" y1="20" x2="22" y2="22"></line></svg>
+                    </button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button id="moreBtn" class="icon-btn" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    </button>
+                    <!-- Settings: sync with phones (CalDAV) + export. The launcher's gear glyph. -->
+                    <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
+                <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+            </div>
         </div>
 
         <div id="topMenu" class="top-menu" role="menu" hidden>
@@ -429,7 +435,7 @@
                 <h2 id="sheetTitle" data-i18n="calendar.newEvent"></h2>
                 <label class="allday-inline">
                     <span data-i18n="calendar.allDay"></span>
-                    <span class="switch"><input type="checkbox" id="fAllDay"><span class="track"></span></span>
+                    <span class="switch sm"><input type="checkbox" id="fAllDay"><span class="track"></span></span>
                 </label>
             </div>
 
@@ -635,11 +641,9 @@
         </div>
     </div>
 
-    <!-- Settings: export to a file + sync with phones (CalDAV). The sync half is UI only for
-         now (2026-09-22) and is wired by NayiveUI.davSection (shared/ui.js), the
-         same one Contacts' CardDAV sheet uses. -->
+    <!-- Settings: event alerts + export to a file. -->
     <div id="settingsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--wide">
+        <div class="sheet">
             <h2 data-i18n="ui.settings"></h2>
 
             <!-- How long before each event the push comes (/api/push window_minutes;
@@ -648,9 +652,9 @@
                  server cannot answer (an admin, no VAPID key). -->
             <div id="setRemind" class="share-sect" hidden>
                 <p class="share-head" data-i18n="calendar.set.remindHead"></p>
-                <div class="field">
-                    <label for="setRemindMin" data-i18n="calendar.set.remindMin"></label>
+                <div class="field remind-row">
                     <input type="number" id="setRemindMin" min="1" max="1440" inputmode="numeric">
+                    <label for="setRemindMin" data-i18n="calendar.set.remindMin"></label>
                 </div>
                 <p class="share-note" data-i18n="calendar.set.remindNote"></p>
             </div>
@@ -684,85 +688,6 @@
                 </div>
             </div>
 
-            <div id="setSync" class="share-sect share-link">
-                <p class="share-head" data-i18n="dav.syncHead"></p>
-                <p class="share-note" data-i18n="calendar.set.syncLead"></p>
-
-                <!-- Off: one row, the (i) and the "+" that connects a phone. -->
-                <div data-dav="off" class="share-row share-link-app">
-                    <span class="share-link-url has-info" data-i18n="dav.syncOff"></span>
-                    <button class="info-dot" data-i18n-attr="data-info:calendar.set.syncInfo"></button>
-                    <button data-dav="connect" class="share-drop" type="button" data-i18n-attr="title:dav.connect, aria-label:dav.connect"></button>
-                </div>
-
-                <!-- On: one card per phone kind (the phone decides; a PC sees both),
-                     the by-hand values, and the row that turns it off. -->
-                <div data-dav="on" hidden>
-                    <div class="loc-app" data-dav="iphone">
-                        <p class="share-head share-link-app" data-i18n="dav.iphone"></p>
-                        <p class="loc-links">
-                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.iphoneSetup"></a>
-                        </p>
-                        <p class="share-note share-link-how" data-i18n="calendar.set.iphoneHow"></p>
-                    </div>
-                    <div class="loc-app" data-dav="android">
-                        <p class="share-head share-link-app" data-i18n="dav.android"></p>
-                        <p class="loc-links">
-                            <a class="loc-link" href="https://f-droid.org/packages/at.bitfire.davdroid/" target="_blank" rel="noopener" data-i18n="dav.davxGet"></a>
-                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.davxSetup"></a>
-                        </p>
-                        <p class="share-note share-link-how" data-i18n="calendar.set.androidHow"></p>
-                    </div>
-                    <p class="share-note share-link-how" data-dav="onphone" data-i18n="dav.onPhone"></p>
-
-                    <div class="loc-app">
-                        <p class="share-head share-link-app" data-i18n="dav.byHand"></p>
-                        <div class="share-row"><span class="share-link-url" data-dav="server"></span><button class="share-drop" data-dav-copy="server"></button></div>
-                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="user"></span><button class="share-drop" data-dav-copy="user"></button></div>
-                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="pass"></span><button class="share-drop" data-dav-copy="pass"></button></div>
-                    </div>
-
-                    <div class="share-row loc-off">
-                        <span class="share-link-url" data-i18n="dav.syncOn"></span>
-                        <button data-dav="stop" class="share-drop" type="button" data-i18n-attr="title:dav.stop, aria-label:dav.stop"></button>
-                    </div>
-                </div>
-
-                <!-- What the phones get: this calendar, plus three read-only extras. -->
-                <div class="field-row share-link-app">
-                    <div class="field">
-                        <label for="setAccess" data-i18n="dav.access"></label>
-                        <select id="setAccess">
-                            <option value="rw" data-i18n="dav.accessRw"></option>
-                            <option value="ro" data-i18n="dav.accessRo"></option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="setBirthdays" data-i18n="calendar.set.birthdays"></label>
-                        <select id="setBirthdays">
-                            <option value="yes" data-i18n="calendar.set.show"></option>
-                            <option value="no"  data-i18n="calendar.set.hide"></option>
-                        </select>
-                    </div>
-                </div>
-                <div class="field-row">
-                    <div class="field">
-                        <label for="setTrips" data-i18n="calendar.set.trips"></label>
-                        <select id="setTrips">
-                            <option value="yes" data-i18n="calendar.set.show"></option>
-                            <option value="no"  data-i18n="calendar.set.hide"></option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="setTasks" data-i18n="calendar.set.tasks"></label>
-                        <select id="setTasks">
-                            <option value="no"  data-i18n="calendar.set.tasksNo"></option>
-                            <option value="yes" data-i18n="calendar.set.tasksYes"></option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
             <!-- The only other action is closing, so shared/ui.js lifts it into the
                  sheet's top-right corner and this row goes away. -->
             <div class="sheet-actions">
@@ -786,7 +711,7 @@
         await NayiveI18n.ready;
 
         // ICS model + DST-safe recurrence engine — shared with the tasks app (see ../shared/ical.js).
-        import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, excludeOne, mergeIcs,
+        import { makeEventDef, icsToCalendar, calendarToIcs, excludeOccurrence, excludeOne, endSeriesBefore, mergeIcs,
                  eventDefsToIcs, expandEventDef, instantiate, pad2 } from '../shared/ical.js';
 
         //------------------------------------------------------------------------//
@@ -854,7 +779,6 @@
         let eventDefs   = [];   // source of truth: array of event definitions (see makeEventDef)
         let calFile     = null;    // calendar.ics as read, so a save keeps what eventDefs does not model (null: no file yet)
         let calBody     = null;    // the text calFile and eventDefs were parsed from (a re-read of the same text is skipped)
-        let whoUser     = '';      // who is signed in (Settings' by-hand "User" row)
         let calBadSaid  = false;   // the "cannot understand this file" toast was shown for this bad spell
         let dragBusy    = false;   // a finger / mouse is down on an event (press through drop)
         let dragMoving  = false;   // ...and FullCalendar has started dragging / resizing it
@@ -921,7 +845,6 @@
             // opens on the local cache and the store syncs once the connection is back.
             NayiveUI.bootWithStore( store, async function( who )
             {
-                whoUser = ( who && who.user ) || '';      // the by-hand "User" row in Settings
                 await loadCalendar();
                 initFullCalendar();
             } );
@@ -1108,12 +1031,12 @@
                         ? '<span class="tz-tag">' + arg.event.extendedProps.tzAbbrev + '</span>' : '';
 
                     return { html: '<div class="fc-event-main-frame"><span class="fc-event-title">' +
-                                   escapeHtml( arg.event.title ) + '</span>' + zoneTag + '</div>' };
+                                   NayiveUI.escapeHtml( arg.event.title ) + '</span>' + zoneTag + '</div>' };
                 },
 
                 allDayContent: function( arg )
                 {
-                    return { html: '<span class="alldaytz-label">' + escapeHtml( arg.text ) + '</span>' };
+                    return { html: '<span class="alldaytz-label">' + NayiveUI.escapeHtml( arg.text ) + '</span>' };
                 },
 
                 // Phone month: a tap picks the day for the list below instead of opening the sheet.
@@ -1258,11 +1181,6 @@
                 return 'GMT' + sign + hh + (mm ? ':' + pad2( mm ) : '');
             }
             catch( _ ) { return zone; }
-        }
-
-        function escapeHtml( s )
-        {
-            return String( s ).replace( /[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]) );
         }
 
         // eventDragStop / eventResizeStop fire BEFORE eventDrop / eventResize, so the
@@ -1461,8 +1379,11 @@
             // matters more than the spelling. PC / tablet keep the full name.
             if( view.type === 'dayGridMonth' || view.type === 'listMonth' )
                 label.textContent = start.toFormat( PHONE ? 'LLL yyyy' : 'LLLL yyyy' );
-            else if( view.type === 'rollWeek' )   // days as the house writes them: yyyy-mm-dd
-                label.textContent = start.toFormat( 'yyyy-MM-dd' ) + ' – ' + DateTime.fromJSDate( view.currentEnd ).minus({days:1}).toFormat( 'yyyy-MM-dd' );
+            else if( view.type === 'rollWeek' )   // yyyy-Mmm – yyyy-Mmm (3-letter month, e.g. 2026-Sep)
+            {
+                const ym = d => d.toFormat( 'yyyy' ) + '-' + d.toFormat( 'LLL' ).replace( '.', '' ).slice( 0, 3 );
+                label.textContent = ym( start ) + ' – ' + ym( DateTime.fromJSDate( view.currentEnd ).minus({days:1}) );
+            }
             else
                 label.textContent = start.toFormat( 'yyyy-MM-dd' );
         }
@@ -1483,7 +1404,7 @@
             const frame = document.querySelector( '.fc-scrollgrid-section-header .fc-timegrid-axis-frame' );
             if( ! frame ) return;
 
-            frame.innerHTML = '<span class="corner-tz-badge">' + escapeHtml( gmtLabel( VIEWER_TZ ) ) + '</span>';
+            frame.innerHTML = '<span class="corner-tz-badge">' + NayiveUI.escapeHtml( gmtLabel( VIEWER_TZ ) ) + '</span>';
         }
 
         //------------------------------------------------------------------------//
@@ -1658,12 +1579,12 @@
                            : inst.startMs < fromMs ? '…'                                    // started on an earlier day
                                                     : DateTime.fromMillis( inst.startMs ).toFormat( 'HH:mm' );
                 const tag  = ( ! inst.allDay && zone !== VIEWER_TZ )
-                           ? '<span class="dl-tz">' + escapeHtml( zoneAbbrev( zone ) ) + '</span>' : '';
+                           ? '<span class="dl-tz">' + NayiveUI.escapeHtml( zoneAbbrev( zone ) ) + '</span>' : '';
 
                 const btn = document.createElement( 'button' );
                 btn.type      = 'button';
                 btn.className = 'dl-row';
-                btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
+                btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + NayiveUI.escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
                 btn.addEventListener( 'click', () => openSheetForEdit( inst.def.key, occKey( inst ) ) );
                 box.appendChild( btn );
             }
@@ -1764,12 +1685,10 @@
                 closeGoTo();
             });
 
-            // Settings: export to a file + sync with phones (UI only, NayiveUI.davSection).
-            const davSync = NayiveUI.davSection( document.getElementById( 'setSync' ) );
+            // Settings: event alerts + export to a file.
             document.getElementById( 'settingsBtn' ).addEventListener( 'click', function()
             {
                 fillExportRange();
-                davSync.refresh( whoUser );
                 loadRemind();
                 NayiveUI.open( 'settingsBackdrop' );
             });
@@ -1906,9 +1825,9 @@
                 ? '<span class="sr-recur" data-i18n-attr="title:calendar.recurs"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M8 16H3v5"></path></svg></span>'
                 : '';
 
-            row.innerHTML = '<span class="sr-title">' + escapeHtml( def.title || T( 'calendar.untitledEvent' ) ) + '</span>' +
+            row.innerHTML = '<span class="sr-title">' + NayiveUI.escapeHtml( def.title || T( 'calendar.untitledEvent' ) ) + '</span>' +
                             recurIcon +
-                            '<span class="sr-when">' + escapeHtml( formatOccurrenceWhen( def, occ ) ) + '</span>';
+                            '<span class="sr-when">' + NayiveUI.escapeHtml( formatOccurrenceWhen( def, occ ) ) + '</span>';
 
             row.addEventListener( 'click', function()
             {
@@ -2211,8 +2130,8 @@
 
         function buildPrintHtml( rows, from, to )
         {
-            let html = '<div class="pr-head"><h1>' + escapeHtml( T( 'calendar.events' ) ) + '</h1>' +
-                       '<div class="pr-range">' + escapeHtml( from + '  →  ' + to ) + '</div></div>';
+            let html = '<div class="pr-head"><h1>' + NayiveUI.escapeHtml( T( 'calendar.events' ) ) + '</h1>' +
+                       '<div class="pr-range">' + NayiveUI.escapeHtml( from + '  →  ' + to ) + '</div></div>';
 
             let day = null;
 
@@ -2222,16 +2141,16 @@
                 {
                     if( day !== null ) html += '</table></div>';
                     day   = r.day;
-                    html += '<div class="pr-day"><h2>' + escapeHtml( dayHeading( day ) ) + '</h2><table class="pr-ev">';
+                    html += '<div class="pr-day"><h2>' + NayiveUI.escapeHtml( dayHeading( day ) ) + '</h2><table class="pr-ev">';
                 }
 
                 const def  = r.inst.def;
                 const span = spanNote( r );
                 const meta = [ def.location || '', String( def.notes || '' ).trim() ].filter( Boolean ).join( '\n' );
 
-                html += '<tr><td class="pr-when">' + escapeHtml( occTimeLabel( r.inst ) ) + '</td><td>' +
-                        '<div class="pr-title">' + escapeHtml( ( def.title || T( 'calendar.untitledEvent' ) ) + span ) + '</div>' +
-                        ( meta ? '<div class="pr-meta">' + escapeHtml( meta ) + '</div>' : '' ) +
+                html += '<tr><td class="pr-when">' + NayiveUI.escapeHtml( occTimeLabel( r.inst ) ) + '</td><td>' +
+                        '<div class="pr-title">' + NayiveUI.escapeHtml( ( def.title || T( 'calendar.untitledEvent' ) ) + span ) + '</div>' +
+                        ( meta ? '<div class="pr-meta">' + NayiveUI.escapeHtml( meta ) + '</div>' : '' ) +
                         '</td></tr>';
             }
 
@@ -2569,7 +2488,8 @@
         // By key: a moved occurrence (RECURRENCE-ID) goes on its own. Deleting the
         // series itself also takes its moved occurrences, as before. A series
         // opened from one of its days asks first: only that day (an EXDATE), or
-        // all of it.
+        // that day and all after (the series ends the day before, and its moved
+        // occurrences from that day on go too; from its first day, all of it).
         async function deleteFromSheet()
         {
             if( ! editingKey ) return;
@@ -2585,7 +2505,7 @@
                            : DateTime.fromISO( occ, { zone: gone.tzid } ).setZone( VIEWER_TZ ).toFormat( 'yyyy-MM-dd HH:mm' );
                 const how  = await NayiveUI.confirm( { title: T( 'calendar.delRepeatTitle' ), body: TF( 'calendar.delRepeatBody', { date: seen } ),
                                                       other: T( 'calendar.delThisOne' ), otherIcon: 'trash',
-                                                      confirm: T( 'calendar.delAllOfIt' ), danger: true } );
+                                                      confirm: T( 'calendar.delThisAndAfter' ), danger: true } );
                 if( ! how ) return;                                   // cancelled: the sheet stays open
                 if( refuseEdit() ) return;
                 gone = findDef( key );                                // a merge may have re-read it meanwhile
@@ -2599,6 +2519,30 @@
                     undoable( T( 'ui.toast.deleted' ), function() { undo(); } );
                     return;
                 }
+
+                const undo = endSeriesBefore( gone, occ );
+                if( undo )
+                {
+                    // Its moved occurrences from that day on (by their RECURRENCE-ID) go with it.
+                    const zone    = gone.allDay ? 'utc' : gone.floating ? VIEWER_TZ : gone.tzid;
+                    const cut     = DateTime.fromISO( occ, { zone } ).toMillis();
+                    const after   = d => d.uid === gone.uid && d.rid && DateTime.fromISO( d.rid, { zone } ).toMillis() >= cut;
+                    const removed = [];
+                    eventDefs.forEach( ( d, i ) => { if( after( d ) ) removed.push( { i, d } ); } );
+                    eventDefs = eventDefs.filter( d => ! after( d ) );
+
+                    closeSheet();
+                    refetchAll();
+                    saveCalendar();
+                    undoable( T( 'ui.toast.deleted' ), function()
+                    {
+                        undo();
+                        for( const r of removed )
+                            if( ! findDef( r.d.key ) ) eventDefs.splice( Math.min( r.i, eventDefs.length ), 0, r.d );
+                    } );
+                    return;
+                }
+                // Nothing before it: the whole series goes, below.
             }
             const goes = d => d.key === key || ( gone && ! gone.rid && d.uid === gone.uid );
 
@@ -2664,7 +2608,7 @@
         {
             const dl = document.getElementById( 'tzList' );
 
-            try { knownZones = Intl.supportedValuesOf( 'timeZone' ); } catch( _ ) { knownZones = COMMON_ZONES; }
+            knownZones = NayiveUI.timeZones();
 
             for( const z of knownZones )
             {
@@ -2682,14 +2626,6 @@
             try { Intl.DateTimeFormat( undefined, { timeZone: sZone } ); return true; }
             catch( _ ) { return false; }
         }
-
-        const COMMON_ZONES =
-        [
-            'UTC','Europe/Madrid','Europe/London','Europe/Paris','Europe/Berlin','Europe/Rome','Europe/Lisbon',
-            'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Sao_Paulo','America/Mexico_City',
-            'Asia/Tokyo','Asia/Shanghai','Asia/Hong_Kong','Asia/Singapore','Asia/Dubai','Asia/Kolkata',
-            'Australia/Sydney','Pacific/Auckland'
-        ];
 
     </script>
 </body>

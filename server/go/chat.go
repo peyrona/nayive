@@ -382,15 +382,6 @@ func (h *ChatHub) Close() {
 	h.closeOnce.Do(func() { close(h.closing) })
 }
 
-// DropUser forgets a deleted or renamed account: its owner record and every
-// token that pointed at it. The next lookup reads the disk again.
-func (h *ChatHub) DropUser(name string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.owners, name)
-	h.resetIndex()
-}
-
 func (h *ChatHub) resetIndex() {
 	h.indexed = false
 	h.laterRead = false // a home dropped from memory may hold scheduled texts
@@ -867,10 +858,18 @@ func (h *ChatHub) purge(o *chatOwner, c *chatConv) {
 	if floor <= 0 {
 		return
 	}
+	h.dropMessages(o, c, func(m *ChatMsg) bool { return m.ID <= floor })
+}
+
+// dropMessages removes every message `gone` picks, from memory and from its
+// month file - its photo or file too - and answers the highest id it removed.
+// Caller holds h.mu.
+func (h *ChatHub) dropMessages(o *chatOwner, c *chatConv, gone func(*ChatMsg) bool) int64 {
 	months := map[string]bool{}
+	var top int64
 	keep := c.msgs[:0]
 	for _, m := range c.msgs {
-		if m.ID > floor {
+		if !gone(m) {
 			keep = append(keep, m)
 			continue
 		}
@@ -880,11 +879,14 @@ func (h *ChatHub) purge(o *chatOwner, c *chatConv) {
 			delete(c.cids, m.From+"|"+m.CID)
 		}
 		h.dropMedia(o, c, m)
+		top = max(top, m.ID)
 	}
+	clear(c.msgs[len(keep):]) // the dropped tail must not pin the old messages
 	c.msgs = keep
 	for month := range months {
 		h.writeMonth(c, month)
 	}
+	return top
 }
 
 // dropMedia deletes the photo or file of a message that is going away - but
@@ -1028,29 +1030,12 @@ func (h *ChatHub) expire(o *chatOwner, now time.Time) {
 
 // expireConv drops the messages sent before `cutoff` (unix ms). Caller holds h.mu.
 func (h *ChatHub) expireConv(o *chatOwner, c *chatConv, cutoff int64) {
-	months := map[string]bool{}
-	keep := c.msgs[:0]
-	for _, m := range c.msgs {
-		if m.At >= cutoff {
-			keep = append(keep, m)
-			continue
-		}
-		months[monthOf(m.At)] = true
-		delete(c.byID, m.ID)
-		if m.CID != "" {
-			delete(c.cids, m.From+"|"+m.CID)
-		}
-		h.dropMedia(o, c, m)
-		c.st.Gone = max(c.st.Gone, m.ID)
-	}
-	if len(months) == 0 {
+	n := len(c.msgs)
+	top := h.dropMessages(o, c, func(m *ChatMsg) bool { return m.At < cutoff })
+	if len(c.msgs) == n {
 		return
 	}
-	clear(c.msgs[len(keep):]) // the dropped tail must not pin the old messages
-	c.msgs = keep
-	for month := range months {
-		h.writeMonth(c, month)
-	}
+	c.st.Gone = max(c.st.Gone, top)
 	o.bump(c, nil)
 	h.saveState(c)
 }
@@ -1607,22 +1592,7 @@ func mediaName(m *ChatMsg) string {
 
 // allowSend is the per-person rate limit (the owner has none).
 func (o *chatOwner) allowSend(pid string) bool {
-	if pid == "o" {
-		return true
-	}
-	now := time.Now()
-	keep := o.sent[pid][:0]
-	for _, t := range o.sent[pid] {
-		if now.Sub(t) < time.Minute {
-			keep = append(keep, t)
-		}
-	}
-	if len(keep) >= chatGuestPerMin {
-		o.sent[pid] = keep
-		return false
-	}
-	o.sent[pid] = append(keep, now)
-	return true
+	return allowIn(o.sent, pid, chatGuestPerMin, time.Now())
 }
 
 // allowBytes is the per-person daily upload allowance.
@@ -1826,19 +1796,24 @@ func (h *ChatHub) sendPushes(owner string, jobs []chatPushJob) {
 			deliverPush(h.push, h.users, h.log, j.owner, j.sub, payload, chatPushTTL)
 			continue
 		}
-		person, endpoint := j.person, j.sub.Endpoint
-		deliverPushTo(h.push, h.log, j.sub, payload, chatPushTTL, func() {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			if o := h.owners[owner]; o != nil {
-				if c := o.contact(person); c != nil && removeSub(c, endpoint) {
-					h.saveData(o)
-					o.changed(true)
-				}
-			}
-		})
+		deliverPushTo(h.push, h.log, j.sub, payload, chatPushTTL, h.forgetGuestSub(owner, j.person, j.sub.Endpoint))
 	}
 	traced(h, "pushed", len(jobs)) // every device asked, the dead ones forgotten
+}
+
+// forgetGuestSub is what a push to a person's device does when that device is
+// gone for good: the subscription leaves their contact in `owner`'s chat.
+func (h *ChatHub) forgetGuestSub(owner, person, endpoint string) func() {
+	return func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if o := h.owners[owner]; o != nil {
+			if c := o.contact(person); c != nil && removeSub(c, endpoint) {
+				h.saveData(o)
+				o.changed(true)
+			}
+		}
+	}
 }
 
 func removeSub(c *ChatContact, endpoint string) bool {

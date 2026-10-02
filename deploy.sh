@@ -7,11 +7,10 @@
 #   1. the server         server/go/  -> built here into ONE static Linux binary
 #                         -> ${REMOTE_BASE}/server/go/nayive
 #      (no Python, no apt packages: `go build` needs no network, the only
-#       dependency is vendored - see docs/go-port.md)
+#       dependency is vendored - see server/README.md)
 #   2. the apps           client/apps/  -> ${REMOTE_BASE}/client/apps/
-#      (calc, calendar, contact, drive, habits, planner, tasks, text, trips, write,
-#       index.html launcher, login.html, admin.html and the shared/ code every
-#       app loads — theme, store, gum-api, ui, ical; see docs/shared-modules.md)
+#      (every app, the index.html launcher, login.html, admin.html and the
+#       shared/ code every app loads)
 #   3. the Android app    android/publish.sh -> android/build/site/
 #                         -> ~/web_sites/app/  (https://<origin>/app/)
 #      (nayive.apk + version.json, which installed phones check once a day:
@@ -43,7 +42,7 @@
 #   sudo apt install ffmpeg
 #
 # Without it the server still runs; the startup log says "video conversion OFF"
-# and Drive never offers the conversion. See docs/avi-to-mp4.md.
+# and Drive never offers the conversion. See server/go/convert.go.
 #
 # LibreOffice is the same kind of by-hand step, for Drive's .odt/.ods ->
 # .docx/.xlsx conversion (server/go/office.go):
@@ -66,8 +65,8 @@
 # Before anything is copied, the Go code must pass gofmt, go vet and its whole
 # test suite; any failure aborts the deploy. A few generated app files
 # (apps/sw.js's precache list, the .gz sidecars) are refreshed too. All of it is
-# in the PRE-BUILD section below — add any new must-run-every-deploy step there,
-# nowhere else.
+# in tools/prebuild.sh, which pack.sh runs too — add any new must-run step
+# there; only the Android app's step is deploy's own (PRE-BUILD below).
 #
 # Usage:
 #   ./deploy.sh          Pre-build + build + rsync. No questions.
@@ -78,7 +77,7 @@
 #                        the .gz files and the APK locally.)
 #   ./deploy.sh --help   Print this header.
 #
-# Needs Go 1.24 or newer: ~/sdk/go1.27.1 is used when present, else `go` on the
+# Needs Go 1.27.1 or newer: ~/sdk/go1.27.1 is used when present, else `go` on the
 # PATH (Ubuntu's apt golang is 1.18 — too old, never use it).
 #
 # REMOTE_USER, REMOTE_HOST and REMOTE_PORT are private, so they live in
@@ -88,12 +87,13 @@
 # if the key is not installed yet, run once:
 #   ssh-copy-id -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST}
 #
-# Hidden/editor files (.*, *~, *.swp) are excluded from
-# apps/, and so are the per-app USER-DATA files (calendar.ics, contacts.vcf,
-# contacts-meta.json, tasks.json) — those are written live on the server and
-# must never be overwritten by a stale local copy.
+# Hidden/editor files (.*, *~, *.swp) are excluded from apps/. User data never
+# lives there (it is in store/homes/ since 2026-09-15).
 # Files removed locally ARE deleted from the server's apps/ (--delete), except
 # those excluded ones: rsync never deletes what it excludes.
+#
+# It ships the WORKING TREE, untracked files included: it warns first when
+# server/go/ or client/apps/ holds changes git does not have.
 # ==============================================================================
 set -euo pipefail
 
@@ -112,8 +112,7 @@ REMOTE_BIN="$REMOTE_BASE/server/go/nayive" # the Go binary on the VPS
 REMOTE_APK_DIR="/home/${REMOTE_USER}/web_sites/app" # the APK download site (sites_dir/app)
 SERVICE="nayive.service"
 
-SRC_ROOT="$SCRIPT_DIR/client"             # the server run-root in the repo
-APPSSRC="$SRC_ROOT/apps"
+APPSSRC="$SCRIPT_DIR/client/apps"         # what the browser loads (the run-root is store/)
 GOSRC="$SCRIPT_DIR/server/go"               # the Go server's source
 APKSITE="$SCRIPT_DIR/android/build/site"    # what android/publish.sh lays out
 
@@ -142,7 +141,7 @@ command -v rsync >/dev/null 2>&1 || { echo "ERROR: 'rsync' not found (needed to 
 if [ -x "$HOME/sdk/go1.27.1/bin/go" ]; then
     export PATH="$HOME/sdk/go1.27.1/bin:$PATH"
 fi
-command -v go >/dev/null 2>&1 || { echo "ERROR: 'go' not found (install Go 1.24+ in ~/sdk, not from apt)." >&2; exit 1; }
+command -v go >/dev/null 2>&1 || { echo "ERROR: 'go' not found (install Go 1.27.1+ in ~/sdk, not from apt)." >&2; exit 1; }
 
 [ -d "$APPSSRC" ]        || { echo "ERROR: local apps source not found: $APPSSRC" >&2; exit 1; }
 [ -f "$GOSRC/go.mod" ]   || { echo "ERROR: Go server source not found: $GOSRC" >&2; exit 1; }
@@ -151,19 +150,26 @@ echo "==> Deploying  server/go/ + $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMO
 echo "==> Using $(go version)"
 [ "$DRY_RUN" = 1 ] && echo "==> DRY RUN: nothing will be copied to the VPS or restarted"
 
+# What ships is the working tree: say so when it differs from git, or the VPS
+# can end up running code no commit can rebuild. A warning, not a stop.
+# (Checked before the pre-build, which rewrites sw.js on purpose.)
+if command -v git >/dev/null 2>&1 &&
+   DIRTY="$(git -C "$SCRIPT_DIR" status --porcelain -- server/go client/apps 2>/dev/null)" && [ -n "$DIRTY" ]; then
+    echo "==> WARNING: server/go/ or client/apps/ has changes git does not have (not committed):" >&2
+    DIRTY_N="$(printf '%s\n' "$DIRTY" | wc -l)"
+    printf '%s\n' "$DIRTY" | sed -n '1,20s/^/      /p' >&2
+    if [ "$DIRTY_N" -gt 20 ]; then echo "      ... ($DIRTY_N in all)" >&2; fi
+fi
+
 # ------------------------------------------------------------------------------
 # PRE-BUILD — everything that MUST pass or run on every deploy.
 # Each entry is run from $SCRIPT_DIR; a non-zero exit aborts the deploy.
-# Add any further must-run-every-deploy step to this list.
+# The shared steps (gofmt, vet, tests, checks, sw.js, .gz) are in
+# tools/prebuild.sh, which pack.sh runs too; add a further step there.
 # ------------------------------------------------------------------------------
-PREBUILD_STEPS=(
-    "cd server/go && test -z \"\$(gofmt -l .)\""   # formatting is not a matter of opinion
-    "cd server/go && go vet ./..."                  # the built-in static analyser
-    "cd server/go && go test -count=1 ./..."        # the whole suite, incl. the RFC 8291 push vector
-    "go -C tools run ./check-i18n"              # every dictionary must agree with es.json
-    "go -C tools run ./check-docx-editor"       # the docx-editor.dev engine vs docx-editor.lock.json, and the refs to it
-    "go -C tools run ./build-precache"          # refresh apps/sw.js: precache file list + CACHE_VERSION
-    "go -C tools run ./build-gzip"              # .gz sidecar beside every text asset (server sends them as-is)
+# shellcheck source=tools/prebuild.sh
+. "$SCRIPT_DIR/tools/prebuild.sh"
+PREBUILD_STEPS+=(
     "android/publish.sh"                        # the release APK + version.json, into android/build/site/ (skipped if android/ is unchanged)
 )
 
@@ -223,7 +229,6 @@ fi
 echo "==> Deploying apps  $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"
 if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay \
       --exclude='.*' --exclude='*~' --exclude='*.swp' \
-      --exclude='calendar.ics' --exclude='contacts.vcf' --exclude='contacts-meta.json' --exclude='tasks.json' \
       -e "$RSYNC_RSH" \
       "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"; then
     echo "ERROR: apps rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/ failed." >&2

@@ -12,6 +12,9 @@
 // obscure namesake hamlet happens to share the literal spelling - then open-meteo's forecast
 // endpoint turns those coordinates into an IANA timezone.
 //
+// accept-language=en on purpose: the label (st.tzLabel) names the country in English,
+// and currency.js detects a stage's currency from English country names.
+//
 // Nominatim's usage policy caps anonymous use at 1 request/second, so calls are serialized
 // through nominatimQueue rather than fired in parallel (a multi-stage trip geocodes several
 // locations at once via ensureRouteCoords()).
@@ -249,7 +252,7 @@ async function fetchWeather( lat, lon, sDate )
 // the place's time zone, which is what lets geocodeLocation() ask for both at once.
 function weatherUrl( lat, lon, sDate )
 {
-    const near = sDate >= addDaysIso( todayIso(), -5 );
+    const near = sDate >= addDaysIso( NayiveUI.todayIso(), -5 );
     const base = near ? 'https://api.open-meteo.com/v1/forecast'
                       : 'https://archive-api.open-meteo.com/v1/archive';
 

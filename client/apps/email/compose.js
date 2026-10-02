@@ -29,6 +29,15 @@
  * quotes or a forward carries, after the usual "-- " line. A draft opened
  * again already has it. A message holding nothing but it counts as empty.
  *
+ * THE TEXT is formatted: Squire (lib/, Fastmail's editor) in #cText, with
+ * a bar on top - bold, italic, underline, lists, a link, clear. What gets
+ * in (a paste, a draft made elsewhere) goes through DOMPurify first, down to
+ * those few tags and a link's href: no styles, no pictures. The mail goes out
+ * as HTML and as plain text (plainText: lists as "- " / "1. ", a quote as
+ * "> ", a link's address after its words); the server cleans the HTML again.
+ * A reply quotes the original's words in a <blockquote>. A file dropped or a
+ * picture pasted into the text is attached, not put in the text.
+ *
  * ADDRESSES: typed freely ("Ana <ana@x.es>, bob@y.com"); the Contacts app's
  * addresses that fit the word being typed show under the field (arrows +
  * Enter, or a tap). The server checks them all before sending.
@@ -66,14 +75,14 @@
         var msg = opts.msg || null;
         // from a message on screen: this view takes its history entry (a Back
         // here would arrive late and close what was just opened)
-        var fromRead = !! S.open;
+        var fromRead = !! S.open && !! ( history.state && history.state.mailRead );     // split pushes none
         if( S.open ) E.closeMessage( false );
         if( S.selecting ) E.endSelect();
         C = blank();
         if( msg ) C.acct = msg.acct || S.acct;
         var sig = String( S.settings.signature || "" ).replace( /\s+$/, "" );
         C.sig = sig.trim() ? "\n\n-- \n" + sig : "";
-        var f = { to: "", cc: "", bcc: "", subject: "", text: C.sig };
+        var f = { to: "", cc: "", bcc: "", subject: "", html: textHTML( C.sig ) };
 
         if( msg && opts.mode !== "fwd" )
         {
@@ -90,19 +99,19 @@
             }
             else f.to = list( to );
             f.subject = /^re:/i.test( msg.subject || "" ) ? msg.subject : "Re: " + ( msg.subject || "" );
-            f.text = C.sig + "\n\n" + E.TF( "mail.wrote", { date: E.longDate( msg.date ), who: E.whoFull( msg.from ) } ) + "\n" +
-                     quote( bodyText( msg ) );
+            f.html = textHTML( C.sig + "\n\n" + E.TF( "mail.wrote", { date: E.longDate( msg.date ), who: E.whoFull( msg.from ) } ) ) +
+                     "<blockquote>" + textHTML( bodyText( msg ) ) + "</blockquote>";
             C.inReplyTo = msg.mid || "";
             C.references = ( msg.references || [] ).concat( msg.mid ? [ msg.mid ] : [] );
         }
         else if( msg )   // forward: the text under a header, and its files
         {
             f.subject = /^(fwd?|rv):/i.test( msg.subject || "" ) ? msg.subject : "Fwd: " + ( msg.subject || "" );
-            f.text = C.sig + "\n\n" + E.T( "mail.fwdHeader" ) + "\n" +
+            f.html = textHTML( C.sig + "\n\n" + E.T( "mail.fwdHeader" ) + "\n" +
                      E.T( "mail.from" ) + ": " + E.whoFull( msg.from ) + "\n" +
                      E.T( "mail.date" ) + ": " + E.longDate( msg.date ) + "\n" +
                      E.T( "mail.subject" ) + ": " + ( msg.subject || "" ) + "\n" +
-                     E.T( "mail.to" ) + ": " + E.whoFull( msg.to ) + "\n\n" + bodyText( msg );
+                     E.T( "mail.to" ) + ": " + E.whoFull( msg.to ) + "\n\n" + bodyText( msg ) );
             ( msg.parts || [] ).filter( function ( p ) { return ! p.inline; } ).forEach( function ( p )
             {
                 C.files.push( { kind: "keep", acct: msg.acct || S.acct, ref: msg.ref, part: p.id, name: p.name, size: p.size } );
@@ -110,12 +119,13 @@
         }
         show( f, fromRead );
         var focus = msg && opts.mode !== "fwd" ? "cText" : "cTo";
-        E.$( "cText" ).setSelectionRange( 0, 0 );      // over the signature, not under it
+        ed.moveCursorToStart();                         // over the signature, not under it
         setTimeout( function ()
         {
-            var el = E.$( focus );
-            el.focus();
-            if( focus === "cText" ) { el.setSelectionRange( 0, 0 ); el.scrollTop = 0; }
+            if( focus !== "cText" ) { E.$( focus ).focus(); return; }
+            ed.focus();
+            ed.moveCursorToStart();
+            E.$( "composeView" ).parentNode.scrollTop = 0;
         }, 50 );
     };
 
@@ -148,9 +158,10 @@
             {
                 C.files.push( { kind: "keep", acct: acct, ref: msg.ref, part: p.id, name: p.name, size: p.size } );
             } );
-            // a draft made elsewhere may be HTML only: its words, not nothing
-            show( { to: addrs( msg.to ), cc: addrs( msg.cc ), bcc: addrs( msg.bcc ),
-                    subject: msg.subject || "", text: msg.text || bodyText( msg ) } );
+            // its HTML (ours, or one made elsewhere - cleaned down to what
+            // the editor keeps), else its plain text
+            show( { to: addrs( msg.to ), cc: addrs( msg.cc ), bcc: addrs( msg.bcc ), subject: msg.subject || "",
+                    html: msg.html ? bodyOf( msg.html ) : null, text: msg.text || "" } );
             C.typed = true;
         }
         catch( err ) { E.plug( "offline" ); NayiveUI.toast( E.errText( err ) ); }
@@ -178,7 +189,207 @@
         var doc = new DOMParser().parseFromString( html, "text/html" );      // inert: loads nothing
         return ( doc.body ? doc.body.textContent : "" ).replace( /\n{3,}/g, "\n\n" ).trim();
     }
-    function quote( text ) { return text.split( "\n" ).map( function ( l ) { return "> " + l; } ).join( "\n" ); }
+
+    // ---------------------------------------------------------------------
+    // the text: Squire
+    // ---------------------------------------------------------------------
+
+    var ed = null;      // the editor on #cText
+    var linkAt = null;  // the words the link sheet is for (their range)
+
+    // What may come into the text: these tags, a link's address - nothing
+    // else (no style, no class, no picture). A tag not listed goes, its words
+    // stay. DOMPurify, then into the editor's own document (Squire asks that).
+    var PURE = { ALLOWED_TAGS: [ "b", "strong", "i", "em", "u", "a", "div", "p", "br", "ul", "ol", "li", "blockquote", "span" ],
+                 ALLOWED_ATTR: [ "href" ], RETURN_DOM_FRAGMENT: true };
+    function toFragment( html )
+    {
+        return document.importNode( DOMPurify.sanitize( html, PURE ), true );
+    }
+
+    function esc( t ) { return t.replace( /&/g, "&amp;" ).replace( /</g, "&lt;" ).replace( />/g, "&gt;" ); }
+
+    // Plain text as the editor's lines: one <div> each. Spaces the editor
+    // would drop - at a line's ends (the signature's "-- "), or in a row -
+    // go in as no-break spaces (plainText turns them back).
+    function textHTML( text )
+    {
+        return String( text || "" ).split( "\n" ).map( function ( l )
+        {
+            l = l.replace( /^ | $/g, "\u00a0" ).replace( / {2}/g, " \u00a0" );
+            return "<div>" + ( l ? esc( l ) : "<br>" ) + "</div>";
+        } ).join( "" );
+    }
+
+    // A whole HTML page's body (a draft's HTML part), read inertly.
+    function bodyOf( html )
+    {
+        var doc = new DOMParser().parseFromString( html, "text/html" );
+        return doc.body ? doc.body.innerHTML : "";
+    }
+
+    // The editor's text as plain text: a line per block or <br>, a list's
+    // items as "- " / "1. " (two spaces more per level), a quote's lines
+    // after "> ", a link's address after its words (when they differ).
+    function plainText( root )
+    {
+        var lines = [], cur = null;
+        function line( pre ) { cur = { pre: pre, text: "" }; lines.push( cur ); }
+        function walk( n, pre, depth )
+        {
+            if( n.nodeType === 3 )
+            {
+                var v = n.nodeValue.replace( /\u200b/g, "" ).replace( /[\r\n]+/g, " " );
+                if( ! cur && ! /[^ \t]/.test( v ) ) return;   // the gap between two blocks
+                if( ! cur ) line( pre );
+                cur.text += v;
+                cur.fresh = false;
+                return;
+            }
+            if( n.nodeType !== 1 ) return;
+            var tag = n.nodeName;
+            if( tag === "BR" )
+            {
+                // the <br> that ends a block's words only holds the line open
+                if( cur && ! n.nextSibling ) return;
+                if( ! cur ) line( pre );
+                cur = null;
+                return;
+            }
+            var block = /^(DIV|P|LI|UL|OL|BLOCKQUOTE|H[1-6]|PRE|TABLE|TR)$/.test( tag );
+            if( block && ! ( cur && cur.fresh ) ) cur = null;   // an item's first block stays on its "- " line
+            if( tag === "BLOCKQUOTE" ) pre += "> ";
+            if( tag === "LI" )
+            {
+                var mark = n.parentNode && n.parentNode.nodeName === "OL"
+                         ? ( [].indexOf.call( n.parentNode.children, n ) + 1 ) + ". " : "- ";
+                line( pre );
+                cur.text = new Array( depth ).join( "  " ) + mark;
+                cur.fresh = true;
+            }
+            var inner = tag === "UL" || tag === "OL" ? depth + 1 : depth;
+            for( var c = n.firstChild; c; c = c.nextSibling ) walk( c, pre, inner );
+            if( tag === "A" && cur )
+            {
+                var href = n.getAttribute( "href" ) || "", words = n.textContent.trim();
+                var bare = href.replace( /^mailto:/i, "" );
+                if( href && bare !== words && href !== words ) cur.text += " <" + bare + ">";
+            }
+            if( block ) cur = null;
+        }
+        walk( root, "", 0 );
+        return lines.map( function ( l ) { return ( l.text ? l.pre + l.text : l.pre.replace( / +$/, "" ) ); } )
+                    .join( "\n" ).replace( /\u00a0/g, " " );
+    }
+
+    function setBody( html )
+    {
+        ed.setHTML( html );
+        paintEmpty();
+        paintFormat();
+    }
+
+    // The placeholder: shown while the box holds no words at all. The mark
+    // goes on the box around, not on the editor (Squire takes any change in
+    // there, an attribute too, for typing).
+    function paintEmpty()
+    {
+        var root = E.$( "cText" );
+        root.parentNode.classList.toggle( "is-empty", ! root.textContent.trim() && ! root.querySelector( "li, blockquote" ) );
+    }
+
+    // The bar's buttons lit for what the cursor is in.
+    function paintFormat()
+    {
+        var path = ed.getPath() || "";
+        var on = { bold: ed.hasFormat( "B" ), italic: ed.hasFormat( "I" ), underline: ed.hasFormat( "U" ),
+                   ul: /(^|>)UL\b/.test( path ), ol: /(^|>)OL\b/.test( path ), link: ed.hasFormat( "A" ) };
+        document.querySelectorAll( "#cFormat [aria-pressed]" ).forEach( function ( b )
+        {
+            var v = !! on[ b.getAttribute( "data-fmt" ) ];
+            b.classList.toggle( "is-active", v );
+            b.setAttribute( "aria-pressed", v ? "true" : "false" );
+        } );
+    }
+
+    function format( what )
+    {
+        if( ! ed ) return;
+        var on = function ( tag ) { return ed.hasFormat( tag ); };
+        switch( what )
+        {
+            case "bold":      on( "B" ) ? ed.removeBold()      : ed.bold();      break;
+            case "italic":    on( "I" ) ? ed.removeItalic()    : ed.italic();    break;
+            case "underline": on( "U" ) ? ed.removeUnderline() : ed.underline(); break;
+            case "ul":        on( "UL" ) ? ed.removeList() : ed.makeUnorderedList(); break;
+            case "ol":        on( "OL" ) ? ed.removeList() : ed.makeOrderedList();   break;
+            case "clear":     ed.removeAllFormatting(); break;
+            case "link":      askLink(); return;
+        }
+        ed.focus();
+        paintFormat();
+    }
+
+    // The link sheet: the address for the words picked (or, with none, the
+    // address goes in as its own words); empty takes the link off.
+    function askLink()
+    {
+        linkAt = ed.getSelection();
+        var a = linkAt && linkAt.startContainer;
+        a = a && ( a.nodeType === 1 ? a : a.parentNode ).closest( "a" );
+        E.$( "linkHref" ).value = a && E.$( "cText" ).contains( a ) ? a.getAttribute( "href" ) || "" : "";
+        NayiveUI.open( "linkSheet" );
+        setTimeout( function () { E.$( "linkHref" ).focus(); }, 50 );
+    }
+
+    function applyLink()
+    {
+        var href = E.$( "linkHref" ).value.trim();
+        NayiveUI.close( "linkSheet" );
+        if( ! ed || ! linkAt ) return;
+        ed.focus();
+        ed.setSelection( linkAt );
+        linkAt = null;
+        if( ! href ) ed.removeLink();
+        else
+        {
+            if( ! /^(https?|mailto|tel):/i.test( href ) ) href = /^[^\s@\/]+@[^\s@\/]+$/.test( href ) ? "mailto:" + href : "https://" + href;
+            ed.makeLink( href );
+        }
+        paintFormat();
+    }
+
+    function startEditor()
+    {
+        ed = new Squire( E.$( "cText" ), { sanitizeToDOMFragment: toFragment } );
+        ed.addEventListener( "input", function () { paintEmpty(); changed(); } );
+        ed.addEventListener( "pathChange", paintFormat );
+        // a picture pasted, a file dropped: attached, not put in the text
+        ed.addEventListener( "pasteImage", function ( e )
+        {
+            var files = e.detail && e.detail.clipboardData ? e.detail.clipboardData.files : [];
+            if( C ) addFiles( [].map.call( files || [], upFile ) );
+        } );
+        E.$( "cText" ).addEventListener( "drop", function ( e )
+        {
+            var files = e.dataTransfer && e.dataTransfer.files;
+            if( ! files || ! files.length ) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if( C ) addFiles( [].map.call( files, upFile ) );
+        }, true );
+        // the bar keeps the text's selection: a press there does not take the focus
+        E.$( "cFormat" ).addEventListener( "mousedown", function ( e ) { if( e.target.closest( "button" ) ) e.preventDefault(); } );
+        E.$( "cFormat" ).addEventListener( "click", function ( e )
+        {
+            var b = e.target.closest( "button[data-fmt]" );
+            if( b ) format( b.getAttribute( "data-fmt" ) );
+        } );
+        E.$( "linkOkBtn" ).addEventListener( "click", applyLink );
+        E.$( "linkHref" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); applyLink(); } } );
+    }
+
+    function upFile( f ) { return { kind: "up", file: f, name: f.name || "image.png", size: f.size }; }
 
     function show( f, replaceHistory )
     {
@@ -191,7 +402,7 @@
         E.$( "cCc" ).value = f.cc;
         E.$( "cBcc" ).value = f.bcc;
         E.$( "cSubject" ).value = f.subject;
-        E.$( "cText" ).value = f.text;
+        setBody( f.html != null ? f.html : textHTML( f.text ) );
         var cc = !! ( f.cc || f.bcc );
         E.$( "cCcRow" ).hidden = ! cc;
         E.$( "cBccRow" ).hidden = ! cc;
@@ -319,19 +530,16 @@
 
     function empty()
     {
-        var sig = C.sig.trim();
-        return ! C.files.length && [ "cTo", "cCc", "cBcc", "cSubject", "cText" ].every( function ( id )
-        {
-            var v = E.$( id ).value.trim();
-            return ! v || ( id === "cText" && v === sig );
-        } );
+        var text = plainText( E.$( "cText" ) ).trim();
+        return ! C.files.length && ( ! text || text === C.sig.trim() ) &&
+               [ "cTo", "cCc", "cBcc", "cSubject" ].every( function ( id ) { return ! E.$( id ).value.trim(); } );
     }
 
-    // What the writer's fields hold now.
+    // What the writer's fields hold now: the text twice, formatted and plain.
     function fieldsNow()
     {
         return { to: E.$( "cTo" ).value, cc: E.$( "cCc" ).value, bcc: E.$( "cBcc" ).value,
-                 subject: E.$( "cSubject" ).value, text: E.$( "cText" ).value };
+                 subject: E.$( "cSubject" ).value, html: ed.getHTML(), text: plainText( E.$( "cText" ) ) };
     }
 
     // The request both share: the message as JSON, the uploads as files.
@@ -344,7 +552,7 @@
         mine = mine || C;
         var fl = fields || fieldsNow();
         var out = {
-            to: fl.to, cc: fl.cc, bcc: fl.bcc, subject: fl.subject, text: fl.text,
+            to: fl.to, cc: fl.cc, bcc: fl.bcc, subject: fl.subject, text: fl.text, html: fl.html,
             inReplyTo: mine.inReplyTo, references: mine.references, mid: mine.mid,
             draftRef: mine.draftAcct === forDraftIn ? mine.draftRef : "",
             keep: [], drive: []
@@ -366,11 +574,19 @@
 
     async function post( acct, path, fd )
     {
-        var res;
-        try { res = await fetch( "/api/mail/" + encodeURIComponent( acct ) + "/" + path, { method: "POST", credentials: "same-origin", body: fd, keepalive: !! fd.small } ); }
+        var url = "/api/mail/" + encodeURIComponent( acct ) + "/" + path, res;
+        try
+        {
+            if( fd.small )
+            {
+                var r = await fetch( url, { method: "POST", credentials: "same-origin", body: fd, keepalive: true } );
+                res = { ok: r.ok, status: r.status, body: await r.text() };
+            }
+            else res = await upload( url, fd );
+        }
         catch( e ) { var off = new Error( "offline" ); off.code = "offline"; throw off; }
         var data = null;
-        try { data = await res.json(); } catch( e ) {}
+        try { data = JSON.parse( res.body ); } catch( e ) {}
         if( ! res.ok )
         {
             if( res.status === 401 ) NayiveUI.sessionExpired();
@@ -381,6 +597,25 @@
             throw err;
         }
         return data;
+    }
+
+    // With files: XMLHttpRequest, the one that tells how much went up, told
+    // as GumApi's "nayive:upload" events - the shared bar (ui.js) shows a big
+    // attachment going up. Answers fetch's { ok, status }, the body as text.
+    var upSeq = 0;
+    function upload( url, fd )
+    {
+        var id = "mail-" + ( ++upSeq );
+        function tell( d ) { try { document.dispatchEvent( new CustomEvent( "nayive:upload", { detail: d } ) ); } catch( e ) {} }
+        return new Promise( function ( ok, fail )
+        {
+            var x = new XMLHttpRequest();
+            x.open( "POST", url );
+            x.upload.onprogress = function ( e ) { if( e.lengthComputable ) tell( { id: id, loaded: e.loaded, total: e.total } ); };
+            x.onload = function () { tell( { id: id, done: true } ); ok( { ok: x.status >= 200 && x.status < 300, status: x.status, body: x.responseText } ); };
+            x.onerror = x.onabort = x.ontimeout = function () { tell( { id: id, done: true } ); fail( new TypeError( "Failed to fetch" ) ); };
+            x.send( fd );
+        } );
     }
 
     function stamp( key )
@@ -503,7 +738,7 @@
     // screen it takes that one's history entry (as E.compose does).
     function reopen( mine, fields )
     {
-        var fromRead = !! S.open;
+        var fromRead = !! S.open && !! ( history.state && history.state.mailRead );     // split pushes none
         if( S.open ) E.closeMessage( false );
         if( S.selecting ) E.endSelect();
         C = mine;
@@ -625,7 +860,7 @@
         {
             mine.sending = false;
             E.plug( "synced" );
-            if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && ! S.open && ! S.selecting ) E.loadList( false );
+            if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! S.selecting ) E.loadList( false );
         }, function ( err )
         {
             mine.sending = false;
@@ -716,6 +951,8 @@
     // ---------------------------------------------------------------------
 
     E.isComposing = function () { return !! C; };
+    // the text as it goes out, plain (tools/email-test reads it)
+    E.composeText = function () { return C ? plainText( E.$( "cText" ) ) : ""; };
 
     document.addEventListener( "DOMContentLoaded", function ()
     {
@@ -728,7 +965,7 @@
         E.$( "cAttach" ).addEventListener( "click", function ( e ) { e.stopPropagation(); toggleAttach(); } );
         E.$( "cFileInput" ).addEventListener( "change", function ( e )
         {
-            addFiles( [].map.call( e.target.files || [], function ( f ) { return { kind: "up", file: f, name: f.name, size: f.size }; } ) );
+            addFiles( [].map.call( e.target.files || [], upFile ) );
             e.target.value = "";
         } );
         // the clip's panel closes on a tap elsewhere, Escape, or a resize
@@ -743,7 +980,8 @@
             E.$( "cCc" ).focus();
         } );
         E.$( "cFrom" ).addEventListener( "change", fromChanged );
-        [ "cTo", "cCc", "cBcc", "cSubject", "cText" ].forEach( function ( id )
+        startEditor();
+        [ "cTo", "cCc", "cBcc", "cSubject" ].forEach( function ( id )
         {
             E.$( id ).addEventListener( "input", changed );
         } );

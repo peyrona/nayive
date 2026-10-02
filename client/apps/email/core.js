@@ -42,6 +42,7 @@
         settings: { trashDays: 30, showImages: false, signature: "" },
         selecting: false,  // picking several (actions.js)
         sel:      new Set(),  // the rows picked (items of S.items)
+        only:     null,       // the pick dialog's matches: the rest out of sight (null = every row)
         // out of sight while their Undo is on show - a re-read never brings
         // them back: accounts being removed (accounts.js), labels being
         // deleted (labels.js), rows deleted for good ("acct|ref", actions.js)
@@ -106,6 +107,61 @@
               "toobig", "private", "key" ].indexOf( code ) >= 0 )
             return E.T( "mail.err." + code );
         return E.T( "mail.err.down" );
+    };
+
+    // The bar in the middle of the screen, for the long jobs: bar( text,
+    // pct, onStop ) draws it (a ✕ only with onStop), bar( null ) hides it.
+    // pct null: no end known - the fill slides (theme.css .is-sliding).
+    var barStop = null;
+    E.bar = function ( text, pct, onStop )
+    {
+        var box = E.$( "busyBar" ), row = box.firstElementChild, stop = E.$( "busyStopBtn" );
+        box.classList.toggle( "show", text != null );
+        barStop = text != null ? onStop || null : null;
+        stop.hidden = ! barStop;
+        row.classList.toggle( "can-stop", !! barStop );
+        if( text == null ) return;
+        var sliding = pct == null;
+        row.classList.toggle( "is-sliding", sliding );
+        row.querySelector( ".transfer-text" ).textContent = text;
+        if( sliding ) { row.removeAttribute( "aria-valuenow" ); row.querySelector( ".transfer-fill" ).style.width = ""; return; }
+        pct = Math.max( 0, Math.min( 100, Math.floor( pct ) ) );
+        row.setAttribute( "aria-valuenow", String( pct ) );
+        row.querySelector( ".transfer-fill" ).style.width = pct + "%";
+    };
+
+    // A job on `total` emails (E.MANY or more): the bar, once it has run
+    // 600 ms (a quick one never flashes it). In pieces (more than E.CHUNK)
+    // step( sent ) moves it; one call for all of them leaves it sliding,
+    // saying "Working… N emails" - or `text`, which always slides (one call
+    // the server works through: Empty Trash). end() takes it away.
+    E.MANY = 10;
+    E.job = function ( total, text )
+    {
+        if( total < E.MANY ) return { step: function () {}, end: function () {} };
+        var pieces = ! text && total > E.CHUNK, sent = 0, shown = false, ended = false;
+        function draw()
+        {
+            shown = true;
+            if( pieces ) E.bar( E.TF( "mail.workingN", { n: sent, total: total } ), sent * 100 / total );
+            else E.bar( text || E.TF( "mail.workingAll", { n: total } ), null );
+        }
+        var timer = setTimeout( draw, 600 );
+        return {
+            step: function ( n ) { if( ended ) return; sent = n; if( shown && pieces ) draw(); },
+            end:  function () { if( ended ) return; ended = true; clearTimeout( timer ); if( shown ) E.bar( null ); }
+        };
+    };
+    E.$( "busyStopBtn" ).addEventListener( "click", function () { var f = barStop; E.bar( null ); if( f ) f(); } );
+
+    // A big pick goes in pieces of CHUNK: Nayive takes up to 1000 refs +
+    // mids a call (api_mail.go), but a mail server may take far fewer.
+    E.CHUNK = 100;
+    E.chunks = function ( list )
+    {
+        var out = [];
+        for( var i = 0; i < list.length; i += E.CHUNK ) out.push( list.slice( i, i + E.CHUNK ) );
+        return out;
     };
 
     // The header plug: busy while asking, green when the server answered,

@@ -63,8 +63,8 @@ package main
 //
 // java: NO LOCKS IN THIS FILE. Every field of Reminders below is touched by the
 // one goroutine Run owns, and by nothing else - which is why `sent`, `fails`,
-// `events` and `tripDay` are plain maps. The Python needs the same discipline
-// and states it in a comment; here the race detector enforces it.
+// `events` and `tripDay` are plain maps. The race detector (go test -race)
+// holds that in place.
 
 import (
 	"context"
@@ -174,9 +174,9 @@ func NewReminders(cfg *Config, users *Users, trash *Trash, sessions *SessionStor
 
 // Run drives the loop until `ctx` is cancelled. Start it once from main.
 //
-// java: this is the whole of Python's ReminderService, which subclasses Thread
-// and sleeps on an interruptible Event. Here it is a `for { select {} }` over a
-// ticker and the context, which is the idiomatic shape and needs no stop flag.
+// java: a Thread that sleeps until the next tick or an interrupt. Here it is a
+// `for { select {} }` over a ticker and the context, which is the idiomatic
+// shape and needs no stop flag.
 func (r *Reminders) Run(ctx context.Context) {
 	r.log.Info("reminders: started", "every", pollInterval.String())
 	ticker := time.NewTicker(pollInterval)
@@ -197,8 +197,8 @@ func (r *Reminders) Run(ctx context.Context) {
 // safeTick makes one bad calendar file cost only that tick.
 //
 // java: an unrecovered panic in a goroutine kills the WHOLE PROCESS - it is not
-// like an uncaught exception on one Java thread. Python's `except Exception` in
-// the loop body is only politeness; here it is what keeps the server up.
+// like an uncaught exception on one Java thread. This recover is what keeps
+// the server up.
 func (r *Reminders) safeTick() {
 	defer func() {
 		if err := recover(); err != nil {
@@ -354,12 +354,13 @@ func (r *Reminders) tripTick(user string, subs []PushSub, loc *time.Location) {
 	if lead > 0 {
 		trips = r.tripsDue(user, lead, today)
 	}
-	r.announceTrips(user, subs, trips, loc)
-
 	// Marked only now, and only for a user who got this far (they have at least
 	// one device): someone who registers their first one at noon is scanned
-	// today, not tomorrow.
-	r.tripDay[user] = today
+	// today, not tomorrow. Nor while a push failed: the next tick tries that
+	// device again (the saved keys skip the ones that got it), as events do.
+	if r.announceTrips(user, subs, trips, loc) {
+		r.tripDay[user] = today
+	}
 }
 
 type dueTrip struct {
@@ -369,14 +370,16 @@ type dueTrip struct {
 }
 
 // announceTrips pushes every due trip to every device that has not had it yet,
-// then saves the keys - once, after the whole fan-out.
+// then saves the keys - once, after the whole fan-out. False when a push
+// failed, so there is something left to try again.
 //
 // `trips` may be empty and this still has work to do: the save at the end is
 // what drops the keys of trips already past, so the file cannot grow for ever.
 // Nothing new and nothing stale means no write at all, so a user with no trips
 // never even gets the file.
-func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, loc *time.Location) {
+func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, loc *time.Location) bool {
 	path := filepath.Join(r.cfg.HomesDir, user, "data", "reminders.json")
+	done := true
 	saved := loadSentKeys(path, "trips")
 
 	keys := make(map[string]bool, len(saved))
@@ -402,6 +405,8 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 			if r.send(user, sub, dev, payload, dailySeconds) {
 				keys[key] = true
 				r.log.Info("reminders: trip sent", "user", user, "dest", trip.dest, "start", trip.start)
+			} else {
+				done = false
 			}
 		}
 	}
@@ -417,6 +422,7 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 	if !sameKeySet(keep, saved) { // nothing new and nothing stale -> no write
 		saveSentKeys(path, "trips", keep, r.log)
 	}
+	return done
 }
 
 // tripJSON is just enough of a trip.json to decide whether it is due.
@@ -504,8 +510,8 @@ func (r *Reminders) eventsFor(user string, tzName *string, loc *time.Location) (
 		return nil, false
 	}
 	// java: Go strings are just bytes; invalid UTF-8 survives the round trip
-	// and only the regex-matched ASCII of a DTSTART is ever interpreted. That
-	// is the same tolerance Python's errors="replace" buys.
+	// and only the regex-matched ASCII of a DTSTART is ever interpreted: a
+	// stray bad byte costs nothing.
 	events := ParseEvents(string(raw), loc)
 	r.events[ckey] = cachedICS{mtime: info.ModTime(), tzName: name, events: events}
 	return events, true
@@ -547,9 +553,8 @@ func (r *Reminders) phrase(lang, key, builtin string) string {
 // subscribed in.
 //
 // java: the substitution is a plain string Replace, never a format call. An
-// event called "Reunion {equipo}" would make Python's str.format raise and lose
-// the notification entirely; Go's Sprintf would print "%!e(MISSING)" into the
-// user's phone. Replace cannot fail on user text.
+// event called "Reunion %equipo" through Sprintf would print "%!e(MISSING)"
+// into the user's phone. Replace cannot fail on user text.
 func (r *Reminders) eventText(lang, summary, hhmm string) (string, string) {
 	title := r.phrase(lang, "push.eventTitle", "Recordatorio")
 	body := r.phrase(lang, "push.eventBody", "«{summary}» empieza a las {time}.")

@@ -17,6 +17,7 @@ public class NayiveApp extends Application {
     static final String CH_FIND = "find";        // "Buscar mi móvil"
     static final String CH_PENDING = "pending";  // the unread count (the icon's badge)
     static final String CH_UPDATES = "updates";  // a new APK
+    static final String CH_MEDIA = "media";      // photos and videos uploaded
 
     @Override
     public void onCreate() {
@@ -51,5 +52,10 @@ public class NayiveApp extends Application {
         nm.createNotificationChannel(find);
         nm.createNotificationChannel(pending);
         nm.createNotificationChannel(updates);
+
+        NotificationChannel media = new NotificationChannel(CH_MEDIA, getString(R.string.chan_media),
+                NotificationManager.IMPORTANCE_LOW);
+        media.setShowBadge(false);
+        nm.createNotificationChannel(media);
     }
 }

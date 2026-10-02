@@ -1,11 +1,7 @@
 /*
- * ical.js - The .ics event model + DST-safe recurrence engine, shared by the
- * calendar app and the tasks app's once-a-day "what's on the calendar today" sync.
- *
- * Both used to carry a byte-identical copy of this (~135 lines of fiddly
- * timezone math). This is the single copy. calendar is the reference: tasks gets
- * a strict superset (it ignores the extra `location`/`notes` fields and the
- * serialization exports it never calls).
+ * ical.js - The .ics event model + DST-safe recurrence engine. Only the
+ * Calendar app imports it now (Tasks used to, for its "what's on the calendar
+ * today" sync).
  *
  * ES module - import what you need:
  *     import { icsToEventDefs, expandEventDef, eventDefsToIcs } from '../shared/ical.js';
@@ -30,7 +26,7 @@
  *   end:   { date:'YYYY-MM-DD', time:'HH:mm'|null },
  *   rrule: null | { freq:'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY', interval, byweekday:['MO',...]|null, until:'YYYY-MM-DD'|null, count:number|null,
  *                   wkst?,        // ICAL week start, only when the file has one
- *                   custom? }     // true: a rule the sheet cannot show (FREQ=HOURLY, BYDAY=2TU...) - never rewritten
+ *                   custom? }     // true: a rule the sheet cannot show (FREQ=HOURLY, BYDAY=2TU...) - never rewritten (but endSeriesBefore sets its UNTIL)
  * }
  *
  * A def read from a file also carries `_src`: its VEVENT's own lines, so a save
@@ -44,7 +40,7 @@ const RRule        = rrule.RRule;
 // The viewer's current device zone - the anchor for floating events.
 const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export function pad2( n ) { return String( n ).padStart( 2, '0' ); }
+export const pad2 = NayiveUI.pad2;   // shared/ui.js (deferred, so loaded before this module)
 
 //------------------------------------------------------------------------//
 // ICS  <->  event-def MODEL
@@ -201,7 +197,8 @@ function ianaZone( tzid )
 // What the sheet can show AND write back as it came: one RRULE, a plain
 // FREQ, BYDAY only as bare weekdays of a weekly rule. Anything else
 // (FREQ=HOURLY, BYDAY=2TU, BYMONTHDAY, BYSETPOS, a second RRULE...) is
-// `custom`: the calendar never rewrites it, it stays in the file verbatim.
+// `custom`: the calendar never rewrites it, it stays in the file verbatim
+// (only "delete this and all after" sets its UNTIL, endSeriesBefore).
 const SHEET_FREQS = [ 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY' ];
 
 function sheetCanShow( recur, vc )
@@ -582,6 +579,41 @@ export function excludeOne( def, occ )
     };
 }
 
+// "Delete this one and all after" on a series: the series ends just before the
+// occurrence at `occ` (as in excludeOne). A rule the sheet shows gets a
+// date-only UNTIL, the day before, as the sheet writes one (one occurrence a
+// day at most). A rule it cannot show keeps its text, its COUNT / UNTIL swapped
+// for an UNTIL one second before `occ`, in UTC (an HOURLY rule keeps that day's
+// earlier ones), or the day before for an all-day one. Returns undo(), or null
+// when nothing comes before `occ`: then the whole series is to go.
+export function endSeriesBefore( def, occ )
+{
+    const zone   = def.allDay ? 'utc' : def.floating ? VIEWER_TZ : def.tzid;
+    const at     = DateTime.fromISO( occ, { zone } );
+    const before = at.minus( { days: 1 } ).toISODate();
+    const old    = def.rrule;
+    const rule   = Object.assign( {}, old, { until: before, count: null } );
+
+    if( old.raw )
+    {
+        const parts = old.raw.split( ';' ).filter( p => p && ! /^(UNTIL|COUNT)=/i.test( p ) );
+        parts.push( 'UNTIL=' + ( def.allDay ? before.replace( /-/g, '' )
+                                            : at.minus( { seconds: 1 } ).toUTC().toFormat( "yyyyLLdd'T'HHmmss'Z'" ) ) );
+        rule.raw = parts.join( ';' );
+    }
+
+    def.rrule = rule;
+
+    const from = DateTime.fromISO( def.start.date, { zone } ).minus( { days: 2 } ).toMillis();
+    if( ! expandEventDef( def, from, at.toMillis() ).some( i => i.startMs < at.toMillis() ) )
+    {
+        def.rrule = old;
+        return null;
+    }
+
+    return function undo() { def.rrule = old; };   // the same object: the event goes back byte for byte
+}
+
 // One VEVENT back into the file: byte for byte when none of its fields
 // changed; otherwise its own lines, with only the properties of the changed
 // fields (and DTSTAMP) replaced, each where it stood. One it did not have yet
@@ -646,12 +678,12 @@ function patchEvent( src, def, eol )
 }
 
 //------------------------------------------------------------------------//
-// SERIALIZATION (calendar only - tasks is read-only and never imports these)
+// SERIALIZATION
 
 export function eventDefsToIcs( defs )
 {
     const comp = new ICAL.Component( [ 'vcalendar', [], [] ] );
-    comp.updatePropertyWithValue( 'prodid', '-//Mingle//Personal Calendar//EN' );
+    comp.updatePropertyWithValue( 'prodid', '-//Nayive//Personal Calendar//EN' );
     comp.updatePropertyWithValue( 'version', '2.0' );
 
     for( const def of defs )
@@ -683,7 +715,9 @@ function defToVEventComponent( def )
         ev.endDate   = strToIcalDateTime( def.end.date, def.end.time, zone );
     }
 
-    if( def.rrule && def.rrule.freq )   // never "RRULE:FREQ=;" - that line empties the whole file on the next read
+    if( def.rrule && def.rrule.raw )    // a rule the sheet cannot show, as written (endSeriesBefore may have set its UNTIL)
+        vc.updatePropertyWithValue( 'rrule', ICAL.Recur.fromString( def.rrule.raw ) );
+    else if( def.rrule && def.rrule.freq )   // never "RRULE:FREQ=;" - that line empties the whole file on the next read
     {
         const parts = {};
         if( def.rrule.byweekday && def.rrule.byweekday.length )

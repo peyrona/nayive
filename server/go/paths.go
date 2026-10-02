@@ -4,10 +4,10 @@ package main
 // Path helpers - the segment arithmetic every sandbox check is built on.
 // =============================================================================
 //
-// The Python does all of this with pathlib: Path.joinpath(*parts),
-// Path.resolve(), Path.parents, Path.relative_to(). Go's path/filepath is
-// string-based and has no equivalent of `root in target.parents`, so the four
-// operations that matter live here, once, and nothing else re-implements them.
+// Go's path/filepath is string-based and has no equivalent of pathlib's
+// `root in target.parents`, so the four operations that matter - split,
+// resolve, "is inside", relative - live here, once, and nothing else
+// re-implements them.
 //
 // THE RULE, in one sentence: compare PATH SEGMENTS, never string prefixes. A
 // user's file called "EE.UU..txt" must not be mistaken for a traversal attempt,
@@ -49,9 +49,9 @@ func cleanSegments(parts []string) []string {
 // which is the whole point: "%2e%2e" would slip past a check done before.
 //
 // An API path is decoded ONCE, by the query parser (or the mux, for a path
-// value), and never again: a second decode (the Python's, kept until
-// 2026-09-28) made a name holding "%20" unreachable and put an upload named
-// "a%2Fb.txt" into a folder a/.
+// value), and never again: a second decode (removed 2026-09-28) made a name
+// holding "%20" unreachable and put an upload named "a%2Fb.txt" into a folder
+// a/.
 func hasDotDot(parts []string) bool {
 	for _, p := range parts {
 		if p == ".." {
@@ -167,8 +167,8 @@ func lastSegment(p string) string {
 
 // contains is `x in list` for a small slice of strings.
 //
-// java: Go's stdlib has slices.Contains; this is spelled out because it reads
-// the same as the Python it replaces and costs nothing.
+// java: Go's stdlib has slices.Contains; this one predates its use here and
+// costs nothing.
 func contains(list []string, want string) bool {
 	for _, x := range list {
 		if x == want {
@@ -208,13 +208,13 @@ func absUnder(base, p string) string {
 	return filepath.Join(base, p)
 }
 
-// quotePath percent-encodes a path for a Location header the way Python's
-// urllib quote() does: everything unsafe EXCEPT "/", which stays readable.
+// quotePath percent-encodes a path for a Location header: everything unsafe
+// EXCEPT "/", which stays readable (what urllib's quote() does).
 //
 // java: url.QueryEscape escapes the slashes too (and turns a space into "+"),
 // so a redirect back to "/nayive/index.html" would arrive as
 // "%2Fnayive%2Findex.html". The browser follows either, but the login page
-// reads ?return= and the two servers must hand it the same string.
+// reads ?return= and shows it as a path.
 func quotePath(p string) string {
 	var out strings.Builder
 	for _, b := range []byte(p) {

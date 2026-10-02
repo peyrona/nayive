@@ -1,13 +1,14 @@
-<!-- index.html - Launcher for the Balata single-page apps. A 3-column grid of the
+<!-- index.html - Launcher for the Nayive single-page apps. A 3-column grid of the
      apps (Photos / Music / Movies are folder viewers: opened from here they use the
      folder each remembers in its own data/<app>/config.json, asking once via
-     NayiveUI.pickFolder the first time; Write, Calc and Text open from the Office tile's popup),
+     NayiveUI.pickFolder the first time; Write, Calc and Text open from the Office tile's popup,
+     Contacts, Bookmarks and Passwords from the Records one),
      centred in the viewport, with a settings row below: a gear button that, when pressed,
      rolls from the centre to the left edge while the other tool buttons unfold into place
      to its right, one after another (right-to-left as the gear rolls out, mirrored on the
      way back) - the shared colour-scheme (dark / light) toggle, an account button
-     (opens the "Mi cuenta" dialog: change the sign-in password, the trash / trip
-     reminder periods, this device's notifications and automatic theme; its bottom
+     (opens the "Mi cuenta" dialog: the sign-in password, language, timezone, trip
+     reminder, this device's notifications and more - see its script; its bottom
      row, on the left, holds the palette button that opens the "Esquemas de color"
      dialog - create / edit custom dark + light schemes; shared/theme.js applies the
      active one everywhere), the install button and the "Cerrar sesión" button. Pressing the gear again - or clicking
@@ -16,25 +17,39 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <!-- A BIG SCREEN STARTS ON THE DESKTOP (desktop/index.html): at least 1024 x 600
-         with a mouse or touchpad, unless this device's desktop settings say
-         otherwise (localStorage "balata-desktop" .start: auto | desktop | launcher).
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- A BIG SCREEN STARTS ON THE DESKTOP (desktop/index.html), as this device's
+         "Open the desktop" says (balata-desktop's `mode`; the desktop's "⋮" menu
+         and My account set it):
+           auto   (the default) at least 1024 x 600 with a mouse or touchpad;
+           always at least 1024 x 600 either way up (a tablet held upright too),
+                  with or without a mouse;
+           never  the simple view, always.
          Never inside a frame (the desktop's own menu IS this page), never on a
          phone, never with a query or hash (?here=, enrolment...: this page acts on it), and
          never for an account that must pick its password first (login.html's
-         "nayive-must-set": the desktop's apps would all be refused). -->
+         "nayive-must-set": the desktop's apps would all be refused).
+         nayiveDeskMode / nayiveWantDesk are used again below (My account, MOUSE CHIP);
+         the desktop keeps its own copy of the rule (see its OPEN THE DESKTOP). -->
     <script>
+    function nayiveDeskMode()
+    {
+        try { var m = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {} ).mode; }
+        catch( e ) {}
+        return m === 'always' || m === 'never' ? m : 'auto';
+    }
+    function nayiveWantDesk( mode )
+    {
+        var mq = function ( q ) { return window.matchMedia( q ).matches; };
+        if( mode === 'never' || mq( '(max-width: 640px)' ) ) return false;
+        if( mode === 'always' ) return mq( '(min-width: 1024px) and (min-height: 600px)' ) || mq( '(min-width: 600px) and (min-height: 1024px)' );
+        return mq( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' );
+    }
     try
     {
         if( window.top === window && ! location.search && ! location.hash &&
-            ! window.matchMedia( '(max-width: 640px)' ).matches &&
-            sessionStorage.getItem( 'nayive-must-set' ) !== '1' )
-        {
-            var dkStart = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ) || {} ).start || 'auto';
-            var dkBig   = window.matchMedia( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' ).matches;
-            if( dkStart === 'desktop' || ( dkStart === 'auto' && dkBig ) ) location.replace( 'desktop/' );
-        }
+            sessionStorage.getItem( 'nayive-must-set' ) !== '1' &&
+            nayiveWantDesk( nayiveDeskMode() ) ) location.replace( 'desktop/' );
     }
     catch( e ) {}
     </script>
@@ -44,7 +59,7 @@
     <title>Apps</title>
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 
-    <!-- Shared colour scheme (dark default, opt-in light) — same as every other Balata app. -->
+    <!-- Shared colour scheme (shared/theme.js: the account's dark / light schemes) — same as every other Nayive app. -->
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared/app.css">
@@ -336,6 +351,7 @@
 
         /* Office and Records are <button> tiles (they open a popup, not a page). */
         button.tile { border: 0; background: none; font: inherit; cursor: pointer; }
+        #passwordsTile { cursor: pointer; }   /* no href: no app yet, see its click */
 
         /* "Buscar mi móvil" (2026-09-21, his ask: the panel's bottom-right corner).
            The settings row's own round .icon-btn, on that row's line at the right
@@ -366,6 +382,10 @@
         .find-row small { display: block; color: var(--text-dim); font-size: 0.8rem; }
         .find-row small.find-live { color: var(--accent); }
         .find-note { font-size: 0.8rem; color: var(--text-dim); margin: 10px 0 0; }
+        /* Mi cuenta: under each phone, its photo upload switch and folder. */
+        .dev-media { padding: 0 6px 0 12px; margin-bottom: 8px; }
+        .dev-media .scm-check-row { margin: 6px 0; }
+        .dev-media .folder-pick[hidden] { display: none; }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the panel fills the
            width - 30px padding + 24px column gaps + 27vw tiles made it 426px wide
@@ -385,12 +405,12 @@
         /* ---- eye toggle inside a password field (Mi cuenta dialog) ---- */
         .pw-wrap { position: relative; margin: 10px 0; }
         .pw-wrap .scm-input { margin: 0; padding-right: 42px; }
+        /* An on / off row: text · (i) · the shared .switch at the end. */
         .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
         .scm-check-row[hidden] { display: none; }
-        :root:not(.in-desktop) #deskScaleWrap { display: none; }
-        .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; }
+        .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; cursor: pointer; }
         .scm-check-row .scm-check { margin: 0; }
-        .scm-check input { flex: 0 0 auto; }
+        .scm-check-row > .switch { margin-left: auto; }
         .pw-eye
         {
             position: absolute; top: 0; right: 0; height: 100%;
@@ -408,7 +428,7 @@
         .scm-h
         {
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
-            color: var(--text-dim); margin: 18px 0 8px;
+            color: var(--text-faint); margin: 18px 0 8px;
         }
 
         .scm-list { display: flex; flex-direction: column; gap: 6px; }
@@ -461,8 +481,6 @@
         .scm-assign { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 0.88rem; }
         .scm-assign.scm-assign-inline { justify-content: flex-start; }   /* spinner sits right after the label, not pushed to the edge */
         .scm-assign select { max-width: 190px; }   /* the shared field look (app.css) */
-        #lockText { max-width: 190px; }            /* the screen locker's clock line */
-        #lockSel  { min-width: 0; }
         /* Colour schemes: the dark and light pickers share one row, half each. */
         .scm-assign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 8px 0; }
         .scm-assign-row .scm-assign { margin: 0; min-width: 0; }
@@ -471,8 +489,8 @@
            it left too little for its own label ("Fuseau horaire" wrapped). Cap it
            at a share of the row instead, so the label always gets one line. */
         #tzSel { max-width: min( 190px, 55% ); }
-        .trash-days-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.85rem; }
-        .scm-num { width: 4.5em; text-align: center; }
+        /* My account: narrower than the shared 460px sheet (his call, 2026-10-02). */
+        #pwBackdrop .sheet { max-width: 380px; }
     </style>
 </head>
 
@@ -574,7 +592,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                 <span>Bookmarks</span>
             </a>
-            <a class="tile" role="menuitem">
+            <a class="tile" role="menuitem" id="passwordsTile">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
                 <span>Passwords</span>
             </a>
@@ -652,7 +670,6 @@
                     <option value="en">English</option>
                     <option value="es">Español</option>
                     <option value="fr">Français</option>
-                    <option value="it">Italiano</option>
                     <option value="pt">Português</option>
                 </select>
             </label>
@@ -672,55 +689,28 @@
                  the person is one, but the phone and the PC can be in different
                  places, and each must follow its own sun. -->
             <div class="scm-check-row" id="autoThemeWrap">
-                <label class="scm-check">
-                    <input type="checkbox" id="autoThemeChk">
-                    <span data-i18n="acct.themeAuto"></span>
-                </label>
+                <label class="scm-check" for="autoThemeChk"><span data-i18n="acct.themeAuto"></span></label>
                 <button class="info-dot" data-i18n-attr="data-info:acct.themeAutoInfo"></button>
+                <label class="switch sm"><input type="checkbox" id="autoThemeChk"><span class="track"></span></label>
             </div>
             <p class="scm-msg" id="autoThemeMsg" hidden></p>
 
-            <!-- Desktop mode only (html.in-desktop): new windows start with Scale
-                 on or off. DEVICE state, like the desktop's own settings
-                 (localStorage "balata-desktop" .scaleNew; desktop/index.html). -->
-            <div class="scm-check-row" id="deskScaleWrap">
-                <label class="scm-check">
-                    <input type="checkbox" id="deskScaleChk">
-                    <span data-i18n="acct.deskScale"></span>
-                </label>
-                <button class="info-dot" data-i18n-attr="data-info:acct.deskScaleInfo"></button>
-            </div>
-
-            <!-- Screen locker (shared/locker.js): which one + after how many idle
-                 minutes, in ONE row. DEVICE state (localStorage "nayive-locker").
-                 The clock's own line of text only shows with the clock. -->
-            <div class="scm-assign" id="lockRow">
-                <span data-i18n="acct.locker"></span>
-                <span class="trash-days-field">
-                    <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
-                    <input class="scm-num" id="lockMin" type="number" min="1" max="999" step="1" inputmode="numeric"
-                           data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span>
-                </span>
-            </div>
-            <label class="scm-assign" for="lockText" id="lockTextWrap" hidden>
-                <span data-i18n="acct.lockerText"></span>
-                <input id="lockText" type="text" maxlength="60" spellcheck="false">
+            <!-- Open the desktop: Auto / Always / Never - DEVICE state too (see the
+                 <head>). Only on a big screen, and not in the desktop's own menu:
+                 its "⋮" holds the same choice, and the desktop keeps it in memory. -->
+            <label class="scm-assign" for="deskModeSel" id="deskModeWrap" hidden>
+                <span data-i18n="desktop.openMode"></span>
+                <select id="deskModeSel">
+                    <option value="auto"   data-i18n="desktop.openAuto"></option>
+                    <option value="always" data-i18n="desktop.openAlways"></option>
+                    <option value="never"  data-i18n="desktop.openNever"></option>
+                </select>
             </label>
-
-            <label class="scm-assign" for="tripDaysAcct">
-                <span data-i18n="acct.remindTrip"></span>
-                <span class="trash-days-field">
-                    <input class="scm-num" id="tripDaysAcct" type="number" min="0" max="90" inputmode="numeric"> <span data-i18n="acct.daysBefore"></span>
-                </span>
-            </label>
-            <p class="scm-msg" id="tripDaysMsg" hidden></p>
 
             <div class="scm-check-row" id="pushChkWrap">
-                <label class="scm-check">
-                    <input type="checkbox" id="pushChk">
-                    <span data-i18n="acct.notifsOff"></span>
-                </label>
+                <label class="scm-check" for="pushChk"><span data-i18n="acct.notifsOff"></span></label>
                 <button class="info-dot" data-i18n-attr="data-info:acct.notifsInfo"></button>
+                <label class="switch sm"><input type="checkbox" id="pushChk"><span class="track"></span></label>
             </div>
             <!-- "Remind me N min before" lives in Planner › Settings (2026-09-27):
                  only events use it. -->
@@ -821,6 +811,26 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        // MOUSE CHIP - "Open the desktop" on Auto (see the <head>): a mouse or
+        // touchpad plugged into a big screen offers the desktop, in the shared
+        // toast with a button. Never a move on its own: left alone, it goes.
+        // Not in the desktop's own menu (a frame), not while this page acts on
+        // a query or hash, not for an account that must pick its password.
+        ( function ()
+        {
+            if( window.top !== window || ! window.matchMedia ) return;
+            var fine = window.matchMedia( '(any-pointer: fine)' );
+            function onChange()
+            {
+                try { if( sessionStorage.getItem( 'nayive-must-set' ) === '1' ) return; } catch( e ) {}
+                if( ! fine.matches || ! window.NayiveUI || location.search || location.hash ||
+                    nayiveDeskMode() !== 'auto' || ! nayiveWantDesk( 'auto' ) ) return;
+                NayiveUI.undoToast( NayiveUI.t( 'desktop.toDeskAsk' ), function () { location.replace( 'desktop/' ); },
+                                    { label: NayiveUI.t( 'desktop.toDeskGo' ), ms: 10000 } );
+            }
+            if( fine.addEventListener ) fine.addEventListener( 'change', onChange );
+        } )();
+
         // The Chat and eMail tiles' unread counts (Chat: all chats not muted;
         // eMail: every account's Inbox), now and whenever the launcher comes
         // back on screen. The admin has neither: the tile goes invisible but
@@ -881,6 +891,15 @@
                          card: document.getElementById( ids[ 1 ] ),
                          menu: NayiveUI.wireMenu( { btn: ids[ 0 ], menu: ids[ 1 ] } ) };
             } ).filter( function ( p ) { return p.menu; } );
+
+            // Passwords: no app yet, so a note instead. No href (the desktop
+            // would open it as an app), so it closes its card itself.
+            var pwTile = document.getElementById( 'passwordsTile' );
+            if( pwTile ) pwTile.addEventListener( 'click', function ()
+            {
+                pops.forEach( function ( p ) { p.menu.close(); } );
+                NayiveUI.alert( { title: NayiveUI.t( 'launcher.notYet' ) } );
+            } );
 
             window.addEventListener( 'click', function ( e )
             {
@@ -1303,29 +1322,11 @@
         } )();
     </script>
 
-    <!-- Eye toggle: show / hide the text of a password field. Also used, inline,
-         by apps/login.html. -->
-    <script>
-        window.NayivePwEye = function ( btn )
-        {
-            var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
-            var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path></svg>';
-            var input = document.getElementById( btn.dataset.eye );
-            if( ! input ) return;
-            btn.innerHTML = EYE;
-            btn.addEventListener( 'click', function ()
-            {
-                var show = input.type === 'password';
-                input.type = show ? 'text' : 'password';
-                btn.innerHTML = show ? EYE_OFF : EYE;
-                btn.setAttribute( 'aria-label', show ? NayiveUI.t( 'ui.hidePassword' ) : NayiveUI.t( 'ui.showPassword' ) );
-                input.focus();
-            } );
-        };
-    </script>
-
-    <!-- "Mi cuenta" dialog: change the sign-in password (POST /api/password) and
-         the trash retention period (GET/POST /api/files?trash=days). -->
+    <!-- "Mi cuenta" dialog: the sign-in password (POST /api/password), the
+         language (/api/lang), the timezone (/api/tz), the automatic theme,
+         "Open the desktop" (this device), this device's notifications
+         (/api/push) and the list of phones. The trip reminder moved to
+         Trips › Settings (2026-10-02). -->
     <script>
         ( function ()
         {
@@ -1336,8 +1337,6 @@
             var msgEl   = document.getElementById( 'pwMsg' );
             var saveBtn = document.getElementById( 'pwSave' );
             var cancel  = document.getElementById( 'pwCancel' );
-            var tripEl  = document.getElementById( 'tripDaysAcct' );
-            var tripMsg = document.getElementById( 'tripDaysMsg' );
             var pushChk   = document.getElementById( 'pushChk' );
             var pushWrap  = document.getElementById( 'pushChkWrap' );
             var pushMsgEl = document.getElementById( 'pushMsg' );
@@ -1363,7 +1362,7 @@
             // Interface language. It belongs to the ACCOUNT (POST /api/lang), so
             // a choice made on the phone reaches the PC; shared/i18n.js keeps a
             // copy on this device to paint with, and reloads so every string
-            // re-renders. See NayiveI18n.adopt and lib/users.user_lang.
+            // re-renders. See NayiveI18n.adopt and server/go/users.go UserLang.
             if( langSel && window.NayiveI18n )
             {
                 // The CHOICE, not the language in use: with nothing stored the
@@ -1376,7 +1375,7 @@
                 {
                     var code = langSel.value;
                     langSel.disabled = true;
-                    lmsg( '' );
+                    say( langMsg, '' );
 
                     // The SERVER first. Switch this device on a save that
                     // failed and the next boot reads the old value back from
@@ -1404,48 +1403,29 @@
                         {
                             langSel.disabled = false;
                             langSel.value = NayiveI18n.saved() || '';
-                            lmsg( NayiveUI.t( 'acct.langFailed' ), false );
+                            say( langMsg, NayiveUI.t( 'acct.langFailed' ), false );
                         } );
                 } );
             }
 
-            back.querySelectorAll( '.pw-eye' ).forEach( window.NayivePwEye );
+            // The eyes on the two password fields (shared/ui.js, deferred: at
+            // DOMContentLoaded it is there).
+            document.addEventListener( 'DOMContentLoaded', function ()
+            {
+                back.querySelectorAll( '.pw-eye' ).forEach( function ( btn )
+                {
+                    var input = document.getElementById( btn.dataset.eye );
+                    if( input ) NayiveUI.pwEye( btn, input );
+                } );
+            } );
 
-            function msg( t, ok )
+            // One row's message line under its setting: hidden when empty,
+            // green when ok, red otherwise.
+            function say( el, t, ok )
             {
-                msgEl.textContent = t;
-                msgEl.hidden = ! t;
-                msgEl.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function tmsg( t, ok )
-            {
-                tripMsg.textContent = t;
-                tripMsg.hidden = ! t;
-                tripMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function lmsg( t, ok )
-            {
-                langMsg.textContent = t;
-                langMsg.hidden = ! t;
-                langMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function tzmsg( t, ok )
-            {
-                tzMsg.textContent = t;
-                tzMsg.hidden = ! t;
-                tzMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function amsg( t, ok )
-            {
-                autoMsg.textContent = t;
-                autoMsg.hidden = ! t;
-                autoMsg.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
-            }
-            function pushmsg( t, ok )
-            {
-                pushMsgEl.textContent = t;
-                pushMsgEl.hidden = ! t;
-                pushMsgEl.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
+                el.textContent = t;
+                el.hidden = ! t;
+                el.style.color = ok ? 'var(--ok, var(--accent))' : 'var(--danger)';
             }
 
             // --- timezone ------------------------------------------------- //
@@ -1456,26 +1436,12 @@
             // list, never typed, so an unknown zone can't be saved.
             var tzSaved = null;            // last value confirmed by the server
 
-            // Every zone the browser knows. Ancient browsers have no
-            // supportedValuesOf; they get a short list plus (below) whatever is
-            // already saved, which is enough to see and keep the current value.
-            function knownZones()
-            {
-                try { return Intl.supportedValuesOf( 'timeZone' ); }
-                catch ( e )
-                {
-                    return [ 'UTC','Europe/Madrid','Europe/London','Europe/Paris','Europe/Berlin',
-                             'Europe/Rome','Europe/Lisbon','America/New_York','America/Chicago',
-                             'America/Denver','America/Los_Angeles','America/Sao_Paulo',
-                             'America/Mexico_City','Asia/Tokyo','Asia/Shanghai','Asia/Hong_Kong',
-                             'Asia/Singapore','Asia/Dubai','Asia/Kolkata','Australia/Sydney',
-                             'Pacific/Auckland' ];
-                }
-            }
-
+            // Every zone the browser knows (NayiveUI.timeZones; ancient browsers
+            // get a short list) plus, below, whatever is already saved, which is
+            // enough to see and keep the current value.
             function fillZones( current )
             {
-                var zones = knownZones().slice();
+                var zones = NayiveUI.timeZones().slice();
                 // The saved zone ALWAYS gets an entry, even when this browser's
                 // list has never heard of it (an old IANA alias, a newer server).
                 // Without this the box would silently snap to the first option
@@ -1494,7 +1460,7 @@
 
             async function loadTz()
             {
-                tzmsg( '' );
+                say( tzMsg, '' );
                 try
                 {
                     var r = await fetch( '/api/tz', { credentials: 'same-origin' } );
@@ -1514,10 +1480,10 @@
                     var r = await fetch( '/api/tz?value=' + encodeURIComponent( z ),
                                          { method: 'POST', credentials: 'same-origin' } );
                     var d = await r.json().catch( function (){ return {}; } );
-                    if( r.ok ) { tzSaved = d.tz || ''; tzSel.value = tzSaved; tzmsg( '' ); }
-                    else { fillZones( tzSaved ); tzmsg( NayiveUI.t( 'acct.tzFailed' ) ); }
+                    if( r.ok ) { tzSaved = d.tz || ''; tzSel.value = tzSaved; say( tzMsg, '' ); }
+                    else { fillZones( tzSaved ); say( tzMsg, NayiveUI.t( 'acct.tzFailed' ) ); }
                 }
-                catch ( e ) { fillZones( tzSaved ); tzmsg( NayiveUI.t( 'login.noServer' ) ); }
+                catch ( e ) { fillZones( tzSaved ); say( tzMsg, NayiveUI.t( 'login.noServer' ) ); }
                 tzSel.disabled = false;
             } );
 
@@ -1536,24 +1502,24 @@
             {
                 if( ! navigator.geolocation )
                 {
-                    amsg( NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                    say( autoMsg, NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
                     return;
                 }
 
-                amsg( NayiveUI.t( 'acct.themeAutoLocating' ), true );
+                say( autoMsg, NayiveUI.t( 'acct.themeAutoLocating' ), true );
 
                 navigator.geolocation.getCurrentPosition(
                     function ( pos )
                     {
                         window.BalataTheme.setGeo( pos.coords.latitude, pos.coords.longitude );
-                        amsg( NayiveUI.t( 'acct.themeAutoGeo' ), true );
+                        say( autoMsg, NayiveUI.t( 'acct.themeAutoGeo' ), true );
                     },
                     function ()
                     {
                         // Refused, or the device simply does not know where it
                         // is. Auto mode stays ON: theme.js falls back to the
                         // sun of the time zone's main city.
-                        amsg( NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
+                        say( autoMsg, NayiveUI.t( 'acct.themeAutoNoGeo' ), false );
                     },
                     { timeout: 10000, maximumAge: 24 * 3600 * 1000 } );
             }
@@ -1601,7 +1567,7 @@
                 // Turned on by us just now: the time-zone fallback is the
                 // expected state, not a failure, so it is not shown in red.
                 var key = autoState();
-                amsg( key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' || first );
+                say( autoMsg, key ? NayiveUI.t( key ) : '', key === 'acct.themeAutoGeo' || first );
 
                 if( on && window.BalataTheme.hasGeo() ) refreshGeoQuietly();
             }
@@ -1612,72 +1578,13 @@
             {
                 if( ! window.BalataTheme ) return;
 
-                if( ! autoChk.checked ) { window.BalataTheme.setAuto( false ); amsg( '' ); return; }
+                if( ! autoChk.checked ) { window.BalataTheme.setAuto( false ); say( autoMsg, '' ); return; }
 
                 // On FIRST, so the theme is already following the fallback
                 // window even if the location request is refused or times out.
                 window.BalataTheme.setAuto( true );
                 askGeo();
             } );
-
-            // Desktop mode: do new windows start with Scale on? (see #deskScaleWrap)
-            var deskChk = document.getElementById( 'deskScaleChk' );
-            function deskSet()
-            {
-                try { return JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ) || {}; }
-                catch( e ) { return {}; }
-            }
-            function loadDeskScale() { deskChk.checked = !! deskSet().scaleNew; }
-            deskChk.addEventListener( 'change', function ()
-            {
-                var d = deskSet();
-                d.scaleNew = deskChk.checked;
-                try { localStorage.setItem( 'balata-desktop', JSON.stringify( d ) ); } catch( e ) {}
-            } );
-
-            // Screen locker (see #lockRow): saved at once, on this device.
-            var lockSel  = document.getElementById( 'lockSel' );
-            var lockMin  = document.getElementById( 'lockMin' );
-            var lockText = document.getElementById( 'lockText' );
-            function loadLocker()
-            {
-                var s = NayiveLock.settings();
-                lockSel.innerHTML = '';
-                [ '' ].concat( NayiveLock.LOCKERS ).forEach( function ( id )
-                {
-                    var o = document.createElement( 'option' );
-                    o.value = id;
-                    o.textContent = NayiveUI.t( id ? 'scrlock.' + id : 'scrlock.none' );
-                    lockSel.appendChild( o );
-                } );
-                lockSel.value  = s.id;
-                lockMin.value  = s.min;
-                lockText.value = s.text;
-                lockMin.disabled = ! s.id;
-                document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
-            }
-            lockSel.addEventListener( 'change', function () { NayiveLock.save( { id: lockSel.value } ); loadLocker(); } );
-            lockMin.addEventListener( 'change', function ()      // never below 1
-            {
-                var n = Math.floor( Number( lockMin.value ) );
-                NayiveLock.save( { min: n >= 1 ? Math.min( n, 999 ) : 1 } );
-                loadLocker();
-            } );
-            lockText.addEventListener( 'input', function () { NayiveLock.save( { text: lockText.value } ); } );
-
-            var tripSaved = null;
-
-            async function loadTripDays()
-            {
-                tripEl.value = ''; tmsg( '' );
-                try
-                {
-                    var r = await fetch( '/api/files?tripdays=1', { credentials: 'same-origin' } );
-                    var d = await r.json();
-                    if( r.ok ) { tripSaved = d.days; tripEl.value = d.days; }
-                }
-                catch ( e ) { /* leave it blank */ }
-            }
 
             // --- native OS notifications (Web Push) ------------------------- //
             // PER DEVICE, not per account: the browser owns the subscription, so
@@ -1812,7 +1719,7 @@
             // quietly registered again instead of going silent forever.
             async function loadPush()
             {
-                pushmsg( '' );
+                say( pushMsgEl, '' );
                 if( ! pushState.supported ) { renderPush(); return; }
                 try
                 {
@@ -1821,7 +1728,7 @@
                     {
                         pushState.vapid = '';
                         pushState.why   = NayiveUI.t( 'ui.loadFailed' );
-                        pushmsg( pushState.why );
+                        say( pushMsgEl, pushState.why );
                         renderPush();
                         return;
                     }
@@ -1837,7 +1744,7 @@
                         try { await sub.unsubscribe(); } catch ( e ) {}
                         pushState.sub = null;
                         pushState.subscribed = false;
-                        pushmsg( NayiveUI.t( 'acct.notifsStale' ) );
+                        say( pushMsgEl, NayiveUI.t( 'acct.notifsStale' ) );
                     }
                     else
                     {
@@ -1863,7 +1770,7 @@
                 if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
                 {
                     if( pushWrap ) pushWrap.hidden = true;
-                    pushmsg( NayiveUI.t( 'acct.notifsIos' ) );
+                    say( pushMsgEl, NayiveUI.t( 'acct.notifsIos' ) );
                     return;
                 }
 
@@ -1871,20 +1778,20 @@
                 {
                     // Hide the whole label - hiding only the box leaves its text stranded.
                     if( pushWrap ) pushWrap.hidden = true;
-                    pushmsg( NayiveUI.t( 'acct.notifsUnsupported' ) );
+                    say( pushMsgEl, NayiveUI.t( 'acct.notifsUnsupported' ) );
                     return;
                 }
                 var blocked = ( Notification.permission === 'denied' );
                 if( pushWrap ) pushWrap.hidden = false;
                 pushChk.disabled = blocked;
                 pushChk.checked  = pushState.subscribed;
-                if( blocked ) pushmsg( NayiveUI.t( 'acct.notifsBlocked' ) );
+                if( blocked ) say( pushMsgEl, NayiveUI.t( 'acct.notifsBlocked' ) );
             }
 
             // The click handler. The order of the first steps is NOT negotiable.
             async function enablePush()
             {
-                pushmsg( '' );
+                say( pushMsgEl, '' );
 
                 // iOS FIRST, before any permission call. Outside an installed
                 // PWA, requestPermission() resolves to "denied" - and denied is
@@ -1893,17 +1800,17 @@
                 // returns "ios" only when we are on iOS and NOT installed.
                 if( NayiveUI.installMode && NayiveUI.installMode() === 'ios' )
                 {
-                    pushmsg( NayiveUI.t( 'acct.notifsIos' ) );
+                    say( pushMsgEl, NayiveUI.t( 'acct.notifsIos' ) );
                     renderPush();
                     if( NayiveUI.offerInstall ) NayiveUI.offerInstall( { manual: true } );
                     return;
                 }
                 if( ! pushState.supported )
-                    { pushmsg( NayiveUI.t( 'acct.notifsUnsupported' ) ); renderPush(); return; }
+                    { say( pushMsgEl, NayiveUI.t( 'acct.notifsUnsupported' ) ); renderPush(); return; }
                 if( Notification.permission === 'denied' )
                     { renderPush(); return; }
                 if( ! pushState.vapid )
-                    { pushmsg( pushState.why || NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
+                    { say( pushMsgEl, pushState.why || NayiveUI.t( 'ui.saveFailed' ) ); renderPush(); return; }
 
                 // requestPermission MUST be the first await in this handler. Any
                 // await before it spends the user activation and the browser
@@ -1923,7 +1830,7 @@
                     {
                         try { await sub.unsubscribe(); } catch ( e ) {}   // leave no orphan
                         pushState.subscribed = false;
-                        pushmsg( NayiveUI.t( 'ui.saveFailed' ) );
+                        say( pushMsgEl, NayiveUI.t( 'ui.saveFailed' ) );
                     }
                 }
                 // Say what the browser said: "No se pudo guardar." alone left
@@ -1931,14 +1838,14 @@
                 catch ( e )
                 {
                     var why = e && e.name ? ' (' + e.name + ( e.message ? ': ' + e.message : '' ) + ')' : '';
-                    pushmsg( NayiveUI.t( 'ui.saveFailed' ) + why );
+                    say( pushMsgEl, NayiveUI.t( 'ui.saveFailed' ) + why );
                 }
                 renderPush();
             }
 
             async function disablePush()
             {
-                pushmsg( '' );
+                say( pushMsgEl, '' );
                 var sub = pushState.sub;
                 var ep  = sub && sub.endpoint;
                 try { if( sub ) await sub.unsubscribe(); } catch ( e ) {}
@@ -1960,34 +1867,30 @@
                     return pushChk.checked ? enablePush() : disablePush();
                 } );
 
-            tripEl.addEventListener( 'change', async function ()
+            // Open the desktop (see the <head>): saved at once, on this device,
+            // and acted on at once - a choice that wants the desktop goes there.
+            var deskSel = document.getElementById( 'deskModeSel' );
+            function loadDeskMode()
             {
-                var v = parseInt( tripEl.value, 10 );
-                if( ! isFinite( v ) ) { tripEl.value = ( tripSaved == null ? '' : tripSaved ); return; }
-                v = Math.max( 0, Math.min( 90, v ) );
-
-                tripEl.disabled = true;
-                try
-                {
-                    var q = new URLSearchParams( { tripdays: '1', value: String( v ) } ).toString();
-                    var r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
-                    var d = await r.json().catch( function (){ return {}; } );
-                    if( r.ok )
-                    {
-                        tripSaved = d.days; tripEl.value = d.days;
-                        tmsg( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : NayiveUI.t( 'acct.tripNone' ), true );
-                    }
-                    else { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( NayiveUI.t( 'ui.saveFailed' ) ); }
-                }
-                catch ( e ) { tripEl.value = ( tripSaved == null ? '' : tripSaved ); tmsg( NayiveUI.t( 'login.noServer' ) ); }
-                tripEl.disabled = false;
+                var big = window.matchMedia( '(min-width: 1024px) and (min-height: 600px)' ).matches ||
+                          window.matchMedia( '(min-width: 600px) and (min-height: 1024px)' ).matches;
+                document.getElementById( 'deskModeWrap' ).hidden = window.top !== window || ! big;
+                deskSel.value = nayiveDeskMode();
+            }
+            deskSel.addEventListener( 'change', function ()
+            {
+                var cur = {};
+                try { cur = JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {}; } catch( e ) {}
+                cur.mode = deskSel.value;
+                try { localStorage.setItem( 'balata-desktop', JSON.stringify( cur ) ); } catch( e ) {}
+                if( nayiveWantDesk( cur.mode ) ) location.replace( 'desktop/' );
             } );
 
             function open( opts )
             {
                 mandatory = !!( opts && opts.mandatory === true );
                 curEl.value = ''; newEl.value = '';
-                msg( mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
+                say( msgEl, mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
 
                 // No current password to confirm, and no way out until it's set.
                 curWrap.hidden = mandatory;
@@ -1995,8 +1898,7 @@
 
                 loadTz();
                 loadAuto();
-                loadDeskScale();
-                loadLocker();
+                loadDeskMode();
                 // Until it has a password the server refuses this account every
                 // other API (trip days, notifications, phones): those rows wait.
                 accountRows( ! mandatory );
@@ -2033,17 +1935,14 @@
             }
 
             // The rows that need a password first: shown and loaded, or hidden.
-            var tripRow = tripEl.closest( '.scm-assign' );
             function accountRows( on )
             {
-                tripRow.hidden = ! on;
                 if( ! on )
                 {
                     if( pushWrap ) pushWrap.hidden = true;
                     document.getElementById( 'devWrap' ).hidden = true;
                     return;
                 }
-                loadTripDays();
                 loadPush();
                 if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
             }
@@ -2117,7 +2016,7 @@
                 open( { focus: pushChk } );
                 // After open(): loadPush clears this line on its way in, but it
                 // clears it synchronously, before its first await.
-                pushmsg( NayiveUI.t( 'acct.notifsAsk' ), true );
+                say( pushMsgEl, NayiveUI.t( 'acct.notifsAsk' ), true );
             }
 
             // ---- after each login: are notifications on HERE? ------------//
@@ -2204,11 +2103,11 @@
                 if( wantPw )
                 {
                     if( ! mandatory && ! curEl.value )
-                        { msg( NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                        { say( msgEl, NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
                     if( ! newEl.value )
-                        { msg( mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                        { say( msgEl, mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
                     if( newEl.value.length < 4 )
-                        { msg( NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
+                        { say( msgEl, NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
                     try
                     {
                         var res = await fetch( '/api/password',
@@ -2233,13 +2132,13 @@
                         else
                         {
                             // The server's own words are Spanish: say it in the user's language.
-                            msg( NayiveUI.t( res.status === 401 ? 'acct.curWrong'
+                            say( msgEl, NayiveUI.t( res.status === 401 ? 'acct.curWrong'
                                            : res.status === 400 ? 'acct.tooShort' : 'acct.changeFailed' ) );
                             saveBtn.disabled = false;
                             return;
                         }
                     }
-                    catch ( e ) { msg( NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
+                    catch ( e ) { say( msgEl, NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
                 }
 
                 saveBtn.disabled = false;
@@ -2740,9 +2639,86 @@
                 devWrap.hidden = ! ds.length;
                 devList.innerHTML = ds.map( function ( d )
                 {
-                    return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) );
+                    return row( d.name, [ { t: seenLine( d ) } ], btn( 'remove', d.id, NayiveUI.icon( 'trash' ), T( 'dev.remove' ), true ) ) +
+                           mediaRow( d );
                 } ).join( '' );
             }
+            // "Upload new photos and videos" (server/go/api_device_media.go): the
+            // switch, and - while on - the folder for what no trip takes.
+            function mediaRow( d )
+            {
+                var id = 'devMedia-' + d.id;
+                return '<div class="dev-media">' +
+                       '<div class="scm-check-row">' +
+                           '<label class="scm-check" for="' + esc( id ) + '"><span>' + esc( T( 'dev.media' ) ) + '</span></label>' +
+                           '<button class="info-dot" type="button" data-info="' + esc( T( 'dev.mediaInfo' ) ) + '"></button>' +
+                           '<label class="switch sm"><input type="checkbox" id="' + esc( id ) + '" data-dev-media="' + esc( d.id ) + '"' +
+                               ( d.media ? ' checked' : '' ) + '><span class="track"></span></label>' +
+                       '</div>' +
+                       '<button type="button" class="folder-pick" data-dev-dir="' + esc( d.id ) + '" title="' + esc( T( 'dev.mediaDir' ) ) +
+                           '" aria-label="' + esc( T( 'dev.mediaDir' ) ) + '"' + ( d.media ? '' : ' hidden' ) + '>' +
+                           '<span class="fp-btn-ic">' + NayiveUI.icon( 'folder' ) + '</span>' +
+                           '<span class="fp-btn-nm">' + esc( dirLabel( d.mediaDir ) ) + '</span></button>' +
+                       '</div>';
+            }
+            // "files/Camera" -> "Archivos / Camera", as Drive shows it.
+            function dirLabel( dir )
+            {
+                var parts = String( dir || 'files/Camera' ).split( '/' );
+                parts[ 0 ] = T( 'ui.filesRoot' );
+                return parts.join( ' / ' );
+            }
+            function devById( id ) { return devs.filter( function ( d ) { return d.id === id; } )[ 0 ]; }
+            function saveMedia( id, body, undo )
+            {
+                api( 'PUT', '/' + encodeURIComponent( id ), body ).then( function ( j )
+                {
+                    if( j._status !== 200 ) { undo(); toast( T( 'ui.saveFailed' ) ); }
+                } ).catch( function () { undo(); toast( T( 'login.noServer' ) ); } );
+            }
+            devList.addEventListener( 'change', function ( e )
+            {
+                var box = e.target.closest( '[data-dev-media]' );
+                if( ! box ) return;
+                var d = devById( box.getAttribute( 'data-dev-media' ) );
+                if( ! d ) return;
+                var on = box.checked;
+                d.media = on;
+                drawAccount();
+                saveMedia( d.id, { media: on }, function () { d.media = ! on; drawAccount(); } );
+            } );
+            // The folder picker needs GumApi (shared/gum-api.js), which this page
+            // does not load up front: fetched on the first tap.
+            var gumLoad = null;
+            function needGum()
+            {
+                if( window.GumApi ) return Promise.resolve();
+                if( ! gumLoad )
+                    gumLoad = new Promise( function ( resolve, reject )
+                    {
+                        var sc = document.createElement( 'script' );
+                        sc.src = 'shared/gum-api.js';
+                        sc.onload = resolve;
+                        sc.onerror = function () { gumLoad = null; reject( new Error( 'gum-api' ) ); };
+                        document.head.appendChild( sc );
+                    } );
+                return gumLoad;
+            }
+            devList.addEventListener( 'click', function ( e )
+            {
+                var b = e.target.closest( '[data-dev-dir]' );
+                if( ! b ) return;
+                var d = devById( b.getAttribute( 'data-dev-dir' ) );
+                if( ! d ) return;
+                needGum().then( function () { return NayiveUI.pickFolder( { title: T( 'dev.mediaDir' ) } ); } ).then( function ( picked )
+                {
+                    if( ! picked || picked === d.mediaDir ) return;
+                    var had = d.mediaDir;
+                    d.mediaDir = picked;
+                    drawAccount();
+                    saveMedia( d.id, { mediaDir: picked }, function () { d.mediaDir = had; drawAccount(); } );
+                } ).catch( function () { toast( T( 'login.noServer' ) ); } );
+            } );
             function redraw() { drawAccount(); if( isOpen() ) render(); }
             // A delete inside a dialog acts at once: no second question. Its token
             // dies (the phone must enrol again), so the row only hides now; the

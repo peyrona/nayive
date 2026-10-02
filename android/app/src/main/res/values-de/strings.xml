@@ -11,6 +11,9 @@
     <string name="step_batt_why">Damit Nayive bei ausgeschaltetem Bildschirm wach bleibt. Wähle „Zulassen“.</string>
     <string name="step_full_title">Vollbild</string>
     <string name="step_full_why">Damit ein Anruf auch bei gesperrtem Handy erscheint.</string>
+    <string name="step_media_title">Fotos und Videos</string>
+    <string name="step_media_why">Um die neuen Fotos der Kamera zu Nayive hochzuladen, wenn du es in Mein Konto einschaltest. Auf dem Handy wird nie etwas gelöscht.</string>
+    <string name="step_media_partial">Du hast nur einige Fotos gewählt: Tippe auf Zulassen und wähle „Alle zulassen“.</string>
     <string name="step_do">Zulassen</string>
     <string name="step_ok">Erledigt</string>
     <string name="setup_continue">Weiter</string>
@@ -20,6 +23,7 @@
     <string name="chan_find">Mein Handy suchen</string>
     <string name="chan_pending">Ungelesen</string>
     <string name="chan_updates">Aktualisierungen</string>
+    <string name="chan_media">Hochgeladene Fotos</string>
     <string name="link_on">Nayive ist verbunden</string>
     <string name="link_tracking">Nayive speichert deine Reiseposition</string>
     <string name="link_enrol">Öffne Nayive und melde dich an, um dieses Handy zu aktivieren</string>
@@ -38,6 +42,18 @@
     </plurals>
     <string name="update_title">Es gibt eine neue Version von Nayive</string>
     <string name="update_text">Tippe, um sie herunterzuladen.</string>
+
+    <string name="media_done">Fotos zu Nayive hochgeladen</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d Foto</item>
+        <item quantity="other">%d Fotos</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d Video</item>
+        <item quantity="other">%d Videos</item>
+    </plurals>
+    <string name="media_fix_title">Nayive kann deine Fotos nicht sehen</string>
+    <string name="media_fix_text">Tippe, um es zu erlauben und die neuen Fotos hochzuladen.</string>
     <string name="shortcut_setup">Berechtigungen</string>
     <string name="shortcut_setup_long">Nayive-Berechtigungen</string>
 </resources>

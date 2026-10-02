@@ -46,7 +46,6 @@ to build a replacement.
 | `serve.mjs` | the repo over HTTP, `/engine/` = the vendored engine, `/corpus/` = `CORPUS` |
 | `index.html` + `page.js` | the engine alone on a page, loaded by the names in its lock file; open / save / print by hand |
 | `zipdiff.py` | two `.docx` compared part by part by meaning, and the integrity check |
-| `cdp.mjs` | headless Chromium over the DevTools protocol (a copy of `tools/locktest/cdp.mjs`) |
 
 ## Results
 

@@ -13,7 +13,10 @@ function stageDateTimeKey( sDate, sTime ) { return sDate + 'T' + (sTime || '00:0
 
 function newId() { return Date.now() + Math.floor( Math.random() * 1000 ); }
 function round2( n ) { return Math.round( n * 100 ) / 100; }
-function slugify( s ) { return (s || '').toLowerCase().trim().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'item'; }
+// The OLD slug (accented letters dropped: "Córdoba" -> "c-rdoba"). Only for a
+// legacy document's file name, which was made with it and must still be found.
+// Every new name uses NayiveUI.slugify ("cordoba").
+function legacySlug( s ) { return (s || '').toLowerCase().trim().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'item'; }
 
 // A safe, in-folder file name for an UPLOADED document: the original base name
 // slugified, its real extension kept, and a "-2", "-3"... suffix if another doc in
@@ -22,7 +25,7 @@ function uniqueFileName( sOriginalName, aSiblingDocs )
 {
     const dot  = sOriginalName.lastIndexOf( '.' );
     const ext  = (dot > 0 ? sOriginalName.slice( dot + 1 ) : '').toLowerCase().replace( /[^a-z0-9]/g, '' );
-    const base = slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName );
+    const base = NayiveUI.slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName, 'item' );
     const make = function( n ) { return base + (n > 1 ? '-' + n : '') + (ext ? '.' + ext : ''); };
     const taken = new Set( (aSiblingDocs || []).map( function( d ) { return d.file; } ).filter( Boolean ) );
 
@@ -34,7 +37,7 @@ function uniqueFileName( sOriginalName, aSiblingDocs )
 // Base name only ("destination-year") - resolveNewTripDirName() adds a "-2", "-3"...
 // suffix on collision at creation time; an already-saved trip's real folder is
 // trip.dirName, never this recomputed straight from its (possibly since-edited) fields.
-function dirNameFor( sDestination, sStartDate ) { return slugify( sDestination ) + '-' + (sStartDate ? sStartDate.slice( 0, 4 ) : 'new'); }
+function dirNameFor( sDestination, sStartDate ) { return NayiveUI.slugify( sDestination, 'item' ) + '-' + (sStartDate ? sStartDate.slice( 0, 4 ) : 'new'); }
 
 // Where a document's bytes live, and the URL that serves them. A document is one of:
 //   kind 'link'   -> doc.path points straight into the user's files/ tree (not copied)
@@ -46,14 +49,14 @@ function dirNameFor( sDestination, sStartDate ) { return slugify( sDestination )
 function docPath( base, doc )
 {
     if( doc && doc.kind === 'link' && doc.path ) return sharedRef( base, doc.path );
-    const file = (doc && doc.file) || ( slugify( doc && doc.name ) + '.pdf' );
+    const file = (doc && doc.file) || ( legacySlug( doc && doc.name ) + '.pdf' );
     return base + '/' + file;
 }
 
 // A trip somebody shared with us also lends the files it POINTS at outside
 // its own folder — its linked documents and its photo folder. They are ours
-// to read through "shared/<slug>/~/<the owner's path>" (lib/shares.py
-// extra_path). On one of our own trips the path is already ours: unchanged.
+// to read through "shared/<slug>/~/<the owner's path>" (server/go/shares.go
+// ExtraPath). On one of our own trips the path is already ours: unchanged.
 function sharedRef( base, ownerPath )
 {
     return String( base || '' ).indexOf( 'shared/' ) === 0
@@ -74,12 +77,6 @@ function localTimeIn( sTz )
 }
 
 function findTrip( id ) { return trips.find( function( t ) { return t.id === id; } ); }
-
-function todayIso()
-{
-    const d = new Date();
-    return d.getFullYear() + '-' + String( d.getMonth() + 1 ).padStart( 2, '0' ) + '-' + String( d.getDate() ).padStart( 2, '0' );
-}
 
 function addDaysIso( sIso, n )
 {

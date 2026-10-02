@@ -7,9 +7,8 @@ package main
 // A session is a random opaque token (the value of the `nayive_session` cookie)
 // mapped to {user, role, expiry}. The table is a map in this one process, and
 // a copy of it lives in config/sessions.json, so a restart - every deploy - no
-// longer signs everyone out. (Until 2026-09-21 it did, like lib/sessions.py;
-// the Android app made it plain: its first screen after a deploy was the
-// password.)
+// longer signs everyone out. (Until 2026-09-21 it did; the Android app made
+// it plain: its first screen after a deploy was the password.)
 //
 // Only each token's SHA-256 reaches the disk, as in devices.json: the file on
 // its own signs nobody in. It is written at once on a sign-in or a sign-out;
@@ -31,7 +30,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -157,7 +155,7 @@ func (s *SessionStore) lookup(token string) *entry {
 }
 
 // Get resolves a token, or reports that it is unknown or expired.
-// Every hit slides the expiry forward, exactly like sessions.py.
+// Every hit slides the expiry forward.
 //
 // java: `(Session, bool)` is the Go answer to returning null. The caller writes
 // `sess, ok := store.Get(tok); if !ok { ... }`. The compiler will not let you
@@ -206,8 +204,7 @@ func (s *SessionStore) Drop(token string) {
 // deleted, so an open tab cannot keep working).
 //
 // java: unlike Java's iterator, deleting from a Go map WHILE ranging over it is
-// explicitly legal - no ConcurrentModificationException. sessions.py has to
-// build a list first; here the loop is enough.
+// explicitly legal - no ConcurrentModificationException; the loop is enough.
 func (s *SessionStore) DropUser(user string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -263,18 +260,9 @@ func (s *SessionStore) Count() int {
 // A file that cannot be read signs everyone out - the old behaviour, never a
 // crash - and is moved aside, not overwritten, by the next save.
 func (s *SessionStore) load() {
-	raw, err := os.ReadFile(s.path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			s.log.Error("sessions.json is unreadable - everyone signs in again", "err", err)
-			s.broken = true
-		}
-		return
-	}
 	var file sessionsFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		s.log.Error("sessions.json is unreadable - everyone signs in again", "err", err)
-		s.broken = true
+	var ok bool
+	if ok, s.broken = loadTable(s.path, &file, s.log, "everyone signs in again"); !ok {
 		return
 	}
 	now := time.Now()
@@ -293,20 +281,12 @@ func (s *SessionStore) load() {
 	}
 }
 
-// save writes the table. Caller holds mu. Like Devices.save, it never writes
-// over a file that could not be read: that one is moved aside first.
+// save writes the table. Caller holds mu. It never writes over a file that
+// could not be read: that one is moved aside first (saveTable).
 func (s *SessionStore) save() {
 	if s.path == "" {
 		s.dirty = false
 		return
-	}
-	if s.broken {
-		aside := s.path + ".broken-" + time.Now().Format("2006-01-02-150405")
-		if err := os.Rename(s.path, aside); err != nil && !os.IsNotExist(err) {
-			s.log.Error("sessions.json is unreadable and cannot be moved aside - not saving", "err", err)
-			return
-		}
-		s.broken = false
 	}
 	rows := make([]sessionRow, 0, len(s.byHash))
 	for h, e := range s.byHash {
@@ -318,8 +298,7 @@ func (s *SessionStore) save() {
 	// java: map order is random in Go, on purpose. Sorted, the file only
 	// changes where a session did.
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Hash < rows[j].Hash })
-	if err := atomicWriteJSON(s.path, sessionsFile{Sessions: rows}, 4); err != nil {
-		s.log.Error("cannot save sessions.json", "err", err)
+	if !saveTable(s.path, &s.broken, sessionsFile{Sessions: rows}, s.log) {
 		return
 	}
 	// Best effort, as for vapid.json: hashes only, but nobody else's business.
@@ -346,12 +325,9 @@ func newToken() string {
 // sessionCookie builds the Set-Cookie header for a fresh sign-in, and
 // clearCookie its sign-out counterpart.
 //
-// java: http.Cookie + http.SetCookie would be the idiomatic call, and it is
-// what the spike used. The header is built by hand here for ONE reason: it
-// emits the attributes in its own order, and while no browser cares, the parity
-// harness that compares this port with the Python line by line does. Matching
-// handler.py exactly means one less "expected difference" to explain away
-// forever after.
+// java: http.Cookie + http.SetCookie would be the idiomatic call. The header
+// is built by hand so its attributes come out in one fixed order that the
+// tests can read line by line; no browser cares either way.
 func sessionCookieHeader(token string, ttl time.Duration, remember, secure bool) string {
 	out := CookieName + "=" + token + "; HttpOnly; SameSite=Lax; Path=/"
 	if remember {

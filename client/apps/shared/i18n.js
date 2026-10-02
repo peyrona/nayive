@@ -9,7 +9,7 @@
  *
  * NO string lives in the source any more - not even the Spanish one. Every
  * interface message is a key in shared/i18n/<lang>.json, one file per language
- * (es en pt fr de it la). es.json is the reference: a key missing from another
+ * (es en pt fr de). es.json is the reference: a key missing from another
  * language falls back to Spanish, and then to the literal key.
  *
  *   - static text:   <span data-i18n="key"></span>
@@ -48,7 +48,7 @@
 {
     "use strict";
 
-    var LANGS   = [ "es", "en", "pt", "fr", "de", "it" ];  // languages the UI can offer
+    var LANGS   = [ "es", "en", "pt", "fr", "de" ];        // languages the UI can offer
     var SOURCE  = "es";                               // the reference dictionary
     var KEY     = "balata-lang";
     var SHOW_MS = 2500;                               // never hide the page longer than this
@@ -177,14 +177,16 @@
 
     function capitalise( s ) { return s ? s.charAt( 0 ).toUpperCase() + s.slice( 1 ) : s; }
 
-    function weekday( iso, style )
+    // `asIs` keeps the language's own case, for a name inside a sentence
+    // ("2026-09-28 · lunes").
+    function weekday( iso, style, asIs )
     {
         // 2024-01-01 was a Monday, so 2024-01-<iso> lines the ISO number up.
         var d = new Date( Date.UTC( 2024, 0, iso ) );
         try
         {
-            return capitalise( new Intl.DateTimeFormat( lang,
-                   { weekday: style || "long", timeZone: "UTC" } ).format( d ) );
+            var name = new Intl.DateTimeFormat( lang, { weekday: style || "long", timeZone: "UTC" } ).format( d );
+            return asIs ? name : capitalise( name );
         }
         catch ( e ) { return String( iso ); }
     }
@@ -270,8 +272,8 @@
         month:     month,
         langs:     LANGS.slice(),
         // The language the ACCOUNT chose, as /api/whoami reports it (see
-        // lib/users.user_lang). Copies it onto THIS device and reloads, so a
-        // choice made on the phone reaches the PC on its next boot.
+        // Users.UserLang in server/go/users.go). Copies it onto THIS device and
+        // reloads, so a choice made on the phone reaches the PC on its next boot.
         //
         //   null / undefined  the account never chose one: leave the device
         //                     alone. Every device that existed before this
@@ -310,19 +312,11 @@
         // Like adopt(), returns true when a reload is on its way and false when
         // the pick changed nothing - a caller that has to survive the reload
         // (the launcher reopens its settings dialog) needs to know which.
+        // Same write as adopt(), so a refused write (private mode) does not
+        // reload for nothing. No code = "por defecto": follow the browser again.
         setLang:   function ( code )
         {
-            if( ! code )                              // "por defecto": follow the browser again
-            {
-                if( ! saved() ) return false;
-                try { localStorage.removeItem( KEY ); } catch ( e ) {}
-                location.reload();
-                return true;
-            }
-            if( LANGS.indexOf( code ) === -1 || code === saved() ) return false;
-            try { localStorage.setItem( KEY, code ); } catch ( e ) {}
-            location.reload();
-            return true;
+            return window.NayiveI18n.adopt( code || "" );
         }
     };
 } )();

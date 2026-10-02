@@ -51,6 +51,24 @@ func TestParseEvents(t *testing.T) {
 	}
 }
 
+// TestQuotedTZID: RFC 5545 lets a parameter value be quoted; TZID="..." is
+// that zone, not the server's own clock.
+func TestQuotedTZID(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("no tzdata for America/New_York: %v", err)
+	}
+	ics := "BEGIN:VEVENT\r\nUID:q\r\nSUMMARY:Cita\r\n" +
+		"DTSTART;TZID=\"America/New_York\":20260829T100000\r\nEND:VEVENT\r\n"
+	events := ParseEvents(ics, time.UTC)
+	if len(events) != 1 || events[0].StartEpoch == nil {
+		t.Fatalf("events = %+v", events)
+	}
+	if got, want := *events[0].StartEpoch, time.Date(2026, 8, 29, 10, 0, 0, 0, ny).Unix(); got != want {
+		t.Errorf("quoted TZID start = %d, want %d", got, want)
+	}
+}
+
 // TestUnfoldAndEscapes pins the two text rules: RFC 5545 continuation lines,
 // and a SUMMARY that carries escaped punctuation.
 func TestUnfoldAndEscapes(t *testing.T) {

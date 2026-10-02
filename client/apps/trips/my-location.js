@@ -2,13 +2,14 @@
 
 //------------------------------------------------------------------------//
 // This account's ONE location URL: where a phone app sends where you are,
-// from the background, for every trip (server/go/location.go). Two apps use
-// it, both free and open source, neither ours - Overland on iPhone,
-// GPSLogger on Android. Each has its own ending on the same key and its own
-// one-tap set-up link, so the phone being read on decides which card is
-// shown; a PC, which can set up neither, shows both.
+// from the background, for every trip (server/go/location.go). On iPhone
+// that is Overland (free, open source, not ours), with a one-tap set-up link.
+// On Android the Nayive app does it by itself (/api/device/report, no URL),
+// so Android gets a card that recommends the app instead (2026-10-02; it was
+// GPSLogger - its URL ending still works for phones already sending). A PC
+// shows both cards. An Android phone sees the URL only to turn it off.
 // Returns an element that loads and redraws itself: make it, add it, done.
-// Trips' "My location" sheet (route.js openMyLocation) is its home; it lived
+// Trips' Settings › Location (route.js openSettings) is its home; it lived
 // in shared/ui.js until 2026-09-28 (shared.md #21).
 function locationSection()
 {
@@ -21,27 +22,19 @@ function locationSection()
     let loaded  = false;
 
     function isAndroid() { return /android/i.test( navigator.userAgent ); }
+    function isPC()      { return ! NayiveUI.isIOS() && ! isAndroid(); }
 
     const APPS = [
         {
             key:   'overland',
             name:  'Overland',
             head:  'trips.loc.overland',
+            about: 'trips.loc.overlandAbout',
             how:   'trips.loc.overlandHow',
             store: 'https://apps.apple.com/app/id1292426766',
             mine:  NayiveUI.isIOS,
             // The app reads its whole setup from this link: no typing on the phone.
             setup: function( url ) { return 'overland://setup?url=' + encodeURIComponent( url ) + '&device_id=nayive'; }
-        },
-        {
-            key:   'gpslogger',
-            name:  'GPSLogger',
-            head:  'trips.loc.gpslogger',
-            how:   'trips.loc.gpsloggerHow',
-            store: 'https://f-droid.org/packages/com.mendhak.gpslogger/',
-            mine:  isAndroid,
-            // Same idea, its own way: the server writes a .properties profile.
-            setup: function( url ) { return 'gpslogger://properties/' + url + '.properties'; }
         }
     ];
 
@@ -66,7 +59,9 @@ function locationSection()
         return a;
     }
 
-    function appCard( app, url, last )
+    // The app's name, what it does, where to get it. Its address comes
+    // after the on / off box (appAddress).
+    function appCard( app )
     {
         const card = document.createElement( 'div' );
         card.className = 'loc-app';
@@ -75,6 +70,27 @@ function locationSection()
         head.className   = 'share-head';
         head.textContent = t( app.head );
         card.appendChild( head );
+
+        // What the app does, always - the iPhone twin of the Android card's words.
+        const about = document.createElement( 'p' );
+        about.className   = 'share-note';
+        about.textContent = t( app.about );
+        card.appendChild( about );
+
+        const links = document.createElement( 'p' );
+        links.className = 'loc-links';
+        links.appendChild( linkButton( t( 'trips.loc.get' ).replace( '{app}', app.name ), app.store ) );
+        card.appendChild( links );
+
+        return card;
+    }
+
+    // Switched on: the address, below the on / off box (his call, 2026-10-02),
+    // then how to give it to the app.
+    function appAddress( app, url, last )
+    {
+        const card = document.createElement( 'div' );
+        card.className = 'loc-app';
 
         const row = document.createElement( 'div' );
         row.className = 'share-row share-link-app';
@@ -90,23 +106,96 @@ function locationSection()
         } ) );
         card.appendChild( row );
 
-        const links = document.createElement( 'p' );
-        links.className = 'loc-links';
-        links.appendChild( linkButton( t( 'trips.loc.get' ).replace( '{app}', app.name ), app.store ) );
-        if( app.mine() )
-            links.appendChild( linkButton( t( 'trips.loc.setup' ).replace( '{app}', app.name ), app.setup( url ) ) );
-        card.appendChild( links );
-
-        // The steps - or, on a PC, where to go instead. The (i) follows the
-        // sheet's last words, but only when those words are the steps.
         const mine = app.mine();
-        const how  = document.createElement( 'p' );
+        if( mine )
+        {
+            const links = document.createElement( 'p' );
+            links.className = 'loc-links';
+            links.appendChild( linkButton( t( 'trips.loc.setup' ).replace( '{app}', app.name ), app.setup( url ) ) );
+            card.appendChild( links );
+        }
+
+        // The steps - or, on a PC, the same from the phone. The (i) follows
+        // the sheet's last words, but only when those words are the steps.
+        const how = document.createElement( 'p' );
         how.className   = 'share-note share-link-how';
         how.textContent = mine ? t( app.how ) : t( 'trips.loc.onPhone' );
         if( last && mine ) how.appendChild( infoButton() );
         card.appendChild( how );
 
         return card;
+    }
+
+    // Android: the Nayive app sends where you are by itself, and does much
+    // more - recommend it. It needs no location URL. Inside the app already:
+    // say so, no "Get" button (his call, 2026-10-02).
+    function apkCard()
+    {
+        const card = document.createElement( 'div' );
+        card.className = 'loc-app';
+
+        const head = document.createElement( 'p' );
+        head.className   = 'share-head';
+        head.textContent = t( 'trips.loc.apk' );
+        card.appendChild( head );
+
+        const how = document.createElement( 'p' );
+        how.className   = 'share-note';
+        how.textContent = t( NayiveUI.inAndroidApp() ? 'trips.loc.apkHave' : 'trips.loc.apkHow' );
+        card.appendChild( how );
+        if( NayiveUI.inAndroidApp() ) return card;
+
+        const links = document.createElement( 'p' );
+        links.className = 'loc-links';
+        links.appendChild( linkButton( t( 'trips.loc.getApk' ), window.location.origin + '/app/' ) );
+        card.appendChild( links );
+
+        return card;
+    }
+
+    // The on / off for the location address, boxed and loud (his call,
+    // 2026-10-02). Only Overland (iPhone) and old GPSLogger phones use it - the
+    // Nayive app does not. It sits last, at the bottom of the tab (his call).
+    // On makes the address; off asks first, then drops it.
+    function masterRow()
+    {
+        const row = document.createElement( 'label' );
+        row.className = 'share-add loc-master' + ( tracker ? ' on' : '' );
+
+        const text = document.createElement( 'span' );
+        text.className   = 'loc-master-text';
+        text.textContent = loaded ? t( tracker ? 'trips.loc.on' : 'trips.loc.none' ) : '…';
+        row.appendChild( text );
+        if( loaded && ! tracker ) row.appendChild( infoButton() );
+
+        const input = document.createElement( 'input' );
+        input.type     = 'checkbox';
+        // The row is a <label>: tie it to the switch, or a click anywhere
+        // in it goes to the (i), the first control inside.
+        input.id       = 'locMasterSw';
+        row.htmlFor    = input.id;
+        input.checked  = !! tracker;
+        input.disabled = ! loaded;
+        input.addEventListener( 'change', function()
+        {
+            input.disabled = true;
+            const done = input.checked
+                ? NayiveUI.jsonApi( '/api/location', 'POST' )
+                : NayiveUI.confirm( { title: t( 'trips.loc.stopTitle' ), body: t( 'trips.loc.stopBody' ),
+                                      confirm: t( 'trips.loc.stopOk' ) } )
+                      .then( function( yes ) { if( yes ) return NayiveUI.jsonApi( '/api/location', 'DELETE' ); } );
+            done.then( load, function( e ) { NayiveUI.toast( e.message || t( 'ui.loadFailed' ) ); load(); } );
+        } );
+
+        const sw = document.createElement( 'span' );
+        sw.className = 'switch sm';
+        const track = document.createElement( 'span' );
+        track.className = 'track';
+        sw.appendChild( input );
+        sw.appendChild( track );
+        row.appendChild( sw );
+
+        return row;
     }
 
     function render()
@@ -118,55 +207,20 @@ function locationSection()
         note.textContent = t( 'trips.loc.lead' );
         box.appendChild( note );
 
-        if( ! tracker )
-        {
-            // Nothing set up yet: one row, and the "+" that makes the URL.
-            const row = document.createElement( 'div' );
-            row.className = 'share-row share-link-app';
+        if( isAndroid() || isPC() ) box.appendChild( apkCard() );
 
-            const text = document.createElement( 'span' );
-            text.className   = 'share-link-url';
-            text.textContent = loaded ? t( 'trips.loc.none' ) : '…';
-            row.appendChild( text );
+        const base  = tracker ? window.location.origin + tracker.url : '';
+        const cards = APPS.filter( function( a ) { return a.mine() || isPC(); } );
+        cards.forEach( function( a ) { box.appendChild( appCard( a ) ); } );
 
-            if( loaded )
+        // Android has no use for the address: its switch shows only to turn an old one off.
+        if( ! ( isAndroid() && ! tracker ) ) box.appendChild( masterRow() );
+
+        if( tracker )
+            cards.forEach( function( a, i )
             {
-                text.classList.add( 'has-info' );
-                row.appendChild( infoButton() );
-                row.appendChild( NayiveUI.rowButton( 'plus', t( 'trips.loc.create' ), function()
-                {
-                    return NayiveUI.jsonApi( '/api/location', 'POST' ).then( load );
-                } ) );
-            }
-            box.appendChild( row );
-            NayiveUI.applyInfoDots( box );
-            return;
-        }
-
-        const base  = window.location.origin + tracker.url;
-        const cards = APPS.filter( function( a ) { return a.mine() || ( ! NayiveUI.isIOS() && ! isAndroid() ); } );
-        cards.forEach( function( a, i )
-        {
-            box.appendChild( appCard( a, base + '/' + a.key, i === cards.length - 1 ) );
-        } );
-
-        // Turning off is about the key, not the app: one button for both.
-        const off = document.createElement( 'div' );
-        off.className = 'share-row loc-off';
-
-        const onText = document.createElement( 'span' );
-        onText.className   = 'share-link-url';
-        onText.textContent = t( 'trips.loc.on' );
-        off.appendChild( onText );
-
-        off.appendChild( NayiveUI.rowButton( 'x', t( 'trips.loc.stop' ), function()
-        {
-            // The phone keeps sending to this URL, which then just fails: ask first.
-            return NayiveUI.confirm( { title: t( 'trips.loc.stopTitle' ), body: t( 'trips.loc.stopBody' ),
-                                       confirm: t( 'trips.loc.stopOk' ) } )
-                .then( function( yes ) { if( yes ) return NayiveUI.jsonApi( '/api/location', 'DELETE' ).then( load ); } );
-        } ) );
-        box.appendChild( off );
+                box.appendChild( appAddress( a, base + '/' + a.key, i === cards.length - 1 ) );
+            } );
 
         NayiveUI.applyInfoDots( box );
     }

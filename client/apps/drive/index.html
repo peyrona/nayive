@@ -34,6 +34,7 @@
     <!-- The offline store Calendar and Contacts save through: a dropped .ics /
          .vcf is merged into their file through it too (upload.js). -->
     <script src="../shared/store.js" defer></script>
+    <script src="../shared/vcard.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
     <script src="../shared/photo.js" defer></script>
@@ -64,8 +65,6 @@
                 { sel: '#compressBtn',     text: NayiveUI.t( 'drive.introCompress' ) },
                 { sel: '#propsBtn',        text: NayiveUI.t( 'drive.introProps' ) },
                 { sel: '#deleteBtn',       text: NayiveUI.t( 'drive.introTrash' ) },
-                // A fixed name: the bin's tooltip turns into "Back to Drive"
-                // while the bin is open (render in tree.js).
                 // Fixed names: both tooltips turn into "Back to Drive" while
                 // their view is open (render in tree.js).
                 { sel: '#bigFilesBtn', name: NayiveUI.t( 'drive.bigTitle' ),
@@ -96,99 +95,97 @@
                 <div id="diskBar" class="disk-bar" hidden data-i18n-attr="title:drive.diskUse"><i></i></div>
             </div>
 
-            <!-- The magnifier inside the box opens the advanced search: name
-                 rules, kinds and dates, no wildcards to learn (advsearch.js). -->
-            <div class="search-wrap">
-                <input type="search" id="searchInput" class="topbar-search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:drive.searchPh, title:drive.searchTip">
-                <!-- Stands in for the box while an advanced search is in force (advsearch.js). -->
-                <button id="advChip" type="button" class="adv-chip" hidden>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                    <span id="advChipText"></span>
-                </button>
-                <button id="searchBuilderBtn" class="icon-btn sm" data-i18n-attr="title:drive.sbTitle">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                </button>
-            </div>
-            <button id="searchToggleBtn" class="icon-btn" data-i18n-attr="title:ui.search">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            </button>
-
-            <div class="sep"></div>
-
-            <button id="newFolderBtn" class="icon-btn" data-i18n-attr="title:ui.newFolder">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
-            </button>
-            <button id="uploadBtn" class="icon-btn" data-i18n-attr="title:drive.uploadTip">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
-            <input type="file" id="uploadInput" multiple style="display:none">
-            <input type="file" id="uploadDirInput" webkitdirectory multiple style="display:none">
-            <input type="file" id="uploadPhotoInput" accept="image/*" multiple style="display:none">
-            <button id="downloadBtn" class="icon-btn" disabled data-i18n-attr="title:drive.downloadFolderOrSel">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            </button>
-
-            <!-- WHAT YOU DO TO WHAT IS SELECTED: the ticked rows, or the
-                 folder open in the tree. The whole group - its rule included -
-                 leaves the bar only at the Drive root with nothing ticked;
-                 with just the open folder they all act on that folder.
-                 display: contents, so the buttons
-                 still lay themselves out as children of the .topbar; the
-                 hidden attribute takes all of them at once
-                 (updateToolbarState in toolbar.js). -->
-            <div id="selActions" hidden>
-                <div class="sep"></div>
-
-                <button id="renameBtn" class="icon-btn" disabled data-i18n-attr="title:ui.rename">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-                </button>
-                <button id="moveToBtn" class="icon-btn" data-i18n-attr="title:drive.moveToDots" disabled>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg>
-                </button>
-                <button id="copyToBtn" class="icon-btn" data-i18n-attr="title:drive.copyToDots" disabled>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                </button>
-                <button id="copyLinkBtn" class="icon-btn" data-i18n-attr="title:drive.copyLink" disabled>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                </button>
-                <button id="shareBtn" class="icon-btn" disabled data-i18n-attr="title:drive.shareWith">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>
-                </button>
-                <button id="compressBtn" class="icon-btn" disabled data-i18n-attr="title:drive.compress">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>
-                </button>
-                <button id="propsBtn" class="icon-btn" disabled data-i18n-attr="title:drive.properties">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                </button>
-                <button id="deleteBtn" class="icon-btn danger" disabled data-i18n-attr="title:ui.toTrash">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
-
-                
-            </div>
-
             <!-- Upload / download progress sits here when there is room
                  (NayiveUI.transfer in shared/ui.js); else at the bottom. -->
             <div class="transfer-slot" data-transfer-slot></div>
             <span id="statusLabel" class="status-label"></span>
 
-            <!-- "Biggest files" on/off, like the bin next to it: lit while the
-                 list is open, and a second tap goes back (listing.js). -->
-            <button id="bigFilesBtn" class="icon-btn" data-i18n-attr="title:drive.bigTitle">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"></path><path d="M7 20V4"></path><path d="M11 4h10"></path><path d="M11 8h7"></path><path d="M11 12h4"></path></svg>
-            </button>
-            <button id="trashViewBtn" class="icon-btn" data-i18n-attr="title:acct.trash">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-            <!-- Phone only: the buttons above that a phone reaches for least
-                 (see B6b in the phone block). Its entries are cloned from them. -->
-            <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
-            </button>
-            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            </button>
-            <button id="syncIndicator" class="sync-indicator synced" type="button" data-i18n-attr="title:ui.synced"></button>
+            <input type="file" id="uploadInput" multiple style="display:none">
+            <input type="file" id="uploadDirInput" webkitdirectory multiple style="display:none">
+            <input type="file" id="uploadPhotoInput" accept="image/*" multiple style="display:none">
+
+            <div class="topbar-actions">
+                <!-- WHAT YOU DO TO WHAT IS SELECTED: the ticked rows, or the
+                     folder open in the tree. The whole group leaves the bar
+                     only at the Drive root with nothing ticked; with just the
+                     open folder they all act on that folder. It is the first
+                     group, so the bar grows leftwards when it comes and the
+                     buttons after it never move (updateToolbarState in toolbar.js). -->
+                <div id="selActions" class="tb-group" hidden>
+                    <button id="renameBtn" class="icon-btn" disabled data-i18n-attr="title:ui.rename">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                    </button>
+                    <button id="moveToBtn" class="icon-btn" data-i18n-attr="title:drive.moveToDots" disabled>
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg>
+                    </button>
+                    <button id="copyToBtn" class="icon-btn" data-i18n-attr="title:drive.copyToDots" disabled>
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <button id="copyLinkBtn" class="icon-btn" data-i18n-attr="title:drive.copyLink" disabled>
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    </button>
+                    <button id="shareBtn" class="icon-btn" disabled data-i18n-attr="title:drive.shareWith">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>
+                    </button>
+                    <button id="compressBtn" class="icon-btn" disabled data-i18n-attr="title:drive.compress">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>
+                    </button>
+                    <button id="propsBtn" class="icon-btn" disabled data-i18n-attr="title:drive.properties">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    </button>
+                    <button id="deleteBtn" class="icon-btn danger" disabled data-i18n-attr="title:ui.toTrash">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+
+                <div id="driveTools" class="tb-group">
+                    <!-- The shared search fold (NayiveUI.searchFold): the magnifier after
+                         the box opens it. The funnel inside the box opens the advanced
+                         search: name rules, kinds and dates, no wildcards to learn
+                         (advsearch.js); the × after it clears and folds the box. -->
+                    <div class="search-wrap">
+                        <input type="search" id="searchInput" class="topbar-search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:drive.searchPh, title:drive.searchTip">
+                        <!-- Stands in for the box while an advanced search is in force (advsearch.js). -->
+                        <button id="advChip" type="button" class="adv-chip" hidden>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                            <span id="advChipText"></span>
+                        </button>
+                        <button id="searchBuilderBtn" class="icon-btn sm" type="button" data-i18n-attr="title:drive.sbTitle, aria-label:drive.sbTitle"></button>
+                    </div>
+                    <button id="searchToggleBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                    <button id="newFolderBtn" class="icon-btn" data-i18n-attr="title:ui.newFolder">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+                    </button>
+                    <button id="uploadBtn" class="icon-btn" data-i18n-attr="title:drive.uploadTip">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    </button>
+                    <button id="downloadBtn" class="icon-btn" disabled data-i18n-attr="title:drive.downloadFolderOrSel">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                    <!-- "Biggest files" on/off, like the bin next to it: lit while the
+                         list is open, and a second tap goes back (listing.js). -->
+                    <button id="bigFilesBtn" class="icon-btn" data-i18n-attr="title:drive.bigTitle">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"></path><path d="M7 20V4"></path><path d="M11 4h10"></path><path d="M11 8h7"></path><path d="M11 12h4"></path></svg>
+                    </button>
+                    <button id="trashViewBtn" class="icon-btn" data-i18n-attr="title:acct.trash">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+
+                <div class="tb-group tb-sys">
+                    <!-- Phone only: the buttons above that a phone reaches for least
+                         (see B6b in the phone block). Its entries are cloned from them. -->
+                    <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    </button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
+                <button id="syncIndicator" class="sync-indicator synced" type="button" data-i18n-attr="title:ui.synced"></button>
+            </div>
         </div>
 
         <div class="body-row">
@@ -316,7 +313,7 @@
                 <p id="sbSummary" class="share-note"></p>
             </div>
             <div class="sheet-actions">
-                <button id="sbClearBtn" type="button" class="text-btn ghost sheet-actions-left" data-i18n="drive.sbClear"></button>
+                <button id="sbClearBtn" type="button" class="sheet-actions-left" data-act="secondary:eraser" data-i18n-attr="title:drive.sbClear"></button>
                 <button id="sbCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="sbSearchBtn" data-act="primary:search" data-i18n-attr="title:ui.search"></button>
             </div>
@@ -397,8 +394,8 @@
             <p id="replaceMsg"></p>
             <ul id="replaceList" class="replace-list"></ul>
             <label id="replaceOptWrap" class="replace-opt">
-                <input type="checkbox" id="replaceOverwrite">
                 <span data-i18n="drive.replaceExisting"></span>
+                <span class="switch sm"><input type="checkbox" id="replaceOverwrite"><span class="track"></span></span>
             </label>
             <div class="sheet-actions">
                 <button id="replaceCancelBtn"  data-act="close" data-i18n-attr="title:ui.cancel"></button>
@@ -496,36 +493,6 @@
             </div>
             <div class="sheet-actions">
                 <button id="importWithCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Built-in image editor (TOAST UI Image Editor; library loaded on first use) -->
-    <div id="editorBackdrop" class="editor-backdrop">
-        <div class="editor-bar">
-            <span id="editorName" class="editor-title"></span>
-            <span class="editor-actions">
-                <button id="editorSaveBtn"   class="editor-btn" data-i18n-attr="title:ui.save, aria-label:ui.save"></button>
-                <button id="editorSaveAsBtn" class="editor-btn" data-i18n-attr="aria-label:ui.saveCopy, title:drive.saveCopyEllipsis"></button>
-                <button id="editorCloseBtn"  class="editor-btn" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
-            </span>
-        </div>
-        <div id="tuiEditor" class="editor-canvas"></div>
-        <textarea id="editorComment" class="editor-comment" rows="2" data-i18n-attr="placeholder:drive.photoCommentPh"></textarea>
-    </div>
-
-    <!-- "Guardar copia" dialog. Sits above the image-editor overlay
-         (sheet-backdrop z-index 100 > editor-backdrop 99). -->
-    <div id="saveCopyBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="ui.saveCopy"></h2>
-            <div class="field">
-                <label for="saveCopyName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveCopyName" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="sheet-actions">
-                <button id="saveCopyCancelBtn"  data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="saveCopyConfirmBtn" data-act="primary" data-i18n-attr="title:ui.saveCopy"></button>
             </div>
         </div>
     </div>

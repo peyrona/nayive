@@ -77,9 +77,6 @@
             font-size: calc( var(--board) * 0.05 ); line-height: 1;
             box-shadow: 0 calc( var(--board) * 0.004 ) calc( var(--board) * 0.008 ) rgba( 0, 0, 0, 0.35 );
         }
-        /* `display: flex` above is a class rule and `hidden` is the browser's
-           own, so without this line an empty square would still show its disc. */
-        .checkers-pc[hidden] { display: none; }
         /* The light on both comes from the same corner, so a board of them
            looks like one set of pieces under one lamp. */
         .checkers-pc.is-w { background: radial-gradient( circle at 34% 28%, #FFFDF7, #EBE1CC 62%, #C9BCA0 ); color: #6B5A3C; }
@@ -191,7 +188,7 @@
                                  paused board is covered SOLIDLY and a finished
                                  one is not: there is nothing left to work out
                                  from a board that is over. -->
-                            <div class="game-cover checkers-over" id="checkersOver" hidden>
+                            <div class="game-cover" id="checkersOver" hidden>
                                 <p class="game-cover-t" id="checkersOverTitle"></p>
                                 <p class="game-cover-s" id="checkersOverSub"></p>
                                 <button class="text-btn" id="checkersOverBtn" type="button"></button>
@@ -209,8 +206,8 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE GAMES"): the same twelve in
-        // every game, whether it uses them all or not.
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
+        // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
             STEP        = NayiveGames.STEP,

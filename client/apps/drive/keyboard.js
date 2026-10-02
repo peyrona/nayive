@@ -106,7 +106,7 @@ function kbdListMove( dir, activate )
 // Nothing here happens on a phone: no keyboard, and a title there is also
 // the ⋮ menu's label and the help card's name, so the hints come off too.
 
-const IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || '' );
+const IS_MAC = NayiveUI.isMac;
 
 // "Ctrl+F" on a PC, "⌘F" on a Mac. The modifier NAMES are translated
 // (Strg / Entf in German, Supr in Spanish); the Mac glyphs are the same
@@ -158,9 +158,8 @@ function focusSearch()
 {
     if( advSearch ) { openSearchBuilder(); return; }    // the box is hidden behind its button
 
-    const box = document.getElementById( 'searchInput' );
-    box.focus();
-    box.select();
+    driveSearch.open();                                  // unfolds and focuses it
+    document.getElementById( 'searchInput' ).select();
 }
 
 // Hangs " · Ctrl+F" off each shortcut button's tooltip — and takes it off
@@ -215,9 +214,9 @@ function onShortcutKey( e )
 
     if( isPhone() || trashMode ) return;
     if( anyCtxMenuOpen() ) return;
-    // A dialog, the viewer, the player or the image editor owns the screen:
+    // A dialog, the viewer or the player owns the screen:
     // the toolbar behind it is not what the key is for.
-    if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open, .editor-backdrop.open' ) ) return;
+    if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open' ) ) return;
     if( ! s.inField && inTextField( e.target ) ) return;
 
     // Swallowed even when the action itself cannot run, so the browser's
@@ -242,7 +241,7 @@ function onNavKey( e )
     if( t && t.closest && t.closest( 'input, textarea, button, a, select, [contenteditable]' ) ) return;
     if( isPhone() || trashMode ) return;
     if( anyCtxMenuOpen() ) return;
-    if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open, .editor-backdrop.open' ) ) return;
+    if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open' ) ) return;
 
     if( e.key === 'ArrowLeft'  ) { e.preventDefault(); focusPane( 'tree' ); return; }
     if( e.key === 'ArrowRight' ) { e.preventDefault(); focusPane( 'list' ); return; }

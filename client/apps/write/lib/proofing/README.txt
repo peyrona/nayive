@@ -4,9 +4,8 @@ en.{aff,dic} — dictionary-en 4.0.0 — SCOWL-based en_US, permissive (see en.L
 pt.{aff,dic} — LibreOffice pt_PT (see pt.LICENSE).
 fr.{aff,dic} — LibreOffice fr_FR (see fr.LICENSE).
 de.{aff,dic} — LibreOffice de_DE frami (see de.LICENSE).
-it.{aff,dic} — LibreOffice it_IT (see it.LICENSE).
 
-Weight: the four added on 2026-09-08 cost about 2.1 MB gzipped on top of es+en's
+Weight: the three added on 2026-09-08 cost about 1.9 MB gzipped on top of es+en's
 0.4 MB, and everything under lib/ is precached by the service worker — German is
 1.2 MB of that on its own. Dropping a language is deleting its two files and its
 line in proofing.js's DICT map; the Settings list is built from that map.

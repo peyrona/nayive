@@ -398,20 +398,24 @@ function eventKey( block )
     return blockProp( block, 'UID' ) + '\n' + blockProp( block, 'RECURRENCE-ID' );
 }
 
+// The cards are told apart as Contacts tells them (shared/vcard.js): each is
+// kept as the text it is in the file, and a card dropped again (same UID)
+// takes its old one's place.
 async function mergeIntoContacts( incomingText )
 {
-    const incoming = extractBlocks( incomingText, 'VCARD' );
+    const incoming = NayiveVCard.cards( incomingText ) || [];
     if( ! incoming.length ) throw new Error( T( 'drive.noContactsInFile' ) );
 
-    const blocks = extractBlocks( await readTextOrEmpty( 'data/contacts.vcf' ), 'VCARD' );
+    const book   = NayiveVCard.cards( await readTextOrEmpty( 'data/contacts.vcf' ) ) || [];
+    const blocks = book.map( function( c ) { return c.text; } );
     const byUid  = new Map();
-    blocks.forEach( function( b, i ) { const u = blockProp( b, 'UID' ); if( u ) byUid.set( u, i ); } );
+    book.forEach( function( c, i ) { if( c.uid ) byUid.set( c.uid, i ); } );
 
-    for( const b of incoming )
+    for( const c of incoming )
     {
-        const u = blockProp( b, 'UID' );
-        if( u && byUid.has( u ) ) blocks[ byUid.get( u ) ] = b;
-        else { blocks.push( b ); if( u ) byUid.set( u, blocks.length - 1 ); }
+        const u = c.uid;
+        if( u && byUid.has( u ) ) blocks[ byUid.get( u ) ] = c.text;
+        else { blocks.push( c.text ); if( u ) byUid.set( u, blocks.length - 1 ); }
     }
 
     await writeAppFile( 'data/contacts.vcf', blocks.join( '\r\n' ) + '\r\n' );
@@ -426,7 +430,7 @@ async function mergeIntoCalendar( incomingText )
 
     let existing = await readTextOrEmpty( 'data/calendar.ics' );
     if( ! /BEGIN:VCALENDAR/i.test( existing ) )
-        existing = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mingle//Personal Calendar//EN\r\nEND:VCALENDAR\r\n';
+        existing = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nayive//Personal Calendar//EN\r\nEND:VCALENDAR\r\n';
 
     // The existing file stays as it is, line for line - its header, a VTODO,
     // anything else Drive does not know: an event dropped again (same UID and

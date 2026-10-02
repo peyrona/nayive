@@ -32,7 +32,7 @@
 
      Place names for the map clusters are reverse-geocoded once (Nominatim) and
      cached in data/photos/places.json. Per-photo comments live in
-     data/photos/comments.json (the same sidecar Drive's image editor uses). -->
+     data/photos/comments.json (the same sidecar the image editor, apps/image, uses). -->
 <!doctype html>
 <html lang="es">
 <head>
@@ -44,7 +44,7 @@
     <title>Photos</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='16' height='16' rx='2'/%3E%3Ccircle cx='12' cy='8' r='2'/%3E%3Cpath d='m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18'/%3E%3Cpath d='M18 22H4a2 2 0 0 1-2-2V6'/%3E%3C/svg%3E">
 
-    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive /
+    <!-- Shared colour scheme (light default, opt-in dark). Toggle lives in Drive /
          the launcher; this page only follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/theme.css">
@@ -63,8 +63,8 @@
             title: 'Photos',
             lead:  NayiveUI.t( 'photos.introLead' ),
             buttons: [
-                { sel: '#crumb',       text: NayiveUI.t( 'photos.introFolder' ) },
-                { sel: '#searchInput', text: NayiveUI.t( 'photos.introSearch' ) },
+                { sel: '#folderInfoBtn', text: NayiveUI.t( 'photos.introFolder' ) },
+                { sel: '#searchToggle', text: NayiveUI.t( 'photos.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'photos.introRescan' ) },
                 { sel: '[data-mode="grid"]',   text: NayiveUI.t( 'photos.introGrid' ) },
                 { sel: '[data-mode="lista"]',  text: NayiveUI.t( 'photos.introList' ) },
@@ -91,8 +91,8 @@
     a:focus-visible,
     [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-    /* .crumb, .bar-info, .tb-end and the whole .view-bar row come from
-       shared/app.css (folder-backed viewers), search field included. */
+    /* The header's toolbar (folder-? menu, .tb-modes, .topbar-actions groups)
+       comes from shared/app.css (folder-backed viewers), search field included. */
 
     /* Album index: the chosen folder's sub-folders, shown as cards before any
        one of them is opened. Reuses nothing else in the app. */
@@ -105,9 +105,6 @@
     .album-card svg { width: 26px; height: 26px; color: var(--accent); }
     .album-card .a-name { font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
                           white-space: nowrap; max-width: 100%; }
-
-    /* The .view-bar row (the 5 gallery modes, then upload + share) is the shared
-       one - #grid's 16px indent already matches its padding, so nothing here. */
 
     /* list view: each day's .shots (in #grid only - the map strip keeps its
        own tile layout) becomes a column of thin rows */
@@ -167,7 +164,6 @@
     /* ---------- stage : one pane visible at a time ---------- */
     .stage { flex: 1 1 auto; min-height: 0; position: relative; }
     .pane  { position: absolute; inset: 0; overflow: auto; }
-    .pane[hidden] { display: none; }
 
     /* ---------- grid (contact sheet) ---------- */
     #grid { padding: 2px var(--space-4) 40px; }
@@ -288,10 +284,8 @@
         font-size: 0.9rem;
         color: var(--text-dim);
     }
-    .map-empty[hidden] { display: none; }
 
     #nogeoChip { position: absolute; left: var(--space-4); bottom: var(--space-4); z-index: 3; }
-    #nogeoChip[hidden] { display: none; }
 
     /* map header: sits top-right (top-left is Leaflet's zoom control), tells the
        reader where the place names come from via the shared info dot. */
@@ -345,8 +339,7 @@
      * Both are deliberately fixed-dark and do NOT follow the theme - the same
      * call app.css records for Drive's built-in image viewer. Colours here are
      * literals on purpose; only --accent (readable on black) is borrowed. */
-    body.pase .topbar,
-    body.pase .view-bar { display: none; }
+    body.pase .topbar { display: none; }
     body.pase #pase   { position: fixed; inset: 0; z-index: 40; }
 
     #pase { background: #101013; overflow: hidden; }
@@ -402,7 +395,6 @@
     /* per-photo comment, read-only here - edited in "Editar" mode. Fixed
      * light-on-dark like the rest of the lightbox (never theme tokens). */
     .lb-note { margin-top: 2px; }
-    .lb-note[hidden] { display: none; }
     .lb-note .note-text
     {
         margin: 0;
@@ -422,7 +414,6 @@
 
     /* the comment, read-only, under the Pase caption */
     .pase-cap .c { margin-top: 8px; font-size: 0.9rem; line-height: 1.45; color: rgba(255, 255, 255, 0.9); max-width: 46ch; white-space: pre-wrap; }
-    .pase-cap .c[hidden] { display: none; }
 
     /* ---------- EDITAR mode : the hint bar over the grid ---------- */
     .edit-hint
@@ -435,17 +426,6 @@
         background: color-mix(in srgb, var(--accent) 10%, var(--bg));
         border-bottom: 1px solid var(--line);
     }
-    .edit-hint[hidden] { display: none; }
-
-    /* ---------- IMAGE EDITOR : full-screen, opens in this tab ----------
-     * TOAST UI Image Editor (same build Drive ships, loaded on first use). A
-     * fixed-dark surface like the other viewers - literals on purpose, never
-     * theme tokens - matching Drive's own editor chrome. */
-    /* The chrome itself is the shared IMAGE EDITOR block in shared/app.css (Drive
-       opens the same editor). Local: the layer it opens over, and a tabular-figures
-       title, because Photos puts "3 / 128" up there. */
-    .editor-backdrop { z-index: 60; }
-    .editor-title    { font-variant-numeric: tabular-nums; }
 
     /* ---------- scene : a real photo <img>, or (example mode) placeholder art ----------
      * A real thumbnail is an <img> so the browser applies EXIF orientation.
@@ -495,9 +475,6 @@
 
     @media (max-width: 640px)
     {
-        .search-toggle              { display: inline-flex; }
-        .tb-end .topbar-search      { display: none; }
-        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
         .pase-cap { left: 14px; bottom: 88px; max-width: 78%; }
         .pase-cap .t { font-size: 1.1rem; }
         .lb-nav.prev { left: 8px; }
@@ -519,16 +496,10 @@
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
             <h1>Photos</h1>
 
-            <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
+            </button>
 
-            <div class="topbar-actions">
-                <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ui.sync.synced"></div>
-            </div>
-
-            <span class="bar-info" id="subStrip"></span>
-        </header>
-
-        <div class="view-bar" id="viewBar">
             <div class="tb-modes" role="tablist" data-i18n-attr="aria-label:photos.galleryMode">
                 <button class="icon-btn is-active" data-mode="grid" role="tab" aria-selected="true" data-i18n-attr="title:photos.grid, aria-label:photos.grid">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -549,29 +520,37 @@
 
             <input type="file" id="addInput" accept="image/*" multiple hidden>
 
-            <div class="tb-actions">
-                <div class="tb-sep"></div>
-                <button class="icon-btn" id="addBtn" type="button" hidden data-i18n-attr="title:photos.uploadHere, aria-label:photos.uploadHere">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </button>
-
-                <button class="icon-btn" id="shareBtn" type="button" hidden data-i18n-attr="title:photos.shareAlbumTip, aria-label:photos.shareAlbum">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
-                </button>
+            <div class="topbar-actions">
+                <div class="tb-group">
+                    <div class="search-wrap">
+                        <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
+                    </div>
+                    <button class="icon-btn" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </button>
+                    <button class="icon-btn" id="addBtn" type="button" hidden data-i18n-attr="title:photos.uploadHere, aria-label:photos.uploadHere">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </button>
+                    <button class="icon-btn" id="shareBtn" type="button" hidden data-i18n-attr="title:photos.shareAlbumTip, aria-label:photos.shareAlbum">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
+                    </button>
+                    <button class="icon-btn" id="reloadBtn" type="button" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    </button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </button>
+                </div>
+                <div class="sync-indicator synced" id="sync" data-i18n-attr="title:ui.sync.synced"></div>
             </div>
+        </header>
 
-            <div class="tb-end">
-                <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
-                <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                </button>
-                <button class="icon-btn" id="reloadBtn" type="button" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-                </button>
-                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                </button>
-            </div>
+        <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
+        <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
+            <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+            <div class="menu-info" id="subStrip"></div>
         </div>
 
         <div class="edit-hint" id="editHint" hidden data-i18n="photos.editHint"></div>
@@ -634,38 +613,6 @@
         </div>
     </div>
 
-    <!-- EDITAR mode: the photo opens here, in this tab (TOAST UI Image Editor).
-         The checkmark saves the edited pixels + comment and the views re-render;
-         the X asks before it drops unsaved changes. -->
-    <div id="editorBackdrop" class="editor-backdrop" role="dialog" aria-modal="true" data-i18n-attr="aria-label:photos.editorTitle">
-        <div class="editor-bar">
-            <span id="editorName" class="editor-title"></span>
-            <span class="editor-actions">
-                <button id="editorSaveBtn"   class="editor-btn" data-i18n-attr="title:ui.save, aria-label:ui.save"></button>
-                <button id="editorSaveAsBtn" class="editor-btn" data-i18n-attr="title:photos.saveAsCopy, aria-label:photos.saveAsCopy"></button>
-                <button id="editorCloseBtn"  class="editor-btn" data-i18n-attr="title:ui.close, aria-label:ui.close">&times;</button>
-            </span>
-        </div>
-        <div id="tuiEditor" class="editor-canvas"></div>
-        <textarea id="editorComment" class="editor-comment" rows="2" data-i18n-attr="placeholder:photos.commentPh"></textarea>
-    </div>
-
-    <!-- "Guardar como copia" dialog. Sits above the editor overlay (sheet-backdrop
-         z-index 100 > editor-backdrop 60). Closes only via its buttons / Escape. -->
-    <div id="saveAsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="photos.saveAsCopy"></h2>
-            <div class="field">
-                <label for="saveAsName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveAsName" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="sheet-actions">
-                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.saveCopy"></button>
-            </div>
-        </div>
-    </div>
-
     <div class="toast" id="toast"></div>
 
 <script src="../shared/media.js"></script>
@@ -682,16 +629,16 @@ const { esc, extOf, baseName, fmtSize, sleep, pool } = NayiveMedia;
  *
  * Drive opens Photos as  ?dir=<folder path relative to the file root>
  * e.g. "files/viajes/lisboa". Chat adds &photo=<that folder's photo> to open
- * one photo straight away. With no ?dir= the page runs in DEMO mode on a
- * small built-in example set (a Lisbon trip) - handy for opening it directly.
+ * one photo straight away. With no ?dir= (opened from the launcher) it uses
+ * the folder remembered in data/photos/config.json, or asks for one.
  * ==========================================================================*/
 const PARAMS = new URLSearchParams( location.search );
 // DIR / DEMO are resolved for real in boot(): with no ?dir= we try the folder
-// remembered in data/photos/config.json (or ask for it), and only a visitor who
-// is not signed in falls back to DEMO.
+// remembered in data/photos/config.json (or ask for it); without one, a visitor
+// who is not signed in goes to the sign-in page, anyone else gets a message.
 let DIR  = ( () => { const d = PARAMS.get( "dir" ); return d != null ? d.replace( /\/+$/, "" ) : null; } )();
 let DEMO = DIR === null;
-// "shared/<algo>" = an album another user shared with us (lib/shares.py). We can
+// "shared/<algo>" = an album another user shared with us (server/go/shares.go). We can
 // look at it, never change it - the server refuses every write there anyway.
 // Note what stays ON: thumbnails, the EXIF cache, places and our own comments
 // all live in OUR OWN data/photos/, so they work exactly as for our own photos
@@ -705,7 +652,6 @@ let RO   = DIR !== null && DIR.indexOf( "shared/" ) === 0;
 // tell you what you are allowed to do with it.
 let CAN_ADD = false;
 
-const COMMENTS_PATH = "data/photos/comments.json";
 const PLACES_PATH   = "data/photos/places.json";
 const SCAN_PATH     = "data/photos/scan-cache.json";
 const IMG_EXT   = [ "jpg", "jpeg", "png", "gif", "webp", "bmp", "avif" ];
@@ -724,7 +670,6 @@ const st = {
  *            scene, hue }]   (scene / hue only in DEMO mode) */
 let PHOTOS   = [];
 let CLUSTERS = [];     // [{ id, lat, lon, items:[photo], place }]
-const EDITS  = {};     // DEMO only: photo id -> edited data URL
 let COMMENTS = {};     // photo id -> comment text
 let OWNER_NOTES = {};  // a shared album: its owner's notes, read-only (loadOwnerNotes)
 let UNSHOWN  = [];     // [{ path, name }]: this folder's HEIC / HEIF files (unshownTileHtml)
@@ -743,15 +688,15 @@ function cacheSet( p, fields )
 }
 
 // The photos the grid / list / lightbox work on: all of them, or - when the
-// header search box has text - just those whose file name matches.
+// header search box has text - just those whose file name or comment matches.
 function photos()
 {
     const q = st.q.trim().toLowerCase();
-    return q ? PHOTOS.filter( p => p.name.toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
+    return q ? PHOTOS.filter( p => p.name.toLowerCase().indexOf( q ) !== -1
+                                || noteFor( p.id ).toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
 }
-function pad2( n ) { return String( n ).padStart( 2, "0" ); }
-function dayOf( ts )  { const d = new Date( ts ); return d.getFullYear() + "-" + pad2( d.getMonth() + 1 ) + "-" + pad2( d.getDate() ); }
-function timeOf( ts ) { const d = new Date( ts ); return pad2( d.getHours() ) + ":" + pad2( d.getMinutes() ); }
+function dayOf( ts )  { const d = new Date( ts ), p = NayiveUI.pad2; return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ); }
+function timeOf( ts ) { const d = new Date( ts ), p = NayiveUI.pad2; return p( d.getHours() ) + ":" + p( d.getMinutes() ); }
 function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.localeCompare( b.name, NayiveUI.lang() ) ); }
 
 /* ---------------------------------------------------------------------------
@@ -804,10 +749,9 @@ let   thumbWorkers  = 0;
 function thumbKey( p )  { return p.size + "_" + p.mtime + ".jpg"; }
 function thumbPath( p ) { return THUMB_DIR + "/" + thumbKey( p ); }
 
-function realPhoto( p ) { return ! DEMO || !! EDITS[ p.id ]; }
+function realPhoto( p ) { return ! DEMO; }
 function srcFor( p )
 {
-    if( EDITS[ p.id ] ) return EDITS[ p.id ];
     if( p.localUrl )    return p.localUrl;      // just uploaded: show the local bytes
     // The photo's mtime in the URL makes it content-addressed (an edit changes
     // the mtime -> a new URL), so the browser may keep it for good instead of
@@ -823,7 +767,7 @@ function srcFor( p )
 // is missing, go straight to the full photo (and make the thumb from it).
 function thumbSrc( p )
 {
-    if( EDITS[ p.id ] || p.localUrl || ! p.size || ! p.mtime ) return { src: srcFor( p ), stage: "full" };
+    if( p.localUrl || ! p.size || ! p.mtime ) return { src: srcFor( p ), stage: "full" };
     const state = THUMB_STATE.get( thumbKey( p ) );
     if( state === "missing" || state === "pending" || state === "failed" ) return { src: srcFor( p ), stage: "fallback" };
     // `immutable`: the key IS the content, so the browser may cache it for good.
@@ -1050,46 +994,6 @@ function buildDemo()
     geocode().then( () => { renderGrid(); if( st.mode === "map" ) drawMap(); } );
 }
 
-/* A stand-in "photo" for the editor in DEMO mode: the gradient painted to a
- * canvas so TOAST UI has real pixels to load. */
-const SCENES = {
-    "s-river":   { angle: 180, stops: [ [ 0, "#2b3a6b" ], [ 0.3, "#7a5a8f" ], [ 0.56, "#e08a4c" ], [ 0.7, "#f2b56a" ], [ 0.73, "#8a6a5a" ], [ 1, "#3f4a63" ] ] },
-    "s-azulejo": { angle: 45,  stops: [ [ 0, "#1e5aa8" ], [ 0.5, "#4f8bd0" ], [ 1, "#1e5aa8" ] ] },
-    "s-tram":    { angle: 118, stops: [ [ 0, "#c49a54" ], [ 0.38, "#ecc267" ], [ 0.56, "#b0754a" ], [ 1, "#b0754a" ] ] },
-    "s-facade":  { angle: 92,  stops: [ [ 0, "#e7b7c4" ], [ 0.33, "#f2d69a" ], [ 0.66, "#bfe0cf" ], [ 1, "#e7c1a0" ] ] },
-    "s-roofs":   { angle: 180, stops: [ [ 0, "#8fb7d8" ], [ 0.44, "#d98a5e" ], [ 0.6, "#b5623a" ], [ 1, "#b5623a" ] ] },
-    "s-castle":  { angle: 180, stops: [ [ 0, "#a9c4d8" ], [ 0.42, "#9a8f7e" ], [ 1, "#9a8f7e" ] ] },
-    "s-street":  { angle: 178, stops: [ [ 0, "#e6dcc6" ], [ 0.2, "#cdb994" ], [ 0.33, "#9a8a6d" ], [ 1, "#5f5442" ] ] },
-    "s-food":    { radial: true, stops: [ [ 0, "#efe0c4" ], [ 0.38, "#c99a5e" ], [ 1, "#7a5636" ] ] },
-    "s-pena":    { angle: 120, stops: [ [ 0, "#c9433a" ], [ 0.36, "#e3b23c" ], [ 0.64, "#d98a2b" ], [ 1, "#d98a2b" ] ] },
-    "s-night":   { angle: 180, stops: [ [ 0, "#10162e" ], [ 0.68, "#1d2749" ], [ 1, "#0c1022" ] ] },
-};
-function sceneImage( p )
-{
-    const W = 1400, H = 933;
-    const c = document.createElement( "canvas" );
-    c.width = W; c.height = H;
-    const x = c.getContext( "2d" );
-    const def = SCENES[ p.scene ] || SCENES[ "s-street" ];
-
-    let g;
-    if( def.radial )
-        g = x.createRadialGradient( W * 0.5, H * 0.56, 8, W * 0.5, H * 0.56, Math.max( W, H ) * 0.72 );
-    else
-    {
-        const a  = ( def.angle || 180 ) * Math.PI / 180;
-        const dx = Math.sin( a ), dy = -Math.cos( a );
-        const half = ( Math.abs( dx ) * W + Math.abs( dy ) * H ) / 2;
-        g = x.createLinearGradient( W / 2 - dx * half, H / 2 - dy * half, W / 2 + dx * half, H / 2 + dy * half );
-    }
-    def.stops.forEach( s => g.addColorStop( s[ 0 ], s[ 1 ] ) );
-
-    try { x.filter = "hue-rotate(" + p.hue + ")"; } catch( _ ) {}
-    x.fillStyle = g;
-    x.fillRect( 0, 0, W, H );
-    return c.toDataURL( "image/png" );
-}
-
 /* ---------------------------------------------------------------------------
  * LOADING A REAL FOLDER
  * -------------------------------------------------------------------------*/
@@ -1108,18 +1012,6 @@ const SYNC_TITLES = { titles: { saving: 'photos.uploading', offline: 'photos.off
 function setSync( state )
 {
     NayiveUI.applySyncState( 'sync', state, SYNC_TITLES );
-}
-
-/* "foto.jpg" -> "foto (2).jpg" if the name is already taken in this folder. */
-function uniqueName( name, taken )
-{
-    if( ! taken.has( name ) ) return name;
-    const dot  = name.lastIndexOf( "." );
-    const stem = dot > 0 ? name.slice( 0, dot ) : name;
-    const ext  = dot > 0 ? name.slice( dot )    : "";
-    let i = 2;
-    while( taken.has( stem + " (" + i + ")" + ext ) ) i++;
-    return stem + " (" + i + ")" + ext;
 }
 
 /* Upload the picked images into the folder Photos is showing (DIR), then
@@ -1167,7 +1059,7 @@ async function handleAddPhotos( fileList )
             NayiveUI.toast( NayiveUI.tf( "photos.notAPhoto", { name: f.name } ) );
             continue;
         }
-        const name  = uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
+        const name  = NayiveUI.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
         taken.add( name );
 
         try
@@ -1660,16 +1552,16 @@ async function reverseGeocode( lat, lon )
  * PER-PHOTO COMMENTS
  *
  * Real: data/photos/comments.json, keyed by the image's files/ path - the
- * same sidecar Drive's image editor reads and writes. DEMO: localStorage.
+ * same sidecar the image editor (apps/image) reads and writes. DEMO: localStorage.
  * -------------------------------------------------------------------------*/
 async function loadComments()
 {
     if( DEMO ) return;                           // handled in buildDemo()
-    try { COMMENTS = JSON.parse( await GumApi.readFile( COMMENTS_PATH ) ) || {}; }
+    try { COMMENTS = await NayiveMedia.readComments(); }      // no file yet (404): none
     catch( err )
     {
         COMMENTS = {};
-        if( ! err || ( err.status !== 403 && err.status !== 404 ) )
+        if( ! err || err.status !== 403 )
             NayiveUI.toast( NayiveUI.t( 'photos.commentsFailed' ) );
     }
 }
@@ -1700,19 +1592,18 @@ async function saveComment( id, text )
     // read-modify-write the whole sidecar, so a stale in-memory copy can't wipe
     // a note added elsewhere (Drive's editor) since we loaded. Only a missing
     // file (404) is an empty map: on any other read error, or a file that is
-    // not a map, nothing is written - it would put this one note over all.
-    // True when the note is on disk.
+    // not a map (readComments throws for both), nothing is written - it would
+    // put this one note over all. True when the note is on disk.
     let map;
-    try { map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {}; }
-    catch( _ ) { map = null; }
-    if( ! map || typeof map !== "object" || Array.isArray( map ) )
+    try { map = await NayiveMedia.readComments(); }
+    catch( _ )
     {
         NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) );
         return false;
     }
     if( text ) map[ id ] = text; else delete map[ id ];
     COMMENTS = map;
-    try { await GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( map, null, 1 ) ) ); }
+    try { await NayiveMedia.writeComments( map ); }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); return false; }
     return true;
 }
@@ -1739,14 +1630,13 @@ async function sweepComments()
     // it. Only a missing file is empty; on any other read error nothing is
     // written (the sweep runs again on the next load).
     let map;
-    try { map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {}; }
+    try { map = await NayiveMedia.readComments(); }
     catch( _ ) { return; }
-    if( typeof map !== "object" || Array.isArray( map ) ) return;
     let removed = false;
     for( const key of dead )
         if( Object.prototype.hasOwnProperty.call( map, key ) ) { delete map[ key ]; removed = true; }
     if( removed )
-        GumApi.writeFileBytes( COMMENTS_PATH, new TextEncoder().encode( JSON.stringify( map, null, 1 ) ) ).catch( () => {} );
+        NayiveMedia.writeComments( map ).catch( () => {} );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1765,6 +1655,7 @@ function setCrumb()
         : NayiveUI.tf( total === 1 ? "photos.onePhoto" : "photos.nPhotos", { n: total } );
     setCrumbPath( DEMO ? NayiveUI.t( 'photos.demoCrumb' ) : dirLabel() );
     $( "#subStrip" ).textContent = count;
+    NayiveMedia.searchCount( shown, total );
 }
 
 /* ---------------------------------------------------------------------------
@@ -2187,333 +2078,78 @@ function setPlaying( on )
 }
 
 /* ---------------------------------------------------------------------------
- * EDITAR : open the photo in the image editor, in this tab
+ * EDITAR : the photo opens in Image (apps/image), a window of its own - a
+ * desktop window or a browser tab; on a phone, in place of this page (Back
+ * comes back here).
  *
- * Same TOAST UI build Drive ships, loaded from ../drive/lib on first use.
- * The checkmark (or Ctrl+Enter) saves: an image edit is written back to the
- * file (real mode) or kept in EDITS (demo), and the comment is saved - then
- * the grid / map strip / lightbox re-render. The X (or Escape) leaves without
- * saving, and asks first when there is something to lose - as Drive and Chat.
+ * Its saves come back as file news (GumApi.onFilesChanged), as any other
+ * page's do: a photo written over gets its new size + mtime (so a new
+ * thumbnail) and a fresh copy; any other change in this folder (a "Save a
+ * copy", a file binned or put back) re-reads the folder; the notes file,
+ * the notes. Read while this page is hidden, the news waits for it to show.
  * -------------------------------------------------------------------------*/
-let editorLibPromise = null;
-function loadEditorLib()
-{
-    if( editorLibPromise ) return editorLibPromise;
-    const add = ( tag, attrs ) => new Promise( ( res, rej ) =>
-    {
-        const el = document.createElement( tag );
-        Object.assign( el, attrs );
-        el.onload = res;
-        el.onerror = () => rej( new Error( "load " + ( attrs.href || attrs.src ) ) );
-        document.head.appendChild( el );
-        if( tag === "link" ) res();
-    } );
-    const base = "../drive/lib/";
-    add( "link", { rel: "stylesheet", href: base + "tui-color-picker_v2.2.8.min.css" } );
-    add( "link", { rel: "stylesheet", href: base + "tui-image-editor_v3.15.3.min.css" } );
-    editorLibPromise = add( "script", { src: base + "tui-color-picker_v2.2.8.min.js" } )
-        .then( () => add( "script", { src: base + "tui-image-editor_v3.15.3.min.js" } ) )
-        .catch( err => { editorLibPromise = null; throw err; } );
-    return editorLibPromise;
-}
-
-let imageEditor  = null;      // the live tui.ImageEditor, or null
-let editorPhoto  = null;      // the photo being edited
-let editorDirty  = false;     // an image edit is on the undo stack
-let commentBase  = "";        // the note as it was when the editor opened
-let editorSaving = false;     // the ✓ is writing; the editor stays up until it lands
-
-function editorChanged() { return editorDirty || $( "#editorComment" ).value.trim() !== commentBase; }
+const PHONE         = matchMedia( "(max-width: 640px)" );
+const COMMENTS_FILE = "data/photos/comments.json";     // NayiveMedia's notes sidecar
 
 function editPhoto( id )
 {
     const p = photos().find( x => x.id === id );
     if( ! p ) return;
-    if( ! DEMO && EDIT_EXT.indexOf( extOf( p.name ) ) === -1 )
+    if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoEdit' ) ); return; }
+    if( EDIT_EXT.indexOf( extOf( p.name ) ) === -1 )
     {
         NayiveUI.toast( NayiveUI.t( 'photos.cantEdit' ) );
         openLb( id, photos() );
         return;
     }
-    openImageEditor( p );
+    const url = "../image/index.html?file=" + encodeURIComponent( p.path );
+    if( PHONE.matches ) location.href = url;
+    else                window.open( url, "_blank" );
 }
 
-async function openImageEditor( p )
+let newsPaths   = new Set();
+let newsFolders = false;     // something was binned, renamed or made
+let newsTimer   = 0;
+let newsWaiting = false;     // news came while hidden
+
+function onFilesNews( msg )
 {
-    editorPhoto = p;
-    editorDirty = false;
-    $( "#editorName" ).textContent = ( p.place || p.name ) + "  ·  " + p.day + " · " + p.time;
-    $( "#editorSaveBtn"   ).innerHTML = NayiveUI.icon( "check" );
-    $( "#editorSaveAsBtn" ).innerHTML = NayiveUI.icon( "saveas" );
-    $( "#editorCloseBtn"  ).innerHTML = "&times;";
-    $( "#editorComment" ).value = COMMENTS[ p.id ] || "";
-    commentBase = $( "#editorComment" ).value.trim();
-    NayiveUI.setOpen( "editorBackdrop", true );
-
-    try { await loadEditorLib(); }
-    catch( _ )
-    {
-        NayiveUI.setOpen( "editorBackdrop", false );
-        NayiveUI.toast( NayiveUI.t( 'photos.editorFailed' ) );
-        return;
-    }
-    if( editorPhoto !== p ) return;             // closed again while the library loaded
-
-    const host = $( "#tuiEditor" );
-    host.innerHTML = "";
-    const path = EDITS[ p.id ] || ( DEMO ? sceneImage( p ) : srcFor( p ) );
-    // The library puts the picture between its own two 64px rows (tools
-    // below, zoom / undo above), so it gets the host minus both. Asking for
-    // the whole window left a portrait photo running off the bottom.
-    const box = host.getBoundingClientRect();
-    imageEditor = new tui.ImageEditor( host, {
-        includeUI: {
-            loadImage: { path, name: p.name },
-            menu: [ "crop", "flip", "rotate", "draw", "shape", "icon", "text", "mask", "filter" ],
-            initMenu: "",
-            menuBarPosition: "bottom",
-            uiSize: { width: "100%", height: "100%" },
-            locale: NayivePhoto.editorLocale(),     // its words in the user's language
-        },
-        cssMaxWidth:  Math.max( 160, box.width - 16 ),
-        cssMaxHeight: Math.max( 160, box.height - 136 ),
-        selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
-        usageStatistics: false,
-    } );
-    NayivePhoto.localizeEditor( host );
-    imageEditor.on( "undoStackChanged", len => { editorDirty = len > 0; } );
+    if( DEMO ) return;
+    const mine = ( msg.paths || [] ).filter( p => typeof p === "string" &&
+                   ( p === COMMENTS_FILE || p.slice( 0, p.lastIndexOf( "/" ) ) === DIR ) );
+    if( ! mine.length ) return;
+    mine.forEach( p => newsPaths.add( p ) );
+    if( msg.folders ) newsFolders = true;
+    if( document.hidden ) { newsWaiting = true; return; }
+    clearTimeout( newsTimer );
+    newsTimer = setTimeout( applyNews, 400 );     // a burst of saves = one refresh
 }
 
-function editorFormat( name )
+async function applyNews()
 {
-    const e = extOf( name );
-    return e === "png" ? "png" : ( e === "webp" ? "webp" : "jpeg" );
-}
-function dataUrlToBytes( u )
-{
-    // "data:," is a canvas with no picture - what a device hands back for a
-    // canvas bigger than it allows (an iPhone stops near 16.7 MP). Saving it
-    // would leave an empty file where the photo was.
-    if( ! /^data:image\//.test( u ) ) throw new Error( "empty render" );
-    const bin = atob( u.slice( u.indexOf( "," ) + 1 ) );
-    const out = new Uint8Array( bin.length );
-    for( let i = 0; i < bin.length; i++ ) out[ i ] = bin.charCodeAt( i );
-    return out;
-}
+    const paths = [ ...newsPaths ], folders = newsFolders;
+    newsPaths   = new Set();
+    newsFolders = false;
 
-// save: true = the checkmark; false = the X, Escape or another mode, which
-// ask before dropping unsaved changes (a "no" keeps the editor open).
-async function closeImageEditor( save )
-{
-    if( editorSaving ) return;                  // the ✓ in flight decides
-    const p = editorPhoto;
+    if( paths.includes( COMMENTS_FILE ) ) await loadComments();
 
-    if( ! save && p && editorChanged() &&
-        ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.unsavedTitle' ), body: NayiveUI.t( 'drive.unsavedBody' ),
-                                    confirm: NayiveUI.t( 'drive.closeWithout' ), danger: true } ) ) return;
-    if( editorPhoto !== p ) return;             // closed some other way meanwhile
+    const shown = p => IMG_EXT.indexOf( extOf( p ) ) !== -1 || HEIC_EXT.indexOf( extOf( p ) ) !== -1;
+    const files = paths.filter( p => p !== COMMENTS_FILE && shown( p ) );
+    const known = files.map( f => PHOTOS.find( x => x.path === f ) );
+    if( folders || known.some( p => ! p ) ) { await loadFolder(); return; }
 
-    let dataUrl = null, size = null;
-    if( save && p && imageEditor && editorDirty )
-    {
-        const fmt  = editorFormat( p.name );
-        const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
-        try { dataUrl = imageEditor.toDataURL( opts ); size = imageEditor.getCanvasSize(); }
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }   // stays open: nothing lost
-    }
-    const comment = p ? $( "#editorComment" ).value.trim() : "";
-    const noteGone = save && p && ! comment ? commentBase : "";   // a note this ✓ clears: its Undo puts it back
-
-    // Write BEFORE tearing the editor down: a save that fails leaves it open
-    // with the edit and the note, so nothing is lost and ✓ can try again.
-    if( save && p && ! DEMO )
-    {
-        editorSaving = true;
-        try
-        {
-            if( dataUrl )
-            {
-                try
-                {
-                    const bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height );
-                    const old   = thumbPath( p );
-                    await GumApi.writeFileBytes( p.path, bytes );
-                    editorDirty = false;              // on disk: a retry only redoes the note
-                    try { imageEditor.clearUndoStack(); } catch( _ ) {}   // ...and an undo cannot un-save it
-                    p.bust = Date.now();
-                    await refreshStat( p );           // new size + mtime -> new thumbnail key
-                    if( thumbPath( p ) !== old ) NayivePhoto.dropThumb( old );   // nothing asks for it now
-                }
-                catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.saveImageFailed' ) ); return; }
-            }
-            if( comment !== commentBase )
-            {
-                if( ! await saveComment( p.id, comment ) ) return;   // it said why; the note stays in the box
-                commentBase = comment;
-            }
-        }
-        finally { editorSaving = false; }
-    }
-
-    if( imageEditor ) { try { imageEditor.destroy(); } catch( _ ) {} imageEditor = null; }
-    $( "#tuiEditor" ).innerHTML = "";
-    editorPhoto = null;
-    editorDirty = false;
-    NayiveUI.setOpen( "editorBackdrop", false );
-
-    if( ! p || ! save ) return;
-
-    if( DEMO )
-    {
-        if( dataUrl ) EDITS[ p.id ] = dataUrl;
-        await saveComment( p.id, comment );
-    }
-
+    for( const p of known ) { p.bust = Date.now(); await refreshStat( p ); }
     renderGrid();
     if( st.cluster != null ) openCluster( st.cluster );
     if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
-    if( ! noteGone ) { NayiveUI.toast( NayiveUI.t( 'photos.photoUpdated' ) ); return; }
-
-    NayiveUI.undoToast( NayiveUI.t( 'photos.commentDeleted' ), async () =>
-    {
-        if( ! await saveComment( p.id, noteGone ) ) return;          // it said why
-        // the editor open on this photo again, its box still empty: the note shows there too
-        if( editorPhoto && editorPhoto.id === p.id && ! commentBase && ! $( "#editorComment" ).value.trim() )
-        {
-            $( "#editorComment" ).value = noteGone;
-            commentBase = noteGone;
-        }
-        renderGrid();
-        if( st.cluster != null ) openCluster( st.cluster );
-        if( $( "#lb" ).classList.contains( "open" ) ) paintLb();
-    } );
 }
 
-/* Is `name` already in the folder `dir` ("files/x/")? A listing that fails
- * answers no, as Drive's check does. */
-async function nameTaken( dir, name )
+document.addEventListener( "visibilitychange", () =>
 {
-    try { return ( ( await GumApi.listDir( dir.replace( /\/$/, "" ) ) ).nodes || [] ).some( n => n.path === dir + name ); }
-    catch( _ ) { return false; }
-}
-
-/* "Guardar como copia": opens the #saveAsBackdrop sheet to name the copy;
- * confirmSaveAs() then writes the edited pixels to a NEW file in the same
- * folder (leaving the original untouched), carries the note over to the copy,
- * and re-scans the folder so the new photo shows up. */
-function saveImageEditorAs()
-{
-    const p = editorPhoto;
-    if( ! p || ! imageEditor ) return;
-
-    const cur  = p.name;
-    const dot  = cur.lastIndexOf( "." );
-    const tag  = "-" + NayiveUI.t( "ui.editedSuffix" );
-    const seed = dot > 0 ? cur.slice( 0, dot ) + tag + cur.slice( dot ) : cur + tag;
-
-    const inp = $( "#saveAsName" );
-    inp.value = seed;
-    NayiveUI.setOpen( "saveAsBackdrop", true );
-    inp.focus();
-    // preselect the base name, leaving the extension out of the selection
-    try { inp.setSelectionRange( 0, dot > 0 ? seed.length - ( cur.length - dot ) : seed.length ); }
-    catch( _ ) {}
-}
-
-async function confirmSaveAs()
-{
-    if( editorSaving ) return;                  // a write in flight decides
-    const p    = editorPhoto;
-    const name = ( $( "#saveAsName" ).value || "" ).trim();
-    if( ! p || ! imageEditor || ! name ) return;
-
-    NayiveUI.setOpen( "saveAsBackdrop", false );
-
-    const dir  = p.path.slice( 0, p.path.lastIndexOf( "/" ) + 1 );   // "" at the root
-    const dest = dir + name;
-
-    const fmt  = editorFormat( name );
-    const opts = fmt === "png" ? { format: fmt } : { format: fmt, quality: 0.92 };
-    let dataUrl;
-    try { dataUrl = imageEditor.toDataURL( opts ); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.renderFailed' ) ); return; }
-
-    const comment = $( "#editorComment" ).value.trim();
-    const size    = imageEditor.getCanvasSize();
-
-    // The bytes are made first: keepExif copies the tags from the photo's own
-    // file, which a "Replace" of the photo itself (below) sends to the bin.
-    let bytes = null;
-    if( ! DEMO )
-    {
-        editorSaving = true;
-        try { bytes = await NayivePhoto.keepExif( p.path, dataUrlToBytes( dataUrl ), size.width, size.height ); }
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
-        finally { editorSaving = false; }
-    }
-
-    // A PUT replaces a file outright, with no trip through the papelera, so
-    // a name already taken is asked about first - as Drive's "Guardar copia"
-    // does; the photo's own name is taken too (it was written over unasked).
-    // "No" leaves the editor open with the edits. "Replace" bins the old file
-    // first; its bin ids let the Undo below bring it back.
-    let binned = null;
-    if( ! DEMO && ( dest === p.path || await nameTaken( dir, name ) ) )
-    {
-        if( ! await NayiveUI.confirm( { title: NayiveUI.t( 'drive.nameExistsTitle' ),
-                                        body: NayiveUI.tf( 'drive.nameExistsCopyBody', { name } ),
-                                        confirm: NayiveUI.t( 'drive.replace' ), danger: true } ) ) return;
-        if( editorPhoto !== p || ! imageEditor ) return;    // the editor went away meanwhile
-        try { binned = await GumApi.binPaths( [ dest ] ); }   // null from an old server: no Undo
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.moveExistingFailed' ) ); return; }
-        await NayiveMedia.purgePaths( [ dest ] );    // its thumbnail + scan entry, as Drive's delete does
-    }
-    else if( editorPhoto !== p || ! imageEditor ) return;
-
-    // Write the copy BEFORE tearing the editor down (same order as
-    // closeImageEditor): a failed write leaves it open with the edits, so
-    // nothing is lost and the copy can be tried again.
-    if( ! DEMO )
-    {
-        editorSaving = true;
-        try { await GumApi.writeFileBytes( dest, bytes ); }
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.copyFailed' ) ); return; }
-        finally { editorSaving = false; }
-    }
-
-    try { imageEditor.destroy(); } catch( _ ) {}
-    imageEditor = null;
-    $( "#tuiEditor" ).innerHTML = "";
-    editorPhoto = null;
-    editorDirty = false;
-    NayiveUI.setOpen( "editorBackdrop", false );
-
-    if( DEMO ) { NayiveUI.toast( NayiveUI.t( 'photos.demoNoCreate' ) ); return; }
-
-    // a replaced file's note must not stick to the new picture
-    let noteOk = true;
-    const oldNote = COMMENTS[ dest ] || "";
-    if( comment || COMMENTS[ dest ] ) noteOk = await saveComment( dest, comment );
-
-    await loadFolder();
-    if( ! noteOk ) return;                       // saveComment's toast stands
-    if( ! binned || ! binned.length ) { NayiveUI.toast( NayiveUI.t( 'photos.copySaved' ) ); return; }
-
-    // Undo of the Replace: the new copy to the bin FIRST (a restore onto a
-    // taken name lands as "name (2)"), then the old file and its note back.
-    NayiveUI.undoToast( NayiveUI.t( 'photos.copySaved' ), async () =>
-    {
-        try
-        {
-            await GumApi.deletePaths( [ dest ] );
-            await NayiveMedia.purgePaths( [ dest ] );
-            await GumApi.trashRestore( binned );
-        }
-        catch( _ ) { NayiveUI.toast( NayiveUI.t( 'drive.restoreFailed' ) ); await loadFolder(); return; }
-        if( oldNote !== comment ) await saveComment( dest, oldNote );
-        await loadFolder();
-    } );
-}
+    if( ! newsWaiting || document.hidden ) return;
+    newsWaiting = false;
+    applyNews();
+} );
 
 /* ---------------------------------------------------------------------------
  * MODES
@@ -2544,7 +2180,6 @@ function setMode( m )
         b.setAttribute( "aria-selected", on );
     } );
 
-    if( m !== "editar" ) closeImageEditor( false );
     if( m !== "map" ) closeStrip();
 
     if( m === "pase" )
@@ -2562,7 +2197,7 @@ function setMode( m )
  * -------------------------------------------------------------------------*/
 $$( ".tb-modes .icon-btn" ).forEach( b => b.addEventListener( "click", () => setMode( b.dataset.mode ) ) );
 
-// Header search: filter the sheet by file name (see photos()). Also re-labels
+// Header search: filter the sheet by file name or comment (see photos()). Also re-labels
 // the count ("12 de 240 fotos").
 $( "#searchInput" ).addEventListener( "input", e =>
 {
@@ -2571,7 +2206,8 @@ $( "#searchInput" ).addEventListener( "input", e =>
     setCrumb();
 } );
 
-NayiveMedia.wireSearchToggle();                        // phone magnifier
+NayiveMedia.wireSearchToggle();                        // the search fold
+NayiveMedia.wireFolderInfo();                          // folder-? -> path + counts
 
 // Reload: re-list the folder from the server (picks up added / removed files).
 $( "#reloadBtn" ).addEventListener( "click", () =>
@@ -2652,35 +2288,13 @@ $( "#pSpeed" ).addEventListener( "click", () =>
 } );
 $( "#paseX" ).addEventListener( "click", () => setMode( "grid" ) );
 
-$( "#editorSaveBtn"   ).addEventListener( "click", () => closeImageEditor( true ) );
-$( "#editorSaveAsBtn" ).addEventListener( "click", saveImageEditorAs );
-$( "#editorCloseBtn"  ).addEventListener( "click", () => closeImageEditor( false ) );
-
-$( "#saveAsCancelBtn"  ).addEventListener( "click", () => NayiveUI.setOpen( "saveAsBackdrop", false ) );
-$( "#saveAsConfirmBtn" ).addEventListener( "click", confirmSaveAs );
-$( "#saveAsName" ).addEventListener( "keydown", e =>
-{
-    if( e.key === "Enter" ) { e.preventDefault(); confirmSaveAs(); }
-} );
-
 document.addEventListener( "keydown", e =>
 {
-    if( $( "#saveAsBackdrop" ).classList.contains( "open" ) )
-    {
-        if( e.key === "Escape" ) NayiveUI.setOpen( "saveAsBackdrop", false );
-        return;
-    }
     if( $( "#lb" ).classList.contains( "open" ) )
     {
         if( e.key === "Escape" ) closeLb();
         if( e.key === "ArrowLeft" ) lbStep( -1 );
         if( e.key === "ArrowRight" ) lbStep( 1 );
-        return;
-    }
-    if( $( "#editorBackdrop" ).classList.contains( "open" ) )
-    {
-        if( e.key === "Escape" ) closeImageEditor( false );
-        if( ( e.ctrlKey || e.metaKey ) && e.key === "Enter" ) closeImageEditor( true );
         return;
     }
     if( st.mode === "pase" )
@@ -2754,6 +2368,7 @@ async function boot()
     if( subs.length && ! imgs.length ) { renderAlbums( subs ); return; }
 
     await loadFolder( folder );
+    GumApi.onFilesChanged( onFilesNews );        // Image saved a photo here, Drive changed the folder...
 
     // ?photo=<path> (Chat's "Abrir en Fotos"): that photo, straight in the lightbox.
     const want = PARAMS.get( "photo" );
@@ -2777,7 +2392,8 @@ NayiveI18n.ready.then( () =>
 function renderAlbums( subs )
 {
     $( ".tb-modes" ).hidden = true;                // no gallery modes on the album index
-    $( "#searchInput" ).hidden = true;
+    $( ".topbar-actions .search-wrap" ).hidden = true;
+    $( "#searchToggle" ).hidden = true;
     $( "#reloadBtn" ).hidden = true;
     $( "#editHint" ).hidden = true;
     $( "#addBtn" ).hidden = true;               // pick an album first, then upload into it

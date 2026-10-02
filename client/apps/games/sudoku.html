@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- Sudoku --------------------------------------------------------
@@ -237,7 +237,7 @@
                          pause, it is free thinking time. Over the play area only
                          - the header keeps the game's name and its toolbar, so
                          a paused game is left the way any other pane is. -->
-                    <div class="game-cover solid sudoku-pause" id="sudokuPaused" hidden>
+                    <div class="game-cover solid" id="sudokuPaused" hidden>
                         <p class="game-cover-t" data-i18n="games.paused"></p>
                         <button class="text-btn" id="sudokuResume" type="button" data-i18n="games.resume"></button>
                     </div>
@@ -257,7 +257,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -299,9 +299,8 @@
             var LEVELS = { easy: 42, medium: 34, hard: 28 };
             var ORDER  = [ 'easy', 'medium', 'hard' ];
 
-            // The record goes in the file's own `times` map (see PERSISTENCE):
-            // Minesweeper got there first and took the bare easy / medium /
-            // hard, so Sudoku's carry its name.
+            // The record goes in the file's own `times` map (see PERSISTENCE),
+            // under this game's name: each timed game reads only its own keys.
             var KEY = { easy: 'sudokuEasy', medium: 'sudokuMedium', hard: 'sudokuHard' };
 
             var ALL = 0x3FE;                   // bits 1..9: the candidates of an empty square
@@ -673,7 +672,7 @@
                 notesBtn.classList.toggle( 'is-active', noteMode );
 
                 timeEl.textContent = clock( seconds() );
-                bestEl.textContent = times[ level ] ? clock( times[ level ] ) : '--';
+                bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
             }
 
             //---- a move ------------------------------------------------------
@@ -766,7 +765,7 @@
                 render();
 
                 secs   = seconds();
-                record = ! times[ level ] || secs < times[ level ];
+                record = ! has( level ) || secs < times[ level ];
                 if( record ) { times[ level ] = secs; saveTime( KEY[ level ], secs ); }
                 bestEl.textContent = clock( times[ level ] );
 
@@ -847,19 +846,23 @@
             // re-reads whenever the tab is focused and that answer can be older
             // than the board just finished here. Only this game's own keys are
             // read, so Minesweeper's sit in the same map untouched.
+            // A level either HAS a record or it does not; 0 is a perfectly good
+            // one (Minesweeper's rule, see its has()).
+            function has( k ) { return typeof times[ k ] === 'number'; }
+
             function adoptTimes( saved )
             {
                 var out = {};
 
                 ORDER.forEach( function ( k )
                 {
-                    var n = Number( saved[ KEY[ k ] ] );
+                    var n = parseFloat( saved[ KEY[ k ] ] );        // NaN when absent or damaged
 
-                    if( isFinite( n ) && n > 0 && ( ! times[ k ] || n < times[ k ] ) ) times[ k ] = n;
-                    if( times[ k ] ) out[ KEY[ k ] ] = times[ k ];
+                    if( isFinite( n ) && n >= 0 && ( ! has( k ) || n < times[ k ] ) ) times[ k ] = n;
+                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
                 } );
 
-                bestEl.textContent = times[ level ] ? clock( times[ level ] ) : '--';
+                bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
                 return out;
             }
 

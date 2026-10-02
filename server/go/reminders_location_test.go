@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/json"
-	"io"
-	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -172,23 +173,92 @@ func testSub(t *testing.T, endpoint string) PushSub {
 	return PushSub{Endpoint: endpoint, Keys: PushKeys{P256dh: b64u(priv.PublicKey().Bytes()), Auth: b64u(auth)}, Lang: "es"}
 }
 
+// fakePush is a push service on this machine. It counts what each path gets
+// and answers 201 - or the status `answers` names for a path.
+type fakePush struct {
+	*httptest.Server
+	mu   sync.Mutex
+	hits map[string]int
+}
+
+// newFakePush starts one; tls for a service the subscriptions name by a real
+// push host (see wire). It stops when the test ends.
+func newFakePush(t *testing.T, tls bool, answers map[string]int) *fakePush {
+	t.Helper()
+	p := &fakePush{hits: map[string]int{}}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p.mu.Lock()
+		p.hits[r.URL.Path]++
+		p.mu.Unlock()
+		if code, ok := answers[r.URL.Path]; ok {
+			w.WriteHeader(code)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	if tls {
+		p.Server = httptest.NewTLSServer(handler)
+	} else {
+		p.Server = httptest.NewServer(handler)
+	}
+	t.Cleanup(p.Close)
+	return p
+}
+
+// wire sends every push of `v` here. A TLS service is dialled whatever host
+// the subscription names - it must name a real push service (cleanSub) - and
+// its certificate is trusted.
+func (p *fakePush) wire(v *VapidStore) {
+	if p.TLS == nil {
+		localPush(v)
+		return
+	}
+	tr := p.Client().Transport.(*http.Transport).Clone()
+	tr.TLSClientConfig.InsecureSkipVerify = true // the name is FCM's, the certificate the test's
+	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, p.Listener.Addr().String())
+	}
+	v.client = &http.Client{Transport: tr, Timeout: pushTimeout}
+}
+
+// count is what `path` got so far; "" counts every path.
+func (p *fakePush) count(path string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if path != "" {
+		return p.hits[path]
+	}
+	n := 0
+	for _, c := range p.hits {
+		n += c
+	}
+	return n
+}
+
+// waitHits waits up to 10 s (a slow box, not a flake) for `path` to have got n
+// pushes, and fails when it got any other number.
+func (p *fakePush) waitHits(t *testing.T, path string, n int) {
+	t.Helper()
+	for i := 0; i < 500 && p.count(path) < n; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := p.count(path); got != n {
+		t.Fatalf("%q got %d pushes, want %d", path, got, n)
+	}
+}
+
 // TestLocationTickSendsOnce: a trip under way, a location URL on, two devices -
 // ON reaches each device once, and the keys survive in reminders.json.
 func TestLocationTickSendsOnce(t *testing.T) {
 	users, cfg, _ := newTestUsers(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 
-	var hits atomic.Int32
-	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer service.Close()
+	service := newFakePush(t, false, nil)
 	subs := []PushSub{testSub(t, service.URL+"/a"), testSub(t, service.URL+"/b")}
 
 	trackers := NewTrackers(cfg.ConfigDir, log)
 	vapid := NewVapidStore(cfg.ConfigDir, "", log)
-	localPush(vapid) // the fake service is on this machine
+	service.wire(vapid)
 	r := NewReminders(cfg, users, nil, nil, vapid, trackers, log)
 
 	day := func(d int) string { return time.Now().AddDate(0, 0, d).Format("2006-01-02") }
@@ -198,17 +268,17 @@ func TestLocationTickSendsOnce(t *testing.T) {
 		[]byte(`{"id": 7, "destination": "Oporto", "startDate": "`+day(-1)+`", "endDate": "`+day(1)+`"}`), 0o644)
 
 	r.locationTick("ana", subs, time.Local)
-	if n := hits.Load(); n != 0 {
+	if n := service.count(""); n != 0 {
 		t.Fatalf("no location URL yet: %d pushes, want 0", n)
 	}
 
 	trackers.Create("ana")
 	r.locationTick("ana", subs, time.Local)
-	if n := hits.Load(); n != 2 {
+	if n := service.count(""); n != 2 {
 		t.Fatalf("first tick: %d pushes, want 2 (one per device)", n)
 	}
 	r.locationTick("ana", subs, time.Local)
-	if n := hits.Load(); n != 2 {
+	if n := service.count(""); n != 2 {
 		t.Fatalf("second tick: %d pushes, want still 2", n)
 	}
 
@@ -220,7 +290,44 @@ func TestLocationTickSendsOnce(t *testing.T) {
 	// A restart forgets nothing: a fresh loop reads the keys back.
 	fresh := NewReminders(cfg, users, nil, nil, NewVapidStore(cfg.ConfigDir, "", log), trackers, log)
 	fresh.locationTick("ana", subs, time.Local)
-	if n := hits.Load(); n != 2 {
+	if n := service.count(""); n != 2 {
 		t.Fatalf("after a restart: %d pushes, want still 2", n)
+	}
+}
+
+// TestTripRetryAfterFailedPush: a device the push service turned away is tried
+// again on the next tick, and only that one - the day is not marked done.
+func TestTripRetryAfterFailedPush(t *testing.T) {
+	users, cfg, _ := newTestUsers(t)
+	log := quietLog()
+
+	var hitsA, hitsB atomic.Int32
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/b" && hitsB.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable) // busy the first time
+			return
+		}
+		if r.URL.Path == "/a" {
+			hitsA.Add(1)
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer service.Close()
+	subs := []PushSub{testSub(t, service.URL+"/a"), testSub(t, service.URL+"/b")}
+
+	vapid := NewVapidStore(cfg.ConfigDir, "", log)
+	localPush(vapid)
+	r := NewReminders(cfg, users, nil, nil, vapid, NewTrackers(cfg.ConfigDir, log), log)
+	start := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	trips := []dueTrip{{id: "7", dest: "Oporto", start: start}}
+
+	if r.announceTrips("ana", subs, trips, time.Local) {
+		t.Fatal("a failed push still marked the day done")
+	}
+	if !r.announceTrips("ana", subs, trips, time.Local) {
+		t.Fatal("the retry did not mark the day done")
+	}
+	if a, b := hitsA.Load(), hitsB.Load(); a != 1 || b != 2 {
+		t.Fatalf("pushes: a %d (want 1), b %d (want 2)", a, b)
 	}
 }

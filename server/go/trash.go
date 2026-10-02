@@ -79,11 +79,11 @@ type TrashItem struct {
 // java: a Go map has no order at all - `for k := range m` is deliberately
 // randomised, so two consecutive reads of the same trash can came back in
 // different orders whenever two items shared a deletion second, and the
-// Papelera list jumped around under the user. Python's dict keeps insertion
-// order and its sort is stable, so its listing is chronological and steady.
+// Papelera list jumped around under the user. The listing must be
+// chronological and steady.
 //
-// This type is the smallest thing that buys the same: the key order is captured
-// on read and written back out in that order, new entries appended at the end.
+// This type is the smallest thing that buys that: the key order is captured on
+// read and written back out in that order, new entries appended at the end.
 type trashIndex struct {
 	order []string
 	rows  map[string]TrashEntry
@@ -187,8 +187,7 @@ func (ix trashIndex) MarshalJSON() ([]byte, error) {
 
 // Trash owns every trash can on the box.
 //
-// java: one mutex for ALL cans, exactly like the Python's module-level _LOCK.
-// It serialises every index.json read-modify-write; the expensive folder walks
+// java: one mutex for ALL cans. It serialises every index.json read-modify-write; the expensive folder walks
 // deliberately happen OUTSIDE it (see List).
 type Trash struct {
 	mu       sync.Mutex
@@ -233,7 +232,7 @@ func saveIndex(tdir string, index *trashIndex) error {
 	return atomicWriteJSON(indexPath(tdir), index, 2)
 }
 
-// newEntryID mirrors Python's f"{int(time.time())}-{secrets.token_hex(4)}".
+// newEntryID is "<unix seconds>-<8 hex digits>".
 func newEntryID() string {
 	raw := make([]byte, 4)
 	rand.Read(raw)
@@ -658,9 +657,8 @@ func moveResolved(src, dst Resolved) error {
 // moveOrCopy renames, falling back to copy-then-delete when the two paths sit
 // on different filesystems.
 //
-// java: Python reaches for shutil.move, which handles that case for a file AND
-// for a whole directory tree. Go's os.Rename just fails with EXDEV, so the
-// fallback is written out here.
+// java: Go's os.Rename just fails with EXDEV across filesystems, for a file
+// and for a whole directory tree, so the fallback is written out here.
 //
 // It is not a theoretical path: the admin's trash is <base>/.trash while a home
 // could sit on its own mount, and the external-storage setting in the admin

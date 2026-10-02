@@ -5,8 +5,6 @@ package main
 // =============================================================================
 
 import (
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,7 +41,7 @@ func TestAppsDirOutsideTheRunRoot(t *testing.T) {
 		}
 	}
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	srv, err := NewServer(cfg, log)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)

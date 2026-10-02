@@ -182,3 +182,40 @@ func TestMailWrite(t *testing.T) {
 		t.Fatalf("contacts = %+v", book.Contacts)
 	}
 }
+
+// The editor's formatting: a draft with HTML (and a file) keeps both
+// versions and its file as part 2; sent, the message is
+// multipart/alternative, plain first, and what the app wrote is cleaned.
+func TestMailWriteHTML(t *testing.T) {
+	f, sent := newWriteFixture(t)
+	f.addAccount(t, mailTestPass, 200)
+
+	d := f.postForm(t, "/api/mail/a1/draft", MailOut{To: "bob@example.com", Subject: "Con formato",
+		Text: "Hola negrita", HTML: `<div>Hola <b>negrita</b></div>`}, map[string]string{"notas.txt": "uno"}, 200)
+	ref := d["ref"].(string)
+	if parts := d["parts"].([]any); len(parts) != 1 || parts[0].(map[string]any)["id"] != "2" {
+		t.Fatalf("draft parts = %v", d["parts"])
+	}
+	var dm MailMessage
+	f.call(t, f.owner, "GET", "/api/mail/a1/msg/"+ref, "", 200, &dm)
+	if dm.Text != "Hola negrita" || !strings.Contains(dm.HTML, "<b>negrita</b>") || len(dm.Parts) != 1 || dm.Parts[0].ID != "2" {
+		t.Fatalf("draft opened = text %q html %q parts %+v", dm.Text, dm.HTML, dm.Parts)
+	}
+
+	f.postForm(t, "/api/mail/a1/send", MailOut{To: "bob@example.com", Subject: "Hecho", Text: "Hola",
+		HTML: `<div>Hola <i>tú</i><script>alert(1)</script><a href="javascript:x()">y</a></div>`}, nil, 200)
+	raw := (*sent)[0].raw
+	plain, html := strings.Index(raw, "text/plain"), strings.Index(raw, "text/html")
+	if !strings.Contains(raw, "multipart/alternative") || plain < 0 || html < plain {
+		t.Fatalf("not plain + HTML:\n%s", raw)
+	}
+	if strings.Contains(raw, "<script") || strings.Contains(raw, "javascript:") {
+		t.Fatalf("the HTML was not cleaned:\n%s", raw)
+	}
+
+	// no HTML: plain text only, as before
+	f.postForm(t, "/api/mail/a1/send", MailOut{To: "bob@example.com", Subject: "Sin", Text: "Hola"}, nil, 200)
+	if raw := (*sent)[1].raw; strings.Contains(raw, "multipart") || strings.Contains(raw, "text/html") {
+		t.Fatalf("plain mail grew an HTML part:\n%s", raw)
+	}
+}

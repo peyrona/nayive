@@ -20,8 +20,8 @@ pre-deploy habit.
   the apps root.
 - `page.html` is copied in as `client/apps/_locktest.html` for the run and **deleted afterwards**
   (a `finally`), so a test page can never be rsynced to the VPS.
-- `cdp.mjs` launches a headless Chromium and talks the DevTools protocol to it — no Puppeteer,
-  no Playwright, no `node_modules`.
+- `../cdp.mjs` (shared by every tool) launches a headless Chromium and talks the DevTools protocol
+  to it — no Puppeteer, no Playwright, no `node_modules`.
 - The page stubs only `GumApi` and `NayiveStore`, with an in-memory server, `.bak/` and papelera.
   Everything above them — `crypt.js`, `office.js`, `ui.js`, the real sheets — is the shipping code.
   The tests answer the real password dialog by typing into `#askPw1` and clicking the real button.

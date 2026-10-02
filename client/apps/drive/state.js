@@ -74,6 +74,7 @@ let searchTruncated = false;         // the server capped the result list
 let searchSeq       = 0;             // guards against a stale search response landing late
 let searchTimer     = null;          // debounce for the search box
 let advSearch       = null;          // the advanced search in force: { draft, spec, summary, nFilters } (listing.js)
+let driveSearch     = null;          // the header search fold: { open, close, fit, isOpen } (NayiveUI.searchFold, init.js)
 let bigMode         = false;         // the "Biggest files" list is on screen (listing.js, openBigFiles)
 let trashMode       = false;         // the "Papelera" view is open instead of the file tree
 let trashItems      = [];            // entries from GumApi.trashList() while trashMode is on

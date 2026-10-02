@@ -30,7 +30,7 @@ func newSitesServer(t *testing.T) (*Server, string, *http.Client) {
 	write("cv/sub/nota.txt", "sin index")
 	write("cv/.git/config", "secreto")
 	write("api/index.html", "<h1>no</h1>")
-	srv.cfg.Server.SitesDir = sites
+	srv.cfg.Update(func(c *ServerConfig) { c.SitesDir = sites })
 	return srv, ts.URL, client
 }
 
@@ -103,7 +103,7 @@ func TestSitesNewFolderNeedsNoRestart(t *testing.T) {
 // TestSitesOff - no "sites_dir": every such URL is the old plain 404.
 func TestSitesOff(t *testing.T) {
 	srv, base, client := newSitesServer(t)
-	srv.cfg.Server.SitesDir = ""
+	srv.cfg.Update(func(c *ServerConfig) { c.SitesDir = "" })
 
 	resp := do(t, client, "GET", base+"/cv/", nil, nil)
 	body, _ := io.ReadAll(resp.Body)
@@ -160,12 +160,9 @@ func TestAdminSetSites(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "jefe", "secreto")
 	post := func(value string) (int, string) {
-		resp := do(t, client, "POST", ts.URL+"/api/admin",
-			strings.NewReader(`{"action":"set-sites","sites_dir":"`+value+`"}`),
-			map[string]string{"Content-Type": "application/json"})
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return resp.StatusCode, string(body)
+		code, body := callJSON(t, client, "POST", ts.URL+"/api/admin",
+			`{"action":"set-sites","sites_dir":"`+value+`"}`)
+		return code, string(body)
 	}
 
 	sites := t.TempDir()

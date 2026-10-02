@@ -11,7 +11,6 @@ package main
 
 import (
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,7 +27,7 @@ import (
 // round).
 func TestSweepOrphansByTimeInTheBin(t *testing.T) {
 	users, cfg, _ := newTestUsers(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	trash := NewTrash(cfg.BaseDir, cfg.HomesDir, users, log)
 
 	can := filepath.Join(cfg.HomesDir, "ana", ".trash")
@@ -170,10 +169,11 @@ func TestAccountFileProtected(t *testing.T) {
 	signIn(t, client, ts.URL, "ana", "abc") // the account still works
 }
 
-// TestAdminCannotTrashAccountFile - the admin's Drive is rooted at the base
-// directory, so every account file is one click away. It is refused; an
-// ordinary file of the admin's is not.
-func TestAdminCannotTrashAccountFile(t *testing.T) {
+// TestAccountFileIsStructuralForAdmin - the admin's Drive is rooted at the base
+// directory, so every account file is one click away. isStructuralDir, the
+// guard of move and trash, refuses it; an ordinary file of the admin's it does
+// not.
+func TestAccountFileIsStructuralForAdmin(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	base := srv.cfg.BaseDir
 	os.MkdirAll(filepath.Join(base, "files"), 0o755)
@@ -195,7 +195,7 @@ func TestSharesNeverOverwriteUnreadableFile(t *testing.T) {
 	broken := `{"shares": [ {"slug": "viaje", oops`
 	os.WriteFile(path, []byte(broken), 0o644)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	shares := NewShares(cfg.ConfigDir, cfg.HomesDir, log)
 	if g := shares.Create("ana", "beto", "files/mio.txt", "folder", "", "ro"); g == nil {
 		t.Fatalf("Create refused")
@@ -210,5 +210,37 @@ func TestSharesNeverOverwriteUnreadableFile(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "files/mio.txt") {
 		t.Errorf("the new share was not saved: %q", b)
+	}
+}
+
+// TestSharesReadABareList - a shares.json from before the {"shares": ...}
+// wrapper, a bare list, is still read.
+func TestSharesReadABareList(t *testing.T) {
+	_, cfg, _ := newTestUsers(t)
+	os.WriteFile(filepath.Join(cfg.ConfigDir, "shares.json"),
+		[]byte(`[{"slug": "viaje", "owner": "ana", "to": "beto", "root": "files/viaje", "app": "folder", "mode": "ro"}]`), 0o644)
+	shares := NewShares(cfg.ConfigDir, cfg.HomesDir, quietLog())
+	if got := shares.ByOwner("ana"); len(got) != 1 || got[0].Slug != "viaje" {
+		t.Fatalf("a bare list read as %+v", got)
+	}
+}
+
+// TestTrackersMoveFromOwntracks - the keys in the old owntracks.json move to
+// location.json, and the old file goes: it must not bring them back later.
+func TestTrackersMoveFromOwntracks(t *testing.T) {
+	_, cfg, _ := newTestUsers(t)
+	key := strings.Repeat("k", 32)
+	oldPath := filepath.Join(cfg.ConfigDir, "owntracks.json")
+	os.WriteFile(oldPath, []byte(`{"keys": [{"owner": "ana", "key": "`+key+`", "created": 1}]}`), 0o644)
+
+	trackers := NewTrackers(cfg.ConfigDir, quietLog())
+	if k := trackers.For("ana"); k == nil || k.Key != key {
+		t.Fatalf("the old key did not move: %+v", k)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg.ConfigDir, "location.json")); !strings.Contains(string(b), key) {
+		t.Errorf("location.json = %q", b)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Errorf("owntracks.json is still there: %v", err)
 	}
 }

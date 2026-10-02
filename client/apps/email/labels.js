@@ -94,28 +94,31 @@
         var groups = {};
         picking.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m ); } );
         E.plug( "saving" );
-        var changed = [];
+        var changed = [], job = E.job( picking.length ), sent = 0;
         try
         {
             for( var acct in groups )
-            {
-                var rows = groups[ acct ];
-                var body = { refs: rows.map( function ( m ) { return m.ref; } ), mids: rows.map( function ( m ) { return m.mid || ""; } ) };
-                body[ on ? "add" : "remove" ] = [ l.id ];
-                var r = await E.api( "POST", encodeURIComponent( acct ) + "/labels", body );
-                var byRef = {}, known = ( r && r.known ) || {};
-                ( ( r && r.items ) || [] ).forEach( function ( it ) { byRef[ it.ref ] = it.labels || []; } );
-                rows.forEach( function ( m )
+                for( var rows of E.chunks( groups[ acct ] ) )     // big picks in pieces (core.js)
                 {
-                    var now = byRef[ m.ref ] || ( m.mid && known[ m.mid ] );
-                    if( ! now ) return;
-                    m.labels = now.slice();
-                    changed.push( m );
-                } );
-            }
+                    job.step( sent );
+                    var body = { refs: rows.map( function ( m ) { return m.ref; } ), mids: rows.map( function ( m ) { return m.mid || ""; } ) };
+                    body[ on ? "add" : "remove" ] = [ l.id ];
+                    var r = await E.api( "POST", encodeURIComponent( acct ) + "/labels", body );
+                    var byRef = {}, known = ( r && r.known ) || {};
+                    ( ( r && r.items ) || [] ).forEach( function ( it ) { byRef[ it.ref ] = it.labels || []; } );
+                    rows.forEach( function ( m )
+                    {
+                        var now = byRef[ m.ref ] || ( m.mid && known[ m.mid ] );
+                        if( ! now ) return;
+                        m.labels = now.slice();
+                        changed.push( m );
+                    } );
+                    sent += rows.length;
+                }
             E.plug( "synced" );
         }
         catch( err ) { E.plug( "offline" ); NayiveUI.toast( E.errText( err ) ); }
+        job.end();
         if( changed.length ) { renderPicker(); E.labelsChanged( changed ); }
     }
 
@@ -222,7 +225,7 @@
         }
         NayiveUI.undoToast( E.T( "ui.toast.deleted" ), function ()
         {
-            var here = ! S.label && S.tray === "inbox" && ! S.open && ! S.selecting && ! E.isComposing();
+            var here = ! S.label && S.tray === "inbox" && E.listShown() && ! S.selecting && ! E.isComposing();
             back();
             if( wasOn && here ) E.openLabel( l.id );      // still where it sent us: back to its list
         }, { onExpire: function ()

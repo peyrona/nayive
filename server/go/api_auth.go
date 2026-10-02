@@ -322,24 +322,7 @@ func (s *Server) apiUnlock(w http.ResponseWriter, r *http.Request) {
 // be able to tell a saved choice from a lost one, or it would show the new
 // language and quietly revert on the next reload.
 func (s *Server) apiLang(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.requireSession(w, r)
-	if !ok {
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		sendJSON(w, r, http.StatusOK,
-			map[string]any{"lang": s.users.UserLang(sess.Role, sess.User)})
-	case http.MethodPost:
-		stored, good := s.users.SetUserLang(sess.Role, sess.User, queryValue(r, "value"))
-		if !good {
-			sendError(w, r, http.StatusBadRequest, "idioma no válido")
-			return
-		}
-		sendJSON(w, r, http.StatusOK, map[string]string{"lang": stored})
-	default:
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
-	}
+	s.accountSetting(w, r, "lang", "idioma no válido", s.users.UserLang, s.users.SetUserLang)
 }
 
 // apiTZ is the timezone of the signed-in ACCOUNT.
@@ -352,21 +335,29 @@ func (s *Server) apiLang(w http.ResponseWriter, r *http.Request) {
 // prints (reminders.go). Unknown zone names are refused for the same reason
 // unknown languages are.
 func (s *Server) apiTZ(w http.ResponseWriter, r *http.Request) {
+	s.accountSetting(w, r, "tz", "zona horaria no válida", s.users.UserTZ, s.users.SetUserTZ)
+}
+
+// accountSetting is apiLang and apiTZ: one per-account setting, read with GET
+// ({key: value | null}) and stored with POST ?value= ({key: stored}). A value
+// `set` refuses answers 400 `bad`.
+func (s *Server) accountSetting(w http.ResponseWriter, r *http.Request, key, bad string,
+	get func(role, user string) *string, set func(role, user, value string) (string, bool)) {
+
 	sess, ok := s.requireSession(w, r)
 	if !ok {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		sendJSON(w, r, http.StatusOK,
-			map[string]any{"tz": s.users.UserTZ(sess.Role, sess.User)})
+		sendJSON(w, r, http.StatusOK, map[string]any{key: get(sess.Role, sess.User)})
 	case http.MethodPost:
-		stored, good := s.users.SetUserTZ(sess.Role, sess.User, queryValue(r, "value"))
+		stored, good := set(sess.Role, sess.User, queryValue(r, "value"))
 		if !good {
-			sendError(w, r, http.StatusBadRequest, "zona horaria no válida")
+			sendError(w, r, http.StatusBadRequest, bad)
 			return
 		}
-		sendJSON(w, r, http.StatusOK, map[string]string{"tz": stored})
+		sendJSON(w, r, http.StatusOK, map[string]string{key: stored})
 	default:
 		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
 	}

@@ -13,12 +13,11 @@ NayiveI18n.ready.then( function()
     {
         if( e.key !== 'Escape' ) return;
 
-        if(      document.getElementById( 'confirmSheetBackdrop'   ).classList.contains( 'open' ) ) closeConfirm();
-        else if( document.getElementById( 'filePickerSheetBackdrop' ).classList.contains( 'open' ) ) closeFilePicker();
+        if(      document.getElementById( 'filePickerSheetBackdrop' ).classList.contains( 'open' ) ) closeFilePicker();
         else if( document.getElementById( 'stageSheetBackdrop'    ).classList.contains( 'open' ) ) closeStageSheet();
         else if( document.getElementById( 'tripSheetBackdrop'     ).classList.contains( 'open' ) ) closeTripSheet();
         else if( document.getElementById( 'mapSheetBackdrop'      ).classList.contains( 'open' ) ) closeMapSheet();
-        else if( document.getElementById( 'locSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'locSheetBackdrop' );
+        else if( document.getElementById( 'setSheetBackdrop'      ).classList.contains( 'open' ) ) closeSheet( 'setSheetBackdrop' );
         else if( document.getElementById( 'discoverSheetBackdrop' ).classList.contains( 'open' ) ) closeDiscover();
         else if( document.getElementById( 'currencySheetBackdrop' ).classList.contains( 'open' ) ) closeSheet( 'currencySheetBackdrop' );
     });
@@ -152,6 +151,6 @@ function hereStageId( trip )
 
 function anySheetOpen()
 {
-    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'locSheetBackdrop', 'discoverSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop', 'confirmSheetBackdrop']
+    return ['tripSheetBackdrop', 'stageSheetBackdrop', 'mapSheetBackdrop', 'setSheetBackdrop', 'discoverSheetBackdrop', 'currencySheetBackdrop', 'filePickerSheetBackdrop']
         .some( function( id ) { return document.getElementById( id ).classList.contains( 'open' ); } );
 }

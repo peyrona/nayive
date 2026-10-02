@@ -1,0 +1,27 @@
+/* image.css - Image: the page is the header and, under it, the editor. The
+   editor's own look is the shared IMAGE EDITOR block in shared/app.css. */
+
+.app { height: 100vh; height: 100dvh; }
+
+/* Under the header: always dark, whatever the colour scheme. */
+.editor-page
+{
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+}
+
+/* "Loading editor…" / why it could not open, in the canvas until the editor is in. */
+.editor-msg
+{
+    margin: 0;
+    padding: 40px 20px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* A desktop window has its own close. */
+html.is-windowed #backBtn { display: none; }

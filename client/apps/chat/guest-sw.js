@@ -12,6 +12,10 @@
  */
 "use strict";
 
+// The options of a notification (call rules included), shared with ../sw.js.
+// Absolute: this worker is served at /c/<token>/sw.js.
+importScripts( "/nayive/chat/push-notice.js" );
+
 var SCOPE = self.registration.scope;              // https://<site>/c/<token>/
 var API   = SCOPE.replace( /\/c\/([^/]+)\/$/, "/api/c/$1" );
 
@@ -25,32 +29,9 @@ self.addEventListener( "push", function ( event )
     var icon = new URL( "/nayive/chat/icons/icon-192.png", SCOPE ).toString();
     // A push must ALWAYS show something: iPhone takes the permission away
     // after a few silent ones.
-    event.waitUntil( self.registration.showNotification( d.title || "Chat", notice( d, icon, SCOPE ) ) );
+    event.waitUntil( self.registration.showNotification( d.title || "Chat",
+        pushNotice( d, { body: d.body || "", icon: icon, tag: "chat", url: SCOPE } ) ) );
 } );
-
-// The options of one notification. A call (chat_call.go) rings until it is
-// answered; "quiet" replaces the ringing one without a sound (answered or
-// declined on another device); a ring that arrives after its deadline (push
-// order is not guaranteed) says "missed" instead. Same code in ../sw.js.
-function notice( d, icon, home )
-{
-    var late = d.kind === "call" && d.until && Date.now() > d.until;
-    var o = {
-        body:     ( late && d.late ) || d.body || "",
-        icon:     icon,
-        badge:    icon,
-        tag:      d.tag || "chat",
-        renotify: ! d.quiet,
-        data:     { url: d.url || home }
-    };
-    if( d.kind === "call" && ! d.quiet && ! late && d.until )
-    {
-        o.requireInteraction = true;
-        o.vibrate = [ 500, 250, 500, 250, 500 ];
-    }
-    if( d.quiet ) o.silent = true;
-    return o;
-}
 
 self.addEventListener( "notificationclick", function ( event )
 {

@@ -35,7 +35,8 @@ package main
 // point when a better one sits right next to it in time (routeForShow).
 //
 // Coordinates are rounded (roundCoord, ~100 m) BEFORE they are written: the
-// exact spot never reaches the disk.
+// exact spot never reaches a trip. The one finer copy is the phone finder's
+// last.json (devices.go NoteLast, ~1 m), which only its owner reads.
 
 import (
 	"math"
@@ -206,10 +207,22 @@ type trackedTrip struct {
 }
 
 // trackedTrips are the user's own trips - every data/trips/<dir> with a
-// trip.json - except those switched off in Trips ("track": false). Every path
-// goes through ownerFile, so a symlink out of the home, or a trip in .trash, is
-// never read or written.
+// trip.json - except those switched off in Trips ("track": false).
 func (s *Server) trackedTrips(user string) []trackedTrip {
+	var out []trackedTrip
+	for _, lt := range s.ownTrips(user) {
+		if lt.trip.Track == nil || *lt.trip.Track {
+			out = append(out, lt)
+		}
+	}
+	return out
+}
+
+// ownTrips are ALL the user's own trips, switched off or not: "track" is about
+// positions, and the phone's photos (api_device_media.go) still go to a trip
+// that keeps none. Every path goes through ownerFile, so a symlink out of the
+// home, or a trip in .trash, is never read or written.
+func (s *Server) ownTrips(user string) []trackedTrip {
 	var out []trackedTrip
 	base := s.ownerFile(user, []string{"data", "trips"})
 	if base == "" {
@@ -233,17 +246,11 @@ func (s *Server) trackedTrips(user string) []trackedTrip {
 			continue
 		}
 		var trip publicTripFile
-		if loadJSONFile(file, &trip) && (trip.Track == nil || *trip.Track) {
+		if loadJSONFile(file, &trip) {
 			out = append(out, trackedTrip{root: root, trip: trip})
 		}
 	}
 	return out
-}
-
-// recordPosition stores p in every tracked trip of `owner` that covers it, and
-// answers how many took it.
-func (s *Server) recordPosition(owner string, p tripPosition) int {
-	return s.recordPositions(owner, []tripPosition{p})
 }
 
 // recordPositions stores a whole batch, and answers how many points were taken,

@@ -75,8 +75,9 @@
            there would shove the group left of centre. That alone still leaves
            it 6px off, because the left side also carries 36px the right side
            does not: the 20px app icon, its 6px margin and the title's 10px one.
-           So the right block opens with a 36px counterweight, and the group
-           lands dead centre.
+           The right block's line between its two groups (app.css HEADER)
+           already weighs 11px of that, so it opens with a 25px counterweight,
+           and the group lands dead centre.
 
            The counterweight has to be PADDING on the right block. Putting it
            inside as a `::before` spacer does nothing: that block's width comes
@@ -128,7 +129,7 @@
            the rules out to the edges of an empty row. */
         .game-options .game-stats { flex: 0 0 auto; }
 
-        .topbar .topbar-actions { flex: 1 1 0; margin-left: 0; justify-content: flex-end; padding-left: 36px; }
+        .topbar .topbar-actions { flex: 1 1 0; margin-left: 0; justify-content: flex-end; padding-left: 25px; }
 
         /* THE GAMES SCREEN - the launcher's own tile, one level down: the icon
            over the name, the whole card the way in, and no ">" on it. */
@@ -203,12 +204,12 @@
 
            It was written out four times - .g2048-over, .inv-over, .ast-over and
            .tet-over, the same nine lines each - before Minesweeper and Sudoku
-           were going to make it six. The per-game class stays on the element for
-           the few rules that really are its own; everything here is shared.
+           were going to make it six. Everything here is shared; no game adds a
+           rule of its own to its cover.
 
            `cursor: pointer` is not: the three canvas games take a click anywhere
            on the card, because on a phone the whole card is the target you
-           actually hit, and the other three have a real button in the middle. */
+           actually hit, and the others have a real button in the middle. */
         .game-cover
         {
             position: absolute; inset: 0; z-index: 2;
@@ -218,7 +219,7 @@
             background: color-mix( in srgb, var(--card2) 86%, transparent );
         }
         .game-cover.tappable { cursor: pointer; }
-        /* The two timed games cover the board SOLIDLY, and the others do not.
+        /* The three timed games cover the board SOLIDLY, and the others do not.
            86% of --card2 over a small canvas hides it; over a 440px Sudoku grid
            it does not, and a board that can still be read with the clock stopped
            is not a pause, it is free thinking time. Nothing is lost by hiding it
@@ -281,16 +282,20 @@
             </div>
 
             <div class="topbar-actions">
-                <!-- The speaker: every game's sounds on or off (see THE SOUNDS).
-                     ONE <svg> with the waves and the cross as two groups, and not
-                     two icons: the help dialog copies a button's first <svg>, and
-                     a hidden one would copy as nothing. -->
-                <button class="icon-btn" id="gamesSound" type="button">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><g data-ic="on"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></g><g data-ic="off" hidden><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></g></svg>
-                </button>
-                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                </button>
+                <div class="tb-group">
+                    <!-- The speaker: every game's sounds on or off (see THE SOUNDS).
+                         ONE <svg> with the waves and the cross as two groups, and not
+                         two icons: the help dialog copies a button's first <svg>, and
+                         a hidden one would copy as nothing. -->
+                    <button class="icon-btn" id="gamesSound" type="button">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><g data-ic="on"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></g><g data-ic="off" hidden><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></g></svg>
+                    </button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </button>
+                </div>
                 <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
             </div>
         </header>
@@ -479,8 +484,8 @@
         // A key press no game may answer. Two rules, both of them the whole
         // suite's rather than any one game's: a sheet is over the app - the help
         // dialog, the install prompt, "session expired" - and it has swallowed
-        // the keys; or the caret is in a field. Five of the six games asked this
-        // in the same two lines before anything else, and now ask it in one.
+        // the keys; or the caret is in a field. The games asked this in the
+        // same two lines before anything else, and now ask it in one.
         function keyBusy( e )
         {
             var el = e.target;
@@ -513,8 +518,8 @@
         // a tap, and that answer can be OLDER than the game being played right
         // now - our own write may still be in the outbox - so a score beaten on
         // the phone is picked up here and one beaten here is never thrown away.
-        // The four games that keep a score all merge it this way; the two that
-        // keep a time point the same rule the other way (see adoptTimes).
+        // The four games that keep a score all merge it this way; the three
+        // that keep a time point the same rule the other way (see adoptTimes).
         function keepBest( have, n, el )
         {
             var best = n > have ? n : have;
@@ -584,8 +589,9 @@
         // part of that shape was written three times, and by the third it was
         // byte for byte the same, so it is written once here instead:
         //
-        //   - play / pause / resume, and the rule that a hidden tab or an
-        //     unfocused window pauses a game but never resumes it;
+        //   - play / pause / resume, and the rule that a hidden tab, an
+        //     unfocused window or a sheet over the app pauses a game but never
+        //     resumes it;
         //   - the overlay's three sets of words, and the pause button's two
         //     icons;
         //   - enter / leave: the arrow keys are owned only while the pane is on
@@ -612,7 +618,7 @@
 
         function arcade( o )
         {
-            var loop    = gameLoop( o.step, o.draw );
+            var loop    = gameLoop( step, o.draw );
             var noop    = function () {};
             var live    = false;                   // is this the pane on screen?
             var held    = '';                      // the state a pause interrupted
@@ -621,6 +627,18 @@
             var palette = o.palette || noop;
             var fit     = o.fit     || noop;
             var els     = o.els;
+
+            // Any dialog over the app pauses a running game: the help sheet,
+            // the install prompt, "session expired". They cover the pane and
+            // swallow the keys (see keyBusy), and a ship or a piece that cannot
+            // be steered is one lost where the player did not put it. Asked
+            // before each of the game's own steps, and only while one of its
+            // `runs` states is on: a finished game's dust still settles.
+            function step()
+            {
+                if( runs.indexOf( o.getState() ) >= 0 && document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
+                o.step();
+            }
 
             function overlay()
             {
@@ -1371,7 +1389,7 @@
         //
         //     { "best":  { "g2048": 12345, "invaders": 3120, "asteroids": 8400,
         //                  "tetris": 24500 },
-        //       "times": { "easy": 47, "medium": 210, "hard": 999,
+        //       "times": { "minesEasy": 47, "minesMedium": 210, "minesHard": 999,
         //                  "sudokuEasy": 421, "sudokuMedium": 903 } }
         //
         // Two maps because there are two kinds of record: 2048 and the three
@@ -1380,11 +1398,11 @@
         // own way (see adoptBest / adoptTimes).
         //
         // The three timed games share the one `times` map and each reads only
-        // the keys it knows: Minesweeper was first and took the bare easy /
-        // medium / hard, so Sudoku's carry its name and Solitaire's carry its
-        // own - solitaire1 and solitaire3, one per draw mode, because turning
-        // one card over is a different game from turning three. A fourth timed
-        // game only has to pick a prefix of its own.
+        // the keys it knows, which carry its name: minesEasy..., sudokuEasy...
+        // and Solitaire's solitaire1 and solitaire3, one per draw mode, because
+        // turning one card over is a different game from turning three. A
+        // fourth timed game only has to pick a prefix of its own. (Minesweeper
+        // once used the bare easy / medium / hard; it still reads them.)
         //
         // Chess and Checkers have no line here at all. They end in a RESULT
         // and not in a number to beat, so there is nothing of either to write
@@ -1525,23 +1543,6 @@
                 b.addEventListener( 'click', function () { showGame( b.dataset.game ); } );
             } );
 
-            // Escape is the way back on a keyboard - the same thing the game's
-            // name does with a click, from any of the nine and whatever the game
-            // is doing. goHome() calls leave(), so the loop stops, the held keys
-            // are let go and the record is written, exactly as it is when the
-            // name is clicked.
-            //
-            // keyBusy() is what keeps it out of the way of everything else that
-            // answers Escape: a sheet over the app (the help dialog, the install
-            // prompt, "session expired") closes itself instead of dropping the
-            // game behind it, and a field with the caret in it keeps its own.
-            // On the Games screen there is nothing to go back from, so `current`
-            // being empty ends it before any of that.
-            //
-            // It used to be the second pause key in Invaders and Tetris. It is
-            // not any more - `p` is, in both - because a key that means "out of
-            // here" everywhere else in the suite cannot mean "wait a moment" in
-            // two of six games.
             // The speaker. Its tooltip says what a press DOES, the way the
             // pause button's does: "turn the sound off" while it is on.
             var soundBtn = document.getElementById( 'gamesSound' );
@@ -1560,6 +1561,23 @@
             document.getElementById( 'gamesBack' ).addEventListener( 'click', goHome );
             paintSound();
 
+            // Escape is the way back on a keyboard - the same thing the game's
+            // name does with a click, from any of the nine and whatever the game
+            // is doing. goHome() calls leave(), so the loop stops, the held keys
+            // are let go and the record is written, exactly as it is when the
+            // name is clicked.
+            //
+            // keyBusy() is what keeps it out of the way of everything else that
+            // answers Escape: a sheet over the app (the help dialog, the install
+            // prompt, "session expired") closes itself instead of dropping the
+            // game behind it, and a field with the caret in it keeps its own.
+            // On the Games screen there is nothing to go back from, so `current`
+            // being empty ends it before any of that.
+            //
+            // It used to be the second pause key in Invaders and Tetris. It is
+            // not any more - `p` is, in all three canvas games - because a key
+            // that means "out of here" everywhere else in the suite cannot mean
+            // "wait a moment" in a few of the games.
             document.addEventListener( 'keydown', function ( e )
             {
                 if( e.key !== 'Escape' || e.ctrlKey || e.altKey || e.metaKey ) return;

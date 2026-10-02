@@ -121,15 +121,118 @@ function renderMapSheet()
     mode.appendChild( closeBtn );
 }
 
-// "My location" (list header): what places you on the Journey maps - the
-// location URL, drawn and kept by locationSection (my-location.js).
-function openMyLocation()
+// Settings (list header, the gear), two tabs (2026-10-02):
+//   Location - what places you on the Journey maps: the location URL, drawn
+//              and kept by locationSection (my-location.js).
+//   General  - "Remind me about a trip N days before" (was in the launcher's
+//              "Mi cuenta").
+function openSettings()
 {
-    const sheet = document.getElementById( 'locSheet' );
+    const sheet = document.getElementById( 'setSheet' );
     sheet.innerHTML = '';
-    buildSheetHeader( T( 'trips.myLocation' ), 'locSheetBackdrop', sheet );
-    sheet.insertBefore( locationSection(), sheet.querySelector( '.sheet-actions' ) );
-    openSheet( 'locSheetBackdrop' );
+    buildSheetHeader( T( 'ui.settings' ), 'setSheetBackdrop', sheet );
+
+    const tabs = document.createElement( 'div' );
+    tabs.className = 'set-tabs';
+    tabs.setAttribute( 'role', 'tablist' );
+
+    const panes = [ [ 'location', T( 'trips.tabLocation' ), locationSection() ],
+                    [ 'general',  T( 'trips.tabGeneral' ),  reminderSection() ] ];
+
+    function show( key )
+    {
+        tabs.querySelectorAll( '.pill' ).forEach( function( b )
+        {
+            const on = b.getAttribute( 'data-tab' ) === key;
+            b.classList.toggle( 'is-active', on );
+            b.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+        } );
+        sheet.querySelectorAll( '[data-pane]' ).forEach( function( p ) { p.hidden = p.getAttribute( 'data-pane' ) !== key; } );
+    }
+
+    const actions = sheet.querySelector( '.sheet-actions' );
+    sheet.insertBefore( tabs, actions );
+    panes.forEach( function( p )
+    {
+        const b = document.createElement( 'button' );
+        b.type = 'button';
+        b.className = 'pill';
+        b.setAttribute( 'role', 'tab' );
+        b.setAttribute( 'data-tab', p[ 0 ] );
+        b.textContent = p[ 1 ];
+        b.addEventListener( 'click', function() { show( p[ 0 ] ); } );
+        tabs.appendChild( b );
+
+        p[ 2 ].setAttribute( 'data-pane', p[ 0 ] );
+        sheet.insertBefore( p[ 2 ], actions );
+    } );
+
+    show( 'location' );
+    openSheet( 'setSheetBackdrop' );
+}
+
+// "Remind me about a trip N days before": ACCOUNT state on the server
+// (/api/files?tripdays=), saved on change. 0 = no reminder.
+function reminderSection()
+{
+    const t = NayiveUI.t;
+
+    const box = document.createElement( 'div' );
+
+    const field = document.createElement( 'div' );
+    field.className = 'field';
+
+    const label = document.createElement( 'label' );
+    label.htmlFor     = 'tripDaysSet';
+    label.textContent = t( 'acct.remindTrip' ) + ' (' + t( 'acct.daysBefore' ) + ')';
+
+    const input = document.createElement( 'input' );
+    input.id        = 'tripDaysSet';
+    input.type      = 'number';
+    input.min       = '0';
+    input.max       = '90';
+    input.inputMode = 'numeric';
+
+    const msg = document.createElement( 'p' );
+    msg.className = 'share-note';
+    msg.hidden    = true;
+
+    field.append( label, input );
+    box.append( field, msg );
+
+    let saved = null;
+
+    function say( text ) { msg.textContent = text; msg.hidden = ! text; }
+
+    fetch( '/api/files?tripdays=1', { credentials: 'same-origin' } )
+        .then( function( r ) { return r.ok ? r.json() : null; } )
+        .then( function( d ) { if( d ) { saved = d.days; input.value = d.days; } } )
+        .catch( function() { /* leave it blank */ } );
+
+    input.addEventListener( 'change', async function()
+    {
+        let v = parseInt( input.value, 10 );
+        if( ! isFinite( v ) ) { input.value = ( saved == null ? '' : saved ); return; }
+        v = Math.max( 0, Math.min( 90, v ) );
+
+        input.disabled = true;
+        try
+        {
+            const q = new URLSearchParams( { tripdays: '1', value: String( v ) } ).toString();
+            const r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
+            const d = await r.json().catch( function() { return {}; } );
+            if( r.ok )
+            {
+                saved = d.days; input.value = d.days;
+                say( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : t( 'acct.tripNone' ) );
+            }
+            else { input.value = ( saved == null ? '' : saved ); say( t( 'ui.saveFailed' ) ); }
+        }
+        catch( e ) { input.value = ( saved == null ? '' : saved ); say( t( 'login.noServer' ) ); }
+        input.disabled = false;
+    } );
+
+    return box;
 }
 
 // Title + lone "close" for sheets whose only control is close. The close

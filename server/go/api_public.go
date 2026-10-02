@@ -449,14 +449,21 @@ func (s *Server) publicPhotos(owner, photosDir string) []publicPhoto {
 // -----------------------------------------------------------------------------
 
 // ownerFile is <owner's home>/<parts> with every symlink followed, or "" when it
-// does not exist or lands outside that home - the containment test
-// Shares.RootPath makes.
+// does not exist, lands outside that home, or is in its .trash.
 func (s *Server) ownerFile(owner string, parts []string) string {
 	parts = cleanSegments(parts)
 	if owner == "" || len(parts) == 0 || hasDotDot(parts) || hasSegment(parts, ".trash") {
 		return ""
 	}
-	home, err := resolveExisting(filepath.Join(s.cfg.HomesDir, owner))
+	return homeFile(s.cfg.HomesDir, owner, parts)
+}
+
+// homeFile is <homesDir>/<owner>/<parts> with every symlink followed, or ""
+// when it does not exist or lands outside that home: the containment test
+// ownerFile, Shares.RootPath and Shares.ExtraPath all make. Each caller checks
+// the segments first.
+func homeFile(homesDir, owner string, parts []string) string {
+	home, err := resolveExisting(filepath.Join(homesDir, owner))
 	if err != nil {
 		return ""
 	}

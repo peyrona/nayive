@@ -7,8 +7,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +50,7 @@ func TestReminderTickRingsARepeatingEvent(t *testing.T) {
 		"DTSTART:" + first.Format("20060102T150405Z") + "\r\nRRULE:FREQ=DAILY\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
 	os.WriteFile(filepath.Join(data, "calendar.ics"), []byte(ics), 0o644)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	r := NewReminders(cfg, srv.users, srv.trash, srv.sessions, srv.push, srv.trackers, log)
 	r.tick()
 	if n := hits.Load(); n != 1 {

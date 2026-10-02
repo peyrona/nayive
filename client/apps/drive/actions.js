@@ -296,38 +296,13 @@ async function copySelectionLink()
 
     try
     {
-        await copyText( url );
+        await NayiveUI.copyText( url );
         flashStatus( T( 'drive.linkCopied' ) );
     }
     catch( _ )
     {
         flashStatus( T( 'drive.linkCopyFailed' ) );
     }
-}
-
-// Clipboard write, with a fallback for the plain-HTTP LAN URL where
-// navigator.clipboard is absent (it needs a secure context).
-function copyText( text )
-{
-    if( navigator.clipboard && navigator.clipboard.writeText )
-        return navigator.clipboard.writeText( text );
-
-    return new Promise( function( resolve, reject )
-    {
-        try
-        {
-            const ta = document.createElement( 'textarea' );
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity  = '0';
-            document.body.appendChild( ta );
-            ta.select();
-            const ok = document.execCommand( 'copy' );
-            ta.remove();
-            ok ? resolve() : reject( new Error( 'copy failed' ) );
-        }
-        catch( e ) { reject( e ); }
-    });
 }
 
 // A transient message in the top-bar status slot (before the sync dot).
@@ -689,20 +664,3 @@ function endDownload( state )
     else if( state === 'stopped' && job.stopped ) NayiveUI.toast( T( 'drive.downloadStopped' ) );
     updateToolbarState();
 }
-
-// Walks `node`, collecting every leaf file with its path inside the zip
-// (zipPrefix nests folder contents under the folder's own name).
-function collectEntries( node, zipPrefix, out )
-{
-    if( ! isDir( node ) )
-    {
-        out.push( { fullPath: node.path, zipPath: zipPrefix } );
-        return;
-    }
-
-    (node.nodes || []).forEach( function( c )
-    {
-        collectEntries( c, zipPrefix + '/' + c.path.split( '/' ).pop(), out );
-    });
-}
-

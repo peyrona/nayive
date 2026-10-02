@@ -11,6 +11,9 @@
     <string name="step_batt_why">So Nayive stays awake with the screen off. Choose “Allow”.</string>
     <string name="step_full_title">Full screen</string>
     <string name="step_full_why">So a call shows even when the phone is locked.</string>
+    <string name="step_media_title">Photos and videos</string>
+    <string name="step_media_why">To upload the camera’s new photos to Nayive, if you turn it on in My account. It never deletes anything on the phone.</string>
+    <string name="step_media_partial">You chose only some photos: tap Allow and choose “Allow all”.</string>
     <string name="step_do">Allow</string>
     <string name="step_ok">Done</string>
     <string name="setup_continue">Continue</string>
@@ -20,6 +23,7 @@
     <string name="chan_find">Find my phone</string>
     <string name="chan_pending">Unread</string>
     <string name="chan_updates">Updates</string>
+    <string name="chan_media">Photos uploaded</string>
     <string name="link_on">Nayive is connected</string>
     <string name="link_tracking">Nayive is keeping your trip position</string>
     <string name="link_enrol">Open Nayive and sign in to activate this phone</string>
@@ -38,6 +42,18 @@
     </plurals>
     <string name="update_title">A new version of Nayive is out</string>
     <string name="update_text">Tap to download it.</string>
+
+    <string name="media_done">Photos uploaded to Nayive</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d videos</item>
+    </plurals>
+    <string name="media_fix_title">Nayive cannot see your photos</string>
+    <string name="media_fix_text">Tap to allow it and upload the new photos.</string>
     <string name="shortcut_setup">Permissions</string>
     <string name="shortcut_setup_long">Nayive permissions</string>
 </resources>

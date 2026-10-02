@@ -11,6 +11,9 @@
     <string name="step_batt_why">Perché Nayive resti sveglio a schermo spento. Scegli «Consenti».</string>
     <string name="step_full_title">Schermo intero</string>
     <string name="step_full_why">Perché una chiamata si veda anche a cellulare bloccato.</string>
+    <string name="step_media_title">Foto e video</string>
+    <string name="step_media_why">Per caricare su Nayive le nuove foto della fotocamera, se lo attivi in Il mio account. Non cancella mai niente dal cellulare.</string>
+    <string name="step_media_partial">Hai scelto solo alcune foto: tocca Consenti e scegli «Consenti tutto».</string>
     <string name="step_do">Consenti</string>
     <string name="step_ok">Fatto</string>
     <string name="setup_continue">Continua</string>
@@ -20,6 +23,7 @@
     <string name="chan_find">Trova il mio cellulare</string>
     <string name="chan_pending">Da leggere</string>
     <string name="chan_updates">Aggiornamenti</string>
+    <string name="chan_media">Foto caricate</string>
     <string name="link_on">Nayive è connesso</string>
     <string name="link_tracking">Nayive salva la tua posizione di viaggio</string>
     <string name="link_enrol">Apri Nayive ed entra con il tuo utente per attivare questo cellulare</string>
@@ -38,6 +42,18 @@
     </plurals>
     <string name="update_title">C’è una nuova versione di Nayive</string>
     <string name="update_text">Tocca per scaricarla.</string>
+
+    <string name="media_done">Foto caricate su Nayive</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d foto</item>
+        <item quantity="other">%d foto</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d video</item>
+    </plurals>
+    <string name="media_fix_title">Nayive non vede le tue foto</string>
+    <string name="media_fix_text">Tocca per consentirlo e caricare le nuove foto.</string>
     <string name="shortcut_setup">Permessi</string>
     <string name="shortcut_setup_long">Permessi di Nayive</string>
 </resources>

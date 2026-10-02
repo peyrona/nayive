@@ -13,49 +13,13 @@
     var C = window.NayiveChat;
     var S = C.S, h = C.h;
 
-    // Drag the divider to set the list width (desktop only). Saved in this
-    // browser, so each device keeps its own. Double-click: back to default.
+    // Drag the divider to set the list width (desktop only: a phone hides
+    // it). Saved in this browser, so each device keeps its own. Double-click:
+    // back to default (shared/ui.js).
     function initResizer( rz, side )
     {
-        var KEY = "chat-side-width", MIN = 260, MAX = 600, DEF = 340;
-        var root = document.documentElement.style;
-        function set( w ) { root.setProperty( "--side-w", w + "px" ); }
-
-        var saved = 0;
-        try { saved = parseInt( localStorage.getItem( KEY ), 10 ); } catch( _ ) {}
-        if( saved >= MIN && saved <= MAX ) set( saved );
-
-        var dragging = false, startX = 0, startW = 0;
-
-        rz.addEventListener( "pointerdown", function ( e )
-        {
-            dragging = true;
-            startX   = e.clientX;
-            startW   = side.getBoundingClientRect().width;
-            rz.setPointerCapture( e.pointerId );
-            rz.classList.add( "dragging" );
-            document.body.style.userSelect = "none";
-        } );
-        rz.addEventListener( "pointermove", function ( e )
-        {
-            if( ! dragging ) return;
-            set( Math.max( MIN, Math.min( MAX, Math.round( startW + e.clientX - startX ) ) ) );
-        } );
-        function end()
-        {
-            if( ! dragging ) return;
-            dragging = false;
-            rz.classList.remove( "dragging" );
-            document.body.style.userSelect = "";
-            try { localStorage.setItem( KEY, Math.round( side.getBoundingClientRect().width ) ); } catch( _ ) {}
-        }
-        rz.addEventListener( "pointerup", end );
-        rz.addEventListener( "pointercancel", end );
-        rz.addEventListener( "dblclick", function ()
-        {
-            set( DEF );
-            try { localStorage.setItem( KEY, DEF ); } catch( _ ) {}
-        } );
+        NayiveUI.paneResizer( rz, side, { key: "chat-side-width", min: 260, max: 600, def: 340,
+            set: function ( w ) { document.documentElement.style.setProperty( "--side-w", w + "px" ); } } );
     }
 
     C.start = async function ( cfg )

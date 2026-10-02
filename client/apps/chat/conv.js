@@ -29,6 +29,16 @@
         downBtn = h( "button", { class: "down", attrs: { type: "button", hidden: true, title: T( "chat.toBottom" ),
                                   "aria-label": T( "chat.toBottom" ) }, on: { click: function () { C.toBottom( true ); } } },
                      C.ic( "chev-down" ) );
+        // In a desktop window as narrow as a phone the list's header is gone
+        // while a chat is open: this bar is then the top row, and its empty
+        // room drags the window (desktop/index.html, data-win-drag).
+        if( NayiveUI.windowed )
+        {
+            var narrow = window.matchMedia( "(max-width: 640px)" );
+            var mark = function () { head.toggleAttribute( "data-win-drag", narrow.matches ); };
+            narrow.addEventListener( "change", mark );
+            mark();
+        }
         var conv = h( "div", { class: "view", attrs: { id: "vConv", hidden: true } }, head, wall, downBtn );
         main.appendChild( empty );
         main.appendChild( conv );
@@ -166,31 +176,35 @@
         head.textContent = "";
         var sub = C.convSubtitle( c );
         head.appendChild( C.btn( "back", "chat.back", C.back, "back-btn" ) );
-        head.appendChild( C.ringIfOnline( C.avatar( c.id, c.name ), c.id ) );
+        var av = C.ringIfOnline( C.avatar( c.id, c.name ), c.id );
+        av.style.cursor = "pointer";
+        av.addEventListener( "click", function () { C.openInfo(); } );   // the picture opens Info too, like the name
+        head.appendChild( av );
         // (Auto-delete - one number for every chat - sits on the list's
         // filters row; Info says it in words.)
         head.appendChild( h( "button", { class: "who", attrs: { type: "button", title: T( "chat.chatOptions" ) },
                                          on: { click: function () { C.openInfo(); } } },
             h( "span", { class: "who-top" }, h( "b", { text: c.name } ) ),
             sub[ 1 ] ? h( "small", { class: sub[ 0 ], text: sub[ 1 ] } ) : null ) );
-        // [phone] [video] [?] [⋮] - search, options, mute, pin, a person's link
+        // [phone] [video] | [⋮] [?] - search, options, mute, pin, a person's link
         // and delete live in the menu. Calls are one to one (call.js): a group
         // has no phone, and neither does a server without coturn. This "?"
         // explains this side only; the list's help explains the list (his
         // call, 2026-09-21).
+        // The two groups of every header (shared/app.css HEADER).
+        var calls = h( "div", { class: "tb-group" } );
         if( c.kind === "d" && S.callsOn )
         {
             var call  = C.btn( "phone", "chat.voiceCall", function () { C.startCall( false ); } );
             call.id = "convCallBtn";
             var video = C.btn( "video", "chat.videoCall", function () { C.startCall( true ); } );
             video.id = "convVideoBtn";
-            head.appendChild( call );
-            head.appendChild( video );
+            calls.appendChild( call );
+            calls.appendChild( video );
         }
         var help = C.btn( "help", "chat.help", function () { C.showConvHelp(); } );
         help.id = "convHelpBtn";
-        head.appendChild( help );
-        head.appendChild( convMore );
+        head.appendChild( h( "div", { class: "topbar-actions" }, calls, h( "div", { class: "tb-group tb-sys" }, convMore, help ) ) );
 
         // [icon, label, action, its line in the "?" help, class]
         convMenu.textContent = "";

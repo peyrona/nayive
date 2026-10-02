@@ -10,7 +10,7 @@ internet (page titles and site icons are fetched for real). Exits non-zero when 
 
 What it does: builds `server/go` into a scratch run-root under `/tmp` (its own config, one user
 `test`, a `cp -a` copy of `client/apps`), starts it on a free port, drives headless Chromium over
-the DevTools protocol (`../locktest/cdp.mjs`), then deletes the run-root. The real `store/` is
+the DevTools protocol (`../cdp.mjs`), then deletes the run-root. The real `store/` is
 never touched. Screenshots stay in `/tmp/bookmarks-shots-*` (the path is printed).
 
 Covered: empty screen · add / edit, title autofill (domain, then the page's own), duplicate

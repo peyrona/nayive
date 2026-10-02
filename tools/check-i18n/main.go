@@ -39,7 +39,7 @@ import (
 
 const ref = "es"
 
-var langs = []string{"es", "en", "pt", "fr", "de", "it"}
+var langs = []string{"es", "en", "pt", "fr", "de"}
 
 // Never translated - see docs/i18n.md. A value that carries one of these in the
 // reference must carry the same word in every language.

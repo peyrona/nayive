@@ -59,8 +59,8 @@
             title: 'Music',
             lead:  NayiveUI.t( 'music.introLead' ),
             buttons: [
-                { sel: '#crumb',        text: NayiveUI.t( 'music.introFolder' ) },
-                { sel: '#searchInput',  text: NayiveUI.t( 'music.introSearch' ) },
+                { sel: '#folderInfoBtn', text: NayiveUI.t( 'music.introFolder' ) },
+                { sel: '#searchToggle', text: NayiveUI.t( 'music.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'music.introRescan' ) },
                 { sel: '#filterSongs',  name: NayiveUI.t( 'music.introGroupName' ), text: NayiveUI.t( 'music.introGroup' ) },
                 { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ) },
@@ -81,13 +81,8 @@
      * =================================================================*/
     html, body { height: 100%; }
 
-    /* Elements below force their own `display` (flex, mostly) - the [hidden]
-       attribute's UA display:none loses to that unless restated here. Same
-       pattern Photos already uses (.edit-hint[hidden] etc.). */
-    #mainRow[hidden], #noDirHint[hidden], #playerBar[hidden], #loadActions[hidden] { display: none; }
-
-    /* .crumb, .bar-info, .tb-end and the .view-bar row come from shared/app.css
-       (folder-backed viewers), search field included. */
+    /* The header's toolbar (folder-? menu, .tb-modes, .topbar-actions groups)
+       comes from shared/app.css (folder-backed viewers), search field included. */
 
     /* ---- main row: library + queue ----------------------------------
        .main-row, .folder-row, .scope-chip, .empty-hint and the whole player
@@ -99,9 +94,6 @@
     .pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
 
     .lib-pane   { flex: 1 1 auto; min-width: 420px; display: flex; flex-direction: column; overflow: hidden; }
-    /* The toolbar row is shared/app.css's .view-bar; it only re-states the
-       padding, so it stays flush with .lib-content's own indent. */
-    .view-bar   { padding-inline: 20px; }
 
     .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 20px 28px; }
 
@@ -183,6 +175,7 @@
     .eq span:nth-child(2) { height: 100%; animation-delay: .15s; }
     .eq span:nth-child(3) { height: 65%; animation-delay: .3s; }
     @keyframes eqBounce { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+    @media (prefers-reduced-motion: reduce) { .eq span { animation: none; } }   /* still bars */
     .queue-art { flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-s); border: none;
                  display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); cursor: pointer; padding: 0; }
     .queue-art svg { width: 17px; height: 17px; }
@@ -224,9 +217,6 @@
         #mainRow > .queue-pane, .pane-resizer { display: none; }
         .queue-open-btn             { display: inline-flex; }
         .lib-pane                   { min-width: 0; }   /* the 420px floor made the page 551px wide on a phone */
-        .search-toggle              { display: inline-flex; }
-        .tb-end .topbar-search      { display: none; }
-        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
         .volume-block { display: none; }
         /* Player bar in two rows: cover + title + transport, then the seek bar
            full width underneath (one row clipped the "next" button off-screen). */
@@ -243,48 +233,62 @@
     <header class="topbar">
         <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         <h1>Music</h1>
-        <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <!-- The toolbar, shown once a folder is open (display: contents). -->
+        <div class="tb-tools" id="tools" hidden>
+            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
+            </button>
+
+            <div class="tb-modes">
+                <button class="icon-btn is-active" id="filterSongs" data-i18n-attr="title:music.songs, aria-label:music.songs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                </button>
+                <button class="icon-btn" id="filterAlbums" data-i18n-attr="title:music.albums, aria-label:music.albums">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="icon-btn" id="filterArtists" data-i18n-attr="title:music.artists, aria-label:music.artists">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+                </button>
+                <button class="icon-btn" id="filterFolders" data-i18n-attr="title:music.folders, aria-label:music.folders">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
+                </button>
+            </div>
+        </div>
         <div class="topbar-actions">
+            <!-- Like #tools, shown once a folder is open. -->
+            <div class="tb-group" data-tools hidden>
+                <div class="search-wrap">
+                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
+                </div>
+                <button class="icon-btn" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+                <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
+                <button class="icon-btn queue-open-btn" id="queueBtn" type="button" data-i18n-attr="title:music.openQueue, aria-label:music.openQueue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>
+                </button>
+                <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                </button>
+            </div>
+            <div class="tb-group tb-sys" data-tools hidden>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </button>
+            </div>
             <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
         </div>
-        <span class="bar-info" id="subStrip"></span>
     </header>
+
+    <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
+    <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
+        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <div class="menu-info" id="subStrip"></div>
+    </div>
 
     <div class="main-row" id="mainRow" hidden>
 
         <div class="lib-pane">
-            <div class="view-bar">
-                <div class="tb-modes">
-                    <button class="icon-btn is-active" id="filterSongs" data-i18n-attr="title:music.songs, aria-label:music.songs">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                    </button>
-                    <button class="icon-btn" id="filterAlbums" data-i18n-attr="title:music.albums, aria-label:music.albums">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                    <button class="icon-btn" id="filterArtists" data-i18n-attr="title:music.artists, aria-label:music.artists">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
-                    </button>
-                    <button class="icon-btn" id="filterFolders" data-i18n-attr="title:music.folders, aria-label:music.folders">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
-                    </button>
-                </div>
-                <div class="tb-end">
-                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:music.searchPh">
-                    <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    </button>
-                    <!-- Phones only (<= 760 px): the queue has no pane there, it opens as a sheet. -->
-                    <button class="icon-btn queue-open-btn" id="queueBtn" type="button" data-i18n-attr="title:music.openQueue, aria-label:music.openQueue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>
-                    </button>
-                    <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-                    </button>
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    </button>
-                </div>
-            </div>
             <div class="lib-content" id="libContent"></div>
         </div>
 
@@ -444,14 +448,12 @@ var st = {
     queue: [],              // songs currently queued, by reference to entries in st.songs
     playingIndex: -1,       // index into st.queue
     seekOnLoad: 0,          // seconds to jump to once the new src loads (an Undo resuming a song)
-    isPlaying: false,
     shuffle: false,
     repeat: false,          // at the end of the queue: stop (false) or start again (true); per device
     played: new Set(),      // shuffle: queue entries already played this round (none repeats before all have)
     history: [],            // shuffle: entries played before the current one, for "previous"
     playlists: [],          // [{id, name, paths:[...]}]
     playlistsBlocked: "",   // "unread" / "bad": the file could not be read, so it is never written
-    queueWidth: 360,
     dragPayload: null       // { type:'library', song } | { type:'queue', index }
 };
 
@@ -953,6 +955,7 @@ function renderLibrary()
     var q = st.search.trim().toLowerCase();
     var pool = ! q ? st.songs : st.songs.filter( function ( s )
     { return ( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+    NayiveMedia.searchCount( pool.length, st.songs.length );
 
     if( st.filter === "songs" )
     {
@@ -1434,7 +1437,8 @@ function updateMediaSession( song )
             play:          function () { audio.play().catch( function () {} ); },
             pause:         function () { audio.pause(); },
             previoustrack: function () { advance( -1 ); },
-            nexttrack:     function () { advance( 1 ); }
+            nexttrack:     function () { advance( 1 ); },
+            seekto:        function ( d ) { if( d.seekTime != null ) audio.currentTime = d.seekTime; }
         } );
 }
 
@@ -1579,35 +1583,13 @@ async function deletePlaylist( id )
 /* ---------------------------------------------------------------------------
  * RESIZABLE QUEUE PANE
  * -------------------------------------------------------------------------*/
+// The shared handle (shared/ui.js), mouse and touch; the queue is right of
+// it. A double-click gives the pane back its own width. Not kept.
 function wireResizer()
 {
-    var resizer = $( "#paneResizer" ), pane = $( "#queuePane" );
-    resizer.addEventListener( "mousedown", function ( e )
-    {
-        e.preventDefault();
-        var startX = e.clientX, startWidth = st.queueWidth;
-        resizer.classList.add( "dragging" );
-        function onMove( ev )
-        {
-            var next = Math.min( 560, Math.max( 260, startWidth - ( ev.clientX - startX ) ) );
-            st.queueWidth = next;
-            pane.style.width = next + "px";
-            pane.style.flexBasis = next + "px";
-        }
-        function onUp()
-        {
-            document.removeEventListener( "mousemove", onMove );
-            document.removeEventListener( "mouseup", onUp );
-            resizer.classList.remove( "dragging" );
-        }
-        document.addEventListener( "mousemove", onMove );
-        document.addEventListener( "mouseup", onUp );
-    } );
-    resizer.addEventListener( "dblclick", function ()
-    {
-        st.queueWidth = 360;
-        pane.style.width = pane.style.flexBasis = "";
-    } );
+    var pane = $( "#queuePane" );
+    NayiveUI.paneResizer( $( "#paneResizer" ), pane, { min: 260, max: 560, def: null, right: true,
+        set: function ( w ) { pane.style.width = pane.style.flexBasis = w == null ? "" : w + "px"; } } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1654,7 +1636,8 @@ function wireStaticUI()
     $( "#searchInput" ).addEventListener( "input", function ( e )
     { st.search = e.target.value; listShown = LIST_PAGE; renderLibrary(); } );
 
-    NayiveMedia.wireSearchToggle();                     // phone magnifier
+    NayiveMedia.wireSearchToggle();                     // the search fold
+    NayiveMedia.wireFolderInfo();                       // folder-? -> path + counts
     NayiveMedia.wireCrumbPicker( { app: "music" } );    // crumb -> folder picker
 
     $( "#reloadBtn" ).addEventListener( "click", function ()
@@ -1718,6 +1701,7 @@ function wireStaticUI()
         seekRange.max = Math.floor( audio.duration ) || 1;
         $( "#totalLabel" ).textContent = fmtClock( audio.duration );
         if( st.seekOnLoad ) { try { audio.currentTime = st.seekOnLoad; } catch( e ) {} st.seekOnLoad = 0; }
+        NayiveMedia.positionState( audio );
     } );
     audio.addEventListener( "timeupdate", function ()
     {
@@ -1725,8 +1709,20 @@ function wireStaticUI()
         seekRange.value = Math.floor( audio.currentTime );
         $( "#elapsedLabel" ).textContent = fmtClock( audio.currentTime );
     } );
-    audio.addEventListener( "play",  function () { st.isPlaying = true;  setPlayIcon( true ); } );
-    audio.addEventListener( "pause", function () { st.isPlaying = false; setPlayIcon( false ); } );
+    // The lock screen's play/pause and its progress bar follow the element.
+    audio.addEventListener( "play",  function ()
+    {
+        setPlayIcon( true );
+        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "playing";
+        NayiveMedia.positionState( audio );
+    } );
+    audio.addEventListener( "pause", function ()
+    {
+        setPlayIcon( false );
+        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "paused";
+        NayiveMedia.positionState( audio );
+    } );
+    audio.addEventListener( "seeked", function () { NayiveMedia.positionState( audio ); } );
     audio.addEventListener( "ended", function () { autoNext(); } );
 
     // A song that cannot play (gone since the scan, a format the browser lacks)
@@ -1744,12 +1740,6 @@ function wireStaticUI()
     } );
 
     wireResizer();
-
-    document.addEventListener( "keydown", function ( e )
-    {
-        if( $( "#saveBackdrop" ).classList.contains( "open" ) ) { if( e.key === "Escape" ) NayiveUI.setOpen( "saveBackdrop", false ); return; }
-        if( $( "#loadBackdrop" ).classList.contains( "open" ) ) { if( e.key === "Escape" ) NayiveUI.setOpen( "loadBackdrop", false ); return; }
-    } );
 }
 
 var setPlayIcon = NayiveMedia.setPlayIcon;
@@ -1777,6 +1767,7 @@ async function boot()
 
     setCrumb();
     $( "#mainRow"   ).hidden = false;
+    $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
     $( "#playerBar" ).hidden = false;
 
     await loadPlaylists();

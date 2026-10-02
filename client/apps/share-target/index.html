@@ -125,17 +125,6 @@ let DEST  = null;        // folder path, e.g. "files/fotos/viajes"
 
 function baseName( p ) { return String( p ).split( "/" ).pop(); }
 
-function uniqueName( name, taken )
-{
-    if( ! taken.has( name ) ) return name;
-    const dot  = name.lastIndexOf( "." );
-    const stem = dot > 0 ? name.slice( 0, dot ) : name;
-    const ext  = dot > 0 ? name.slice( dot )    : "";
-    let i = 2;
-    while( taken.has( stem + " (" + i + ")" + ext ) ) i++;
-    return stem + " (" + i + ")" + ext;
-}
-
 /* Pull the shared images back out of the Cache the service worker filled. */
 async function readInbox()
 {
@@ -222,7 +211,10 @@ function renderStrip()
         const img = document.createElement( "img" );
         img.src = URL.createObjectURL( it.blob );
         img.alt = it.name;
-        img.addEventListener( "load", () => URL.revokeObjectURL( img.src ), { once: true } );
+        // Freed once shown - or once it turns out it cannot be (a HEIC, say).
+        const free = () => URL.revokeObjectURL( img.src );
+        img.addEventListener( "load",  free, { once: true } );
+        img.addEventListener( "error", free, { once: true } );
         strip.appendChild( img );
     } );
     if( ITEMS.length > SHOW )
@@ -282,7 +274,7 @@ async function upload()
                                                                 { type: it.blob.type } )
                                                     : it.blob,
                           maxPx );
-        const name  = uniqueName( ready.name || it.name ||
+        const name  = NayiveUI.uniqueName( ready.name || it.name ||
                                   ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
         taken.add( name );
 

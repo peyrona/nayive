@@ -8,8 +8,7 @@
  * sight at once, removed when the Undo is gone) - its mail stays on its
  * server; Nayive's labels on it go (the toast says so).
  * GENERAL: how many days mail stays in the Trash and the signature (both
- * saved as they are typed), and whether pictures from the internet are hidden
- * or shown when a message opens - with what each means for the sender.
+ * saved as they are typed).
  *
  * THE FORM. The provider, and beside it the address: a drop-down filled from
  * the server's list (/api/mail/providers, mail_presets.go) plus "Other". It
@@ -17,7 +16,7 @@
  * Workspace on one's own domain is "Gmail" picked by hand). Under it, what
  * that provider needs, in steps, and a link to the page where its app
  * password is made. A provider that lets no app in with a password at all
- * (Microsoft, Proton) says why and what to do instead, and Add stays off.
+ * (Microsoft) says why and what to do instead, and Add stays off.
  * "Other" shows the two server fields. The server tries the login before it
  * keeps anything.
  */
@@ -30,7 +29,7 @@
     var providers = [];      // from the server, once
     var picked    = false;   // the user chose the provider by hand
 
-    var EYE     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    var EYE     = NayiveUI.icon( "eye" );
     var EYE_OFF = NayiveUI.icon( "eyeoff" );
 
     function prov() { return providers.filter( function ( p ) { return p.id === E.$( "addProv" ).value; } )[ 0 ] || null; }
@@ -44,7 +43,7 @@
         sel.textContent = "";
         providers.forEach( function ( p )
         {
-            sel.appendChild( h( "option", { text: p.name + ( p.blocked ? "  " + E.T( "mail.prov.blockedTag" ) : "" ), attrs: { value: p.id } } ) );
+            sel.appendChild( h( "option", { text: p.name, attrs: { value: p.id } } ) );
         } );
         sel.appendChild( h( "option", { text: E.T( "mail.prov.other" ), attrs: { value: "other" } } ) );
     }
@@ -54,8 +53,6 @@
     {
         showTab( tab || "accounts" );
         E.$( "trashDays" ).value = S.settings.trashDays;
-        E.$( "imagesDefault" ).value = S.settings.showImages ? "show" : "hide";
-        imagesHint();
         E.$( "signature" ).value = S.settings.signature || "";
         E.$( "trashDaysHint" ).hidden = ! S.accounts.some( function ( a ) { return a.provider === "gmail" || /gmail\.com$/.test( a.imapHost || "" ); } );
         renderList();
@@ -100,11 +97,6 @@
             }
             catch( err ) { NayiveUI.toast( E.errText( err ) ); }
         }, 500 );
-    }
-
-    function imagesHint()
-    {
-        E.$( "imagesHint" ).textContent = E.T( E.$( "imagesDefault" ).value === "show" ? "mail.showImagesAlwaysHint" : "mail.imagesHidden" );
     }
 
     // The signature: in use at once (a message written right away has it),
@@ -363,13 +355,6 @@
         } );
         E.$( "addPass" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); E.addAccount(); } } );
         E.$( "trashDays" ).addEventListener( "input", saveDays );
-        E.$( "imagesDefault" ).addEventListener( "change", async function ( e )
-        {
-            var on = e.target.value === "show";
-            imagesHint();
-            try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { showImages: on } ) ); }
-            catch( err ) { e.target.value = on ? "hide" : "show"; imagesHint(); NayiveUI.toast( E.errText( err ) ); }
-        } );
         E.$( "signature" ).addEventListener( "input", saveSignature );
         E.$( "signature" ).addEventListener( "change", function () { if( sigTimer ) saveSignature( true ); } );
         document.querySelector( "#setSheet .mail-tabs" ).addEventListener( "click", function ( e )

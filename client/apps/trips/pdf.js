@@ -349,7 +349,7 @@ function buildTripPrintDoc( trip )
         doc._initMap = mapSec._initMap || null;   // exportTripPdf() runs this once the node is laid out
     }
 
-    doc.appendChild( prEl( 'div', 'pr-foot', TF( 'trips.generatedOn', { date: todayIso() } ) + ' · Trips — Nayive' ) );
+    doc.appendChild( prEl( 'div', 'pr-foot', TF( 'trips.generatedOn', { date: NayiveUI.todayIso() } ) + ' · Trips — Nayive' ) );
 
     return doc;
 }

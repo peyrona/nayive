@@ -4,8 +4,7 @@ package main
 // Writing responses - the four helpers every route uses.
 // =============================================================================
 //
-// These are the Go copies of handler.py's _send_bytes / _send_json / _send_text
-// / _redirect, and they keep its rules:
+// sendBytes / sendJSON / sendText / redirect, and their rules:
 //
 //   * a text-ish body between 1400 and 4 000 000 bytes is gzipped at level 1
 //     (fastest) - below one packet compression is a net loss, and above the
@@ -15,7 +14,7 @@ package main
 //
 // java: net/http gives us the last point for free. Writes to the ResponseWriter
 // of a HEAD request are discarded by the server, so no route has to ask "was
-// this a HEAD?" the way BaseHTTPRequestHandler does.
+// this a HEAD?".
 
 import (
 	"bytes"
@@ -28,14 +27,14 @@ import (
 	"strings"
 )
 
-// The gzip tier-2 bounds, copied from handler.py so behaviour matches.
+// The gzip tier-2 bounds.
 const (
 	gzMin   = 1400      // below ~one packet, compressing is a net loss
 	gzMax   = 4_000_000 // never hold more than this in RAM to compress it
 	gzLevel = gzip.BestSpeed
 )
 
-// maxBody caps a request body, like handler.py's MAX_BODY.
+// maxBody caps a JSON request body.
 const maxBody = 1 << 20 // 1 MiB
 
 // gzTypes are the content types worth compressing.
@@ -61,7 +60,7 @@ func compressible(ctype string) bool {
 	return false
 }
 
-// acceptsGzip is the same loose check handler.py makes: we do not parse q-values.
+// acceptsGzip is a loose check: we do not parse q-values.
 func acceptsGzip(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 }
@@ -89,8 +88,8 @@ func sendBytes(w http.ResponseWriter, r *http.Request, status int, ctype string,
 	w.WriteHeader(status)
 
 	// java: we deliberately ignore the write error. The only realistic cause is
-	// the client hanging up mid-response (Python's BrokenPipeError), there is
-	// nothing left to tell them, and net/http has already logged it.
+	// the client hanging up mid-response (a broken pipe), there is nothing left
+	// to tell them, and net/http has already logged it.
 	_, _ = w.Write(body)
 }
 
@@ -98,9 +97,8 @@ func sendBytes(w http.ResponseWriter, r *http.Request, status int, ctype string,
 //
 // java: json.Marshal escapes <, > and & into their \u00XX forms by default - a
 // defence for JSON pasted straight into HTML, which nothing here does, and it
-// would make byte-for-byte comparison with Python's output pointlessly noisy.
-// An Encoder with SetEscapeHTML(false) turns it off. Encoder also appends a
-// "\n", which we trim so the bytes match json.dumps().
+// makes the answers harder to read. An Encoder with SetEscapeHTML(false) turns
+// it off. Encoder also appends a "\n", which we trim.
 func sendJSON(w http.ResponseWriter, r *http.Request, status int, payload any) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -170,15 +168,12 @@ var errBodyTooLarge = errors.New("request body too large")
 
 // refuseOversizedBody reports a body the caller must not read.
 //
-// handler.py sizes the body from Content-Length ALONE and answers 413 without
-// reading a byte, so a declared length over the cap is refused even when the
-// client then sends nothing. Checking r.ContentLength here reproduces that
-// exactly; MaxBytesReader stays as the backstop for a body with no declared
-// length, or one that lies about it.
+// A declared Content-Length over the cap is refused with 413 before a byte is
+// read, even when the client then sends nothing; MaxBytesReader stays as the
+// backstop for a body with no declared length, or one that lies about it.
 //
-// The Python also drops the connection, because the unread body would otherwise
-// be parsed as the start of the next request on a kept-alive socket. Go does
-// not have that hazard, but the header keeps the two servers' answers identical.
+// The connection closes after the answer: the unread body is not worth
+// draining.
 func refuseOversizedBody(w http.ResponseWriter, r *http.Request) error {
 	if r.ContentLength > maxBody {
 		w.Header().Set("Connection", "close")

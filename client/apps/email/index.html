@@ -41,7 +41,7 @@
              Writing:   [←] [icon] eMail ...... [clip] [discard] [send] [?] [plug]
                         (the clip opens Chat's panel: this device, Nayive, gallery)
              Selecting: [←] [icon] eMail 3 .... [what can be done to them] [?] [plug]
-             Reading:   [←] [icon] eMail ...... [what can be done to it] [pictures] [?] [plug]
+             Reading:   [←] [icon] eMail ...... [what can be done to it] [?] [plug]
              The action buttons get their glyphs from core.js (data-icon); which of
              them show depends on the tray (email.js, E.syncBar). -->
         <div class="topbar">
@@ -53,45 +53,50 @@
             <span id="selCount" class="mail-sel-count" hidden></span>
 
             <div class="topbar-actions">
-                <!-- Enter searches (the mail server does it: not on every key). -->
-                <div id="searchWrap" class="search-wrap">
-                    <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
-                    <button id="searchClear" class="icon-btn sm" type="button" hidden data-i18n-attr="title:mail.searchClear, aria-label:mail.searchClear">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <!-- What the open message, the picked ones or the message being
+                     written can do (actions.js, syncBar). -->
+                <div class="tb-group">
+                    <div id="actions" class="mail-actions" hidden>
+                        <button id="actAll"     class="icon-btn" type="button" data-icon="selectAll" data-i18n-attr="title:mail.selectAll, aria-label:mail.selectAll"></button>
+                        <button id="actReply"    class="icon-btn" type="button" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
+                        <button id="actReplyAll" class="icon-btn" type="button" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
+                        <button id="actForward"  class="icon-btn" type="button" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
+                        <button id="actRead"    class="icon-btn" type="button" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
+                        <button id="actUnread"  class="icon-btn" type="button" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
+                        <button id="actStar"    class="icon-btn" type="button" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
+                        <button id="actLabel"   class="icon-btn" type="button" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
+                        <button id="actSpam"    class="icon-btn" type="button" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
+                        <button id="actNotSpam" class="icon-btn" type="button" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
+                        <button id="actRestore" class="icon-btn" type="button" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
+                        <button id="actDelete"  class="icon-btn" type="button" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
+                        <button id="actForget"  class="icon-btn danger" type="button" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
+                    </div>
+                    <!-- Writing: what a message being written can do. -->
+                    <div id="writeActions" class="mail-actions" hidden>
+                        <button id="cAttach"  class="icon-btn" type="button" data-icon="clip"   aria-haspopup="true" data-i18n-attr="title:mail.attach, aria-label:mail.attach"></button>
+                        <button id="cDiscard" class="icon-btn" type="button" data-icon="trash"  data-i18n-attr="title:mail.discard, aria-label:mail.discard"></button>
+                        <button id="cSend"    class="icon-btn mail-send" type="button" data-icon="sent" data-i18n-attr="title:mail.send, aria-label:mail.send"></button>
+                    </div>
+                </div>
+                <!-- The tray's own: list-only, so reading, picking or writing hides it (email.css). -->
+                <div id="listTools" class="tb-group">
+                    <!-- Enter searches (the mail server does it: not on every key).
+                         The magnifier opens the field (NayiveUI.searchFold). -->
+                    <div id="searchWrap" class="search-wrap">
+                        <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
+                    </div>
+                    <button id="searchBtn" class="icon-btn mail-list-only" type="button" data-i18n-attr="title:mail.search, aria-label:mail.search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                    <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
+                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="select" data-i18n-attr="title:mail.select, aria-label:mail.select"></button>
+                </div>
+                <div class="tb-group tb-sys">
+                    <button id="setBtn" class="icon-btn mail-list-only" type="button" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
+                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>
-                <div id="actions" class="mail-actions" hidden>
-                    <button id="actAll"     class="icon-btn" type="button" data-icon="selectAll" data-i18n-attr="title:mail.selectAll, aria-label:mail.selectAll"></button>
-                    <button id="actReply"    class="icon-btn" type="button" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
-                    <button id="actReplyAll" class="icon-btn" type="button" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
-                    <button id="actForward"  class="icon-btn" type="button" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
-                    <button id="actRead"    class="icon-btn" type="button" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
-                    <button id="actUnread"  class="icon-btn" type="button" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
-                    <button id="actStar"    class="icon-btn" type="button" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
-                    <button id="actLabel"   class="icon-btn" type="button" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
-                    <button id="actSpam"    class="icon-btn" type="button" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
-                    <button id="actNotSpam" class="icon-btn" type="button" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
-                    <button id="actRestore" class="icon-btn" type="button" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
-                    <button id="actDelete"  class="icon-btn" type="button" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
-                    <button id="actForget"  class="icon-btn danger" type="button" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
-                </div>
-                <!-- Reading only, and only when the message has pictures from the internet:
-                     shows them, or hides them again (read.js sets its words). -->
-                <button id="imagesBtn" class="icon-btn" type="button" hidden aria-pressed="false" data-i18n-attr="title:mail.showImages, aria-label:mail.showImages">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                </button>
-                <!-- Writing: what a message being written can do. -->
-                <div id="writeActions" class="mail-actions" hidden>
-                    <button id="cAttach"  class="icon-btn" type="button" data-icon="clip"   aria-haspopup="true" data-i18n-attr="title:mail.attach, aria-label:mail.attach"></button>
-                    <button id="cDiscard" class="icon-btn" type="button" data-icon="trash"  data-i18n-attr="title:mail.discard, aria-label:mail.discard"></button>
-                    <button id="cSend"    class="icon-btn mail-send" type="button" data-icon="sent" data-i18n-attr="title:mail.send, aria-label:mail.send"></button>
-                </div>
-                <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
-                <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="select" data-i18n-attr="title:mail.select, aria-label:mail.select"></button>
-                <button id="setBtn" class="icon-btn mail-list-only" type="button" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
-                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                </button>
                 <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
             </div>
         </div>
@@ -132,6 +137,11 @@
                         <span id="trashBarText"></span>
                         <button id="emptyTrashBtn" class="icon-btn danger mail-bar-bin" type="button" data-icon="trash" data-i18n-attr="title:mail.emptyTrash, aria-label:mail.emptyTrash"></button>
                     </div>
+                    <!-- An advanced search in force: what it asks, and the way out (search.js). -->
+                    <div id="advBar" class="mail-images-bar" hidden>
+                        <span id="advBarText" class="mail-adv-text"></span>
+                        <button id="advOffBtn" class="pill" type="button" data-i18n="mail.advOff"></button>
+                    </div>
                     <div id="list" class="mail-list"></div>
                     <div id="listEmpty" class="empty-state" hidden>
                         <p id="listEmptyText"></p>
@@ -139,12 +149,14 @@
                     <div id="listMore" class="mail-more" hidden></div>
                 </section>
 
-                <!-- One message. Its head: the subject, a chevron, the labels - a tap
+                <!-- One message. Its head: the subject, a chevron, "Show pictures" (only
+                     when it has pictures from the internet), the labels - a tap
                      on the subject or the chevron shows / hides From, To, Date. -->
                 <section id="readView" class="mail-read-view" hidden>
                     <div class="mail-head">
                         <h2 id="readSubject" class="mail-subject"></h2>
                         <button id="metaBtn" class="icon-btn sm mail-meta-btn" type="button" data-icon="chevron" aria-controls="readMeta" aria-expanded="false" data-i18n-attr="title:mail.details, aria-label:mail.details"></button>
+                        <button id="imagesBtn" class="pill mail-images-btn" type="button" hidden aria-pressed="false" data-i18n="mail.showImages"></button>
                         <span id="readLabels" class="mail-chips" hidden></span>
                     </div>
                     <div id="readMeta" class="mail-meta" hidden></div>
@@ -178,17 +190,55 @@
                         <input id="cSubject" type="text" autocomplete="off">
                     </div>
                     <div id="cFiles" class="mail-parts" hidden></div>
-                    <textarea id="cText" class="mail-ctext" data-i18n-attr="placeholder:mail.textPh, aria-label:mail.textPh"></textarea>
+                    <!-- The text, formatted: Squire (lib/) in the box, its buttons on top.
+                         The mail goes out as HTML and as plain text (compose.js). -->
+                    <div class="mail-cbox is-empty">
+                        <div id="cFormat" class="mail-cformat" role="toolbar" data-i18n-attr="aria-label:mail.format">
+                            <button id="fBold" class="icon-btn sm" type="button" data-fmt="bold" aria-pressed="false" data-i18n-attr="title:write.tb.bold, aria-label:write.tb.bold"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z"></path></svg></button>
+                            <button id="fItalic" class="icon-btn sm" type="button" data-fmt="italic" aria-pressed="false" data-i18n-attr="title:write.tb.italic, aria-label:write.tb.italic"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z"></path></svg></button>
+                            <button id="fUnderline" class="icon-btn sm" type="button" data-fmt="underline" aria-pressed="false" data-i18n-attr="title:write.tb.underline, aria-label:write.tb.underline"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z"></path></svg></button>
+                            <button id="fBullet" class="icon-btn sm" type="button" data-fmt="ul" aria-pressed="false" data-i18n-attr="title:write.tb.bulletList, aria-label:write.tb.bulletList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-200v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360ZM200-160q-33 0-56.5-23.5T120-240q0-33 23.5-56.5T200-320q33 0 56.5 23.5T280-240q0 33-23.5 56.5T200-160Zm0-240q-33 0-56.5-23.5T120-480q0-33 23.5-56.5T200-560q33 0 56.5 23.5T280-480q0 33-23.5 56.5T200-400Zm-56.5-263.5Q120-687 120-720t23.5-56.5Q167-800 200-800t56.5 23.5Q280-753 280-720t-23.5 56.5Q233-640 200-640t-56.5-23.5Z"></path></svg></button>
+                            <button id="fNumbered" class="icon-btn sm" type="button" data-fmt="ol" aria-pressed="false" data-i18n-attr="title:write.tb.numberedList, aria-label:write.tb.numberedList"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"></path></svg></button>
+                            <button id="fLink" class="icon-btn sm" type="button" data-fmt="link" aria-pressed="false" data-i18n-attr="title:write.tb.link, aria-label:write.tb.link"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"></path></svg></button>
+                            <button id="fClear" class="icon-btn sm" type="button" data-fmt="clear" data-i18n-attr="title:write.tb.clearFormatting, aria-label:write.tb.clearFormatting"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M800-436q0 36-8 69t-22 63l-62-60q6-17 9-34.5t3-37.5q0-47-17.5-89T650-600L480-768l-88 86-56-56 144-142 226 222q44 42 69 99.5T800-436Zm-8 380L668-180q-41 29-88 44.5T480-120q-133 0-226.5-92.5T160-436q0-51 16-98t48-90L56-792l56-56 736 736-56 56ZM480-200q36 0 68.5-10t61.5-28L280-566q-21 32-30.5 64t-9.5 66q0 98 70 167t170 69Zm-37-204Zm110-116Z"></path></svg></button>
+                        </div>
+                        <div id="cText" class="mail-ctext" role="textbox" aria-multiline="true" data-i18n-attr="aria-label:mail.textPh, data-ph:mail.textPh"></div>
+                    </div>
                     <p id="cStatus" class="mail-cstatus"></p>
                     <!-- the addresses of the Contacts app that fit what is being typed -->
                     <div id="cSuggest" class="mail-suggest" role="listbox" hidden></div>
                     <input id="cFileInput" type="file" multiple hidden>
                 </section>
             </main>
+
+            <!-- SPLIT: a desktop window wide enough shows the open message
+                 beside the list. #readView moves in here and back (read.js). -->
+            <div id="readRz" class="pane-resizer" hidden></div>
+            <section id="readPane" class="mail-pane" hidden>
+                <div id="readNone" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
+                </div>
+            </section>
         </div>
     </div>
 
     <div id="toast" class="toast"></div>
+
+    <!-- The format bar's link: the address for the words picked (empty takes
+         the link off). -->
+    <div class="sheet-backdrop" id="linkSheet" role="dialog" aria-modal="true">
+        <div class="sheet sheet--pack">
+            <h2 data-i18n="write.sc.link"></h2>
+            <div class="field">
+                <label for="linkHref" data-i18n="write.linkAddress"></label>
+                <input id="linkHref" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
+            </div>
+            <div class="sheet-actions">
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="linkOkBtn" type="button" data-act="primary" data-i18n-attr="title:write.apply"></button>
+            </div>
+        </div>
+    </div>
 
     <!-- LABELS for the messages picked (or the one open): a tap puts a label on
          all of them, or takes it off all of them (mixed = some have it). A new
@@ -208,15 +258,142 @@
         </div>
     </div>
 
+    <!-- PICK, from the select bar's tick-all button: All (bottom left) ticks every
+         row (all ticked: none); or the fields pick the rows that match ALL the
+         fields filled - the list's next pages are read first. -->
+    <div class="sheet-backdrop" id="pickSheet" role="dialog" aria-modal="true">
+        <div class="sheet mail-pick-sheet">
+            <h2 data-i18n="mail.pickGo"></h2>
+            <div class="field">
+                <label for="pickOlder" data-i18n="mail.pickOlder"></label>
+                <select id="pickOlder">
+                    <option value="" data-i18n="mail.pickAny"></option>
+                    <option value="7"   data-i18n="mail.pickWeek"></option>
+                    <option value="30"  data-i18n="mail.pickMonth"></option>
+                    <option value="90"  data-i18n="mail.pick3Months"></option>
+                    <option value="180" data-i18n="mail.pick6Months"></option>
+                    <option value="365" data-i18n="mail.pickYear"></option>
+                    <option value="730" data-i18n="mail.pick2Years"></option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="pickSeen" data-i18n="mail.pickSeen"></label>
+                <select id="pickSeen">
+                    <option value=""       data-i18n="mail.pickAny"></option>
+                    <option value="unread" data-i18n="mail.pickUnread"></option>
+                    <option value="read"   data-i18n="mail.pickRead"></option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="pickFrom" data-i18n="mail.pickFrom"></label>
+                <input id="pickFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+            </div>
+            <div class="field">
+                <label for="pickSubject" data-i18n="mail.pickSubject"></label>
+                <input id="pickSubject" type="text" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="pickLabel" data-i18n="mail.pickLabel"></label>
+                <select id="pickLabel"></select>
+            </div>
+            <label class="mail-pick-switch">
+                <span data-i18n="mail.pickAttach"></span>
+                <span class="switch sm"><input type="checkbox" id="pickAttach"><span class="track"></span></span>
+            </label>
+            <label class="mail-pick-switch">
+                <span data-i18n="mail.pickStarred"></span>
+                <span class="switch sm"><input type="checkbox" id="pickStarred"><span class="track"></span></span>
+            </label>
+            <div class="sheet-actions">
+                <button id="pickAllBtn" class="text-btn small sheet-actions-left" type="button" data-i18n="mail.pickAll"></button>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="pickGoBtn" type="button" data-act="primary" data-i18n-attr="title:mail.pickGo"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADVANCED SEARCH, the funnel in the search box (search.js): the rows of
+         the tray on screen that match ALL the fields filled. The server looks
+         for the words (From, To and Subject go to it as words too); each row is
+         then checked here field by field. Clear (bottom left) empties the fields. -->
+    <div class="sheet-backdrop" id="advSheet" role="dialog" aria-modal="true">
+        <div class="sheet mail-adv-sheet">
+            <h2 data-i18n="mail.advTitle"></h2>
+            <p class="hint" data-i18n="mail.advNote"></p>
+            <div class="field">
+                <label for="advFrom" data-i18n="mail.pickFrom"></label>
+                <input id="advFrom" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+            </div>
+            <div class="field">
+                <label for="advTo" data-i18n="mail.advTo"></label>
+                <input id="advTo" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:mail.pickFromPh">
+            </div>
+            <div class="field">
+                <label for="advSubject" data-i18n="mail.pickSubject"></label>
+                <input id="advSubject" type="text" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="advWords" data-i18n="mail.advWords"></label>
+                <input id="advWords" type="text" autocomplete="off">
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="advSince" data-i18n="mail.advSince"></label>
+                    <div class="dt-field"><input type="date" id="advSince"><span class="dt-display"></span></div>
+                </div>
+                <div class="field">
+                    <label for="advUntil" data-i18n="mail.advUntil"></label>
+                    <div class="dt-field"><input type="date" id="advUntil"><span class="dt-display"></span></div>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="advSeen" data-i18n="mail.pickSeen"></label>
+                    <select id="advSeen">
+                        <option value=""       data-i18n="mail.pickAny"></option>
+                        <option value="unread" data-i18n="mail.pickUnread"></option>
+                        <option value="read"   data-i18n="mail.pickRead"></option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="advLabel" data-i18n="mail.pickLabel"></label>
+                    <select id="advLabel"></select>
+                </div>
+            </div>
+            <label class="mail-pick-switch">
+                <span data-i18n="mail.pickAttach"></span>
+                <span class="switch sm"><input type="checkbox" id="advAttach"><span class="track"></span></span>
+            </label>
+            <label class="mail-pick-switch">
+                <span data-i18n="mail.pickStarred"></span>
+                <span class="switch sm"><input type="checkbox" id="advStarred"><span class="track"></span></span>
+            </label>
+            <div class="sheet-actions">
+                <button id="advClearBtn" class="sheet-actions-left" type="button" data-act="secondary:eraser" data-i18n-attr="title:mail.advClear"></button>
+                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
+                <button id="advGoBtn" type="button" data-act="primary:search" data-i18n-attr="title:ui.search"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- The long jobs (core.js E.bar): the pick dialog reading every page of
+         the tray, an action on hundreds of messages. The shared transfer
+         bar's look, in the middle of the screen. -->
+    <div class="transfer-bar mail-busy-bar" id="busyBar">
+        <div class="transfer-row" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <span class="transfer-text"></span>
+            <span class="transfer-track"><span class="transfer-fill"></span></span>
+            <button id="busyStopBtn" class="icon-btn sm transfer-stop" type="button" data-icon="x" data-i18n-attr="title:ui.cancel, aria-label:ui.cancel"></button>
+        </div>
+    </div>
+
     <!-- SETTINGS, two tabs.
          Accounts: the ones there are (bin = remove, at once: the mail stays on
          its server) and the form that adds one - the provider drop-down fills
          itself from the server (/api/mail/providers) and follows the address as
          it is typed; what that provider needs is spelled out under it, step by
          step, with a link to where its app password is made.
-         General: how many days mail stays in the Trash; pictures from the internet
-         hidden or shown when a message opens (the toolbar's picture button shows
-         them in one message); the signature under every new message, reply and
+         General: how many days mail stays in the Trash; the signature under every new message, reply and
          forward. Every change applies at once. -->
     <div class="sheet-backdrop" id="setSheet" role="dialog" aria-modal="true">
         <div class="sheet sheet--wide">
@@ -310,15 +487,6 @@
                     <input id="trashDays" type="number" min="1" max="365" inputmode="numeric">
                     <p id="trashDaysHint" class="hint" data-i18n="mail.trashDaysHint" hidden></p>
                 </div>
-                <div class="section-label" data-i18n="mail.images"></div>
-                <div class="field">
-                    <label for="imagesDefault" data-i18n="mail.imagesDefault"></label>
-                    <select id="imagesDefault">
-                        <option value="hide" data-i18n="mail.imagesHide"></option>
-                        <option value="show" data-i18n="mail.imagesShow"></option>
-                    </select>
-                    <p id="imagesHint" class="hint"></p>
-                </div>
                 <div class="section-label" data-i18n="mail.signature"></div>
                 <div class="field">
                     <textarea id="signature" class="mail-signature" rows="4" maxlength="2000" data-i18n-attr="placeholder:mail.signaturePh, aria-label:mail.signature"></textarea>
@@ -363,6 +531,9 @@
     <script src="accounts.js" defer></script>
     <script src="labels.js" defer></script>
     <script src="actions.js" defer></script>
+    <script src="search.js" defer></script>
+    <script src="lib/dompurify_v3.4.16.min.js" defer></script>
+    <script src="lib/squire_v2.4.9.js" defer></script>
     <script src="compose.js" defer></script>
     <script src="email.js" defer></script>
 </body>

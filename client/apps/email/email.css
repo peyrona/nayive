@@ -5,15 +5,12 @@
    its rows, the message header and the reading frame. */
 html, body { height: 100%; overflow: hidden; }
 
-/* The search field: its width, and the clear cross inside it (as in Drive). */
-.search-wrap { position: relative; flex: 0 0 auto; width: 210px; }
-.search-wrap .topbar-search { width: 100%; padding-right: 32px; }
-.search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
-.search-wrap .icon-btn.sm { width: 26px; height: 26px; }
-.search-wrap .icon-btn.sm svg { width: 15px; height: 15px; }
+/* The search field is the shared SEARCH FOLD (app.css): only the modes that
+   put it away are eMail's (its magnifier is .mail-list-only). */
 body.reading .search-wrap,
 body.selecting .search-wrap,
-body.in-label .search-wrap { display: none; }
+body.in-label .search-wrap,
+body.in-label #searchBtn { display: none; }
 
 /* The bar's modes: list-only buttons leave while reading or picking; the
    message actions come (actions.js, syncBar). */
@@ -22,7 +19,9 @@ body.selecting .mail-list-only,
 body.composing .mail-list-only,
 body.composing .search-wrap,
 body.composing #actions,
-body.composing #imagesBtn { display: none; }
+body.reading #listTools,
+body.selecting #listTools,
+body.composing #listTools { display: none; }
 .icon-btn.mail-send  { color: var(--accent); }
 
 /* Writing: a label and its field per row, the files, the text filling the rest. */
@@ -32,7 +31,20 @@ body.composing #imagesBtn { display: none; }
 .mail-cfield input,
 .mail-cfield select  { flex: 1 1 auto; min-width: 0; }
 .mail-cfield .text-btn { flex: 0 0 auto; }
-.mail-ctext          { flex: 1 1 auto; min-height: 260px; resize: vertical; line-height: 1.5; font: inherit; }
+/* The text box: the format bar on top, then Squire's editable area. The box
+   wears the shared field look (app.css: input, textarea) - the area inside is
+   a div, which that rule does not reach. */
+.mail-cbox           { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 300px;
+                       background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s); }
+.mail-cbox:focus-within { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.mail-cformat        { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.mail-ctext          { flex: 1 1 auto; min-height: 240px; padding: 7px 10px; outline: none; overflow-wrap: anywhere;
+                       font-size: var(--field-fs); line-height: 1.5; color: var(--text); cursor: text; }
+.mail-cbox.is-empty .mail-ctext::before { content: attr(data-ph); position: absolute; color: var(--text-faint); pointer-events: none; }
+.mail-ctext blockquote { margin: 0 0 0 4px; padding-left: 10px; border-left: 3px solid var(--line); color: var(--text-dim); }
+.mail-ctext ul,
+.mail-ctext ol       { margin: 0; padding-left: 26px; }
+.mail-ctext a        { color: var(--accent); }
 .mail-cstatus        { margin: 0; min-height: 1.2em; font-size: 0.78rem; color: var(--text-dim); }
 .mail-cfile .icon-btn { margin: -4px -8px -4px 0; }
 .mail-suggest
@@ -83,6 +95,15 @@ body.composing #imagesBtn { display: none; }
 .mail-tray.is-missing { opacity: 0.5; }
 
 .mail-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+
+/* SPLIT (read.js): a desktop window wide enough - the list at its width
+   (the handle drags it), the open message on its right. Writing takes it all. */
+body.split .mail-main          { flex: 0 1 var(--mail-list-w, 380px); }
+.mail-pane                     { flex: 1 1 0; min-width: 0; overflow-y: auto; }
+.mail-pane .empty-state        { height: 100%; justify-content: center; }
+body.split.composing .mail-main { flex: 1 1 auto; }
+body.composing .mail-pane,
+body.composing #readRz         { display: none; }
 
 /* A server that refused the password or does not answer. */
 .mail-problem
@@ -139,6 +160,7 @@ body.composing #imagesBtn { display: none; }
 .mail-tick svg        { width: 14px; height: 14px; visibility: hidden; }
 body.selecting .mail-row  { padding-left: 46px; }
 body.selecting .mail-tick { display: flex; }
+.mail-row.is-current,
 .mail-row.is-picked   { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .mail-row.is-picked .mail-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .mail-row.is-picked .mail-tick svg { visibility: visible; }
@@ -189,6 +211,12 @@ body.selecting .mail-tick { display: flex; }
 .mail-pick-mark svg { width: 16px; height: 16px; display: block; }
 .mail-new-label  { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
 .mail-new-label input { flex: 1 1 auto; min-width: 0; }
+.mail-pick-switch { display: flex; align-items: center; gap: 12px; padding: 8px 0; cursor: pointer; }   /* the switch right after its words */
+.mail-pick-sheet  { max-width: 340px; }
+/* The advanced search (search.js): its dialog, and the bar over the list
+   saying what it asks (the Trash bar's look) with its way out. */
+.mail-adv-sheet   { max-width: 420px; }
+.mail-adv-text    { flex: 1 1 auto; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
 
 .mail-row.unread .who,
 .mail-row.unread .subj span { font-weight: 700; }
@@ -206,6 +234,7 @@ body.selecting .mail-tick { display: flex; }
 .mail-meta-btn  { display: inline-flex; vertical-align: middle; margin: -4px 4px 0 0; }
 .mail-meta-btn svg { transition: transform var(--tr-move); }
 .mail-meta-btn.open svg { transform: rotate(180deg); }
+.mail-images-btn { vertical-align: middle; margin: -3px 6px 0 0; padding: 4px 12px; }
 .mail-head .mail-chips { display: inline-flex; vertical-align: middle; margin: -3px 0 0; font-size: 1rem; line-height: normal; }
 .mail-meta
 {
@@ -278,7 +307,7 @@ body.selecting .mail-tick { display: flex; }
 .field.mail-prov { flex: 0 1 230px; }
 
 /* What the provider picked needs: a short line, its steps, its link. Red-edged
-   when the provider lets no app in (Microsoft, Proton). */
+   when the provider lets no app in (Microsoft). */
 .mail-prov-help
 {
     margin: -2px 0 14px;
@@ -329,14 +358,10 @@ body.selecting .mail-tick { display: flex; }
     body.reading .mail-side,
     body.composing .mail-side { display: none; }
     .mail-compose         { padding: 10px 12px 16px; }
+    .mail-ctext           { font-size: 16px; }         /* under 16px iOS zooms in on focus (app.css) */
     .mail-cfield label    { flex-basis: 48px; }
     .mail-read-view       { padding: 12px 12px 32px; }
-    .search-wrap          { width: 150px; }
     .field.mail-prov      { flex: 1 1 100%; }
-}
-@media (max-width: 420px)
-{
-    .search-wrap          { width: 118px; }
 }
 
 /* the clip's panel while writing (Chat's look, app.css .attach): under the
@@ -357,3 +382,5 @@ body.selecting .mail-tick { display: flex; }
 .mail-newpass .field-error { flex: 1 1 100%; margin: 0; }
 .mail-signature { min-height: 90px; resize: vertical; }
 
+/* the long jobs' bar (core.js E.bar): the transfer bar, centred */
+.transfer-bar.mail-busy-bar { top: 50%; bottom: auto; transform: translate(-50%, -50%); }

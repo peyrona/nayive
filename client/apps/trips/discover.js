@@ -82,7 +82,7 @@ function discoverWhenFor( st )
     if( ! start )
         return '';
 
-    const today = todayIso();
+    const today = NayiveUI.todayIso();
 
     if( today >= start && today <= end )
         return T( 'trips.disc.today' );

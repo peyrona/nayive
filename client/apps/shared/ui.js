@@ -17,7 +17,7 @@
  *   - the bottom-centre transient toast (paired CSS is in shared/theme.css)
  *   - the viewer's IANA time zone
  *   - the interface language, re-exported from shared/i18n.js: t / tf /
- *     applyI18n / i18nReady / lang / saved / locale / weekday / month / setLang
+ *     applyI18n / lang / saved / locale / weekday / month / setLang
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
  *   - the info dot: a circled "i" by a label that opens a small popup
  *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
@@ -29,7 +29,7 @@
  *     (Planner frames calendar + tasks + habits) the <html> gets .is-embedded, app.css
  *     hides the app's own title / sync dot (the host shows them once), and
  *     anything that must leave the frame (home link, sign-in) navigates the TOP
- *     window. NayiveUI.embedded tells an app which case it is in. When the host
+ *     window. When the host
  *     window is wider than a phone the <html> also gets .is-embedded-wide and
  *     the app's own icon stays on, labelling its pane in Planner's split view.
  *
@@ -112,9 +112,10 @@
     catch ( e ) {}
     if( EMBEDDED ) { try { document.documentElement.classList.add( WINDOWED ? "is-windowed" : "is-embedded" ); } catch ( e ) {} }
 
-    // In a window the card's title row is sticky (app.css); its height goes in
-    // --win-head-h so an app's own sticky heads (Contacts' letters) sit under it.
-    if( WINDOWED && window.ResizeObserver ) document.addEventListener( "DOMContentLoaded", function ()
+    // The card's title row is sticky (app.css) - everywhere since 2026-09-30,
+    // not only in a window; its height goes in --win-head-h so an app's own
+    // sticky heads (Contacts' letters) sit under it.
+    if( window.ResizeObserver ) document.addEventListener( "DOMContentLoaded", function ()
     {
         var head = document.querySelector( ".page > .page-inner > .card > .header" );
         if( ! head ) return;
@@ -187,7 +188,7 @@
     // screen. Safe to call on every open - it recomputes from scratch.
     //
     //   <div class="sheet sheet--pack"> ...      -> packed automatically on open
-    //   NayiveUI.pack( sheetEl, { min: 320, max: 440 } )   -> manual, custom bounds
+    //   packSheet( sheetEl, { min: 320, max: 440 } )       -> manual, custom bounds
     //
     // `target` may be the .sheet, the .sheet-backdrop around it, or either's id.
     function packSheet( target, opts )
@@ -511,6 +512,9 @@
         help:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>' ],
         info:   [ 2,   '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="11" x2="12" y2="16"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>' ],
         search: [ 2,   '<circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>' ],
+        filter: [ 2,   '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>' ],
+        // "Limpiar": empties a dialog's fields (the advanced searches).
+        eraser: [ 2,   '<path d="M7 21l-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"></path><line x1="22" y1="21" x2="7" y2="21"></line><line x1="5" y1="11" x2="14" y2="20"></line>' ],
         textcursor: [ 2, '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"></path><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"></path><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"></path><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"></path><line x1="9" y1="7" x2="9" y2="17"></line>' ],
         plus:   [ 2.4, '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>' ],
         back:   [ 2.2, '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>' ],
@@ -518,6 +522,8 @@
         // never navigates: it means expand or step in place (Drive's tree twisty, the
         // month pagers in Calendar and Habits, a collapsible section's caret).
         forward: [ 2.2, '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>' ],
+        up:     [ 2.2, '<polyline points="18 15 12 9 6 15"></polyline>' ],      // move up in a list
+        down:   [ 2.2, '<polyline points="6 9 12 15 18 9"></polyline>' ],       // move down in a list
         edit:   [ 2,   '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>' ],
         grid:   [ 1.9, '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line>' ],
         folder: [ 2,   '<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>' ],
@@ -536,6 +542,8 @@
         gear:   [ 2,   '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' ],
         // "Mi cuenta" - a person bust.
         user:   [ 2,   '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' ],
+        // "Show the password" - an eye (NayiveUI.pwEye, eMail's account form).
+        eye:    [ 2,   '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>' ],
         // "Do not show again" - an eye with a slash.
         eyeoff: [ 2,   '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>' ],
         // "Marcar como pendiente" - a counter-clockwise arrow (standard undo).
@@ -599,6 +607,231 @@
             return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">' + d[ 1 ] + '</svg>';
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + d[ 0 ] +
                '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d[ 1 ] + '</svg>';
+    }
+
+    // PASSWORD EYE - the button beside a password field shows / hides its
+    // text (the launcher's "Mi cuenta", the admin panel; login.html keeps its
+    // own copy, as it does not load this file).
+    function pwEye( btn, input )
+    {
+        btn.innerHTML = icon( "eye" );
+        btn.addEventListener( "click", function ()
+        {
+            var show = input.type === "password";
+            input.type = show ? "text" : "password";
+            btn.innerHTML = icon( show ? "eyeoff" : "eye" );
+            btn.setAttribute( "aria-label", t( show ? "ui.hidePassword" : "ui.showPassword" ) );
+            input.focus();
+        } );
+    }
+
+    // SEARCH FOLD - every toolbar search field (app.css SEARCH FOLD). At rest
+    // only a magnifier shows; a click opens the field in its place. The field
+    // takes the room the bar has left; only when that is under `min` px do
+    // the bar's other icons step aside (.search-tight) so it takes the bar.
+    // Inside the field, on the right: when the field has a dialog of filters,
+    // a funnel button that opens it; then the ×, which (like Escape) clears
+    // the field and folds it away.
+    //   o.box       the wrapper around the input (the field's own box)
+    //   o.input     the text field
+    //   o.bar       the row whose icons step aside (default: the closest
+    //               .topbar / .view-bar)
+    //   o.toggle    the magnifier to open it (default: one is made, before box)
+    //   o.filter()  opens the filter dialog (the in-field button shows a funnel)
+    //   o.filterTitle  its tooltip (an i18n key)
+    //   o.filterBtn the app's own filter button instead (it wires the click)
+    //   o.onClose() the field has been emptied: drop the search (default:
+    //               an "input" event on it)
+    //   o.min       the narrowest the field may get beside the icons (180)
+    // Returns { open, close, fit, isOpen, count }. count( "12 / 300" ) shows
+    // how many items match, dim, inside the field before its buttons ("" hides
+    // it). open( true ) unfolds it without
+    // the focus (a search the app set itself: no phone keyboard); close( true )
+    // folds it without onClose (the app is about to show something else).
+    function searchFold( o )
+    {
+        var box = o.box, input = o.input, min = o.min || 180;
+        var bar = o.bar || box.parentElement.closest( ".topbar, .view-bar" );
+        var toggle = o.toggle;
+        if( ! toggle )
+        {
+            toggle = document.createElement( "button" );
+            toggle.type = "button";
+            toggle.className = "icon-btn";
+            toggle.innerHTML = icon( "search" );
+            toggle.setAttribute( "data-i18n-attr", "title:ui.search, aria-label:ui.search" );
+            toggle.title = t( "ui.search" );
+            toggle.setAttribute( "aria-label", t( "ui.search" ) );
+            box.parentNode.insertBefore( toggle, box );
+        }
+        toggle.classList.add( "search-fold-toggle" );
+        box.classList.add( "search-fold" );
+        bar.classList.add( "search-fold-bar" );
+
+        var ends = document.createElement( "span" );
+        ends.className = "search-ends";
+        // A filter dialog gets its funnel button; a plain field gets nothing
+        // there - a magnifier that cannot be pressed would only look like one.
+        var mark = o.filterBtn;
+        if( mark ) mark.classList.add( "icon-btn", "sm" );
+        else if( o.filter )
+        {
+            mark = document.createElement( "button" );
+            mark.type = "button";
+            mark.className = "icon-btn sm";
+            mark.addEventListener( "click", function () { o.filter(); } );
+            if( o.filterTitle )
+            {
+                mark.setAttribute( "data-i18n-attr", "title:" + o.filterTitle + ", aria-label:" + o.filterTitle );
+                mark.title = t( o.filterTitle );
+                mark.setAttribute( "aria-label", t( o.filterTitle ) );
+            }
+        }
+        if( mark )
+        {
+            mark.classList.add( "search-mark" );
+            mark.innerHTML = icon( "filter" );
+            box.classList.add( "has-filter" );
+        }
+        var shut = document.createElement( "button" );
+        shut.type = "button";
+        shut.className = "icon-btn sm search-shut";
+        shut.innerHTML = icon( "x" );
+        shut.setAttribute( "data-i18n-attr", "title:ui.close, aria-label:ui.close" );
+        shut.title = t( "ui.close" );
+        shut.setAttribute( "aria-label", t( "ui.close" ) );
+        shut.addEventListener( "click", function () { close(); } );
+        var tally = document.createElement( "span" );
+        tally.className = "search-count";
+        tally.hidden = true;
+        ends.appendChild( tally );
+        if( mark ) ends.appendChild( mark );
+        ends.appendChild( shut );
+        box.appendChild( ends );
+
+        // The field's text must stop before the count + buttons, whatever
+        // their width; with no count the CSS padding stands.
+        function count( text )
+        {
+            tally.textContent = text || "";
+            tally.hidden = ! text;
+            input.style.paddingRight = text ? ( ends.offsetWidth + 8 ) + "px" : "";
+        }
+
+        function isOpen() { return box.classList.contains( "is-open" ); }
+        function open( noFocus )
+        {
+            box.classList.add( "is-open" );
+            fit();
+            if( noFocus !== true && ! input.hidden ) input.focus();
+        }
+        function close( quiet )
+        {
+            box.classList.remove( "is-open" );
+            fit();
+            input.value = "";
+            count( "" );
+            if( quiet === true ) return;
+            if( o.onClose ) o.onClose();
+            else input.dispatchEvent( new Event( "input" ) );
+        }
+        // The bar's state follows the field as it is SHOWN: an app mode that
+        // hides the box (reading a message, the bin) gives the icons back.
+        // Tried with the icons shown, and tight only when the field gets too
+        // little - measured in one go, so nothing flickers.
+        function fit()
+        {
+            var shown = isOpen() && box.getClientRects().length > 0;
+            bar.classList.toggle( "searching", shown );
+            bar.classList.remove( "search-tight" );
+            if( shown && box.offsetWidth < min ) bar.classList.add( "search-tight" );
+        }
+
+        toggle.addEventListener( "click", function () { open(); } );
+        input.addEventListener( "keydown", function ( e )
+        {
+            if( e.key !== "Escape" || ! isOpen() ) return;
+            e.preventDefault();
+            e.stopPropagation();      // not the app's own Escape (a dialog, a viewer)
+            close();
+        } );
+        // The bar resizing, and the box itself coming and going (an app mode
+        // shows or hides it). fit() ends where it started for a given size,
+        // so its own changes settle at once.
+        if( window.ResizeObserver )
+        {
+            var ro = new ResizeObserver( fit );
+            ro.observe( bar );
+            ro.observe( box );
+        }
+
+        return { open: open, close: close, fit: fit, isOpen: isOpen, count: count };
+    }
+
+    // A Mac (or an iPhone / iPad with a keyboard): its shortcuts take ⌘, not
+    // Ctrl, and show as glyphs. For every app that names or reads a combo.
+    var IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || "" );
+
+    // PANE RESIZER - a .pane-resizer handle (app.css) sets the width of the
+    // side pane next to it: Drive's tree, Chat's list, Bookmarks' tree,
+    // Music's queue. Mouse, pen and touch alike; a double-click puts the
+    // default width back.
+    //   rz, pane    the handle and the pane it sizes
+    //   o.min/max   the widths a drag may reach (px)
+    //   o.def       the double-click's width (null: whatever the CSS says)
+    //   o.set( w )  applies a width (a custom property, a style)
+    //   o.key       localStorage key: the width is put back now, and kept
+    //               after a drag and a double-click (this device's own)
+    //   o.save( w ) instead of `key`, when the app keeps it itself
+    //   o.right     the pane is right of the handle (a drag right narrows it)
+    //   o.off()     true while there is nothing to drag (a phone layout)
+    function paneResizer( rz, pane, o )
+    {
+        var keep = o.save || function ( w )
+        {
+            if( o.key ) try { localStorage.setItem( o.key, w ); } catch( _ ) {}
+        };
+
+        if( o.key )
+        {
+            var saved = NaN;
+            try { saved = parseInt( localStorage.getItem( o.key ), 10 ); } catch( _ ) {}
+            if( saved >= o.min && saved <= o.max ) o.set( saved );
+        }
+
+        var dragging = false, startX = 0, startW = 0;
+
+        rz.addEventListener( "pointerdown", function ( e )
+        {
+            if( o.off && o.off() ) return;
+            dragging = true;
+            startX   = e.clientX;
+            startW   = pane.getBoundingClientRect().width;
+            rz.setPointerCapture( e.pointerId );
+            rz.classList.add( "dragging" );
+            document.body.style.userSelect = "none";
+        } );
+        rz.addEventListener( "pointermove", function ( e )
+        {
+            if( ! dragging ) return;
+            var dx = ( e.clientX - startX ) * ( o.right ? -1 : 1 );
+            o.set( Math.max( o.min, Math.min( o.max, Math.round( startW + dx ) ) ) );
+        } );
+        function end()
+        {
+            if( ! dragging ) return;
+            dragging = false;
+            rz.classList.remove( "dragging" );
+            document.body.style.userSelect = "";
+            keep( Math.round( pane.getBoundingClientRect().width ) );
+        }
+        rz.addEventListener( "pointerup", end );
+        rz.addEventListener( "pointercancel", end );
+        rz.addEventListener( "dblclick", function ()
+        {
+            o.set( o.def );
+            if( o.def != null ) keep( o.def );
+        } );
     }
 
     // THE CLIP'S PANEL (Chat's writer, eMail's): a round coloured button per
@@ -877,8 +1110,6 @@
         else { closeInfo(); openInfo( dot ); }
     }
 
-    // Wire every <button class="info-dot"> under `root` (default: document).
-    // Idempotent; fills in the icon + ARIA if missing.
     //------------------------------------------------------------------------//
     // SYNC INDICATOR GLYPH
     //
@@ -931,9 +1162,134 @@
             if( el._nayiveSync ) continue;
             el._nayiveSync = true;
             el.innerHTML = SYNC_GLYPH;
+            watchSyncChip( el );
         }
     }
 
+    //------------------------------------------------------------------------//
+    // THE PLUG AS A FLOATING CHIP  (his call, 2026-09-30)
+    //
+    // Green is the normal case, so the plug takes no room in the header: it is
+    // hidden while the connection is fine and, when it is not, floats as a
+    // round chip just outside the END of its bar - under a top bar, above a
+    // bottom one, beside a side one (the desktop's). Same spot in every app.
+    //
+    //   - It shows only once the link has been bad for 3 s: a lift or a
+    //     wifi → 4G hand-over would otherwise blink it.
+    //   - Blue (a GET / PUT in flight) never shows it on its own, and does not
+    //     restart the 3 s either: a retry loop going red → blue → red shows.
+    //   - When the link is back it stays green 1.5 s, then fades away.
+    //
+    // Apps keep toggling the same state classes; this watches them. The timing
+    // lives per id, not per element, so a header rebuilt from scratch (Trips)
+    // keeps a chip that is already up. In a frame the dot stays hidden
+    // (app.css), whatever this does. theme.css draws .sy-show / .sy-fade.
+
+    var SY_WAIT = 3000, SY_FLASH = 1500, SY_FADE = 250;
+    var syChips = {};   // id → { el, badSince, okSince, shown, timer }
+
+    function syncMood( el )
+    {
+        var c = el.classList;
+        return c.contains( "busy" ) ? "busy" : c.contains( "synced" ) ? "ok" : "bad";
+    }
+
+    function watchSyncChip( el )
+    {
+        var key = el.id || "sync";
+        var st  = syChips[ key ] || ( syChips[ key ] = { badSince: 0, okSince: 0, shown: false, timer: 0 } );
+        st.el = el;                                    // the newest one is the one on screen
+        new MutationObserver( function () { if( st.el === el ) syncChipUpdate( st ); } )
+            .observe( el, { attributes: true, attributeFilter: [ "class" ] } );
+        syncChipUpdate( st );
+    }
+
+    // Re-entrant on purpose: its own .sy-show / .sy-fade wake the observer
+    // again, and the second pass changes nothing.
+    function syncChipUpdate( st )
+    {
+        var mood = syncMood( st.el ), now = Date.now(), show, wait = 0;
+
+        clearTimeout( st.timer );
+        st.timer = 0;
+        if( mood === "bad" && ! st.badSince ) st.badSince = now;
+        if( mood === "ok" ) st.badSince = 0;
+        if( mood !== "ok" ) st.okSince = 0;
+
+        if( mood === "bad" )
+        {
+            wait = st.badSince + SY_WAIT - now;
+            show = st.shown || wait <= 0;
+        }
+        else if( mood === "busy" ) show = st.shown;    // up already: stays, blue
+        else if( st.shown )                            // back to green: the short flash
+        {
+            if( ! st.okSince ) st.okSince = now;
+            wait = st.okSince + SY_FLASH - now;
+            show = wait > 0;
+            if( ! show ) st.okSince = 0;
+        }
+        else show = false;
+
+        if( wait > 0 ) st.timer = setTimeout( function () { syncChipUpdate( st ); }, wait );
+        syncChipShow( st, show );
+    }
+
+    function syncChipShow( st, show )
+    {
+        var el = st.el, c = el.classList;
+        st.shown = show;
+        if( show )
+        {
+            // Only real changes: even a no-op classList call rewrites the
+            // attribute, which would wake the observer again - forever.
+            if( c.contains( "sy-fade" ) ) c.remove( "sy-fade" );
+            if( ! c.contains( "sy-show" ) ) c.add( "sy-show" );
+            placeSyncChip( el );
+        }
+        else if( c.contains( "sy-show" ) && ! c.contains( "sy-fade" ) )
+        {
+            c.add( "sy-fade" );
+            setTimeout( function () { if( ! st.shown ) c.remove( "sy-show", "sy-fade" ); }, SY_FADE );
+        }
+    }
+
+    // Just outside the bar's end, where the plug used to sit.
+    function placeSyncChip( el )
+    {
+        var bar = el.closest( ".topbar, .header, .bar, .trip-header, header" ) || el.parentElement;
+        if( ! bar ) return;
+
+        var r = bar.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, gap = 6;
+        var s = el.style;
+        s.top = s.bottom = s.left = s.right = "";
+
+        if( r.height > r.width )                       // a side bar: beside its lower end
+        {
+            s.bottom = Math.max( gap, H - r.bottom + gap ) + "px";
+            if( r.left > W / 2 ) s.right = ( W - r.left + gap ) + "px";
+            else                 s.left  = ( r.right + gap ) + "px";
+        }
+        else
+        {
+            s.right = Math.max( gap, W - r.right + gap ) + "px";
+            if( r.top > H / 2 ) s.bottom = ( H - r.top + gap ) + "px";            // a bottom bar: above it
+            else                s.top    = Math.max( gap, r.bottom + gap ) + "px"; // a top bar: under it
+        }
+    }
+
+    // The bar may move (a card page scrolls, the window is resized, the
+    // desktop's bar changes side): keep an open chip glued to it.
+    function placeSyncChips()
+    {
+        for( var k in syChips )
+            if( syChips[ k ].shown && syChips[ k ].el.isConnected ) placeSyncChip( syChips[ k ].el );
+    }
+    window.addEventListener( "resize", placeSyncChips );
+    document.addEventListener( "scroll", placeSyncChips, { capture: true, passive: true } );
+
+    // Wire every <button class="info-dot"> under `root` (default: document).
+    // Idempotent; fills in the icon + ARIA if missing.
     function applyInfoDots( root )
     {
         var scope = root && root.querySelectorAll ? root : document;
@@ -976,16 +1332,6 @@
     }
 
     //------------------------------------------------------------------------//
-    // GUIDED TOUR HOOK  - NayiveUI.startTour. NayiveUI.firstRun re-points this at
-    // the app's own first-run intro card (see below); until then it just says
-    // "coming soon". The launcher's "Que es Nayive" button calls it.
-
-    function defaultTour()
-    {
-        toast( t( "ui.tourSoon" ) );
-    }
-
-    //------------------------------------------------------------------------//
     // CONFIRM / ALERT  - a Nayive sheet, never the browser's window.confirm /
     // window.alert (those ignore the theme and the style guide).
     //
@@ -1005,6 +1351,81 @@
     // `body` may hold "\n" - each line becomes its own <p>. A plain string
     // argument is taken as the body.
 
+    //------------------------------------------------------------------------//
+    // ONE DIALOG, BUILT ON THE FLY  -  the frame every dialog made here is
+    // thrown away in (confirm / alert, askPassword, the intro, pickFolder,
+    // pickFile, the install sheet, Compartir; Chat's own too): the backdrop,
+    // its sheet, an optional title, Escape, and one close.
+    //
+    //   var d = modal( { cls: "sheet--pack", title: "...", escape: fn } );
+    //   ... fill d.sheet ...
+    //   d.show( fill )   on the page: appended, then fill() (buttons are
+    //                    styled in place), then Escape heard and "open" set
+    //   d.close()        taken off, once: false when it already was
+    //
+    //   o.cls        more classes for the sheet;   o.id  the backdrop's id
+    //   o.title      an <h2>, first in the sheet
+    //   o.escape()   what Escape does (default: close); the key never goes
+    //                on to the page underneath
+    //   o.top()      Escape only while this answers true (a dialog asked
+    //                from inside this one closes first)
+    //   o.key( e )   any other key
+    //   o.linger     ms the node stays after close (a fade), 0 by default
+
+    function modal( o )
+    {
+        o = o || {};
+        var done = false;
+
+        var back = document.createElement( "div" );
+        back.className = "sheet-backdrop";
+        if( o.id ) back.id = o.id;
+        back.setAttribute( "role", "dialog" );
+        back.setAttribute( "aria-modal", "true" );
+
+        var sheet = document.createElement( "div" );
+        sheet.className = "sheet" + ( o.cls ? " " + o.cls : "" );
+        back.appendChild( sheet );
+
+        if( o.title )
+        {
+            var h = document.createElement( "h2" );
+            h.textContent = o.title;
+            sheet.appendChild( h );
+        }
+
+        function onKey( e )
+        {
+            if( e.key !== "Escape" ) { if( o.key ) o.key( e ); return; }
+            if( o.top && ! o.top() ) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            ( o.escape || close )();
+        }
+
+        function close()
+        {
+            if( done ) return false;
+            done = true;
+            document.removeEventListener( "keydown", onKey, true );
+            back.classList.remove( "open" );
+            if( o.linger ) setTimeout( function () { if( back.parentNode ) back.parentNode.removeChild( back ); }, o.linger );
+            else if( back.parentNode ) back.parentNode.removeChild( back );
+            return true;
+        }
+
+        function show( fill )
+        {
+            document.body.appendChild( back );
+            if( fill ) fill();
+            document.addEventListener( "keydown", onKey, true );
+            back.classList.add( "open" );
+        }
+
+        return { back: back, sheet: sheet, show: show, close: close };
+    }
+
     function normDialogOpts( opts )
     {
         if( typeof opts === "string" ) return { body: opts };
@@ -1017,23 +1438,8 @@
 
         return new Promise( function ( resolve )
         {
-            var done = false;
-
-            var back = document.createElement( "div" );
-            back.className = "sheet-backdrop";
-            back.setAttribute( "role", "dialog" );
-            back.setAttribute( "aria-modal", "true" );
-
-            var sheet = document.createElement( "div" );
-            sheet.className = "sheet";
-            back.appendChild( sheet );
-
-            if( opts.title )
-            {
-                var h = document.createElement( "h2" );
-                h.textContent = opts.title;
-                sheet.appendChild( h );
-            }
+            var d     = modal( { title: opts.title, escape: function () { finish( false ); } } );
+            var sheet = d.sheet;
 
             var bodyText = opts.body == null ? "" : String( opts.body );
             if( bodyText )
@@ -1076,27 +1482,8 @@
 
             function finish( val )
             {
-                if( done ) return;
-                done = true;
-                document.removeEventListener( "keydown", onKey, true );
-                back.classList.remove( "open" );
-                if( back.parentNode ) back.parentNode.removeChild( back );
-                resolve( val );
+                if( d.close() ) resolve( val );
             }
-
-            function onKey( e )
-            {
-                if( e.key === "Escape" )
-                {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    finish( false );
-                }
-            }
-
-            document.body.appendChild( back );
-            applySheetButtons( sheet );     // classes + SVGs; lone close -> corner
 
             // applySheetButtons keeps the same button nodes (it only re-classes
             // them and may move a lone close to the sheet corner).
@@ -1104,8 +1491,7 @@
             if( other )  other.addEventListener( "click", function () { finish( "other" ); } );
             if( cancel ) cancel.addEventListener( "click", function () { finish( false ); } );
 
-            document.addEventListener( "keydown", onKey, true );
-            back.classList.add( "open" );
+            d.show( function () { applySheetButtons( sheet ); } );   // classes + SVGs; lone close -> corner
 
             // For a destructive confirm, focus the safe (cancel) button so a
             // stray Enter doesn't trigger the delete.
@@ -1140,23 +1526,8 @@
 
         return new Promise( function ( resolve )
         {
-            var done = false;
-
-            var back = document.createElement( "div" );
-            back.className = "sheet-backdrop";
-            back.setAttribute( "role", "dialog" );
-            back.setAttribute( "aria-modal", "true" );
-
-            var sheet = document.createElement( "div" );
-            sheet.className = "sheet sheet--pack";
-            back.appendChild( sheet );
-
-            if( opts.title )
-            {
-                var h = document.createElement( "h2" );
-                h.textContent = opts.title;
-                sheet.appendChild( h );
-            }
+            var d     = modal( { cls: "sheet--pack", title: opts.title, escape: function () { finish( null ); }, key: onKey } );
+            var sheet = d.sheet;
 
             if( opts.body )
             {
@@ -1217,12 +1588,7 @@
 
             function finish( val )
             {
-                if( done ) return;
-                done = true;
-                document.removeEventListener( "keydown", onKey, true );
-                back.classList.remove( "open" );
-                if( back.parentNode ) back.parentNode.removeChild( back );
-                resolve( val );
+                if( d.close() ) resolve( val );
             }
 
             function submit()
@@ -1242,30 +1608,20 @@
                 finish( pw );
             }
 
+            // Enter in a field is the ✓ (Escape is the modal's).
             function onKey( e )
             {
-                if( e.key === "Escape" )
-                {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    finish( null );
-                }
-                else if( e.key === "Enter" && ( e.target === one || e.target === two ) )
+                if( e.key === "Enter" && ( e.target === one || e.target === two ) )
                 {
                     e.preventDefault();
                     submit();
                 }
             }
 
-            document.body.appendChild( back );
-            applySheetButtons( sheet );
-
             ok.addEventListener( "click", submit );
             cancel.addEventListener( "click", function () { finish( null ); } );
 
-            document.addEventListener( "keydown", onKey, true );
-            back.classList.add( "open" );
+            d.show( function () { applySheetButtons( sheet ); } );
             packSheet( sheet, { min: 300, max: 420 } );
             one.focus();
         } );
@@ -1401,23 +1757,9 @@
 
     function buildIntro( opts )
     {
-        var app = opts.app || appKey();
-
-        var back = document.createElement( "div" );
-        back.className = "sheet-backdrop";
-        back.setAttribute( "role", "dialog" );
-        back.setAttribute( "aria-modal", "true" );
-
-        var sheet = document.createElement( "div" );
-        sheet.className = "sheet intro-sheet";
-        back.appendChild( sheet );
-
-        if( opts.title )
-        {
-            var h = document.createElement( "h2" );
-            h.textContent = opts.title;
-            sheet.appendChild( h );
-        }
+        var app   = opts.app || appKey();
+        var d     = modal( { cls: "intro-sheet", title: opts.title } );
+        var sheet = d.sheet;
 
         // One paragraph, or several: `lead` takes a string or an array of them,
         // so an app can add a note under its summary without a new option.
@@ -1477,6 +1819,8 @@
                 }
                 var tx = document.createElement( "span" );
                 tx.textContent = it.text || "";
+                // The plug is a floating chip now: say when it shows at all.
+                if( el && el.classList.contains( "sync-indicator" ) ) tx.textContent += " " + t( "ui.sync.chipHint" );
                 boxx.appendChild( tx );
 
                 li.appendChild( boxx );
@@ -1493,25 +1837,7 @@
             sheet.appendChild( hint );
         }
 
-        var done = false;
-        function finish()
-        {
-            if( done ) return;
-            done = true;
-            document.removeEventListener( "keydown", onKey, true );
-            back.classList.remove( "open" );
-            if( back.parentNode ) back.parentNode.removeChild( back );
-        }
-        function onKey( e )
-        {
-            if( e.key === "Escape" )
-            {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                finish();
-            }
-        }
+        function finish() { d.close(); }
 
         // Close (x) in the top-right corner, like every other Nayive dialog. It is
         // sticky, not just absolute, so it stays put while a long button list
@@ -1544,9 +1870,7 @@
             sheet.appendChild( row );
         }
 
-        document.body.appendChild( back );
-        document.addEventListener( "keydown", onKey, true );
-        back.classList.add( "open" );
+        d.show();
         xb.focus();
     }
 
@@ -1753,7 +2077,7 @@
     // written the moment the count reaches 0 - not when the bubbles are closed,
     // and not when they open - so whoever sat through the 9 seconds never sees
     // it again, while whoever quit the app first meets it in the next one.
-    // NayiveUI.showCoach( true ) forces it back for a demo or a test.
+    // showCoach( true ) forces it back for a demo or a test.
 
     var COACH_KEY  = "balata-coach-seen";
     var COACH_SECS = 9;
@@ -2092,9 +2416,6 @@
             }, true );
         }
 
-        // the launcher's NayiveUI.startTour hook still opens this dialog
-        if( window.NayiveUI ) window.NayiveUI.startTour = function () { doShowIntro( introOpts, false ); };
-
         // Apps never auto-open. The launcher passes autoShow and re-opens every
         // visit until the user dismisses it for good.
         if( introOpts.autoShow && ! introDismissed( introOpts.app || appKey() ) )
@@ -2196,37 +2517,16 @@
             var namePicked = false;   // the text was select()ed once already
             var busy       = false;   // a server call is in flight
 
-            var back = document.createElement( "div" );
-            back.className = "sheet-backdrop";
-            back.setAttribute( "role", "dialog" );
-            back.setAttribute( "aria-modal", "true" );
-
-            var sheet = document.createElement( "div" );
-            sheet.className = "sheet";
-            back.appendChild( sheet );
+            // Escape is heard on document/capture, BEFORE the name field's own
+            // keydown: while a name is open, that is what Escape drops.
+            var d     = modal( { escape: function () { if( nameMode ) cancelName(); else finish( null ); } } );
+            var sheet = d.sheet;
 
             function finish( val )
             {
-                if( done ) return;
+                if( ! d.close() ) return;
                 done = true;
-                document.removeEventListener( "keydown", onKey, true );
-                back.classList.remove( "open" );
-                if( back.parentNode ) back.parentNode.removeChild( back );
                 resolve( val || null );
-            }
-
-            function onKey( e )
-            {
-                if( e.key === "Escape" )
-                {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    // This runs on document/capture, BEFORE the name field's own
-                    // keydown: while a name is open, that is what Escape drops.
-                    if( nameMode ) cancelName();
-                    else           finish( null );
-                }
             }
 
             function sortNodes( nodes )
@@ -2345,8 +2645,7 @@
                 nameMode = null;
                 render();
 
-                p.then( function ( sel ) { selected = sel || null; },
-                        function ( err ) { toast( String( ( err && err.message ) || err ) ); } )
+                p.then( function ( sel ) { selected = sel || null; }, taskFailed )
                  .then( loadTree )
                  .then( function ()
                  {
@@ -2437,7 +2736,15 @@
             function afterUndo( p )
             {
                 if( ! done ) runTask( p );
-                else p.catch( function ( err ) { toast( String( ( err && err.message ) || err ) ); } );
+                else p.catch( taskFailed );
+            }
+
+            // A name already taken is the server's 409: say it in words, not
+            // "HTTP 409: Conflict".
+            function taskFailed( err )
+            {
+                toast( err && err.status === 409 ? t( "drive.nameExistsTitle" )
+                                                 : String( ( err && err.message ) || err ) );
             }
 
             // Straight to the papelera - Drive can put it back - so this acts at
@@ -2598,10 +2905,7 @@
                 }
             }
 
-            document.body.appendChild( back );
-            render();
-            document.addEventListener( "keydown", onKey, true );
-            back.classList.add( "open" );
+            d.show( render );
 
             loadTree().then( render );
         } );
@@ -2630,39 +2934,18 @@
 
         return new Promise( function ( resolve )
         {
-            var done     = false;
             var dir      = opts.dir || "files";
             var nodes    = null;      // what `dir` holds, once listed
             var failed   = false;
             var selected = null;      // the highlighted file's node
             var seq      = 0;         // the newest listing asked for
 
-            var back = document.createElement( "div" );
-            back.className = "sheet-backdrop";
-            back.setAttribute( "role", "dialog" );
-            back.setAttribute( "aria-modal", "true" );
-
-            var sheet = document.createElement( "div" );
-            sheet.className = "sheet";
-            back.appendChild( sheet );
+            var d     = modal( { escape: function () { finish( null ); } } );
+            var sheet = d.sheet;
 
             function finish( node )
             {
-                if( done ) return;
-                done = true;
-                document.removeEventListener( "keydown", onKey, true );
-                back.classList.remove( "open" );
-                if( back.parentNode ) back.parentNode.removeChild( back );
-                resolve( node ? { path: node.path, name: nameOf( node ), size: node.size || 0 } : null );
-            }
-
-            function onKey( e )
-            {
-                if( e.key !== "Escape" ) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                finish( null );
+                if( d.close() ) resolve( node ? { path: node.path, name: nameOf( node ), size: node.size || 0 } : null );
             }
 
             function nameOf( n )  { return String( n.path ).split( "/" ).pop(); }
@@ -2796,9 +3079,7 @@
                 applySheetButtons( sheet );
             }
 
-            document.body.appendChild( back );
-            document.addEventListener( "keydown", onKey, true );
-            back.classList.add( "open" );
+            d.show();
             open( dir );
         } );
     }
@@ -2931,6 +3212,16 @@
     {
         return /FBAN|FBAV|FB_IAB|Instagram|Line\/|WhatsApp|Twitter/i.test( navigator.userAgent );
     }
+    // Inside the Nayive Android app (a Trusted Web Activity): Chrome gives the
+    // first page the app opens the referrer "android-app://org.nayive.app/";
+    // the later pages of that tab find it in sessionStorage. device.html (only
+    // the app opens it) sets the same flag.
+    var IN_APK = "nayive-apk";
+    try { if( /^android-app:\/\/org\.nayive\.app\b/.test( document.referrer ) ) sessionStorage.setItem( IN_APK, "1" ); } catch ( _ ) {}
+    function inAndroidApp()
+    {
+        try { return sessionStorage.getItem( IN_APK ) === "1"; } catch ( _ ) { return false; }
+    }
 
     // What can this device actually do right now?
     //   installed | prompt (Chromium) | ios (manual steps) | inapp |
@@ -3018,35 +3309,11 @@
 
     function buildInstall( mode, manual )
     {
-        var back = document.createElement( "div" );
-        back.className = "sheet-backdrop";
-        back.id        = "nayive-install-bar";
-        back.setAttribute( "role", "dialog" );
-        back.setAttribute( "aria-modal", "true" );
+        var d     = modal( { id: "nayive-install-bar", cls: "intro-sheet install-sheet" } );
+        var back  = d.back;
+        var sheet = d.sheet;
 
-        var sheet = document.createElement( "div" );
-        sheet.className = "sheet intro-sheet install-sheet";
-        back.appendChild( sheet );
-
-        var done = false;
-        function finish()
-        {
-            if( done ) return;
-            done = true;
-            document.removeEventListener( "keydown", onKey, true );
-            back.classList.remove( "open" );
-            if( back.parentNode ) back.parentNode.removeChild( back );
-        }
-        function onKey( e )
-        {
-            if( e.key === "Escape" )
-            {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                finish();
-            }
-        }
+        function finish() { d.close(); }
         back._finish = finish;
 
         // Corner x, sticky, above the title - like every other Nayive dialog.
@@ -3190,9 +3457,7 @@
 
         if( acts.children.length ) sheet.appendChild( acts );
 
-        document.body.appendChild( back );
-        document.addEventListener( "keydown", onKey, true );
-        back.classList.add( "open" );
+        d.show();
         xb.focus();
         return back;
     }
@@ -3355,7 +3620,7 @@
      * A share lets another user of THIS server see one file or one folder of
      * yours. They can look, never change: the server roots their "shared/<slug>"
      * path at your folder with writable=false, so every write is refused there
-     * (lib/shares.py + users.resolve_path).
+     * (server/go/shares.go + Users.Resolve in users.go).
      *
      * isShared( path ) is what every app uses to switch itself to read-only.
      * ---------------------------------------------------------------------*/
@@ -3370,12 +3635,14 @@
     /* Everything shared WITH us, fetched once and remembered for the life of the
      * page. Both Drive and Photos need the same answer ("may I add files here?")
      * and neither should ask the server again on every render.
+     * `fresh` asks again and remembers the new answer: Trips and Split re-read
+     * the list on every refresh, so a share made or taken back meanwhile shows.
      * Returns a promise of the /api/shares "with_me" array, [] on any failure. */
     var _withMe = null;
 
-    function sharedWithMe()
+    function sharedWithMe( fresh )
     {
-        if( ! _withMe )
+        if( ! _withMe || fresh )
             _withMe = fetch( window.location.origin + "/api/shares" )
                 .then( function ( r ) { return r.ok ? r.json() : {}; } )
                 .then( function ( j ) { return j.with_me || []; } )
@@ -3398,7 +3665,7 @@
     /* Promise of true when this path sits in a folder somebody shared with us
      * AND they ticked "pueden añadir archivos". Adding is ALL it allows: the
      * server still refuses overwrite, delete, rename and re-sharing there
-     * (lib/shares.py MODES). A path of our own resolves to false - our own
+     * (server/go/shares.go Modes). A path of our own resolves to false - our own
      * folders are not "shared", they are simply ours. */
     function canAddTo( path )
     {
@@ -3479,11 +3746,29 @@
         return b;
     }
 
+    // To the clipboard. navigator.clipboard is absent on the plain-HTTP LAN URL
+    // (it needs a secure context) and may refuse; then a hidden textarea and
+    // execCommand("copy"). Resolves when one of the two worked.
     function copyText( value )
     {
+        function legacy()
+        {
+            var ta = document.createElement( "textarea" );
+            ta.value = value;
+            ta.setAttribute( "readonly", "" );
+            ta.style.position = "fixed";
+            ta.style.opacity  = "0";
+            document.body.appendChild( ta );
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand( "copy" ); } catch ( e ) {}
+            ta.remove();
+            if( ! ok ) throw new Error( "copy failed" );
+        }
+
         if( navigator.clipboard && navigator.clipboard.writeText )
-            return navigator.clipboard.writeText( value );
-        return Promise.reject( new Error( "no clipboard" ) );
+            return navigator.clipboard.writeText( value ).catch( legacy );
+        return new Promise( function ( resolve ) { legacy(); resolve(); } );
     }
 
     // The public links whose × is still on Undo: a sheet opened again meanwhile
@@ -3499,14 +3784,14 @@
 
         return new Promise( function ( resolve )
         {
-            var back = document.createElement( "div" );
-            back.className = "sheet-backdrop";
-            back.setAttribute( "role", "dialog" );
-            back.setAttribute( "aria-modal", "true" );
-
-            var sheet = document.createElement( "div" );
-            sheet.className = "sheet";
-            back.appendChild( sheet );
+            // Escape as the other dialogs take it: from anywhere (nothing inside
+            // needs the focus first), and never on to the app underneath. Only
+            // while this is the top sheet: a question asked from inside it
+            // (NayiveUI.confirm) is closed by its own Escape, not this one.
+            // Closed, it fades out before it goes.
+            var d = modal( { escape: close, linger: 200, top: function () { return topSheetBackdrop() === back; } } );
+            var back  = d.back;
+            var sheet = d.sheet;
 
             var users = [], mine = [], chosen = [];   // chosen = every person ticked right now
             var mayAdd = false;                      // "pueden añadir archivos" ticked?
@@ -3516,23 +3801,7 @@
 
             function close()
             {
-                document.removeEventListener( "keydown", onKey, true );
-                back.classList.remove( "open" );
-                setTimeout( function () { if( back.parentNode ) back.parentNode.removeChild( back ); }, 200 );
-                resolve();
-            }
-
-            // Escape as the other dialogs take it: from anywhere (nothing inside
-            // needs the focus first), and never on to the app underneath. Only
-            // while this is the top sheet: a question asked from inside it
-            // (NayiveUI.confirm) is closed by its own Escape, not this one.
-            function onKey( e )
-            {
-                if( e.key !== "Escape" || topSheetBackdrop() !== back ) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                close();
+                if( d.close() ) resolve();
             }
 
             var ok = null;   // the "Compartir" button, so a tick-box can enable it
@@ -3726,9 +3995,17 @@
                         setLead();          // no render(): that would scroll the list back to the top
                     } );
 
-                    addLab.appendChild( addBox );
+                    // An on / off option: the text, then the shared .switch.
+                    var addSw = document.createElement( "span" );
+                    addSw.className = "switch sm";
+                    var addTrack = document.createElement( "span" );
+                    addTrack.className = "track";
+                    addSw.appendChild( addBox );
+                    addSw.appendChild( addTrack );
+
                     addLab.appendChild( document.createTextNode(
                         t( "share.mayadd" ) ) );
+                    addLab.appendChild( addSw );
                     people.appendChild( addLab );
                 }
                 sheet.appendChild( people );
@@ -3898,76 +4175,9 @@
                 } ).then( render );
             }
 
-            document.body.appendChild( back );
-            render();
-            back.classList.add( "open" );
+            d.show( render );
             load();
-
-            document.addEventListener( "keydown", onKey, true );
         } );
-    }
-
-    /* "Sync with your phones" (CardDAV in Contacts, CalDAV in Calendar): the top
-     * of each app's Settings sheet. The markup lives in the app (its texts differ);
-     * this wires it, finding its parts by data-dav="…":
-     *   off / on        the two states; connect (+) and stop (x) flip them
-     *   iphone / android / onphone   the set-up cards: the phone being read on
-     *                   decides which one shows, a PC shows both (as Trips' My location)
-     *   server / user / pass         the by-hand rows; [data-dav-copy="<part>"] copies one
-     * UI ONLY for now (2026-09-22): nothing is sent or saved. Set-up links
-     * ([data-dav-soon]), the password and every <select> answer "Not working yet".
-     * Returns { refresh( user ) }: call it each time the sheet opens. */
-    function davSection( root )
-    {
-        function part( k )   { return root.querySelector( '[data-dav="' + k + '"]' ); }
-        function soon( e )   { if( e ) e.preventDefault(); toast( t( "dav.soon" ) ); }
-        function show( on )  { part( "off" ).hidden = on; part( "on" ).hidden = ! on; }
-        function isAndroid() { return /android/i.test( navigator.userAgent ); }
-
-        function setValue( k, label, value )
-        {
-            var el = part( k );
-            el.textContent   = t( label ) + ": " + ( value || "…" );
-            el.dataset.value = value;
-        }
-
-        part( "connect" ).innerHTML = icon( "plus" );
-        part( "stop"    ).innerHTML = icon( "x" );
-        part( "connect" ).addEventListener( "click", function () { show( true ); } );
-        part( "stop"    ).addEventListener( "click", function () { show( false ); } );
-
-        root.querySelectorAll( "[data-dav-soon]" ).forEach( function ( el ) { el.addEventListener( "click", soon ); } );
-        root.querySelectorAll( "select" ).forEach( function ( el ) { el.addEventListener( "change", function () { soon(); } ); } );
-
-        root.querySelectorAll( "[data-dav-copy]" ).forEach( function ( b )
-        {
-            b.type      = "button";
-            b.innerHTML = icon( "copy" );
-            b.title     = t( "ui.copy" );
-            b.setAttribute( "aria-label", b.title );
-            b.addEventListener( "click", function ()
-            {
-                var value = part( b.dataset.davCopy ).dataset.value;
-                if( ! value ) { soon(); return; }          // no password yet
-                copyText( value ).then( function () { toast( t( "dav.copied" ) ); },
-                                        function () { toast( value ); } );
-            } );
-        } );
-
-        function refresh( user )
-        {
-            var ios = isIOS(), droid = isAndroid();
-            part( "iphone"  ).hidden = droid;
-            part( "android" ).hidden = ios;
-            part( "onphone" ).hidden = ios || droid;
-
-            setValue( "server", "dav.server", location.origin + "/dav/" );
-            setValue( "user",   "dav.user",   user || "" );
-            setValue( "pass",   "dav.pass",   "" );
-            part( "pass" ).textContent = t( "dav.pass" ) + ": ••••-••••-••••-••••";
-        }
-
-        return { refresh: refresh };
     }
 
     // The town at a (rounded) position, in the viewer's language; "" when unknown.
@@ -4008,6 +4218,20 @@
 
     var sessionBar = null;
 
+    // Send the browser to the sign-in page, returning here afterwards. Framed
+    // pages (Planner's iframes, a desktop window) navigate the TOP window, or
+    // the sign-in form would open inside the frame. A cross-origin
+    // `top.location` throws; then we fall back to ourselves. GumApi.loginRedirect
+    // is this same function (admin.html and the launcher have no GumApi).
+    function loginRedirect()
+    {
+        var win = window;
+        try { if( window.top !== window && window.top.location.pathname ) win = window.top; }
+        catch ( e ) {}
+        win.location.href = "/nayive/login.html?return=" +
+            encodeURIComponent( win.location.pathname + win.location.search );
+    }
+
     function sessionExpired()
     {
         if( ! document.body ) return;
@@ -4029,19 +4253,7 @@
         btn.type        = "button";
         btn.className   = "session-bar-btn";
         btn.textContent = t( "ui.session.login" );
-        btn.addEventListener( "click", function ()
-        {
-            if( window.GumApi ) return GumApi.loginRedirect();
-
-            // admin.html (and anything else that loads ui.js on its own) has no
-            // GumApi: same redirect, done here. Framed pages navigate the TOP
-            // window or the sign-in form would open inside the frame.
-            var win = window;
-            try { if( window.top !== window && window.top.location.pathname ) win = window.top; }
-            catch ( e ) {}
-            win.location.href = "/nayive/login.html?return=" +
-                encodeURIComponent( win.location.pathname + win.location.search );
-        } );
+        btn.addEventListener( "click", loginRedirect );
 
         bar.appendChild( msg );
         bar.appendChild( btn );
@@ -4401,6 +4613,57 @@
         return d.getFullYear() + "-" + pad2( d.getMonth() + 1 ) + "-" + pad2( d.getDate() );
     }
 
+    // "hoja.XLSX" -> "xlsx" (no dot, lower case); "" when there is none.
+    function extOf( name )
+    {
+        var m = /\.([a-z0-9]+)$/i.exec( String( name || "" ) );
+        return m ? m[ 1 ].toLowerCase() : "";
+    }
+
+    // "files/a/b.txt" -> "b.txt"
+    function baseName( path ) { return String( path || "" ).split( "/" ).pop(); }
+
+    // "foto.jpg" -> "foto (2).jpg", "foto (3).jpg"... while the name is in
+    // `taken` (a Set of the folder's names). Photos' and the share target's
+    // uploads; Drive's copies say "(copia)" instead (move-copy.js).
+    function uniqueName( name, taken )
+    {
+        if( ! taken.has( name ) ) return name;
+        var dot  = name.lastIndexOf( "." );
+        var stem = dot > 0 ? name.slice( 0, dot ) : name;
+        var ext  = dot > 0 ? name.slice( dot )    : "";
+        var i = 2;
+        while( taken.has( stem + " (" + i + ")" + ext ) ) i++;
+        return stem + " (" + i + ")" + ext;
+    }
+
+    // A name as a safe folder / file name: "Córdoba 2026" -> "cordoba-2026".
+    // Accents are dropped (NFD), not the letters; anything else that is not a-z
+    // or 0-9 becomes one "-". `max` cuts it; `fallback` stands in for "".
+    function slugify( s, fallback, max )
+    {
+        var out = String( s || "" ).normalize( "NFD" ).replace( /[\u0300-\u036f]/g, "" )
+                  .toLowerCase().replace( /[^a-z0-9]+/g, "-" ).replace( /^-+|-+$/g, "" );
+        if( max ) out = out.slice( 0, max );
+        return out || fallback || "item";
+    }
+
+    // Every IANA time zone this browser knows. Ancient browsers have no
+    // supportedValuesOf; they get a short list of the common ones.
+    function timeZones()
+    {
+        try { return Intl.supportedValuesOf( "timeZone" ); }
+        catch ( e )
+        {
+            return [ "UTC","Europe/Madrid","Europe/London","Europe/Paris","Europe/Berlin",
+                     "Europe/Rome","Europe/Lisbon","America/New_York","America/Chicago",
+                     "America/Denver","America/Los_Angeles","America/Sao_Paulo",
+                     "America/Mexico_City","Asia/Tokyo","Asia/Shanghai","Asia/Hong_Kong",
+                     "Asia/Singapore","Asia/Dubai","Asia/Kolkata","Australia/Sydney",
+                     "Pacific/Auckland" ];
+        }
+    }
+
     //------------------------------------------------------------------------//
     // THE SYNC INDICATOR  -  one mapping from shared/store.js states to the
     // header plug, for every app that syncs through the store.
@@ -4542,7 +4805,26 @@
             await maybeRefresh( true, "visible" );
             if( opts.onVisible ) opts.onVisible();
         } );
-        window.addEventListener( "focus", function () { maybeRefresh( false, "focus" ); } );
+        // A click on a window without focus fires "focus" between its press and its
+        // release. The re-read then redraws the list under the pointer, the release
+        // lands on a NEW button and the click is lost (the second click works). So
+        // while a button is held the re-read waits until the click is done.
+        var held = false, waiting = false;
+
+        window.addEventListener( "pointerdown",   function () { held = true;  }, true );
+        window.addEventListener( "pointercancel", function () { held = false; }, true );
+        window.addEventListener( "pointerup",     function ()
+        {
+            held = false;
+            if( ! waiting ) return;
+            waiting = false;
+            setTimeout( function () { maybeRefresh( false, "focus" ); }, 0 );   // after the click
+        }, true );
+        window.addEventListener( "focus", function ()
+        {
+            if( held ) waiting = true;
+            else       maybeRefresh( false, "focus" );
+        } );
 
         var dot = byId( opts.indicatorId || "syncIndicator" );
         if( dot && dot.tagName === "BUTTON" ) dot.addEventListener( "click", refreshNow );
@@ -4978,16 +5260,26 @@
 
     window.NayiveUI = {
         setOpen:  setOpen,
+        paneResizer: paneResizer,   // a .pane-resizer handle sizes the pane next to it
+        isMac:    IS_MAC,           // shortcuts take ⌘ (Drive, Write, Calc, Text)
+        pwEye:    pwEye,            // show / hide a password field's text
+        searchFold: searchFold,     // a toolbar search field folded behind a magnifier
+        modal:    modal,            // a dialog built on the fly: backdrop, sheet, Escape, close
         open:     open,
         close:    close,
-        pack:     packSheet,   // shrink a dialog to its content width (or .sheet--pack)
         toast:    toast,
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
+        loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
         viewerTz: viewerTz,
         escapeHtml: escapeHtml,
         townName:   townName,      // the town at a position, "" when unknown (trips/public.html)
         pad2:       pad2,
         todayIso:   todayIso,
+        extOf:      extOf,
+        baseName:   baseName,
+        uniqueName: uniqueName,    // "foto.jpg" -> "foto (2).jpg" in a folder that has it
+        slugify:    slugify,       // "Córdoba" -> "cordoba" (Trips, Split)
+        timeZones:  timeZones,     // every IANA zone (the launcher, Calendar)
         applySyncState: applySyncState,   // store state -> the header plug (classes + title)
         syncIndicator:  syncIndicator,    // a ready store.onState listener for #syncIndicator
         bootWithStore:  bootWithStore,    // the access probe + "open from cache" fallback
@@ -5001,21 +5293,17 @@
         t:         t,
         tf:        tf,
         applyI18n: applyI18n,
-        i18nReady: i18nReady,
         lang:      I18N ? I18N.lang    : function () { return "es"; },
         saved:     I18N ? I18N.saved   : function () { return null; },
         locale:    I18N ? I18N.locale  : function () { return "es"; },
         weekday:   I18N ? I18N.weekday : function ( n ) { return String( n ); },
         month:     I18N ? I18N.month   : function ( n ) { return String( n ); },
-        langs:     I18N ? I18N.langs   : [],
         setLang:   I18N ? I18N.setLang : function () {},
         applySheetButtons: applySheetButtons,
         applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,
         applySyncDots:     applySyncDots,
-        embedded:          EMBEDDED,     // true inside Planner's iframes (and a desktop window)
         windowed:          WINDOWED,     // true inside a desktop window
-        localizeDateTimeInputs: localizeDateTimeInputs,
         confirm:  confirmDialog,
         askPassword: askPassword,
         alert:    alertDialog,
@@ -5025,25 +5313,23 @@
         setIntro:  setIntro,      // swap that dialog when the app changes screen
         setHelpMenu: setHelpMenu, // the "?" opens the app's own Ayuda menu instead
         showIntro: showIntro,     // open it now (the toolbar "?" button)
-        showCoach: showCoach,     // the once-ever "name = inicio" / "? = ayuda" bubbles
         holdIntro: holdIntro,     // suppress + close the auto help card for this load
         isShared:     isShared,
         sharedWithMe: sharedWithMe,   // everything shared WITH us, fetched once per page
         canAddTo:     canAddTo,
         sharedBadge:  sharedBadge,
         shareSheet:   shareSheet,
-        davSection:      davSection,          // Contacts' / Calendar's "Sync with your phones" (UI only)
         rowButton:       rowButton,           // the share sheet's round button (trips/my-location.js too)
         jsonApi:         jsonApi,             // one JSON call to this server
         copyText:        copyText,            // to the clipboard, or a rejected promise
         isIOS:           isIOS,
+        inAndroidApp:    inAndroidApp,
         pickFolder:           pickFolder,
         pickFile:             pickFile,
         launcherFolder:       launcherFolder,
         changeLauncherFolder: changeLauncherFolder,
         offerInstall:         offerInstall,
         isStandalone:         isStandalone,
-        installMode:          installMode,
-        startTour:    defaultTour    // firstRun re-points this at the app's intro card
+        installMode:          installMode
     };
 } )();

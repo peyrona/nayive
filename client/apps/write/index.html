@@ -24,10 +24,10 @@
     <!-- The pull-down menu bar (Archivo, Edición, Ver…) and the switch that
          remembers whether the user wants it or the icon toolbar. Shared with Calc. -->
     <script src="../shared/menubar.js" defer></script>
-    <!-- Write still carries its own copies of most of the office plumbing; what
-         it does take from here is the save-as folder row (NayiveOffice.folderField). -->
     <!-- A document locked with a password: AES-GCM, the key never leaves the tab. -->
     <script src="../shared/crypt.js" defer></script>
+    <!-- The open document, its autosave, the Open / "Guardar como" sheets and the
+         header's menus - the plumbing Write shares with Calc and Text. -->
     <script src="../shared/office.js" defer></script>
     <!-- Image shrinking on insert (NayivePhoto.prepare) — an image is stored inside
          the .docx, so a phone photo would otherwise be carried whole. -->
@@ -94,20 +94,21 @@
         html, body { height: 100%; overflow: hidden; }
 
         /* .file-label / .file-label-input are the shared OFFICE CHROME (shared/app.css),
-           the same header shape Calc and Text use. Nothing local. */
+           the same header shape Calc and Text use. Only: the name keeps its own
+           width, so the chrome switch sits right after it (app.css HEADER). */
+        .topbar .file-label { flex: 0 1 auto; }
 
         /* The toolbar row's buttons - the formatting strip and Write's own - are
            the TOOLBAR BUTTON of shared/app.css (its comment there): a smaller
-           rounded square than the header's .icon-btn, and a property that is ON
+           circle than the header's .icon-btn, and a property that is ON
            in the document (bold, a list, the formatting marks) shows as an
            accent tint, not the header's full accent fill. */
         #toolbarRow .icon-btn
         {
             flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-            width: 32px; height: 32px; margin: 2px 0; border: none; border-radius: var(--radius-s); cursor: pointer;
-            background: transparent; color: var(--text-dim);
+            width: 32px; height: 32px; margin: 2px 0; border: none; border-radius: 50%; cursor: pointer;
+            color: var(--text-dim);
         }
-        #toolbarRow .icon-btn:hover     { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
         #toolbarRow .icon-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
         #toolbarRow .icon-btn:disabled  { opacity: 0.4; cursor: default; background: transparent; color: var(--text-dim); }
 
@@ -123,23 +124,14 @@
              "Aa"  #fmtBtn   - phone only; folds the formatting row away while
                                you type.
            #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
-           glance and needs no glyph. .is-active (shared app.css) marks it while
-           the row is showing. */
+           glance and needs no glyph (its type is in shared/app.css, Calc's too).
+           .is-active (shared app.css) marks it while the row is showing. */
         #fmtBtn { display: none; }
 
         /* The "⋮" that opens the rest of the toolbar in place: the row's own
-           .icon-btn (above), open = the tint of a property that is on. Phone
-           only, and always last in the row. */
-        #toolbarRow #moreToolsBtn                      { display: none; order: 99; }
-        #toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-        #fmtBtn
-        {
-            font-family: var(--font-sans);
-            font-size: 0.95rem;
-            font-weight: 600;
-            line-height: 1;
-            letter-spacing: 0.5px;
-        }
+           .icon-btn (above), open = the tint of a property that is on (shared
+           app.css). Phone only, and always last in the row. */
+        #toolbarRow #moreToolsBtn { display: none; order: 99; }
 
         /* The "..." menu is the shared .top-menu / .menu-item (shared/app.css),
            anchored under its button by NayiveUI.wireMenu (via shared/office.js). */
@@ -248,12 +240,9 @@
             position: absolute; inset: 0; z-index: 5;
             display: flex; align-items: center; justify-content: center;
             background: var(--bg); color: var(--text-dim); font-size: 0.9rem;
-            transition: opacity var(--tr-move) ease;
+            transition: opacity var(--tr-move);
         }
         #editor.is-ready .editor-loading { opacity: 0; pointer-events: none; }
-
-        /* "Sección 2 de 3" under the page-setup fields. */
-        .ps-section { font-size: 0.78rem; color: var(--text-dim); margin: 2px 0 4px; }
 
         /* The proofing-language checkboxes, one per vendored dictionary. */
         .proof-langs { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0; }
@@ -334,10 +323,9 @@
         /* .open-crumb / .open-list are the shared OFFICE CHROME block in shared/app.css
            (Calc and Text get the same list from shared/office.js). Nothing local. */
 
-        /* Settings and page setup: a checkbox row, not a full-width control
-           (shared app.css only styles block labels). */
-        .sheet .field label.check { display: flex; align-items: center; gap: 8px; margin-bottom: 0; font-size: 0.9rem; color: var(--text); cursor: pointer; }
-        .sheet .field label.check input { width: auto; }
+        /* Settings and page setup: an on / off row - the text, then the shared
+           .switch at the end (shared app.css only styles block labels). */
+        .sheet .field label.check { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0; font-size: 0.9rem; color: var(--text); cursor: pointer; }
 
         /* Table-borders popup (#tbPopup) — the toolbar button opens this inline,
            chrome-free picker anchored under it. Sections, top to bottom: the eight
@@ -424,7 +412,7 @@
             /* On screen the engine stacks its pages absolutely, 32 px of grey
                apart. On paper that gap adds up and pushes the last page onto an
                extra sheet, so the pages go back into the flow, one per sheet. */
-            .docx-pages, .docx-pages-host,
+            .docx-pages,
             #editorHost > div             { height: auto !important; }
             #editor .docx-page            { position: relative !important; top: auto !important; left: auto !important;
                                             margin: 0 !important; box-shadow: none !important;
@@ -449,6 +437,19 @@
             <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
             <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
 
+            <!-- Write's two menu chromes, the way Calendar switches day / week /
+                 month: two icon buttons in the header, the current one filled
+                 with the accent. Tooltips only - a label here would push the
+                 file name off a phone. -->
+            <div class="tb-modes">
+                <button id="chromeToolbarBtn" class="icon-btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="title:ui.chromeToolbar, aria-label:ui.chromeToolbar">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
+                </button>
+                <button id="chromeMenusBtn" class="icon-btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="title:ui.chromeMenus, aria-label:ui.chromeMenus">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
+                </button>
+            </div>
+
             <!-- Phone only (see the phone block in the CSS above): "Aa" folds the
                  formatting row away, "⋮" holds the app's own buttons. write.js
                  moves the toolbar's "?" in here too while the phone layout is on. -->
@@ -458,17 +459,6 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
                 </button>
             </div>
-
-            <!-- Write's two menu chromes, the way Calendar switches day / week /
-                 month: two icon buttons in the header, the current one filled
-                 with the accent. Tooltips only - a label here would push the
-                 file name off a phone. -->
-            <button id="chromeToolbarBtn" class="icon-btn chrome-btn" type="button" data-chrome="toolbar" data-i18n-attr="title:ui.chromeToolbar, aria-label:ui.chromeToolbar">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="19" height="9" rx="2"></rect><rect x="5.2" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="10.4" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect><rect x="15.6" y="10.4" width="3.2" height="3.2" rx="0.6" fill="currentColor" stroke="none"></rect></svg>
-            </button>
-            <button id="chromeMenusBtn" class="icon-btn chrome-btn" type="button" data-chrome="menus" data-i18n-attr="title:ui.chromeMenus, aria-label:ui.chromeMenus">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="5.5" x2="21" y2="5.5"></line><rect x="5.5" y="9.5" width="11" height="10.5" rx="1.6"></rect><line x1="8.2" y1="13.2" x2="13.8" y2="13.2" stroke-width="1.6"></line><line x1="8.2" y1="16.5" x2="13.8" y2="16.5" stroke-width="1.6"></line></svg>
-            </button>
 
             <!-- "Guardado 12:04". Its own element, not the plug's title: shared/ui.js
                  rewrites that title on every store state change. -->
@@ -714,8 +704,6 @@
                 <div class="field"><label for="psRight" data-i18n="write.marginRight"></label><input type="text" id="psRight" inputmode="decimal"></div>
             </div>
 
-            <!-- Only shown when the document has more than one section. -->
-            <p id="psSection" class="dialog-text ps-section" hidden></p>
             <div class="sheet-actions">
                 <button id="pageSetupCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="pageSetupConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
@@ -730,7 +718,7 @@
             <h2 data-i18n="ui.saveAs"></h2>
             <div class="field">
                 <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" placeholder="documento.docx" autocomplete="off">
+                <input type="text" id="saveName" data-i18n-attr="placeholder:write.defaultFile" autocomplete="off">
             </div>
             <div class="field">
                 <label for="saveDirBtn" data-i18n="ui.folder"></label>
@@ -782,8 +770,8 @@
             </div>
 
             <div class="section-label" data-i18n="write.paFlowLabel"></div>
-            <div class="field"><label class="check"><input type="checkbox" id="paKeepNext"> <span data-i18n="write.paKeepNext"></span></label></div>
-            <div class="field"><label class="check"><input type="checkbox" id="paKeepLines"> <span data-i18n="write.paKeepLines"></span></label></div>
+            <div class="field"><label class="check"><span data-i18n="write.paKeepNext"></span><span class="switch sm"><input type="checkbox" id="paKeepNext"><span class="track"></span></span></label></div>
+            <div class="field"><label class="check"><span data-i18n="write.paKeepLines"></span><span class="switch sm"><input type="checkbox" id="paKeepLines"><span class="track"></span></span></label></div>
 
             <div class="section-label" data-i18n="write.paListLabel"></div>
             <div class="field-row">
@@ -887,7 +875,7 @@
 <div id="proofLangs" class="proof-langs"></div>
             </div>
             <div class="field">
-                <label class="check"><input type="checkbox" id="setAutocorrect"> <span data-i18n="write.autocorrect"></span></label>
+                <label class="check"><span data-i18n="write.autocorrect"></span><span class="switch sm"><input type="checkbox" id="setAutocorrect"><span class="track"></span></span></label>
                 <p class="dialog-text st-note" data-i18n="write.autocorrectNote"></p>
             </div>
 
@@ -905,10 +893,10 @@
     <div id="menuPanel" class="top-menu menu-panel" role="menu" hidden></div>
     <div id="menuSub"   class="top-menu menu-panel" role="menu" hidden></div>
 
-    <!-- Insertar ▸ Imagen: the menu picks the file itself (plan Phase 5). -->
+    <!-- Insertar ▸ Imagen: the menu picks the file itself. -->
     <input id="imgInput" type="file" accept="image/*" style="display:none">
 
-    <!-- Insertar ▸ Hipervínculo (plan Phase 5). -->
+    <!-- Insertar ▸ Hipervínculo. -->
     <div id="linkBackdrop" class="sheet-backdrop">
         <div class="sheet sheet--pack">
             <h2 data-i18n="write.sc.link"></h2>

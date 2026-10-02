@@ -14,8 +14,10 @@
         var any = S.accounts.length > 0;
         E.$( "noAcct" ).hidden = any;
         E.$( "side" ).hidden = ! any;
-        E.$( "listView" ).hidden = ! any || !! S.open;
+        E.$( "listView" ).hidden = ! any || ( !! S.open && ! E.split );
+        E.showPane();
         E.$( "searchWrap" ).hidden = ! any;
+        E.$( "searchBtn" ).hidden = ! any;
         if( ! any ) { E.plug( "synced" ); return; }
         E.openAccount( S.acct );
     };
@@ -54,7 +56,7 @@
             if( S.acct !== before ) { E.showAccounts(); return; }
             await E.loadTrays();
             var main = E.$( "listView" ).parentNode;
-            if( ! S.open && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false );
+            if( E.listShown() && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false );
             else E.plug( "synced" );
         }
         catch( err ) { E.plug( "offline" ); }
@@ -73,6 +75,7 @@
                 { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ) },
                 { sel: "#composeBtn", text: T( "mail.introCompose" ) },
                 { icon: "back", name: T( "mail.reply" ) + " \u00b7 " + T( "mail.forward" ), text: T( "mail.introReply" ) },
+                { sel: "#fBold", name: T( "mail.format" ), text: T( "mail.introFormat" ) },
                 { sel: "#selectBtn", text: T( "mail.introSelect" ) },
                 { sel: "#actDelete", text: T( "mail.introDelete" ) },
                 { sel: "#actLabel", text: T( "mail.introLabels" ) },
@@ -115,14 +118,17 @@
         E.$( "acctSel" ).addEventListener( "change", function ( e ) { E.openAccount( e.target.value ); } );
         E.$( "syncIndicator" ).addEventListener( "click", function () { E.refresh( true ); } );
 
+        // The magnifier opens the field; its × and Escape clear the search and fold it.
         var input = E.$( "searchInput" );
         input.addEventListener( "keydown", function ( e )
         {
             if( e.key === "Enter" ) { e.preventDefault(); E.search( input.value ); }
-            if( e.key === "Escape" ) { input.value = ""; E.search( "" ); }
         } );
         input.addEventListener( "input", function () { if( ! input.value ) E.search( "" ); } );
-        E.$( "searchClear" ).addEventListener( "click", function () { input.value = ""; E.search( "" ); input.focus(); } );
+        // The funnel inside opens the advanced search (search.js).
+        E.searchFold = NayiveUI.searchFold( { box: E.$( "searchWrap" ), input: input, toggle: E.$( "searchBtn" ),
+                                              filter: E.openAdvSearch, filterTitle: "mail.advTitle",
+                                              onClose: E.clearSearch } );
 
         // the phone's Back closes a message instead of leaving the app
         window.addEventListener( "popstate", function () { if( S.open ) E.closeMessage( false ); } );

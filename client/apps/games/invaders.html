@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- Space Invaders ------------------------------------------------
@@ -23,8 +23,8 @@
            The field is sized off one length the way 2048 and Sudoku are, but
            what --board fixes here is the WIDTH of a 3:4 box: the canvas is a
            216 x 288 world scaled to it (see the module), so one number moves
-           the game, the sprites and the aliens' step together. 46vh rather
-           than Sudoku's 52 because the box is 4/3 as tall as it is wide. */
+           the game, the sprites and the aliens' step together. 75cqh because
+           the box is 4/3 as tall as it is wide. */
         .invaders         { --board: max( 200px, min( 100cqw, 75cqh ) );
                             height: 100%; display: flex; flex-direction: column; }
 
@@ -86,8 +86,8 @@
                       padding: 0 var(--space-4) var(--space-3); text-align: center;
                       font-size: 0.78rem; color: var(--text-faint); }
 
-        /* PHONE: the width is what limits the field there (92vw of 390px is
-           359px, well under 46vh of any phone), so the height cap can loosen
+        /* PHONE: the width is what limits the field there (94vw of 390px is
+           367px, well under 54vh of any phone), so the height cap can loosen
            and the padding round it comes off. */
         @media (max-width: 640px)
         {
@@ -142,7 +142,7 @@
                         <div class="inv-fit">
                             <div class="inv-stage">
                                 <canvas class="inv-canvas" id="invCanvas" tabindex="0" data-i18n-attr="aria-label:games.invaders"></canvas>
-                                <div class="game-cover tappable inv-over" id="invOver" hidden>
+                                <div class="game-cover tappable" id="invOver" hidden>
                                     <p class="game-cover-t" id="invOverTitle"></p>
                                     <p class="game-cover-s" id="invOverSub"></p>
                                     <button class="text-btn" id="invOverBtn" type="button"></button>
@@ -159,7 +159,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -733,12 +733,6 @@
             function step()
             {
                 var i;
-
-                // Any dialog over the app pauses it: the help sheet, the install
-                // prompt, "session expired". They cover the pane and swallow the
-                // keys (see onKey), and a ship that cannot be steered is a ship
-                // standing still while it is shot at.
-                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
 
                 for( i = 0; i < aliens.length; i++ ) if( aliens[ i ].boom > 0 ) aliens[ i ].boom--;
 

@@ -20,15 +20,13 @@ function openNode( node )
 
     if( isDir( node ) ) { navigateTo( node.path ); return true; }
 
-    const ext     = typeExt( node );
-    const toWrite = WRITE_IMPORT.includes( ext );
-    const toCalc  = CALC_IMPORT.includes( ext );
-    const toText  = TEXT_IMPORT.includes( ext );
+    const ext    = typeExt( node );
+    const toText = TEXT_IMPORT.includes( ext );
 
     // A file in a format an editor opens natively: open it in place, from
     // wherever it lives. Calc opens a .csv as it is too (it saves it back as
     // a .csv, and says first what a .csv cannot keep). Anything else falls
-    // through to the import/conversion routing below.
+    // through to the routing below.
     if( ext === 'docx' ) { openDoc( '../write/index.html?file=' + encodeURIComponent( node.path ) ); return true; }
     if( ext === 'xlsx' || ext === 'csv' ) { openDoc( '../calc/index.html?file=' + encodeURIComponent( node.path ) ); return true; }
     if( toText )         { openDoc( '../text/index.html?file='  + encodeURIComponent( node.path ) ); return true; }
@@ -41,8 +39,8 @@ function openNode( node )
     const office = officeKind( ext );
     if( office ) { openOffice( node, office ); return true; }
 
-    // An image the editor can re-encode: open it in Drive's built-in editor.
-    if( IMAGE_EDIT.includes( ext ) ) { openImageEditor( node.path ); return true; }
+    // An image the editor can re-encode: open it in Image, a window of its own.
+    if( IMAGE_EDIT.includes( ext ) ) { openDoc( '../image/index.html?file=' + encodeURIComponent( node.path ) ); return true; }
 
     // Any other image: show it in Drive's built-in lightbox viewer (no editing).
     if( IMAGE_VIEW.includes( ext ) ) { openImageViewer( node.path ); return true; }
@@ -53,13 +51,6 @@ function openNode( node )
 
     // A PDF: hand it to the browser's own PDF viewer (zoom, print, pages).
     if( ext === 'pdf' ) { openDoc( GumApi.fileUrl( node.path ) ); return true; }
-
-    // A file elsewhere that one of the editors can import: hand it to the tool
-    // with its import action pre-triggered (ask which one when both qualify).
-    if( toWrite && toCalc ) { openWithDialog( node.path, [ 'write', 'calc' ], 'drive.openWithBody' ); return true; }
-    if( toWrite )           { openImport( 'write', node.path ); return true; }
-    if( toCalc )            { openImport( 'calc',  node.path ); return true; }
-    if( toText )            { openImport( 'text',  node.path ); return true; }
 
     // No app claims this extension: ask which one should have it.
     openWithDialog( node.path, OPEN_WITH_ALL, 'drive.openWithAny' );

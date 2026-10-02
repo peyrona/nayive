@@ -88,21 +88,15 @@ if [[ -f "$CFG" ]]; then
     echo "keeping existing $CFG"
     PORT="$(grep -oE '"port"[[:space:]]*:[[:space:]]*[0-9]+' "$CFG" | grep -oE '[0-9]+' || echo "$PORT")"
 else
-    cat > "$CFG" <<EOF
-{
-    "host": "127.0.0.1",
-    "port": $PORT,
-    "base_dir": ".",
-    "apps_dir": "../client/apps",
-    "session_hours": 12,
-    "log_level": "error",
-    "tls": {
-        "cert_file": "",
-        "key_file": ""
-    },
-    "admin": { "name": null, "password": null }
-}
-EOF
+    # The example the repo keeps (pack.sh ships it), on 127.0.0.1 and $PORT.
+    EXAMPLE="$RUN/config/server.example.json"
+    [[ -f $EXAMPLE ]] || { echo "error: $EXAMPLE not found next to install.sh" >&2; exit 1; }
+    [[ $PORT =~ ^[0-9]+$ ]] || { echo "error: PORT must be a number, not '$PORT'" >&2; exit 1; }
+    NEW="$(sed -e 's/"host": "0\.0\.0\.0"/"host": "127.0.0.1"/' \
+               -e "s/\"port\": [0-9]*/\"port\": $PORT/" "$EXAMPLE")"
+    grep -q '"host": "127.0.0.1"' <<<"$NEW" && grep -q "\"port\": $PORT," <<<"$NEW" ||
+        { echo "error: $EXAMPLE has no \"host\" / \"port\" line to set" >&2; exit 1; }
+    printf '%s\n' "$NEW" > "$CFG"
     echo "wrote $CFG  (admin account is empty - set it in the admin panel)"
     echo "  it listens on 127.0.0.1 only until you create the admin; then set \"host\": \"0.0.0.0\" there"
 fi

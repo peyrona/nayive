@@ -46,6 +46,13 @@ client/apps/write/lib/.docx-editor-prev/
 # Snapshot folders made before edits.
 .bak/
 
+# Tool leftovers: npm and Python caches, and the page tools/locktest copies
+# into client/apps/ for a run (left behind if the run is killed; deploy.sh
+# would ship it).
+node_modules/
+__pycache__/
+/client/apps/_locktest.html
+
 # Claude Code local settings.
 /.claude/
 

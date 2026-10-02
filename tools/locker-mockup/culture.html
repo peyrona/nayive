@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salon locker</title>
+<!--
+  MOCKUP, version 2 (2026-09-29): a screen locker for people who love
+  literature, languages and fine arts. A triptych of boxes:
+
+    left:   the clock (the hour also in words, a new language each minute)
+            the weather (now + tomorrow)
+    centre: a painting chosen for today's sky, with its museum label
+    right:  the word of the day (+ a foreign word), a verse for today's sky
+
+  ALL DATA IS LIVE, fetched from the internet and kept in localStorage so the
+  free services are asked as little as possible:
+    place      open-meteo geocoding, from the device's time zone   30 days
+    weather    open-meteo forecast (current + 2 days, ONE call)    30 min
+    painting   Wikidata ("depicts" rain, snow...) + Commons image  7 days / sky
+    verse      PoetryDB                                            1 day / sky
+    words      Wiktionary main page + the word's own entry         1 day
+  ?city=Paris in the address picks another city.
+
+  Keys (mockup only): W = preview another sky (painting + verse),
+  N = another painting, L = next language for the hour. Any other key or a
+  click shows the password box (any password works here).
+
+  The locker is written as NayiveLock.define( "culture", ... ) so it can move
+  to client/apps/shared/lockers/culture.js almost as is.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..600&family=EB+Garamond:ital,wght@0,400..600;1,400..600&display=swap" rel="stylesheet">
+<style>
+:root
+{
+    --ivory: #F6F1E7;       /* main text: aged paper under gallery light */
+    --smoke: #CFC7B6;       /* secondary text (>= 9:1 on the boxes) */
+    --rule:  rgba( 246, 241, 231, 0.22 );
+    --rule-2: rgba( 246, 241, 231, 0.10 );
+    --box:   rgba( 14, 12, 10, 0.86 );   /* nearly opaque: the wall tints, never fights the text */
+    --serif-display: "Bodoni Moda", "Didot", "Bodoni 72", serif;
+    --serif-text: "EB Garamond", "Garamond", "Georgia", serif;
+}
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+body { font-family: var(--serif-text); color: var(--ivory); -webkit-font-smoothing: antialiased; }
+
+/* The locker's host: what shared/locker.js gives a locker (full screen, black). */
+#host { position: fixed; inset: 0; background: #000; overflow: hidden; }
+
+/*----------------------------------------------------------------------------*/
+/* LOCKER: "culture" */
+
+/* The wall: today's painting, blurred and dimmed, so each work tints the room. */
+.cl-wall
+{
+    position: absolute; inset: -8%; width: 116%; height: 116%; object-fit: cover;
+    filter: blur( 60px ) saturate( 1.1 ) brightness( 0.30 ); opacity: 0; transition: opacity 2s ease;
+}
+.cl-wall.on { opacity: 1; }
+
+/* The triptych. Moves a few px every minute (no burn-in). */
+.cl-grid
+{
+    position: absolute; inset: 3.4vh 2.2vw;
+    display: grid; grid-template-columns: minmax( 0, 26fr ) minmax( 0, 48fr ) minmax( 0, 26fr ); gap: 1.3vw;
+    transition: transform 40s linear;
+}
+.cl-wing { display: flex; flex-direction: column; gap: 1.3vw; min-height: 0; }
+
+/* A box: a double rule, like a book plate. */
+.cl-box
+{
+    position: relative; min-height: 0; overflow: hidden;
+    background: var(--box); border: 1px solid var(--rule);
+    padding: 2.2vh 1.5vw 2.4vh;
+    display: flex; flex-direction: column;
+}
+.cl-box::before { content: ""; position: absolute; inset: 5px; border: 1px solid var(--rule-2); pointer-events: none; }
+.cl-head
+{
+    flex: none; display: flex; justify-content: space-between; align-items: baseline; gap: 1em;
+    font-style: italic; color: var(--smoke); font-size: clamp( 14px, 1vw, 19px );
+    padding-bottom: 0.55em; margin-bottom: 0.9em; border-bottom: 1px solid var(--rule-2);
+}
+.cl-head .src { font-size: 0.8em; white-space: nowrap; }
+.cl-quiet { color: var(--smoke); font-style: italic; font-size: clamp( 15px, 1.05vw, 19px ); }
+.cl-fade { transition: opacity 0.9s ease; }
+.cl-fade.out { opacity: 0; }
+
+/* Clock */
+.cl-clock { flex: none; }
+.cl-time
+{
+    font-family: var(--serif-display); font-weight: 400; font-optical-sizing: auto;
+    font-size: clamp( 52px, 5.2vw, 104px ); line-height: 0.95; letter-spacing: -0.01em;
+    font-variant-numeric: lining-nums tabular-nums; margin: 0.05em 0 0.2em -0.03em;
+}
+.cl-time .colon { opacity: 0.55; margin: 0 0.02em; position: relative; top: -0.06em; }
+.cl-words { font-style: italic; font-size: clamp( 17px, 1.3vw, 25px ); line-height: 1.3; }
+.cl-words .tongue { display: block; font-style: normal; font-size: 0.66em; color: var(--smoke); margin-top: 0.3em; }
+
+/* Weather */
+.cl-weather { flex: 1; }
+.cl-wx { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2vw; font-size: clamp( 14px, 1vw, 19px ); line-height: 1.4; }
+.cl-wx .when { color: var(--smoke); font-style: italic; margin-bottom: 0.2em; }
+.cl-wx .big { font-size: clamp( 38px, 3.1vw, 62px ); line-height: 1.05; font-variant-numeric: lining-nums; }
+.cl-wx .mid { font-size: clamp( 24px, 1.9vw, 38px ); line-height: 1.25; font-variant-numeric: lining-nums; }
+.cl-wx .sky { font-size: 1.15em; margin-top: 0.15em; }
+.cl-wx .small { color: var(--smoke); margin-top: 0.3em; font-variant-numeric: lining-nums; }
+.cl-hours-head { color: var(--smoke); font-style: italic; margin-top: 1.6em; padding-top: 0.8em; border-top: 1px solid var(--rule-2); font-size: clamp( 14px, 1vw, 19px ); }
+.cl-hours { display: grid; grid-template-columns: repeat( 5, 1fr ); gap: 0.4em; margin-top: 0.5em; font-variant-numeric: lining-nums; }
+.cl-hours .hh { color: var(--smoke); font-size: clamp( 13px, 0.9vw, 17px ); }
+.cl-hours .ht { font-size: clamp( 18px, 1.35vw, 26px ); line-height: 1.2; }
+.cl-hours .hs { color: var(--smoke); font-style: italic; font-size: clamp( 13px, 0.9vw, 17px ); }
+.cl-sun { margin-top: auto; padding-top: 0.8em; border-top: 1px solid var(--rule-2); color: var(--smoke); font-size: clamp( 14px, 0.95vw, 18px ); font-variant-numeric: lining-nums; }
+
+/* Painting: whole, never cropped, hung with a gallery shadow. */
+/* Painting + label are one group, centred in the box; JS sizes the picture. */
+.cl-hang { flex: none; }
+.cl-hang img
+{
+    display: block; margin: 0 auto;
+    box-shadow: 0 2px 3px rgba( 0, 0, 0, 0.5 ), 0 24px 60px rgba( 0, 0, 0, 0.65 );
+}
+.cl-label { flex: none; margin-top: 2vh; font-size: clamp( 14px, 1vw, 19px ); line-height: 1.4; color: var(--smoke); }
+.cl-label .who { color: var(--ivory); font-variant-caps: small-caps; letter-spacing: 0.04em; font-size: 1.1em; }
+.cl-label .life { margin-left: 0.5em; }
+.cl-label .title { color: var(--ivory); font-style: italic; font-size: 1.1em; }
+.cl-label .orig { font-style: italic; }
+
+/* Word of the day */
+.cl-word { flex: 1.35; }
+.cl-lemma { font-family: var(--serif-display); font-size: clamp( 30px, 2.5vw, 50px ); line-height: 1.05; overflow-wrap: anywhere; }
+.cl-meta { color: var(--smoke); margin-top: 0.35em; font-size: clamp( 14px, 1vw, 19px ); }
+.cl-meta .pos { font-style: italic; }
+.cl-meta .ipa { margin-left: 0.6em; font-family: "Gentium Plus", "Charis SIL", "DejaVu Serif", serif; font-size: 0.92em; }
+.cl-defs { margin: 0.7em 0 0; padding: 0 0 0 1.2em; font-size: clamp( 15px, 1.08vw, 20px ); line-height: 1.4; }
+.cl-defs li { margin-bottom: 0.25em; }
+.cl-defs li span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.cl-etym
+{
+    color: var(--smoke); font-size: clamp( 14px, 0.98vw, 18px ); line-height: 1.45; margin-top: 0.6em;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+}
+.cl-foreign { margin-top: auto; padding-top: 0.8em; border-top: 1px solid var(--rule-2); font-size: clamp( 14px, 1vw, 19px ); line-height: 1.4; }
+.cl-foreign .in { color: var(--smoke); font-style: italic; }
+.cl-foreign .fw { font-family: var(--serif-display); font-size: 1.45em; margin-right: 0.35em; }
+.cl-foreign .fpos { color: var(--smoke); font-style: italic; }
+.cl-foreign .fdef { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+/* Verse */
+.cl-poem { flex: 1; }
+.cl-lines { font-style: italic; font-size: clamp( 18px, 1.42vw, 27px ); line-height: 1.35; }
+.cl-lines span { display: block; text-wrap: pretty; padding-left: 1.1em; text-indent: -1.1em; }
+.cl-lines span + span { padding-left: 2.2em; }
+.cl-by { color: var(--smoke); margin-top: 0.7em; font-size: clamp( 14px, 1vw, 19px ); }
+.cl-by .poet { color: var(--ivory); }
+
+/*----------------------------------------------------------------------------*/
+/* MOCKUP ONLY: stands in for shared/locker.js's password box. */
+
+#card
+{
+    position: fixed; left: 50%; bottom: 9vh; transform: translateX( -50% );
+    display: none; align-items: center; gap: 12px; padding: 14px 16px;
+    background: rgba( 12, 10, 8, 0.85 ); backdrop-filter: blur( 14px );
+    border: 1px solid rgba( 238, 231, 217, 0.22 ); box-shadow: 0 20px 50px rgba( 0, 0, 0, 0.6 );
+}
+#card.on { display: flex; }
+#card label { font-style: italic; color: var(--smoke); font-size: 18px; }
+#card input
+{
+    font: inherit; font-size: 18px; color: var(--ivory); width: 16em;
+    background: rgba( 255, 255, 255, 0.06 ); border: 1px solid rgba( 238, 231, 217, 0.25 );
+    padding: 8px 10px; outline: none;
+}
+#card input:focus { border-color: var(--ivory); }
+#card button { font: inherit; font-size: 18px; color: #1a1408; background: var(--ivory); border: 0; padding: 8px 18px; cursor: pointer; }
+#card button:focus-visible { outline: 2px solid var(--smoke); outline-offset: 2px; }
+#hint
+{
+    position: fixed; left: 0; right: 0; top: 6px; text-align: center; pointer-events: none; z-index: 2;
+    font-size: 14px; font-style: italic; color: var(--smoke); transition: opacity 1.5s ease;
+}
+#unlocked
+{
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: #1b1d22; color: var(--smoke); font-size: 20px; font-style: italic; cursor: pointer;
+}
+#unlocked.on { display: flex; }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<div id="card" role="dialog" aria-label="Unlock">
+    <label for="pw">Your password</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <button id="go" type="button">Unlock</button>
+</div>
+<div id="hint">Mockup: W previews another sky, N shows another painting, L changes the language of the hour.</div>
+<div id="unlocked">Unlocked (mockup). Click to lock again.</div>
+
+<script>
+/* Stub of shared/locker.js: just enough to run a locker here. */
+var NayiveLock = { defs: {}, define: function ( id, fn ) { this.defs[ id ] = fn; } };
+</script>
+
+<script>
+/*
+ * lockers/culture.js - the salon (mockup). A triptych of boxes: clock and
+ * weather on the left, a painting chosen for today's sky in the centre, the
+ * word of the day and a verse for today's sky on the right. Live data only.
+ */
+NayiveLock.define( "culture", function ( host, opts )
+{
+    "use strict";
+
+    var alive = true;
+
+    //------------------------------------------------------------------------//
+    // SKIES - the weather reduced to seven moods; each picks a painting and a verse.
+
+    var SKIES = [ "clear", "clouds", "rain", "fog", "snow", "storm", "night" ];
+    var SKY =
+    {
+        clear:  { day: "a clear day",   art: "wd:Q525 wd:Q166564",            poem: "sun" },     // Sun, sunset
+        clouds: { day: "a cloudy day",  art: "wd:Q8074",                      poem: "clouds" },  // cloud
+        rain:   { day: "a rainy day",   art: "wd:Q7925",                      poem: "rain" },    // rain
+        fog:    { day: "a misty day",   art: "wd:Q37477 wd:Q192196",          poem: "mist" },    // fog, mist
+        snow:   { day: "a snowy day",   art: "wd:Q7561",                      poem: "snow" },    // snow
+        storm:  { day: "a stormy day",  art: "wd:Q81054 wd:Q2857578 wd:Q33741", poem: "storm" }, // storm, thunderstorm, lightning
+        night:  { day: "a clear night", art: "wd:Q575 wd:Q405 wd:Q1058800",   poem: "stars" }    // night, Moon, moonlight
+    };
+
+    // WMO weather codes (open-meteo) in words.
+    var WMO = { 0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast", 45: "fog", 48: "freezing fog",
+                51: "light drizzle", 53: "drizzle", 55: "heavy drizzle", 56: "freezing drizzle", 57: "freezing drizzle",
+                61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain", 67: "freezing rain",
+                71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains", 80: "light showers", 81: "showers",
+                82: "violent showers", 85: "snow showers", 86: "heavy snow showers",
+                95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with hail" };
+
+    var SHORT = { clear: "clear", night: "clear", clouds: "cloudy", rain: "rain", fog: "fog", snow: "snow", storm: "storm" };
+
+    function skyOf( code, isDay )
+    {
+        if( code >= 95 ) return "storm";
+        if( ( code >= 71 && code <= 77 ) || code === 85 || code === 86 ) return "snow";
+        if( ( code >= 51 && code <= 67 ) || ( code >= 80 && code <= 82 ) ) return "rain";
+        if( code === 45 || code === 48 ) return "fog";
+        if( code === 2 || code === 3 ) return "clouds";
+        return isDay ? "clear" : "night";
+    }
+
+    //------------------------------------------------------------------------//
+    // THE HOUR IN WORDS - six tongues, 12-hour clock, as people say it.
+
+    function en( n )
+    {
+        var A = [ "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+                  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" ];
+        var T = [ "", "", "twenty", "thirty", "forty", "fifty" ];
+        return n < 20 ? A[ n ] : T[ Math.floor( n / 10 ) ] + ( n % 10 ? "-" + A[ n % 10 ] : "" );
+    }
+    function es( n )
+    {
+        var A = [ "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+                  "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte",
+                  "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve" ];
+        var T = [ "", "", "", "treinta", "cuarenta", "cincuenta" ];
+        return n < 30 ? A[ n ] : T[ Math.floor( n / 10 ) ] + ( n % 10 ? " y " + A[ n % 10 ] : "" );
+    }
+    function fr( n, fem )
+    {
+        var A = [ "zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
+                  "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf" ];
+        var T = [ "", "", "vingt", "trente", "quarante", "cinquante" ];
+        var s = n < 20 ? A[ n ] : T[ Math.floor( n / 10 ) ] + ( n % 10 === 1 ? " et un" : n % 10 ? "-" + A[ n % 10 ] : "" );
+        return fem ? s.replace( /\bun$/, "une" ) : s;
+    }
+    function it( n )
+    {
+        var A = [ "zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci",
+                  "undici", "dodici", "tredici", "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove" ];
+        var T = [ "", "", "venti", "trenta", "quaranta", "cinquanta" ];
+        if( n < 20 ) return A[ n ];
+        var t = T[ Math.floor( n / 10 ) ], u = n % 10;
+        if( u === 1 || u === 8 ) t = t.slice( 0, -1 );                 // ventuno, trentotto
+        return t + ( u === 3 ? "tré" : u ? A[ u ] : "" );              // ventitré
+    }
+    function de( n, one )
+    {
+        var A = [ "null", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn",
+                  "elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn" ];
+        var T = [ "", "", "zwanzig", "dreißig", "vierzig", "fünfzig" ];
+        if( n === 1 && one ) return one;
+        if( n < 20 ) return A[ n ];
+        var u = n % 10;
+        return u ? ( u === 1 ? "ein" : A[ u ] ) + "und" + T[ Math.floor( n / 10 ) ] : T[ Math.floor( n / 10 ) ];
+    }
+    function pt( n, fem )
+    {
+        var A = [ "zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez",
+                  "onze", "doze", "treze", "catorze", "quinze", "dezasseis", "dezassete", "dezoito", "dezanove" ];
+        var T = [ "", "", "vinte", "trinta", "quarenta", "cinquenta" ];
+        var s = n < 20 ? A[ n ] : T[ Math.floor( n / 10 ) ] + ( n % 10 ? " e " + A[ n % 10 ] : "" );
+        return fem ? s.replace( /\bum$/, "uma" ).replace( /\bdois$/, "duas" ) : s;
+    }
+
+    var TONGUES =
+    [
+        { name: "English", say: function ( H, h, m )
+        {
+            var nx = h % 12 + 1;
+            if( m === 0 ) return H === 0 ? "It is midnight." : H === 12 ? "It is noon." : "It is " + en( h ) + " o’clock.";
+            if( m === 15 ) return "It is a quarter past " + en( h ) + ".";
+            if( m === 30 ) return "It is half past " + en( h ) + ".";
+            if( m === 45 ) return "It is a quarter to " + en( nx ) + ".";
+            var r = m < 30 ? m : 60 - m;
+            var mins = r === 1 ? " minute" : r % 5 ? " minutes" : "";
+            return "It is " + en( r ) + mins + ( m < 30 ? " past " + en( h ) : " to " + en( nx ) ) + ".";
+        } },
+        { name: "español", say: function ( H, h, m )
+        {
+            var hour = function ( x ) { return x === 1 ? "Es la una" : "Son las " + es( x ); };
+            if( m === 0 )  return hour( h ) + " en punto.";
+            if( m === 15 ) return hour( h ) + " y cuarto.";
+            if( m === 30 ) return hour( h ) + " y media.";
+            if( m < 30 || m % 5 ) return hour( h ) + " y " + es( m ) + ".";
+            var nx = h % 12 + 1;
+            return hour( nx ) + " menos " + ( m === 45 ? "cuarto" : es( 60 - m ) ) + ".";
+        } },
+        { name: "français", say: function ( H, h, m )
+        {
+            function hour( x, H24 )
+            {
+                if( x === 12 ) return H24 === 12 || H24 === 11 ? "midi" : "minuit";
+                return x === 1 ? "une heure" : fr( x ) + " heures";
+            }
+            var hh = hour( h, H ), mid = hh === "midi" || hh === "minuit";
+            if( m === 0 )  return "Il est " + hh + ".";
+            if( m === 15 ) return "Il est " + hh + " et quart.";
+            if( m === 30 ) return "Il est " + hh + " et demi" + ( mid ? "" : "e" ) + ".";
+            if( m > 30 && m % 5 === 0 )
+                return "Il est " + hour( h % 12 + 1, H ) + " moins " + ( m === 45 ? "le quart" : fr( 60 - m ) ) + ".";
+            return "Il est " + hh + " " + fr( m, true ) + ".";
+        } },
+        { name: "italiano", say: function ( H, h, m )
+        {
+            function hour( x, H24 )
+            {
+                if( x === 12 ) return H24 === 12 || H24 === 11 ? "È mezzogiorno" : "È mezzanotte";
+                return x === 1 ? "È l’una" : "Sono le " + it( x );
+            }
+            if( m === 0 )  return hour( h, H ) + ( h === 12 ? "." : " in punto." );
+            if( m === 15 ) return hour( h, H ) + " e un quarto.";
+            if( m === 30 ) return hour( h, H ) + " e mezza.";
+            if( m > 30 && m % 5 === 0 )
+                return hour( h % 12 + 1, H ) + " meno " + ( m === 45 ? "un quarto" : it( 60 - m ) ) + ".";
+            return hour( h, H ) + " e " + it( m ) + ".";
+        } },
+        { name: "Deutsch", say: function ( H, h, m )
+        {
+            var nx = h % 12 + 1;
+            if( m === 0 )  return "Es ist " + de( h, "ein" ) + " Uhr.";
+            if( m === 15 ) return "Es ist Viertel nach " + de( h ) + ".";
+            if( m === 30 ) return "Es ist halb " + de( nx ) + ".";
+            if( m === 45 ) return "Es ist Viertel vor " + de( nx ) + ".";
+            return "Es ist " + de( h, "ein" ) + " Uhr " + de( m ) + ".";
+        } },
+        { name: "português", say: function ( H, h, m )
+        {
+            function hour( x, H24 )
+            {
+                if( x === 12 ) return H24 === 12 || H24 === 11 ? "É meio-dia" : "É meia-noite";
+                return x === 1 ? "É uma" : "São " + pt( x, true );
+            }
+            if( m === 0 )  return hour( h, H ) + ( h === 12 ? "." : " em ponto." );
+            if( m === 15 ) return hour( h, H ) + " e um quarto.";
+            if( m === 30 ) return hour( h, H ) + " e meia.";
+            if( m > 30 && m % 5 === 0 )
+                return hour( h % 12 + 1, H ) + " menos " + ( m === 45 ? "um quarto" : pt( 60 - m ) ) + ".";
+            return hour( h, H ) + " e " + pt( m ) + ".";
+        } }
+    ];
+
+    //------------------------------------------------------------------------//
+    // DATA - every source is cached in localStorage; a failed fetch falls back
+    // to the last good copy, however old.
+
+    var PREFIX = "nv-culture:";
+
+    function pad( n ) { return n < 10 ? "0" + n : "" + n; }
+    function today() { var d = new Date(); return d.getFullYear() + "-" + pad( d.getMonth() + 1 ) + "-" + pad( d.getDate() ); }
+    function dayNo() { var d = new Date(); return Math.floor( ( d - d.getTimezoneOffset() * 6e4 ) / 864e5 ); }
+
+    function cached( key, ttl, get )
+    {
+        var old = null;
+        try { old = JSON.parse( localStorage.getItem( PREFIX + key ) || "null" ); } catch ( e ) {}
+        if( old && Date.now() - old.t < ttl ) return Promise.resolve( old.v );
+        return get().then( function ( v )
+        {
+            try { localStorage.setItem( PREFIX + key, JSON.stringify( { t: Date.now(), v: v } ) ); } catch ( e ) {}
+            return v;
+        }, function ( err ) { if( old ) return old.v; throw err; } );
+    }
+    function json( u ) { return fetch( u ).then( function ( r ) { if( ! r.ok ) throw new Error( r.status ); return r.json(); } ); }
+    function clean( el ) { return el ? el.textContent.replace( /\s+/g, " " ).trim() : ""; }
+
+    // The place: the city of the device's time zone (the real locker would use Nayive's tz-geo.json).
+    function getPlace()
+    {
+        var tz = "Europe/Madrid";
+        try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch ( e ) {}
+        var city = opts.city || tz.split( "/" ).pop().replace( /_/g, " " );
+        return cached( "place:" + city, 30 * 864e5, function ()
+        {
+            return json( "https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + encodeURIComponent( city ) )
+                .then( function ( d )
+                {
+                    var r = d.results && d.results[ 0 ];
+                    if( ! r ) throw new Error( "no place" );
+                    return { name: r.name, lat: r.latitude, lon: r.longitude };
+                } );
+        } );
+    }
+
+    function getWeather( p )
+    {
+        return cached( "weather2:" + p.lat + "," + p.lon, 30 * 6e4, function ()
+        {
+            return json( "https://api.open-meteo.com/v1/forecast?latitude=" + p.lat + "&longitude=" + p.lon +
+                         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day" +
+                         "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset" +
+                         "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2" );
+        } );
+    }
+
+    // Paintings that DEPICT the sky's things (Wikidata), by artists dead before
+    // 1956 (public domain), with an image on Wikimedia Commons.
+    function getPaintings( sky )
+    {
+        return cached( "art:" + sky, 7 * 864e5, function ()
+        {
+            var q = "SELECT ?item (SAMPLE(?lab) AS ?label) (SAMPLE(?img) AS ?image) (SAMPLE(?cl) AS ?creator)" +
+                    " (SAMPLE(?b) AS ?born) (SAMPLE(?dd) AS ?died) (SAMPLE(?inc) AS ?date) (SAMPLE(?col) AS ?coll)" +
+                    " (SAMPLE(?t) AS ?title) (SAMPLE(LANG(?t)) AS ?tlang) WHERE {" +
+                    " VALUES ?d { " + SKY[ sky ].art + " }" +
+                    " ?item wdt:P31 wd:Q3305213; wdt:P180 ?d; wdt:P18 ?img; wdt:P170 ?c." +
+                    " ?c wdt:P570 ?dd. FILTER(YEAR(?dd) < 1956)" +
+                    " OPTIONAL { ?c wdt:P569 ?b } OPTIONAL { ?item wdt:P571 ?inc }" +
+                    " OPTIONAL { ?item wdt:P195 ?cc. ?cc rdfs:label ?col. FILTER(LANG(?col) = 'en') }" +
+                    " OPTIONAL { ?item wdt:P1476 ?t }" +
+                    " ?item rdfs:label ?lab. FILTER(LANG(?lab) = 'en')" +
+                    " ?c rdfs:label ?cl. FILTER(LANG(?cl) = 'en')" +
+                    " } GROUP BY ?item LIMIT 60";
+            return json( "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent( q ) ).then( function ( d )
+            {
+                function v( b, k ) { return b[ k ] ? b[ k ].value : ""; }
+                function yr( s ) { var m = /^(-?\d{1,4})/.exec( s ); return m ? m[ 1 ] : ""; }
+                return d.results.bindings.map( function ( b )
+                {
+                    var label = v( b, "label" ), title = v( b, "title" ), tl = v( b, "tlang" );
+                    return { title: label, image: v( b, "image" ).replace( /^http:/, "https:" ),
+                             orig: title && tl && tl !== "en" && title !== label ? title : "", origLang: tl,
+                             artist: v( b, "creator" ), born: yr( v( b, "born" ) ), died: yr( v( b, "died" ) ),
+                             date: yr( v( b, "date" ) ), coll: v( b, "coll" ) };
+                } ).filter( function ( a ) { return a.image && ! /\.(tiff?|pdf|djvu)$/i.test( a.image ); } );
+            } );
+        } );
+    }
+
+    // A few lines from a poem that names the sky's word.
+    function getPoem( sky )
+    {
+        var kw = SKY[ sky ].poem;
+        return cached( "poem2:" + sky + ":" + today(), 864e5, function ()
+        {
+            return json( "https://poetrydb.org/lines,random/" + kw + ";20/author,title,lines" ).then( function ( list )
+            {
+                if( ! Array.isArray( list ) ) throw new Error( "no poem" );
+                var re = new RegExp( "\\b" + kw + "\\b", "i" ), END = /[.!?;:]["'’”)]*$/;
+                for( var i = 0; i < list.length; i++ )
+                {
+                    var L = list[ i ].lines, k = -1;
+                    for( var j = 0; j < L.length; j++ ) if( re.test( L[ j ] ) ) { k = j; break; }
+                    if( k < 0 ) continue;
+                    // Whole sentences only: back to where the sentence starts, on to where it ends.
+                    var s = k;
+                    while( s > 0 && k - s < 3 && L[ s - 1 ].trim() && ! END.test( L[ s - 1 ].trim() ) ) s--;
+                    if( s > 0 && L[ s - 1 ].trim() && ! END.test( L[ s - 1 ].trim() ) ) continue;
+                    var out = [], done = false;
+                    for( j = s; j < L.length && out.length < 5; j++ )
+                    {
+                        var t = L[ j ].trim();
+                        if( ! t ) break;
+                        out.push( t );
+                        if( j >= k && END.test( t ) ) { done = true; break; }
+                    }
+                    if( ! done || out.join( " " ).length > 200 ) continue;   // a fragment, or too long for the box
+                    return { lines: out, author: list[ i ].author, title: list[ i ].title };
+                }
+                throw new Error( "no match" );
+            } );
+        } );
+    }
+
+    // Wiktionary's word of the day and foreign word of the day (one page), then
+    // the word's own entry for its pronunciation and etymology.
+    function getWords()
+    {
+        return cached( "words2:" + today(), 864e5, function ()
+        {
+            var W = "https://en.wiktionary.org";
+            return json( W + "/w/api.php?action=parse&page=Wiktionary:Main_Page&prop=text&format=json&formatversion=2&origin=*" )
+                .then( function ( d )
+                {
+                    var doc = new DOMParser().parseFromString( d.parse.text, "text/html" );
+                    function defs( sel )
+                    {
+                        return [].slice.call( doc.querySelectorAll( sel + " > ol > li" ) ).slice( 0, 2 ).map( function ( li )
+                        {
+                            li = li.cloneNode( true );
+                            [].forEach.call( li.querySelectorAll( "ul, ol, dl" ), function ( x ) { x.remove(); } );
+                            return clean( li );
+                        } );
+                    }
+                    var t = doc.getElementById( "WOTD-rss-title" );
+                    if( ! t ) throw new Error( "no word" );
+                    var w = { word: clean( t ), pos: clean( t.closest( "td" ).querySelector( "i" ) ), defs: defs( "#WOTD-rss-description" ) };
+                    var fw = doc.querySelector( ".mf-fwotd .headword" );
+                    if( fw ) w.foreign = { word: clean( fw ), code: fw.getAttribute( "lang" ) || "",
+                                           lang: clean( doc.getElementById( "FWOTD-rss-language" ) ),
+                                           pos: clean( fw.closest( "td" ).querySelector( "i" ) ),
+                                           defs: defs( "#FWOTD-rss-description" ) };
+                    return fetch( W + "/api/rest_v1/page/html/" + encodeURIComponent( w.word.replace( / /g, "_" ) ) )
+                        .then( function ( r ) { return r.ok ? r.text() : ""; } )
+                        .then( function ( html )
+                        {
+                            var p = html && new DOMParser().parseFromString( html, "text/html" );
+                            var en = p && p.getElementById( "English" ), sec = en && en.closest( "section" );
+                            if( sec )
+                            {
+                                var ipa = sec.querySelector( ".IPA" );
+                                if( ipa ) w.ipa = clean( ipa );
+                                var eh = sec.querySelector( "[id^=Etymology]" ), es = eh && eh.closest( "section" );
+                                var para = es && es.querySelector( "p" );
+                                if( para ) [].forEach.call( para.querySelectorAll( "sup" ), function ( x ) { x.remove(); } );
+                                if( para ) w.etym = clean( para );
+                            }
+                            return w;
+                        }, function () { return w; } );
+                } );
+        } );
+    }
+
+    //------------------------------------------------------------------------//
+    // DRAWING
+
+    var DAYS   = [ "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" ];
+    var MONTHS = [ "January", "February", "March", "April", "May", "June", "July",
+                   "August", "September", "October", "November", "December" ];
+
+    function el( tag, cls, text, parent )
+    {
+        var e = document.createElement( tag );
+        if( cls ) e.className = cls;
+        if( text != null ) e.textContent = text;
+        if( parent ) parent.appendChild( e );
+        return e;
+    }
+    function deg( n ) { n = Math.round( n ); return ( n < 0 ? "−" + ( -n ) : n ) + "°"; }
+    function cap( s ) { return s ? s.charAt( 0 ).toUpperCase() + s.slice( 1 ) : s; }
+    function hm( iso ) { return iso ? iso.slice( 11, 16 ) : ""; }
+    function box( parent, cls, left, right )
+    {
+        var b = el( "section", "cl-box " + cls, null, parent );
+        var h = el( "div", "cl-head", null, b );
+        var l = el( "span", "", left, h ), r = el( "span", "src", right || "", h );
+        var body = el( "div", "cl-fade", null, b );
+        body.style.cssText = "flex:1;min-height:0;display:flex;flex-direction:column;";
+        return { box: b, left: l, right: r, body: body };
+    }
+    // Fades a box's body out, refills it, fades it back in.
+    function refill( part, fill )
+    {
+        part.body.classList.add( "out" );
+        setTimeout( function ()
+        {
+            if( ! alive ) return;
+            part.body.innerHTML = "";
+            fill( part.body );
+            part.body.classList.remove( "out" );
+        }, part.body.childNodes.length ? 450 : 0 );
+    }
+    function quiet( part, text ) { refill( part, function ( b ) { el( "div", "cl-quiet", text, b ); } ); }
+
+    var wall = el( "img", "cl-wall", null, host ); wall.alt = "";
+    var grid = el( "div", "cl-grid", null, host );
+    var left = el( "div", "cl-wing", null, grid );
+    var mid  = el( "div", "cl-wing", null, grid );
+    var right = el( "div", "cl-wing", null, grid );
+
+    var clock   = box( left, "cl-clock", "" );
+    var weather = box( left, "cl-weather", "Weather", "Open-Meteo" );
+    var art     = box( mid, "cl-art", "A painting", "Wikidata, Wikimedia Commons" );
+    var words   = box( right, "cl-word", "Word of the day", "Wiktionary" );
+    var poem    = box( right, "cl-poem", "A verse", "PoetryDB" );
+    art.box.style.flex = "1";
+
+    // The clock: built once, only its text changes.
+    var timeEl  = el( "div", "cl-time", null, clock.body );
+    var wordsEl = el( "div", "cl-words", null, clock.body );
+
+    [ weather, art, words, poem ].forEach( function ( p ) { quiet( p, "Fetching…" ); } );
+
+    var ti = new Date().getMinutes() % TONGUES.length, shownMin = -1;
+    function tick( force )
+    {
+        var d = new Date(), H = d.getHours(), m = d.getMinutes();
+        if( ! force && m === shownMin ) return;
+        if( ! force && shownMin >= 0 ) ti = ( ti + 1 ) % TONGUES.length;   // a new tongue each minute
+        if( ! force && shownMin >= 0 && H === 0 && m === 0 ) loadDaily();  // a new day: new word, verse
+        shownMin = m;
+
+        clock.left.textContent = DAYS[ d.getDay() ] + ", " + d.getDate() + " " + MONTHS[ d.getMonth() ];
+        timeEl.innerHTML = "";
+        timeEl.appendChild( document.createTextNode( pad( H ) ) );
+        el( "span", "colon", ":", timeEl );
+        timeEl.appendChild( document.createTextNode( pad( m ) ) );
+        var tg = TONGUES[ ti ];
+        wordsEl.textContent = tg.say( H, H % 12 || 12, m );
+        el( "span", "tongue", tg.name, wordsEl );
+
+        // A few px of drift every minute: no burn-in, too slow to notice.
+        grid.style.transform = "translate(" + ( Math.random() * 12 - 6 ).toFixed( 1 ) + "px," +
+                                              ( Math.random() * 10 - 5 ).toFixed( 1 ) + "px)";
+    }
+
+    var wxShown = "";
+    function drawWeather( p, w )
+    {
+        if( w.current.time === wxShown ) return;           // same data: no fade, no blink
+        wxShown = w.current.time;
+        weather.left.textContent = "Weather in " + p.name;
+        var c = w.current, dl = w.daily;
+        refill( weather, function ( b )
+        {
+            var g = el( "div", "cl-wx", null, b );
+            var now = el( "div", "", null, g ), tom = el( "div", "", null, g );
+            el( "div", "when", "Now", now );
+            el( "div", "big", deg( c.temperature_2m ), now );
+            el( "div", "sky", cap( WMO[ c.weather_code ] || "" ), now );
+            el( "div", "small", "Feels like " + deg( c.apparent_temperature ) + ", wind " + Math.round( c.wind_speed_10m ) + "\u00a0km/h", now );
+            var td = new Date( dl.time[ 1 ] + "T12:00" );
+            el( "div", "when", "Tomorrow, " + DAYS[ td.getDay() ], tom );
+            el( "div", "mid", deg( dl.temperature_2m_max[ 1 ] ) + " / " + deg( dl.temperature_2m_min[ 1 ] ), tom );
+            el( "div", "sky", cap( WMO[ dl.weather_code[ 1 ] ] || "" ), tom );
+            if( dl.precipitation_probability_max[ 1 ] != null )
+                el( "div", "small", "Chance of rain " + dl.precipitation_probability_max[ 1 ] + "%", tom );
+            // The next hours, every three.
+            var hr = w.hourly, i0 = hr.time.indexOf( c.time.slice( 0, 13 ) + ":00" );
+            if( i0 >= 0 )
+            {
+                el( "div", "when cl-hours-head", "The next hours", b );
+                var hs = el( "div", "cl-hours", null, b );
+                for( var i = i0 + 3; i < hr.time.length && hs.childNodes.length < 5; i += 3 )
+                {
+                    var h = el( "div", "", null, hs );
+                    el( "div", "hh", hm( hr.time[ i ] ), h );
+                    el( "div", "ht", deg( hr.temperature_2m[ i ] ), h );
+                    el( "div", "hs", SHORT[ skyOf( hr.weather_code[ i ], hr.is_day[ i ] ) ], h );
+                }
+            }
+            el( "div", "cl-sun", "Sunrise " + hm( dl.sunrise[ 0 ] ) + ", sunset " + hm( dl.sunset[ 0 ] ) + ". Today "
+                               + deg( dl.temperature_2m_max[ 0 ] ) + " / " + deg( dl.temperature_2m_min[ 0 ] ) + ".", b );
+        } );
+    }
+
+    var sky = "", preview = -1, artShift = 0, artList = [];
+    var artSize = function () {};
+    function onResize() { artSize(); }
+    window.addEventListener( "resize", onResize );
+
+    function drawArt( tries )
+    {
+        tries = tries || 0;
+        if( ! artList.length ) { quiet( art, "No painting for this sky today." ); return; }
+        if( tries >= Math.min( 5, artList.length ) ) { quiet( art, "The pictures are not reachable right now." ); return; }
+        var a = artList[ ( dayNo() + artShift ) % artList.length ];
+        var src = a.image + "?width=1280";
+        var img = new Image();
+        img.onerror = function () { if( alive ) { artShift++; drawArt( tries + 1 ); } };
+        img.onload = function ()
+        {
+            if( ! alive ) return;
+            var r = img.naturalWidth / img.naturalHeight;
+            if( r > 2.2 || r < 0.45 ) { artShift++; drawArt( tries + 1 ); return; }   // scrolls, screens: skip
+            refill( art, function ( b )
+            {
+                var hang = el( "div", "cl-hang", null, b );
+                img.alt = a.alt || a.title;
+                hang.appendChild( img );
+                var lab = el( "div", "cl-label", null, b );
+                var l1 = el( "div", "", null, lab );
+                el( "span", "who", a.artist || "Unknown artist", l1 );
+                if( a.born || a.died ) el( "span", "life", a.born + "–" + a.died, l1 );
+                var l2 = el( "div", "", null, lab );
+                el( "span", "title", a.title, l2 );
+                if( a.date ) l2.appendChild( document.createTextNode( ", " + a.date ) );
+                if( a.orig ) el( "div", "orig", a.orig, lab ).lang = a.origLang;
+                if( a.coll ) el( "div", "", a.coll + ".", lab );
+
+                // As big as the box allows, never cropped; the label just under
+                // it, lined up with the painting's left edge.
+                b.style.justifyContent = "center";
+                artSize = function ()
+                {
+                    var gap = parseFloat( getComputedStyle( lab ).marginTop ) || 0;
+                    var aw = b.clientWidth, ah = b.clientHeight - lab.offsetHeight - gap;
+                    var k = Math.min( aw / img.naturalWidth, ah / img.naturalHeight );
+                    var w = Math.floor( img.naturalWidth * k ), h = Math.floor( img.naturalHeight * k );
+                    img.style.width = w + "px";
+                    img.style.height = h + "px";
+                    lab.style.paddingLeft = Math.floor( ( aw - w ) / 2 ) + "px";
+                };
+                artSize();
+            } );
+            wall.classList.remove( "on" );
+            setTimeout( function () { wall.src = src; wall.classList.add( "on" ); }, 500 );
+        };
+        img.src = src;
+    }
+
+    function drawWords( w )
+    {
+        refill( words, function ( b )
+        {
+            el( "div", "cl-lemma", w.word, b ).lang = "en";
+            var meta = el( "div", "cl-meta", null, b );
+            if( w.pos ) el( "span", "pos", w.pos, meta );
+            if( w.ipa ) el( "span", "ipa", w.ipa, meta );
+            var ol = el( "ol", "cl-defs", null, b );
+            w.defs.forEach( function ( d ) { el( "span", "", d, el( "li", "", null, ol ) ); } );
+            if( w.etym ) el( "div", "cl-etym", w.etym, b );
+            if( w.foreign )
+            {
+                var f = el( "div", "cl-foreign", null, b );
+                el( "div", "in", "Foreign word of the day, in " + w.foreign.lang, f );
+                var l = el( "div", "", null, f );
+                el( "span", "fw", w.foreign.word, l ).lang = w.foreign.code;
+                if( w.foreign.pos ) el( "span", "fpos", w.foreign.pos, l );
+                if( w.foreign.defs.length ) el( "div", "fdef", w.foreign.defs.join( "; " ), f );
+            }
+        } );
+    }
+
+    function drawPoem( v )
+    {
+        refill( poem, function ( b )
+        {
+            b.style.justifyContent = "safe center";
+            var ls = el( "div", "cl-lines", null, b );
+            v.lines.forEach( function ( t ) { el( "span", "", t.replace( /\s*--\s*/g, "\u2014" ), ls ); } );   // -- is an em dash
+            var by = el( "div", "cl-by", null, b );
+            el( "span", "poet", v.author, by );
+            by.appendChild( document.createTextNode( ", " + v.title ) );
+            // Shrinks the verse until it fits its box (small screens, long lines).
+            function fit()
+            {
+                ls.style.fontSize = "";
+                var px = parseFloat( getComputedStyle( ls ).fontSize );
+                while( b.scrollHeight > b.clientHeight + 1 && px > 13 ) { px -= 1; ls.style.fontSize = px + "px"; }
+            }
+            fit();
+            if( document.fonts ) document.fonts.ready.then( fit );
+        } );
+    }
+
+    // The sky changed (live weather, or W in the mockup): new painting, new verse.
+    function setSky( s )
+    {
+        if( s === sky ) return;
+        sky = s;
+        art.left.textContent  = "A painting for " + SKY[ s ].day;
+        poem.left.textContent = "A verse for " + SKY[ s ].day;
+        getPaintings( s ).then( function ( l ) { if( alive && sky === s ) { artList = l; artShift = 0; drawArt(); } },
+                                function () { if( alive ) quiet( art, "The paintings are not reachable right now." ); } );
+        getPoem( s ).then( function ( v ) { if( alive && sky === s ) drawPoem( v ); },
+                           function () { if( alive ) quiet( poem, "No verse reached us today." ); } );
+    }
+
+    var place = null;
+    function loadWeather()
+    {
+        ( place ? Promise.resolve( place ) : getPlace() ).then( function ( p )
+        {
+            place = p;
+            return getWeather( p ).then( function ( w )
+            {
+                if( ! alive ) return;
+                drawWeather( p, w );
+                if( preview < 0 ) setSky( skyOf( w.current.weather_code, w.current.is_day ) );
+            } );
+        } ).catch( function ()
+        {
+            if( ! alive ) return;
+            quiet( weather, "The weather is not reachable right now." );
+            if( ! sky ) setSky( "clouds" );
+        } );
+    }
+    function loadDaily()
+    {
+        getWords().then( function ( w ) { if( alive ) drawWords( w ); },
+                         function () { if( alive ) quiet( words, "The word of the day is not reachable right now." ); } );
+        if( sky ) { var s = sky; sky = ""; setSky( s ); }
+    }
+
+    tick( true );
+    loadWeather();
+    loadDaily();
+    var t1 = setInterval( tick, 1000 );
+    var t2 = setInterval( loadWeather, 10 * 6e4 );   // the cache keeps it to one call per 30 min
+
+    // Mockup hooks (W / N / L keys).
+    host.mock =
+    {
+        sky:    function () { preview = ( Math.max( preview, SKIES.indexOf( sky ) ) + 1 ) % SKIES.length; setSky( SKIES[ preview ] ); },
+        art:    function () { if( artList.length ) { artShift++; drawArt(); } },
+        tongue: function () { ti = ( ti + 1 ) % TONGUES.length; tick( true ); }
+    };
+
+    return function ()
+    {
+        alive = false;
+        window.removeEventListener( "resize", onResize );
+        clearInterval( t1 );
+        clearInterval( t2 );
+        host.innerHTML = "";
+    };
+} );
+</script>
+
+<script>
+/* MOCKUP ONLY: plays the part of shared/locker.js (password box, keys). */
+( function ()
+{
+    "use strict";
+    var host = document.getElementById( "host" ), card = document.getElementById( "card" );
+    var pw = document.getElementById( "pw" ), hint = document.getElementById( "hint" );
+    var unlocked = document.getElementById( "unlocked" );
+    var stop = null, hideT = 0;
+    var city = new URLSearchParams( location.search ).get( "city" ) || "";
+
+    function lock() { unlocked.classList.remove( "on" ); stop = NayiveLock.defs.culture( host, { city: city } ); }
+    function showCard()
+    {
+        card.classList.add( "on" ); pw.focus();
+        clearTimeout( hideT ); hideT = setTimeout( hideCard, 30000 );
+    }
+    function hideCard() { card.classList.remove( "on" ); pw.value = ""; pw.blur(); }
+    function unlock()
+    {
+        if( ! pw.value ) { pw.focus(); return; }
+        hideCard(); stop(); stop = null; unlocked.classList.add( "on" );
+    }
+
+    document.getElementById( "go" ).addEventListener( "click", unlock );
+    pw.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) unlock(); } );
+    unlocked.addEventListener( "click", function ( e ) { e.stopPropagation(); lock(); } );
+
+    document.addEventListener( "keydown", function ( e )
+    {
+        if( ! stop ) return;
+        if( e.key === "Escape" ) { hideCard(); return; }
+        if( card.classList.contains( "on" ) ) { clearTimeout( hideT ); hideT = setTimeout( hideCard, 30000 ); return; }
+        var k = e.key.toLowerCase();
+        if( k === "w" ) { host.mock.sky();    return; }
+        if( k === "n" ) { host.mock.art();    return; }
+        if( k === "l" ) { host.mock.tongue(); return; }
+        showCard();
+    } );
+    document.addEventListener( "pointerdown", function ( e )
+    {
+        if( ! stop || card.contains( e.target ) ) return;
+        if( card.classList.contains( "on" ) ) hideCard(); else showCard();
+    } );
+
+    setTimeout( function () { hint.style.opacity = "0"; }, 9000 );
+    lock();
+} )();
+</script>
+</body>
+</html>

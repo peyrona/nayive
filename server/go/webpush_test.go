@@ -14,6 +14,7 @@ package main
 
 import (
 	"crypto/ecdh"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -163,5 +164,30 @@ func TestValidateKeys(t *testing.T) {
 	}
 	if err := ValidateKeys(rfc8291.uaPub, b64u(make([]byte, 15))); err == nil {
 		t.Error("a 15-byte auth secret was accepted")
+	}
+}
+
+// TestClipPushBody: a payload over one record loses the end of its body text,
+// and stays JSON the service worker can read; the other fields stay whole.
+func TestClipPushBody(t *testing.T) {
+	long := strings.Repeat("ñandú <3 ", 600) // escapes and 2-byte runes
+	raw, _ := json.Marshal(map[string]string{"title": "Ana", "body": long, "url": "/nayive/chat/"})
+	if len(raw) <= maxPlaintext {
+		t.Fatalf("the test payload is only %d bytes", len(raw))
+	}
+	out := clipPushBody(raw)
+	var got map[string]string
+	if err := json.Unmarshal(out, &got); err != nil || len(out) > maxPlaintext {
+		t.Fatalf("clipped = %d bytes, err %v", len(out), err)
+	}
+	if got["title"] != "Ana" || got["url"] != "/nayive/chat/" ||
+		!strings.HasSuffix(got["body"], "…") || !strings.HasPrefix(long, strings.TrimSuffix(got["body"], "…")) {
+		t.Errorf("clipped payload = %q / %q / %.40q", got["title"], got["url"], got["body"])
+	}
+
+	// No body text: nothing to clip, nothing changed.
+	bare, _ := json.Marshal(map[string]string{"title": long})
+	if string(clipPushBody(bare)) != string(bare) {
+		t.Error("a payload without a body was changed")
 	}
 }

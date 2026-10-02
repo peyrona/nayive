@@ -128,14 +128,9 @@ body       { overflow: hidden; }
    turns .app-title into one - a person has no Nayive to go back to). */
 .list-head .app-title-guest { margin: 0 10px 0 4px; font-size: 1.1rem; font-weight: 700; color: var(--accent); }
 .list-head .sync-indicator  { margin-left: 4px; }
-.list-head .search-wrap     { display: none; position: relative; flex: 1 1 auto; min-width: 0; }
-.list-head .search-wrap input { width: 100%; padding-right: 34px; }
-.list-head .search-wrap .icon-btn { position: absolute; right: 2px; top: 0; bottom: 0; margin: auto 0; }
-.list-head.searching .topbar-actions { flex: 1 1 auto; min-width: 0; }
-.list-head.searching .search-wrap    { display: block; }
-.list-head.searching .topbar-actions > .icon-btn { display: none; }
-/* Searching: the field takes the bar, so the motto steps aside with the buttons. */
-.list-head.searching .app-motto { display: none; }
+/* The search field is the shared SEARCH FOLD (app.css); here only: when it
+   is too narrow and the buttons step aside, the motto goes with them. */
+.list-head.search-tight .app-motto { display: none; }
 /* The owner's bar holds six buttons: when the list is narrow (a small phone,
    or dragged thin on a desktop) the word "Chat" steps aside (its icon stays),
    and the motto with it. */
@@ -180,6 +175,10 @@ button.who { cursor: pointer; }
 .bar .search-in { flex: 1 1 auto; min-width: 0; }
 /* WhatsApp on a PC has no "back" on the open chat: the list is right there. */
 @media (min-width: 641px) { #convBar .back-btn { display: none; } #convBar .av { margin-left: 8px; } }
+/* A desktop window as narrow as a phone shows one pane at a time, so an open
+   chat's bar is the window's title bar (conv.js: data-win-drag). The name
+   hugs its text there, so the room after it is empty bar to grab. */
+@media (max-width: 640px) { html.is-windowed #convBar .who { flex: 0 1 auto; } }
 .bar .count     { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; padding: 0 4px; }
 
 /* ---- the list of chats --------------------------------------------------- */
@@ -254,7 +253,7 @@ button.who { cursor: pointer; }
 {
     padding: 12px 16px 4px;
     font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-faint);   /* as .section-label (app.css) */
 }
 .hint-bar
 {
@@ -531,7 +530,7 @@ button.who { cursor: pointer; }
 .cbox .quote .x svg { width: 16px; height: 16px; }
 .send
 {
-    flex: 0 0 auto; width: 48px; height: 48px; border: none; border-radius: 50%;
+    flex: 0 0 auto; width: 46px; height: 46px; border: none; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 2px var(--shadow);
     cursor: pointer;
@@ -544,6 +543,9 @@ button.who { cursor: pointer; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
 .composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
+
+/* "Schedule message": one date field and a short hint - no need for the full 460px */
+.sheet.later-sheet      { max-width: 280px; }
 
 /* the clock of my scheduled texts, with how many; their list */
 .cbox .later-btn        { position: relative; color: var(--accent); }
@@ -570,10 +572,9 @@ button.who { cursor: pointer; }
 }
 .emojis button
 {
-    padding: 4px 0; border: none; border-radius: var(--radius-s); background: none;
+    padding: 4px 0; border: none; border-radius: 50%;
     font-size: 1.45rem; line-height: 1.2; cursor: pointer;
 }
-.emojis button:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
 
 /* ---- holding a message down ---------------------------------------------- */
 .ctx
@@ -856,8 +857,13 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen.video.live.peer-cam-off .call-remote { opacity: 0; }
 .call-screen.video.live:not(.peer-cam-off) .call-top .av { display: none; }
 .call-screen.video.live:not(.peer-cam-off) .call-top { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
-/* My picture: a box in one corner (.at-tl / tr / bl / br), clear of the name
-   at the top and the buttons at the bottom. */
+/* Video talking: name + timer sit just above the buttons, the buttons 9px
+   off the bottom edge. */
+.call-screen.video.live:not(.small)             { padding-bottom: calc(9px + env(safe-area-inset-bottom)); }
+.call-screen.video.live:not(.small) .call-top  { margin-top: auto; }
+.call-screen.video.live:not(.small) .call-btns { margin-top: 16px; }
+/* My picture: a box in one corner (.at-tl / tr / bl / br), as close to the
+   bottom edge as to the top one. */
 .call-screen .call-pip
 {
     position: absolute; z-index: 3;
@@ -868,8 +874,8 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen .call-pip[hidden] { display: none; }
 .call-screen .call-pip.at-tl { left: 14px;  top: calc(14px + env(safe-area-inset-top)); }
 .call-screen .call-pip.at-tr { right: 14px; top: calc(14px + env(safe-area-inset-top)); }
-.call-screen .call-pip.at-bl { left: 14px;  bottom: calc(110px + env(safe-area-inset-bottom)); }
-.call-screen .call-pip.at-br { right: 14px; bottom: calc(110px + env(safe-area-inset-bottom)); }
+.call-screen .call-pip.at-bl { left: 14px;  bottom: calc(14px + env(safe-area-inset-bottom)); }
+.call-screen .call-pip.at-br { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); }
 .call-screen .call-self { display: block; width: 100%; height: 100%; object-fit: cover; }
 .call-screen .call-self.mirror { transform: scaleX(-1); }
 
@@ -879,11 +885,14 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 {
     position: absolute; width: 44px; height: 44px; padding: 0; border: none;
     background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    /* On the button, not the ::before: clip-path would cut the shadow off. */
+    filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
+/* Yellow with a dark rim: seen over any picture, light or dark. */
 .call-screen .call-corner::before
 {
     content: ""; position: absolute; width: 24px; height: 24px;
-    background: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+    background: rgba(255, 224, 130, 0.75);
 }
 .call-screen .call-corner.tl { left: 0;  top: 0; }
 .call-screen .call-corner.tr { right: 0; top: 0; }
@@ -914,6 +923,26 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
     border-radius: 0; box-shadow: none; z-index: 0; opacity: 0.55;
 }
 .call-screen.video:not(.live) .call-corner { display: none; }
+
+/* Small (the "small" button): a box over the chat, dragged anywhere (call.js
+   sets left / top); a tap brings the whole screen back. Video talking: their
+   picture 3:4 with the timer; else the name and the state. */
+.call-screen.small
+{
+    inset: auto; width: 180px; padding: 10px; gap: 8px;
+    border-radius: var(--radius-m); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    cursor: grab; touch-action: none; user-select: none;
+}
+.call-screen.small.video.live:not(.peer-cam-off) { width: 150px; aspect-ratio: 3 / 4; padding: 8px; }
+@media (pointer: fine) { .call-screen.small.video.live:not(.peer-cam-off) { width: 200px; } }
+.call-screen.small .call-top       { gap: 2px; }
+.call-screen.small .call-top .av   { display: none; }
+.call-screen.small .call-top b     { font-size: 1rem; margin-top: 0; }
+.call-screen.small .call-state     { font-size: 0.85rem; }
+.call-screen.small.video.live:not(.peer-cam-off) .call-top b { display: none; }
+.call-screen.small.live .call-pip  { display: none; }
+.call-screen.small .call-btns      { gap: 12px; }
+.call-screen.small .call-hear      { margin-top: 0; }
 
 /* "New chat": a Nayive user's row has two targets - the circle (my picture
    for that account) and the rest (open the chat). */

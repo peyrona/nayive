@@ -387,7 +387,7 @@ function showAdvSearchBox()
     document.getElementById( 'advChipText' ).textContent =
         advSearch.nFilters === 1 ? T( 'drive.sbActiveOne' ) : TF( 'drive.sbActiveMany', { n: advSearch.nFilters } );
     chip.title = advSearch.summary;
-    document.querySelector( '.topbar' ).classList.add( 'searching' );      // phone: keep the box row open
+    driveSearch.open();                 // the box stays unfolded while it is in force
 }
 
 // The breadcrumb: "Resultados (n)", what was asked, and the way out.
@@ -413,11 +413,8 @@ function advSearchCrumbs( host, info )
 }
 
 // "Quitar filtros", or Escape on the button in the box: back to the folder,
-// and on a phone the box row folds away, as Escape in the box itself does.
+// and the box folds away, as its × and Escape in the box itself do.
 function endAdvSearch()
 {
-    clearSearch();
-    selectedPaths.clear();
-    document.querySelector( '.topbar' ).classList.remove( 'searching' );
-    render();
+    driveSearch.close();                // its onClose: clearSearch, render
 }

@@ -45,6 +45,31 @@ final class Api {
         return call(c, "POST", path, body, 30_000);
     }
 
+    /** Raw bytes, the first n of b: a piece of a photo or video (MediaUploader). */
+    static Reply put(Context c, String path, byte[] b, int n) throws IOException {
+        HttpURLConnection h = (HttpURLConnection) new URL(BuildConfig.ORIGIN + path).openConnection();
+        try {
+            h.setRequestMethod("PUT");
+            h.setConnectTimeout(20_000);
+            h.setReadTimeout(60_000);
+            h.setUseCaches(false);
+            h.setRequestProperty(HEADER, Prefs.token(c));
+            h.setRequestProperty("Accept", "application/json");
+            h.setRequestProperty("X-Nayive-App", String.valueOf(BuildConfig.VERSION_CODE));
+            h.setRequestProperty("Content-Type", "application/octet-stream");
+            h.setDoOutput(true);
+            h.setFixedLengthStreamingMode(n);   // never chunked: the server refuses it
+            try (OutputStream out = h.getOutputStream()) {
+                out.write(b, 0, n);
+            }
+            int status = h.getResponseCode();
+            InputStream in = status >= 400 ? h.getErrorStream() : h.getInputStream();
+            return new Reply(status, parse(in));
+        } finally {
+            h.disconnect();
+        }
+    }
+
     private static Reply call(Context c, String method, String path, JSONObject body, int readTimeoutMs)
             throws IOException {
         HttpURLConnection h = (HttpURLConnection) new URL(BuildConfig.ORIGIN + path).openConnection();

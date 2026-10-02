@@ -77,6 +77,12 @@
  *
  * The CSS - #menuBar, .menu-top, .menu-panel, .mi-* - lives in shared/app.css,
  * next to the .top-menu / .menu-item vocabulary the panels are built on.
+ *
+ * -----------------------------------------------------------------------------
+ * NayiveMenus.COLORS   the text colours both menus offer (Word's and Excel's
+ *                      own first row, plus white): [ swatch, name key ], the
+ *                      name as 'ui.color.' + key - no interface string lives
+ *                      in the source (docs/i18n.md).
  * ---------------------------------------------------------------------------*/
 
 const NayiveMenus = ( function ()
@@ -660,5 +666,9 @@ const NayiveMenus = ( function ()
         };
     }
 
-    return { create: create, chrome: chrome };
+    const COLORS = [ [ '#000000', 'black'  ], [ '#808080', 'gray'   ], [ '#C00000', 'red'    ],
+                     [ '#E36C0A', 'orange' ], [ '#FFC000', 'yellow' ], [ '#00B050', 'green'  ],
+                     [ '#0070C0', 'blue'   ], [ '#7030A0', 'purple' ], [ '#FFFFFF', 'white'  ] ];
+
+    return { create: create, chrome: chrome, COLORS: COLORS };
 } )();

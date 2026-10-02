@@ -7,19 +7,14 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/ecdh"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -56,25 +51,34 @@ func newChatFixture(t *testing.T) *chatFixture {
 	return f
 }
 
+// DropUser forgets an account's chat as a restart would: its owner record and
+// every token that pointed at it. The next lookup reads the disk again.
+func (h *ChatHub) DropUser(name string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.owners, name)
+	h.resetIndex()
+}
+
+// restart is a second server over the same run-root, as after a restart: what
+// it knows, it read from the disk.
+func (f *chatFixture) restart(t *testing.T) (*Server, *httptest.Server) {
+	t.Helper()
+	srv2, err := NewServer(f.srv.cfg, quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv2.Close() })
+	ts2 := httptest.NewServer(srv2.routes())
+	t.Cleanup(ts2.Close)
+	return srv2, ts2
+}
+
 // call does one JSON request, checks the status and decodes the answer.
 func (f *chatFixture) call(t *testing.T, client *http.Client, method, path, body string,
 	want int, out any) []byte {
 	t.Helper()
-	var rd io.Reader
-	if body != "" {
-		rd = strings.NewReader(body)
-	}
-	resp := do(t, client, method, f.base+path, rd, map[string]string{"Content-Type": "application/json"})
-	raw := readBody(t, resp)
-	if resp.StatusCode != want {
-		t.Fatalf("%s %s = %d, want %d: %s", method, path, resp.StatusCode, want, raw)
-	}
-	if out != nil {
-		if err := json.Unmarshal(raw, out); err != nil {
-			t.Fatalf("%s %s: bad JSON %v: %s", method, path, err, raw)
-		}
-	}
-	return raw
+	return jsonCall(t, client, method, f.base+path, body, want, out)
 }
 
 type msgList struct {
@@ -238,14 +242,7 @@ func TestChatSurvivesRestart(t *testing.T) {
 	f.call(t, anonymous(), "POST", "/api/c/"+f.carmen+"/conv/"+conv+"/messages", `{"kind":"text","text":"uno"}`, 201, nil)
 	f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", `{"kind":"poll","poll":{"q":"¿Día?","opts":["sáb","dom"]}}`, 201, nil)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv2, err := NewServer(f.srv.cfg, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { srv2.Close() })
-	ts2 := httptest.NewServer(srv2.routes())
-	defer ts2.Close()
+	_, ts2 := f.restart(t)
 	resp := do(t, anonymous(), "GET", ts2.URL+"/api/c/"+f.carmen+"/conv/"+conv+"/messages", nil, nil)
 	var list msgList
 	json.Unmarshal(readBody(t, resp), &list)
@@ -509,53 +506,25 @@ func waitEv(t *testing.T, ch <-chan traceEv, ev string) int {
 // someone looking at the chat right now is not buzzed.
 func TestChatPush(t *testing.T) {
 	f := newChatFixture(t)
-	var mu sync.Mutex
-	hits := map[string]int{}
-	push := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		hits[r.URL.Path]++
-		mu.Unlock()
-		if r.URL.Path == "/gone" {
-			w.WriteHeader(http.StatusGone)
-			return
-		}
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer push.Close()
-	localPush(f.srv.chat.push) // the fake service is on this machine
-	count := func(p string) int { mu.Lock(); defer mu.Unlock(); return hits[p] }
+	push := newFakePush(t, false, map[string]int{"/gone": http.StatusGone})
+	push.wire(f.srv.chat.push)
+	count := push.count
 
-	// A real key pair for the encryption (the fake service does not decrypt).
-	key, _ := ecdh.P256().GenerateKey(rand.Reader)
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	keys := PushKeys{P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
-		Auth: base64.RawURLEncoding.EncodeToString(auth)}
 	h := f.srv.chat
 	evs := traceEvents(t, h)
 	h.mu.Lock()
 	carmen := h.owner("ana").contact(f.ids["Carmen"])
-	carmen.Subs = []PushSub{{Endpoint: push.URL + "/good", Keys: keys, Lang: "es"},
-		{Endpoint: push.URL + "/gone", Keys: keys, Lang: "es"}}
+	carmen.Subs = []PushSub{testSub(t, push.URL+"/good"), testSub(t, push.URL+"/gone")}
 	h.mu.Unlock()
 
 	conv := "d-" + f.ids["Carmen"]
 	send := func(text string) {
 		f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", `{"kind":"text","text":"`+text+`"}`, 201, nil)
 	}
-	waitHits := func(p string, n int) {
-		t.Helper()
-		for i := 0; i < 250 && count(p) < n; i++ { // up to 10 s: a slow box, not a flake
-			time.Sleep(40 * time.Millisecond)
-		}
-		if count(p) < n {
-			t.Fatalf("%s got %d pushes, want %d", p, count(p), n)
-		}
-	}
 
 	send("hola")
-	waitHits("/good", 1)
-	waitHits("/gone", 1)
+	push.waitHits(t, "/good", 1)
+	push.waitHits(t, "/gone", 1)
 	waitEv(t, evs, "pushed") // both asked, and the 410 already acted on
 	h.mu.Lock()
 	left := len(carmen.Subs)
@@ -679,7 +648,7 @@ func TestChatClear(t *testing.T) {
 // only the pictures of their own world.
 func TestChatPhotos(t *testing.T) {
 	f := newChatFixture(t)
-	jpeg := []byte{0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 0x11, 0x22, 0xFF, 0xD9}
+	jpeg := keepJPEG
 	put := func(path string, body []byte, want int) {
 		t.Helper()
 		resp := do(t, f.owner, "PUT", f.base+path, bytes.NewReader(body), map[string]string{"Content-Type": "image/jpeg"})

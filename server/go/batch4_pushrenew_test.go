@@ -41,7 +41,7 @@ func TestPushRenewCarriesLangAndLabel(t *testing.T) {
 		"https://fcm.googleapis.com/fcm/send/other", "https://fcm.googleapis.com/fcm/send/new"
 
 	users.AddPushSub("ana", old, p256, au, "fr", "Móvil de Ana", nil)
-	users.AddPushSub("ana", other, p256, au, "it", "Portátil", nil)
+	users.AddPushSub("ana", other, p256, au, "pt", "Portátil", nil)
 	before := pushRenewFind(users.UserPush("ana").Subs, old).Created
 
 	if got := users.RenewPushSub("ana", old, fresh, p256, au, "de", "Linux armv8l", nil); got != "added" {
@@ -58,7 +58,7 @@ func TestPushRenewCarriesLangAndLabel(t *testing.T) {
 	if n == nil || n.Lang != "fr" || n.Label != "Móvil de Ana" || n.Created != before {
 		t.Errorf("renewed device = %+v, want lang fr, label \"Móvil de Ana\", created %d", n, before)
 	}
-	if o := pushRenewFind(subs, other); o == nil || o.Lang != "it" || o.Label != "Portátil" {
+	if o := pushRenewFind(subs, other); o == nil || o.Lang != "pt" || o.Label != "Portátil" {
 		t.Errorf("the other device changed: %+v", o)
 	}
 }
@@ -131,7 +131,7 @@ func TestPushRenewOverHTTP(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	p256, au := pushRenewKeys(t)
 	const old, fresh = "https://fcm.googleapis.com/fcm/send/old", "https://fcm.googleapis.com/fcm/send/new"
-	srv.users.AddPushSub("ana", old, p256, au, "it", "Tablet", nil)
+	srv.users.AddPushSub("ana", old, p256, au, "pt", "Tablet", nil)
 
 	signIn(t, client, ts.URL, "ana", "abc")
 	jsonCall(t, client, "POST", ts.URL+"/api/push",
@@ -139,7 +139,7 @@ func TestPushRenewOverHTTP(t *testing.T) {
 			`"lang":"en","label":"Win32","old_endpoint":"`+old+`"}`, 200, nil)
 
 	subs := srv.users.UserPush("ana").Subs
-	if len(subs) != 1 || subs[0].Endpoint != fresh || subs[0].Lang != "it" || subs[0].Label != "Tablet" {
+	if len(subs) != 1 || subs[0].Endpoint != fresh || subs[0].Lang != "pt" || subs[0].Label != "Tablet" {
 		t.Errorf("devices = %+v, want only the new one, it / Tablet", subs)
 	}
 }

@@ -13,7 +13,7 @@
     <title>Contacts</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'/%3E%3Ccircle cx='9' cy='11' r='2.2'/%3E%3Cpath d='M5.5 17.5c0-2.2 1.7-3.3 3.5-3.3s3.5 1.1 3.5 3.3'/%3E%3Cline x1='14' y1='10' x2='18' y2='10'/%3E%3Cline x1='14' y1='14' x2='18' y2='14'/%3E%3C/svg%3E">
 
-    <!-- Shared colour scheme (dark default, opt-in light). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
+    <!-- Shared colour scheme (light default, opt-in dark). Toggle lives in Drive / the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
@@ -31,7 +31,7 @@
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
     </script>
 
-    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <!-- File-API helpers: the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
@@ -97,7 +97,7 @@
            background is required — rows would slide under a transparent head. */
         .letter-head
         {
-            position: sticky; top: 0; z-index: 3;
+            position: sticky; top: var(--win-head-h, 0px); z-index: 3;   /* under the sticky title row (app.css) */
             background: var(--card);
             font-size: 0.75rem; font-weight: 700; color: var(--accent);
             text-transform: uppercase; letter-spacing: 0.04em;
@@ -131,7 +131,6 @@
             background: color-mix(in srgb, var(--card) 88%, transparent);
             user-select: none; touch-action: none; cursor: pointer;
         }
-        .az-rail[hidden] { display: none; }
         /* A 23px-wide strip is a ~6mm thumb target, and a miss opens whatever
            contact row is underneath. This invisible flap widens the catch area to
            the left without widening the pill; events on a pseudo-element are
@@ -158,7 +157,6 @@
             font-size: 1.3rem; font-weight: 700; text-align: center;
             pointer-events: none;
         }
-        .az-bubble[hidden] { display: none; }
 
         .contact-row
         {
@@ -189,7 +187,6 @@
             padding: 6px 8px 6px 4px;
             background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
         }
-        .select-bar[hidden] { display: none; }   /* class selector would otherwise beat [hidden]'s UA style */
         .select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); }
 
         /* The tick is the same native checkbox the merge preview uses. */
@@ -314,21 +311,27 @@
                     </svg>
                     <h1>Contacts</h1>
 
-                    <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
-                        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                    <button id="dedupBtn" class="icon-btn" data-i18n-attr="title:contact.findDupes">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    </button>
-                    <!-- Settings: sync with phones (CardDAV) + import / export .vcf.
-                         The launcher's gear glyph, so "settings" looks the same everywhere. -->
-                    <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    </button>
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    </button>
-                    <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+                    <div class="header-actions">
+                        <div class="tb-group">
+                            <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
+                                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
+                            <button id="dedupBtn" class="icon-btn" data-i18n-attr="title:contact.findDupes">
+                                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            </button>
+                        </div>
+                        <div class="tb-group tb-sys">
+                            <!-- Settings: sync with phones (CardDAV) + import / export .vcf.
+                                 The launcher's gear glyph, so "settings" looks the same everywhere. -->
+                            <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            </button>
+                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                            </button>
+                        </div>
+                        <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.sync.synced"></button>
+                    </div>
                 </div>
 
                 <div class="search-row">
@@ -512,81 +515,10 @@
         </div>
     </div>
 
-    <!-- Settings: sync with phones (CardDAV) + vCard files. The sync half is UI
-         only for now (2026-09-22) and is wired by NayiveUI.davSection (shared/ui.js),
-         which Calendar's CalDAV sheet shares. Same rows and cards as Trips' "My location". -->
+    <!-- Settings: vCard files (import / export). -->
     <div id="settingsBackdrop" class="sheet-backdrop">
         <div class="sheet">
             <h2 data-i18n="ui.settings"></h2>
-
-            <div id="setSync" class="share-sect share-link">
-                <p class="share-head" data-i18n="dav.syncHead"></p>
-                <p class="share-note" data-i18n="contact.set.syncLead"></p>
-
-                <!-- Off: one row, the (i) and the "+" that connects a phone. -->
-                <div data-dav="off" class="share-row share-link-app">
-                    <span class="share-link-url has-info" data-i18n="dav.syncOff"></span>
-                    <button class="info-dot" data-i18n-attr="data-info:contact.set.syncInfo"></button>
-                    <button data-dav="connect" class="share-drop" type="button" data-i18n-attr="title:dav.connect, aria-label:dav.connect"></button>
-                </div>
-
-                <!-- On: one card per phone kind (the phone decides; a PC sees both),
-                     the by-hand values, and the row that turns it off. -->
-                <div data-dav="on" hidden>
-                    <div class="loc-app" data-dav="iphone">
-                        <p class="share-head share-link-app" data-i18n="dav.iphone"></p>
-                        <p class="loc-links">
-                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.iphoneSetup"></a>
-                        </p>
-                        <p class="share-note share-link-how" data-i18n="contact.set.iphoneHow"></p>
-                    </div>
-                    <div class="loc-app" data-dav="android">
-                        <p class="share-head share-link-app" data-i18n="dav.android"></p>
-                        <p class="loc-links">
-                            <a class="loc-link" href="https://f-droid.org/packages/at.bitfire.davdroid/" target="_blank" rel="noopener" data-i18n="dav.davxGet"></a>
-                            <a class="loc-link" href="#" data-dav-soon data-i18n="dav.davxSetup"></a>
-                        </p>
-                        <p class="share-note share-link-how" data-i18n="contact.set.androidHow"></p>
-                    </div>
-                    <p class="share-note share-link-how" data-dav="onphone" data-i18n="dav.onPhone"></p>
-
-                    <div class="loc-app">
-                        <p class="share-head share-link-app" data-i18n="dav.byHand"></p>
-                        <div class="share-row"><span class="share-link-url" data-dav="server"></span><button class="share-drop" data-dav-copy="server"></button></div>
-                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="user"></span><button class="share-drop" data-dav-copy="user"></button></div>
-                        <div class="share-row share-link-app"><span class="share-link-url" data-dav="pass"></span><button class="share-drop" data-dav-copy="pass"></button></div>
-                    </div>
-
-                    <div class="share-row loc-off">
-                        <span class="share-link-url" data-i18n="dav.syncOn"></span>
-                        <button data-dav="stop" class="share-drop" type="button" data-i18n-attr="title:dav.stop, aria-label:dav.stop"></button>
-                    </div>
-                </div>
-
-                <div class="field-row share-link-app">
-                    <div class="field">
-                        <label for="setAccess" data-i18n="dav.access"></label>
-                        <select id="setAccess">
-                            <option value="rw" data-i18n="dav.accessRw"></option>
-                            <option value="ro" data-i18n="dav.accessRo"></option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="setGroups" data-i18n="contact.set.groups"></label>
-                        <select id="setGroups">
-                            <option value="groups" data-i18n="contact.set.groupsAsGroups"></option>
-                            <option value="labels" data-i18n="contact.set.groupsAsLabels"></option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="setPhotos" data-i18n="contact.set.photos"></label>
-                        <select id="setPhotos">
-                            <option value="yes" data-i18n="contact.set.photosYes"></option>
-                            <option value="no"  data-i18n="contact.set.photosNo"></option>
-                        </select>
-                    </div>
-                </div>
-            </div>
 
             <div class="share-sect share-link">
                 <p class="share-head" data-i18n="contact.set.filesHead"></p>
@@ -626,12 +558,17 @@
     <a id="downloadAnchor" style="display:none;"></a>
     <div id="toast" class="toast"></div>
 
+    <script src="../shared/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
     <script>
         //------------------------------------------------------------------------//
         // STATE
 
         const CONTACTS_FILE  = 'data/contacts.vcf';
         const META_FILE      = 'data/contacts-meta.json';   // local UX state only, never contact data
+
+        // The vCard reading and writing every reader of the book shares (shared/vcard.js).
+        const { contentLines, isQuotedPrintable, decodeValue, splitOnce, splitOutsideQuotes, splitEscaped,
+                parseParams, unescapeText, escapeText, foldLine, photoOf, cards: vcfCards } = NayiveVCard;
 
         // Interface strings: every one of them lives in shared/i18n/*.json.
         const T  = k           => NayiveUI.t( k );
@@ -662,7 +599,6 @@
         let query      = '';
         let editingUid = null;    // uid of the contact open in the edit form, or null when adding
         let dismissed  = new Set();   // dismissKey() strings for pairs the user marked "not a duplicate"
-        let mergeGroup = null;    // the group currently open in the merge preview sheet
         let undoState  = null;    // { contacts: [...], label } snapshot for the "Deshacer" toast
 
         //------------------------------------------------------------------------//
@@ -702,7 +638,6 @@
             // opens on the local cache and the store syncs once the connection is back.
             NayiveUI.bootWithStore( store, async function( who )
             {
-                whoUser = ( who && who.user ) || '';      // the by-hand "User" row in Settings
                 await loadContacts();
                 document.getElementById( 'searchInput' ).focus();   // ready to search straight away
             } );
@@ -817,35 +752,6 @@
             const merged = S.mergeLists( base == null ? null : vcfCards( base ), m, t,
                                          { id: c => c.uid, stamp: c => c.rev || null } );
             return merged.length ? merged.map( c => c.text ).join( '\r\n' ) + '\r\n' : '';
-        }
-
-        // The cards of a .vcf as they are written: [{ text, uid, rev }], rev as
-        // bare digits so "2026-09-28T10:00:00Z" and "20260928T100000Z" compare.
-        // null = text that holds no card at all.
-        function vcfCards( text )
-        {
-            const cards = [];
-            let   cur   = null;
-            const done  = () =>
-            {
-                const one  = cur.join( '\r\n' );
-                const flat = one.replace( /\r\n[ \t]/g, '' );
-                const val  = name => { const x = new RegExp( '^(?:[\\w-]+\\.)?' + name + '(?:;[^:\\r\\n]*)?:(.*)$', 'im' ).exec( flat ); return x ? x[ 1 ].trim() : ''; };
-                cards.push( { text: one, uid: val( 'UID' ), rev: val( 'REV' ).replace( /\D/g, '' ) } );
-                cur = null;
-            };
-
-            for( const l of String( text || '' ).replace( /\r\n?/g, '\n' ).split( '\n' ) )
-            {
-                const tag = l.trim().toUpperCase();
-                if( tag === 'BEGIN:VCARD' ) { if( cur ) done(); cur = [ l ]; continue; }
-                if( ! cur ) continue;
-                cur.push( l );
-                if( tag === 'END:VCARD' ) done();
-            }
-            if( cur ) done();
-
-            return cards.length || ! String( text || '' ).trim() ? cards : null;
         }
 
         // The store merged another device's save in: the book (or the "not
@@ -1004,86 +910,6 @@
             return out.sort( byDisplayName );
         }
 
-        // Physical lines -> content lines. Each one keeps the physical lines it came
-        // from (so a card nobody edited is written back exactly as it was read) and
-        // its text: RFC folds (a line that starts with a space or a tab) joined, and
-        // so are vCard 2.1 QUOTED-PRINTABLE soft breaks (a line that ends in "=",
-        // as Android exports), that "=" dropped. A blank line rides along with the
-        // line above it: vCard 2.1 ends a base64 PHOTO with one.
-        function contentLines( text )
-        {
-            const out  = [];
-            let   cur  = null;
-            let   soft = false;     // `cur` ends in a QUOTED-PRINTABLE soft break
-
-            for( const p of text.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' ) )
-            {
-                if( cur && soft )
-                {
-                    cur.text = cur.text.slice( 0, -1 ) + p;
-                    cur.phys.push( p );
-                    soft = /=$/.test( p );
-                    continue;
-                }
-
-                if( cur && ( p === '' || /^[ \t]/.test( p ) ) )
-                {
-                    cur.text += p.slice( 1 );
-                    cur.phys.push( p );
-                    soft = /=$/.test( p ) && isQuotedPrintable( cur.text );
-                    continue;
-                }
-
-                cur  = { text: p, phys: [ p ] };
-                soft = /=$/.test( p ) && isQuotedPrintable( p );
-                out.push( cur );
-            }
-
-            return out;
-        }
-
-        // Does this content line say ENCODING=QUOTED-PRINTABLE (or 2.1's bare
-        // QUOTED-PRINTABLE) before its value?
-        function isQuotedPrintable( line )
-        {
-            const left = splitOnce( line, ':' )[ 0 ];
-            return left !== null && /;\s*(ENCODING\s*=\s*)?QUOTED-PRINTABLE\s*(;|$)/i.test( left );
-        }
-
-        // The value of a vCard 2.1 QUOTED-PRINTABLE line as text, in its CHARSET
-        // (UTF-8 when it names none, or one this browser does not know). Line
-        // breaks come back as "\n". Any other value is returned as it is.
-        function decodeValue( value, params )
-        {
-            if( ! params.some( p => p.val === 'QUOTED-PRINTABLE' ) )
-                return value;
-
-            const bytes = [];
-
-            for( let i = 0; i < value.length; i++ )
-            {
-                const hex = value.substr( i + 1, 2 );
-
-                if( value[ i ] === '=' && /^[0-9A-Fa-f]{2}$/.test( hex ) )
-                {
-                    bytes.push( parseInt( hex, 16 ) );
-                    i += 2;
-                }
-                else
-                {
-                    bytes.push( ...new TextEncoder().encode( value[ i ] ) );
-                }
-            }
-
-            const charset = ( params.find( p => p.key === 'CHARSET' ) || {} ).val;
-            let   dec;
-
-            try   { dec = new TextDecoder( charset || 'utf-8' ); }
-            catch { dec = new TextDecoder( 'utf-8' ); }
-
-            return dec.decode( new Uint8Array( bytes ) ).replace( /\r\n?/g, '\n' );
-        }
-
         // The model field each vCard property feeds. Any other property is kept as
         // its lines and written back untouched.
         const FIELD_OF = { UID: 'uid', FN: 'fn', N: 'n', ORG: 'org', TITLE: 'title', TEL: 'tels', EMAIL: 'emails',
@@ -1151,8 +977,8 @@
                         c.title = unescapeText( value );
                         break;
 
-                    case 'TEL':
-                        entry( 'tels', { type: pickType( params, 'CELL' ), value: unescapeText( value ).trim() } );
+                    case 'TEL':      // vCard 4.0 may write it as a URI: "tel:+34-600..."
+                        entry( 'tels', { type: pickType( params, 'CELL' ), value: unescapeText( value ).trim().replace( /^tel:/i, '' ) } );
                         break;
 
                     case 'EMAIL':
@@ -1207,29 +1033,6 @@
             return c;
         }
 
-        // A PHOTO's picture as a data: URL, or '' for one this page cannot show
-        // (a link to the web: its line stays in the card as it was). Read in the
-        // three ways phones write it - 3.0 "PHOTO;ENCODING=b;TYPE=JPEG:<base64>",
-        // 2.1 "PHOTO;ENCODING=BASE64;JPEG:<base64>" and 4.0 "PHOTO:data:image/...".
-        // A 2.1 fold leaves spaces inside the base64: they go.
-        function photoOf( value, params )
-        {
-            const v = value.replace( /\s+/g, '' );
-            const d = /^data:image\/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+\/=]+)$/i.exec( v );
-
-            if( d ) return 'data:image/' + d[ 1 ].toLowerCase().replace( 'jpg', 'jpeg' ) + ';base64,' + d[ 2 ];
-
-            if( params.some( p => p.key === 'VALUE' && /^UR[IL]$/.test( p.val ) ) || ! /^[A-Za-z0-9+\/=]+$/.test( v ) || v.length < 16 )
-                return '';
-
-            const t    = params.filter( p => p.key === 'TYPE' ).map( p => p.val.replace( /^IMAGE\//, '' ) );
-            const mime = t.includes( 'PNG' ) || /^iVBOR/.test( v ) ? 'png'
-                       : t.includes( 'GIF' ) || /^R0lG/.test( v )  ? 'gif'
-                       : 'jpeg';
-
-            return 'data:image/' + mime + ';base64,' + v;
-        }
-
         // Fill in whatever the source card left implicit so the rest of the app can rely on it.
         function normalizeContact( c )
         {
@@ -1244,80 +1047,6 @@
                 c.fn = displayName( c );
 
             return c;
-        }
-
-        function splitOnce( line, sep )
-        {
-            let inQ = false;
-
-            for( let i = 0; i < line.length; i++ )
-            {
-                const ch = line[ i ];
-
-                if( ch === '"' )               inQ = ! inQ;
-                else if( ch === sep && ! inQ ) return [ line.slice( 0, i ), line.slice( i + 1 ) ];
-            }
-
-            return [ null, null ];
-        }
-
-        function splitOutsideQuotes( str, sep )
-        {
-            const parts = [];
-            let   cur   = '';
-            let   inQ   = false;
-
-            for( const ch of str )
-            {
-                if( ch === '"' )               { inQ = ! inQ; cur += ch; }
-                else if( ch === sep && ! inQ ) { parts.push( cur ); cur = ''; }
-                else                            cur += ch;
-            }
-
-            parts.push( cur );
-            return parts;
-        }
-
-        // Split a structured value on an UNescaped separator (so "\;" and "\," stay literal).
-        function splitEscaped( str, sep )
-        {
-            const parts = [];
-            let   cur   = '';
-
-            for( let i = 0; i < str.length; i++ )
-            {
-                const ch = str[ i ];
-
-                if( ch === '\\' && i + 1 < str.length ) { cur += ch + str[ ++i ]; continue; }
-                if( ch === sep )                        { parts.push( cur ); cur = ''; continue; }
-                cur += ch;
-            }
-
-            parts.push( cur );
-            return parts;
-        }
-
-        function parseParams( segs )
-        {
-            const out = [];
-
-            for( const seg of segs )
-            {
-                const eq = seg.indexOf( '=' );
-
-                if( eq === -1 )
-                {
-                    out.push( { key: 'TYPE', val: seg.trim().toUpperCase() } );   // vCard 2.1 style: TEL;HOME;VOICE:
-                    continue;
-                }
-
-                const key = seg.slice( 0, eq ).trim().toUpperCase();
-
-                for( const v of seg.slice( eq + 1 ).split( ',' ) )
-                    out.push( { key: key, val: v.replace( /^"|"$/g, '' ).trim().toUpperCase() } );
-            }
-
-            return out;
         }
 
         // First meaningful TYPE value (ignoring transport/preference noise), else the fallback.
@@ -1588,67 +1317,6 @@
         function revStamp()
         {
             return new Date().toISOString().replace( /\.\d+Z$/, 'Z' );
-        }
-
-        function escapeText( s )
-        {
-            return String( s == null ? '' : s )
-                .replace( /\\/g, '\\\\' )
-                .replace( /\n/g, '\\n' )
-                .replace( /,/g,  '\\,' )
-                .replace( /;/g,  '\\;' );
-        }
-
-        function unescapeText( s )
-        {
-            let out = '';
-
-            for( let i = 0; i < s.length; i++ )
-            {
-                const ch = s[ i ];
-
-                if( ch === '\\' && i + 1 < s.length )
-                {
-                    const nx = s[ ++i ];
-                    out += ( nx === 'n' || nx === 'N' ) ? '\n' : nx;
-                }
-                else
-                {
-                    out += ch;
-                }
-            }
-
-            return out;
-        }
-
-        // RFC 6350 §3.2: fold content lines longer than 75 octets. Continuation lines begin
-        // with a single space. Folding is done on UTF-8 octet boundaries without splitting a
-        // multi-byte character.
-        function foldLine( line )
-        {
-            const bytes = new TextEncoder().encode( line );
-
-            if( bytes.length <= 75 )
-                return line;
-
-            const dec = new TextDecoder();
-            let   out = '';
-            let   pos = 0;
-            let   max = 75;
-
-            while( pos < bytes.length )
-            {
-                let end = Math.min( pos + max, bytes.length );
-
-                while( end < bytes.length && ( bytes[ end ] & 0xC0 ) === 0x80 )
-                    end--;
-
-                out += ( pos === 0 ? '' : '\r\n ' ) + dec.decode( bytes.slice( pos, end ) );
-                pos  = end;
-                max  = 74;   // continuation lines spend one octet on the leading space
-            }
-
-            return out;
         }
 
         //------------------------------------------------------------------------//
@@ -2167,7 +1835,9 @@
         function buildMatcher( rawQuery )
         {
             const qText   = foldForSearch( rawQuery.trim() );
-            const qDigits = rawQuery.replace( /\D/g, '' );
+            // Phone numbers are matched by their digits only when the query looks like
+            // one ("+34 600", "600-12"): "Pepe 2" must not match every phone with a 2.
+            const qDigits = /^[\d\s+\-().\/]+$/.test( rawQuery.trim() ) ? rawQuery.replace( /\D/g, '' ) : '';
 
             if( ! qText )
                 return null;
@@ -2208,6 +1878,14 @@
                 row.appendChild( tick );
             }
 
+            appendFace( row, c, name );
+            return row;
+        }
+
+        // The avatar, the name and the sub line, as the list shows a contact - also
+        // the members of a group in the Duplicates sheet.
+        function appendFace( row, c, name )
+        {
             const av = document.createElement( 'div' );
             av.className = 'avatar';
             paintAvatar( av, c, name );
@@ -2231,7 +1909,6 @@
             }
 
             row.appendChild( meta );
-            return row;
         }
 
         //------------------------------------------------------------------------//
@@ -2408,7 +2085,9 @@
             if( urlGroup ) body.appendChild( urlGroup );
 
             const misc = [];
-            if( c.bday ) misc.push( { label: T( 'contact.birthday' ), value: formatBday( c.bday ) } );
+            // Shown as stored: ANSI yyyy-mm-dd, or --mm-dd without a year (see
+            // normalizeBday) - no locale-dependent reformatting.
+            if( c.bday ) misc.push( { label: T( 'contact.birthday' ), value: c.bday } );
             if( c.note ) misc.push( { label: NayiveUI.t( 'ui.notes' ), value: c.note, multiline: true } );
             const miscGroup = buildDetailGroup( misc );
             if( miscGroup ) body.appendChild( miscGroup );
@@ -2468,13 +2147,6 @@
         {
             return [ a.street, [ a.postal, a.city ].filter( Boolean ).join( ' ' ), a.region, a.country ]
                 .map( s => s.trim() ).filter( Boolean ).join( '\n' );
-        }
-
-        // c.bday is always stored as ANSI yyyy-mm-dd, or --mm-dd without a year (see
-        // normalizeBday), which is also how we show it — no locale-dependent reformatting.
-        function formatBday( sIso )
-        {
-            return sIso;
         }
 
         function typeLabel( table, sType )
@@ -2892,24 +2564,11 @@
         let mergeModel = null;   // union preview backing the merge sheet
 
         //------------------------------------------------------------------------//
-        // SETTINGS SHEET  -  sync with phones (CardDAV) + vCard files.
-        // The sync half is UI ONLY for now: "Connect" just flips the sheet to its
-        // "on" look, and nothing is sent or saved. Import / export are the real ones.
-
-        let whoUser = '';
-        let davSync = null;      // NayiveUI.davSection over #setSync
-
-        function openSettingsSheet()
-        {
-            davSync.refresh( whoUser );
-            openBackdrop( 'settingsBackdrop' );
-        }
+        // SETTINGS SHEET  -  vCard files (import / export).
 
         function wireSettingsSheet()
         {
-            davSync = NayiveUI.davSection( document.getElementById( 'setSync' ) );
-
-            document.getElementById( 'settingsBtn'      ).addEventListener( 'click', openSettingsSheet );
+            document.getElementById( 'settingsBtn'      ).addEventListener( 'click', () => openBackdrop( 'settingsBackdrop' ) );
             document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'settingsBackdrop' ) );
 
             document.getElementById( 'setExportBtn' ).addEventListener( 'click', exportVcf );
@@ -3011,31 +2670,7 @@
                 row.className = 'dup-contact';
                 row.addEventListener( 'click', () => openDetail( c.uid ) );
 
-                const name = displayName( c );
-
-                const av = document.createElement( 'div' );
-                av.className = 'avatar';
-                paintAvatar( av, c, name );
-                row.appendChild( av );
-
-                const meta = document.createElement( 'div' );
-                meta.className = 'contact-meta';
-
-                const nm = document.createElement( 'div' );
-                nm.className = 'contact-name';
-                nm.textContent = name;
-                meta.appendChild( nm );
-
-                const sub = subLine( c );
-                if( sub )
-                {
-                    const sb = document.createElement( 'div' );
-                    sb.className = 'contact-sub';
-                    sb.textContent = sub;
-                    meta.appendChild( sb );
-                }
-
-                row.appendChild( meta );
+                appendFace( row, c, displayName( c ) );
 
                 // With 3+ members the group may have swept in someone who only shares a surname
                 // (union-find joins the whole connected component). Let the user drop them.
@@ -3187,6 +2822,7 @@
                 adrs    : unionValues( members.map( realAdrs ),                 adrKey ),
                 urls    : unionValues( members.map( c => withVal( c.urls ) ),   urlKey ),
                 bday    : firstNonEmpty( members.map( c => c.bday ) ),
+                bdays   : [ ...new Set( members.map( c => c.bday ).filter( Boolean ) ) ],
                 notes   : [ ...new Set( members.map( c => c.note.trim() ).filter( Boolean ) ) ]
             };
 
@@ -3210,14 +2846,17 @@
             mergeCheckSection( body, T( 'contact.addresses' ), 'adr',   m.adrs,   a => [ typeLabel( ADR_TYPES(), a.type ),   formatAddress( a ) ] );
             mergeCheckSection( body, T( 'contact.websites' ),  'url',   m.urls,   u => [ T( 'contact.web' ), u.value ] );
 
-            if( m.bday )
+            // Two different birthdays: the user picks one, like the name.
+            if( m.bdays.length > 1 )
+                body.appendChild( mergePickField( T( 'contact.birthday' ), 'mergeBday', m.bdays, m.bday ) );
+            else if( m.bday )
             {
                 const sec = document.createElement( 'div' );
                 sec.className = 'merge-section';
                 sec.innerHTML = '<div class="ms-label" data-i18n="contact.birthday"></div>';
                 const v = document.createElement( 'div' );
                 v.className = 'mr-val';
-                v.textContent = formatBday( m.bday );
+                v.textContent = m.bday;
                 sec.appendChild( v );
                 body.appendChild( sec );
             }
@@ -3351,7 +2990,7 @@
             merged.emails = collectChecked( 'email' );
             merged.adrs   = collectChecked( 'adr' );
             merged.urls   = collectChecked( 'url' );
-            merged.bday   = m.bday;
+            merged.bday   = ( document.getElementById( 'mergeBday' ) || {} ).value || m.bday;
             merged.note   = m.notes.join( '\n———\n' );
             merged.photo  = nameSrc.photo || firstNonEmpty( m.members.map( c => c.photo ) );
             merged.src    = mergedSource( m.members, nameSrc );

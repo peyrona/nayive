@@ -35,9 +35,8 @@ type adminRequest struct {
 	Password *string `json:"password"`
 	// java: RawMessage, not *float64, so a hand-typed `"quota": "abc"` is OUR
 	// error to report rather than one that fails the whole request. With a
-	// typed field the answer was a flat "bad JSON", where the Python says
-	// "cuota no válida" - and the panel shows that message to the person who
-	// typed it.
+	// typed field the answer would be a flat "bad JSON" rather than "cuota no
+	// válida" - and the panel shows that message to the person who typed it.
 	Quota    json.RawMessage `json:"quota"`
 	PhotoMax json.RawMessage `json:"photo_max"`
 
@@ -179,7 +178,7 @@ func (s *Server) adminSetup(w http.ResponseWriter, r *http.Request, body *adminR
 		sendError(w, r, http.StatusConflict, "el administrador ya existe")
 		return
 	}
-	if len(s.users.ListUsers()) > 0 {
+	if len(s.users.ListUserNames()) > 0 {
 		// Not a fresh install - regular users already exist. Refuse the open,
 		// no-login setup so a wiped server.json cannot be used to seize the box;
 		// the admin restores it by hand instead.
@@ -482,13 +481,21 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 		sendError(w, r, http.StatusNotFound, "no existe ese usuario")
 		return
 	}
-	os.RemoveAll(home)
+	// Signed out first: no request of theirs may write into a half-removed home.
 	s.sessions.DropUser(name)
+	removed := os.RemoveAll(home)
+	// The rest goes even when the home did not go whole: its config.json may be
+	// gone already, and the account with it from the admin's list.
 	s.users.ForgetUsage(name)
 	s.shares.DropUser(name)   // anything they shared, or was shared with them
 	s.trackers.DropUser(name) // their location URL
 	s.chat.DeleteUser(name)   // their chat links; others' chats with them end
 	s.devices.DropUser(name)  // their phones' tokens die
+	if removed != nil {
+		s.log.Error("cannot delete a user's home", "name", name, "err", removed)
+		sendError(w, r, http.StatusInternalServerError, "no se pudo borrar todo el usuario")
+		return
+	}
 
 	s.log.Info("user deleted", "name", name)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "usuario eliminado"})

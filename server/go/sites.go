@@ -64,10 +64,8 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) bool {
 	name := strings.Join(parts, "/")
 	info, err := root.Stat(name)
 
-	// A directory URL must end in "/" or the page's relative links break.
 	if err == nil && info.IsDir() {
-		if !strings.HasSuffix(r.URL.Path, "/") {
-			redirect(w, http.StatusFound, r.URL.EscapedPath()+"/")
+		if redirectToSlash(w, r) {
 			return true
 		}
 		name += "/index.html"

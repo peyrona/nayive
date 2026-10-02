@@ -18,7 +18,7 @@
 
     var MAX_FILE  = 25 * 1024 * 1024;
     var PHOTO_MAX = 1600;                 // longest side of a sent photo, px
-    var OSM = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    var OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";   // no {s}. subdomains: OSM asks for the one name
     var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 
     // ---------------------------------------------------------------------
@@ -145,6 +145,8 @@
         el.appendChild( act );
     };
 
+    // vCard's text escape (shared/vcard.js escapeText): a person's page has
+    // no session, and that file is not public (server/go/static.go).
     function vEsc( s ) { return String( s ).replace( /\\/g, "\\\\" ).replace( /[,;]/g, "\\$&" ).replace( /\n/g, "\\n" ); }
 
     function saveVcf( c )
@@ -749,46 +751,8 @@
 
     function shortPath( p ) { return String( p || "" ).replace( /^files\/?/, "" ) || T( "ui.filesRoot" ); }
 
-    // TOAST UI Image Editor - the build Drive ships, loaded from ../drive/lib
-    // on the first edit (as Photos does).
-    var tuiLoad = null;
-    function loadEditor()
-    {
-        if( tuiLoad ) return tuiLoad;
-        var add = function ( tag, attrs )
-        {
-            return new Promise( function ( ok, fail )
-            {
-                var el = document.createElement( tag );
-                Object.keys( attrs ).forEach( function ( k ) { el[ k ] = attrs[ k ]; } );
-                el.onload = ok;
-                el.onerror = function () { fail( new Error( "load " + ( attrs.href || attrs.src ) ) ); };
-                document.head.appendChild( el );
-                if( tag === "link" ) ok();
-            } );
-        };
-        var base = "../drive/lib/";
-        add( "link", { rel: "stylesheet", href: base + "tui-color-picker_v2.2.8.min.css" } );
-        add( "link", { rel: "stylesheet", href: base + "tui-image-editor_v3.15.3.min.css" } );
-        tuiLoad = add( "script", { src: base + "tui-color-picker_v2.2.8.min.js" } )
-            .then( function () { return add( "script", { src: base + "tui-image-editor_v3.15.3.min.js" } ); } )
-            .catch( function ( e ) { tuiLoad = null; throw e; } );
-        return tuiLoad;
-    }
-
-    function dataUrlBytes( u )
-    {
-        // "data:," is a canvas with no picture - what a device hands back for
-        // a canvas bigger than it allows (an iPhone stops near 16.7 MP).
-        // Saving it would leave an empty file where the photo was.
-        if( ! /^data:image\//.test( u ) ) throw new Error( "empty render" );
-        var bin = atob( u.slice( u.indexOf( "," ) + 1 ) );
-        var out = new Uint8Array( bin.length );
-        for( var i = 0; i < bin.length; i++ ) out[ i ] = bin.charCodeAt( i );
-        return out;
-    }
-
-    // Editar foto. The photo is kept first - the editor writes the owner's own
+    // Editar foto (TOAST UI Image Editor, as Drive and Photos: shared/photo.js
+    // loads and builds it). The photo is kept first - the editor writes the owner's own
     // file, never the chat's - so everybody in the chat sees the edit. The bar:
     // save (the chat shows it), save a copy beside it (the chat does not
     // change), close. onSaved: the caller redraws (the full-screen viewer).
@@ -841,34 +805,16 @@
         C.pushNav( "photo-editor", navClose );
         closeB.addEventListener( "click", leave );
 
-        try { await loadEditor(); }
+        try { await NayivePhoto.loadEditor(); }
         catch( _ ) { C.popNav( "photo-editor" ); shut(); C.toast( "chat.editorFailed", 3500 ); return; }
         if( ! layer.isConnected ) return;          // closed while the library loaded
 
-        // The library puts the picture between its own two 64px rows (tools
-        // below, zoom / undo above), so it gets the host minus both. Asking
-        // for the whole window left a portrait photo running off the bottom.
-        var box = host.getBoundingClientRect();
-        editor = new tui.ImageEditor( host, {
-            includeUI: {
-                loadImage: { path: GumApi.fileUrl( path ) + "&v=" + Date.now(), name: path.split( "/" ).pop() },
-                menu: [ "crop", "flip", "rotate", "draw", "shape", "icon", "text", "mask", "filter" ],
-                initMenu: "",
-                menuBarPosition: "bottom",
-                uiSize: { width: "100%", height: "100%" },
-                locale: NayivePhoto.editorLocale()      // its words in the user's language
-            },
-            cssMaxWidth:  Math.max( 160, box.width - 16 ),
-            cssMaxHeight: Math.max( 160, box.height - 136 ),
-            selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
-            usageStatistics: false     // the library pings Google Analytics unless this is off
-        } );
-        NayivePhoto.localizeEditor( host );
+        editor = NayivePhoto.newEditor( host, GumApi.fileUrl( path ) + "&v=" + Date.now(), path.split( "/" ).pop() );
         editor.on( "undoStackChanged", function ( n ) { dirty = n > 0; } );
 
         function pixels()
         {
-            try { return dataUrlBytes( editor.toDataURL( { format: "jpeg", quality: 0.92 } ) ); }
+            try { return NayivePhoto.dataUrlBytes( editor.toDataURL( { format: "jpeg", quality: 0.92 } ) ); }
             catch( _ ) { C.toast( "chat.failed", 3000 ); return null; }
         }
         // The photo's own Exif (its date) put back into the export.
@@ -1065,44 +1011,52 @@
     };
     C.forgetBook = function () { book = null; };
 
+    // Read as Contacts reads it (shared/vcard.js): folds, QUOTED-PRINTABLE
+    // names from an Android export, escapes; a PHOTO in its 3.0, 2.1 or 4.0
+    // form (a link to the web: ""). A name keeps to one line.
     function parseVcf( text )
     {
-        var out = [];
-        var lines = String( text || "" ).replace( /\r?\n[ \t]/g, "" ).split( /\r?\n/ );
-        var cur = null;
-        lines.forEach( function ( line )
+        var V = NayiveVCard, out = [];
+        V.read( text ).forEach( function ( props )
         {
-            var i = line.indexOf( ":" );
-            if( i < 0 ) return;
-            var left = line.slice( 0, i );
-            var key = left.split( ";" )[ 0 ].toUpperCase().replace( /^ITEM\d+\./, "" );
-            var val = line.slice( i + 1 ).replace( /\\n/g, " " ).replace( /\\([,;\\])/g, "$1" ).trim();
-            if( key === "BEGIN" ) cur = { name: "", tels: [], emails: [], uid: "", photo: "" };
-            else if( ! cur ) return;
-            else if( key === "FN" ) cur.name = val;
-            else if( key === "TEL" && val ) cur.tels.push( val );
-            else if( key === "EMAIL" && val ) cur.emails.push( val );
-            else if( key === "UID" ) cur.uid = val;
-            else if( key === "PHOTO" && ! cur.photo ) cur.photo = photoOf( left, line.slice( i + 1 ) );
-            else if( key === "END" )
+            var cur = { name: "", tels: [], emails: [], uid: "", photo: "" };
+            props.forEach( function ( p )
             {
-                if( cur.name ) out.push( cur );
-                cur = null;
-            }
+                var val = V.unescapeText( p.value ).replace( /\n/g, " " ).trim();
+                if( p.name === "FN" ) cur.name = val;
+                else if( p.name === "TEL" && val ) cur.tels.push( val );
+                else if( p.name === "EMAIL" && val ) cur.emails.push( val );
+                else if( p.name === "UID" ) cur.uid = val;
+                else if( p.name === "PHOTO" && ! cur.photo ) cur.photo = V.photoOf( p.value, p.params );
+            } );
+            if( cur.name ) out.push( cur );
         } );
         return out.sort( function ( a, b ) { return a.name.localeCompare( b.name ); } );
     }
 
-    // A card's PHOTO as a data: URL, or "" (a link to the web). The Contacts
-    // app reads it the same way (its photoOf): 3.0, 2.1 and 4.0 forms.
-    function photoOf( left, value )
+    // The server's own rules for a card and a poll (api_chat.go checkSend),
+    // kept here too: one thing it would refuse costs the whole message, so
+    // it is left out before sending instead.
+    //
+    // oneLine is the server's cleanOneLine: every run of blanks and control
+    // characters becomes one space, and the text is cut at `max` characters.
+    function oneLine( s, max )
     {
-        var v = value.replace( /\s+/g, "" );
-        var d = /^data:image\/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+\/=]+)$/i.exec( v );
-        if( d ) return "data:image/" + d[ 1 ].toLowerCase().replace( "jpg", "jpeg" ) + ";base64," + d[ 2 ];
-        if( /VALUE=UR[IL]/i.test( left ) || ! /^[A-Za-z0-9+\/=]{16,}$/.test( v ) ) return "";
-        var mime = /PNG/i.test( left ) || /^iVBOR/.test( v ) ? "png" : /GIF/i.test( left ) || /^R0lG/.test( v ) ? "gif" : "jpeg";
-        return "data:image/" + mime + ";base64," + v;
+        var t = String( s || "" ).split( /[\s\p{Cc}]+/u ).filter( Boolean ).join( " " );
+        return Array.from( t ).slice( 0, max ).join( "" ).trim();
+    }
+
+    // A phone is digits and + - ( ) . and blanks, up to 40; an address has an
+    // "@", no blank, < > or ", and up to 120 bytes; at most six of each.
+    function cardFit( card )
+    {
+        var bytes = function ( t ) { return new TextEncoder().encode( t ).length; };
+        var trim  = function ( t ) { return String( t || "" ).trim(); };
+        return {
+            name:   oneLine( card.name, 60 ),
+            tels:   ( card.tels || [] ).map( trim ).filter( function ( t ) { return t && t.length <= 40 && /^[0-9+\-(). ]+$/.test( t ); } ).slice( 0, 6 ),
+            emails: ( card.emails || [] ).map( trim ).filter( function ( e ) { return e && bytes( e ) <= 120 && e.indexOf( "@" ) >= 0 && ! /[ <>"]/.test( e ); } ).slice( 0, 6 )
+        };
     }
 
     C.openCardSheet = function ()
@@ -1118,7 +1072,8 @@
 
         function send( card )
         {
-            if( ! card.name || ! ( ( card.tels || [] ).length || ( card.emails || [] ).length ) ) { C.toast( "chat.cardNeeds", 2600 ); return; }
+            card = cardFit( card );
+            if( ! card.name || ! ( card.tels.length || card.emails.length ) ) { C.toast( "chat.cardNeeds", 2600 ); return; }
             if( sh ) sh.close();
             C.sendMsg( { kind: "card", card: card }, conv );
         }
@@ -1198,13 +1153,23 @@
             h( "div", { class: "section-label", text: T( "chat.options" ) } ),
             opts,
             h( "button", { class: "text-btn dashed", attrs: { type: "button" }, text: T( "chat.addOption" ), on: { click: function () { addOpt( true ); } } } ),
-            h( "label", { class: "scm-check", style: "display:flex;gap:8px;align-items:center;margin-top:14px" }, multi, T( "chat.pollMultiLabel" ) ) );
+            h( "label", { class: "scm-check", style: "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:14px;cursor:pointer" },
+               T( "chat.pollMultiLabel" ), h( "span", { class: "switch sm" }, multi, h( "span", { class: "track" } ) ) ) );
         var go = h( "button", { attrs: { type: "button", "data-act": "primary:send", title: T( "chat.sendMsg" ) } } );
         var sh = C.sheet( T( "chat.newPoll" ), body, go );
         go.addEventListener( "click", function ()
         {
-            var list = Array.prototype.map.call( opts.querySelectorAll( "input" ), function ( i ) { return i.value.trim(); } )
-                                      .filter( function ( v, i, a ) { return v && a.indexOf( v ) === i; } );
+            // Two options the server would read as the same one (see oneLine:
+            // it keeps 60 characters of each) are one option here as well.
+            var seen = [];
+            var list = Array.prototype.map.call( opts.querySelectorAll( "input" ), function ( i ) { return oneLine( i.value, 100 ); } )
+                                      .filter( function ( v )
+                                      {
+                                          var k = oneLine( v, 60 );
+                                          if( ! k || seen.indexOf( k ) >= 0 ) return false;
+                                          seen.push( k );
+                                          return true;
+                                      } );
             if( ! q.value.trim() || list.length < 2 ) { C.toast( "chat.pollNeeds", 2600 ); return; }
             sh.close();
             C.sendMsg( { kind: "poll", poll: { q: q.value.trim(), opts: list, multi: multi.checked } }, conv );

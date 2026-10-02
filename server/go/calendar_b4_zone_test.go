@@ -9,8 +9,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -85,7 +83,7 @@ func TestFloatingEventRingsInEachDeviceZone(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"subs": []PushSub{subT, subN, subM}, "window_minutes": 15})
 	os.WriteFile(filepath.Join(data, "push.json"), raw, 0o644)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	r := NewReminders(cfg, srv.users, srv.trash, srv.sessions, srv.push, srv.trackers, log)
 
 	ring := func(name, vevent string) []string {
@@ -198,7 +196,7 @@ func TestRenewalDoesNotRingTwice(t *testing.T) {
 	os.WriteFile(filepath.Join(data, "calendar.ics"), []byte("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nSUMMARY:x\r\nDTSTART:"+
 		wall.Format("20060102T150405")+"\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"), 0o644)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	r := NewReminders(cfg, srv.users, srv.trash, srv.sessions, srv.push, srv.trackers, log)
 	r.tick()
 	if got := sent(); strings.Join(got, ",") != "old" {

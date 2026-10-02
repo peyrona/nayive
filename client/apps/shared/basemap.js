@@ -116,7 +116,7 @@
         } );
 
         if( o.onFail )  tiles.on( "tileerror", o.onFail );
-        if( o.onReady ) tiles.on( "load", function () { setTimeout( o.onReady, 150 ); } );
+        if( o.onReady ) tiles.once( "load", function () { setTimeout( o.onReady, 150 ); } );   // once, like the GL path
         tiles.addTo( map );
     }
 

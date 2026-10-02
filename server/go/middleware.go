@@ -26,9 +26,8 @@ import (
 // java: a PANIC is a RuntimeException. Unhandled, it unwinds the goroutine -
 // and net/http already recovers panics per request, so one bad route cannot
 // take the process down. We install our own anyway for two reasons: to log it
-// the way this project logs everything else, and to answer with the same
-// {"error": ...} JSON shape the browser apps expect, which is what handler.py's
-// catch-all does.
+// the way this project logs everything else, and to answer with the
+// {"error": ...} JSON shape the browser apps expect.
 //
 // java: `recover()` only works inside a deferred function, and returns nil when
 // nothing is panicking. There is no `catch`; this is the whole mechanism.
@@ -75,52 +74,15 @@ func logRequest(log Logger, next http.Handler) http.Handler {
 	})
 }
 
-// refuseChunked rejects a request body sent with Transfer-Encoding: chunked.
-//
-// java: handler.py refuses these because BaseHTTPRequestHandler does NOT
-// de-chunk, so the body would be left in the socket and parsed as the next
-// request - request smuggling. net/http de-chunks correctly, so the danger is
-// gone in Go. The refusal stays only so the two servers answer identically
-// while both are running; the real port can drop this filter.
-//
-// It sits OUTSIDE refuseTraversal and INSIDE securityHeaders, which is where
-// _dispatch does the same test: before the URL is looked at, after the headers
-// every response carries. A chunked PUT reaches this before streamToFile's own
-// length check, so both servers give the same reason for the same 411.
-func refuseChunked(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for _, enc := range r.TransferEncoding {
-			if strings.EqualFold(enc, "chunked") {
-				// The Python drops the connection here: its unread body would
-				// be parsed as the next request on a kept-alive socket. Go has
-				// no such hazard, but the header keeps the answers identical.
-				w.Header().Set("Connection", "close")
-				sendError(w, r, http.StatusLengthRequired, "usa Content-Length (no chunked)")
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // collapsePath rewrites a URL path with repeated slashes or "." segments into
 // the single-slash form, IN PLACE, so the router never sees the odd shape.
 //
 // java: http.ServeMux runs path.Clean() on every request and, when the result
 // differs, answers its own 307 to the cleaned URL instead of routing. That is
-// one round trip the Python never asks for, and it is visible: it turns a
-// served page into a redirect.
-//
-// The Python arrives at the same place by two different routes, and this
-// reproduces both:
-//
-//   - a LEADING "//" is collapsed by BaseHTTPRequestHandler.parse_request
-//     itself, so "//nayive/login.html" reaches the handler as
-//     "/nayive/login.html" (without that, urlparse would read "nayive" as a
-//     netloc and the path would come out as just "/login.html");
-//   - an INTERIOR "//" or "." is left alone in self.path and absorbed later,
-//     when the path is split into segments and the empty and "." ones are
-//     dropped - the same rule splitPath applies here.
+// one round trip nobody needs, and it is visible: it turns a served page into
+// a redirect. Here "//nayive/login.html" is simply "/nayive/login.html", and an
+// interior "//" or "." is dropped - the same rule splitPath applies to the
+// segments.
 //
 // ".." never reaches this: refuseTraversal wraps it and answers 403 first, on
 // the raw path. That ordering matters - collapsing first would let
@@ -196,14 +158,13 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// securityHeaders adds the three headers handler.py puts on every response.
+// securityHeaders adds the three security headers every response carries.
 //
 // java: a filter is the right place for these - one line each, applied
 // everywhere, impossible for a new route to forget. There is deliberately no
 // Content-Security-Policy here: it is easy to break the vendored libraries with
-// one, and handler.py says the same. The two exceptions are content Nayive did
-// not write - a user's HTML/SVG (filesRead) and a static site (serveSite) - and
-// each sets its own sandbox.
+// one. The two exceptions are content Nayive did not write - a user's HTML/SVG
+// (filesRead) and a static site (serveSite) - and each sets its own sandbox.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -220,10 +181,9 @@ func securityHeaders(next http.Handler) http.Handler {
 //
 // java: http.ServeMux CLEANS the path and answers 301/307 to the cleaned URL,
 // so "/nayive/../config/server.json" would quietly become a redirect to
-// "/config/server.json". Nothing leaks - that URL is a 404 - but handler.py
-// answers a flat 403 there, and a security boundary is the last place two
-// servers should disagree. Checked on r.URL.Path, which is already
-// percent-decoded, so "%2e%2e" is caught too.
+// "/config/server.json". Nothing leaks - that URL is a 404 - but a ".." in a
+// URL is never a mistake, and a flat 403 says so. Checked on r.URL.Path, which
+// is already percent-decoded, so "%2e%2e" is caught too.
 func refuseTraversal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, seg := range strings.Split(r.URL.Path, "/") {

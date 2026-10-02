@@ -14,10 +14,8 @@
  * shows them.
  *
  * PICTURES. This message's own (cid:) come in as data: urls, fetched here
- * with the session. The internet's only after the toolbar's picture button
- * (or the setting that shows them at once): they tell a sender the message
- * was opened. Settings explains that; this view only has the button, which
- * hides them again too.
+ * with the session. The internet's only after the head's "Show pictures" button
+ * (they tell a sender the message was opened); it hides them again too.
  * The server has already cut scripts, handlers and forms out (mail_mime.go);
  * cleanMessage below drops the rest, and every url that is not http(s),
  * mailto, tel, #, a data: picture or this message's own attachment.
@@ -34,9 +32,9 @@
     {
         S.open = m;
         S.openScroll = E.$( "listView" ).parentNode.scrollTop;
-        S.showImages = !! S.settings.showImages;
+        S.showImages = false;
         setReading( true );
-        try { history.pushState( { mailRead: 1 }, "" ); } catch( e ) {}
+        if( ! E.split ) try { history.pushState( { mailRead: 1 }, "" ); } catch( e ) {}
 
         // what the row already knows, at once
         E.$( "readSubject" ).textContent = m.subject || E.T( "mail.noSubject" );
@@ -91,7 +89,7 @@
         S.msg = null;
         setReading( false );
         E.$( "readBody" ).textContent = "";
-        E.$( "listView" ).parentNode.scrollTop = S.openScroll || 0;
+        if( ! E.split ) E.$( "listView" ).parentNode.scrollTop = S.openScroll || 0;
         if( fromCode ) { try { if( history.state && history.state.mailRead ) history.back(); } catch( e ) {} }
         E.syncBar();
     };
@@ -116,14 +114,66 @@
     }
     E.toggleMeta = function () { showMeta(); };
 
+    // full: the message over the list (a phone, a narrow window); split: beside it
     function setReading( on )
     {
-        document.body.classList.toggle( "reading", on );
-        E.$( "backBtn" ).hidden = ! on;
-        E.$( "listView" ).hidden = on;
+        var full = on && ! E.split;
+        document.body.classList.toggle( "reading", full );
+        E.$( "backBtn" ).hidden = ! full;
+        E.$( "listView" ).hidden = full;
         E.$( "readView" ).hidden = ! on;
+        E.$( "readNone" ).hidden = on;
         if( ! on ) E.$( "imagesBtn" ).hidden = true;
+        E.markCurrent();
     }
+
+    // ---------------------------------------------------------------------
+    // SPLIT: in a desktop window wide enough the message shows on the right
+    // of the list, not over it. #readView moves into #readPane (and back into
+    // .mail-main when the window narrows); the list keeps its tools, and the
+    // open message's row is marked. No history entry and no ←: nothing to go
+    // back to. E.listShown(): the list is on screen (refresh, next page...).
+    // ---------------------------------------------------------------------
+
+    var wide = window.matchMedia( "(min-width: 1080px)" );
+    E.split = false;
+    E.listShown = function () { return ! S.open || E.split; };
+
+    // the open message's row, marked (split only)
+    E.markCurrent = function ()
+    {
+        document.querySelectorAll( ".mail-row.is-current" ).forEach( function ( r ) { r.classList.remove( "is-current" ); } );
+        if( E.split && S.open && S.open._row ) S.open._row.classList.add( "is-current" );
+    };
+
+    // the pane and its handle: split, with an account to read
+    E.showPane = function ()
+    {
+        var on = E.split && S.accounts.length > 0;
+        document.body.classList.toggle( "split", on );
+        E.$( "readRz" ).hidden = ! on;
+        E.$( "readPane" ).hidden = ! on;
+    };
+
+    function syncSplit()
+    {
+        var on = !! NayiveUI.windowed && wide.matches;
+        if( on === E.split ) return;
+        E.split = on;
+        var view = E.$( "readView" );
+        if( on ) E.$( "readPane" ).appendChild( view );
+        else E.$( "composeView" ).parentNode.insertBefore( view, E.$( "composeView" ) );
+        E.showPane();
+        if( S.open ) { setReading( true ); E.syncBar(); }
+    }
+
+    NayiveUI.paneResizer( E.$( "readRz" ), E.$( "composeView" ).parentNode, {
+        key: "email-list-width", min: 280, max: 700, def: 380,
+        off: function () { return ! E.split; },
+        set: function ( w ) { document.documentElement.style.setProperty( "--mail-list-w", w + "px" ); } } );
+    syncSplit();
+    // the desktop resizes this window's frame: each resize asks again
+    window.addEventListener( "resize", syncSplit );
 
     function renderMeta( m )
     {
@@ -241,8 +291,8 @@
         box.appendChild( frame( doc, S.showImages ) );
     }
 
-    // The toolbar's picture button: this message's pictures shown or hidden
-    // (the setting only picks how a message opens).
+    // The head's picture button: this message's pictures shown or hidden
+    // (every message opens with them hidden).
     E.showImages = function ()
     {
         if( ! S.msg ) return;
@@ -253,8 +303,7 @@
     {
         var b = E.$( "imagesBtn" ), word = E.T( S.showImages ? "mail.hideImages" : "mail.showImages" );
         b.hidden = ! remote;
-        b.title = word;
-        b.setAttribute( "aria-label", word );
+        b.textContent = word;
         b.setAttribute( "aria-pressed", S.showImages ? "true" : "false" );
         b.classList.toggle( "is-active", S.showImages );
     }

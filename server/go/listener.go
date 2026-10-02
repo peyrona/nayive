@@ -4,18 +4,16 @@ package main
 // limitListener - a hard ceiling on connections being served at once.
 // =============================================================================
 //
-// server.py caps worker threads with a BoundedSemaphore and DROPS a connection
-// that arrives with every slot taken, rather than queueing it. Same rule here,
-// and the same number: far above anything this handful of users produces (a
-// browser opens ~6 sockets; the service-worker precache is ~60 sequential
-// fetches over those), low enough that a flood of slow clients cannot spawn
-// thousands of goroutines.
+// A connection that arrives with every slot taken is DROPPED, not queued. The
+// number is far above anything this handful of users produces (a browser opens
+// ~6 sockets; the service-worker precache is ~60 sequential fetches over
+// those), and low enough that a flood of slow clients cannot spawn thousands
+// of goroutines.
 //
-// java: WHAT WE NO LONGER NEED. server.py has a long comment about not running
-// the TLS handshake on the accept loop, because one stalled client would wedge
-// the whole server. net/http accepts a connection and immediately hands it to
-// its own goroutine, handshake included, so that failure mode does not exist in
-// Go. This file is only the connection cap.
+// java: the TLS handshake never runs on the accept loop, so one stalled client
+// cannot wedge the server: net/http accepts a connection and immediately hands
+// it to its own goroutine, handshake included. This file is only the
+// connection cap.
 //
 // One address gets a QUARTER of the slots at most: a single client dribbling
 // request bodies must not be able to take all 250 (audit #14). This machine
@@ -67,10 +65,9 @@ func newLimitListener(inner net.Listener, limit int) net.Listener {
 // Accept takes a slot, then a connection.
 //
 // java: the `select` with a `default` branch is a NON-BLOCKING send - it takes
-// a slot if one is free and falls through instantly if not, the same as
-// Python's acquire(blocking=False). Without the default branch it would block
-// until a slot freed up, which is exactly the accept-loop stall server.py
-// warns about.
+// a slot if one is free and falls through instantly if not - tryAcquire() on
+// a Semaphore. Without the default branch it would block until a slot freed
+// up: the whole accept loop stalled.
 func (l *limitListener) Accept() (net.Conn, error) {
 	for {
 		conn, err := l.Listener.Accept()
@@ -163,8 +160,7 @@ type limitConn struct {
 // always from the same goroutine - Shutdown closes idle connections from the
 // shutdown goroutine while the one serving that connection is closing it too.
 // Releasing twice would hand back a slot we never took and the cap would drift
-// upward until it meant nothing; Python catches that with BoundedSemaphore
-// raising on an over-release.
+// upward until it meant nothing.
 //
 // java: sync.Once is the fix, and it is AtomicBoolean.compareAndSet wrapped in
 // a nicer shape: whichever goroutine gets there first runs the function, the

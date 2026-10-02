@@ -33,7 +33,7 @@ type pushRequest struct {
 	} `json:"subscription"`
 	// java: RAW, not *int - see pushFile in users.go. A typed field would also
 	// have made `"window_minutes": "25"` fail the whole request with "bad
-	// JSON", where the Python's int("25") accepts it.
+	// JSON"; a number sent as a string is still a number here.
 	WindowMinutes json.RawMessage `json:"window_minutes"`
 	Lang          string          `json:"lang"`
 	Label         string          `json:"label"`
@@ -57,8 +57,7 @@ func (s *Server) apiPush(w http.ResponseWriter, r *http.Request) {
 	user := sess.User
 
 	// Say plainly when the crypto cannot start, instead of handing the browser
-	// a key it cannot use. (In the Python this was the "python3-cryptography is
-	// missing" path; here the only way to fail is an unreadable vapid.json.)
+	// a key it cannot use. The only way to fail is an unreadable vapid.json.
 	vapidPublic, err := s.push.PublicKey()
 	if err != nil {
 		sendError(w, r, http.StatusServiceUnavailable, err.Error())

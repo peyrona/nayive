@@ -5,8 +5,10 @@ package main
 // book the "To" field suggests from.
 // =============================================================================
 //
-// THE MESSAGE. Plain text (UTF-8, quoted-printable) and, when there are
-// attachments, multipart/mixed with the text as part 1 and the files as
+// THE MESSAGE. Plain text (UTF-8, quoted-printable) - or, when the app sends
+// HTML too (the editor's formatting), multipart/alternative with both, plain
+// first; the HTML is cleaned here too (sanitizeMailHTML) - and, when there are
+// attachments, multipart/mixed with that body as part 1 and the files as
 // parts 2, 3... in the order given - so after a draft is saved the app knows
 // each file's part id without asking (mailDraftParts). Bcc goes into a draft
 // (so reopening it keeps it) and never into a message sent.
@@ -53,6 +55,7 @@ type MailOut struct {
 	Bcc        string        `json:"bcc"`
 	Subject    string        `json:"subject"`
 	Text       string        `json:"text"`
+	HTML       string        `json:"html"`       // the same words, formatted (the editor's); empty: plain text only
 	InReplyTo  string        `json:"inReplyTo"`  // a Message-ID, no brackets
 	References []string      `json:"references"` // the thread so far
 	MID        string        `json:"mid"`        // a draft keeps its Message-ID across saves
@@ -165,10 +168,43 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 	}
 
 	text := strings.ReplaceAll(m.Text, "\r\n", "\n")
-	var buf bytes.Buffer
-	var th gomail.InlineHeader
+	htmlDoc := ""
+	if body := strings.TrimSpace(m.HTML); body != "" {
+		htmlDoc = mailHTMLDoc(sanitizeMailHTML(body, nil))
+	}
+	var th, hh gomail.InlineHeader
 	th.Set("Content-Type", "text/plain; charset=utf-8")
+	hh.Set("Content-Type", "text/html; charset=utf-8")
+	// the body: the plain text alone, or it and the HTML side by side
+	// (multipart/alternative, plain first: a reader shows the last it can)
+	alternative := func(iw *gomail.InlineWriter) error {
+		for _, p := range []struct {
+			h    gomail.InlineHeader
+			body string
+		}{{th, text}, {hh, htmlDoc}} {
+			pw, err := iw.CreatePart(p.h)
+			if err != nil {
+				return err
+			}
+			io.WriteString(pw, p.body)
+			if err := pw.Close(); err != nil {
+				return err
+			}
+		}
+		return iw.Close()
+	}
+	var buf bytes.Buffer
 	if len(files) == 0 {
+		if htmlDoc != "" {
+			iw, err := gomail.CreateInlineWriter(&buf, h)
+			if err != nil {
+				return nil, nil, err
+			}
+			if err := alternative(iw); err != nil {
+				return nil, nil, err
+			}
+			return buf.Bytes(), rcpts, nil
+		}
 		h.Set("Content-Type", "text/plain; charset=utf-8")
 		w, err := gomail.CreateSingleInlineWriter(&buf, h)
 		if err != nil {
@@ -184,12 +220,22 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 	if err != nil {
 		return nil, nil, err
 	}
-	tw, err := mw.CreateSingleInline(th)
-	if err != nil {
-		return nil, nil, err
+	if htmlDoc != "" {
+		iw, err := mw.CreateInline()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := alternative(iw); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		tw, err := mw.CreateSingleInline(th)
+		if err != nil {
+			return nil, nil, err
+		}
+		io.WriteString(tw, text)
+		tw.Close()
 	}
-	io.WriteString(tw, text)
-	tw.Close()
 	for _, f := range files {
 		var ah gomail.AttachmentHeader
 		ah.Set("Content-Type", mailFileType(f))
@@ -205,6 +251,15 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 		return nil, nil, err
 	}
 	return buf.Bytes(), rcpts, nil
+}
+
+// mailHTMLDoc is the HTML part: what the app wrote, in a page of its own
+// that names its charset (some readers guess otherwise), with a quote drawn
+// as the usual line down its left.
+func mailHTMLDoc(body string) string {
+	return "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">" +
+		"<style>blockquote{margin:0 0 0 .8ex;padding-left:1ex;border-left:1px solid #ccc}</style>" +
+		"</head><body>" + body + "</body></html>\n"
 }
 
 // mailFileType is the Content-Type a file goes out with: the one given,

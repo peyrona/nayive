@@ -19,11 +19,9 @@ package main
 //	          a keypair the server generates once (see vapidKeys).
 //	RFC 8188  the "aes128gcm" body framing that wraps the ciphertext.
 //
-// THE DEPENDENCY THAT IS NO LONGER HERE
+// NO CRYPTO DEPENDENCY
 // -----------------------------------------------------------------------------
-// lib/webpush.py needed python3-cryptography from apt - the one non-stdlib
-// import in the whole Python server, and the reason install.sh could refuse to
-// install. Go's standard library has all four primitives:
+// Go's standard library has all four primitives:
 //
 //	crypto/ecdh    the ECDH exchange and the on-curve point check
 //	crypto/ecdsa   the ES256 signature
@@ -83,7 +81,6 @@ const (
 // -----------------------------------------------------------------------------
 
 // java: base64.RawURLEncoding is exactly "URL-safe alphabet, no = padding".
-// Python has to strip and re-add the padding by hand; here it is a constant.
 func b64u(raw []byte) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
@@ -140,8 +137,7 @@ type vapidFile struct {
 	Created int64  `json:"created"`
 }
 
-// NewVapidStore does no I/O - the key is loaded on first use, like Python's
-// lazy vapid_keys().
+// NewVapidStore does no I/O - the key is loaded on first use.
 //
 // contact is the JWT "sub" claim, "push_contact" in server.json: an https: or
 // mailto: address of whoever runs this server. Push services (Apple's above
@@ -584,5 +580,34 @@ func (v *VapidStore) SendJSON(sub PushSub, payload any, ttl int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if len(raw) > maxPlaintext {
+		raw = clipPushBody(raw)
+	}
 	return v.Send(sub.Endpoint, sub.Keys.P256dh, sub.Keys.Auth, raw, ttl)
+}
+
+// clipPushBody shortens the "body" text of a JSON payload, ending it with "…",
+// until the whole fits one record. encrypt's own cut at maxPlaintext would end
+// the JSON mid-string, and the service worker could not read it at all. A
+// payload with no body text comes back as it was.
+func clipPushBody(raw []byte) []byte {
+	var fields map[string]json.RawMessage
+	var body string
+	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(fields["body"], &body) != nil {
+		return raw
+	}
+	runes := []rune(body)
+	for len(raw) > maxPlaintext && len(runes) > 0 {
+		// Every rune is one byte at least, and "…" is three: cutting this many
+		// fits in one pass, unless escapes made the text longer.
+		cut := min(len(runes), len(raw)-maxPlaintext+3)
+		runes = runes[:len(runes)-cut]
+		fields["body"], _ = json.Marshal(string(runes) + "…")
+		out, err := json.Marshal(fields)
+		if err != nil {
+			return raw
+		}
+		raw = out
+	}
+	return raw
 }

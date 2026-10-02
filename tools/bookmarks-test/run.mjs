@@ -11,7 +11,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { browser, attach } from "../locktest/cdp.mjs";
+import { browser, attach } from "../cdp.mjs";
 
 const HERE  = path.dirname( new URL( import.meta.url ).pathname );
 const REPO  = path.resolve( HERE, "../.." );

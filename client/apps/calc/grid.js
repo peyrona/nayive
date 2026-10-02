@@ -1204,7 +1204,7 @@ function initGrid( d )
         afterPaste        : applyClipStyles,
         // A number or date typed as text is stored as one (see TYPED
         // NUMBERS AND DATES above).
-        beforeChange      : typedValues,
+        beforeChange      : function( changes, source ) { mergedValue( changes, source ); typedValues( changes, source ); },
         // The formula bar follows the cell under the cursor even when the
         // cursor does not move: undo, redo, paste, fill and fx all change
         // it in place.
@@ -1246,7 +1246,8 @@ function initGrid( d )
         afterOnCellMouseDown : function( event, coords ) { if( coords && coords.row >= 0 && coords.col >= 0 ) followLinkAt( coords.row, coords.col, event ); },
         afterColumnResize : function( newSize, column ) { activeSheet.cols[ column ] = newSize; activeSheet.colsSrc[ column ] = null; scheduleAutosave(); },
         afterRowResize    : function( newSize, row    ) { activeSheet.rows[ row ]    = newSize; activeSheet.rowsSrc[ row ]    = null; scheduleAutosave(); },
-        afterMergeCells   : function( cellRange, mergeParent ) { trackMerge( mergeParent ); scheduleAutosave(); },
+        beforeMergeCells  : function( cellRange, auto ) { mergeMove = auto ? null : mergedContents( cellRange ); mergeWas = auto ? null : sourceBlock( cellRange ); },
+        afterMergeCells   : function( cellRange, mergeParent, auto ) { if( ! auto ) { moveMergedLook(); fixMergeUndo( cellRange ); } trackMerge( mergeParent ); scheduleAutosave(); },
         afterUnmergeCells : function( cellRange ) { untrackMerge( cellRange ); scheduleAutosave(); },
         afterRender       : function()
         {
@@ -1303,6 +1304,133 @@ function trackMerge( m )
 {
     activeSheet.merges = activeSheet.merges.filter( function( e ) { return ! ( e.row === m.row && e.col === m.col ); } );
     activeSheet.merges.push( { row: m.row, col: m.col, rowspan: m.rowspan, colspan: m.colspan } );
+}
+
+// Handsontable keeps only the top-left cell of a merge and blanks the rest,
+// so every other cell's contents were lost. Now nothing is: the merged cell
+// gets all of them, left to right then down, joined with a space and written
+// as each cell shows it (a date as a date, a formula as its result). A lone
+// filled cell moves as it is, so a number or formula keeps working there.
+// The look is the top-left cell's; only its number format is borrowed when it
+// has none, or a moved date would turn into a bare serial number.
+// The value rides inside the plugin's own write (beforeChange, source
+// 'MergeCells'), so its Ctrl+Z step - and the formula engine's, which must
+// stay paired with it - puts every old value back in one go.
+let mergeMove = null;         // { row, col, value, numFmt } read before the merge blanks it
+
+function mergedContents( cellRange )
+{
+    const a = cellRange.getTopStartCorner();
+    const b = cellRange.getBottomEndCorner();
+    const empty = function( v ) { return v === null || v === undefined || v === ''; };
+    const found = [];
+
+    for( let r = a.row; r <= b.row; r++ )
+        for( let c = a.col; c <= b.col; c++ )
+        {
+            const src = table.getSourceDataAtCell( table.toPhysicalRow( r ), table.toPhysicalColumn( c ) );
+            if( ! empty( src ) ) found.push( { r: r, c: c, src: src } );
+        }
+
+    if( ! found.length || ( found.length === 1 && found[ 0 ].r === a.row && found[ 0 ].c === a.col ) ) return null;
+
+    const fmtOf = function( f ) { const st = styleOf( activeSheet, f.r, f.c ); return st && st.numFmt; };
+
+    if( found.length === 1 )
+        return { row: a.row, col: a.col, value: found[ 0 ].src, numFmt: fmtOf( found[ 0 ] ) };
+
+    const shown = found.map( function( f )
+    {
+        const v = table.getDataAtCell( f.r, f.c );
+        return typeof v === 'number' ? showNumber( v, fmtOf( f ) ) : String( v == null ? '' : v );
+    } );
+
+    return { row: a.row, col: a.col, value: shown.join( ' ' ), numFmt: null };
+}
+
+function mergedValue( changes, source )
+{
+    if( source !== 'MergeCells' || ! mergeMove || mergeMove.done || ! changes ) return;
+
+    const m  = mergeMove;
+    const ch = changes.find( function( c ) { return c && c[ 0 ] === m.row && c[ 1 ] === m.col; } );
+    if( ch ) ch[ 3 ] = m.value;
+    else     changes.push( [ m.row, m.col, table.getDataAtCell( m.row, m.col ), m.value ] );
+    m.done = true;
+}
+
+function moveMergedLook()
+{
+    const m = mergeMove;
+    mergeMove = null;
+    if( ! m || ! m.done || ! m.numFmt ) return;
+
+    const sheet  = activeSheet;
+    const before = sheet.cellStyles[ encodeCell( { r: m.row, c: m.col } ) ];
+    const own    = styleOf( sheet, m.row, m.col );
+    if( own && own.numFmt ) return;
+
+    const to    = encodeCell( { r: m.row, c: m.col } );
+    const after = Object.assign( {}, own, before, { numFmt: m.numFmt } );
+    const put   = function( st ) { if( st ) sheet.cellStyles[ to ] = Object.assign( {}, st ); else delete sheet.cellStyles[ to ]; };
+
+    put( after );
+    undoStep( function() { put( before ); }, function() { put( after ); } );
+    table.render();
+}
+
+// The plugin's own Ctrl+Z step for a merge has two flaws, so it is replaced:
+// - it keeps the cells' SHOWN values, so a formula came back as its result;
+// - it writes them back through the formula engine. Every Ctrl+Z / Ctrl+Y
+//   already steps the engine's own history, and a fresh write wipes the
+//   engine's redo list, so Ctrl+Y after it threw "There is no operation to
+//   redo" and did nothing. Writing as 'UndoRedo.undo' / 'UndoRedo.redo'
+//   keeps the engine out of it, as every other undo step does.
+let mergeWas = null;          // the merged block's source values, formulas included
+
+function sourceBlock( cellRange )
+{
+    const a = cellRange.getTopStartCorner();
+    const b = cellRange.getBottomEndCorner();
+    const rows = [];
+
+    for( let r = a.row; r <= b.row; r++ )
+    {
+        const row = [];
+        for( let c = a.col; c <= b.col; c++ ) row.push( table.getSourceDataAtCell( table.toPhysicalRow( r ), table.toPhysicalColumn( c ) ) );
+        rows.push( row );
+    }
+
+    return rows;
+}
+
+function fixMergeUndo( cellRange )
+{
+    const was = mergeWas;
+    mergeWas = null;
+
+    const ur = table.getPlugin( 'undoRedo' );
+    if( ! was || ! ur || ! ur.doneActions ) return;
+
+    const act = ur.doneActions.slice().reverse().find( function( x ) { return x && x.actionType === 'merge_cells' && x.cellRange === cellRange; } );
+    if( ! act ) return;
+
+    const now = sourceBlock( cellRange );
+    const at  = cellRange.getTopStartCorner();
+    const put = function( hot, block, source ) { hot.populateFromArray( at.row, at.col, block, undefined, undefined, source ); };
+
+    // auto = true: the cells already hold what they should, so the merge
+    // hooks above must not move anything again.
+    act.undo = function( hot, done )
+    {
+        try     { hot.getPlugin( 'mergeCells' ).unmergeRange( cellRange, true ); put( hot, was, 'UndoRedo.undo' ); }
+        finally { hot.render(); done(); }
+    };
+    act.redo = function( hot, done )
+    {
+        try     { hot.getPlugin( 'mergeCells' ).mergeRange( cellRange, true, true ); put( hot, now, 'UndoRedo.redo' ); }
+        finally { hot.render(); done(); }
+    };
 }
 
 function untrackMerge( cellRange )

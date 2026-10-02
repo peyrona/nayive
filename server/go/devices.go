@@ -9,13 +9,15 @@ package main
 // uses. Through it the phone learns, with the screen off, what a web page
 // cannot wait for:
 //
-//	GET /api/device/wait?v=V   (the app) -> {"v","hold","track","badge","call","find"}
+//	GET /api/device/wait?v=V   (the app) -> {"v","hold","track","badge","call","find","media"}
 //
 //	track  a trip of the owner covers today, on the owner's clock (the rule
 //	       positions.go keeps positions by): send positions
 //	badge  the unread chat messages (the launcher's own count)
 //	call   a Chat call ringing for the owner right now (chat_call.go hands it over)
 //	find   "Buscar mi móvil" was pressed for THIS phone
+//	media  when "Upload new photos and videos" was switched on for THIS phone
+//	       (unix seconds; 0 = off) - api_device_media.go
 //
 // It answers at once when that differs from V (a hash of the answer the phone
 // last saw), otherwise when something changes, otherwise after `hold` seconds.
@@ -29,7 +31,8 @@ package main
 //
 //	POST   /api/device/enrol            (session) {t, name, endpoint?} -> {"id"}
 //	GET    /api/device                  (session) -> the phones, the finds, the last position
-//	PUT    /api/device/<id>             (session) {endpoint} its Chrome's push endpoint, anew
+//	PUT    /api/device/<id>             (session) {endpoint?, media?, mediaDir?} its Chrome's
+//	                                              push endpoint anew; the photo upload switch
 //	DELETE /api/device/<id>             (session) -> revoke: that token stops working
 //	POST   /api/device/find             (session) {id} ring that phone
 //	                                              {ask: true, endpoint?} push "¿Dónde estás?"
@@ -38,6 +41,7 @@ package main
 //
 //	POST   /api/device/report           (the app) {positions?, find?}
 //	POST   /api/device/ack              (the app) {call|find, act: decline|stop}
+//	       /api/device/media/...        (the app) the photo upload (api_device_media.go)
 //
 // The app's credential is its token, in the X-Nayive-Device header: a URL ends
 // up in logs, a header does not. Only the token's SHA-256 is stored, in
@@ -101,6 +105,11 @@ type deviceRow struct {
 	Seen     int64  `json:"seen"`
 	App      int    `json:"app,omitempty"`      // the APK's versionCode
 	Endpoint string `json:"endpoint,omitempty"` // web push of the Chrome inside its TWA
+
+	// The photo upload (api_device_media.go).
+	Media     int64    `json:"media,omitempty"`     // switched on at (unix s); 0 = off
+	MediaDir  string   `json:"mediaDir,omitempty"`  // where no trip takes a picture; "" = files/Camera
+	MediaDone []string `json:"mediaDone,omitempty"` // the phone ids already filed, newest last
 }
 
 type devicesFile struct {
@@ -211,18 +220,9 @@ func (d *Devices) ensureLoaded() {
 		return
 	}
 	d.loaded = true
-	raw, err := os.ReadFile(d.path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			d.log.Error("devices.json is unreadable - starting with no phones", "err", err)
-			d.broken = true
-		}
-		return
-	}
 	var file devicesFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		d.log.Error("devices.json is unreadable - starting with no phones", "err", err)
-		d.broken = true
+	var ok bool
+	if ok, d.broken = loadTable(d.path, &file, d.log, "starting with no phones"); !ok {
 		return
 	}
 	for _, r := range file.Devices {
@@ -232,17 +232,9 @@ func (d *Devices) ensureLoaded() {
 	}
 }
 
-// save writes the table back. Caller holds mu. Like Trackers.save, it never
-// writes over a file that could not be read: that one is moved aside first.
+// save writes the table back. Caller holds mu. It never writes over a file
+// that could not be read: that one is moved aside first (saveTable).
 func (d *Devices) save() {
-	if d.broken {
-		aside := d.path + ".broken-" + time.Now().Format("2006-01-02-150405")
-		if err := os.Rename(d.path, aside); err != nil && !os.IsNotExist(err) {
-			d.log.Error("devices.json is unreadable and cannot be moved aside - not saving", "err", err)
-			return
-		}
-		d.broken = false
-	}
 	rows := make([]deviceRow, len(d.rows))
 	for i, r := range d.rows {
 		if s := d.seen[r.ID]; s > r.Seen {
@@ -251,9 +243,7 @@ func (d *Devices) save() {
 		}
 		rows[i] = r
 	}
-	if err := atomicWriteJSON(d.path, devicesFile{Devices: rows}, 4); err != nil {
-		d.log.Error("cannot save devices.json", "err", err)
-	}
+	saveTable(d.path, &d.broken, devicesFile{Devices: rows}, d.log)
 }
 
 func tokenHash(token string) string {
@@ -418,6 +408,72 @@ func (d *Devices) SetEndpoint(owner, id, endpoint string) bool {
 		}
 	}
 	return false
+}
+
+// SetMedia switches `owner`'s phone `id`'s photo upload on or off, and/or sets
+// its folder ("" = the default). Switching on stamps the moment: only what the
+// phone takes from then on goes up. Already on stays as it was.
+func (d *Devices) SetMedia(owner, id string, on *bool, dir *string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	for i := range d.rows {
+		r := &d.rows[i]
+		if r.Owner != owner || r.ID != id {
+			continue
+		}
+		if on != nil {
+			switch {
+			case *on && r.Media == 0:
+				r.Media = time.Now().Unix()
+			case !*on:
+				r.Media = 0
+			}
+		}
+		if dir != nil {
+			r.MediaDir = strings.Join(publicPhotoDir(*dir), "/")
+		}
+		d.save()
+		d.kickLocked()
+		return true
+	}
+	return false
+}
+
+// mediaFiled: phone `id` already sent the file it calls `phoneID`.
+func (d *Devices) mediaFiled(id, phoneID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	for _, r := range d.rows {
+		if r.ID == id {
+			for _, p := range r.MediaDone {
+				if p == phoneID {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// noteMediaFiled remembers that phone `id` sent `phoneID`, the newest
+// mediaDoneMax only: the phone itself moves past what it sent, this list only
+// catches a retry whose answer was lost.
+func (d *Devices) noteMediaFiled(id, phoneID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensureLoaded()
+	for i := range d.rows {
+		if r := &d.rows[i]; r.ID == id {
+			r.MediaDone = append(r.MediaDone, phoneID)
+			if n := len(r.MediaDone); n > mediaDoneMax {
+				r.MediaDone = append([]string(nil), r.MediaDone[n-mediaDoneMax:]...)
+			}
+			d.save()
+			return
+		}
+	}
 }
 
 // FollowEndpoint: `owner`'s browser renewed its push subscription (sw.js
@@ -722,12 +778,8 @@ func (d *Devices) NoteLast(owner string, p lastPos) {
 	if info, err := os.Stat(filepath.Join(d.homes, owner)); err != nil || !info.IsDir() {
 		return
 	}
-	p.Lat = math.Round(p.Lat*1e5) / 1e5 // ~1 m: this store is for finding a phone
-	p.Lon = math.Round(p.Lon*1e5) / 1e5
-	if math.IsNaN(p.Acc) || p.Acc < 0 {
-		p.Acc = 0
-	}
-	p.Acc = math.Min(math.Ceil(p.Acc), 100000)
+	p = roundedForFind(p) // ~1 m: this store is for finding a phone
+	p.Acc = math.Min(p.Acc, 100000)
 
 	d.lastMu.Lock()
 	defer d.lastMu.Unlock()
@@ -766,6 +818,7 @@ type deviceState struct {
 	Badge int            `json:"badge"`
 	Call  *deviceCallOut `json:"call"`
 	Find  *deviceFindOut `json:"find"`
+	Media int64          `json:"media"`
 }
 
 // version is what the phone echoes back: equal means nothing to tell it.
@@ -810,6 +863,9 @@ func (s *Server) tripToday(owner string) bool {
 func (s *Server) deviceStateFor(r *deviceRow) (deviceState, time.Time) {
 	var next time.Time
 	st := deviceState{Track: s.tripToday(r.Owner), Badge: s.chatUnreadOf(r.Owner)}
+	if cur := s.devices.byID(r.ID); cur != nil { // the wait's copy is as old as the wait
+		st.Media = cur.Media
+	}
 	if ring := s.devices.ringFor(r.Owner); ring != nil {
 		st.Call = &deviceCallOut{ID: ring.ID, From: ring.From, Video: ring.Video, URL: ring.URL, Until: ring.Until}
 		next = time.UnixMilli(ring.Until)
@@ -831,7 +887,16 @@ func (s *Server) deviceStateFor(r *deviceRow) (deviceState, time.Time) {
 func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(r.PathValue("rest"), "/")
 
-	// The app's own three: the token is the whole credential.
+	// The app's own: the token is the whole credential.
+	if rest == "media" || strings.HasPrefix(rest, "media/") {
+		dev := s.devices.ByToken(r.Header.Get(deviceHeader))
+		if dev == nil {
+			sendError(w, r, http.StatusUnauthorized, "este móvil no está dado de alta")
+			return
+		}
+		s.deviceMedia(w, r, dev, strings.TrimPrefix(strings.TrimPrefix(rest, "media"), "/"))
+		return
+	}
 	switch rest {
 	case "wait", "report", "ack":
 		dev := s.devices.ByToken(r.Header.Get(deviceHeader))
@@ -941,25 +1006,40 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 		}
 		s.devices.NoteLast(user, p)
 		if body.Find != "" {
-			s.devices.FoundAt(user, body.Find, s.roundedForFind(p))
+			s.devices.FoundAt(user, body.Find, roundedForFind(p))
 		}
 		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
 
 	case len(parts) == 1 && r.Method == http.MethodPut:
 		// The launcher no longer keeps the phone's token, so after a new
 		// sign-in it names the phone by id to update its Chrome's endpoint.
+		// Mi cuenta also sends the photo upload's switch and folder here.
 		var body struct {
-			Endpoint string `json:"endpoint"`
+			Endpoint *string `json:"endpoint"`
+			Media    *bool   `json:"media"`
+			MediaDir *string `json:"mediaDir"`
 		}
 		if err := readJSON(w, r, &body); err != nil {
 			sendBodyError(w, r, err)
 			return
 		}
-		if len(body.Endpoint) > 1024 || !chatPushHostOK(body.Endpoint) {
+		if body.Endpoint == nil && body.Media == nil && body.MediaDir == nil {
+			sendError(w, r, http.StatusBadRequest, "nada que cambiar")
+			return
+		}
+		if body.Endpoint != nil && (len(*body.Endpoint) > 1024 || !chatPushHostOK(*body.Endpoint)) {
 			sendError(w, r, http.StatusBadRequest, "endpoint no válido")
 			return
 		}
-		if !s.devices.SetEndpoint(user, parts[0], body.Endpoint) {
+		if body.MediaDir != nil && *body.MediaDir != "" && publicPhotoDir(*body.MediaDir) == nil {
+			sendError(w, r, http.StatusBadRequest, "carpeta no válida")
+			return
+		}
+		if body.Endpoint != nil && !s.devices.SetEndpoint(user, parts[0], *body.Endpoint) {
+			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
+			return
+		}
+		if (body.Media != nil || body.MediaDir != nil) && !s.devices.SetMedia(user, parts[0], body.Media, body.MediaDir) {
 			sendError(w, r, http.StatusNotFound, "ese móvil no existe")
 			return
 		}
@@ -977,8 +1057,9 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// roundedForFind is p as the find dialog shows it (same ~1 m as last.json).
-func (s *Server) roundedForFind(p lastPos) lastPos {
+// roundedForFind is p as the find dialog shows it, and as last.json keeps it:
+// ~1 m, the accuracy in whole metres.
+func roundedForFind(p lastPos) lastPos {
 	p.Lat = math.Round(p.Lat*1e5) / 1e5
 	p.Lon = math.Round(p.Lon*1e5) / 1e5
 	if math.IsNaN(p.Acc) || p.Acc < 0 {
@@ -989,11 +1070,13 @@ func (s *Server) roundedForFind(p lastPos) lastPos {
 }
 
 type deviceOut struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Created int64  `json:"created"`
-	Seen    int64  `json:"seen"`
-	Online  bool   `json:"online"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Created  int64  `json:"created"`
+	Seen     int64  `json:"seen"`
+	Online   bool   `json:"online"`
+	Media    bool   `json:"media"`    // "Upload new photos and videos"
+	MediaDir string `json:"mediaDir"` // where no trip takes them
 }
 
 // deviceList is what the web shows: Mi cuenta's phones, and the find dialog.
@@ -1001,7 +1084,8 @@ func (s *Server) deviceList(w http.ResponseWriter, r *http.Request, user string)
 	out := []deviceOut{}
 	for _, d := range s.devices.List(user) {
 		out = append(out, deviceOut{ID: d.ID, Name: d.Name, Created: d.Created, Seen: d.Seen,
-			Online: time.Since(time.Unix(d.Seen, 0)) < deviceOnline})
+			Online: time.Since(time.Unix(d.Seen, 0)) < deviceOnline,
+			Media:  d.Media > 0, MediaDir: mediaDirOf(&d)})
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{
 		"devices": out,
@@ -1073,7 +1157,7 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 		if v != seen || !now.Before(deadline) {
 			sendJSON(w, r, http.StatusOK, map[string]any{
 				"v": v, "hold": int(deviceHold / time.Second),
-				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find,
+				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find, "media": st.Media,
 			})
 			return
 		}
@@ -1132,7 +1216,7 @@ func (s *Server) deviceReport(w http.ResponseWriter, r *http.Request, dev *devic
 	saved := s.recordPositions(dev.Owner, ps) // also keeps the newest as the last position
 	if body.Find != "" && len(ps) > 0 {
 		newest := ps[len(ps)-1]
-		s.devices.FoundAt(dev.Owner, body.Find, s.roundedForFind(lastPos{
+		s.devices.FoundAt(dev.Owner, body.Find, roundedForFind(lastPos{
 			Lat: newest.Lat, Lon: newest.Lon, Acc: newest.Acc, At: newest.At, Source: "nayive"}))
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"ok": true, "saved": saved})

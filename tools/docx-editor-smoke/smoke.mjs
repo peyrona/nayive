@@ -36,7 +36,7 @@ import os   from 'node:os';
 import path from 'node:path';
 import url  from 'node:url';
 import zlib from 'node:zlib';
-import { browser, attach } from './cdp.mjs';
+import { browser, attach } from '../cdp.mjs';
 
 const HERE   = path.dirname( url.fileURLToPath( import.meta.url ) );
 const CORPUS = process.env.CORPUS;

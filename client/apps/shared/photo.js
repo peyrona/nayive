@@ -27,9 +27,10 @@
  * That is only possible when the source is itself a JPEG; a PNG or a HEIC has
  * no Exif to copy, and those photos arrive without a position.
  *
- * It also holds what the three image editors (Drive, Photos, Chat) share:
- * keepExif(), the editor's words in the user's language (editorLocale,
- * localizeEditor) and the thumbnail an edit leaves behind (thumbOf, dropThumb).
+ * It also holds what the three image editors (Drive, Photos, Chat) share: the
+ * editor itself (loadEditor, newEditor, dataUrlBytes), keepExif(), its words
+ * in the user's language (editorLocale, localizeEditor) and the thumbnail an
+ * edit leaves behind (thumbOf, dropThumb).
  */
 ( function ()
 {
@@ -64,11 +65,7 @@
     //  What is a photo
     //------------------------------------------------------------------------//
 
-    function extOf( name )
-    {
-        var m = /\.([a-z0-9]+)$/i.exec( String( name || "" ) );
-        return m ? m[ 1 ].toLowerCase() : "";
-    }
+    function extOf( name ) { return NayiveUI.extOf( name ); }
 
     var IMG_EXT = [ "jpg", "jpeg", "png", "webp", "heic", "heif", "avif", "bmp", "tif", "tiff" ];
 
@@ -390,6 +387,78 @@
         if ( label && word ) label.textContent = word;
     }
 
+    /* The editor's two bundles (~0.7 MB, in drive/lib - found from this
+     * file's own address, so every app asks for the same URLs), loaded once,
+     * on the first edit: tui.colorPicker must exist before the editor. A load
+     * that failed is tried again next time. */
+    var EDITOR_LIB = document.currentScript ? new URL( "../drive/lib/", document.currentScript.src ).href : "../drive/lib/";
+    var editorLib  = null;
+
+    function loadEditor()
+    {
+        if ( editorLib ) return editorLib;
+
+        function add( tag, attrs )
+        {
+            return new Promise( function ( ok, fail )
+            {
+                var el = document.createElement( tag );
+                Object.keys( attrs ).forEach( function ( k ) { el[ k ] = attrs[ k ]; } );
+                el.onload  = ok;
+                el.onerror = function () { fail( new Error( "load " + ( attrs.href || attrs.src ) ) ); };
+                document.head.appendChild( el );
+                if ( tag === "link" ) ok();
+            } );
+        }
+
+        add( "link", { rel: "stylesheet", href: EDITOR_LIB + "tui-color-picker_v2.2.8.min.css" } );
+        add( "link", { rel: "stylesheet", href: EDITOR_LIB + "tui-image-editor_v3.15.3.min.css" } );
+        editorLib = add( "script", { src: EDITOR_LIB + "tui-color-picker_v2.2.8.min.js" } )
+            .then( function () { return add( "script", { src: EDITOR_LIB + "tui-image-editor_v3.15.3.min.js" } ); } )
+            .catch( function ( err ) { editorLib = null; throw err; } );
+        return editorLib;
+    }
+
+    /* A new editor in `host` on the picture at `url`, called `name`: the same
+     * menus in every app, in the user's language. Call it once loadEditor()
+     * is done. The library puts the picture between its own two 64px rows
+     * (tools below, zoom / undo above), so it gets the host minus both.
+     * Asking for the whole window left a portrait photo running off the
+     * bottom. */
+    function newEditor( host, url, name )
+    {
+        var box = host.getBoundingClientRect();
+        var ed  = new tui.ImageEditor( host, {
+            includeUI: {
+                loadImage: { path: url, name: name },
+                menu: [ "crop", "flip", "rotate", "draw", "shape", "icon", "text", "mask", "filter" ],
+                initMenu: "",
+                menuBarPosition: "bottom",
+                uiSize: { width: "100%", height: "100%" },
+                locale: editorLocale()          // its words in the user's language
+            },
+            cssMaxWidth:  Math.max( 160, box.width - 16 ),
+            cssMaxHeight: Math.max( 160, box.height - 136 ),
+            selectionStyle: { cornerSize: 18, rotatingPointOffset: 60 },
+            usageStatistics: false              // the library pings Google Analytics unless this is off
+        } );
+        localizeEditor( host );
+        return ed;
+    }
+
+    /* An editor's toDataURL() as bytes to write. "data:," is a canvas with
+     * no picture - what a device hands back for a canvas bigger than it
+     * allows (an iPhone stops near 16.7 MP): saving it would leave an empty
+     * file where the photo was, so it throws instead. */
+    function dataUrlBytes( u )
+    {
+        if ( ! /^data:image\//.test( u ) ) throw new Error( "empty render" );
+        var bin = atob( u.slice( u.indexOf( "," ) + 1 ) );
+        var out = new Uint8Array( bin.length );
+        for ( var i = 0; i < bin.length; i++ ) out[ i ] = bin.charCodeAt( i );
+        return out;
+    }
+
     /* Photos keeps a thumbnail of each picture, named after the file's size
      * and mtime (data/photos/thumbs/<size>_<mtime>.jpg). When an editor
      * rewrites a file, nothing asks for the old one again. thumbOf() names
@@ -505,11 +574,13 @@
         keepExif:     keepExif,
         editorLocale: editorLocale,
         localizeEditor: localizeEditor,
+        loadEditor:   loadEditor,
+        newEditor:    newEditor,
+        dataUrlBytes: dataUrlBytes,
         thumbOf:      thumbOf,
         dropThumb:    dropThumb,
         copyExif:     copyExif,
         jpegName:     jpegName,
-        isImage:      isImage,
         isJpeg:       isJpeg
     };
 } )();

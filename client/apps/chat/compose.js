@@ -178,16 +178,27 @@
         if( Array.from( text ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
         if( S.editing )
         {
-            var m = S.editing;
+            var m = S.editing, conv = S.open;
             if( ! text && m.kind === "text" ) return;
             C.resetComposer();
             try
             {
-                var out = await C.api( "PATCH", "conv/" + S.open + "/messages/" + m.id, { text: text } );
+                var out = await C.api( "PATCH", "conv/" + conv + "/messages/" + m.id, { text: text } );
                 S.msgs.set( out.id, out );
                 C.redraw( out.id );
             }
-            catch( e ) { C.fail( e ); }
+            catch( e )
+            {
+                C.fail( e );
+                // The edit is not lost: it goes back in the box, still an
+                // edit - unless the box was used for something else meanwhile.
+                if( S.open === conv && ! S.editing && ! S.replyTo && ! ta.value )
+                {
+                    C.editMsg( m );
+                    ta.value = text;
+                    grow();
+                }
+            }
             return;
         }
         if( ! text ) { C.focusComposer(); return; }
@@ -273,7 +284,7 @@
         var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "chat.schedule" ) } } );
         var sh = C.sheet( T( "chat.schedule" ), h( "div", {},
             h( "div", { class: "field" }, h( "label", { attrs: { for: "laterAt" }, text: T( "chat.scheduleWhen" ) } ), input ),
-            h( "p", { class: "hint", text: T( "chat.scheduleHint" ) } ) ), ok );
+            h( "p", { class: "hint", text: T( "chat.scheduleHint" ) } ) ), ok, null, "later-sheet" );
         ok.addEventListener( "click", async function ()
         {
             var at = input.value ? new Date( input.value ).getTime() : NaN;   // no zone: local time
@@ -651,26 +662,22 @@
     // ---------------------------------------------------------------------
 
     // A sheet with a title and a body; closes on its × or Escape (and then
-    // calls onClose, when given).
-    C.sheet = function ( title, body, actions, onClose )
+    // calls onClose, when given). Escape only while it is the last thing on
+    // the page: a sheet or a full-screen layer opened from it goes first.
+    C.sheet = function ( title, body, actions, onClose, cls )
     {
         var close = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.close" ) } } );
         var row = h( "div", { class: "sheet-actions" }, close, actions || null );
-        var back = h( "div", { class: "sheet-backdrop open", attrs: { role: "dialog", "aria-modal": "true" } },
-            h( "div", { class: "sheet" }, h( "h2", { text: title } ), body, row ) );
-        document.body.appendChild( back );
-        NayiveUI.applySheetButtons( back );
+        var d = NayiveUI.modal( { cls: cls, title: title, escape: done, top: function () { return document.body.lastElementChild === d.back; } } );
+        d.sheet.appendChild( body );
+        d.sheet.appendChild( row );
+        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
         function done()
         {
-            if( ! back.parentNode ) return;
-            back.remove();
-            document.removeEventListener( "keydown", esc, true );
-            if( onClose ) onClose();
+            if( d.close() && onClose ) onClose();
         }
-        function esc( e ) { if( e.key === "Escape" && document.body.lastElementChild === back ) { e.stopPropagation(); done(); } }
-        back.querySelectorAll( ".sheet-close, .btn-secondary" ).forEach( function ( b ) { b.addEventListener( "click", done ); } );
-        document.addEventListener( "keydown", esc, true );
-        return { el: back, close: done };
+        d.back.querySelectorAll( ".sheet-close, .btn-secondary" ).forEach( function ( b ) { b.addEventListener( "click", done ); } );
+        return { el: d.back, close: done };
     };
 
     C.showReactions = function ( m )

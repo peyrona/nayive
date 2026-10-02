@@ -25,9 +25,8 @@ package main
 //	DTSTART;TZID=Europe/Madrid:20260829T100000   zoned     -> that TZ
 //
 // java: TIME ZONES. Go has no "naive datetime" - every time.Time carries a
-// Location, and time.Local is the box's own zone. So where Python distinguishes
-// "aware" from "naive", here the distinction is simply which *time.Location is
-// passed in: a nil one means time.Local. The zone a FLOATING value is read in
+// Location, and time.Local is the box's own zone. So "aware" versus "naive"
+// is simply which *time.Location is passed in: a nil one means time.Local. The zone a FLOATING value is read in
 // is the DEVICE's own (PushSub.TZ, reminders.go), else the CALENDAR OWNER's
 // (users.UserTZ); the box's local time is nobody's
 // wall clock, and is only the last resort.
@@ -124,6 +123,7 @@ func dtstartTime(params, rawValue string, loc *time.Location) (time.Time, bool) 
 	case strings.Contains(params, "TZID="):
 		tzid := strings.SplitN(params, "TZID=", 2)[1]
 		tzid = strings.TrimSpace(strings.SplitN(tzid, ";", 2)[0])
+		tzid = strings.Trim(tzid, `"`) // TZID="Europe/Madrid" is legal RFC 5545 too
 		zone = Location(&tzid)
 	default:
 		zone = loc // floating: the calendar owner's own zone

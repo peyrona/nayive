@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Count Lines (not LoC) in files in this project.
-# Counting is made per file type for: .html, .css, .js, .py and .go
+# Counting is made per file type for: .html, .css, .js, .mjs, .py and .go
 # At end shows a table with the results.
 # ==============================================================================
 
@@ -16,12 +16,13 @@ PRUNE=(
     -name .git
     -o -name __pycache__
     -o -name node_modules
-    -o -path './client/apps/*/lib'      # vendored front-end libs (TinyMCE, FullCalendar, ...)
+    -o -path './client/apps/*/lib'      # vendored front-end libs (FullCalendar, Handsontable, ...)
+    -o -path './tools/*/lib'            # vendored libs of the test tools (canvas-spike)
     -o -path './store'                  # the run-root: per-user data, config, runtime state
     -o -path './server/go/vendor'         # vendored Go module (x/text), not ours
 )
 
-EXTS=(html css js py go)
+EXTS=(html css js mjs py go)
 
 printf '%-8s %10s %14s\n' "Type" "Files" "Lines"
 printf '%-8s %10s %14s\n' "----" "-----" "-----"

@@ -96,8 +96,8 @@
         if( ! res.ok )
         {
             authLost( res );
-            // Message format is load-bearing: older callers sniff it for "401" /
-            // "HTTP 404". Keep it as it is; new code reads err.status.
+            // Message format is load-bearing: readJson (below) still sniffs it
+            // for "HTTP 404", and toasts show it. New code reads err.status.
             var err = new Error( "HTTP " + res.status + ": " + res.statusText );
             err.status = res.status;
             throw err;
@@ -136,8 +136,8 @@
     // Nothing here depends on ui.js: with no listener the events go nowhere.
     //
     // The two contracts fetch() had are kept exactly: a non-2xx goes through
-    // assertOk (same "HTTP <status>: <text>" message, sniffed for "401"
-    // downstream), and a dropped connection throws a TypeError("Failed to fetch") -
+    // assertOk (same "HTTP <status>: <text>" message and err.status), and a
+    // dropped connection throws a TypeError("Failed to fetch") -
     // what withRetry retries on. A retry is a new attempt, with a new id.
     var uploadSeq = 0;
 
@@ -186,6 +186,37 @@
     }
 
     //------------------------------------------------------------------------//
+    // CHANGE NEWS
+    //
+    // Every page tells the others (Drive in another tab or desktop window)
+    // what it changed, so they show it without a manual reload: a "Save as"
+    // in Write appears in the Drive listing at once. { paths, folders } -
+    // folders:true when the folder tree may have changed too (new folder,
+    // rename, delete). A page never hears its own news.
+    var newsChannel = null;
+    try { newsChannel = new BroadcastChannel( "nayive-files" ); } catch ( e ) {}
+
+    // A .then() step: announce, then pass the result through untouched.
+    function changed( paths, folders )
+    {
+        return function ( result )
+        {
+            try { if( newsChannel ) newsChannel.postMessage( { paths: paths, folders: folders } ); }
+            catch ( e ) {}
+            return result;
+        };
+    }
+
+    // News of a change this page made some other way (a bin restore names
+    // nothing it brought back).
+    function announce( paths, folders ) { changed( paths, folders )(); }
+
+    function onFilesChanged( fn )
+    {
+        if( newsChannel ) newsChannel.addEventListener( "message", function ( e ) { fn( e.data || {} ); } );
+    }
+
+    //------------------------------------------------------------------------//
     // FILE HELPERS
 
     // The URL for one file: API_FILES + '?file=' + encodeURIComponent( path )
@@ -203,7 +234,7 @@
     {
         var url = fileUrl( path );
         if( opts && opts.convert ) url += "&convert=" + encodeURIComponent( opts.convert );
-        return putBinary( url, bytes );
+        return putBinary( url, bytes ).then( changed( [ path ], false ) );
     }
 
     // Small JSON sidecar helpers (data/<app>/config.json and friends). readJson
@@ -225,21 +256,11 @@
         return writeFileBytes( path, new TextEncoder().encode( JSON.stringify( obj, null, 1 ) ) );
     }
 
-    // The whole recursive file tree (a GET with no ?file= param), parsed.
-    // EXPENSIVE on the server (it walks every folder of the account) - prefer
-    // listDir() / listDirRecursive() / dirTree() below. Kept for completeness.
-    async function readTree()
-    {
-        return JSON.parse( await fetchText( API_FILES ) );
-    }
-
     // ONE level of the tree: the files AND sub-folders directly inside `path`
     // (a virtual path like "files/photos"; "" or omitted = the virtual root).
     // GET ?dir=<path>  -> { path, role, user, nodes: [...] } where each node is
-    // the same shape readTree() uses: a file has nodes:null + size + mtime, a
-    // sub-folder has nodes:[] and is not expanded. Cheap even when the folder
-    // holds thousands of files - use this instead of readTree() when you only
-    // need one folder.
+    // a file with nodes:null + size + mtime or a sub-folder with nodes:[] (not
+    // expanded). Cheap even when the folder holds thousands of files.
     async function listDir( path )
     {
         // "/" (not "") for the root: an empty query value gets dropped before it
@@ -250,7 +271,7 @@
 
     // The whole subtree under ONE folder (that folder's files and sub-folders,
     // sub-folders' files, ...), in one call. `path` must not be "" (the virtual
-    // root). Same node shape as readTree()/listDir(); a sub-folder's `nodes` is
+    // root). Same node shape as listDir(); a sub-folder's `nodes` is
     // fully expanded, not the empty-array stub listDir() gives you. Rejects
     // with "HTTP 404" when the folder does not exist yet.
     async function listDirRecursive( path )
@@ -261,7 +282,7 @@
 
     // The whole virtual root as a FOLDERS-ONLY recursive tree (no file nodes).
     // GET ?tree=dirs  -> { path, role, user, nodes } - same wrapper shape as
-    // readTree(), but a folder that holds thousands of files still adds just one
+    // listDir(), and a folder that holds thousands of files still adds just one
     // node. The Drive left pane loads this and fetches each folder's file list
     // separately with listDir().
     async function dirTree()
@@ -310,7 +331,8 @@
     function makeDir( parent, name )
     {
         var q = new URLSearchParams( { type: "dir", name: name, parent: parent } ).toString();
-        return fetchText( API_FILES + "?" + q, { method: "PUT" } );
+        return fetchText( API_FILES + "?" + q, { method: "PUT" } )
+               .then( changed( [ parent ? parent + "/" + name : name ], true ) );
     }
 
     // ONE "paths" parameter per path - repeated, never joined by a separator.
@@ -332,7 +354,8 @@
     // Items go to the trash can (papelera), not away for good.
     function deletePaths( paths )
     {
-        return fetchText( API_FILES + "?" + pathsQuery( paths ), { method: "DELETE" } );
+        return fetchText( API_FILES + "?" + pathsQuery( paths ), { method: "DELETE" } )
+               .then( changed( [].concat( paths ), true ) );
     }
 
     // The same delete, for an Undo: resolves to the bin ids of what went in
@@ -362,7 +385,8 @@
     function rename( oldPath, newPath )
     {
         var q = new URLSearchParams( { old: oldPath, "new": newPath } ).toString();
-        return fetchText( API_FILES + "?" + q, { method: "POST" } );
+        return fetchText( API_FILES + "?" + q, { method: "POST" } )
+               .then( changed( [ oldPath, newPath ], true ) );
     }
 
     //------------------------------------------------------------------------//
@@ -424,16 +448,12 @@
         return fetchText( API_WHOAMI ).then( JSON.parse );
     }
 
-    // Send the browser to the sign-in page, returning here afterwards.
-    // Framed (Planner's iframes): navigate the TOP window, or the sign-in form
-    // would render inside the frame. A cross-origin `top.location` throws;
-    // then we fall back to ourselves.
+    // Send the browser to the sign-in page, returning here afterwards. The one
+    // copy is NayiveUI.loginRedirect (shared/ui.js, loaded by every page that
+    // loads this file); called only after boot, never while scripts load.
     function loginRedirect()
     {
-        var win = window;
-        try { if( window.top !== window && window.top.location.pathname ) win = window.top; } catch ( e ) {}
-        win.location.href = "/nayive/login.html?return=" +
-            encodeURIComponent( win.location.pathname + win.location.search );
+        NayiveUI.loginRedirect();
     }
 
     //------------------------------------------------------------------------//
@@ -454,7 +474,6 @@
         writeFileBytes:  writeFileBytes,
         readJson:        readJson,
         writeJson:       writeJson,
-        readTree:        readTree,
         listDir:         listDir,
         listDirRecursive: listDirRecursive,
         dirTree:         dirTree,
@@ -466,6 +485,8 @@
         binPaths:        binPaths,
         purgePaths:      purgePaths,
         rename:          rename,
+        onFilesChanged:  onFilesChanged,
+        announce:        announce,
 
         // trash can
         trashList:       trashList,

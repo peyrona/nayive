@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- 2048 ---------------------------------------------------------
@@ -139,7 +139,7 @@
 
                     <div class="g2048-area">
                         <div class="g2048-board" id="g2048Board">
-                            <div class="game-cover g2048-over" id="g2048Over" hidden>
+                            <div class="game-cover" id="g2048Over" hidden>
                                 <p class="game-cover-t" id="g2048OverTitle"></p>
                                 <p class="game-cover-s" id="g2048OverScore"></p>
                                 <button class="text-btn" id="g2048OverBtn" type="button"></button>
@@ -156,7 +156,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -191,8 +191,8 @@
             var over  = false;
             // 2048 has no clock, so a pause here only takes the board off the
             // screen and stops the arrows. It is in the toolbar anyway, because
-            // a button that is there in five games of six and missing in the
-            // sixth reads as a bug rather than as a decision.
+            // a button that is there in every other game and missing in this
+            // one reads as a bug rather than as a decision.
             var paused = false;
             var live  = false;                 // is this the pane on screen? (the arrow keys)
             var dirty = false;                 // the record has moved and is not written yet

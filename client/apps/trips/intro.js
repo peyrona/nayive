@@ -28,7 +28,7 @@ NayiveI18n.ready.then( function () {
         lead:  NayiveUI.t( 'trips.introLead' ),
         buttons: [
             { sel: '.trip-header-actions #addTripBtn', text: NayiveUI.t( 'trips.introAdd' ) },
-            { sel: '.trip-header-actions #myLocationBtn', text: NayiveUI.t( 'trips.introMyLocation' ) },
+            { sel: '.trip-header-actions #settingsBtn', text: NayiveUI.t( 'trips.introSettings' ) },
             // Export and Share are on each trip card, so they show once the list has a trip.
             { sel: '.trip-card-actions .trip-pdf-btn',   text: NayiveUI.t( 'trips.introExport' ) },
             { sel: '.trip-card-actions .trip-share-btn', text: NayiveUI.t( 'trips.introShare' ) },

@@ -52,10 +52,6 @@ function render()
     renderItems();
     renderSelectBar();
 
-    // A search on: the magnifier in the field turns into the × that clears it.
-    document.getElementById( 'searchClear' ).classList.toggle( 'show', !! query );
-    document.getElementById( 'searchIcon' ).style.display = query ? 'none' : '';
-
     document.getElementById( 'gridBtn' ).classList.toggle( 'is-active', ui.mode === 'grid' );
     document.getElementById( 'listBtn' ).classList.toggle( 'is-active', ui.mode === 'list' );
 }
@@ -70,18 +66,21 @@ function renderTree()
     const lit  = filter === 'all' && ! query ? curFolder : null;
     let html = '';
 
-    ( function row( f, depth )
+    // No row for the root: its folders start the tree. The "All" pill and
+    // the crumbs lead back to it.
+    function row( f, depth )
     {
         const kids = childrenOf( f.id ).filter( isFolder );
-        const isOpen = f.id === ROOT || open.has( f.id );
+        const isOpen = open.has( f.id );
         html += '<div class="tree-node">' +
                 '<button type="button" class="folder-row tree-row' + ( f.id === lit ? ' is-active' : '' ) + '" data-id="' + esc( f.id ) + '" style="padding-left:' + ( 4 + depth * 16 ) + 'px">' +
                 '<span class="twisty' + ( kids.length ? ( isOpen ? ' open' : '' ) : ' leaf' ) + '" data-twisty="1">' + SVG.chevron + '</span>' +
-                ( f.id === ROOT ? SVG.bookmark : SVG.folder ) +
+                SVG.folder +
                 '<span class="tree-name">' + esc( folderName( f ) ) + '</span></button>';
         if( kids.length && isOpen ) for( const k of kids ) row( k, depth + 1 );
         html += '</div>';
-    } )( node( ROOT ), 0 );
+    }
+    for( const f of childrenOf( ROOT ).filter( isFolder ) ) row( f, 0 );
 
     host.innerHTML = html;
 }
@@ -130,13 +129,11 @@ function renderCrumbs()
     const up   = document.getElementById( 'upBtn' );
     let html = '';
 
+    // Favourites, Recent and the top level alone say nothing the lit pill
+    // does not: no line at all for them.
     if( query )
         html = '<span class="crumb-note">' + esc( T( 'bookmarks.results' ) ) + '</span>';
-    else if( filter === 'fav' )
-        html = '<span class="crumb-note">' + esc( T( 'bookmarks.favourites' ) ) + '</span>';
-    else if( filter === 'recent' )
-        html = '<span class="crumb-note">' + esc( T( 'bookmarks.recentAdded' ) ) + '</span>';
-    else
+    else if( filter === 'all' && curFolder !== ROOT )
     {
         const parts = ancestry( curFolder );
         parts.forEach( function( f, i )
@@ -147,6 +144,7 @@ function renderCrumbs()
         } );
     }
     host.innerHTML = html;
+    host.parentElement.hidden = ! html;
 
     // ← goes up one level: a phone has no tree to do it with.
     up.hidden = ! ( isPhone() && ! query && filter === 'all' && curFolder !== ROOT );

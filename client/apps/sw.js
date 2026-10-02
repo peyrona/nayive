@@ -28,7 +28,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-882071a765ec";
+var CACHE_VERSION = "nayive-736129feebc5";
 /* @end */
 
 /* @generated:precache */
@@ -64,6 +64,7 @@ var PRECACHE_SHELL = [
     "chat/info.js",
     "chat/list.js",
     "chat/media.js",
+    "chat/push-notice.js",
     "contact/icons/icon-192.png",
     "contact/icons/icon-512.png",
     "contact/index.html",
@@ -97,6 +98,7 @@ var PRECACHE_SHELL = [
     "email/labels.js",
     "email/list.js",
     "email/read.js",
+    "email/search.js",
     "games/asteroids.html",
     "games/checkers.html",
     "games/chess.html",
@@ -118,6 +120,8 @@ var PRECACHE_SHELL = [
     "icons/icon-192.png",
     "icons/icon-512.png",
     "icons/logo-lines.svg",
+    "image/image.css",
+    "image/image.js",
     "index.html",
     "login.html",
     "manifest.json",
@@ -125,6 +129,7 @@ var PRECACHE_SHELL = [
     "planner/icons/icon-512.png",
     "planner/index.html",
     "planner/manifest.json",
+    "share-target/index.html",
     "shared/app.css",
     "shared/basemap.js",
     "shared/crypt.js",
@@ -134,14 +139,15 @@ var PRECACHE_SHELL = [
     "shared/i18n/en.json",
     "shared/i18n/es.json",
     "shared/i18n/fr.json",
-    "shared/i18n/it.json",
     "shared/i18n/pt.json",
     "shared/ical.js",
     "shared/locker.js",
     "shared/lockers/clock.js",
+    "shared/lockers/culture-settings.js",
+    "shared/lockers/culture.js",
     "shared/lockers/life.js",
     "shared/lockers/matrix.js",
-    "shared/lockers/stars.js",
+    "shared/lockers/science.js",
     "shared/media.js",
     "shared/menubar.js",
     "shared/office.js",
@@ -151,6 +157,7 @@ var PRECACHE_SHELL = [
     "shared/theme.js",
     "shared/tz-geo.json",
     "shared/ui.js",
+    "shared/vcard.js",
     "split/icons/icon-192.png",
     "split/icons/icon-512.png",
     "split/index.html",
@@ -210,7 +217,6 @@ var PRECACHE_REST = [
     "calendar/lib/fullcalendar-locale-de_v6.1.21.min.js",
     "calendar/lib/fullcalendar-locale-es_v6.1.21.min.js",
     "calendar/lib/fullcalendar-locale-fr_v6.1.21.min.js",
-    "calendar/lib/fullcalendar-locale-it_v6.1.21.min.js",
     "calendar/lib/fullcalendar-locale-pt_v6.1.21.min.js",
     "calendar/lib/fullcalendar-timegrid_v6.1.21.min.js",
     "shared/lib/ical_v2.2.1.esm.min.js",
@@ -239,8 +245,6 @@ var PRECACHE_REST = [
     "write/lib/proofing/es.dic",
     "write/lib/proofing/fr.aff",
     "write/lib/proofing/fr.dic",
-    "write/lib/proofing/it.aff",
-    "write/lib/proofing/it.dic",
     "write/lib/proofing/pt.aff",
     "write/lib/proofing/pt.dic",
     "write/lib/proofing/typo.js"
@@ -249,6 +253,9 @@ var PRECACHE_REST = [
 
 var CACHE_NAME = CACHE_VERSION;
 var SCOPE_PATH = new URL( self.registration.scope ).pathname;   // e.g. /nayive/
+
+// pushNotice(): a notification's options, shared with chat/guest-sw.js.
+importScripts( "chat/push-notice.js" );
 
 // Trips keeps only the ACTIVE trip's PDFs here, managed from the page (not this
 // SW). Kept across SW updates - never precached, never version-scoped.
@@ -647,10 +654,11 @@ async function htmlStrategy( req, url )
     var cache = await caches.open( CACHE_NAME );
 
     // A navigation to ".../tasks/" resolves to ".../tasks/index.html" on the
-    // server (welcome file); match that key too.
+    // server (welcome file); match that key too. Stored without the query:
+    // the page is the same for every ?file=, ?sel=, ?c=, so one copy is kept.
     var key = url.pathname.charAt( url.pathname.length - 1 ) === "/"
               ? new URL( "index.html", url.href ).toString()
-              : req;
+              : url.origin + url.pathname;
 
     var cached  = await cache.match( key, { ignoreSearch: true } );
     var network = fetch( req ).then( function ( res )
@@ -676,7 +684,7 @@ async function htmlStrategy( req, url )
         return Response.redirect( self.registration.scope, 302 );
 
     return ( await cache.match( root ) ) ||
-           new Response( "Offline - open this app once with a connection first.",
+           new Response( await swText( req, "sw.appOffline" ),
                          { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } } );
 }
 
@@ -736,25 +744,9 @@ async function showPush( event )
     var body  = d.body  || await swText( null, "push.eventTitle" ) || "";
     var icon  = new URL( "icons/icon-192.png", self.registration.scope ).toString();
 
-    // A Chat call (server/go/chat_call.go) rings until answered; "quiet"
-    // replaces the ringing one without a sound (answered or declined on
-    // another device); a ring that arrives after its deadline (push order is
-    // not guaranteed) says "missed" instead. Same rules in chat/guest-sw.js.
-    var late = d.kind === "call" && d.until && Date.now() > d.until;
-    var opts = {
-        body:     ( late && d.late ) || body,
-        icon:     icon,
-        badge:    icon,
-        tag:      d.tag || "nayive-event",   // same event re-sent -> replace, don't stack
-        renotify: ! d.quiet,                 // ...but still buzz for the replacement
-        data:     { url: d.url || SCOPE_PATH }
-    };
-    if( d.kind === "call" && ! d.quiet && ! late && d.until )
-    {
-        opts.requireInteraction = true;
-        opts.vibrate = [ 500, 250, 500, 250, 500 ];
-    }
-    if( d.quiet ) opts.silent = true;
+    // A Chat call's ringing, "quiet" and "missed" rules live in
+    // chat/push-notice.js, shared with chat/guest-sw.js.
+    var opts = pushNotice( d, { body: body, icon: icon, tag: "nayive-event", url: SCOPE_PATH } );
 
     // A chat message: tell every open Nayive page, so the one on screen puts
     // its red Chat dot on at once (shared/ui.js, CHAT DOT). New mail the same

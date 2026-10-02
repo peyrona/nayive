@@ -11,13 +11,17 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { browser, attach } from "../locktest/cdp.mjs";
+import { browser, attach } from "../cdp.mjs";
 
 const HERE = path.dirname( new URL( import.meta.url ).pathname );
 const REPO = path.resolve( HERE, "../.." );
 const GO   = process.env.GO || path.join( os.homedir(), "sdk/go1.27.1/bin/go" );
 
 let pass = 0, fail = 0;
+// the writer's text: Squire's box takes HTML; a change reaches it by its
+// MutationObserver (a moment later, hence the pause); read back as plain text
+const TYPE = html => `( async () => { document.getElementById('cText').innerHTML = ${ JSON.stringify( html ) }; await new Promise( r => setTimeout( r, 80 ) ); } )()`;
+const TEXT = "NayiveMail.composeText()";
 function ok( cond, what, extra ) { if( cond ) { pass++; console.log( "  ok  " + what ); } else { fail++; console.log( "  FAIL " + what + ( extra !== undefined ? "  -> " + JSON.stringify( extra ) : "" ) ); } }
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 
@@ -177,9 +181,10 @@ try
 
     // #8: leaving while saves fail keeps the writer
     await fetch( BASE + "/e2e/draft?fail=1" );
-    await c.evaluate( "var x = document.getElementById('cText'); x.value = 'Texto que no se pierde'; x.dispatchEvent( new Event('input') ); document.getElementById('backBtn').click(); true" );
+    await c.evaluate( TYPE( "<div>Texto que no se pierde</div>" ) );
+    await c.evaluate( "document.getElementById('backBtn').click(); true" );
     await sleep( 1500 );
-    ok( await c.evaluate( "!document.getElementById('composeView').hidden && document.getElementById('cText').value === 'Texto que no se pierde'" ),
+    ok( await c.evaluate( "!document.getElementById('composeView').hidden && " + TEXT + " === 'Texto que no se pierde'" ),
         "a failed save keeps the writer and the text" );
     ok( /No se pudo guardar/.test( await lastToast( c ) ), "and says so", await lastToast( c ) );
     await fetch( BASE + "/e2e/draft?fail=0" );
@@ -189,11 +194,47 @@ try
 
     // #75: Discard, then Undo
     await c.evaluate( "document.getElementById('composeBtn').click(); true" );
-    await c.evaluate( "var x = document.getElementById('cText'); x.value = 'Casi lo pierdo'; x.dispatchEvent( new Event('input') ); document.getElementById('cDiscard').click(); true" );
+    await c.evaluate( TYPE( "<div>Casi lo pierdo</div>" ) );
+    await c.evaluate( "document.getElementById('cDiscard').click(); true" );
     ok( await waitFor( c, "document.getElementById('composeView').hidden" ), "Discard leaves at once" );
     ok( await c.evaluate( "!!document.querySelector('#toast .toast-undo')" ), "…with an Undo" );
     await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
-    ok( await waitFor( c, "!document.getElementById('composeView').hidden && document.getElementById('cText').value === 'Casi lo pierdo'" ), "Undo brings the text back" );
+    ok( await waitFor( c, "!document.getElementById('composeView').hidden && " + TEXT + " === 'Casi lo pierdo'" ), "Undo brings the text back" );
+
+    // the format bar: bold on the words picked, a list, a link; the placeholder
+    await c.evaluate( TYPE( "<div><br></div>" ) );
+    ok( await c.evaluate( "document.querySelector('.mail-cbox').classList.contains('is-empty')" ), "empty: the placeholder shows" );
+    await shot( c, "02a-placeholder" );
+    await c.evaluate( TYPE( "<div>Hola negrita</div><div>uno</div>" ) );
+    ok( await c.evaluate( "!document.querySelector('.mail-cbox').classList.contains('is-empty')" ), "with words, no placeholder" );
+    await c.evaluate( `( async () => { const t = document.getElementById('cText'); t.focus();
+        const n = t.firstChild.firstChild, r = document.createRange(); r.setStart( n, 5 ); r.setEnd( n, 12 );
+        const s = getSelection(); s.removeAllRanges(); s.addRange( r );
+        await new Promise( r => setTimeout( r, 80 ) );
+        document.getElementById('fBold').click();
+        await new Promise( r => setTimeout( r, 80 ) );
+        const n2 = t.children[ 1 ].firstChild, r2 = document.createRange(); r2.setStart( n2, 1 ); r2.collapse( true );
+        s.removeAllRanges(); s.addRange( r2 );
+        await new Promise( r => setTimeout( r, 80 ) );
+        document.getElementById('fBullet').click();
+        await new Promise( r => setTimeout( r, 80 ) ); } )()` );
+    const fmt = await c.evaluate( "document.getElementById('cText').innerHTML" );
+    ok( /<b>negrita<\/b>/.test( fmt ) && /<ul><li>uno/.test( fmt ), "Bold and the list button format the text", fmt );
+    ok( await c.evaluate( "document.getElementById('fBullet').classList.contains('is-active')" ), "…the list button lit in the list" );
+    ok( await c.evaluate( TEXT ) === "Hola negrita\n- uno", "…the plain text has the list as '- '", await c.evaluate( TEXT ) );
+    await c.evaluate( `( async () => { const t = document.getElementById('cText'); t.focus();
+        const n = t.querySelector('b').firstChild, r = document.createRange(); r.setStart( n, 0 ); r.setEnd( n, n.length );
+        const s = getSelection(); s.removeAllRanges(); s.addRange( r );
+        await new Promise( r => setTimeout( r, 80 ) );
+        document.getElementById('fLink').click();
+        await new Promise( r => setTimeout( r, 150 ) );
+        document.getElementById('linkHref').value = 'x.es';
+        document.getElementById('linkOkBtn').click();
+        await new Promise( r => setTimeout( r, 150 ) ); } )()` );
+    const lnk = await c.evaluate( "document.getElementById('cText').innerHTML" );
+    ok( /<a href="https:\/\/x\.es">negrita<\/a>/.test( lnk ), "the link sheet links the words picked", lnk );
+    ok( await c.evaluate( TEXT ) === "Hola negrita <https://x.es>\n- uno", "…its address after them in plain text", await c.evaluate( TEXT ) );
+    await shot( c, "02b-format-bar" );
 
     // send, with Bcc: fresh Message-ID, no Bcc on the wire. The send waits for
     // its Undo (6 s): Undo first brings the writer back with nothing sent.
@@ -216,6 +257,8 @@ try
     const sent = await get( "/e2e/sent" );
     const last = sent && sent[ sent.length - 1 ];
     ok( last && last.rcpts.includes( "carol@example.com" ) && last.rcpts.includes( "perez@example.com" ) && ! /\nBcc:/i.test( last.raw ), "Bcc gets it, and is not in the mail", last && last.rcpts );
+    const body = last ? last.raw.replace( /=\r?\n/g, "" ) : "";
+    ok( /multipart\/alternative/.test( body ) && /<b><a href=3D"https:\/\/x\.es">negrita<\/a><\/b>/.test( body ) && /\n- uno/.test( body ), "it goes as HTML and plain text", body.slice( -900 ) );
 
     // -----------------------------------------------------------------------
     console.log( "READING: the frame" );
@@ -319,9 +362,9 @@ try
     console.log( "PICKING" );
     await c.evaluate( "document.getElementById('selectBtn').click(); true" );
     ok( await c.evaluate( "!document.getElementById('actAll').hidden" ), "select-all shows while picking" );
-    await c.evaluate( "document.getElementById('actAll').click(); true" );
+    await c.evaluate( "document.getElementById('actAll').click(); document.getElementById('pickAllBtn').click(); true" );
     ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-picked').length === document.querySelectorAll('#list .mail-row').length" ), "every row ticked" );
-    await c.evaluate( "document.getElementById('actAll').click(); true" );
+    await c.evaluate( "document.getElementById('actAll').click(); document.getElementById('pickAllBtn').click(); true" );
     ok( await c.evaluate( "document.querySelectorAll('#list .mail-row.is-picked').length === 0" ), "again: none" );
     await c.evaluate( "document.getElementById('backBtn').click(); true" );
 
@@ -374,8 +417,7 @@ try
     console.log( "SIGNATURE" );
     await c.evaluate( "window.__toasts = []; document.getElementById('composeBtn').click(); true" );
     await waitFor( c, "!document.getElementById('composeView').hidden" );
-    ok( await c.evaluate( "document.getElementById('cText').value" ) === "\n\n-- \nAna\nTel 1", "a new message has it, under a '-- ' line",
-        await c.evaluate( "document.getElementById('cText').value" ) );
+    ok( await c.evaluate( TEXT ) === "\n\n-- \nAna\nTel 1", "a new message has it, under a '-- ' line", await c.evaluate( TEXT ) );
     await c.evaluate( "var t = document.getElementById('cTo'); t.value = 'x'; t.dispatchEvent( new Event('input') ); t.value = ''; t.dispatchEvent( new Event('input') ); document.getElementById('backBtn').click(); true" );
     ok( await waitFor( c, "document.getElementById('composeView').hidden", 5000 ), "only the signature: ← leaves" );
     await sleep( 800 );
@@ -384,14 +426,112 @@ try
     await waitFor( c, "document.querySelector('#readBody iframe')" );
     await c.evaluate( "document.getElementById('actReply').click(); true" );
     await waitFor( c, "!document.getElementById('composeView').hidden" );
-    const rtext = await c.evaluate( "document.getElementById('cText').value" );
+    const rtext = await c.evaluate( TEXT );
     ok( /^\n\n-- \nAna\nTel 1\n\n.*\n> /.test( rtext ), "a reply: the signature above the quote", rtext.slice( 0, 120 ) );
-    ok( await waitFor( c, "document.activeElement.id === 'cText' && document.getElementById('cText').selectionStart === 0", 3000 ), "…the caret over it",
-        await c.evaluate( "document.activeElement.id + ' ' + document.getElementById('cText').selectionStart" ) );
+    const AT = "( () => { const s = getSelection(); if( ! s.rangeCount ) return -1; const r = document.createRange(); r.setStart( document.getElementById('cText'), 0 ); r.setEnd( s.anchorNode, s.anchorOffset ); return r.toString().length; } )()";
+    ok( await waitFor( c, "document.activeElement.id === 'cText' && " + AT + " === 0", 3000 ), "…the caret over it",
+        await c.evaluate( "document.activeElement.id + ' ' + " + AT ) );
     await c.evaluate( "document.getElementById('cDiscard').click(); true" );
     await waitFor( c, "document.getElementById('composeView').hidden" );
     await c.evaluate( "NayiveUI.undoSettle(); true" );
     await c.evaluate( "fetch('/api/mail/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({signature:''})}).then( r => r.status )" );
+
+    // -----------------------------------------------------------------------
+    console.log( "ADVANCED SEARCH (the funnel in the search box)" );
+    await openMail( c );
+    const SUBJS = "[...document.querySelectorAll('#list .mail-row .subj span')].map( s => s.textContent )";
+    const ROWS = "document.querySelectorAll('#list .mail-row').length";
+    const all = await c.evaluate( ROWS );
+    const idle = () => waitFor( c, "!NayiveMail.S.loading", 8000 );
+    await c.evaluate( "document.getElementById('searchBtn').click(); true" );
+    ok( await c.evaluate( "document.getElementById('searchWrap').classList.contains('is-open') && !!document.querySelector('#searchWrap .search-ends button.search-mark') && !document.querySelector('#searchWrap span.search-mark')" ),
+        "the magnifier opens the box: a funnel inside, no dead magnifier" );
+    await c.evaluate( "document.querySelector('#searchWrap .search-mark').click(); true" );
+    ok( await waitFor( c, "document.getElementById('advSheet').classList.contains('open')", 3000 ), "the funnel opens the dialog" );
+    await c.evaluate( "document.getElementById('advFrom').value = 'bob'; document.getElementById('advAttach').checked = true; document.getElementById('advGoBtn').click(); true" );
+    await sleep( 300 ); await idle();
+    ok( JSON.stringify( await c.evaluate( SUBJS ) ) === JSON.stringify( [ "With a file" ] ), "From bob + attachments: the one mail", await c.evaluate( SUBJS ) );
+    ok( await c.evaluate( "!document.getElementById('advBar').hidden && /bob/.test( document.getElementById('advBarText').textContent ) && document.getElementById('searchWrap').classList.contains('filter-on')" ),
+        "the bar says what is asked; the funnel is lit" );
+    await c.evaluate( "NayiveMail.openAdvSearch(); document.getElementById('advClearBtn').click(); const d = document.getElementById('advSince'); d.value = '2026-09-02'; d.dispatchEvent( new Event('input') ); document.getElementById('advGoBtn').click(); true" );
+    await sleep( 300 ); await idle();
+    const since = await c.evaluate( SUBJS );
+    ok( since.includes( "With a file" ) && since.includes( "Pictures" ) && ! since.some( s => /^Hello/.test( s ) ), "Since 2026-09-02: only the newer mails", since );
+    ok( await c.evaluate( "document.querySelector('#advSince + .dt-display').textContent === '2026-09-02'" ), "the date shows as yyyy-mm-dd" );
+    await c.evaluate( "NayiveMail.openAdvSearch(); document.getElementById('advClearBtn').click(); document.getElementById('advFrom').value = 'eve'; document.getElementById('advWords').value = 'file'; document.getElementById('advGoBtn').click(); true" );
+    await sleep( 300 ); await idle();
+    ok( await c.evaluate( ROWS ) === 0 && await c.evaluate( "!document.getElementById('listEmpty').hidden && document.getElementById('searchInput').value === 'file'" ),
+        "From eve + the word file: nothing, and the word is in the box" );
+    await c.evaluate( "document.getElementById('advOffBtn').click(); true" );
+    await sleep( 300 ); await idle();
+    ok( await c.evaluate( "document.getElementById('advBar').hidden && document.getElementById('searchInput').value === 'file' && !document.getElementById('searchWrap').classList.contains('filter-on')" ),
+        "Remove filters: the fields go, the word stays" );
+    await c.evaluate( "document.querySelector('#searchWrap .search-shut').click(); true" );
+    await sleep( 300 ); await idle();
+    ok( await c.evaluate( ROWS ) === all && await c.evaluate( "!document.getElementById('searchWrap').classList.contains('is-open') && NayiveMail.S.query === '' && !NayiveMail.S.adv" ),
+        "the × folds the box and the whole tray is back", await c.evaluate( ROWS ) );
+    await shot( c, "20-adv-search" );
+
+    // -----------------------------------------------------------------------
+    // A desktop window (html.is-windowed: the top page is under /nayive/desktop/)
+    // wide enough: the open message on the right of the list (read.js, SPLIT).
+    console.log( "SPLIT (desktop window, wide)" );
+    await c.send( "Page.bringToFront" );          // a tab in the back draws nothing: no resize events
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false } );
+    await nav( c, `${BASE}/nayive/manifest.json`, "/nayive/manifest.json" );
+    await c.evaluate( `history.replaceState( null, '', '/nayive/desktop/split-host.html' );
+        document.body.innerHTML = '<iframe id="f" src="/nayive/email/index.html" style="border:0;width:1300px;height:800px"></iframe>'; true` );
+    const W = "document.getElementById('f').contentWindow", D = W + ".document", $ = id => `${D}.getElementById('${id}')`;
+    const FROWS = `${D}.querySelectorAll('#list .mail-row')`;
+    await waitFor( c, `${W}.NayiveMail && ${FROWS}.length > 1` );
+    ok( await c.evaluate( `${D}.documentElement.classList.contains('is-windowed') && ${D}.body.classList.contains('split')` ), "a wide desktop window splits" );
+    ok( await c.evaluate( `!${$( "readPane" )}.hidden && !${$( "readNone" )}.hidden && ${$( "readView" )}.parentNode.id === 'readPane'` ), "the right side waits, empty" );
+    await c.evaluate( `${FROWS}[0].click(); true` );
+    await waitFor( c, `!${$( "readView" )}.hidden && ${W}.NayiveMail.S.msg` );
+    const sp = await c.evaluate( `( () => { const d = ${D}, g = id => d.getElementById( id );
+        const L = g('listView').getBoundingClientRect(), R = g('readView').getBoundingClientRect();
+        return { list: !g('listView').hidden, side: R.left >= L.right, cur: d.querySelectorAll('#list .mail-row.is-current').length,
+                 first: d.querySelectorAll('#list .mail-row')[0].classList.contains('is-current'), back: g('backBtn').hidden,
+                 tools: !g('composeBtn').hidden && getComputedStyle( g('listTools') ).display !== 'none', acts: !g('actions').hidden && !g('actReply').hidden,
+                 reading: d.body.classList.contains('reading'), hist: ${W}.history.state }; } )()` );
+    ok( sp.list && sp.side, "the message shows on the right of the list", sp );
+    ok( sp.cur === 1 && sp.first, "its row is marked", sp );
+    ok( sp.back && sp.tools && sp.acts && ! sp.reading, "no ←; the list's tools and the message's actions both there", sp );
+    ok( ! ( sp.hist && sp.hist.mailRead ), "no history entry", sp.hist );
+    await shot( c, "21-split" );
+    const subj1 = await c.evaluate( `${$( "readSubject" )}.textContent` );
+    await c.evaluate( `${FROWS}[1].click(); true` );
+    await waitFor( c, `${$( "readSubject" )}.textContent !== ${JSON.stringify( subj1 )} && ${W}.NayiveMail.S.msg` );
+    ok( await c.evaluate( `${FROWS}[1].classList.contains('is-current') && ${D}.querySelectorAll('#list .mail-row.is-current').length === 1` ), "another row: the mark follows" );
+    await c.evaluate( `document.getElementById('f').style.width = '900px'; true` );
+    await waitFor( c, `!${D}.body.classList.contains('split')`, 3000 );
+    const nar = await c.evaluate( `( () => { const d = ${D}, g = id => d.getElementById( id );
+        return { split: d.body.classList.contains('split'), inMain: g('readView').parentNode.classList.contains('mail-main'),
+                 list: g('listView').hidden, back: !g('backBtn').hidden, reading: d.body.classList.contains('reading'), pane: g('readPane').hidden }; } )()` );
+    ok( ! nar.split && nar.inMain && nar.list && nar.back && nar.reading && nar.pane, "narrowed: the message over the list, with ←", nar );
+    await c.evaluate( `document.getElementById('f').style.width = '1300px'; true` );
+    await waitFor( c, `${D}.body.classList.contains('split')`, 3000 );
+    ok( await c.evaluate( `${D}.body.classList.contains('split') && !${$( "listView" )}.hidden && ${$( "readView" )}.parentNode.id === 'readPane' && !${$( "readView" )}.hidden` ),
+        "wide again: side by side, still open" );
+    // opened side by side (no history entry), then narrowed: Reply and back
+    // must not leave the page (the writer takes no entry it does not own)
+    await c.evaluate( `document.getElementById('f').style.width = '900px'; true` );
+    await waitFor( c, `!${D}.body.classList.contains('split')`, 3000 );
+    await c.evaluate( `${$( "actReply" )}.click(); true` );
+    await waitFor( c, `!${$( "composeView" )}.hidden` );
+    await c.evaluate( `${$( "backBtn" )}.click(); true` );
+    await sleep( 800 );
+    ok( await c.evaluate( `location.pathname === '/nayive/desktop/split-host.html' && ${W}.location.pathname === '/nayive/email/index.html' && ${$( "composeView" )}.hidden` ),
+        "narrowed, Reply then ←: still in eMail" );
+    await c.evaluate( `document.getElementById('f').style.width = '1300px'; true` );
+    await waitFor( c, `${D}.body.classList.contains('split')`, 3000 );
+    await c.evaluate( `${$( "composeBtn" )}.click(); true` );
+    await waitFor( c, `!${$( "composeView" )}.hidden` );
+    ok( await c.evaluate( `getComputedStyle( ${$( "readPane" )} ).display === 'none' && ${$( "composeView" )}.getBoundingClientRect().width > 700` ), "writing takes the whole width" );
+    await c.evaluate( `${$( "backBtn" )}.click(); true` );
+    await waitFor( c, `${$( "composeView" )}.hidden` );
+    ok( await c.evaluate( `!${$( "readNone" )}.hidden && ${D}.querySelectorAll('#list .mail-row.is-current').length === 0` ), "back from writing: the right side empty" );
+    await c.send( "Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false } );
 
     // -----------------------------------------------------------------------
     console.log( "START WITHOUT THE SERVER" );

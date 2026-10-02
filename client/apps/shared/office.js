@@ -32,10 +32,27 @@
     function t( k )     { return window.NayiveUI ? NayiveUI.t( k ) : k; }
     function tf( k, v ) { return window.NayiveUI ? NayiveUI.tf( k, v ) : k; }
 
+    // ?new=1 - opened by New in a window of its own (newDocument): start blank,
+    // never with a closed tab's draft. Dropped from the address at once, before
+    // the page's load: the desktop remembers a window by its address then, and a
+    // reload must find this window's own draft again.
+    var START_NEW = ( function ()
+    {
+        try
+        {
+            var u = new URL( location.href );
+            if( ! u.searchParams.has( "new" ) ) return false;
+            u.searchParams.delete( "new" );
+            history.replaceState( history.state, "", u.pathname + u.search + u.hash );
+            return true;
+        }
+        catch ( e ) { return false; }
+    } )();
+
     //------------------------------------------------------------------------//
     // PATHS
 
-    function baseName( path ) { return String( path || "" ).split( "/" ).pop(); }
+    function baseName( path ) { return NayiveUI.baseName( path ); }
 
     function dirName( path )
     {
@@ -44,11 +61,7 @@
     }
 
     // "hoja.XLSX" -> "xlsx" (no dot, lower case); "" when there is none.
-    function extOf( path )
-    {
-        var m = /\.([a-z0-9]+)$/i.exec( String( path || "" ) );
-        return m ? m[ 1 ].toLowerCase() : "";
-    }
+    function extOf( path ) { return NayiveUI.extOf( path ); }
 
     function byBaseName( a, b )
     {
@@ -1581,7 +1594,7 @@
             if( file && await open( file ) ) return;
             if( ! file && imp && await importPath( imp ) ) return;
 
-            if( ! file && ! imp )
+            if( ! file && ! imp && ! START_NEW )
             {
                 // The untitled document from an earlier visit, kept on this device.
                 var d = await saver.takeDraft();
@@ -1631,13 +1644,31 @@
             }
         }
 
-        // A blank document without leaving the app. An untitled one with edits
-        // is only in the device draft: it goes at once, and the toast's Undo
-        // brings it back. One that cannot be kept for that (a password on it,
-        // or it cannot be read) still asks first, as it always did.
+        // On a big screen New leaves this document where it is, as desktops do:
+        // a blank one opens in a desktop window (its window.open makes one,
+        // desktop/index.html hookOpen) or a browser tab of its own. False when
+        // there is one screen - a phone, the installed app, a pane of another
+        // app - or the browser blocked it: New swaps there, as below.
+        function newWindow()
+        {
+            var framed = window.self !== window.top;
+            if( framed ? ! NayiveUI.windowed
+                       : NayiveUI.isStandalone() || ! matchMedia( "(hover: hover) and (pointer: fine)" ).matches ) return false;
+
+            var q = new URLSearchParams( location.search ), u = new URLSearchParams();
+            if( q.get( "dir" ) ) u.set( "dir", q.get( "dir" ) );      // Write saves where Drive opened it
+            u.set( "new", "1" );
+            return !! window.open( location.pathname + "?" + u, "_blank" );
+        }
+
+        // A blank document without leaving the app (see newWindow first). An
+        // untitled one with edits is only in the device draft: it goes at once,
+        // and the toast's Undo brings it back. One that cannot be kept for that
+        // (a password on it, or it cannot be read) still asks first, as it always did.
         async function newDocument()
         {
             if( notReady() ) return;
+            if( newWindow() ) return;
 
             var dropping = saver.dirty() && ! path;
             var kept     = dropping ? await keepUntitled() : null;
@@ -2217,6 +2248,59 @@
     }
 
     //------------------------------------------------------------------------//
+    // THE APP'S OWN SETTINGS FILE  (data/<app>/config.json)
+    //
+    //   var cfg = NayiveOffice.appConfig( "data/write/config.json", "ui.prefsUnread" );
+    //   ( await cfg.read() ).chrome        cfg.write( { chrome: "menus" } )
+    //
+    // One read-modify-write JSON object per app, so a key added later is never
+    // clobbered. read(): nothing saved yet (a 404) is {}; any other failure -
+    // offline, a 5xx, bad JSON, not an object - throws: a file that could not
+    // be read must never be written over with just the key being changed.
+    // write( patch ) goes over what is on the server and resolves the new
+    // object; when that cannot be read it writes nothing, says `warnKey` once
+    // per page, and resolves null.
+
+    function appConfig( path, warnKey )
+    {
+        var warned = false;
+
+        async function read()
+        {
+            var cfg = await GumApi.readJson( path );
+            if( cfg !== null && ( typeof cfg !== "object" || Array.isArray( cfg ) ) ) throw new Error( path + " is not an object" );
+            return cfg || {};
+        }
+
+        async function write( patch )
+        {
+            var cfg;
+            try { cfg = await read(); }
+            catch ( e )
+            {
+                if( ! warned ) { warned = true; NayiveUI.toast( t( warnKey ) ); }
+                return null;
+            }
+            Object.assign( cfg, patch );
+            try { await GumApi.writeJson( path, cfg ); } catch ( e ) {}
+            return cfg;
+        }
+
+        return { read: read, write: write };
+    }
+
+    //------------------------------------------------------------------------//
+    // HELP  -  the "?" and the Ayuda menu: the same three entries in Write,
+    // Calc and Text, each clicking its own real (hidden) button, so the two
+    // chromes cannot drift and there is still one set of handlers.
+
+    var HELP_ITEMS =
+    [
+        { key: "write.stats",       el: "statsBtn" },
+        { key: "write.shortcuts",   el: "scBtn"    },
+        { key: "ui.toolbarButtons", el: "guideBtn" }
+    ];
+    var HELP_IDS = HELP_ITEMS.map( function ( it ) { return it.el; } );
 
     //------------------------------------------------------------------------//
     // KEYBOARD SHORTCUTS  -  Help ▸ "Keyboard shortcuts" in Calc and Write
@@ -2479,6 +2563,9 @@
         withExt:        withExt,
         showShortcuts:  showShortcuts,
         showStats:      showStats,
+        appConfig:      appConfig,
+        HELP_ITEMS:     HELP_ITEMS,
+        HELP_IDS:       HELP_IDS,
         clip:           clip
     };
 } )();

@@ -15,7 +15,7 @@ final class Notes {
 
     private Notes() {}
 
-    static final int LINK = 1, CALL = 2, FIND = 3, PENDING = 4, UPDATE = 5;
+    static final int LINK = 1, CALL = 2, FIND = 3, PENDING = 4, UPDATE = 5, MEDIA = 6, MEDIA_FIX = 7;
 
     /** What the permanent notification says. */
     enum Link { ON, TRACKING, ENROL, OFFLINE, FIX }
@@ -127,6 +127,46 @@ final class Notes {
                 .setContentIntent(PendingIntent.getActivity(c, 50, open, IMMUTABLE))
                 .build();
         c.getSystemService(NotificationManager.class).notify(UPDATE, n);
+    }
+
+    /** The end of a photo run: "12 fotos, 2 vídeos - lisboa". Nothing sent, nothing said. */
+    static void mediaDone(Context c, int photos, int videos, java.util.Set<String> folders) {
+        if (photos + videos == 0) return;
+        android.content.res.Resources r = c.getResources();
+        StringBuilder text = new StringBuilder();
+        if (photos > 0) text.append(r.getQuantityString(R.plurals.media_photos, photos, photos));
+        if (videos > 0) {
+            if (text.length() > 0) text.append(", ");
+            text.append(r.getQuantityString(R.plurals.media_videos, videos, videos));
+        }
+        if (folders.size() == 1) text.append(" \u2014 ").append(folders.iterator().next());
+        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.ORIGIN + "/nayive/drive/"))
+                .setClass(c, Launcher.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Notification n = new NotificationCompat.Builder(c, NayiveApp.CH_MEDIA)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle(c.getString(R.string.media_done))
+                .setContentText(text)
+                .setSilent(true)
+                .setAutoCancel(true)
+                .setContentIntent(PendingIntent.getActivity(c, 60, open, IMMUTABLE))
+                .build();
+        c.getSystemService(NotificationManager.class).notify(MEDIA, n);
+    }
+
+    /** The upload is on in Mi cuenta, but this phone has not let the app see the photos. */
+    static void mediaFix(Context c) {
+        Intent open = new Intent(MainActivity.ACTION_SETUP).setClass(c, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Notification n = new NotificationCompat.Builder(c, NayiveApp.CH_MEDIA)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle(c.getString(R.string.media_fix_title))
+                .setContentText(c.getString(R.string.media_fix_text))
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setAutoCancel(true)
+                .setContentIntent(PendingIntent.getActivity(c, 61, open, IMMUTABLE))
+                .build();
+        c.getSystemService(NotificationManager.class).notify(MEDIA_FIX, n);
     }
 
     static void cancel(Context c, int id) {

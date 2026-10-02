@@ -4,9 +4,9 @@ package main
 // /api/files - the JSON file API.
 // =============================================================================
 //
-// One route, many shapes, exactly as the Python has it. The order below is the
-// Python's order, and it matters: a query parameter is tested for PRESENCE, so
-// "?trash=list" is answered before anything else even looks at "?file=".
+// One route, many shapes. The order below matters: a query parameter is tested
+// for PRESENCE, so "?trash=list" is answered before anything else even looks
+// at "?file=".
 //
 //	GET    ?trash=list                 the papelera
 //	       ?trash=days                 how long it keeps things
@@ -397,8 +397,9 @@ func (s *Server) filesMkdir(w http.ResponseWriter, r *http.Request, role, user s
 	}
 
 	target, ok := s.users.Resolve(role, user, rel)
-	// "add" lends you the folder to drop files in, not to reshape.
-	if !ok || !target.Writable || IsSharedPath(rel) {
+	// "add" lends you the folder to drop files in, not to reshape; data/chat
+	// and data/mail belong to their servers (isServerData).
+	if !ok || !target.Writable || IsSharedPath(rel) || s.isServerData(target.Abs) {
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -715,7 +716,7 @@ func (s *Server) daysSetting(w http.ResponseWriter, r *http.Request, role, user 
 //	                     user cannot sign in - not even to restore it.
 //
 // The last one is a FILE, and a user is also refused a plain overwrite of it -
-// see isProtectedFile. A deliberate difference from the Python.
+// see isProtectedFile.
 func (s *Server) isStructuralDir(role, user, target string) bool {
 	if target == "" {
 		return false

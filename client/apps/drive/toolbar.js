@@ -75,8 +75,8 @@ function updateToolbarState()
 
 
     // The eight above act on WHAT IS SELECTED: the ticked rows, or (nothing
-    // ticked) the folder open in the tree. So the group - rule included, see
-    // #selActions in index.html and drive.css - leaves the bar only when
+    // ticked) the folder open in the tree. So the group - its line included,
+    // see #selActions in index.html - leaves the bar only when
     // there is no target at all (the Drive root, nothing ticked). A folder
     // clicked in the tree shows the same buttons as one right-clicked there.
     document.getElementById( 'selActions' ).hidden = ! nT;
@@ -202,4 +202,77 @@ async function reload()
         setSyncStatus( false );
         setStatus( T( 'drive.reloadError' ) );
     }
+}
+
+//------------------------------------------------------------------------//
+// NEWS FROM OTHER APPS
+//
+// Another tab or desktop window changed files (shared/gum-api.js sends the
+// news): a "Save as" in Write, a new folder in a second Drive... Refresh
+// quietly - no "Loading", the selection kept - but only when it touches the
+// open folder, or the folder tree. A hidden Drive waits until it is seen.
+
+let newsTimer   = null;
+let newsTree    = false;     // the folder tree needs a refetch too
+let newsWaiting = false;     // news came while the page was hidden
+
+function onFilesNews( msg )
+{
+    if( ! dirTreeRoot ) return;      // still starting: the first load shows it anyway
+
+    const parent = function( p ) { const i = p.lastIndexOf( '/' ); return i < 0 ? '' : p.slice( 0, i ); };
+    const seen   = ( msg.paths || [] ).filter( function( p )
+    {
+        if( typeof p !== 'string' ) return false;
+        if( FS_ROOT && p !== FS_ROOT && p.indexOf( FS_ROOT + '/' ) !== 0 ) return false;
+        return ! p.split( '/' ).some( function( s ) { return s.charAt( 0 ) === '.'; } );
+    } );
+
+    if( ! seen.length ) return;
+    if( ! msg.folders && ! seen.some( function( p ) { return parent( p ) === currentFolder; } ) ) return;
+
+    if( msg.folders ) newsTree = true;
+    if( document.hidden ) { newsWaiting = true; return; }
+
+    clearTimeout( newsTimer );
+    newsTimer = setTimeout( applyNews, 400 );     // a burst of saves = one refresh
+}
+
+async function applyNews()
+{
+    newsTimer = null;
+    if( trashMode ) return;      // the bin is on screen; closeTrash() reloads on the way out
+
+    const tree = newsTree;
+    newsTree   = false;
+
+    try
+    {
+        if( tree )
+        {
+            dirTreeRoot = scopeTree( await GumApi.dirTree() );
+            computeFsRoot();
+            if( ! findNode( currentFolder ) ) { reload(); return; }   // the open folder went away
+        }
+
+        const path = currentFolder;
+        const seq  = ++listingSeq;
+        const r    = await GumApi.listDir( path );
+        if( seq !== listingSeq || path !== currentFolder || trashMode ) return;
+
+        curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };
+        const alive = new Set( curListing.nodes.map( function( n ) { return n.path; } ) );
+        selectedPaths.forEach( function( p ) { if( ! alive.has( p ) ) selectedPaths.delete( p ); } );
+        render();
+        if( isSearching() ) runSearch();
+    }
+    catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up
+}
+
+function catchUpNews()
+{
+    if( ! newsWaiting || document.hidden ) return;
+    newsWaiting = false;
+    newsTree    = true;
+    applyNews();
 }

@@ -43,8 +43,8 @@ function getDict( lang )
     ] )
     .then( function( [ aff, dic ] )
     {
-        // One Typo.js cannot hold (Italian: "Map maximum size exceeded", after
-        // ~10 s) stays null for the visit - not parsed again on every check.
+        // One Typo.js cannot hold (Italian, since dropped: "Map maximum size
+        // exceeded", after ~10 s) stays null for the visit - not parsed again on every check.
         try { return new Typo( lang, aff, dic ); }
         catch( e ) { console.error( 'proofing: the ' + lang + ' dictionary cannot be loaded -', e && e.message ); return null; }
     } )

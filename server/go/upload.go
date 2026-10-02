@@ -164,10 +164,10 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 
 	// A body that cannot be sized -> 411.
 	//
-	// java: r.ContentLength is -1 only for a CHUNKED body (refuseChunked answers
-	// those first). A request with NO Content-Length at all arrives here as 0,
-	// exactly like "Content-Length: 0" - by the letter of HTTP both mean an
-	// empty body - so this check does not see them. The 0-byte guard after the
+	// java: r.ContentLength is -1 only for a CHUNKED body. A request with NO
+	// Content-Length at all arrives here as 0, exactly like "Content-Length: 0"
+	// - by the letter of HTTP both mean an empty body - so this check does not
+	// see them. The 0-byte guard after the
 	// copy below is what keeps an empty body off a document.
 	if r.ContentLength < 0 {
 		w.Header().Set("Connection", "close")
@@ -384,8 +384,8 @@ func (c *cappedWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// uploadChars is the alphabet the Python's tempfile uses, and filetree's
-// uploadNameRE matches exactly eight of them.
+// uploadChars is the alphabet of an upload's temp name (tempfile's), and
+// filetree's uploadNameRE matches exactly eight of them.
 const uploadChars = "abcdefghijklmnopqrstuvwxyz0123456789_"
 
 // createUploadTemp makes ".upload-" + 8 random characters.

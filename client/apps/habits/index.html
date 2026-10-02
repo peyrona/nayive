@@ -36,17 +36,8 @@
            Only what is unique to Habits lives here. */
 
 
-        /* HABIT COLOURS. The same eight identity hues Split gives its people
-           (split/index.html), so the suite has ONE palette. Identity colours,
-           not theme colours: the same in light and dark, white reads on all. */
-        [data-c="0"] { --h-color: hsl(170 40% 38%); }
-        [data-c="1"] { --h-color: hsl(215 45% 50%); }
-        [data-c="2"] { --h-color: hsl(345 45% 52%); }
-        [data-c="3"] { --h-color: hsl(35 55% 46%); }
-        [data-c="4"] { --h-color: hsl(275 35% 52%); }
-        [data-c="5"] { --h-color: hsl(95 35% 40%); }
-        [data-c="6"] { --h-color: hsl(15 50% 52%); }
-        [data-c="7"] { --h-color: hsl(200 25% 45%); }
+        /* HABIT COLOURS: the suite's eight identity hues, [data-c] -> var(--id-color)
+           (shared/app.css) - the same ones Split gives its people. */
 
         /* THE TWO VIEWS: Hoy | Mes. They ride IN the header row (inside
            .header-actions, before the [+]) so they cost no vertical space -
@@ -75,7 +66,7 @@
         {
             display: inline-flex; align-items: center; justify-content: center;
             flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
-            color: var(--h-color); background: color-mix(in srgb, var(--h-color) 16%, transparent);
+            color: var(--id-color); background: color-mix(in srgb, var(--id-color) 16%, transparent);
         }
         .h-icon svg          { width: 20px; height: 20px; }
         .row-main            { flex: 1 1 auto; min-width: 0; cursor: pointer; }
@@ -106,13 +97,13 @@
         {
             display: inline-flex; align-items: center; justify-content: center;
             flex: 0 0 auto; width: 48px; height: 48px; padding: 0; border-radius: 50%;
-            border: 2px solid var(--h-color); background: transparent; color: var(--h-color);
+            border: 2px solid var(--id-color); background: transparent; color: var(--id-color);
             font: inherit; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
             cursor: pointer; transition: background-color var(--tr-fast), color var(--tr-fast), transform var(--tr-fast);
         }
         .check-btn svg       { width: 24px; height: 24px; }
         .check-btn:active    { transform: scale(0.92); }
-        .check-btn.done      { background: var(--h-color); color: white; }
+        .check-btn.done      { background: var(--id-color); color: white; }
         .check-btn:focus     { outline: none; }
         .check-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -146,8 +137,8 @@
         .mgrid th.day.today  { color: var(--accent); border-radius: 6px 6px 0 0; }
         .mgrid tr:last-child td.today { border-radius: 0 0 6px 6px; }
         .dot                 { display: inline-block; width: 13px; height: 13px; border-radius: 50%; }
-        .dot.on              { background: var(--h-color); }
-        .dot.miss            { border: 1.5px solid color-mix(in srgb, var(--h-color) 55%, transparent); }
+        .dot.on              { background: var(--id-color); }
+        .dot.miss            { border: 1.5px solid color-mix(in srgb, var(--id-color) 55%, transparent); }
         .name-btn
         {
             display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
@@ -158,16 +149,6 @@
         .name-btn .h-icon svg { width: 15px; height: 15px; }
         .name-btn .nm        { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 600; }
         .hint                { margin: 6px 0 0; font-size: 0.78rem; color: var(--text-dim); }
-
-        /* EMPTY STATES */
-        .empty
-        {
-            display: flex; flex-direction: column; align-items: center; text-align: center;
-            padding: 36px 10px 18px; color: var(--text-faint);
-        }
-        .empty svg           { margin-bottom: 10px; opacity: 0.6; }
-        .empty p             { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
-        .empty p + p         { margin-top: 4px; font-size: 0.8rem; font-weight: 400; color: var(--text-faint); }
 
         /* THE HABIT SHEET: the figures first (an existing habit), then the few settings. */
         .stats               { display: flex; gap: 8px; margin: -4px 0 14px; }
@@ -189,21 +170,11 @@
         .icon-opt:hover      { color: var(--text); }
         .icon-opt.is-active  { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
         .swatches            { display: flex; gap: 10px; flex-wrap: wrap; padding: 3px 0; }
-        .swatch              { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%; background: var(--h-color); cursor: pointer; }
+        .swatch              { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%; background: var(--id-color); cursor: pointer; }
         .swatch.is-active    { outline: 3px solid var(--text); outline-offset: 2px; }
         .dow                 { display: flex; gap: 4px; margin-top: 8px; }
         .dow .pill           { flex: 1 1 0; padding: 7px 0; text-align: center; }
         .left-group          { display: flex; align-items: center; gap: 6px; }
-        .text-btn.small      { padding: 8px 12px; font-size: 0.82rem; }
-
-        /* A toast with an "Undo" button (Split and Contacts have the same pattern). */
-
-        /* PHONE (<= 640px, the shared rule). The card shell already goes edge to
-           edge; the icon picker just needs finger-sized cells. */
-        @media (max-width: 640px)
-        {
-            .row-meta            { white-space: normal; }
-        }
     </style>
 </head>
 <body>
@@ -227,23 +198,27 @@
                         </div>
 
                         <div class="header-actions">
-                            <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:habits.newHabit, aria-label:habits.newHabit">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                            </button>
-                            <!-- Only inside Planner (see the script at the foot): folds this pane
-                                 away, leaving Planner's own chevron strip to bring it back. -->
-                            <button id="collapseBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:habits.collapse, aria-label:habits.collapse">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </button>
-                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                            </button>
+                            <div class="tb-group">
+                                <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:habits.newHabit, aria-label:habits.newHabit">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                                <!-- Only inside Planner (see the script at the foot): folds this pane
+                                     away, leaving Planner's own chevron strip to bring it back. -->
+                                <button id="collapseBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:habits.collapse, aria-label:habits.collapse">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="tb-group tb-sys">
+                                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </button>
+                            </div>
                             <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
                         </div>
                     </div>
@@ -263,7 +238,7 @@
                             <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
                         </div>
 
-                        <div id="homeEmpty" class="empty" hidden>
+                        <div id="homeEmpty" class="empty-state" hidden>
                             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 22V10"></path><path d="M12 12C12 8.5 9.2 5.5 5.5 5.5c0 3.5 2.8 6.5 6.5 6.5z"></path><path d="M12 14c0-3.2 2.6-5.8 6-5.8 0 3.2-2.6 5.8-6 5.8z"></path>
                             </svg>
@@ -285,7 +260,7 @@
                         </div>
                         <div id="gridWrap" class="grid-wrap"></div>
                         <p id="gridHint" class="hint" data-i18n="habits.gridHint"></p>
-                        <div id="monthEmpty" class="empty" hidden>
+                        <div id="monthEmpty" class="empty-state" hidden>
                             <p data-i18n="habits.noMonth"></p>
                         </div>
                     </section>
@@ -481,6 +456,7 @@
         let loaded = false;     // true once the file (or a real "no file yet") has been read;
                                 // until then nothing may be written, or an offline first
                                 // load would upload an empty list over the real file
+        let corrupt = false;    // the file was read but is not JSON: a tap says so, not "check the connection"
         let loadSeq = 0;        // bumped by every load() and save() - see load()
         let view   = 'today';
         let month  = H.monthOf( H.todayIso() );   // the month the grid shows, "yyyy-mm"
@@ -500,12 +476,8 @@
             return e;
         }
 
-        function dowName( iso )
-        {
-            const names = [ T( 'habits.dow1' ), T( 'habits.dow2' ), T( 'habits.dow3' ), T( 'habits.dow4' ),
-                            T( 'habits.dow5' ), T( 'habits.dow6' ), T( 'habits.dow7' ) ];
-            return names[ H.isoWeekday( iso ) - 1 ];
-        }
+        // "lunes": the language's own case, it sits inside the date line.
+        function dowName( iso ) { return NayiveUI.weekday( H.isoWeekday( iso ), 'long', true ); }
 
         function iconLabel( name )
         {
@@ -539,99 +511,89 @@
         function canEdit()
         {
             if( loaded ) return true;
-            toast( T( 'habits.noData' ) );
+            toast( T( corrupt ? 'habits.corrupt' : 'habits.noData' ) );
             return false;
         }
 
         //------------------------------------------------------------------------//
         // INITIALIZATION
 
-        NayiveI18n.ready.then( function()
+        $( 'addBtn' ).addEventListener( 'click', function() { if( canEdit() ) openSheet( null ); } );
+        document.querySelectorAll( '[data-view]' ).forEach( function( b )
         {
-            $( 'addBtn' ).addEventListener( 'click', function() { if( canEdit() ) openSheet( null ); } );
-            document.querySelectorAll( '[data-view]' ).forEach( function( b )
-            {
-                b.addEventListener( 'click', function() { view = b.dataset.view; render(); } );
-            } );
-            $( 'prevMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, -1 ); render(); } );
-            $( 'nextMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, 1 );  render(); } );
-            $( 'archivedToggle' ).addEventListener( 'click', function()
-            {
-                const list = $( 'archivedList' );
-                list.hidden = ! list.hidden;
-                this.classList.toggle( 'is-active', ! list.hidden );
-            } );
-
-            // The habit sheet
-            $( 'saveBtn' ).addEventListener( 'click', saveHabit );
-            $( 'nameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveHabit(); } );
-            $( 'iconGrid' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-icon]' );
-                if( b && hs ) { hs.icon = b.dataset.icon; renderIconGrid(); }
-            } );
-            $( 'swatches' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-c]' );
-                if( b && hs ) { hs.color = +b.dataset.c; renderSwatches(); }
-            } );
-            $( 'daysPresets' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-preset]' );
-                if( ! b || ! hs ) return;
-                if( b.dataset.preset === 'custom' ) hs.custom = true;
-                else { hs.custom = false; hs.days = H.DAY_PRESETS[ b.dataset.preset ].slice(); }
-                renderDays();
-            } );
-            $( 'dowRow' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-dow]' );
-                if( ! b || ! hs ) return;
-                const d = +b.dataset.dow, i = hs.days.indexOf( d );
-                if( i === -1 ) hs.days.push( d ); else hs.days.splice( i, 1 );
-                hs.days.sort( ( a, b ) => a - b );
-                renderDays();
-            } );
-            $( 'archiveBtn' ).addEventListener( 'click', toggleArchive );
-            $( 'deleteBtn' ).addEventListener( 'click', deleteHabit );
-
-            // The × of our sheet (shared/ui.js styles a data-act="close" button and
-            // flags it _nayiveClose; closing it is the app's job). The shared
-            // confirm / alert dialogs handle their own and carry no id.
-            document.addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( 'button' );
-                if( ! b || ! b._nayiveClose ) return;
-                const back = b.closest( '.sheet-backdrop' );
-                if( back && back.id ) closeSheet( back.id );
-            } );
-
-            // Escape closes the topmost of our sheets.
-            document.addEventListener( 'keydown', function( e )
-            {
-                if( e.key !== 'Escape' ) return;
-                const open = Array.from( document.querySelectorAll( '.sheet-backdrop.open' ) ).pop();
-                if( open && open.id ) { closeSheet( open.id ); e.preventDefault(); }
-            } );
-
-            // The store's state machine drives the header plug for every read and write.
-            store.onState( NayiveUI.syncIndicator() );
-
-            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
-            // path (shared/ui.js). Every save PUTs the whole file (last write wins), so a tab
-            // left open all day would upload a stale list over a habit ticked on the phone.
-            // load() ends in render(), which also picks up a day change: phones restore a
-            // backgrounded tab from the bfcache, so this is where "it is tomorrow now" gets
-            // noticed. The default guard keeps the read out of an open sheet, where
-            // re-rendering would throw away what is being typed.
-            NayiveUI.wireRefresh( { store: store, read: load } );
-
-            // Probe the API, then load. On a failed probe the shared helper bounces to the
-            // sign-in page only when we are really online with nothing cached; otherwise it
-            // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, load );
-            armMidnight();
+            b.addEventListener( 'click', function() { view = b.dataset.view; render(); } );
         } );
+        $( 'prevMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, -1 ); render(); } );
+        $( 'nextMonth' ).addEventListener( 'click', function() { month = H.monthAdd( month, 1 );  render(); } );
+        $( 'archivedToggle' ).addEventListener( 'click', function()
+        {
+            const list = $( 'archivedList' );
+            list.hidden = ! list.hidden;
+            this.classList.toggle( 'is-active', ! list.hidden );
+        } );
+
+        // The habit sheet
+        $( 'saveBtn' ).addEventListener( 'click', saveHabit );
+        $( 'nameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveHabit(); } );
+        $( 'iconGrid' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-icon]' );
+            if( b && hs ) { hs.icon = b.dataset.icon; renderIconGrid(); }
+        } );
+        $( 'swatches' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-c]' );
+            if( b && hs ) { hs.color = +b.dataset.c; renderSwatches(); }
+        } );
+        $( 'daysPresets' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-preset]' );
+            if( ! b || ! hs ) return;
+            if( b.dataset.preset === 'custom' ) hs.custom = true;
+            else { hs.custom = false; hs.days = H.DAY_PRESETS[ b.dataset.preset ].slice(); }
+            renderDays();
+        } );
+        $( 'dowRow' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-dow]' );
+            if( ! b || ! hs ) return;
+            const d = +b.dataset.dow, i = hs.days.indexOf( d );
+            if( i === -1 ) hs.days.push( d ); else hs.days.splice( i, 1 );
+            hs.days.sort( ( a, b ) => a - b );
+            renderDays();
+        } );
+        $( 'archiveBtn' ).addEventListener( 'click', toggleArchive );
+        $( 'deleteBtn' ).addEventListener( 'click', deleteHabit );
+
+        // The × of our sheet (shared/ui.js styles a data-act="close" button and
+        // flags it _nayiveClose; closing it is the app's job). Escape presses that
+        // × too (shared/ui.js). The shared confirm / alert dialogs handle their own
+        // and carry no id.
+        document.addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( 'button' );
+            if( ! b || ! b._nayiveClose ) return;
+            const back = b.closest( '.sheet-backdrop' );
+            if( back && back.id ) closeSheet( back.id );
+        } );
+
+        // The store's state machine drives the header plug for every read and write.
+        store.onState( NayiveUI.syncIndicator() );
+
+        // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+        // path (shared/ui.js). Every save PUTs the whole file (last write wins), so a tab
+        // left open all day would upload a stale list over a habit ticked on the phone.
+        // load() ends in render(), which also picks up a day change: phones restore a
+        // backgrounded tab from the bfcache, so this is where "it is tomorrow now" gets
+        // noticed. The default guard keeps the read out of an open sheet, where
+        // re-rendering would throw away what is being typed.
+        NayiveUI.wireRefresh( { store: store, read: load } );
+
+        // Probe the API, then load. On a failed probe the shared helper bounces to the
+        // sign-in page only when we are really online with nothing cached; otherwise it
+        // opens on the local cache and the store syncs once the connection is back.
+        NayiveUI.bootWithStore( store, load );
+        armMidnight();
 
         // A tab left open across midnight rolls over to the new day on its own.
         // Timers are throttled in background tabs; the visibility handler above
@@ -659,6 +621,7 @@
             {
                 habits = [];          // no habits.json on the server yet - a safe first run
                 loaded = true;
+                corrupt = false;
             }
             else if( res.body !== null )
             {
@@ -667,12 +630,14 @@
                     const parsed = JSON.parse( res.body );
                     habits = ( Array.isArray( parsed ) ? parsed : [] ).map( H.normalise ).filter( Boolean );
                     loaded = true;
+                    corrupt = false;
                 }
                 catch( _ )
                 {
                     // A damaged file is shown as empty but is never written over.
                     habits = [];
                     loaded = false;
+                    corrupt = true;
                     toast( T( 'habits.corrupt' ) );
                 }
             }
@@ -692,7 +657,6 @@
             store.write( FILE, JSON.stringify( habits, null, 2 ) );
         }
 
-        // Called by the store on every sync-state change (same mapping as Tasks).
         //------------------------------------------------------------------------//
         // RENDER - today or the month. "Today" is read afresh every time, never
         // remembered, so a render after midnight is already tomorrow's.
@@ -753,9 +717,11 @@
             return main;
         }
 
-        function habitRow( h, today, isDue )
+        // What every habit row has: its hue, its icon, and the name + meta block that
+        // opens the sheet. The caller fills `meta`, then appends `main` to `row`.
+        function rowShell( h, cls )
         {
-            const row = el( 'div', 'card-row habit-row' + ( isDue ? '' : ' off' ) );
+            const row = el( 'div', 'card-row habit-row' + cls );
             row.setAttribute( 'data-c', String( h.color ) );
 
             const ic = el( 'span', 'h-icon' );
@@ -764,6 +730,12 @@
 
             const main = mainBlock( h, function() { openSheet( h ); } );
             const meta = el( 'div', 'row-meta' );
+            return { row: row, main: main, meta: meta };
+        }
+
+        function habitRow( h, today, isDue )
+        {
+            const { row, main, meta } = rowShell( h, isDue ? '' : ' off' );
             meta.appendChild( el( 'span', 'tag', streakText( H.streak( h, today ) ) ) );
             if( H.missedYesterday( h, today ) )
             {
@@ -798,13 +770,7 @@
 
         function archivedRow( h )
         {
-            const row = el( 'div', 'card-row habit-row archived' );
-            row.setAttribute( 'data-c', String( h.color ) );
-            const ic = el( 'span', 'h-icon' );
-            ic.innerHTML = H.glyph( h.icon );
-            row.appendChild( ic );
-            const main = mainBlock( h, function() { openSheet( h ); } );
-            const meta = el( 'div', 'row-meta' );
+            const { row, main, meta } = rowShell( h, ' archived' );
             meta.appendChild( el( 'span', 'tag', T( 'habits.archivedWord' ) + ' ' + h.archived ) );
             main.appendChild( meta );
             row.appendChild( main );
@@ -837,13 +803,17 @@
         function fixYesterday( h )
         {
             if( ! canEdit() ) return;
-            const y = H.isoAdd( H.todayIso(), -1 );
+            const y   = H.isoAdd( H.todayIso(), -1 );
+            const had = h.counts && h.counts[ y ];
             H.setDone( h, y, true );
             save();
             render();
             showUndo( T( 'habits.yesterdayFixed' ), function()
             {
-                H.setDone( h, y, false );
+                const cur = habits.find( x => x.id === h.id );   // by id: a re-read may have replaced it
+                if( ! cur || ! canEdit() ) return;
+                H.setDone( cur, y, false );   // drops the day's count...
+                if( had ) ( cur.counts = cur.counts || {} )[ y ] = had;   // ...which was this
                 save();
                 render();
             } );

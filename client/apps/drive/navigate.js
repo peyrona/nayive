@@ -10,7 +10,7 @@ function renderTree()
     host.appendChild( buildTreeNode( findNode( FS_ROOT ) || dirTreeRoot, 0 ) );
 
     // Everything other people shared with us hangs off its own root, next
-    // to Drive. It is a virtual folder (lib/shares.py) — the paths inside
+    // to Drive. It is a virtual folder (server/go/shares.go) — the paths inside
     // it are real, they just point into someone else's home, read-only.
     const shared = findNode( 'shared' );
     if( shared ) host.appendChild( buildTreeNode( shared, 0, T( 'drive.sharedWithMe' ) ) );
@@ -124,7 +124,7 @@ function renderBreadcrumb()
 
         const info = document.createElement( 'span' );
         info.className   = 'crumb current';
-        info.textContent = TF( 'movies.resultsFor', { q: searchQuery.trim() } );
+        info.textContent = TF( 'drive.resultsFor', { q: searchQuery.trim() } );
         if( bigMode )        bigFilesCrumbs( host, info );      // listing.js
         else if( advSearch ) advSearchCrumbs( host, info );     // advsearch.js
         else                 host.appendChild( info );

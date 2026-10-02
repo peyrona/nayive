@@ -40,11 +40,11 @@ import java.util.concurrent.Executors;
  * GET /api/device/wait is held open by the server until something about this
  * phone changes, or for `hold` seconds, and answers the phone's whole state:
  *
- *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null}
+ *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null, "media"}
  *
  * No Google, no FCM, no second app. What the answer says is applied as it is:
  * track -> positions on/off, badge -> the unread notification, call -> ring,
- * find -> the alarm + one fresh position.
+ * find -> the alarm + one fresh position, media -> the daily photo upload (MediaJob).
  */
 public class LinkService extends Service {
 
@@ -281,6 +281,10 @@ public class LinkService extends Service {
         }
 
         Notes.pending(this, s.optInt("badge", 0));
+
+        // "Upload new photos and videos": when it was switched on, 0 = off.
+        // An answer with no "media" at all (401, an older server) changes nothing.
+        if (s.has("media")) Media.onServer(this, s.optLong("media", 0));
 
         JSONObject call = s.optJSONObject("call");
         if (call != null && !handled.contains(call.optString("id"))

@@ -20,6 +20,8 @@
         var t = p.get( "t" ) || "";
         // Off the address bar and out of the history at once.
         history.replaceState( null, "", location.pathname );
+        // Only the Nayive Android app opens this page (shared/ui.js inAndroidApp).
+        try { sessionStorage.setItem( "nayive-apk", "1" ); } catch( e ) {}
         if( /^[A-Za-z0-9_-]{32,128}$/.test( t ) )
         {
             try { localStorage.setItem( "nayive-enrol", JSON.stringify( { t: t, n: ( p.get( "n" ) || "" ).slice( 0, 60 ) } ) ); }

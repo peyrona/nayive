@@ -40,7 +40,8 @@ import (
 // shared/store.js"; games is here for the other reason - it asks the server for
 // nothing at all, so its shell IS the whole app.
 var offlineApps = []string{"tasks", "calendar", "contact", "planner", "trips", "write", "split", "habits",
-	"games", "bookmarks", "desktop"} // desktop: the launcher sends a big screen there, so it must open offline too
+	"games", "bookmarks", "desktop", // desktop: the launcher sends a big screen there, so it must open offline too
+	"share-target"} // photos shared with no connection: the page opens and keeps them to try again
 
 // Files under apps/<app>/ to precache, by glob. lib/ is recursive. *.js and
 // *.css catch an app's own top-level scripts and stylesheet (write.js, calc.css).
@@ -49,13 +50,13 @@ var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", 
 
 var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/menubar.js",
-	"shared/ical.js", "shared/media.js",
+	"shared/ical.js", "shared/media.js", "shared/vcard.js",
 	"shared/photo.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js", "shared/tz-geo.json",
-	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/stars.js", "shared/lockers/life.js",
+	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
 	"shared/lib/ical_v2.2.1.esm.min.js",
 	"shared/lib/luxon_v3.7.2.min.js", "shared/lib/rrule_v2.8.1.min.js",
 	"shared/i18n/es.json", "shared/i18n/en.json", "shared/i18n/pt.json",
-	"shared/i18n/fr.json", "shared/i18n/de.json", "shared/i18n/it.json"}
+	"shared/i18n/fr.json", "shared/i18n/de.json"}
 
 // The launcher lives at apps/index.html itself; login.html is the sign-in page.
 var rootFiles = []string{"index.html", "login.html", "manifest.json", "icons/*"}

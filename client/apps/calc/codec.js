@@ -1153,12 +1153,18 @@ function engineValues( sh )
     catch( _ ) { return null; }
 }
 
-// One sheet entry -> one worksheet. Reads nothing but `sh`, so the sheet
-// being written does not have to be the one on screen. `xlsx` false = a .csv.
+// One sheet entry -> one worksheet. Reads nothing but `sh` (and the engine),
+// so the sheet being written does not have to be the one on screen. `xlsx`
+// false = a .csv.
+//
+// The cached <v>: the grid's own answers for the sheet on screen (just
+// stashed). Any other sheet takes the engine's, which are live - `sh.values`
+// there is what the grid showed when that sheet was left, and a formula over
+// a sheet edited since then has moved on. It is only the fallback.
 function sheetToWorksheet( sh, xlsx )
 {
     const aoa = sh.data || [];
-    const out = sh.values || engineValues( sh ) || [];
+    const out = ( sh === activeSheet ? sh.values : engineValues( sh ) || sh.values ) || [];
 
     const ws = {};
 
@@ -1265,8 +1271,9 @@ function sheetToWorksheet( sh, xlsx )
     }
 
     // Column widths / row heights / hidden flags, back into the two arrays
-    // the file format keeps them in. Read the hidden lists off the plugins,
-    // not off the sheet entry, so a hide/show made during this session counts.
+    // the file format keeps them in. The hidden lists are the plugins' own
+    // (stashActiveSheet copied them over), so a hide/show made during this
+    // session counts.
     const hiddenCols = sh.hiddenCols;
     const hiddenRows = sh.hiddenRows;
     const cols = [];

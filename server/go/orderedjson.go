@@ -4,19 +4,18 @@ package main
 // orderedJSON - a JSON object that remembers the order of its keys.
 // =============================================================================
 //
-// Every settings file this server rewrites was written by Python, whose dicts
-// keep insertion order: read a file, change one field, write it back, and the
-// other keys stay exactly where they were.
+// Read a settings file, change one field, write it back: the other keys stay
+// exactly where they were, and a new key lands at the end.
 //
 // A Go map cannot do that. `for k := range m` is deliberately randomised, and
-// encoding/json sorts map keys alphabetically on the way out - so the first
-// time the Go server saved a config.json, every key jumped to a new line even
-// though nothing about it had changed. Nothing BREAKS, but this project has no
-// version control: the .gz sidecars and the hand-made copies in .bak/ are the
-// only history there is, and a diff that reorders a whole file to record a
-// one-word change destroys that history's usefulness.
+// encoding/json sorts map keys alphabetically on the way out - so every save
+// would move keys around though nothing about them changed, and a diff of the
+// file (a backup, a hand edit, the .gz sidecar) would show a whole reordered
+// file for a one-word change. The ORDER of the keys is what is kept; the
+// whitespace is not - the file is written back with the server's own indent
+// (atomicWriteJSON).
 //
-// So the files keep their shape:
+// The files that keep their key order:
 //
 //	config/server.json          the whole thing
 //	homes/<user>/data/config.json
@@ -89,16 +88,6 @@ func (o *orderedJSON) Remove(key string) {
 		}
 	}
 	o.order = kept
-}
-
-// Keys is the key list in file order.
-func (o *orderedJSON) Keys() []string {
-	if o == nil {
-		return nil
-	}
-	out := make([]string, len(o.order))
-	copy(out, o.order)
-	return out
 }
 
 // Fields is the plain map, for the readers that only look things up.

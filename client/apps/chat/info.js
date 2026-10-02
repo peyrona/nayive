@@ -264,18 +264,15 @@
                                   value: String( S.deleteAfter || 0 ) } );
         var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.save" ) } } );
         var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
-        var back = h( "div", { class: "sheet-backdrop open", attrs: { role: "dialog", "aria-modal": "true" } },
-            h( "div", { class: "sheet sheet--pack" },
-                h( "h2", { text: T( "chat.autoDelete" ) } ),
-                h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
-                // the number, then what it counts - one row
-                h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
-                h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ),
-                h( "div", { class: "sheet-actions" }, no, ok ) ) );
-        document.body.appendChild( back );
-        NayiveUI.applySheetButtons( back );
-        function done() { back.remove(); document.removeEventListener( "keydown", esc, true ); }
-        function esc( e ) { if( e.key === "Escape" && document.body.lastElementChild === back ) { e.stopPropagation(); done(); } }
+        var d = NayiveUI.modal( { cls: "sheet--pack", title: T( "chat.autoDelete" ), escape: done,
+                                  top: function () { return document.body.lastElementChild === d.back; } } );
+        [ h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
+          // the number, then what it counts - one row
+          h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
+          h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ),
+          h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { d.sheet.appendChild( n ); } );
+        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
+        function done() { d.close(); }
         // The server deletes the old messages (for everyone) the moment it
         // hears: so it hears when the "Undo" is gone (the shared undoToast:
         // 6 s, the next toast, the page closing). Until then the new number
@@ -307,7 +304,6 @@
         ok.addEventListener( "click", save );
         no.addEventListener( "click", done );
         input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
-        document.addEventListener( "keydown", esc, true );
         setTimeout( function () { input.focus(); input.select(); }, 30 );
     };
 

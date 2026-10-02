@@ -65,8 +65,8 @@
             title: 'Movies',
             lead:  NayiveUI.t( 'movies.introLead' ),
             buttons: [
-                { sel: '#crumb',        text: NayiveUI.t( 'movies.introFolder' ) },
-                { sel: '#searchInput',  text: NayiveUI.t( 'movies.introSearch' ) },
+                { sel: '#folderInfoBtn', text: NayiveUI.t( 'movies.introFolder' ) },
+                { sel: '#searchToggle', text: NayiveUI.t( 'movies.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'movies.introRescan' ) },
                 { sel: '#filterMovies', name: NayiveUI.t( 'movies.introGroupName' ), text: NayiveUI.t( 'movies.introGroup' ) },
                 { sel: '#postersBtn',   text: NayiveUI.t( 'movies.introPosters' ) }
@@ -85,18 +85,11 @@
      * =================================================================*/
     html, body { height: 100%; }
 
-    /* Elements below force their own `display` - [hidden]'s UA display:none
-       loses to that unless restated here (same pattern Music/Photos use). */
-    #mainRow[hidden], #noDirHint[hidden], #playerBar[hidden], #videoStage[hidden], #subsBtn[hidden] { display: none; }
-
-    /* .crumb, .bar-info, .tb-end and the .view-bar row come from shared/app.css
-       (folder-backed viewers), search field included. */
+    /* The header's toolbar (folder-? menu, .tb-modes, .topbar-actions groups)
+       comes from shared/app.css (folder-backed viewers), search field included. */
 
     /* ---- main row: just the library (no queue pane) ------------------ */
     .lib-pane   { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
-    /* The toolbar row is shared/app.css's .view-bar; it only re-states the
-       padding, so it stays flush with .lib-content's own indent. */
-    .view-bar   { padding-inline: 24px; }
 
     .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 24px 30px; }
     .lib-inner  { max-width: 1180px; }
@@ -188,6 +181,9 @@
                                                background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
     /* ---- video stage - covers the library while a film plays ---------- */
+    /* The playing video covers the library; the header's toolbar acts on the
+       library, so it steps aside too (it was inside the covered pane before). */
+    body:has(#videoStage:not([hidden])) :is(#tools, [data-tools]) { display: none; }
     .video-stage { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #0C0D10; }
     .stage-frame { flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .stage-frame video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
@@ -228,10 +224,6 @@
 
     @media (max-width: 820px)
     {
-        .search-toggle              { display: inline-flex; }
-        .tb-end .topbar-search      { display: none; }
-        .tb-end .topbar-search.show { display: block; flex: 1 0 100%; order: 5; margin-top: 4px; }
-        .view-bar      { padding-inline: 16px; }
         .lib-content   { padding: 16px 16px 26px; }
         .volume-block  { display: none; }
         /* Player bar in two rows: poster + title + transport + open-video, then the
@@ -252,48 +244,57 @@
     <header class="topbar">
         <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
         <h1>Movies</h1>
-        <button class="crumb" id="crumb" type="button" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <!-- The toolbar, shown once a folder is open (display: contents). -->
+        <div class="tb-tools" id="tools" hidden>
+            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
+            </button>
+
+            <div class="tb-modes">
+                <button class="icon-btn is-active" id="filterMovies" type="button" data-i18n-attr="title:movies.movies, aria-label:movies.movies">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+                </button>
+                <button class="icon-btn" id="filterGenres" type="button" data-i18n-attr="title:movies.genres, aria-label:movies.genres">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                </button>
+                <button class="icon-btn" id="filterFolders" type="button" data-i18n-attr="title:movies.folders, aria-label:movies.folders">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
+                </button>
+            </div>
+        </div>
         <div class="topbar-actions">
+            <!-- Like #tools, shown once a folder is open. -->
+            <div class="tb-group" data-tools hidden>
+                <div class="search-wrap">
+                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
+                </div>
+                <button class="icon-btn" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+                <button class="icon-btn" id="postersBtn" type="button" data-i18n-attr="title:movies.findPostersTip, aria-label:movies.findPosters">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21"/></svg>
+                </button>
+                <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                </button>
+            </div>
+            <div class="tb-group tb-sys" data-tools hidden>
+                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </button>
+            </div>
             <div class="sync-indicator synced" data-i18n-attr="title:ui.sync.synced"></div>
         </div>
-        <span class="bar-info" id="subStrip"></span>
     </header>
+
+    <!-- The folder-? button's menu: the folder (tap = change it), then the counts. -->
+    <div class="top-menu folder-menu" id="folderMenu" role="menu" hidden>
+        <button class="menu-item" id="crumb" type="button" role="menuitem" data-i18n-attr="title:ui.changeFolder, aria-label:ui.changeFolder"></button>
+        <div class="menu-info" id="subStrip"></div>
+    </div>
 
     <div class="main-row" id="mainRow" hidden>
         <div class="lib-pane">
-            <div class="view-bar">
-                <div class="tb-modes">
-                    <button class="icon-btn is-active" id="filterMovies" type="button" data-i18n-attr="title:movies.movies, aria-label:movies.movies">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
-                    </button>
-                    <button class="icon-btn" id="filterGenres" type="button" data-i18n-attr="title:movies.genres, aria-label:movies.genres">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                    </button>
-                    <button class="icon-btn" id="filterFolders" type="button" data-i18n-attr="title:movies.folders, aria-label:movies.folders">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
-                    </button>
-                </div>
-
-                <div class="tb-actions">
-                    <div class="tb-sep"></div>
-                    <button class="icon-btn" id="postersBtn" type="button" data-i18n-attr="title:movies.findPostersTip, aria-label:movies.findPosters">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21"/></svg>
-                    </button>
-                </div>
-
-                <div class="tb-end">
-                    <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
-                    <button class="icon-btn search-toggle" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    </button>
-                    <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-                    </button>
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    </button>
-                </div>
-            </div>
             <div class="lib-content" id="libContent"></div>
 
             <div class="video-stage" id="videoStage" hidden>
@@ -762,7 +763,7 @@ async function fetchPosters()
     {
         var mv  = todo[ i ];
         var key = posterKey( mv );
-        NayiveUI.toast( NayiveUI.t( 'movies.searchingPosters' ) + ( i + 1 ) + " / " + todo.length, { ms: 4000 } );
+        NayiveUI.toast( NayiveUI.tf( 'movies.searchingPosters', { i: i + 1, n: todo.length } ), { ms: 4000 } );
         try
         {
             var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent( st.posters.key )
@@ -984,7 +985,6 @@ var FOLDER_ICON = NayiveMedia.ICONS.folder;
 var GENRE_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
 var PLAY_ICON   = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7-11-7Z"/></svg>';
 var CHECK_ICON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
-var X_ICON      = NayiveMedia.ICONS.x;
 var BACK_ICON   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
 var SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
 
@@ -1086,6 +1086,8 @@ function renderLibrary()
     var host = $( "#libContent" );
     var mv;
     var html = '<div class="lib-inner">';
+
+    NayiveMedia.searchCount( filteredMovies().length, st.movies.length );
 
     if( st.filter === "movies" )
     {
@@ -1338,7 +1340,7 @@ function srtToVtt( srt )
 {
     return "WEBVTT\n\n" + String( srt )
         .replace( /\r+/g, "" )
-        .replace( /^\d+\s*$/gm, "" )
+        .replace( /^\d+[ \t]*\n(?=[^\n]*-->)/gm, "" )    // cue numbers only: a cue whose text is "1984" stays
         .replace( /(\d\d:\d\d:\d\d),(\d\d\d)/g, "$1.$2" )
         .replace( /\n{3,}/g, "\n\n" )
         .trim() + "\n";
@@ -1370,7 +1372,7 @@ async function loadSubtitle( mv )
         var track = document.createElement( "track" );
         track.kind    = "subtitles";
         track.label   = NayiveUI.t( 'movies.subtitles' );
-        track.srclang = "es";
+        track.srclang = NayiveUI.lang();      // the file does not say; the viewer's language is the best guess
         track.src     = st.trackUrl;
         track.default = false;
         video.appendChild( track );
@@ -1419,20 +1421,7 @@ function updateMediaSession( mv )
         } );
 }
 
-function updatePositionState()
-{
-    if( ! ( "mediaSession" in navigator ) || ! navigator.mediaSession.setPositionState ) return;
-    if( ! isFinite( video.duration ) || video.duration <= 0 ) return;
-    try
-    {
-        navigator.mediaSession.setPositionState( {
-            duration: video.duration,
-            position: Math.min( video.currentTime, video.duration ),
-            playbackRate: video.playbackRate || 1
-        } );
-    }
-    catch( e ) {}
-}
+function updatePositionState() { NayiveMedia.positionState( video ); }
 
 /* ---------------------------------------------------------------------------
  * STATIC WIRING
@@ -1464,7 +1453,8 @@ function wireStaticUI()
         renderLibrary();
     } );
 
-    NayiveMedia.wireSearchToggle();                     // phone magnifier
+    NayiveMedia.wireSearchToggle();                     // the search fold
+    NayiveMedia.wireFolderInfo();                       // folder-? -> path + counts
     NayiveMedia.wireCrumbPicker( { app: "movies" } );   // crumb -> folder picker
 
     $( "#reloadBtn" ).addEventListener( "click", function ()
@@ -1632,6 +1622,7 @@ async function boot()
 
     setCrumb();
     $( "#mainRow" ).hidden   = false;
+    $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
     $( "#playerBar" ).hidden = false;
 
     await loadProgress();

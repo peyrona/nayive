@@ -3,8 +3,8 @@
 //------------------------------------------------------------------------//
 // PERSISTENCE - each trip is its own directory under data/trips/ (data/trips/{dirName}/trip.json),
 // per explicit requirement: "each travel and all its associated files exist inside its
-// own dir". The file API has no "list a folder" call, only "GET the whole file tree",
-// so that's what discovers which trip directories exist on load. dirName is assigned
+// own dir". One recursive listing of data/trips (see loadTrips) discovers which trip
+// directories exist on load. dirName is assigned
 // ONCE at creation (see resolveNewTripDirName) and stored on the trip itself - it is
 // NEVER recomputed from destination/date later, because collision-avoidance numbering
 // (japan-2026, japan-2026-2, ...) depends on what else exists at creation time, and
@@ -37,7 +37,7 @@ async function loadTrips()
         }
 
         // Trips other people shared with us. They live in THEIR home and we
-        // only ever read them (lib/shares.py + resolve_path). Outside the
+        // only ever read them (server/go/shares.go + ResolvePath). Outside the
         // try above on purpose: someone with no trips of their own takes
         // the 404 branch, and must still see what was shared with them.
         if( paths !== null ) paths = paths.concat( await sharedTripPaths() );
@@ -59,7 +59,7 @@ async function loadTrips()
         {
             try
             {
-                const t = JSON.parse( res.body );
+                const t = tripShape( JSON.parse( res.body ) );
                 // Where this trip's documents live, and whether it is ours
                 // to change. A "shared/..." path is someone else's trip.
                 t._base = path.replace( /\/trip\.json$/, '' );
@@ -78,6 +78,17 @@ async function loadTrips()
 
     renderAll();
     syncActiveTripDocs();   // background: keep only the current/next trip's PDFs on the device
+}
+
+// Every screen reads a trip's stages and documents as lists, each stage's
+// documents too: a trip.json without one (written by hand, or cut short)
+// gets an empty list rather than blanking the whole trip list.
+function tripShape( t )
+{
+    if( ! Array.isArray( t.stages ) )    t.stages    = [];
+    if( ! Array.isArray( t.documents ) ) t.documents = [];
+    t.stages.forEach( function( st ) { if( st && ! Array.isArray( st.documents ) ) st.documents = []; } );
+    return t;
 }
 
 /* Deep link: ?open=<trip folder> lands straight on that trip's detail
@@ -107,16 +118,10 @@ function sharedBy( trip ) { return sharedOwners[ tripBase( trip ) ] || ''; }
 
 async function sharedTripPaths()
 {
-    try
-    {
-        const r = await fetch( window.location.origin + '/api/shares' );
-        if( ! r.ok ) return [];
-        const j = await r.json();
-        return ( j.with_me || [] )
-            .filter( function( g ) { return g.app === 'trips' && ! g.gone; } )
-            .map( function( g ) { sharedOwners[ g.path ] = g.by; return g.path + '/trip.json'; } );
-    }
-    catch( _ ) { return []; }
+    const grants = await NayiveUI.sharedWithMe( true );   // asked again on every read: [] on any failure
+    return grants
+        .filter( function( g ) { return g.app === 'trips' && ! g.gone; } )
+        .map( function( g ) { sharedOwners[ g.path ] = g.by; return g.path + '/trip.json'; } );
 }
 
 // TWO DEVICES, ONE TRIP (shared/store.js MERGE). Both saved trip.json from the
@@ -156,6 +161,7 @@ function onTripMerged( path, body )
     let t;
     try { t = JSON.parse( body ); } catch( _ ) { return; }
     if( ! t || typeof t !== 'object' ) return;
+    tripShape( t );
     t._base = path.replace( /\/trip\.json$/, '' );
     t._ro   = t._base.indexOf( 'shared/' ) === 0;
 
@@ -192,7 +198,7 @@ function docStoredFile( doc )
 {
     if( docIsLink( doc ) ) return null;
     if( doc.file ) return doc.file;
-    if( doc.kind === undefined && doc.name ) return slugify( doc.name ) + '.pdf';   // legacy scheme
+    if( doc.kind === undefined && doc.name ) return legacySlug( doc.name ) + '.pdf';   // legacy scheme
     return null;
 }
 
@@ -249,7 +255,7 @@ const TRIP_DOCS_CACHE = 'nayive-trips-docs';
 
 function pickActiveTrip( list )
 {
-    const today = todayIso();
+    const today = NayiveUI.todayIso();
 
     const current = list.find( function( t )
     {

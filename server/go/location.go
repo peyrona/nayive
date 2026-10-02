@@ -91,26 +91,17 @@ func (t *Trackers) ensureLoaded() {
 	}
 	t.loaded = true
 
+	var file trackersFile
+	ok, broken := loadTable(t.path, &file, t.log, "starting with no keys")
 	fromOld := false
-	raw, err := os.ReadFile(t.path)
-	if err != nil && os.IsNotExist(err) {
+	if !ok && !broken {
 		// The name before 2026-09-16. Read it, and save() below writes the keys
 		// back under the new name - the user's key survives the rename.
-		if old, oldErr := os.ReadFile(t.oldPath); oldErr == nil {
-			raw, err, fromOld = old, nil, true
-		}
+		ok, broken = loadTable(t.oldPath, &file, t.log, "starting with no keys")
+		fromOld = ok
 	}
-	if err != nil {
-		if !os.IsNotExist(err) {
-			t.log.Error("location.json is unreadable - starting with no keys", "err", err)
-			t.broken = true
-		}
-		return
-	}
-	var file trackersFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		t.log.Error("location.json is unreadable - starting with no keys", "err", err)
-		t.broken = true
+	t.broken = broken
+	if !ok {
 		return
 	}
 	for _, k := range file.Keys {
@@ -118,30 +109,25 @@ func (t *Trackers) ensureLoaded() {
 			t.keys = append(t.keys, k)
 		}
 	}
-	if fromOld && len(t.keys) > 0 {
+	// Once saved under the new name, the old file goes: left there, it would
+	// bring the old keys back the day location.json went missing.
+	if fromOld && len(t.keys) > 0 && t.save() {
 		t.log.Info("location keys moved from owntracks.json", "keys", len(t.keys))
-		t.save()
+		if err := os.Remove(t.oldPath); err != nil {
+			t.log.Warn("cannot remove the old owntracks.json", "err", err)
+		}
 	}
 }
 
-// save writes the table back. Caller holds mu. Like Shares.save, it never writes
-// over a file that could not be read: that one is moved aside first.
-func (t *Trackers) save() {
-	if t.broken {
-		aside := t.path + ".broken-" + time.Now().Format("2006-01-02-150405")
-		if err := os.Rename(t.path, aside); err != nil && !os.IsNotExist(err) {
-			t.log.Error("location.json is unreadable and cannot be moved aside - not saving", "err", err)
-			return
-		}
-		t.broken = false
-	}
+// save writes the table back, and reports whether it did. Caller holds mu. It
+// never writes over a file that could not be read: that one is moved aside
+// first (saveTable).
+func (t *Trackers) save() bool {
 	keys := t.keys
 	if keys == nil {
 		keys = []trackerKey{}
 	}
-	if err := atomicWriteJSON(t.path, trackersFile{Keys: keys}, 4); err != nil {
-		t.log.Error("cannot save location.json", "err", err)
-	}
+	return saveTable(t.path, &t.broken, trackersFile{Keys: keys}, t.log)
 }
 
 // For is the key of `owner`, or nil.

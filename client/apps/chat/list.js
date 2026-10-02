@@ -223,8 +223,8 @@
         // group, new person and everybody - also how a chat deleted "for me"
         // is opened again). A person:
         // Chat ... [search] [⋮] [plug]. The magnifier opens the search field
-        // in the bar itself, and while it is open every button but the plug
-        // steps aside (its × closes it again).
+        // in the bar itself (its × closes it again); only when the bar has no
+        // room for it do the buttons but the plug step aside.
         var head = h( "div", { class: "topbar list-head", attrs: { id: "listHead" } } );
         if( owner )
         {
@@ -239,15 +239,16 @@
         // type=text, not search: the browser's own clear cross would sit next to ours
         var search = h( "input", { class: "topbar-search", attrs: { type: "text", enterkeyhint: "search", id: "listSearchInput",
                                    placeholder: T( "chat.search" ), "aria-label": T( "chat.search" ), autocomplete: "off" },
-                                   on: { input: function () { S.query = search.value; C.renderList(); },
-                                         keydown: function ( e ) { if( e.key === "Escape" ) { e.preventDefault(); endSearch(); } } } } );
-        var box = h( "div", { class: "search-wrap" }, search, C.btn( "x", "chat.closeSearch", endSearch, "sm" ) );
-        var searchBtn = C.btn( "search", "chat.search", startSearch );
+                                   on: { input: function () { S.query = search.value; C.renderList(); } } } );
+        var box = h( "div", { class: "search-wrap" }, search );
+        var searchBtn = C.btn( "search", "chat.search", null );
         searchBtn.id = "listSearch";
         var moreBtn = C.btn( "more", "chat.menu", null );
         moreBtn.id = "listMore";
 
-        var actions = h( "div", { class: "topbar-actions" }, box, searchBtn );
+        // Two groups (shared/app.css HEADER): search + the tools, then help / ⋮.
+        var tools = h( "div", { class: "tb-group" }, box, searchBtn );
+        var sys = h( "div", { class: "tb-group tb-sys" } );
         if( owner )
             [ [ "plus", "chat.newChat", function () { C.openNewChat(); }, "newChatBtn" ],
               [ "user", "chat.editProfile", function () { C.editMyName(); }, "profileBtn" ],
@@ -257,22 +258,16 @@
             {
                 var el = C.btn( b[ 0 ], b[ 1 ], b[ 2 ] );
                 el.id = b[ 3 ];
-                actions.appendChild( el );
+                ( b[ 0 ] === "help" ? sys : tools ).appendChild( el );
             } );
-        else actions.appendChild( moreBtn );
+        else sys.appendChild( moreBtn );
+        var actions = h( "div", { class: "topbar-actions" }, tools, sys );
         actions.appendChild( h( "div", { class: "sync-indicator", attrs: { id: "syncIndicator" } } ) );   // the plug, last
         head.appendChild( actions );
 
-        function startSearch()
-        {
-            head.classList.add( "searching" );
-            search.focus();
-        }
-        function endSearch()
-        {
-            head.classList.remove( "searching" );
-            if( search.value ) { search.value = ""; S.query = ""; C.renderList(); }
-        }
+        // The shared fold (ui.js): the magnifier opens the field, and only a
+        // bar too narrow for it sends the buttons aside; its × and Escape clear it.
+        NayiveUI.searchFold( { bar: head, box: box, input: search, toggle: searchBtn } );
 
         var hint = h( "div", { class: "hint-bar", attrs: { id: "listHint", hidden: true } } );
 
@@ -800,22 +795,12 @@
         else C.copyText( url );
     };
 
+    // The toast shows either way, as it always has.
     C.copyText = function ( text )
     {
         var done = function () { C.toast( "chat.copied" ); };
-        if( navigator.clipboard && navigator.clipboard.writeText )
-            navigator.clipboard.writeText( text ).then( done, function () { legacyCopy( text ); done(); } );
-        else { legacyCopy( text ); done(); }
+        NayiveUI.copyText( text ).then( done, done );
     };
-
-    function legacyCopy( text )
-    {
-        var ta = h( "textarea", { value: text, attrs: { readonly: "" }, style: "position:fixed;left:-999px" } );
-        document.body.appendChild( ta );
-        ta.select();
-        try { document.execCommand( "copy" ); } catch( _ ) {}
-        ta.remove();
-    }
 
     // The QR code of a link (lib/qrcode, owner page only). Null without it.
     C.qrCanvas = function ( text )
@@ -918,18 +903,17 @@
                                       value: o.value || "" } );
             var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.accept" ) } } );
             var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
-            var back = h( "div", { class: "sheet-backdrop open", attrs: { role: "dialog", "aria-modal": "true" } },
-                h( "div", { class: "sheet sheet--pack" },
-                    h( "h2", { text: o.title } ),
-                    o.top || null,
-                    h( "div", { class: "field" }, h( "label", { attrs: { for: "askText" }, text: o.label || "" } ), input ),
-                    o.more || null,
-                    o.hint ? h( "p", { class: "hint", text: o.hint } ) : null,
-                    h( "div", { class: "sheet-actions" }, no, ok ) ) );
-            document.body.appendChild( back );
-            NayiveUI.applySheetButtons( back );
-            function done( v ) { back.remove(); document.removeEventListener( "keydown", esc, true ); resolve( v ); }
-            function esc( e ) { if( e.key === "Escape" ) { e.stopPropagation(); done( "" ); } }
+            // Escape only while it is on top: the picture picker of o.more
+            // (editMyName) closes first.
+            var d = NayiveUI.modal( { cls: "sheet--pack", title: o.title, escape: function () { done( "" ); },
+                                      top: function () { return document.body.lastElementChild === d.back; } } );
+            [ o.top,
+              h( "div", { class: "field" }, h( "label", { attrs: { for: "askText" }, text: o.label || "" } ), input ),
+              o.more,
+              o.hint ? h( "p", { class: "hint", text: o.hint } ) : null,
+              h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { if( n ) d.sheet.appendChild( n ); } );
+            d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
+            function done( v ) { if( d.close() ) resolve( v ); }
             ok.addEventListener( "click", function () { var v = input.value.trim(); if( v ) done( v ); else input.focus(); } );
             no.addEventListener( "click", function () { done( "" ); } );
             input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) ok.click(); } );
@@ -938,7 +922,6 @@
                 {
                     el.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) ok.click(); } );
                 } );
-            document.addEventListener( "keydown", esc, true );
             setTimeout( function () { input.focus(); input.select(); }, 30 );
         } );
     };

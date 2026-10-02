@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -64,14 +63,7 @@ func sharePointsAt(got, want string) bool {
 // once. The cookie jar is what keeps the two sessions apart.
 func signedInClient(t *testing.T, base, user, password string) *http.Client {
 	t.Helper()
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{
-		Jar:       jar,
-		Transport: &http.Transport{DisableCompression: true},
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := noFollow()
 	signIn(t, client, base, user, password)
 	return client
 }
@@ -519,10 +511,8 @@ func TestShareCreateRefusals(t *testing.T) {
 	signIn(t, client, ts.URL, "ana", "abc")
 
 	post := func(body string) int {
-		resp := do(t, client, "POST", ts.URL+"/api/shares", strings.NewReader(body),
-			map[string]string{"Content-Type": "application/json"})
-		defer resp.Body.Close()
-		return resp.StatusCode
+		code, _ := callJSON(t, client, "POST", ts.URL+"/api/shares", body)
+		return code
 	}
 
 	for _, c := range []struct {
@@ -689,10 +679,8 @@ func TestShareWithEveryoneAPI(t *testing.T) {
 	signIn(t, client, ts.URL, "ana", "abc")
 
 	post := func(body string) int {
-		resp := do(t, client, "POST", ts.URL+"/api/shares", strings.NewReader(body),
-			map[string]string{"Content-Type": "application/json"})
-		defer resp.Body.Close()
-		return resp.StatusCode
+		code, _ := callJSON(t, client, "POST", ts.URL+"/api/shares", body)
+		return code
 	}
 	if got := post(`{"to":"*","root":"files/mio.txt","app":"file"}`); got != http.StatusCreated {
 		t.Fatalf("sharing with everybody = %d, want 201", got)

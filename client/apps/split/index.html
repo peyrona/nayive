@@ -40,23 +40,15 @@
            apart at a glance, so each member gets one of eight fixed hues by
            position in the group (wrapping). They are identity colours, not
            theme colours, so they are the same in light and dark and white
-           text reads on all of them. */
+           text reads on all of them: [data-c] -> var(--id-color), shared/app.css. */
         .avatar
         {
             display: inline-flex; align-items: center; justify-content: center;
             flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
             font-size: 0.76rem; font-weight: 700; letter-spacing: 0.02em;
-            color: white; background: var(--m-color, var(--accent));
+            color: white; background: var(--id-color, var(--accent));
         }
         .avatar.sm { width: 24px; height: 24px; font-size: 0.62rem; }
-        [data-c="0"] { --m-color: hsl(170 40% 38%); }
-        [data-c="1"] { --m-color: hsl(215 45% 50%); }
-        [data-c="2"] { --m-color: hsl(345 45% 52%); }
-        [data-c="3"] { --m-color: hsl(35 55% 46%); }
-        [data-c="4"] { --m-color: hsl(275 35% 52%); }
-        [data-c="5"] { --m-color: hsl(95 35% 40%); }
-        [data-c="6"] { --m-color: hsl(15 50% 52%); }
-        [data-c="7"] { --m-color: hsl(200 25% 45%); }
 
         /* A round accent bubble for the rows that are not a person: a group
            (€) or a payment (→). Same size as an avatar so the lists line up. */
@@ -122,8 +114,11 @@
            stays one hover away (title=, set in renderGroup) and is spelled out
            in the edit sheet. `flex: 1 1 0` + `min-width: 0` all the way down is
            what makes the ellipsis engage: at `1 1 auto` flex lays the row out
-           from the name's full width and wraps the tabs instead of shrinking. */
-        .head-title          { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+           from the name's full width and wraps the tabs instead of shrinking.
+           max-width: max-content stops the grow at the name's own width, so the
+           tabs sit right after it and the spare room goes to the gap before the
+           button bar. */
+        .head-title          { flex: 1 1 0; min-width: 0; max-width: max-content; display: flex; flex-direction: column; gap: 1px; }
         .head-title-name     { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
         .head-title-name h2  { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); line-height: 1.3;
                                min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -133,14 +128,13 @@
            does the same). nowrap - they are two short pills and splitting them
            over two lines helps nobody. */
         .tabs                { display: flex; gap: 6px; flex-wrap: wrap; }
-        .header .tabs        { flex: 0 0 auto; flex-wrap: nowrap; }
+        .header .tabs        { flex: 0 0 auto; flex-wrap: nowrap; margin-left: 8px; }
 
-        /* IN A GROUP the button bar drops to a row of its own - the same thing
-           .header already does on a narrow screen, made unconditional so the
-           tabs keep the title's row. The whole bar packs against the RIGHT margin
-           in one run - no gap opened up inside it - so it lines up with the tabs
-           above and with the button bar on the group list. */
-        .header.in-group .header-actions { flex: 0 0 100%; margin-left: 0; justify-content: flex-end; }
+        /* IN A GROUP: look left, act right (2026-10-01). ← · name · Gastos |
+           Saldos on the left, the button bar on the right of the SAME row. The
+           name's flex-basis is 0, so when the row runs out of room it is the
+           button bar that drops to the next row (packed right); the tabs stay
+           beside the name, which shrinks to "..." instead. */
         .search              { width: 100%; margin-bottom: 10px; }
 
         /* BALANCES: one row per person, a thin bar under it showing how far
@@ -169,20 +163,8 @@
         .settle-amt          { font-weight: 700; font-variant-numeric: tabular-nums; }
         .all-even            { display: flex; align-items: center; gap: 8px; padding: 8px 2px; font-size: 0.9rem; color: var(--ok); }
         .all-even svg        { width: 18px; height: 18px; }
-        .actions-row         { display: flex; justify-content: center; margin-top: 16px; }
         .cur-block           { margin-top: 14px; }
         .cur-block:first-child { margin-top: 0; }
-
-        /* EMPTY STATES */
-        .empty
-        {
-            display: flex; flex-direction: column; align-items: center; text-align: center;
-            padding: 36px 10px 18px; color: var(--text-faint);
-        }
-        .empty svg           { margin-bottom: 10px; opacity: 0.6; }
-        .empty p             { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--text-dim); }
-        .empty p + p         { margin-top: 4px; font-size: 0.8rem; font-weight: 400; color: var(--text-faint); }
-        .empty .text-btn     { margin-top: 14px; }
 
         /* THE ENTRY SHEET (an expense or a payment). The amount first and big,
            the currency right beside it, then the fewest possible questions. */
@@ -212,6 +194,14 @@
            the Nayive rule is yyyy-mm-dd. Hide the native text and overlay the
            ISO value; the input stays underneath so a tap still opens the picker.
            (Same trick as Calendar.) */
+        /* Date (1/3) then description on one row; a payment has no description. */
+        .date-text-row               { display: flex; gap: 10px; }
+        .date-text-row > .field      { min-width: 0; }
+        #dateField                   { flex: 0 0 calc( ( 100% - 10px ) / 3 ); }
+        #textField                   { flex: 1 1 auto; }
+        #textField[hidden]           { display: none; }
+        .date-wrap input[type=date]  { width: 100%; }
+        .date-text-row input         { box-sizing: border-box; height: calc( 1.25em + 16px ); }   /* the date's picker icon makes it taller */
         .date-wrap                   { position: relative; }
         .date-wrap input[type=date]  { color: transparent; }
         .date-wrap .date-display
@@ -237,9 +227,38 @@
             .part-row input      { width: 100px; }
             .row-meta            { white-space: normal; }
         }
+        /* EXPORT PDF - exportPdf() fills #printRoot and calls window.print(); the user
+           picks "Save as PDF". display:none on screen; scoped to .printing (set on
+           <html> by exportPdf) so a plain Ctrl+P still prints the page itself. */
+        #printRoot { display: none; }
+        @media print
+        {
+            @page { margin: 14mm; }
+            .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
+            .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
+            .printing #printRoot { display: block !important; }
+        }
+        #printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
+        #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; color: #111; }
+        #printRoot .pr-sub { font-size: 13px; color: #444; }
+        #printRoot h2 { font-size: 13px; margin: 16px 0 5px; padding-bottom: 3px; border-bottom: 1px solid #bbb; color: #111; }
+        #printRoot table.pr-tb { border-collapse: collapse; }
+        #printRoot table.pr-list { width: 100%; }
+        #printRoot .pr-tb th { text-align: left; font-weight: 600; color: #444; padding: 3px 10px 3px 0; border-bottom: 1px solid #bbb; }
+        #printRoot .pr-tb td { vertical-align: top; padding: 3px 10px 3px 0; border-bottom: 1px solid #e2e2e2; }
+        #printRoot .pr-tb tr { break-inside: avoid; page-break-inside: avoid; }
+        #printRoot .pr-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 24px; }
+        #printRoot .pr-neg { color: #b00020; }
+        #printRoot .pr-date { white-space: nowrap; color: #444; font-variant-numeric: tabular-nums; }
+        #printRoot .pr-pay td { color: #555; font-style: italic; }
+        #printRoot .pr-empty { color: #666; font-style: italic; }
     </style>
 </head>
 <body>
+
+    <!-- Filled by exportPdf() just before window.print(), cleared on afterprint. -->
+    <div id="printRoot"></div>
 
     <div id="app" style="display: none;">
         <div class="page">
@@ -248,12 +267,10 @@
                 <div class="card">
 
                     <!-- Header, list:     [€] Split ............................. [+] [?] [•]
-                         Header, in group:  [←] Lisboa 2026… ....... [Gastos] [Saldos]
+                         Header, in group:  [←] Lisboa 2026 [Gastos] [Saldos] .... [+] [personas] [editar] [compartir] [pdf] | [?] [•]
                                                 3 personas · EUR
-                                     ... [+] [personas] [editar] [compartir] [copiar] [csv] [?] [•]
                          Archivar is NOT here - it lives on the group's row in the list.
-                         In a group the button bar takes a row of its own (.in-group),
-                         so the tabs get the title's row and the name has space to run. -->
+                         No room: the button bar drops to the next row, the tabs stay. -->
                     <div class="header">
                         <!-- Inside a group: the way back to the list, before the app icon (as in Trips). -->
                         <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.backToGroups, aria-label:split.backToGroups">
@@ -284,58 +301,56 @@
                         </div>
 
                         <div class="header-actions">
-                            <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:split.newGroup, aria-label:split.newGroup">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                            </button>
-                            <!-- The two the ⋮ menu was asked for most often, promoted to the bar.
-                                 Icons only, the name lives in the tooltip. Both are edits, so a
-                                 group somebody shared with us (read-only) hides them. -->
-                            <!-- Its own key, not split.people: that one is the members sheet's
-                                 heading, where "Personas" is the right word for a title. -->
-                            <button id="peopleBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.peopleTip, aria-label:split.peopleTip">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                </svg>
-                            </button>
-                            <button id="editBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.editGroup, aria-label:split.editGroup">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
-                                </svg>
-                            </button>
-                            <button id="shareBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.shareGroup, aria-label:split.shareGroup">
-                                <!-- Drive's share glyph, verbatim: the tray-with-an-arrow reads as
-                                     "export a file", and this bar already has an export in the ⋮ menu. -->
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
-                                </svg>
-                            </button>
-                            <!-- Desarchivar: only on an archived group of ours. The list's row
-                                 offers the bin there, so this is the one way back. -->
-                            <button id="unarchiveBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.unarchive, aria-label:split.unarchive">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><polyline points="9.5 15 12 12.5 14.5 15"></polyline><line x1="12" y1="12.5" x2="12" y2="18"></line>
-                                </svg>
-                            </button>
-                            <!-- Copiar resumen / Exportar CSV. Both only READ the group, so a
-                                 read-only one keeps them. They emptied the ⋮ menu, which is why
-                                 there is no ⋮ button here any more. -->
-                            <button id="copySumBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.copySummary, aria-label:split.copySummary">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                </svg>
-                            </button>
-                            <button id="csvBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.exportCsv, aria-label:split.exportCsv">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                            </button>
-                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                            </button>
+                            <div class="tb-group">
+                                <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:split.newGroup, aria-label:split.newGroup">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                                <!-- The two the ⋮ menu was asked for most often, promoted to the bar.
+                                     Icons only, the name lives in the tooltip. Both are edits, so a
+                                     group somebody shared with us (read-only) hides them. -->
+                                <!-- Its own key, not split.people: that one is the members sheet's
+                                     heading, where "Personas" is the right word for a title. -->
+                                <button id="peopleBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.peopleTip, aria-label:split.peopleTip">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </button>
+                                <button id="editBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.editGroup, aria-label:split.editGroup">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                                    </svg>
+                                </button>
+                                <button id="shareBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.shareGroup, aria-label:split.shareGroup">
+                                    <!-- Drive's share glyph, verbatim: the tray-with-an-arrow reads as
+                                         "export a file", and this bar already has an export in the ⋮ menu. -->
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+                                    </svg>
+                                </button>
+                                <!-- Desarchivar: only on an archived group of ours. The list's row
+                                     offers the bin there, so this is the one way back. -->
+                                <button id="unarchiveBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.unarchive, aria-label:split.unarchive">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><polyline points="9.5 15 12 12.5 14.5 15"></polyline><line x1="12" y1="12.5" x2="12" y2="18"></line>
+                                    </svg>
+                                </button>
+                                <!-- Exportar PDF. It only READS the group, so a read-only one keeps it.
+                                     Copiar resumen lives at the end of "Saldos" only (2026-10-01). -->
+                                <button id="pdfBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:split.exportPdf, aria-label:split.exportPdf">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="tb-group tb-sys">
+                                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </button>
+                            </div>
                             <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
                         </div>
                     </div>
@@ -354,7 +369,7 @@
                             <div id="archivedList" class="list" style="margin-top: 8px;" hidden></div>
                         </div>
 
-                        <div id="homeEmpty" class="empty" hidden>
+                        <div id="homeEmpty" class="empty-state" hidden>
                             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M16.5 7A7 7 0 1 0 16.5 17"></path>
                                 <line x1="3" y1="10.2" x2="13.5" y2="10.2"></line>
@@ -371,7 +386,7 @@
                             <input id="searchInput" class="search" type="search" autocomplete="off" hidden data-i18n-attr="placeholder:split.searchPh">
                             <div id="entryList" class="list"></div>
                             <p id="noMatch" class="hint" hidden data-i18n="split.noMatch"></p>
-                            <div id="entriesEmpty" class="empty" hidden>
+                            <div id="entriesEmpty" class="empty-state" hidden>
                                 <p data-i18n="split.noEntries"></p>
                                 <p data-i18n="split.noEntriesHint"></p>
                             </div>
@@ -384,12 +399,6 @@
                                 <button id="perCurBtn" class="pill" type="button" data-i18n="split.perCurrency" hidden data-i18n-attr="title:split.perCurrencyTip"></button>
                             </div>
                             <div id="balanceList"></div>
-                            <div class="actions-row">
-                                <button id="copyBtn" class="text-btn ghost" type="button" data-i18n-attr="title:split.copyTip">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    <span data-i18n="split.copySummary"></span>
-                                </button>
-                            </div>
                         </div>
                     </section>
 
@@ -451,16 +460,18 @@
                 </div>
             </div>
 
-            <div class="field" id="textField">
-                <label for="textInput" data-i18n="split.concept"></label>
-                <input id="textInput" type="text" data-i18n-attr="placeholder:split.conceptPh" autocomplete="off">
-            </div>
+            <div class="date-text-row">
+                <div class="field" id="dateField">
+                    <label for="dateInput" data-i18n="split.date"></label>
+                    <div class="date-wrap">
+                        <input id="dateInput" type="date">
+                        <span class="date-display" id="dateDisplay"></span>
+                    </div>
+                </div>
 
-            <div class="field">
-                <label for="dateInput" data-i18n="split.date"></label>
-                <div class="date-wrap">
-                    <input id="dateInput" type="date">
-                    <span class="date-display" id="dateDisplay"></span>
+                <div class="field" id="textField">
+                    <label for="textInput" data-i18n="split.concept"></label>
+                    <input id="textInput" type="text" data-i18n-attr="placeholder:split.conceptPh" autocomplete="off">
                 </div>
             </div>
 
@@ -575,8 +586,7 @@
                 { sel: '#shareBtn:not([hidden])',  text: T( 'split.introShare' ) },
                 { icon: 'check', name: T( 'split.introPayName' ), text: T( 'split.introPay' ) },
                 { name: T( 'split.perCurrency' ), text: T( 'split.introPerCur' ) },
-                { sel: '#copySumBtn', text: T( 'split.introCopy' ) },
-                { sel: '#csvBtn',     text: T( 'split.introCsv' ) },
+                { sel: '#pdfBtn',     text: T( 'split.introPdf' ) },
                 sync
             ]
         };
@@ -676,6 +686,7 @@
         let es = null;         // the entry sheet's working state (see openEntrySheet)
         let gs = null;         // the group sheet's
         let ms = null;         // the people sheet's working copy of the members
+        let msGone = [];       // ids removed there that still share expenses
 
         //------------------------------------------------------------------------//
         // SMALL HELPERS
@@ -690,25 +701,9 @@
             return e;
         }
 
-        function pad2( n ) { return ( n < 10 ? '0' : '' ) + n; }
-
-        // Dates are stored and shown as yyyy-mm-dd (the Nayive rule); this is today's.
-        function todayIso()
-        {
-            const d = new Date();
-            return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() );
-        }
-
         function newId( prefix )
         {
             return prefix + '_' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 6 );
-        }
-
-        function slugify( s )
-        {
-            const t = String( s || '' ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' )
-                        .toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ).slice( 0, 24 );
-            return t || 'grupo';
         }
 
         function fmt( minor, code, opts ) { return M.formatAmount( minor, code, opts ); }
@@ -783,125 +778,118 @@
         //------------------------------------------------------------------------//
         // INITIALIZATION
 
-        NayiveI18n.ready.then( function()
+        // Called by the store on every sync-state change (same mapping as Tasks).
+        // The store drives the header plug; loadGroups() also calls it by hand when there is
+        // nothing to read and the store therefore never emits a state.
+        const setSyncStatus = NayiveUI.syncIndicator();
+
+        $( 'addBtn'  ).addEventListener( 'click', function() { if( current ) openEntrySheet( null ); else openGroupSheet( null ); } );
+        $( 'backBtn' ).addEventListener( 'click', goHome );
+        $( 'pdfBtn'      ).addEventListener( 'click', exportPdf );
+        $( 'peopleBtn' ).addEventListener( 'click', openMembersSheet );
+        $( 'editBtn'    ).addEventListener( 'click', function() { openGroupSheet( current ); } );
+        $( 'unarchiveBtn' ).addEventListener( 'click', function() { toggleArchive( current ); } );
+        $( 'shareBtn'  ).addEventListener( 'click', function()
         {
-            $( 'addBtn'  ).addEventListener( 'click', function() { if( current ) openEntrySheet( null ); else openGroupSheet( null ); } );
-            $( 'backBtn' ).addEventListener( 'click', goHome );
-            $( 'copySumBtn' ).addEventListener( 'click', copySummary );
-            $( 'csvBtn'      ).addEventListener( 'click', exportCsv );
-            $( 'peopleBtn' ).addEventListener( 'click', openMembersSheet );
-            $( 'editBtn'    ).addEventListener( 'click', function() { openGroupSheet( current ); } );
-            $( 'unarchiveBtn' ).addEventListener( 'click', function() { toggleArchive( current ); } );
-            $( 'shareBtn'  ).addEventListener( 'click', function()
-            {
-                const g = current;
-                if( ! g ) return;
-                NayiveUI.shareSheet( { path: g._base, app: 'split', title: g.name || 'Split' } );
-            } );
+            const g = current;
+            if( ! g ) return;
+            NayiveUI.shareSheet( { path: g._base, app: 'split', title: g.name || 'Split' } );
+        } );
 
-            document.querySelectorAll( '[data-tab]' ).forEach( function( b )
-            {
-                b.addEventListener( 'click', function() { tab = b.dataset.tab; renderGroup(); } );
-            } );
-            $( 'searchInput' ).addEventListener( 'input', function() { search = this.value; renderEntries(); } );
-            $( 'perCurBtn' ).addEventListener( 'click', function() { perCur = ! perCur; renderBalances(); } );
-            $( 'copyBtn' ).addEventListener( 'click', copySummary );
-            $( 'archivedToggle' ).addEventListener( 'click', function()
-            {
-                const list = $( 'archivedList' );
-                list.hidden = ! list.hidden;
-                this.classList.toggle( 'is-active', ! list.hidden );
-            } );
+        document.querySelectorAll( '[data-tab]' ).forEach( function( b )
+        {
+            b.addEventListener( 'click', function() { tab = b.dataset.tab; renderGroup(); } );
+        } );
+        $( 'searchInput' ).addEventListener( 'input', function() { search = this.value; renderEntries(); } );
+        $( 'perCurBtn' ).addEventListener( 'click', function() { perCur = ! perCur; renderBalances(); } );
+        $( 'archivedToggle' ).addEventListener( 'click', function()
+        {
+            const list = $( 'archivedList' );
+            list.hidden = ! list.hidden;
+            this.classList.toggle( 'is-active', ! list.hidden );
+        } );
 
-            // Group sheet
-            $( 'groupSaveBtn' ).addEventListener( 'click', saveGroup );
-            $( 'groupNameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveGroup(); } );
+        // Group sheet
+        $( 'groupSaveBtn' ).addEventListener( 'click', saveGroup );
+        $( 'groupNameInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveGroup(); } );
 
-            // Entry sheet
-            $( 'kindTabs' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-kind]' );
-                if( b && es ) { es.kind = b.dataset.kind; renderEntrySheet(); }
-            } );
-            $( 'modeTabs' ).addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( '[data-mode]' );
-                if( b && es ) { es.mode = b.dataset.mode; renderEntrySheet(); }
-            } );
-            $( 'amountInput' ).addEventListener( 'input', function() { if( es ) { es.amountText = this.value; refreshEntryHints(); } } );
-            $( 'currencySel' ).addEventListener( 'change', function()
-            {
-                if( ! es ) return;
-                es.currency = this.value;
-                const known = current && current.rates && current.rates[ es.currency ];
-                es.rateText = es.currency === current.currency ? '' : ( known ? decText( known ) : '' );
-                renderEntrySheet();
-                if( es.currency !== current.currency && ! es.rateText ) $( 'rateInput' ).focus();
-            } );
-            $( 'rateInput' ).addEventListener( 'input', function() { if( es ) { es.rateText = this.value; refreshEntryHints(); } } );
-            $( 'textInput' ).addEventListener( 'input', function() { if( es ) es.text = this.value; } );
-            $( 'dateInput' ).addEventListener( 'input', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
-            $( 'dateInput' ).addEventListener( 'change', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
-            $( 'allBtn' ).addEventListener( 'click', function()
-            {
-                if( ! es ) return;
-                es.among = visibleMembers( current ).map( m => m.id );
-                renderEntrySheet();
-            } );
-            $( 'entrySaveBtn' ).addEventListener( 'click', saveEntry );
-            $( 'entryDelBtn' ).addEventListener( 'click', deleteEntry );
-            $( 'amountInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
-            $( 'textInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
+        // Entry sheet
+        $( 'kindTabs' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-kind]' );
+            if( b && es ) { es.kind = b.dataset.kind; renderEntrySheet(); }
+        } );
+        $( 'modeTabs' ).addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( '[data-mode]' );
+            if( b && es ) { es.mode = b.dataset.mode; renderEntrySheet(); }
+        } );
+        $( 'amountInput' ).addEventListener( 'input', function() { if( es ) { es.amountText = this.value; refreshEntryHints(); } } );
+        $( 'currencySel' ).addEventListener( 'change', function()
+        {
+            if( ! es ) return;
+            es.currency = this.value;
+            const known = current && current.rates && current.rates[ es.currency ];
+            es.rateText = es.currency === current.currency ? '' : ( known ? decText( known ) : '' );
+            renderEntrySheet();
+            if( es.currency !== current.currency && ! es.rateText ) $( 'rateInput' ).focus();
+        } );
+        $( 'rateInput' ).addEventListener( 'input', function() { if( es ) { es.rateText = this.value; refreshEntryHints(); } } );
+        $( 'textInput' ).addEventListener( 'input', function() { if( es ) es.text = this.value; } );
+        $( 'dateInput' ).addEventListener( 'input', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
+        $( 'dateInput' ).addEventListener( 'change', function() { if( es ) es.date = this.value; $( 'dateDisplay' ).textContent = this.value; } );
+        $( 'allBtn' ).addEventListener( 'click', function()
+        {
+            if( ! es ) return;
+            es.among = visibleMembers( current ).map( m => m.id );
+            renderEntrySheet();
+        } );
+        $( 'entrySaveBtn' ).addEventListener( 'click', saveEntry );
+        $( 'entryDelBtn' ).addEventListener( 'click', deleteEntry );
+        $( 'amountInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
+        $( 'textInput' ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) saveEntry(); } );
 
-            // People sheet
-            $( 'addMemberBtn' ).addEventListener( 'click', function()
-            {
-                if( ! ms ) return;
-                ms.push( { id: newId( 'm' ), name: '' } );
-                renderMembersSheet();
-                const inputs = $( 'memberRows' ).querySelectorAll( 'input[type=text]' );
-                if( inputs.length ) inputs[ inputs.length - 1 ].focus();
-            } );
-            $( 'membersSaveBtn' ).addEventListener( 'click', saveMembers );
+        // People sheet
+        $( 'addMemberBtn' ).addEventListener( 'click', function()
+        {
+            if( ! ms ) return;
+            ms.push( { id: newId( 'm' ), name: '' } );
+            renderMembersSheet();
+            const inputs = $( 'memberRows' ).querySelectorAll( 'input[type=text]' );
+            if( inputs.length ) inputs[ inputs.length - 1 ].focus();
+        } );
+        $( 'membersSaveBtn' ).addEventListener( 'click', saveMembers );
 
-            // The × of every one of OUR sheets (shared/ui.js styles a data-act="close"
-            // button and flags it _nayiveClose; closing it is the app's job). The
-            // shared confirm/alert and share dialogs handle their own and carry no id.
-            document.addEventListener( 'click', function( e )
-            {
-                const b = e.target.closest( 'button' );
-                if( ! b || ! b._nayiveClose ) return;
-                const back = b.closest( '.sheet-backdrop' );
-                if( back && back.id ) closeSheet( back.id );
-            } );
+        // The × of every one of OUR sheets (shared/ui.js styles a data-act="close"
+        // button and flags it _nayiveClose; closing it is the app's job). Escape
+        // presses that × too (shared/ui.js). The shared confirm/alert and share
+        // dialogs handle their own and carry no id.
+        document.addEventListener( 'click', function( e )
+        {
+            const b = e.target.closest( 'button' );
+            if( ! b || ! b._nayiveClose ) return;
+            const back = b.closest( '.sheet-backdrop' );
+            if( back && back.id ) closeSheet( back.id );
+        } );
 
-            // Escape closes the topmost of our sheets.
-            document.addEventListener( 'keydown', function( e )
-            {
-                if( e.key !== 'Escape' ) return;
-                const open = Array.from( document.querySelectorAll( '.sheet-backdrop.open' ) ).pop();
-                if( open && open.id ) { closeSheet( open.id ); e.preventDefault(); }
-            } );
+        // The store's state machine drives the header plug for every read and write.
+        store.onState( setSyncStatus );
 
-            // The store's state machine drives the header plug for every read and write.
-            store.onState( setSyncStatus );
+        // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
+        // path (shared/ui.js). Every save PUTs the whole group file (last write wins), so
+        // a tab left open all day would upload stale groups over an edit made on the
+        // phone. The default guard keeps the read out of an open sheet, where
+        // re-rendering would throw away what is being typed.
+        NayiveUI.wireRefresh( { store: store, read: loadGroups } );
 
-            // The plug's click and the focus / visibilitychange re-reads, all on ONE guarded
-            // path (shared/ui.js). Every save PUTs the whole group file (last write wins), so
-            // a tab left open all day would upload stale groups over an edit made on the
-            // phone. The default guard keeps the read out of an open sheet, where
-            // re-rendering would throw away what is being typed.
-            NayiveUI.wireRefresh( { store: store, read: loadGroups } );
-
-            // Probe the API, then load. On a failed probe the shared helper bounces to the
-            // sign-in page only when we are really online with nothing cached; otherwise it
-            // opens on the local cache and the store syncs once the connection is back.
-            NayiveUI.bootWithStore( store, async function( who )
-            {
-                meUser = ( who && who.user ) || '';   // null when we opened from the cache
-                await loadGroups();
-                applyOpenParam();
-            } );
+        // Probe the API, then load. On a failed probe the shared helper bounces to the
+        // sign-in page only when we are really online with nothing cached; otherwise it
+        // opens on the local cache and the store syncs once the connection is back.
+        NayiveUI.bootWithStore( store, async function( who )
+        {
+            meUser = ( who && who.user ) || '';   // null when we opened from the cache
+            await loadGroups();
+            applyOpenParam();
         } );
 
         // Deep link: ?open=<group folder> lands straight on that group. Drive's
@@ -997,10 +985,8 @@
         {
             try
             {
-                const r = await fetch( window.location.origin + '/api/shares' );
-                if( ! r.ok ) return [];
-                const j = await r.json();
-                return ( j.with_me || [] )
+                const grants = await NayiveUI.sharedWithMe( true );   // asked again on every read
+                return grants
                     .filter( g => g.app === 'split' && ! g.gone )
                     .map( g => { sharedOwners[ g.path ] = g.by; return g.path + '/' + FILE; } );
             }
@@ -1015,11 +1001,6 @@
             const body = JSON.stringify( g, ( k, v ) => k.charAt( 0 ) === '_' ? undefined : v, 2 );
             store.write( g._base + '/' + FILE, body );
         }
-
-        // Called by the store on every sync-state change (same mapping as Tasks).
-        // The store drives the header plug; loadGroups() also calls it by hand when there is
-        // nothing to read and the store therefore never emits a state.
-        const setSyncStatus = NayiveUI.syncIndicator();
 
         //------------------------------------------------------------------------//
         // RENDER - home or one group
@@ -1046,19 +1027,18 @@
             setHidden( $( 'groupTitle' ), ! inGroup );
             setHidden( $( 'groupTabs'  ), ! inGroup );
 
-            // .in-group drops the button bar to its own row (see the CSS).
+            // .in-group marks the open-group header (hooks for the CSS).
             document.querySelector( '.header' ).classList.toggle( 'in-group', inGroup );
 
             // Personas, Editar and Compartir all change the group, so a read-only
-            // one hides them. Copiar resumen and Exportar CSV only read it, so
-            // they show for every open group.
+            // one hides them. Exportar PDF only reads it, so
+            // it shows for every open group.
             const canEdit = inGroup && ! current._ro;
             setHidden( $( 'peopleBtn'  ), ! canEdit );
             setHidden( $( 'editBtn'    ), ! canEdit );
             setHidden( $( 'shareBtn'   ), ! canEdit );
             setHidden( $( 'unarchiveBtn' ), ! ( canEdit && current.archived ) );
-            setHidden( $( 'copySumBtn' ), ! inGroup );
-            setHidden( $( 'csvBtn'     ), ! inGroup );
+            setHidden( $( 'pdfBtn'     ), ! inGroup );
 
             const add = $( 'addBtn' );
             add.hidden = inGroup && current._ro;
@@ -1456,7 +1436,7 @@
                           : preset.amount ? M.toDecimal( preset.amount, preset.currency || g.currency, DEC ) : '',
                 rateText:   entry && entry.currency !== g.currency ? decText( entry.rate || '' ) : '',
                 text:       entry ? ( entry.text || '' ) : '',
-                date:       entry ? ( entry.date || todayIso() ) : todayIso(),
+                date:       entry ? ( entry.date || NayiveUI.todayIso() ) : NayiveUI.todayIso(),
                 paidBy:     entry ? entry.paidBy : ( me !== null ? me : ( vis[ 0 ] ? vis[ 0 ].id : null ) ),
                 among:      entry && entry.split && entry.split.mode === 'equal' ? ( entry.split.among || [] ).slice() : vis.map( m => m.id ),
                 mode:       entry && entry.split && entry.split.mode ? entry.split.mode : 'equal',
@@ -1722,7 +1702,7 @@
             const e = {
                 id:       es.id || newId( 'e' ),
                 type:     es.kind,
-                date:     /^\d{4}-\d{2}-\d{2}$/.test( es.date || '' ) ? es.date : todayIso(),
+                date:     /^\d{4}-\d{2}-\d{2}$/.test( es.date || '' ) ? es.date : NayiveUI.todayIso(),
                 amount:   v.amount,
                 currency: es.currency,
                 rate:     es.currency === g.currency ? 1 : v.rate,
@@ -1809,9 +1789,9 @@
             const meName = $( 'meNameInput' ).value.trim() || meUser || T( 'split.meDefault' );
             const others = $( 'othersInput' ).value.split( /[\n,;]/ ).map( s => s.trim() ).filter( Boolean );
             const mem    = [ { id: newId( 'm' ), name: meName, me: true } ].concat( others.map( n => ( { id: newId( 'm' ), name: n } ) ) );
-            const id     = slugify( name ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
+            const id     = NayiveUI.slugify( name, 'grupo', 24 ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
 
-            const g = { id, name, currency: cur, created: todayIso(), archived: false, members: mem, rates: {}, entries: [] };
+            const g = { id, name, currency: cur, created: NayiveUI.todayIso(), archived: false, members: mem, rates: {}, entries: [] };
             g._base = DIR + '/' + id;
             g._ro   = false;
 
@@ -1830,6 +1810,7 @@
             const g = current;
             if( ! g || g._ro ) return;
             ms = members( g ).map( m => Object.assign( {}, m ) );
+            msGone = [];
             renderMembersSheet();
             NayiveUI.open( 'membersSheetBackdrop' );
         }
@@ -1864,7 +1845,8 @@
 
                 const btn = el( 'button', 'icon-btn sm' );
                 btn.type = 'button';
-                if( M.hasMovements( current, m.id ) )
+                const shared = M.sharedOnly( current, m.id );
+                if( shared < 0 )
                 {
                     btn.innerHTML = m.hidden ? IC.eye : IC.eyeoff;
                     btn.title = m.hidden ? T( 'split.showPerson' ) : T( 'split.hidePerson' );
@@ -1874,8 +1856,8 @@
                 {
                     btn.classList.add( 'danger' );
                     btn.innerHTML = IC.trash;
-                    btn.title = T( 'split.removePerson' );
-                    btn.addEventListener( 'click', function() { ms.splice( i, 1 ); renderMembersSheet(); } );
+                    btn.title = shared ? TF( 'split.removeSharer', { n: shared } ) : T( 'split.removePerson' );
+                    btn.addEventListener( 'click', function() { if( shared ) msGone.push( m.id ); ms.splice( i, 1 ); renderMembersSheet(); } );
                 }
                 btn.setAttribute( 'aria-label', btn.title );
                 row.appendChild( btn );
@@ -1890,6 +1872,16 @@
             if( ! g || ! ms ) return;
             const clean = ms.map( m => Object.assign( {}, m, { name: ( m.name || '' ).trim() } ) );
             if( clean.some( m => ! m.name ) ) { toast( T( 'split.nameAll' ) ); return; }
+
+            // Someone removed who only shared expenses: out of those splits,
+            // the rest share them now.
+            msGone.forEach( id => g.entries.forEach( e =>
+            {
+                const sp = e.split;
+                if( ! sp ) return;
+                if( Array.isArray( sp.among ) ) sp.among = sp.among.filter( x => x !== id );
+                if( sp.parts && typeof sp.parts === 'object' ) delete sp.parts[ id ];
+            } ) );
 
             g.members = clean;
             persist( g );
@@ -1965,14 +1957,48 @@
         }
 
         //------------------------------------------------------------------------//
-        // SHARE THE NUMBERS - as text (WhatsApp, Telegram, mail) or as a CSV file.
+        // SHARE THE NUMBERS - as a PDF.
 
-        function summaryText( g )
+        //---- PDF ---------------------------------------------------------------//
+        //
+        // No PDF library: fill the hidden #printRoot with a light-theme sheet (balances,
+        // who pays whom, every expense) and let the browser's print dialog write the
+        // file ("Save as PDF"). Same shape Calendar and Trips use. document.title
+        // seeds the suggested file name.
+
+        function exportPdf()
         {
-            const lines = [];
-            lines.push( ( g.name || 'Split' ) + ' · ' + T( 'split.balancesAt' ) + ' ' + todayIso() );
-            lines.push( T( 'split.totalSpentWord' ) + ': ' + fmt( M.memberTotals( g ).total, g.currency ) );
+            const g = current;
+            if( ! g ) return;
 
+            const root = $( 'printRoot' );
+            root.innerHTML = pdfHtml( g );
+
+            const prevTitle = document.title;
+            document.title  = NayiveUI.slugify( g.name, 'grupo', 24 );
+            document.documentElement.classList.add( 'printing' );
+
+            window.addEventListener( 'afterprint', function done()
+            {
+                window.removeEventListener( 'afterprint', done );
+                document.documentElement.classList.remove( 'printing' );
+                document.title = prevTitle;
+                root.innerHTML = '';
+            } );
+
+            NayiveUI.toast( T( 'calendar.pdfHint' ), { ms: 5000 } );
+            setTimeout( function() { window.print(); }, 350 );
+        }
+
+        function pdfHtml( g )
+        {
+            const esc = NayiveUI.escapeHtml;
+            let html = '<div class="pr-head"><h1>' + esc( g.name || 'Split' ) + '</h1>' +
+                       '<div class="pr-sub">' + esc( T( 'split.balancesAt' ) + ' ' + NayiveUI.todayIso() + ' · ' +
+                                                    T( 'split.totalSpentWord' ) + ': ' + fmt( M.memberTotals( g ).total, g.currency ) ) +
+                       '</div></div>';
+
+            // Balances and who pays whom - the same blocks as the summary text.
             const used   = M.usedCurrencies( g );
             const blocks = ( perCur && used.length > 1 )
                 ? used.map( code => ( { code, net: M.balancesByCurrency( g )[ code ] || {} } ) )
@@ -1980,103 +2006,43 @@
 
             blocks.forEach( b =>
             {
-                lines.push( '' );
-                if( blocks.length > 1 ) lines.push( '[' + b.code + ']' );
+                html += '<h2>' + esc( T( 'split.balances' ) + ( blocks.length > 1 ? ' · ' + b.code : '' ) ) + '</h2><table class="pr-tb">';
                 Object.keys( b.net )
                     .filter( id => memberOf( g, id ) && ( ! memberOf( g, id ).hidden || b.net[ id ] !== 0 ) )
                     .sort( ( x, y ) => b.net[ y ] - b.net[ x ] )
-                    .forEach( id => lines.push( nameOf( g, id ) + ': ' + fmt( b.net[ id ], b.code, { plus: true } ) ) );
-
-                lines.push( '' );
-                lines.push( T( 'split.whoPays' ) + ':' );
+                    .forEach( id => html += '<tr><td>' + esc( nameOf( g, id ) ) + '</td><td class="pr-num' +
+                                            ( b.net[ id ] < 0 ? ' pr-neg' : '' ) + '">' + esc( fmt( b.net[ id ], b.code, { plus: true } ) ) + '</td></tr>' );
+                html += '</table><h2>' + esc( T( 'split.whoPays' ) ) + '</h2><table class="pr-tb">';
                 const tr = M.settle( b.net );
-                if( ! tr.length ) lines.push( '· ' + T( 'split.allEven' ) );
-                tr.forEach( x => lines.push( '· ' + nameOf( g, x.from ) + ' → ' + nameOf( g, x.to ) + ': ' + fmt( x.amount, b.code ) ) );
+                if( ! tr.length ) html += '<tr><td class="pr-empty">' + esc( T( 'split.allEven' ) ) + '</td></tr>';
+                tr.forEach( x => html += '<tr><td>' + esc( nameOf( g, x.from ) + ' → ' + nameOf( g, x.to ) ) +
+                                         '</td><td class="pr-num">' + esc( fmt( x.amount, b.code ) ) + '</td></tr>' );
+                html += '</table>';
             } );
-            return lines.join( '\n' );
-        }
 
-        async function copySummary()
-        {
-            const g = current;
-            if( ! g ) return;
-            const text = summaryText( g );
+            // Every expense and payment, oldest first.
+            const list = sortedEntries( g ).reverse();
+            html += '<h2>' + esc( T( 'split.tabEntries' ) ) + '</h2>';
+            if( ! list.length ) return html + '<div class="pr-empty">-</div>';
 
-            // On a phone the share sheet is what people want (straight into a
-            // chat); on a PC the clipboard is.
-            const coarse = window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches;
-            if( coarse && navigator.share )
-            {
-                try { await navigator.share( { text } ); return; }
-                catch( e ) { if( e && e.name === 'AbortError' ) return; }
-            }
-            try
-            {
-                await navigator.clipboard.writeText( text );
-                toast( T( 'split.copied' ) );
-            }
-            catch( _ )
-            {
-                NayiveUI.alert( { title: T( 'split.summary' ), body: text } );
-            }
-        }
-
-        function csvText( g )
-        {
-            const SEP = DEC === ',' ? ';' : ',';   // as the spreadsheet of that language reads it: ";" when "," is the decimal mark
-            const q   = s => '"' + String( s == null ? '' : s ).replace( /"/g, '""' ) + '"';
-            const rows = [ [ T( 'split.csvDate' ), T( 'split.csvKind' ), T( 'split.csvText' ),
-                             T( 'split.csvPayer' ), T( 'split.csvFor' ), T( 'split.csvAmount' ),
-                             T( 'split.csvCurrency' ), T( 'split.csvRate' ),
-                             TF( 'split.csvAmountIn', { cur: g.currency } ) ].map( q ).join( SEP ) ];
-
-            sortedEntries( g ).reverse().forEach( e =>
+            html += '<table class="pr-tb pr-list"><tr>' +
+                    [ 'split.csvDate', 'split.csvText', 'split.csvPayer', 'split.csvFor', 'split.csvAmount' ]
+                        .map( k => '<th' + ( k === 'split.csvAmount' ? ' class="pr-num"' : '' ) + '>' + esc( T( k ) ) + '</th>' ).join( '' ) +
+                    '</tr>';
+            list.forEach( e =>
             {
                 const pay  = e.type === 'payment';
                 const code = e.currency || g.currency;
-                rows.push( [
-                    e.date || '',
-                    T( pay ? 'split.csvPayment' : 'split.csvExpense' ),
-                    pay ? '' : ( e.text || '' ),
-                    nameOf( g, pay ? e.from : e.paidBy ),
-                    pay ? nameOf( g, e.to ) : M.participants( e ).ids.map( id => nameOf( g, id ) ).join( ', ' ),
-                    M.toDecimal( e.amount, code, DEC ),
-                    code,
-                    decText( code === g.currency ? 1 : ( e.rate || '' ) ),
-                    M.toDecimal( M.entryBase( e, g.currency ), g.currency, DEC )
-                ].map( q ).join( SEP ) );
+                let amount = fmt( e.amount, code );
+                if( code !== g.currency ) amount += ' (' + fmt( M.entryBase( e, g.currency ), g.currency ) + ')';
+                html += '<tr' + ( pay ? ' class="pr-pay"' : '' ) + '>' +
+                        '<td class="pr-date">' + esc( e.date || '' ) + '</td>' +
+                        '<td>' + esc( pay ? T( 'split.csvPayment' ) : ( e.text || '' ) ) + '</td>' +
+                        '<td>' + esc( nameOf( g, pay ? e.from : e.paidBy ) ) + '</td>' +
+                        '<td>' + esc( pay ? nameOf( g, e.to ) : M.participants( e ).ids.map( id => nameOf( g, id ) ).join( ', ' ) ) + '</td>' +
+                        '<td class="pr-num">' + esc( amount ) + '</td></tr>';
             } );
-            return '\ufeff' + rows.join( '\r\n' );   // BOM so Excel reads the accents
-        }
-
-        async function exportCsv()
-        {
-            const g = current;
-            if( ! g ) return;
-            const name = slugify( g.name ) + '.csv';
-            const blob = new Blob( [ csvText( g ) ], { type: 'text/csv;charset=utf-8' } );
-
-            if( navigator.canShare && window.File )
-            {
-                try
-                {
-                    const file = new File( [ blob ], name, { type: 'text/csv' } );
-                    if( navigator.canShare( { files: [ file ] } ) && window.matchMedia( '(pointer: coarse)' ).matches )
-                    {
-                        await navigator.share( { files: [ file ], title: g.name } );
-                        return;
-                    }
-                }
-                catch( e ) { if( e && e.name === 'AbortError' ) return; }
-            }
-
-            const url = URL.createObjectURL( blob );
-            const a   = document.createElement( 'a' );
-            a.href = url;
-            a.download = name;
-            document.body.appendChild( a );
-            a.click();
-            setTimeout( function() { document.body.removeChild( a ); URL.revokeObjectURL( url ); }, 1000 );
+            return html + '</table>';
         }
 
         //------------------------------------------------------------------------//

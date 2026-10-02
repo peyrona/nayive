@@ -11,6 +11,9 @@
     <string name="step_batt_why">Pour que Nayive reste éveillé écran éteint. Choisis « Autoriser ».</string>
     <string name="step_full_title">Plein écran</string>
     <string name="step_full_why">Pour qu’un appel s’affiche même téléphone verrouillé.</string>
+    <string name="step_media_title">Photos et vidéos</string>
+    <string name="step_media_why">Pour envoyer à Nayive les nouvelles photos de l’appareil, si tu l’actives dans Mon compte. Rien n’est jamais effacé du téléphone.</string>
+    <string name="step_media_partial">Tu n’as choisi que certaines photos : touche Autoriser et choisis « Tout autoriser ».</string>
     <string name="step_do">Autoriser</string>
     <string name="step_ok">Fait</string>
     <string name="setup_continue">Continuer</string>
@@ -20,6 +23,7 @@
     <string name="chan_find">Localiser mon téléphone</string>
     <string name="chan_pending">Non lus</string>
     <string name="chan_updates">Mises à jour</string>
+    <string name="chan_media">Photos envoyées</string>
     <string name="link_on">Nayive est connecté</string>
     <string name="link_tracking">Nayive garde ta position de voyage</string>
     <string name="link_enrol">Ouvre Nayive et connecte-toi pour activer ce téléphone</string>
@@ -38,6 +42,18 @@
     </plurals>
     <string name="update_title">Une nouvelle version de Nayive est disponible</string>
     <string name="update_text">Touche pour la télécharger.</string>
+
+    <string name="media_done">Photos envoyées à Nayive</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d vidéo</item>
+        <item quantity="other">%d vidéos</item>
+    </plurals>
+    <string name="media_fix_title">Nayive ne voit pas tes photos</string>
+    <string name="media_fix_text">Touche pour l’autoriser et envoyer les nouvelles photos.</string>
     <string name="shortcut_setup">Autorisations</string>
     <string name="shortcut_setup_long">Autorisations de Nayive</string>
 </resources>

@@ -6,20 +6,11 @@ package main
 // =============================================================================
 
 import (
-	"context"
-	"crypto/ecdh"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
-	"io"
-	"log/slog"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -33,6 +24,7 @@ type phoneState struct {
 	Badge int            `json:"badge"`
 	Call  *deviceCallOut `json:"call"`
 	Find  *deviceFindOut `json:"find"`
+	Media int64          `json:"media"`
 }
 
 // phone is a request as the app makes it: the token in the header.
@@ -76,26 +68,6 @@ func phoneWait(t *testing.T, base, token, v string) phoneState {
 		t.Fatalf("wait JSON: %v %s", err, raw)
 	}
 	return st
-}
-
-func jsonCall(t *testing.T, client *http.Client, method, url, body string, want int, out any) {
-	t.Helper()
-	var rd *strings.Reader
-	if body == "" {
-		rd = strings.NewReader("")
-	} else {
-		rd = strings.NewReader(body)
-	}
-	resp := do(t, client, method, url, rd, map[string]string{"Content-Type": "application/json"})
-	raw := readBody(t, resp)
-	if resp.StatusCode != want {
-		t.Fatalf("%s %s = %d, want %d: %s", method, url, resp.StatusCode, want, raw)
-	}
-	if out != nil {
-		if err := json.Unmarshal(raw, out); err != nil {
-			t.Fatalf("%s %s: bad JSON %v: %s", method, url, err, raw)
-		}
-	}
 }
 
 type deviceListOut struct {
@@ -363,7 +335,6 @@ func TestDeviceHere(t *testing.T) {
 		t.Fatalf("finds = %+v", list.Finds)
 	}
 	// Old positions are forgotten.
-	srv.devices.NoteLast("ana", lastPos{Lat: 1, Lon: 1, At: time.Now().Add(-lastPosTTL - time.Hour).Unix()})
 	os.WriteFile(srv.devices.lastPath("ana"), []byte(`{"lat":1,"lon":1,"at":1000}`), 0o644)
 	if srv.devices.Last("ana") != nil {
 		t.Fatal("a position older than lastPosTTL is still shown")
@@ -379,25 +350,12 @@ func TestDeviceCall(t *testing.T) {
 
 	// The subscriptions below name FCM, but every push this test causes goes
 	// to a local server: nothing leaves the machine (S2-#72).
-	var hits atomic.Int32
-	push := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer push.Close()
-	tr := push.Client().Transport.(*http.Transport).Clone()
-	tr.TLSClientConfig.InsecureSkipVerify = true // the name is FCM's, the certificate the test's
-	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, network, push.Listener.Addr().String())
-	}
-	f.srv.push.client = &http.Client{Transport: tr, Timeout: pushTimeout}
+	push := newFakePush(t, true, nil)
+	push.wire(f.srv.push)
 
 	// ana's phone, whose TWA's Chrome also has notifications on.
-	key, _ := ecdh.P256().GenerateKey(rand.Reader)
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	p256 := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
-	au := base64.RawURLEncoding.EncodeToString(auth)
+	keys := testSub(t, "").Keys
+	p256, au := keys.P256dh, keys.Auth
 	f.srv.users.AddPushSub("ana", "https://fcm.googleapis.com/fcm/send/phone", p256, au, "es", "", nil)
 	f.srv.users.AddPushSub("ana", "https://fcm.googleapis.com/fcm/send/laptop", p256, au, "es", "", nil)
 	jsonCall(t, f.owner, "POST", f.base+"/api/device/enrol",
@@ -427,10 +385,10 @@ func TestDeviceCall(t *testing.T) {
 	if len(missed) != 2 {
 		t.Fatalf("missed pushes = %d, want 2", len(missed))
 	}
-	for i := 0; i < 250 && hits.Load() == 0; i++ {
+	for i := 0; i < 250 && push.count("") == 0; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if hits.Load() == 0 {
+	if push.count("") == 0 {
 		t.Fatal("the laptop's ring never reached the local push server")
 	}
 	// (missed ended the phone's ring in the hub's hook: ring it again.)
@@ -460,7 +418,7 @@ func TestDeviceCall(t *testing.T) {
 // TestDevicePushFilters: what the phone's Chrome is spared, and what it is not.
 func TestDevicePushFilters(t *testing.T) {
 	dir := t.TempDir()
-	d := NewDevices(dir, dir, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d := NewDevices(dir, dir, quietLog())
 	id, err := d.Enrol("ana", phoneToken, "Pixel", "https://fcm.googleapis.com/fcm/send/phone", 3)
 	if err != nil || id == "" {
 		t.Fatalf("enrol: %v", err)

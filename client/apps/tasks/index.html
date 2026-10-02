@@ -10,7 +10,7 @@
     <title>Tasks</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='2'%3E%3C/rect%3E%3Cpath d='M8 4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1'%3E%3C/path%3E%3Cpolyline points='8 13 11 16 16 10.5'%3E%3C/polyline%3E%3C/svg%3E">
 
-    <!-- Shared colour scheme (dark default, opt-in light). Apply the saved choice before first paint to avoid a flash. -->
+    <!-- Shared colour scheme (light default, opt-in dark). Apply the saved choice before first paint to avoid a flash. -->
     <meta name="theme-color" content="#1E1F23">
     <link rel="stylesheet" href="../shared/theme.css">
     <link rel="stylesheet" href="../shared/app.css">
@@ -302,17 +302,23 @@
                         <input id="newTaskInput" class="todo-input" type="text"
                                autocomplete="off" hidden data-i18n-attr="placeholder:tasks.addPh">
 
-                        <button id="addBtn" class="icon-btn" data-i18n-attr="title:tasks.addTask">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
-                        <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                            </svg>
-                        </button>
-                        <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                        <div class="header-actions">
+                            <div class="tb-group">
+                                <button id="addBtn" class="icon-btn" data-i18n-attr="title:tasks.addTask">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="tb-group tb-sys">
+                                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <button id="syncIndicator" class="sync-indicator" type="button" data-i18n-attr="title:ui.synced"></button>
+                        </div>
                     </div>
 
                     <!-- Status + filters -->
@@ -408,7 +414,7 @@
     <!-- Vendored date lib, for the once-a-day birthday and trip syncs. Shared with calendar (shared/lib/): one download, one cache entry. -->
     <script src="../shared/lib/luxon_v3.7.2.min.js"></script>
 
-    <!-- Gum file-API helpers: HMAC signing, the access probe, retrying fetch. -->
+    <!-- File-API helpers: the access probe, retrying fetch. -->
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
@@ -439,6 +445,7 @@
 
     <!-- Offline-capable persistence: local last-known-good cache + write-behind sync. -->
     <script src="../shared/store.js" defer></script>
+    <script src="../shared/vcard.js" defer></script>
 
     <script type="module">
         // Nothing is drawn from JS before the dictionary is in: without an
@@ -579,13 +586,6 @@
 
             document.getElementById( 'planClearBtn' ).addEventListener( 'click', function() { savePlanSheet( true ); } );
             document.getElementById( 'planSaveBtn'  ).addEventListener( 'click', function() { savePlanSheet( false ); } );
-            // Escape and the backdrop's own close button go through shared/ui.js;
-            // this only clears the working state behind them.
-            document.getElementById( 'planSheetBackdrop' ).addEventListener( 'click', function( e )
-            {
-                if( e.target === e.currentTarget ) planSheet = null;
-            });
-
             // The store's state machine drives the header plug for every read and write.
             store.onState( NayiveUI.syncIndicator() );
 
@@ -676,7 +676,6 @@
             // file. The store blocks the path meanwhile and saveTasks() refuses.
 
             loadedTasks = JSON.stringify( tasks );
-            dropCalendarTask();
             render();
         }
 
@@ -701,24 +700,6 @@
 
             NayiveUI.toast( T( why === 'bad' ? 'ui.store.badFile' : why === 'loading' ? 'ui.store.loading' : 'ui.store.notRead' ), { ms: 6000 } );
             return true;
-        }
-
-        // ONE-OFF CLEAN-UP, safe to delete once every device has re-synced.
-        // Tasks used to mirror today's Calendar events into a pinned "On the
-        // calendar for today" task, rebuilt every morning. That is gone, but a
-        // copy can still be sitting in tasks.json: without this it would stay
-        // for good as a plain task.
-        function dropCalendarTask()
-        {
-            localStorage.removeItem( 'tasks_calendar_sync_date' );
-
-            const kept = tasks.filter( function( t ) { return ! t.isCalendarSync; } );
-
-            if( kept.length === tasks.length )
-                return;
-
-            tasks = kept;
-            saveTasks();
         }
 
         function saveTasks()
@@ -990,8 +971,8 @@
 
         // [{ name, age }] (alphabetical) of every contact whose birthday falls today;
         // `age` is null when the vCard gives no usable birth year. Only FN / N and
-        // BDAY are needed, so this reads the vCard lines directly rather than
-        // building the full contact model (see contact/index.html for that).
+        // BDAY are needed, so this reads the cards the light way (shared/vcard.js)
+        // rather than building the full contact model (see contact/index.html).
         function todaysBirthdays( vcfText )
         {
             const now   = DateTime.now().setZone( VIEWER_TZ );
@@ -1001,41 +982,27 @@
             // Feb-29 birthdays are greeted on Feb-28 in non-leap years.
             const catchLeap = ! now.isInLeapYear && month === 2 && day === 28;
 
-            const unfolded = vcfText.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).replace( /\n[ \t]/g, '' );
-            const people   = [];
-            let   card     = null;
+            const people = [];
 
-            for( const line of unfolded.split( '\n' ) )
+            for( const props of NayiveVCard.read( vcfText ) )
             {
-                const tag = line.trim().toUpperCase();
+                const card = { fn: '', n: '', md: null };
 
-                if( tag === 'BEGIN:VCARD' ) { card = { fn: '', n: '', md: null }; continue; }
-
-                if( tag === 'END:VCARD' )
+                for( const p of props )
                 {
-                    if( card && card.md && card.md.month === month &&
-                        ( card.md.day === day || ( catchLeap && card.md.day === 29 ) ) )
-                    {
-                        people.push( { name: card.fn || card.n || T( 'tasks.noName' ),
-                                       age : ageTurning( card.md.year, now.year ) } );
-                    }
-                    card = null;
-                    continue;
+                    const val = p.value.trim();
+
+                    if( p.name === 'FN' )         card.fn = NayiveVCard.unescapeText( val );
+                    else if( p.name === 'N' )     card.n  = nFromStructured( val );
+                    else if( p.name === 'BDAY' )  card.md = bdayDate( val );
                 }
 
-                if( ! card )
-                    continue;
-
-                const colon = line.indexOf( ':' );
-                if( colon === -1 )
-                    continue;
-
-                const prop = line.slice( 0, colon ).split( ';' )[ 0 ].split( '.' ).pop().trim().toUpperCase();
-                const val  = line.slice( colon + 1 ).trim();
-
-                if( prop === 'FN' )         card.fn = vcardUnescape( val );
-                else if( prop === 'N' )     card.n  = nFromStructured( val );
-                else if( prop === 'BDAY' )  card.md = bdayDate( val );
+                if( card.md && card.md.month === month &&
+                    ( card.md.day === day || ( catchLeap && card.md.day === 29 ) ) )
+                {
+                    people.push( { name: card.fn || card.n || T( 'tasks.noName' ),
+                                   age : ageTurning( card.md.year, now.year ) } );
+                }
             }
 
             return people.sort( function( a, b )
@@ -1057,7 +1024,7 @@
         // "family;given;additional;prefix;suffix" -> "Given Family".
         function nFromStructured( val )
         {
-            const p = val.split( ';' ).map( vcardUnescape );
+            const p = NayiveVCard.splitEscaped( val, ';' ).map( NayiveVCard.unescapeText );
             return [ p[ 1 ], p[ 0 ] ].filter( Boolean ).join( ' ' ).trim();
         }
 
@@ -1084,14 +1051,6 @@
             return ( month >= 1 && month <= 12 && day >= 1 && day <= 31 )
                    ? { month: month, day: day, year: year }
                    : null;
-        }
-
-        function vcardUnescape( s )
-        {
-            return String( s ).replace( /\\([,;\\nN])/g, function( _, ch )
-            {
-                return ( ch === 'n' || ch === 'N' ) ? '\n' : ch;
-            });
         }
 
         //------------------------------------------------------------------------//

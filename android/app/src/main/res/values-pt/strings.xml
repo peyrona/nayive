@@ -11,6 +11,9 @@
     <string name="step_batt_why">Para que o Nayive continue acordado com o ecrã desligado. Escolhe «Permitir».</string>
     <string name="step_full_title">Ecrã inteiro</string>
     <string name="step_full_why">Para que uma chamada apareça mesmo com o telemóvel bloqueado.</string>
+    <string name="step_media_title">Fotos e vídeos</string>
+    <string name="step_media_why">Para enviar para o Nayive as fotos novas da câmara, se o ativares em A minha conta. Nunca apaga nada do telemóvel.</string>
+    <string name="step_media_partial">Escolheste só algumas fotos: toca em Permitir e escolhe «Permitir tudo».</string>
     <string name="step_do">Permitir</string>
     <string name="step_ok">Feito</string>
     <string name="setup_continue">Continuar</string>
@@ -20,6 +23,7 @@
     <string name="chan_find">Encontrar o meu telemóvel</string>
     <string name="chan_pending">Por ler</string>
     <string name="chan_updates">Atualizações</string>
+    <string name="chan_media">Fotos enviadas</string>
     <string name="link_on">O Nayive está ligado</string>
     <string name="link_tracking">O Nayive guarda a tua posição da viagem</string>
     <string name="link_enrol">Abre o Nayive e entra com o teu utilizador para ativar este telemóvel</string>
@@ -38,6 +42,18 @@
     </plurals>
     <string name="update_title">Há uma versão nova do Nayive</string>
     <string name="update_text">Toca para a descarregar.</string>
+
+    <string name="media_done">Fotos enviadas para o Nayive</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d foto</item>
+        <item quantity="other">%d fotos</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d vídeo</item>
+        <item quantity="other">%d vídeos</item>
+    </plurals>
+    <string name="media_fix_title">O Nayive não consegue ver as tuas fotos</string>
+    <string name="media_fix_text">Toca para dar permissão e enviar as fotos novas.</string>
     <string name="shortcut_setup">Permissões</string>
     <string name="shortcut_setup_long">Permissões do Nayive</string>
 </resources>

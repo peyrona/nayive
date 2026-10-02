@@ -112,16 +112,16 @@ func NewFileTree(baseDir, homesDir, configDir string, shares *Shares) *FileTree 
 //	                         files/ or deeper in data/, where only users write.
 //	".upload-<8 chars>"      a streamed upload's temp. It can be anywhere, so
 //	                         it must also still carry the 0600 mode it was
-//	                         created with: both servers chmod a finished upload
-//	                         to 0644 before it takes its real name, so a user's
-//	                         own file never has it.
+//	                         created with: a finished upload is chmod 0644
+//	                         before it takes its real name, so a user's own
+//	                         file never has it.
 //	".convert-<8 chars>"     convert.go's ffmpeg output. Same rules as
 //	                         ".upload-": anywhere, and only while still 0600.
 //	".up-<n>" ".jpg-<n>"     the chat's temps (os.CreateTemp's shape). Only
 //	".fw-<n>"                under homes/<u>/data/chat/, only while 0600.
 //
-// This is a deliberate difference from the Python, which sweeps both shapes
-// everywhere - see docs/go-port.md, "Deliberate differences".
+// Each shape is swept only where the server writes it: a user's own file that
+// happens to look like a temp is never touched.
 func (t *FileTree) SweepStaleTemp() int {
 	n := 0
 	remove := func(path string) {
@@ -302,25 +302,12 @@ func ListChildren(fsDir, relPrefix string) []Node {
 }
 
 // DirSize is the total size in bytes of every file under `path` (symlinks not
-// followed).
-//
-// `skipNames` are directory names to prune anywhere in the walk - e.g.
-// DirSize(home, ".thumbs") to leave a cache out. A user's quota uses the plain
-// DirSize(home): .trash included, because a trashed file still occupies the
-// disk until the trash is emptied.
-func DirSize(path string, skipNames ...string) int64 {
+// followed). A user's quota uses DirSize(home): .trash included, because a
+// trashed file still occupies the disk until the trash is emptied.
+func DirSize(path string) int64 {
 	var total int64
-	filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if p != path && contains(skipNames, d.Name()) {
-				// java: returning fs.SkipDir from the callback is how you stop
-				// the walk descending - the equivalent of Python's in-place
-				// `dirs[:] = [...]` trick on os.walk.
-				return fs.SkipDir
-			}
+	filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return nil
 		}
 		if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
@@ -472,15 +459,17 @@ func SearchBy(roots []SearchRoot, limit int, keep func(name string, d fs.DirEntr
 			}
 			name := d.Name()
 
-			// Dot-folders and symlinked folders are never descended into. No
-			// temp-name test on directories: the server only ever writes temp
-			// FILES, so such a name on a folder is the user's own.
+			// Dot-folders are never descended into, and a symlink - to a file
+			// or a folder - is never listed (WalkDir does not follow one, and
+			// d.Type() already says what it is). No temp-name test on
+			// directories: the server only ever writes temp FILES, so such a
+			// name on a folder is the user's own.
 			if d.IsDir() {
-				if strings.HasPrefix(name, ".") || isSymlink(p) {
+				if strings.HasPrefix(name, ".") {
 					return fs.SkipDir
 				}
 			} else {
-				if strings.HasPrefix(name, ".") || isTempName(name) || isSymlink(p) {
+				if strings.HasPrefix(name, ".") || isTempName(name) || d.Type()&fs.ModeSymlink != 0 {
 					return nil
 				}
 			}
@@ -586,23 +575,17 @@ func virtualPath(base, full, prefix string) string {
 	return prefix + "/" + rel
 }
 
-func isSymlink(path string) bool {
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode()&os.ModeSymlink != 0
-}
-
 // -----------------------------------------------------------------------------
 // Content types
 // -----------------------------------------------------------------------------
 
 // mimeOverrides are the content types Go's table gets wrong, misses, or
-// decorates - the same list lib/config.py keeps, for the same reasons.
+// decorates.
 //
 // java: mime.TypeByExtension reads /etc/mime.types on Linux, so the SAME BINARY
 // can answer differently on two machines, and it appends "; charset=utf-8" to
-// text types where Python's mimetypes does not. Neither is acceptable for a
-// server that must behave identically everywhere, so this map wins and
-// TypeByExtension is only the fallback.
+// text types. Neither is acceptable for a server that must behave identically
+// everywhere, so this map wins and TypeByExtension is only the fallback.
 var mimeOverrides = map[string]string{
 	".js":          "text/javascript; charset=utf-8",
 	".mjs":         "text/javascript; charset=utf-8",
@@ -645,10 +628,9 @@ func ContentType(path string) string {
 		return ct
 	}
 	if ct := mime.TypeByExtension(ext); ct != "" {
-		// java: Go APPENDS "; charset=utf-8" to every text type it guesses;
-		// Python's mimetypes never does. Stripping it keeps the two servers
-		// sending the same Content-Type for, say, a plain .txt - and the
-		// browser sniffs UTF-8 correctly either way.
+		// java: Go APPENDS "; charset=utf-8" to every text type it guesses.
+		// Stripping it keeps one Content-Type for, say, a plain .txt whatever
+		// the machine - and the browser sniffs UTF-8 correctly either way.
 		if i := strings.Index(ct, ";"); i >= 0 && strings.HasPrefix(ct, "text/") {
 			return strings.TrimSpace(ct[:i])
 		}

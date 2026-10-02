@@ -5,14 +5,9 @@ package main
 // write every other file uses.
 // =============================================================================
 //
-// The Python original (lib/config.py) is a module whose IMPORT has side effects:
-// it opens the config file, configures logging, and publishes CONFIG, HERE,
-// BASE_DIR... as module-level globals that everything else imports. That is how
-// Python does a singleton.
-//
-// Here there are no globals. Config is a value, built once in main() and passed
-// to whoever needs it. That is what lets the tests stand two servers up in one
-// process, which is exactly what a parity run against the Python needs.
+// There are no globals. Config is a value, built once in main() and passed to
+// whoever needs it. That is what lets the tests stand two servers up in one
+// process (a restart, two run-roots side by side).
 //
 // java: Go has no static initializer block and no import side effects worth
 // relying on. `func init()` exists; this project does not use it.
@@ -118,9 +113,8 @@ type Config struct {
 	// java: config/server.json is rewritten by the admin panel, and a struct
 	// can only write back the fields it knows about. This deployment's file
 	// carries a "tz" that no version of the server reads any more - and the
-	// first password change would have deleted it. Python rewrites the dict it
-	// loaded, so nothing is ever lost; keeping the raw map is how you get that
-	// in Go.
+	// first password change would have deleted it. Keeping the raw map, and
+	// writing it back with the known fields brought up to date, loses nothing.
 	raw *orderedJSON
 
 	Path      string // config/server.json
@@ -139,8 +133,7 @@ type Config struct {
 
 // LoadConfig reads `path` (config/server.json) and derives every path from it.
 //
-// Unlike lib/config.py, a MISSING file is not fatal here: the defaults are
-// enough to boot, and the admin panel then opens with no login so the first
+// A MISSING file is not fatal: the defaults are enough to boot, and the admin panel then opens with no login so the first
 // admin can be created. A malformed file IS fatal - a hand-edit that lost the
 // admin block must not silently unlock the panel.
 func LoadConfig(path string) (*Config, error) {
@@ -175,9 +168,9 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, fmt.Errorf("parse %s: %w", abs, err)
 		}
 		// Field by field, and a field that does not fit its type is left at its
-		// default rather than failing the whole file. A hand-typed
-		// `"port": "4343"` boots the Python fine; refusing to start over it
-		// would be a regression, not a safety feature.
+		// default rather than failing the whole file. Refusing to start over a
+		// hand-typed `"port": "4343"` would be a regression, not a safety
+		// feature.
 		readField(cfg.raw.Fields(), "host", &cfg.Server.Host)
 		readField(cfg.raw.Fields(), "log_level", &cfg.Server.LogLevel)
 		readField(cfg.raw.Fields(), "base_dir", &cfg.Server.BaseDir)
@@ -301,8 +294,7 @@ func (c *Config) AdminName() string {
 // Update mutates the config under its lock and writes it back to disk.
 //
 // java: taking a FUNCTION as the argument means the caller cannot forget to
-// unlock or forget to save - the whole read-modify-write is one call. Python
-// does this with `with CONFIG_LOCK:` at each of the six call sites.
+// unlock or forget to save - the whole read-modify-write is one call.
 func (c *Config) Update(change func(*ServerConfig)) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -314,9 +306,8 @@ func (c *Config) Update(change func(*ServerConfig)) error {
 	}
 	// Keep the raw copy in step with what is now on disk. Without this, every
 	// save would start again from the file as it was AT BOOT, and a key added
-	// by one save would be re-appended in a different place by the next -
-	// Python rewrites the dict it has been mutating all along, so a new key
-	// lands once and stays put.
+	// by one save would be re-appended in a different place by the next. This
+	// way a new key lands once and stays put.
 	c.raw = merged
 	return nil
 }
@@ -325,8 +316,7 @@ func (c *Config) Update(change func(*ServerConfig)) error {
 // server manages brought up to date.
 //
 // java: a field that is a POINTER is written only when it is set, so clearing a
-// setting really removes the key rather than storing null - which is what the
-// Python's dict.pop does.
+// setting really removes the key rather than storing null.
 func (c *Config) merged() *orderedJSON {
 	out := c.raw.Clone()
 	put := out.Put
@@ -400,8 +390,7 @@ func parseLevel(name string) slog.Level {
 	}
 }
 
-// intOr is the "value, or this default when absent" read, the equivalent of
-// Python's CONFIG.get(key, default).
+// intOr is the "value, or this default when absent" read.
 func intOr(p *int, fallback int) int {
 	if p == nil {
 		return fallback
@@ -415,8 +404,8 @@ func intOr(p *int, fallback int) int {
 
 // tmpCounter makes two writers racing on the SAME file use distinct temp names.
 //
-// java: Go has no thread id to put in the name the way Python does, and
-// goroutine ids are deliberately not exposed. An atomic counter does the same
+// java: goroutine ids are deliberately not exposed, so there is no thread id
+// to put in the name. An atomic counter does the same
 // job, and filetree's temp-file regex only cares that there are two numbers.
 var tmpCounter atomic.Uint64
 
@@ -431,20 +420,19 @@ var tmpCounter atomic.Uint64
 // half-written one, and a crash mid-write leaves only a stray .tmp (swept at
 // startup, see sweepStaleTemp).
 //
-// The output matches lib/config.py byte for byte: four-space indent, real UTF-8
-// rather than \uXXXX escapes, and a trailing newline.
+// The output: the given indent (four spaces for config/), real UTF-8 rather
+// than \uXXXX escapes, and a trailing newline.
 func atomicWriteJSON(path string, obj any, indent int) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	// java: SetEscapeHTML(false) turns off Go's default < for < > and &.
-	// Python's json.dump does not escape them, and these files are read by
-	// people as well as by both servers.
+	// These files are read by people as well as by the server.
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", strings.Repeat(" ", indent))
 	if err := enc.Encode(obj); err != nil {
 		return err
 	}
-	// Encoder already ends with "\n", which is what Python writes too.
+	// Encoder already ends with "\n".
 
 	tmp := atomicTempName(path)
 
@@ -490,6 +478,46 @@ func loadJSONFile(path string, dst any) bool {
 		return false
 	}
 	if err := json.Unmarshal(raw, dst); err != nil {
+		return false
+	}
+	return true
+}
+
+// loadTable reads one of the server's own JSON tables (shares.json,
+// location.json, devices.json, sessions.json) into `dst`. ok is false when
+// there is nothing to use: no file yet - the normal first run - or, with
+// broken, one that could not be read. saveTable must then move that one aside
+// before it writes: the table in memory starts empty, and writing it straight
+// over the file would lose everything the file still holds.
+func loadTable(path string, dst any, log Logger, empty string) (ok, broken bool) {
+	raw, err := os.ReadFile(path)
+	if err == nil {
+		if err = json.Unmarshal(raw, dst); err == nil {
+			return true, false
+		}
+	} else if os.IsNotExist(err) {
+		return false, false
+	}
+	log.Error(filepath.Base(path)+" is unreadable - "+empty, "err", err)
+	return false, true
+}
+
+// saveTable writes a table loadTable read. NEVER OVER A FILE THAT COULD NOT BE
+// READ (*broken): that one is moved aside first, dated, where the admin can
+// still recover it. False when nothing was written.
+func saveTable(path string, broken *bool, v any, log Logger) bool {
+	name := filepath.Base(path)
+	if *broken {
+		aside := path + ".broken-" + time.Now().Format("2006-01-02-150405")
+		if err := os.Rename(path, aside); err != nil && !os.IsNotExist(err) {
+			log.Error(name+" is unreadable and cannot be moved aside - not saving", "err", err)
+			return false
+		}
+		log.Warn("unreadable "+name+" moved aside", "kept", aside)
+		*broken = false
+	}
+	if err := atomicWriteJSON(path, v, 4); err != nil {
+		log.Error("cannot save "+name, "err", err)
 		return false
 	}
 	return true

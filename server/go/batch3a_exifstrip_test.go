@@ -178,7 +178,7 @@ func TestPublicPhotosLoseTheirPosition(t *testing.T) {
 		t.Errorf("g.webp VP8X flags = %#x, want EXIF and XMP cleared", w["VP8X"][0])
 	}
 
-	if n := binary16(exifTIFF(t, get("disfraz.png"))[testGPSIFD:]); n != 0 {
+	if n := binary.LittleEndian.Uint16(exifTIFF(t, get("disfraz.png"))[testGPSIFD:]); n != 0 {
 		t.Errorf("a JPEG named .png still carries %d GPS entries", n)
 	}
 }
@@ -196,7 +196,7 @@ func TestExifChunkKeepsOrientation(t *testing.T) {
 		if len(got) != len(tiff) || !bytes.Equal(got[:testGPSIFD], tiff[:testGPSIFD]) {
 			t.Fatalf("%s: IFD0 (the Orientation) changed or went: %x", name, got)
 		}
-		if n := binary16(got[testGPSIFD:]); n != 0 {
+		if n := binary.LittleEndian.Uint16(got[testGPSIFD:]); n != 0 {
 			t.Errorf("%s: %d GPS entries left", name, n)
 		}
 		if !bytes.Equal(got[testGPSData:testGPSData+24], make([]byte, 24)) {

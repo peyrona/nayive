@@ -13,11 +13,8 @@ await NayiveI18n.ready;
 //------------------------------------------------------------------------//
 // INITIALIZATION
 
-NayiveI18n.ready.then( function()
-{
-    wireStaticUI();
-    _tryAutoAccess_();
-});
+wireStaticUI();
+_tryAutoAccess_();
 
 async function _tryAutoAccess_()
 {
@@ -70,6 +67,8 @@ function wireStaticUI()
     // New documents are created in the folder currently open in Drive
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );
+    GumApi.onFilesChanged( onFilesNews );                         // another app saved here (toolbar.js)
+    document.addEventListener( 'visibilitychange', catchUpNews );
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );
     document.getElementById( 'bigFilesBtn'       ).addEventListener( 'click', function() { bigMode ? endAdvSearch() : openBigFiles(); } );
 
@@ -101,16 +100,7 @@ function wireStaticUI()
     });
     document.getElementById( 'searchInput' ).addEventListener( 'keydown', function( e )
     {
-        if( e.key === 'Escape' && e.target.value )
-        {
-            e.stopPropagation();          // keep the global Escape (dialogs / viewer) out of it
-            clearSearch();
-            selectedPaths.clear();
-            document.querySelector( '.topbar' ).classList.remove( 'searching' );
-            render();
-            return;
-        }
-
+        // (Escape is the fold's: it clears the box and folds it away.)
         // ArrowDown drops out of the search box straight into the file list.
         if( e.key === 'ArrowDown' && ! isPhone() )
         {
@@ -120,14 +110,15 @@ function wireStaticUI()
         }
     });
 
-    // Phone: the magnifier reveals the search field (which keeps its live filter);
-    // tapping it again hides and clears it.
-    document.getElementById( 'searchToggleBtn' ).addEventListener( 'click', function()
-    {
-        const on = document.querySelector( '.topbar' ).classList.toggle( 'searching' );
-        if( on ) document.getElementById( 'searchInput' ).focus();
-        else     { clearSearch(); selectedPaths.clear(); render(); }
-    });
+    // The magnifier opens the search box (the shared fold); its funnel opens
+    // the advanced search, and its × / Escape clear the search and fold it.
+    driveSearch = NayiveUI.searchFold( {
+        box:       document.querySelector( '.search-wrap' ),
+        input:     document.getElementById( 'searchInput' ),
+        toggle:    document.getElementById( 'searchToggleBtn' ),
+        filterBtn: document.getElementById( 'searchBuilderBtn' ),
+        onClose:   function() { clearSearch(); selectedPaths.clear(); render(); }
+    } );
 
     // The magnifier inside the box: the advanced search dialog (advsearch.js).
     // While one is in force, the button standing in for the box reopens it,
@@ -190,14 +181,6 @@ function wireStaticUI()
 
     document.getElementById( 'viewerBackdrop' ).addEventListener( 'click', closeImageViewer );   // click anywhere (image, backdrop or ✕) closes
 
-    document.getElementById( 'editorSaveBtn'   ).addEventListener( 'click', saveEditor );
-    document.getElementById( 'editorSaveAsBtn' ).addEventListener( 'click', saveEditorAs );
-    document.getElementById( 'editorCloseBtn'  ).addEventListener( 'click', function() { closeImageEditor( false ); } );
-
-    document.getElementById( 'saveCopyCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'saveCopyBackdrop', false ); } );
-    document.getElementById( 'saveCopyConfirmBtn' ).addEventListener( 'click', confirmSaveCopy );
-    document.getElementById( 'saveCopyName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) { e.preventDefault(); confirmSaveCopy(); } } );
-
     // Media player: only the dark area or the ✕ closes — never a click that
     // lands on the <video>/<audio> element (those go to its own controls).
     document.getElementById( 'mediaCloseBtn' ).addEventListener( 'click', closeMediaViewer );
@@ -218,18 +201,6 @@ function wireStaticUI()
         if( isPhone() && document.getElementById( 'treePane' ).classList.contains( 'open' ) )
         {
             closeTreeSheet();
-            return;
-        }
-
-        if( document.getElementById( 'saveCopyBackdrop' ).classList.contains( 'open' ) )
-        {
-            setBackdrop( 'saveCopyBackdrop', false );
-            return;
-        }
-
-        if( document.getElementById( 'editorBackdrop' ).classList.contains( 'open' ) )
-        {
-            closeImageEditor( false );
             return;
         }
 

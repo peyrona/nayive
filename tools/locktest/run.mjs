@@ -12,7 +12,7 @@
  * bytes that would have left the browser: what lands in the "server", in the
  * .bak beside it, in the papelera and in the device draft.
  */
-import { browser, attach } from "./cdp.mjs";
+import { browser, attach } from "../cdp.mjs";
 import { serve } from "./serve.mjs";
 import fs from "node:fs";
 import path from "node:path";

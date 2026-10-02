@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"image/jpeg"
 	"io"
@@ -18,6 +19,11 @@ import (
 )
 
 const publicTripDir = "data/trips/portugal-2026"
+
+// LinksByOwner is every public link `user` has made.
+func (s *Shares) LinksByOwner(user string) []Grant {
+	return s.filter(func(g *Grant) bool { return g.Token != "" && g.Owner == user })
+}
 
 // publicFixture is ana's trip: two stages already started, one still to come,
 // one switched off, private fields that must never leave, and a photo folder
@@ -321,7 +327,7 @@ func TestPublicPhotos(t *testing.T) {
 	if _, err := jpeg.Decode(bytes.NewReader(body)); err != nil {
 		t.Errorf("a.jpg does not decode: %v", err)
 	}
-	if n := binary16(exifTIFF(t, body)[testGPSIFD:]); n != 0 {
+	if n := binary.LittleEndian.Uint16(exifTIFF(t, body)[testGPSIFD:]); n != 0 {
 		t.Errorf("a.jpg still carries %d GPS entries", n)
 	}
 	if bytes.Contains(body, []byte("MOTIONPHOTO")) || bytes.Contains(body, []byte("GPSLatitude")) {
@@ -372,8 +378,6 @@ func TestPublicPhotos(t *testing.T) {
 		}
 	}
 }
-
-func binary16(b []byte) uint16 { return uint16(b[0]) | uint16(b[1])<<8 }
 
 func TestPublicPageAndBadTokens(t *testing.T) {
 	srv, base, _, link := makeLink(t)

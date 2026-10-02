@@ -1,56 +1,4 @@
-/* actions.js - confirm dialog, navigation, sheet helpers, trip and stage actions. */
-
-//------------------------------------------------------------------------//
-// CONFIRM DIALOG - a small yes/no sheet used before deleting a whole trip. A
-// stage or a document goes at once, with an Undo instead. Only its two buttons
-// (or Escape) close it.
-
-let confirmOnYes = null;
-
-function openConfirm( sTitle, sMessage, sYesLabel, fnYes )
-{
-    confirmOnYes = fnYes;
-
-    const sheet = document.getElementById( 'confirmSheet' );
-    sheet.innerHTML = '';
-
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = sTitle;
-    sheet.appendChild( h2 );
-
-    const p = document.createElement( 'p' );
-    p.className = 'confirm-msg';
-    p.textContent = sMessage;
-    sheet.appendChild( p );
-
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
-
-    const cancelBtn = document.createElement( 'button' );
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
-    cancelBtn.appendChild( svgIcon( ICON_X, 17 ) );
-    cancelBtn.addEventListener( 'click', closeConfirm );
-
-    const yesBtn = document.createElement( 'button' );
-    yesBtn.className = 'btn btn-danger';
-    yesBtn.title = sYesLabel || NayiveUI.t( 'ui.delete' );
-    yesBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
-    yesBtn.addEventListener( 'click', function()
-    {
-        const fn = confirmOnYes;
-        closeConfirm();
-        if( fn ) fn();
-    });
-
-    actions.appendChild( cancelBtn );
-    actions.appendChild( yesBtn );
-    sheet.appendChild( actions );
-
-    openSheet( 'confirmSheetBackdrop' );
-}
-
-function closeConfirm() { closeSheet( 'confirmSheetBackdrop' ); confirmOnYes = null; }
+/* actions.js - navigation, sheet helpers, trip and stage actions. */
 
 //------------------------------------------------------------------------//
 // NAVIGATION
@@ -117,8 +65,8 @@ function removeTripDoc(id) { tripDraft.documents = tripDraft.documents.filter( f
 let tripSaveError = '';
 
 // Editing an already-saved trip goes through the store, so it works offline.
-// Creating one needs its directory made server-side first (Gum's file write
-// does NOT auto-create parents), so a brand-new trip needs a live connection.
+// Creating one makes its directory server-side first (GumApi.makeDir), so a
+// brand-new trip needs a live connection.
 async function saveTrip()
 {
     if( ! tripDraft.destination.trim() || ! tripDraft.startDate || ! tripDraft.endDate )

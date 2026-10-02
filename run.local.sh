@@ -3,13 +3,16 @@
 # run.local — start the Nayive Go server on this machine
 # ==============================================================================
 # Runs server/go/ with store/ as the run-root and client/apps as the apps (see
-# server/README.md) and opens http://localhost:4343/nayive/ in Chromium once
-# the server answers (port set in store/config/server.json). Ctrl+C stops it.
+# server/README.md) and opens http://localhost:<port>/nayive/ in Chromium once
+# the server answers (the port is read from store/config/server.json; 4343 when
+# it sets none). Ctrl+C stops it.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-URL="http://localhost:4343/nayive/"
+CFG="$ROOT/store/config/server.json"
+PORT="$(grep -oE '"port"[[:space:]]*:[[:space:]]*[0-9]+' "$CFG" 2>/dev/null | grep -oE '[0-9]+$' || true)"
+URL="http://localhost:${PORT:-4343}/nayive/"
 export PATH="$HOME/sdk/go1.27.1/bin:$PATH"
 
 # Wait (up to 60 s, go run compiles first) for the server, then open the browser.
@@ -25,4 +28,4 @@ export PATH="$HOME/sdk/go1.27.1/bin:$PATH"
 ) &
 
 cd "$ROOT/server/go"
-exec go run . -config "$ROOT/store/config/server.json"
+exec go run . -config "$CFG"

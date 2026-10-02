@@ -62,17 +62,19 @@ const (
 	MaxPushSubs       = 12   // past this, the oldest device is dropped
 
 	usageTTL = time.Hour // re-measure a home's size after an hour, just in case
+	// usageRecheck: sooner, when the home changed while it was being measured.
+	usageRecheck = time.Minute
 )
 
 // UILangs are the interface languages, and must match LANGS in
 // apps/shared/i18n.js.
-var UILangs = []string{"es", "en", "pt", "fr", "de", "it"}
+var UILangs = []string{"es", "en", "pt", "fr", "de"}
 
 // UserConfig is homes/<user>/data/config.json.
 //
 // java: almost every field is a POINTER, because "absent" and "zero" mean
 // different things throughout: no quota vs a quota of 0, never chose a language
-// vs chose "no preference". Python gets this from None; Go needs nil.
+// vs chose "no preference". nil is "absent".
 type UserConfig struct {
 	Password         string   `json:"password"`
 	Quota            *float64 `json:"quota,omitempty"`
@@ -85,11 +87,10 @@ type UserConfig struct {
 	// RawQuota and RawPhotoMax are the two numbers EXACTLY as the file spells
 	// them.
 	//
-	// java: Go turns a float64 12 back into the token "12"; Python turns the
-	// float 12.0 into "12.0". Both parse to the same number, but the admin
-	// panel's user list echoes the stored value straight back, and two servers
-	// answering "12" and "12.0" for the same account is the kind of difference
-	// that costs an afternoon later. Keeping the raw token settles it.
+	// java: Go turns a float64 12 back into the token "12", where the file may
+	// say "12.0". Both parse to the same number, but the admin panel's user
+	// list echoes the stored value straight back, and it should show what the
+	// file says. Keeping the raw token settles it.
 	RawQuota    json.RawMessage `json:"-"`
 	RawPhotoMax json.RawMessage `json:"-"`
 
@@ -99,14 +100,13 @@ type UserConfig struct {
 	raw *orderedJSON `json:"-"`
 }
 
-// pyFloat is a float64 that marshals the way Python renders one.
+// pyFloat is a float64 that always marshals with its decimal point: "12.0",
+// the way every config.json has spelled a quota since the first server (a
+// Python one) wrote them.
 //
-// java: Go turns float64(12) into the token "12"; Python's json.dump turns the
-// float 12.0 into "12.0". Both parse back to the same number, so nothing
-// BREAKS - but config.json is a file a person opens, and two servers writing
-// the same account differently is the kind of thing that costs an afternoon
-// years later. A quota is always a float here, as it is in the Python, so it
-// always carries its decimal point.
+// java: Go turns float64(12) into the token "12". Both parse back to the same
+// number, so nothing BREAKS - but config.json is a file a person opens, and a
+// quota that changes spelling on its own is a puzzle for whoever reads it.
 type pyFloat float64
 
 func (f pyFloat) MarshalJSON() ([]byte, error) {
@@ -190,6 +190,7 @@ type Users struct {
 	// usageMu guards the disk-usage cache below.
 	usageMu sync.Mutex
 	usage   map[string]usageEntry
+	walking map[string]int // AdjustUsage calls that land while a home is being measured
 }
 
 type usageEntry struct {
@@ -198,7 +199,8 @@ type usageEntry struct {
 }
 
 func NewUsers(cfg *Config, shares *Shares, log Logger) *Users {
-	return &Users{cfg: cfg, shares: shares, log: log, usage: make(map[string]usageEntry)}
+	return &Users{cfg: cfg, shares: shares, log: log,
+		usage: make(map[string]usageEntry), walking: make(map[string]int)}
 }
 
 func (u *Users) homeDir(user string) string { return filepath.Join(u.cfg.HomesDir, user) }
@@ -219,13 +221,11 @@ func (u *Users) pushPath(user string) string {
 // caller, and must not accidentally sign anyone in.
 //
 // java: EVERY FIELD IS DECODED ON ITS OWN, and a field that fails is simply
-// left unset. That is not fussiness - it is the behaviour the Python has, and
-// the difference bites. A single hand-typed `"quota": "abc"` makes
-// json.Unmarshal into the whole struct fail on that field and leave a pointer
-// to ZERO behind, which means "this user's quota is 0 bytes" and every upload
-// they make answers 507. Python's per-field `try: float(q) except: None` reads
-// it as "no quota set", which is the only sane reading. Decoding field by field
-// is how you get that in Go.
+// left unset. That is not fussiness - the difference bites. A single
+// hand-typed `"quota": "abc"` makes json.Unmarshal into the whole struct fail
+// on that field and leave a pointer to ZERO behind, which means "this user's
+// quota is 0 bytes" and every upload they make answers 507. Read field by
+// field, it is "no quota set", which is the only sane reading.
 func readUserConfig(path string) UserConfig {
 	var out UserConfig
 
@@ -307,9 +307,9 @@ func readOptional[T any](fields map[string]json.RawMessage, key string) *T {
 // readNumber is readOptional for a number, and it also accepts the number
 // written as a JSON STRING.
 //
-// java: Python's `int(v)` and `float(v)` parse "30" as happily as 30, and
-// hand-edited config files in this project really do contain both. encoding/json
-// refuses a string for a numeric field, so the string form is retried here.
+// java: hand-edited config files in this project really do contain both "30"
+// and 30. encoding/json refuses a string for a numeric field, so the string
+// form is retried here.
 func readNumber[T ~int | ~float64](fields map[string]json.RawMessage, key string) *T {
 	raw, found := fields[key]
 	if !found || isJSONNull(raw) {
@@ -317,13 +317,13 @@ func readNumber[T ~int | ~float64](fields map[string]json.RawMessage, key string
 	}
 
 	// java: EVERYTHING GOES THROUGH float64 FIRST, even when T is int. Go's
-	// decoder refuses 25.7 for an int field; Python's int(25.7) is 25, and a
-	// hand-edited file really does contain values like that. Converting a
-	// float64 to an int truncates toward zero, which is exactly what int() does.
+	// decoder refuses 25.7 for an int field, and a hand-edited file really does
+	// contain values like that: 25.7 reads as 25. Converting a float64 to an
+	// int truncates toward zero.
 	var n float64
 	if json.Unmarshal(raw, &n) != nil {
-		// The number written as a JSON STRING - int("25") and float("2.5") both
-		// work in Python, and config files here contain both spellings.
+		// The number written as a JSON STRING: config files here contain both
+		// spellings.
 		var text string
 		if json.Unmarshal(raw, &text) != nil {
 			return nil
@@ -412,9 +412,8 @@ func updateUserConfig(path string, change func(*UserConfig)) bool {
 
 // SaveAccountOptions is what the admin panel may change about an account.
 //
-// java: Python signals "leave this field alone" with a module-level sentinel
-// object. Go signals it with nil: a nil pointer here is "not supplied", and a
-// pointer to the zero value is "remove it".
+// java: "leave this field alone" is nil: a nil pointer here is "not
+// supplied", and a pointer to the zero value is "remove it".
 type SaveAccountOptions struct {
 	Password      string // "" keeps the current one
 	ClearPassword bool   // removes it: the person picks a new one at sign-in
@@ -429,8 +428,7 @@ type SaveAccountOptions struct {
 	//	anything else           reject the whole request
 	//
 	// Collapsing "abc" into "remove" would silently wipe a quota because
-	// somebody mistyped it, which is why the Python answers 400 there and so
-	// does this.
+	// somebody mistyped it, which is why that is a 400.
 	Quota    json.RawMessage
 	SetQuota bool
 	PhotoMax json.RawMessage
@@ -501,8 +499,8 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 		case remove:
 			cfg.Quota, cfg.RawQuota = nil, nil
 		default:
-			if math.IsNaN(*value) || math.IsInf(*value, 0) {
-				return "bad-quota"
+			if math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 {
+				return "bad-quota" // a negative quota would block every upload
 			}
 			cfg.Quota, cfg.RawQuota = value, nil // re-rendered, not echoed
 		}
@@ -581,9 +579,9 @@ func (u *Users) RenameAccount(old, name string) string {
 // that nobody could tell apart - and a person who created their account one way
 // and typed it the other could not sign in.
 //
-// Python solves it by REFUSING anything that is not already in NFC form, which
-// works but shows the person "invalid name, try again" for a name that is
-// perfectly good. This port converts instead. Nothing is refused for the way it
+// REFUSING anything that is not already in NFC form would work, but would show
+// the person "invalid name, try again" for a name that is perfectly good. This
+// converts instead. Nothing is refused for the way it
 // happened to be typed, and after the conversion two spellings of the same name
 // really are the same string - which is the property that matters.
 //
@@ -615,8 +613,7 @@ func ValidUsername(name string) bool {
 	}
 	for _, c := range name {
 		// A combining mark that SURVIVED normalisation - a Devanagari virama,
-		// say - is not part of a precomposed letter and is refused, exactly as
-		// Python's str.isalnum() refuses it. What normalisation has already
+		// say - is not part of a precomposed letter and is refused. What normalisation has already
 		// removed by this point is the accent that had a precomposed form, and
 		// that is the case this rule used to catch by accident.
 		if unicode.Is(unicode.Mn, c) || unicode.Is(unicode.Me, c) {
@@ -625,9 +622,8 @@ func ValidUsername(name string) bool {
 		if c == '.' || c == '_' || c == '-' {
 			continue
 		}
-		// isalnum() in Python is Unicode-aware: any script's letters count.
-		// isprintable() is False for control / format / separator characters,
-		// which is what actually needs blocking.
+		// Any script's letters count. What needs blocking is control / format /
+		// separator characters.
 		if !unicode.IsPrint(c) {
 			return false
 		}
@@ -933,8 +929,7 @@ func (u *Users) UserTZ(role, user string) *string {
 func (u *Users) SetUserTZ(role, user, name string) (string, bool) {
 	name = strings.TrimSpace(name)
 	if name != "" {
-		// java: LoadLocation errors on a zone this box does not know, which is
-		// exactly Python's `name not in available_timezones()` check. The
+		// java: LoadLocation errors on a zone this box does not know. The
 		// binary embeds the IANA database (see the tzdata import in main.go),
 		// so this answers the same on a VPS with no tzdata package installed.
 		if _, err := time.LoadLocation(name); err != nil {
@@ -1513,15 +1508,27 @@ func (u *Users) UserQuotaBytes(user string) *int64 {
 func (u *Users) UserUsageBytes(user string) int64 {
 	u.usageMu.Lock()
 	hit, found := u.usage[user]
-	u.usageMu.Unlock()
 	if found && time.Since(hit.measured) < usageTTL {
+		u.usageMu.Unlock()
 		return hit.bytes
 	}
+	if _, busy := u.walking[user]; !busy {
+		u.walking[user] = 0
+	}
+	u.usageMu.Unlock()
 
 	total := DirSize(u.homeDir(user)) // the slow walk (.trash included)
 
+	// An upload or delete that landed during the walk may or may not be in
+	// the figure - the walk may have passed its folder already - so such a
+	// figure is measured again in a minute, not kept for the hour.
 	u.usageMu.Lock()
-	u.usage[user] = usageEntry{bytes: total, measured: time.Now()}
+	measured := time.Now()
+	if u.walking[user] > 0 {
+		measured = measured.Add(usageRecheck - usageTTL)
+	}
+	delete(u.walking, user)
+	u.usage[user] = usageEntry{bytes: total, measured: measured}
 	u.usageMu.Unlock()
 	return total
 }
@@ -1531,6 +1538,9 @@ func (u *Users) UserUsageBytes(user string) int64 {
 func (u *Users) AdjustUsage(user string, delta int64) {
 	u.usageMu.Lock()
 	defer u.usageMu.Unlock()
+	if _, busy := u.walking[user]; busy {
+		u.walking[user]++
+	}
 	if hit, found := u.usage[user]; found {
 		hit.bytes += delta
 		if hit.bytes < 0 {

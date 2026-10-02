@@ -109,14 +109,6 @@
  * calendar.ics stays a plain .ics the reminder service can read. A body that is
  * small, binary, or on a browser without CompressionStream just goes up raw -
  * see gzipBody().
- *
- * ORDERING RULE, and it matters: the new SERVER must be live before this file
- * reaches a browser. An old server does not know Content-Encoding on a request,
- * so it would store the compressed bytes verbatim AS the file - a corrupt
- * calendar.ics, not a failed save. The new server reads plain and gzipped alike,
- * so server-first is always safe. deploy.sh pushes apps/ BEFORE it restarts the
- * service, which leaves exactly that window open; restart first, or deploy when
- * nobody is saving.
  */
 ( function ()
 {
@@ -452,13 +444,9 @@
                     return { ok: true, status: r.status, body: body, mtime: mtime, srv: srv };
                 }
 
-                var errBody = await r.text().catch( function () { return ""; } );
-
-                // Gum answers a GET for a file that does not exist with 500 and a
-                // "File does not exist: ..." body. Treat that (and a plain 404) as
-                // "no file yet" - a reachable server with nothing there - which is
-                // very different from not reaching the server at all.
-                if( r.status === 404 || ( r.status === 500 && /does not exist/i.test( errBody ) ) )
+                // A 404 is "no file yet" - a reachable server with nothing there -
+                // which is very different from not reaching the server at all.
+                if( r.status === 404 )
                     return { ok: false, status: 404, missing: true };
 
                 authLost( r.status );
@@ -1127,12 +1115,6 @@
             await idbDelete( db, OUTBOX, path );
         }
 
-        async function pendingCount()
-        {
-            var db = await dbPromise;
-            return ( await idbGetAll( db, OUTBOX ) ).filter( ours ).length;
-        }
-
         // A write to `path` is held back as a conflict (see CONFLICTS above).
         async function conflicted( path )
         {
@@ -1178,7 +1160,6 @@
             hasCache:     hasCache,
             listCached:   listCached,
             forget:       forget,
-            pendingCount: pendingCount,
             conflicted:   conflicted,
             onConflict:   onConflict,
             onMerged:     onMerged,

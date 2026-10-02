@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- Minesweeper ---------------------------------------------------
@@ -16,7 +16,7 @@
            header, where the build plan first put it: that row has less than
            10px to spare at 390px (see the header block in index.html), so
            three more buttons wrap it onto a second line on every phone - and
-           they would sit there while the other four games are on screen, which
+           they would sit there while the other games are on screen, which
            is worse than a second row inside the one pane that owns them. */
         .mines            { position: relative; height: 100%; display: flex; flex-direction: column; }
 
@@ -188,7 +188,7 @@
                          pause, it is free thinking time. Over the play area only
                          - the header keeps the game's name and its toolbar, so
                          a paused game is left the way any other pane is. -->
-                    <div class="game-cover solid mines-pause" id="minesPaused" hidden>
+                    <div class="game-cover solid" id="minesPaused" hidden>
                         <p class="game-cover-t" data-i18n="games.paused"></p>
                         <button class="text-btn" id="minesResume" type="button" data-i18n="games.resume"></button>
                     </div>
@@ -207,7 +207,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -238,6 +238,12 @@
                 hard:   { cols: 30, rows: 16, mines: 99 }
             };
             var ORDER = [ 'easy', 'medium', 'hard' ];
+
+            // The record goes in the file's own `times` map (see PERSISTENCE),
+            // under this game's name like Sudoku's and Solitaire's. Minesweeper
+            // came first and used the bare easy / medium / hard, which a file
+            // written before may still carry: adoptTimes reads those as well.
+            var KEY = { easy: 'minesEasy', medium: 'minesMedium', hard: 'minesHard' };
 
             // How long a finger has to stay down to plant a flag. 400ms is
             // under the ~500ms at which a mobile browser fires its own
@@ -583,7 +589,7 @@
 
                 secs = seconds();
                 var record = ! has( level ) || secs < times[ level ];
-                if( record ) { times[ level ] = secs; saveTime( level, secs ); bestEl.textContent = clock( secs ); }
+                if( record ) { times[ level ] = secs; saveTime( KEY[ level ], secs ); bestEl.textContent = clock( secs ); }
 
                 sfx.play( record ? 'record' : 'win', null, 0.15 );   // after the last square's own click
 
@@ -719,22 +725,30 @@
                 stopClock();
             }
 
-            // Records come in as { easy: 47, ... } and go back the same way,
-            // merged by MINIMUM - the mirror of 2048's maximum, and for the same
-            // reason: the plug re-reads the file whenever the tab is focused,
-            // and that answer can be older than the game just won here.
+            // Records come in as { minesEasy: 47, ... } and go back the same
+            // way, merged by MINIMUM - the mirror of 2048's maximum, and for the
+            // same reason: the plug re-reads the file whenever the tab is
+            // focused, and that answer can be older than the game just won
+            // here. The old bare key of a level (see KEY) counts as well, and
+            // only the new one is written back.
             function adoptTimes( saved )
             {
+                var out = {};
+
                 ORDER.forEach( function ( k )
                 {
-                    var n = Number( saved[ k ] );
+                    [ saved[ KEY[ k ] ], saved[ k ] ].forEach( function ( v )
+                    {
+                        var n = parseFloat( v );
 
-                    if( ! isFinite( n ) || n < 0 ) return;          // absent, or not a number
-                    if( ! has( k ) || n < times[ k ] ) times[ k ] = n;
+                        if( ! isFinite( n ) || n < 0 ) return;      // absent, or not a number
+                        if( ! has( k ) || n < times[ k ] ) times[ k ] = n;
+                    } );
+                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
                 } );
 
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
-                return times;
+                return out;
             }
 
             function init()

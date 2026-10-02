@@ -349,7 +349,8 @@ async function doCopy( paths, dest )
 
 // A name not already in `taken` (a Set of names present in the
 // destination). On a clash it becomes "name (copia).ext", then
-// "name (copia 2).ext", … The caller adds each returned name to `taken`.
+// "name (copia 2).ext", … - "copia" in the user's language. The caller
+// adds each returned name to `taken`.
 function uniqueName( name, taken )
 {
     if( ! taken.has( name ) ) return name;
@@ -357,10 +358,11 @@ function uniqueName( name, taken )
     const dot  = name.lastIndexOf( '.' );
     const base = dot > 0 ? name.slice( 0, dot ) : name;
     const ext  = dot > 0 ? name.slice( dot ) : '';
+    const word = T( 'drive.copyWord' );
 
     for( let i = 1; ; i++ )
     {
-        const cand = base + ' (copia' + (i > 1 ? ' ' + i : '') + ')' + ext;
+        const cand = base + ' (' + word + (i > 1 ? ' ' + i : '') + ')' + ext;
         if( ! taken.has( cand ) ) return cand;
     }
 }

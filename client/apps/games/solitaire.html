@@ -275,8 +275,8 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE GAMES"): the same twelve in
-        // every game, whether it uses them all or not.
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
+        // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
             STEP        = NayiveGames.STEP,
@@ -765,7 +765,7 @@
                 paintPause();
 
                 secs   = seconds();
-                record = ! times[ draw ] || secs < times[ draw ];
+                record = ! has( draw ) || secs < times[ draw ];
                 if( record ) { times[ draw ] = secs; saveTime( KEY[ draw ], secs ); }
                 bestEl.textContent = clock( times[ draw ] );
 
@@ -1033,19 +1033,23 @@
             // re-reads whenever the tab is focused and that answer can be older
             // than the table just finished here. Only this game's own two keys
             // are read, so the other two games' sit in the same map untouched.
+            // A level either HAS a record or it does not; 0 is a perfectly good
+            // one (Minesweeper's rule, see its has()).
+            function has( k ) { return typeof times[ k ] === 'number'; }
+
             function adoptTimes( saved )
             {
                 var out = {};
 
                 ORDER.forEach( function ( k )
                 {
-                    var n = Number( saved[ KEY[ k ] ] );
+                    var n = parseFloat( saved[ KEY[ k ] ] );        // NaN when absent or damaged
 
-                    if( isFinite( n ) && n > 0 && ( ! times[ k ] || n < times[ k ] ) ) times[ k ] = n;
-                    if( times[ k ] ) out[ KEY[ k ] ] = times[ k ];
+                    if( isFinite( n ) && n >= 0 && ( ! has( k ) || n < times[ k ] ) ) times[ k ] = n;
+                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
                 } );
 
-                bestEl.textContent = times[ draw ] ? clock( times[ draw ] ) : '--';
+                bestEl.textContent = has( draw ) ? clock( times[ draw ] ) : '--';
                 return out;
             }
 
@@ -1111,7 +1115,7 @@
                         draw = Number( b.dataset.solDraw );
                         Array.prototype.slice.call( document.querySelectorAll( '[data-sol-draw]' ) )
                              .forEach( function ( o ) { o.classList.toggle( 'is-active', o === b ); } );
-                        bestEl.textContent = times[ draw ] ? clock( times[ draw ] ) : '--';
+                        bestEl.textContent = has( draw ) ? clock( times[ draw ] ) : '--';
                         newGame();
                     } );
                 } );

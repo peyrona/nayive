@@ -5,19 +5,16 @@ package main
 // =============================================================================
 //
 // httptest.NewServer stands a real server up on a random port inside the test
-// binary. These cover the wiring the parity harness cannot reach without a
-// second machine's worth of setup - and the two rules that are easy to break
-// silently: the static sandbox, and the gzip tiers.
+// binary. These cover the wiring end to end - and the two rules that are easy
+// to break silently: the static sandbox, and the gzip tiers.
 
 import (
 	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	neturl "net/url"
 	"os"
@@ -40,7 +37,7 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server, *http.Client) {
 	os.WriteFile(filepath.Join(root, "apps", "sinsidecar.js"), []byte(big), 0o644)
 	os.WriteFile(filepath.Join(root, "apps", "login.html"), []byte("<h1>entra</h1>"), 0o644)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	srv, err := NewServer(cfg, log)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -50,18 +47,7 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server, *http.Client) {
 	ts := httptest.NewServer(srv.routes())
 	t.Cleanup(ts.Close)
 
-	// A cookie jar, so a signed-in client stays signed in. DisableCompression
-	// keeps the transport from silently asking for gzip and unwrapping it,
-	// which would hide the very header these tests check.
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{
-		Jar:       jar,
-		Transport: &http.Transport{DisableCompression: true},
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse // inspect the redirect, do not follow it
-		},
-	}
-	return srv, ts, client
+	return srv, ts, noFollow()
 }
 
 func writeGzipFile(t *testing.T, path, content string) {
@@ -88,6 +74,34 @@ func do(t *testing.T, client *http.Client, method, url string, body io.Reader,
 		t.Fatalf("%s %s: %v", method, url, err)
 	}
 	return resp
+}
+
+// callJSON sends `body` (none when "") as JSON and answers the status and the
+// body of the reply, whatever they are.
+func callJSON(t *testing.T, client *http.Client, method, url, body string) (int, []byte) {
+	t.Helper()
+	var rd io.Reader
+	if body != "" {
+		rd = strings.NewReader(body)
+	}
+	resp := do(t, client, method, url, rd, map[string]string{"Content-Type": "application/json"})
+	return resp.StatusCode, readBody(t, resp)
+}
+
+// jsonCall is callJSON that must answer `want`, its JSON decoded into `out`
+// (unless nil). It returns the raw reply.
+func jsonCall(t *testing.T, client *http.Client, method, url, body string, want int, out any) []byte {
+	t.Helper()
+	code, raw := callJSON(t, client, method, url, body)
+	if code != want {
+		t.Fatalf("%s %s = %d, want %d: %s", method, url, code, want, raw)
+	}
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			t.Fatalf("%s %s: bad JSON %v: %s", method, url, err, raw)
+		}
+	}
+	return raw
 }
 
 func signIn(t *testing.T, client *http.Client, base, user, password string) {
@@ -175,7 +189,7 @@ func TestStaticSandbox(t *testing.T) {
 	_, cfg, _ := newTestUsers(t)
 	os.Symlink("/etc", filepath.Join(cfg.AppsDir, "fuera"))
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	srv, err := NewServer(cfg, log)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -187,14 +201,7 @@ func TestStaticSandbox(t *testing.T) {
 	// SIGNED IN on purpose: an anonymous request is refused by the session gate
 	// before the sandbox is ever consulted, which would make this test pass for
 	// the wrong reason.
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	signIn(t, client, ts.URL, "ana", "abc")
+	client := signedInClient(t, ts.URL, "ana", "abc")
 	for _, path := range []string{
 		"/nayive/fuera/passwd", // a real symlink out of the tree
 		"/nayive/../config/server.json",
@@ -213,8 +220,8 @@ func TestStaticSandbox(t *testing.T) {
 	}
 }
 
-// TestPublicStatic - the login page and the service worker must be reachable
-// with NO session, and everything else must not.
+// TestPublicStatic - the login page must be reachable with NO session, and a
+// page of the apps must not.
 func TestPublicStatic(t *testing.T) {
 	_, ts, client := newTestServer(t)
 
@@ -406,7 +413,7 @@ func TestPutIfUnmodifiedSince(t *testing.T) {
 // TestPutWithoutContentLength is the 0-byte-file bug: a PUT that carries no
 // bytes must NOT wipe a document. Go reads "no Content-Length at all" as a
 // length of 0, so the old `ContentLength < 0` guard never saw it (only a
-// chunked body, which refuseChunked answers first - TestChunkedBodyIsRefused).
+// chunked body - TestChunkedBody).
 // No length, "Content-Length: 0" and a gzip stream that inflates to nothing
 // are all refused over a document with content; plain text may still be
 // emptied on purpose, and a new document may start empty.
@@ -532,7 +539,8 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
-// TestAdminPanelOpensOnAFreshInstall, and locks once an admin exists.
+// TestAdminPanelGate - once an admin exists, the panel answers the admin only:
+// 401 to nobody, 403 to a regular user.
 func TestAdminPanelGate(t *testing.T) {
 	_, ts, client := newTestServer(t)
 
@@ -560,14 +568,10 @@ func TestAdminPanelGate(t *testing.T) {
 	}
 }
 
-// TestChunkedBodyIsRefused - handler.py tests Transfer-Encoding at the top of
-// _dispatch, before it looks at the path, and answers 411 on EVERY route.
-//
-// This test exists because refuseChunked was written and then never wired into
-// the chain in routes(), so for a while the Go server quietly accepted a
-// chunked POST that the Python refused - and nothing noticed, because no test
-// and none of the parity harness's 214 requests sends one.
-func TestChunkedBodyIsRefused(t *testing.T) {
+// TestChunkedBody: net/http de-chunks a body, so a chunked request is read
+// like any other - but a file upload must say its size up front (411), because
+// the quota check and the 0-byte guard work from it.
+func TestChunkedBody(t *testing.T) {
 	_, ts, client := newTestServer(t)
 
 	// A body of unknown length makes net/http send it chunked.
@@ -580,39 +584,20 @@ func TestChunkedBodyIsRefused(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: %v", method, url, err)
 		}
+		resp.Body.Close()
 		return resp
 	}
 
-	// No GET case: net/http's CLIENT drops the body of a GET rather than
-	// chunking it, so a test cannot produce one. The server does refuse it -
-	// checked by hand with a raw socket, 411 on both servers - it just cannot
-	// be driven from here.
-	for _, tc := range []struct{ method, url, body string }{
-		{"POST", ts.URL + "/api/login", `{"user":"ana","password":"abc"}`},
-		{"POST", ts.URL + "/api/admin", `{"action":"create-user"}`},
-		{"PUT", ts.URL + "/api/files?file=files/mio.txt", "x"},
-	} {
-		resp := chunked(tc.method, tc.url, tc.body)
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode != http.StatusLengthRequired {
-			t.Errorf("%s %s chunked = %d, want 411", tc.method, tc.url, resp.StatusCode)
-		}
-		if !strings.Contains(string(body), "no chunked") {
-			t.Errorf("%s %s chunked body = %q, want the Python's wording",
-				tc.method, tc.url, body)
-		}
-		// The refusal is a response like any other: it carries the headers.
-		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
-			t.Errorf("%s %s chunked went out without the security headers",
-				tc.method, tc.url)
-		}
+	if resp := chunked("POST", ts.URL+"/api/login", `{"user":"ana","password":"abc"}`); resp.StatusCode != http.StatusOK {
+		t.Errorf("chunked sign-in = %d, want 200", resp.StatusCode)
+	}
+	if resp := chunked("PUT", ts.URL+"/api/files?file=files/mio.txt", "x"); resp.StatusCode != http.StatusLengthRequired {
+		t.Errorf("chunked PUT = %d, want 411", resp.StatusCode)
 	}
 }
 
-// TestOversizedBodyIs413 - handler.py sizes every API body from Content-Length
-// and answers 413 "petición demasiado grande" over 1 MiB. Folding that into the
+// TestOversizedBodyIs413 - every API body is sized from Content-Length and
+// answered 413 "petición demasiado grande" over 1 MiB. Folding that into the
 // generic 400 "bad JSON" loses a message the admin panel shows to a person.
 //
 // The FORM case is the one that bit: /api/login has two body shapes and only
@@ -623,11 +608,9 @@ func TestOversizedBodyIs413(t *testing.T) {
 	pad := strings.Repeat("A", maxBody+1000)
 	jsonBody := `{"user":"ana","password":"abc","pad":"` + pad + `"}`
 
-	// The routes behind a session are checked SIGNED IN on purpose. handler.py
-	// reads the body before it looks at the cookie, so it answers 413 to a
-	// stranger too; this port checks the session first and answers 401. That
-	// ordering is left as it is - see docs/go-port-review.md, A2 - so the size
-	// check is asserted where both servers can reach it.
+	// The routes behind a session are checked SIGNED IN on purpose: the
+	// session is checked first, so a stranger gets 401 before the size is
+	// looked at.
 	signIn(t, client, ts.URL, "ana", "abc")
 
 	for _, tc := range []struct{ name, url, ctype, body string }{
@@ -648,15 +631,12 @@ func TestOversizedBodyIs413(t *testing.T) {
 				tc.name, resp.StatusCode, body)
 		}
 		if !strings.Contains(string(body), "demasiado grande") {
-			t.Errorf("%s: body = %q, want the Python's wording", tc.name, body)
+			t.Errorf("%s: body = %q, want \"petición demasiado grande\"", tc.name, body)
 		}
 	}
 
 	// The admin panel needs the admin's own session.
-	adminJar, _ := cookiejar.New(nil)
-	adminClient := &http.Client{Jar: adminJar,
-		Transport: &http.Transport{DisableCompression: true}}
-	signIn(t, adminClient, ts.URL, "jefe", "secreto")
+	adminClient := signedInClient(t, ts.URL, "jefe", "secreto")
 
 	resp := do(t, adminClient, "POST", ts.URL+"/api/admin",
 		strings.NewReader(`{"action":"create-user","pad":"`+pad+`"}`),
@@ -677,11 +657,11 @@ func TestOversizedBodyIs413(t *testing.T) {
 
 // TestOddPathShapesAreNotRedirects - http.ServeMux answers its own 307 to the
 // path.Clean()'d URL whenever the request path is not already clean, which
-// turns a page the Python SERVES into a redirect. collapsePath rewrites the
-// path before the mux sees it, so the two servers answer the same thing.
+// turns a page that should be SERVED into a redirect. collapsePath rewrites the
+// path before the mux sees it.
 //
 // "/api" is the same bug from the other side: without an exact pattern the mux
-// redirects it to the "/api/" subtree, where handler.py just 404s.
+// redirects it to the "/api/" subtree, where it should be a plain 404.
 func TestOddPathShapesAreNotRedirects(t *testing.T) {
 	_, ts, client := newTestServer(t)
 	// Signed in, so a missing app file is a 404 rather than the 401 the static
@@ -729,12 +709,7 @@ func TestAdminClearPassword(t *testing.T) {
 	signIn(t, client, ts.URL, "jefe", "secreto")
 	post := func(body string) {
 		t.Helper()
-		resp := do(t, client, "POST", ts.URL+"/api/admin", strings.NewReader(body),
-			map[string]string{"Content-Type": "application/json"})
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("%s = %d", body, resp.StatusCode)
-		}
+		jsonCall(t, client, "POST", ts.URL+"/api/admin", body, http.StatusOK, nil)
 	}
 
 	post(`{"action":"update-user","name":"ana","quota":"5"}`)
@@ -749,9 +724,7 @@ func TestAdminClearPassword(t *testing.T) {
 		t.Errorf("the old password still signs in")
 	}
 
-	fresh, _ := cookiejar.New(nil)
-	ana := &http.Client{Jar: fresh}
-	signIn(t, ana, ts.URL, "ana", "")
+	ana := signedInClient(t, ts.URL, "ana", "")
 	resp = do(t, ana, "GET", ts.URL+"/api/whoami", nil, nil)
 	var me map[string]any
 	json.NewDecoder(resp.Body).Decode(&me)

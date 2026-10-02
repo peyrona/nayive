@@ -26,7 +26,10 @@ func TestAddrKey(t *testing.T) {
 	}
 }
 
-// noFollow is a client that shows a redirect instead of following it.
+// noFollow is a client that shows a redirect instead of following it. The
+// cookie jar keeps a signed-in client signed in; DisableCompression keeps the
+// transport from silently asking for gzip and unwrapping it, which would hide
+// the very header some tests check.
 func noFollow() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{Jar: jar, Transport: &http.Transport{DisableCompression: true},

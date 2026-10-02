@@ -64,7 +64,7 @@ var (
 // Grant is one row of config/shares.json.
 //
 // java: a STRUCT rather than a map keeps the JSON field order stable, which
-// matters because this file is read by people and written by two servers.
+// matters because this file is read by people.
 type Grant struct {
 	ID      string `json:"id"`
 	Owner   string `json:"owner"`
@@ -129,6 +129,20 @@ type sharesFile struct {
 	Shares []Grant `json:"shares"`
 }
 
+// UnmarshalJSON also takes a bare top-level list, from before the wrapper
+// existed.
+//
+// java: `plain` is the same struct WITHOUT this method - decoding into it is
+// the default decoder, not a call back into this one.
+func (f *sharesFile) UnmarshalJSON(raw []byte) error {
+	type plain sharesFile
+	err := json.Unmarshal(raw, (*plain)(f))
+	if err != nil && json.Unmarshal(raw, &f.Shares) == nil {
+		return nil
+	}
+	return err
+}
+
 // ensureLoaded fills the table the first time anything asks. Caller holds mu.
 func (s *Shares) ensureLoaded() {
 	if s.loaded {
@@ -137,26 +151,10 @@ func (s *Shares) ensureLoaded() {
 	s.loaded = true
 	s.grants = nil
 
-	raw, err := os.ReadFile(s.path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			s.log.Error("shares.json is unreadable - starting with no shares", "err", err)
-			s.broken = true
-		}
-		return // nothing shared yet - the normal first run
-	}
-
 	var file sharesFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		// The Python also accepts a bare top-level list, from before the
-		// wrapper existed. Try that before giving up.
-		var bare []Grant
-		if err2 := json.Unmarshal(raw, &bare); err2 != nil {
-			s.log.Error("shares.json is unreadable - starting with no shares", "err", err)
-			s.broken = true
-			return
-		}
-		file.Shares = bare
+	var ok bool
+	if ok, s.broken = loadTable(s.path, &file, s.log, "starting with no shares"); !ok {
+		return // nothing shared yet - the normal first run - or unreadable
 	}
 	// Keep only well-formed entries, so one hand-edited line cannot take the
 	// server down.
@@ -167,25 +165,10 @@ func (s *Shares) ensureLoaded() {
 	}
 }
 
-// save writes the whole list back. Caller holds mu.
+// save writes the whole list back. Caller holds mu. One bad hand edit must
+// not cost every share: see saveTable.
 func (s *Shares) save() {
-	// NEVER WRITE OVER A FILE THAT COULD NOT BE READ. The table in memory
-	// started empty, so saving it straight away would wipe every grant the
-	// file still holds: one bad hand edit, and every share gone for good.
-	// Move it aside first, dated, where the admin can still recover it. (A
-	// deliberate difference from the Python, which writes straight over.)
-	if s.broken {
-		aside := s.path + ".broken-" + time.Now().Format("2006-01-02-150405")
-		if err := os.Rename(s.path, aside); err != nil && !os.IsNotExist(err) {
-			s.log.Error("shares.json is unreadable and cannot be moved aside - not saving", "err", err)
-			return
-		}
-		s.log.Warn("unreadable shares.json moved aside", "kept", aside)
-		s.broken = false
-	}
-	if err := atomicWriteJSON(s.path, sharesFile{Shares: s.grants}, 4); err != nil {
-		s.log.Error("cannot save shares.json", "err", err)
-	}
+	saveTable(s.path, &s.broken, sharesFile{Shares: s.grants}, s.log)
 }
 
 // -----------------------------------------------------------------------------
@@ -244,25 +227,11 @@ func (s *Shares) RootPath(g *Grant) string {
 	if g == nil {
 		return ""
 	}
-	ownerHome, err := resolveExisting(filepath.Join(s.homesDir, g.Owner))
-	if err != nil {
-		return ""
-	}
 	parts := splitPath(g.Root)
 	if len(parts) == 0 || hasDotDot(parts) {
 		return ""
 	}
-	target, err := resolveExisting(filepath.Join(append([]string{ownerHome}, parts...)...))
-	if err != nil {
-		return ""
-	}
-	if !isInside(ownerHome, target) {
-		return ""
-	}
-	if _, err := os.Lstat(target); err != nil {
-		return ""
-	}
-	return target
+	return homeFile(s.homesDir, g.Owner, parts)
 }
 
 // -----------------------------------------------------------------------------
@@ -317,11 +286,6 @@ func (s *Shares) FindToken(token string) *Grant {
 		}
 	}
 	return nil
-}
-
-// LinksByOwner is every public link `user` has made.
-func (s *Shares) LinksByOwner(user string) []Grant {
-	return s.filter(func(g *Grant) bool { return g.Token != "" && g.Owner == user })
 }
 
 // ByOwner is everything `user` has shared OUT, newest first.
@@ -595,8 +559,7 @@ func (s *Shares) MoveRoot(owner, oldRel, newRel string) int {
 // quietly disappears instead of erroring when it is opened.
 func (s *Shares) RootNodes(user string) []Node {
 	out := []Node{}
-	for i, g := range s.ForUser(user) {
-		_ = i
+	for _, g := range s.ForUser(user) {
 		target := s.RootPath(&g)
 		if target == "" {
 			continue
@@ -688,23 +651,16 @@ func (s *Shares) ExtraPath(g *Grant, parts []string) string {
 		return ""
 	}
 
-	ownerHome, err := resolveExisting(filepath.Join(s.homesDir, g.Owner))
-	if err != nil {
-		return ""
-	}
-	target, err := resolveExisting(filepath.Join(append([]string{ownerHome}, want...)...))
-	if err != nil {
+	target := homeFile(s.homesDir, g.Owner, want)
+	if target == "" {
 		return ""
 	}
 	// Checked AFTER the symlinks are followed, against files/ itself: a link
 	// inside files/ that points at data/ lends nothing. ResolvePath checks
 	// again against the owner's home; doing it here keeps this function safe
 	// alone.
-	files, err := resolveExisting(filepath.Join(ownerHome, "files"))
+	files, err := resolveExisting(filepath.Join(s.homesDir, g.Owner, "files"))
 	if err != nil || target == files || !isInside(files, target) {
-		return ""
-	}
-	if _, err := os.Lstat(target); err != nil {
 		return ""
 	}
 	return target

@@ -63,7 +63,7 @@ function openBigFiles()
     clearSearch();
     selectedPaths.clear();
     bigMode = true;
-    document.querySelector( '.topbar' ).classList.remove( 'searching' );
+    driveSearch.close( true );          // fold the box; the list below replaces the search
     render();                           // "Buscando…" until the server answers
     runSearch();
 }
@@ -220,10 +220,11 @@ const TEXT_IMPORT  =
     'sh', 'bash', 'zsh', 'ksh', 'ps1', 'bat', 'sql',
     'py', 'pyw', 'r', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'java', 'cs', 'tex'
 ];
-// Raster images → an image opener. '.svg' is deliberately absent: the server
-// serves it as text/plain, so it stays in TEXT_IMPORT.
+// Raster images → an image opener. '.svg' is deliberately absent: it is
+// text (the server sends it as image/svg+xml), so it stays in TEXT_IMPORT
+// and opens in the Text editor.
 //   IMAGE_EDIT  the formats the TOAST UI Image Editor can load AND re-encode
-//               (canvas.toDataURL) → they open in Drive's built-in editor.
+//               (canvas.toDataURL) → they open in Image (apps/image).
 //   IMAGE_VIEW  every other raster type → the plain lightbox (view only), and
 //               it also stays the superset used for the file-row icon.
 const IMAGE_EDIT = [ 'png', 'jpg', 'jpeg', 'webp' ];
@@ -233,27 +234,11 @@ const IMAGE_VIEW = [ 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif' ]
 const VIDEO_VIEW = [ 'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv' ];
 const AUDIO_VIEW = [ 'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'weba' ];
 
-function extOf( name )
-{
-    const m = /\.([a-z0-9]+)$/i.exec( name );
-    return m ? m[1].toLowerCase() : '';
-}
+const extOf = NayiveUI.extOf, pad2 = NayiveUI.pad2;   // shared/ui.js (loads before this file)
 
 // Server nodes carry `size` (bytes, files only) and `mtime` (last-modified,
 // Unix seconds). Dates always render yyyy-mm-dd (Nayive ANSI-date rule).
-function fmtSize( bytes )
-{
-    if( bytes == null ) return '';
-    if( bytes < 1024 )  return bytes + ' B';
-
-    const units = [ 'KB', 'MB', 'GB', 'TB' ];
-    let   v = bytes / 1024, i = 0;
-    while( v >= 1024 && i < units.length - 1 ) { v /= 1024; i++; }
-
-    return (v < 10 ? v.toFixed( 1 ) : Math.round( v )) + ' ' + units[i];
-}
-
-function pad2( n ) { return String( n ).padStart( 2, '0' ); }
+function fmtSize( bytes ) { return bytes == null ? '' : NayiveUI.fmtBytes( bytes ); }
 
 function fmtDate( unixSec )
 {
@@ -270,7 +255,7 @@ function fmtDateTime( unixSec )
 }
 
 // The app a shared item belongs to. Only the top-level rows of
-// "Compartido conmigo" carry node.shared (lib/shares.py root_nodes) —
+// "Compartido conmigo" carry node.shared (server/go/shares.go RootNodes) —
 // 'photos' | 'trips' | 'folder' | 'file'. Anything deeper inside a share
 // is an ordinary file again.
 function sharedApp( node )
@@ -280,7 +265,7 @@ function sharedApp( node )
 
 // The extension that decides the icon and the opener. A shared item's name
 // is its slug ("SEPE.txt" -> "sepe-txt", the dot is gone), so its type comes
-// from the grant's own title instead — see lib/shares.py slugify().
+// from the grant's own title instead — see server/go/shares.go Slugify().
 function typeExt( node )
 {
     return extOf( node && node.shared ? ( node.shared.title || '' ) : nameOf( node ) );
@@ -374,11 +359,10 @@ function buildListRow( node, showPath )
     else
     {
         const bits = [];
-        // A folder from the one-level listing carries no child count
-        // (its `nodes` is an empty stub) — show just its date.
-        if( dir && node.nodes && node.nodes.length ) bits.push( node.nodes.length + ' elem.' );
-        else if( ! dir && node.size != null )         bits.push( fmtSize( node.size ) );
-        if( node.mtime )                   bits.push( fmtDate( node.mtime ) );
+        // A folder shows just its date: every listing sends its `nodes` as
+        // an empty stub, so there is no child count to show.
+        if( ! dir && node.size != null ) bits.push( fmtSize( node.size ) );
+        if( node.mtime )                 bits.push( fmtDate( node.mtime ) );
 
         meta.textContent = bits.join( ' · ' );
         if( node.mtime ) meta.title = fmtDateTime( node.mtime );

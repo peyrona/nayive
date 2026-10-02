@@ -4,9 +4,8 @@ package main
 // The static apps under /nayive/, with pre-built .gz sidecars.
 // =============================================================================
 //
-// This is where Go pays for itself. handler.py hand-rolls Range parsing,
-// If-Modified-Since, 206 responses and 64 KiB streaming - about 90 lines.
-// http.ServeContent does all of it.
+// Range parsing, If-Modified-Since, 206 responses and streaming are all
+// http.ServeContent's.
 //
 // What is still ours, because it is this project's policy and not HTTP's: the
 // path sandbox, which files are readable with NO session, the Cache-Control
@@ -75,7 +74,6 @@ var publicStatic = map[string]bool{
 	"shared/i18n/pt.json": true,
 	"shared/i18n/fr.json": true,
 	"shared/i18n/de.json": true,
-	"shared/i18n/it.json": true,
 	// A public trip link (/s/<token>, api_public.go): the page and its map. No
 	// trip data lives in them - that comes from /api/public, token-checked.
 	// The vendored map libraries under trips/lib/ are public too (isPublicStatic).
@@ -121,7 +119,7 @@ type StaticFiles struct {
 // java: os.Root (Go 1.24) is the sandbox. Every Open through it is resolved
 // INSIDE the root by the kernel, so "../../etc/passwd", an absolute path, or a
 // symlink pointing out of the tree all fail - and they fail even if another
-// process swaps a directory for a symlink mid-request, which the Python's
+// process swaps a directory for a symlink mid-request, which a
 // resolve()-then-compare cannot promise.
 func NewStaticFiles(dir string, log Logger) (*StaticFiles, error) {
 	root, err := os.OpenRoot(dir)
@@ -161,10 +159,8 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	name := strings.Join(parts, "/")
 	info, err := s.static.stat(name)
 
-	// A directory URL must end in "/" or the page's relative links break.
 	if err == nil && info.IsDir() {
-		if !strings.HasSuffix(r.URL.Path, "/") {
-			redirect(w, http.StatusFound, r.URL.Path+"/")
+		if redirectToSlash(w, r) {
 			return
 		}
 		parts = append(parts, "index.html")
@@ -198,6 +194,18 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Service-Worker-Allowed", URLPrefix+"/")
 	}
 	s.static.serve(w, r, name, info)
+}
+
+// redirectToSlash answers the redirect a directory URL without its final "/"
+// needs - without it the page's relative links break - and reports whether it
+// did. The escaped path goes back out, so a folder named with "?" or "#" stays
+// a folder name.
+func redirectToSlash(w http.ResponseWriter, r *http.Request) bool {
+	if strings.HasSuffix(r.URL.Path, "/") {
+		return false
+	}
+	redirect(w, http.StatusFound, r.URL.EscapedPath()+"/")
+	return true
 }
 
 // isPublicStatic decides whether this URL may be read with no session.
@@ -296,8 +304,8 @@ func (f *StaticFiles) serve(w http.ResponseWriter, r *http.Request, rel string, 
 			// net/http REFUSES to set Content-Length itself once
 			// Content-Encoding is present - it cannot know whether something
 			// further down re-encodes the body - and falls back to chunked.
-			// handler.py always sends a length, so we send the sidecar's own
-			// size and the two servers stay byte-identical on the wire.
+			// We know the length: the sidecar's own size. A length lets the
+			// browser show progress and keep the connection.
 			w.Header().Set("Content-Length", strconv.FormatInt(gzInfo.Size(), 10))
 			// NOTE THE ORDER: Content-Type was set from the ORIGINAL name
 			// above, so ServeContent never sniffs the gzip magic and answers

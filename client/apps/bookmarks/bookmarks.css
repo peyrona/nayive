@@ -28,14 +28,7 @@ html, body { height: 100%; overflow: hidden; }
 /* --- List pane -------------------------------------------------------- */
 .list-pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 28px; }
 
-/* Search: the Contacts field - a magnifier on the right, which becomes the ×
-   that clears it while a search is on. Esc clears it too. */
-.search-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.search-box  { position: relative; flex: 1 1 auto; min-width: 0; max-width: 560px; }
-.search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
-.search-input { width: 100%; padding-right: 44px; }   /* clears the magnifier / × */
-.search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; }
-.search-clear.show { display: flex; }
+/* Search, in the title bar: the shared SEARCH FOLD (app.css). */
 
 .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
@@ -126,6 +119,7 @@ html, body { height: 100%; overflow: hidden; }
 .sheet-lead    { margin: -6px 0 14px; font-size: 0.85rem; line-height: 1.4; color: var(--text-dim); }
 .field-caption { display: block; margin-bottom: 5px; font-size: 0.8rem; color: var(--text-dim); }
 .check-row     { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 0.92rem; cursor: pointer; }
+.switch-row    { justify-content: space-between; }   /* on / off: text, then the .switch at the end */
 .choice-row    { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .choice-row .text-btn { flex: 1 1 180px; }
 .bm-dup-note   { margin: -8px 0 12px; font-size: 0.8rem; color: var(--warn); }
@@ -143,15 +137,15 @@ html, body { height: 100%; overflow: hidden; }
 
 /* --- Phone ------------------------------------------------------------------
    No tree pane: folders are the rows at the top of the list, the crumbs say
-   where you are and ← goes up. The grid / list switch and the search button
-   leave the header (the switch is in the "⋮"; the field is always there). */
+   where you are and ← goes up. The grid / list switch leaves the header (it
+   is in the "⋮"); the search field takes the room left on its row. */
 @media (max-width: 640px)
 {
     .tree-pane, .pane-resizer { display: none; }
     .list-pane { padding: 10px 10px 24px; }
-    #searchBtn, .view-btn { display: none; }
+    .tb-modes  { display: none; }
     .topbar    { padding: 6px; }                     /* Drive's phone bar: fits a 320px screen on one row */
     .topbar h1 { font-size: 1rem; margin-right: 6px; }
     .items.is-grid { grid-template-columns: 1fr; gap: 8px; }
-    .search-box { max-width: none; }
+    .topbar-actions { flex: 1 1 auto; justify-content: flex-end; }   /* the buttons stay at the right edge (app.css HEADER) */
 }

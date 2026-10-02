@@ -65,55 +65,14 @@ function currentChild( relPath )
 // PANE RESIZER — drag the divider to set the tree-pane width (desktop only).
 // Width is stored in localStorage and applied as the --tree-w custom
 // property; the phone @media rule hard-codes its own width, so the sheet
-// layout is untouched. Double-click resets to the default.
+// layout is untouched. Double-click resets to the default (shared/ui.js).
 
 function initPaneResizer()
 {
-    const rz  = document.getElementById( 'paneResizer' );
-    const tp  = document.getElementById( 'treePane' );
-    const KEY = 'drive-tree-width';
-    const MIN = 140, MAX = 640, DEF = 250;
-
-    const saved = parseInt( localStorage.getItem( KEY ), 10 );
-    if( saved >= MIN && saved <= MAX )
-        document.documentElement.style.setProperty( '--tree-w', saved + 'px' );
-
-    let dragging = false, startX = 0, startW = 0;
-
-    rz.addEventListener( 'pointerdown', function( e )
+    NayiveUI.paneResizer( document.getElementById( 'paneResizer' ), document.getElementById( 'treePane' ),
     {
-        if( isPhone() ) return;
-        dragging = true;
-        startX   = e.clientX;
-        startW   = tp.getBoundingClientRect().width;
-        rz.setPointerCapture( e.pointerId );
-        rz.classList.add( 'dragging' );
-        document.body.style.userSelect = 'none';
-    });
-
-    rz.addEventListener( 'pointermove', function( e )
-    {
-        if( ! dragging ) return;
-        let w = Math.round( startW + ( e.clientX - startX ) );
-        w = Math.max( MIN, Math.min( MAX, w ) );
-        document.documentElement.style.setProperty( '--tree-w', w + 'px' );
-    });
-
-    function endDrag()
-    {
-        if( ! dragging ) return;
-        dragging = false;
-        rz.classList.remove( 'dragging' );
-        document.body.style.userSelect = '';
-        try { localStorage.setItem( KEY, parseInt( tp.getBoundingClientRect().width, 10 ) ); } catch( _ ) {}
-    }
-    rz.addEventListener( 'pointerup', endDrag );
-    rz.addEventListener( 'pointercancel', endDrag );
-
-    rz.addEventListener( 'dblclick', function()
-    {
-        document.documentElement.style.setProperty( '--tree-w', DEF + 'px' );
-        try { localStorage.setItem( KEY, DEF ); } catch( _ ) {}
+        key: 'drive-tree-width', min: 140, max: 640, def: 250, off: isPhone,
+        set: function( w ) { document.documentElement.style.setProperty( '--tree-w', w + 'px' ); }
     });
 }
 

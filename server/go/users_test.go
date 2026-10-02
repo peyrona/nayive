@@ -12,12 +12,11 @@ package main
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestUsers builds a Users over a throwaway run-root with one account.
@@ -41,7 +40,7 @@ func newTestUsers(t *testing.T) (*Users, *Config, string) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := quietLog()
 	shares := NewShares(cfg.ConfigDir, cfg.HomesDir, log)
 	users := NewUsers(cfg, shares, log)
 
@@ -497,5 +496,26 @@ func TestRewriteKeepsUnknownFields(t *testing.T) {
 	// echoes it and the two servers must not disagree about the spelling.
 	if !strings.Contains(string(raw), "12.0") {
 		t.Errorf("the stored quota was re-rendered:\n%s", raw)
+	}
+}
+
+// TestUsageChangedMidWalk: a home that changed while it was being measured is
+// measured again within a minute - its figure may miss the change - while a
+// quiet one keeps its figure for the hour.
+func TestUsageChangedMidWalk(t *testing.T) {
+	users, _, _ := newTestUsers(t)
+	users.UserUsageBytes("ana")
+	if age := time.Since(users.usage["ana"].measured); age > time.Minute {
+		t.Fatalf("a quiet walk is already %v old", age)
+	}
+
+	users.ForgetUsage("ana")
+	users.walking["ana"] = 1 // as if an upload landed during the walk
+	users.UserUsageBytes("ana")
+	if age := time.Since(users.usage["ana"].measured); age < usageTTL-usageRecheck-time.Second {
+		t.Fatalf("a walk with a change during it is kept for %v more", usageTTL-age)
+	}
+	if _, busy := users.walking["ana"]; busy {
+		t.Error("the walk was left marked as running")
 	}
 }

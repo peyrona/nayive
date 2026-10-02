@@ -50,6 +50,21 @@ final class Prefs {
 
     static void setSetupDone(Context c) { sp(c).edit().putBoolean("setup", true).apply(); }
 
+    /** When "Upload new photos and videos" was switched on (server's unix s); 0 = off. Media.java. */
+    static long mediaSince(Context c) { return sp(c).getLong("mediaSince", 0); }
+
+    static void setMediaSince(Context c, long s) { sp(c).edit().putLong("mediaSince", s).apply(); }
+
+    /** The last MediaStore _ID already looked at. */
+    static long mediaLastId(Context c) { return sp(c).getLong("mediaLastId", 0); }
+
+    static void setMediaLastId(Context c, long id) { sp(c).edit().putLong("mediaLastId", id).commit(); }
+
+    /** Upload runs in a row that sent nothing: MediaJob waits longer each time. */
+    static int mediaFails(Context c) { return sp(c).getInt("mediaFails", 0); }
+
+    static void setMediaFails(Context c, int n) { sp(c).edit().putInt("mediaFails", n).apply(); }
+
     /** When the app last asked whether there is a newer APK (ms). */
     static long updateChecked(Context c) { return sp(c).getLong("updateChecked", 0); }
 

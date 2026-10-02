@@ -5,15 +5,10 @@ package main
 // =============================================================================
 
 import (
-	"crypto/ecdh"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 )
@@ -255,11 +250,26 @@ func TestChatCallTimeouts(t *testing.T) {
 	h := f.srv.chat
 	carmen := anonymous()
 	cp, dc := "/api/c/"+f.carmen, "d-"+f.ids["Carmen"]
-	tick := func(after time.Duration) {
+	// Carmen has one device, on a push service of this machine: an ending
+	// that rang her must tell it, one that did not must stay quiet.
+	service := newFakePush(t, false, nil)
+	service.wire(f.srv.push)
+	h.mu.Lock()
+	h.owner("ana").contact(f.ids["Carmen"]).Subs = []PushSub{testSub(t, service.URL+"/carmen")}
+	h.mu.Unlock()
+	tick := func(after time.Duration, pushes int) {
+		t.Helper()
 		h.mu.Lock()
 		jobs := h.callTick(h.owner("ana"), time.Now().Add(after))
 		h.mu.Unlock()
-		_ = jobs
+		if len(jobs) != pushes {
+			t.Fatalf("tick +%v: %d pushes, want %d", after, len(jobs), pushes)
+		}
+		for _, j := range jobs {
+			if j.mine || j.person != f.ids["Carmen"] || j.payload["tag"] == nil {
+				t.Fatalf("tick +%v: push %+v", after, j)
+			}
+		}
 	}
 	callOf := func(id string) *chatCall {
 		h.mu.Lock()
@@ -274,11 +284,11 @@ func TestChatCallTimeouts(t *testing.T) {
 
 	// 1. Nobody answers: "missed", and it is unread for Carmen.
 	id := start()
-	tick(chatCallRing / 2)
+	tick(chatCallRing/2, 0)
 	if c := callOf(id); c.State != "ringing" {
 		t.Fatalf("ended early: %+v", c)
 	}
-	tick(chatCallRing + time.Second)
+	tick(chatCallRing+time.Second, 1) // "missed" on her device
 	if c := callOf(id); c.State != "ended" || c.Reason != "noanswer" {
 		t.Fatalf("no answer: %+v", c)
 	}
@@ -295,7 +305,7 @@ func TestChatCallTimeouts(t *testing.T) {
 	}
 
 	// 2. An ended call is forgotten after chatCallKeep.
-	tick(chatCallKeep + chatCallRing + 2*time.Second)
+	tick(chatCallKeep+chatCallRing+2*time.Second, 0)
 	if callOf(id) != nil {
 		t.Fatal("an old ended call is still kept")
 	}
@@ -303,11 +313,11 @@ func TestChatCallTimeouts(t *testing.T) {
 	// 3. Answered, then Carmen's page is never seen again: "lost", with a duration.
 	id = start()
 	f.call(t, carmen, "POST", cp+"/call/"+id+"/answer", `{"dev":"carmen-page-1"}`, 200, nil)
-	tick(chatCallLost / 2)
+	tick(chatCallLost/2, 0)
 	if c := callOf(id); c.State != "active" {
 		t.Fatalf("a quiet but recent page ended the call: %+v", c)
 	}
-	tick(chatCallLost + time.Second)
+	tick(chatCallLost+time.Second, 0) // she had it: nothing to tell her
 	if c := callOf(id); c.State != "ended" || c.Reason != "lost" {
 		t.Fatalf("lost: %+v", c)
 	}
@@ -325,7 +335,7 @@ func TestChatCallTimeouts(t *testing.T) {
 	h.mu.Lock()
 	cs.seen["owner-page-1"] = time.Now().Add(-time.Hour)
 	h.mu.Unlock()
-	tick(chatCallRing / 2)
+	tick(chatCallRing/2, 0)
 	if c := callOf(id); c.State != "ringing" {
 		t.Fatalf("a page with an open wait was taken for gone: %+v", c)
 	}
@@ -333,7 +343,7 @@ func TestChatCallTimeouts(t *testing.T) {
 	h.mu.Lock()
 	cs.waitEnd("owner-page-1", time.Now().Add(-time.Hour))
 	h.mu.Unlock()
-	tick(chatCallRing / 2)
+	tick(chatCallRing/2, 1) // it rang her: "missed"
 	if c := callOf(id); c.State != "ended" || c.Reason != "cancel" {
 		t.Fatalf("vanished caller: %+v", c)
 	}
@@ -343,37 +353,15 @@ func TestChatCallTimeouts(t *testing.T) {
 // answered; the words come in the device's language; mute does not silence it.
 func TestChatCallPush(t *testing.T) {
 	f := newCallFixture(t)
-	var mu sync.Mutex
-	hits := 0
-	push := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		hits++
-		mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer push.Close()
-	localPush(f.srv.chat.push) // the fake service is on this machine
-	count := func() int { mu.Lock(); defer mu.Unlock(); return hits }
-	waitHits := func(n int) {
-		t.Helper()
-		for i := 0; i < 500 && count() < n; i++ { // up to 10 s: a slow box, not a flake
-			time.Sleep(20 * time.Millisecond)
-		}
-		if count() != n {
-			t.Fatalf("pushes = %d, want %d", count(), n)
-		}
-	}
-	key, _ := ecdh.P256().GenerateKey(rand.Reader)
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	keys := PushKeys{P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
-		Auth: base64.RawURLEncoding.EncodeToString(auth)}
+	push := newFakePush(t, false, nil)
+	push.wire(f.srv.chat.push)
+	waitHits := func(n int) { t.Helper(); push.waitHits(t, "", n) }
 	h := f.srv.chat
 	evs := traceEvents(t, h)
 	dc := "d-" + f.ids["Carmen"]
 	h.mu.Lock()
 	o := h.owner("ana")
-	o.contact(f.ids["Carmen"]).Subs = []PushSub{{Endpoint: push.URL + "/a", Keys: keys, Lang: "es"}}
+	o.contact(f.ids["Carmen"]).Subs = []PushSub{testSub(t, push.URL+"/a")}
 	h.conv(o, dc).st.Mute = map[string]bool{f.ids["Carmen"]: true}
 	h.mu.Unlock()
 

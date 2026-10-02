@@ -112,16 +112,14 @@
         /* Action toolbar (CodeMirror's free build ships no chrome of its own) */
         #toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto; overflow-x: auto; }
         #toolbar .tb-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
-        /* Toolbar buttons: a distinct component from the header .icon-btn - 30px
-           rounded squares with an accent-tinted hover (they act on the text). */
+        /* Toolbar buttons: 30px circles; hover = GROWING WASH in app.css. */
         .tb-btn
         {
             display: flex; align-items: center; justify-content: center;
             width: 30px; height: 30px; flex: 0 0 auto;
-            border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
+            border-radius: 50%; border: none; color: var(--text-dim);
             cursor: pointer; padding: 0;
         }
-        .tb-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
         .tb-btn.active,
         .tb-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
         /* .tb-select is shared - see TOOLBAR SELECT in app.css. Nothing local. */
@@ -575,6 +573,7 @@
         // Only a first run on a brand-new browser falls back to the phone default:
         // wrapping on, because scrolling code sideways on a phone is miserable.
         const TEXT_CFG   = 'data/text/config.json';
+        const textCfg    = O.appConfig( TEXT_CFG, 'ui.prefsUnread' );   // see THE ACCOUNT'S COPY
         const WRAP_KEY   = 'gum_text_wrap';
         const INDENT_KEY = 'gum_text_indent';
         const INDENTS    = [ '4', '2', 'tab' ];
@@ -679,7 +678,7 @@
             document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); setPreview( false ); editor.focus(); } );
             document.getElementById( 'mdViewBtn'  ).addEventListener( 'click',  function()    { setPreview( ! mdReading ); } );
             document.getElementById( 'preview'    ).addEventListener( 'click',  mdAnchorClick );
-            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); writeTextCfg( { indent: e.target.value } ); editor.focus(); } );
+            document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); textCfg.write( { indent: e.target.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
             document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the remembered choice
@@ -695,7 +694,7 @@
             document.getElementById( 'statsBtn' ).addEventListener( 'click', openStats );
             document.getElementById( 'scBtn'    ).addEventListener( 'click', openShortcuts );
             document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-            O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: [ 'statsBtn', 'scBtn', 'guideBtn' ] } );
+            O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
             NayiveUI.setHelpMenu( true );
 
             const marginInput = document.getElementById( 'marginInput' );
@@ -708,6 +707,16 @@
             // min / max only bound the arrows; a typed 5 or 600 has to be put right in
             // the box too, or it would disagree with the line. 'change' = on blur/Enter.
             marginInput.addEventListener( 'change',  function( e ) { e.target.value = String( marginCols ); } );
+
+            // Ctrl+S is CodeMirror's (extraKeys) while the text has the keys. Anywhere
+            // else - the Markdown reader above all - it still saves, and never opens
+            // the browser's own "Save page"; over a dialog it just does nothing.
+            document.addEventListener( 'keydown', function( e )
+            {
+                if( e.defaultPrevented || e.code !== 'KeyS' || ! ( e.ctrlKey || e.metaKey ) || e.altKey || e.shiftKey ) return;
+                e.preventDefault();
+                if( ! document.querySelector( '.sheet-backdrop.open' ) ) saveNow();
+            } );
         }
 
         //------------------------------------------------------------------------//
@@ -718,7 +727,7 @@
         // its own: O.buttonMenu mirrors the hidden #helpTools buttons, exactly
         // as the other two editors mirror their file buttons.
 
-        const IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || '' );
+        const IS_MAC = NayiveUI.isMac;
         const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
 
         // CodeMirror's own keys (its default keymap, the search and
@@ -774,41 +783,17 @@
         // Wrap and indent belong to the PERSON, not to the screen: pick two-space
         // indenting on the PC and the tablet should follow. So beside the device
         // copy in localStorage they are kept in data/text/config.json, exactly as
-        // Write and Calc keep theirs. Read-modify-write, so a key added to this
-        // file later (a default folder, say) is never clobbered.
-
-        let cfgWarned = false;   // "your saved settings could not be read" is said once
-
-        // Nothing saved yet (a 404) is {}. Any other failure - offline, a 5xx,
-        // bad JSON - throws: a file that could not be read must never be
-        // written over with just the one key being changed.
-        async function readTextCfg()
-        {
-            const cfg = await GumApi.readJson( TEXT_CFG );
-            if( cfg !== null && ( typeof cfg !== 'object' || Array.isArray( cfg ) ) ) throw new Error( TEXT_CFG + ' is not an object' );
-            return cfg || {};
-        }
-
-        async function writeTextCfg( patch )
-        {
-            let cfg;
-            try { cfg = await readTextCfg(); }
-            catch( _ )
-            {
-                // The device copy has it already; the account's is left alone.
-                if( ! cfgWarned ) { cfgWarned = true; NayiveUI.toast( T( 'ui.prefsUnread' ) ); }
-                return;
-            }
-            Object.assign( cfg, patch );
-            try { await GumApi.writeJson( TEXT_CFG, cfg ); } catch( _ ) {}
-        }
+        // Write and Calc keep theirs (textCfg: shared/office.js, appConfig).
+        // Read-modify-write, so a key added to this file later (a default folder,
+        // say) is never clobbered; when it cannot be read nothing is written -
+        // the device copy has the change already, the account's is left alone.
 
         // Boot only, and one way: it APPLIES what the account says and never writes
         // back, so two devices cannot push each other in circles.
         async function syncCfg()
         {
             let cfg;
-            try { cfg = await readTextCfg(); }
+            try { cfg = await textCfg.read(); }
             catch( _ ) { return; }   // offline, or unreadable: the device copy stands
 
             if( typeof cfg.wrap === 'boolean' && cfg.wrap !== lineWrap ) applyWrap( cfg.wrap );
@@ -1133,7 +1118,7 @@
         function toggleWrap()
         {
             applyWrap( ! lineWrap );
-            writeTextCfg( { wrap: lineWrap } );
+            textCfg.write( { wrap: lineWrap } );
             editor.focus();
         }
 

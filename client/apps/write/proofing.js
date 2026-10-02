@@ -10,9 +10,9 @@
  * The dictionaries and all the checking live in proofing-worker.js. Finding a
  * misspelling is instant; finding what you meant costs about a second a word,
  * and doing that here froze the document after every file opened (see the
- * worker's header). So a check answers straight away with whatever suggestions
- * are already known, and the rest arrive in the background - the next check
- * and the right-click menu (suggestionsFor) pick them up.
+ * worker's header). So a check answers straight away with where the words
+ * are, and the suggestions arrive in the background - the right-click menu
+ * (suggestionsFor) picks them up.
  *
  * Grammar (kind: 'grammar' / 'style') is not covered yet — English-only grammar
  * via Harper is a later add. See lib/proofing/README.txt.
@@ -28,8 +28,7 @@ const DICT = {
     en: { aff: 'lib/proofing/en.aff', dic: 'lib/proofing/en.dic' },
     pt: { aff: 'lib/proofing/pt.aff', dic: 'lib/proofing/pt.dic' },
     fr: { aff: 'lib/proofing/fr.aff', dic: 'lib/proofing/fr.dic' },
-    de: { aff: 'lib/proofing/de.aff', dic: 'lib/proofing/de.dic' },
-    it: { aff: 'lib/proofing/it.aff', dic: 'lib/proofing/it.dic' }
+    de: { aff: 'lib/proofing/de.aff', dic: 'lib/proofing/de.dic' }
 };
 
 export const PROOF_LANGS = Object.keys( DICT );
@@ -125,44 +124,26 @@ export function resetProofing()
 
 // getLangs() returns the active language codes, e.g. ['es'] or ['es','en'].
 // A word is flagged only when NO active dictionary accepts it, and never when it
-// is in the user's own list.
+// is in the user's own list. check( { segments } ) resolves
+// { issues: [ { segmentId, start, end } ] } - where the flagged words are; their
+// suggestions are asked for separately (suggestionsFor).
 export function makeSpellProvider( getLangs )
 {
     getLangsFn = getLangs;
 
     return {
-        id: 'nayive-typo-spell',
-
-        getCapabilities: () => ( { issueKinds: [ 'spelling' ] } ),
-
-        check: ( { segments, maxSuggestions = 5, signal } ) => new Promise( function( resolve, reject )
+        check: ( { segments } ) => new Promise( function( resolve )
         {
-            signal?.throwIfAborted();
             if( dead ) { resolve( { issues: [] } ); return; }
 
             const langs = langsNow();
             const id    = nextId++;
-            const lk    = langs.join( ',' );
-
-            // A newer check can make this one pointless and abort it; drop it
-            // here, the worker's late answer is simply ignored.
-            signal?.addEventListener( 'abort', function()
-            {
-                if( pending.delete( id ) ) reject( signal.reason );
-            }, { once: true } );
 
             pending.set( id, function( found )
             {
                 resolve( { issues: found.map( function( f )
                 {
-                    return {
-                        segmentId   : f.segmentId,
-                        start       : f.start,
-                        end         : f.end,
-                        kind        : 'spelling',
-                        message     : NayiveUI.tf( 'write.notInDict', { word: f.word } ),
-                        replacements: ( sugg.get( lk + '|' + f.word ) || [] ).slice( 0, maxSuggestions )
-                    };
+                    return { segmentId: f.segmentId, start: f.start, end: f.end };
                 } ) } );
             } );
 

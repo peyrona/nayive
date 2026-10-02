@@ -3,7 +3,8 @@
  *
  * After N idle minutes the page is covered by an animation (a "locker") and
  * ONLY the account password takes it away (POST /api/unlock). Unlike a screen
- * saver, a key or a click does not end it: it only shows the password box.
+ * saver, a key or a click does not end it: it only shows the password box
+ * (a click on a locker's link opens that page in a new tab instead).
  *
  * Classic script, one global `NayiveLock`. Load it in <head>, WITHOUT defer,
  * right after theme.js, so a page that opens while locked is hidden from its
@@ -12,12 +13,14 @@
  *     <script src="../shared/locker.js"></script>
  *
  * STATE - all localStorage, so every tab and every desktop window share it:
- *   nayive-locker     {id, min, text}  the choice, PER DEVICE (launcher ›
- *                     My account). id "" = none; min >= 1, default 15;
+ *   nayive-locker     {v, id, min, text}  the choice, PER DEVICE (desktop's
+ *                     "⋮" menu). id "" = plain black; min 0 = never locks,
+ *                     else 1-999;
  *                     text = the line the bouncing clock shows under the time.
  *   nayive-lock       "1" while locked: a reload or a new tab stays locked.
  *   nayive-lock-seen  ms of the last activity in ANY tab or window.
  *
+ * Only desktop mode locks (see isDesk); phones never do.
  * Only the top window draws the locker; a page inside one of the desktop's
  * windows (an <iframe>) only reports its activity. A playing <video> (a
  * movie, a video call) counts as activity. Nothing happens while signed out.
@@ -41,7 +44,7 @@
     var SET_KEY  = "nayive-locker";
     var LOCK_KEY = "nayive-lock";
     var SEEN_KEY = "nayive-lock-seen";
-    var LOCKERS  = [ "clock", "matrix", "stars", "life" ];   // name = i18n "scrlock.<id>"
+    var LOCKERS  = [ "culture", "science", "clock", "matrix", "life" ];   // name = i18n "scrlock.<id>"
     var MIN_DEFAULT = 15;
     var TICK_MS  = 5000;       // how often the idle time is checked
     var WRITE_MS = 5000;       // activity is written at most this often
@@ -53,6 +56,11 @@
     var isTop = true;          // false = inside a Nayive page's <iframe>
     try { isTop = window.top === window || ! window.top.NayiveLock; } catch ( e ) {}
 
+    // DESKTOP MODE ONLY (2026-09-28): only the desktop page (desktop/) counts the
+    // idle time and locks. A phone never runs it, so a phone never locks; other
+    // pages only follow a lock the desktop already set.
+    var isDesk = isTop && /\/desktop\/(index\.html)?$/.test( location.pathname );
+
     function get( k )    { try { return localStorage.getItem( k ); } catch ( e ) { return null; } }
     function put( k, v ) { try { if( v == null ) localStorage.removeItem( k ); else localStorage.setItem( k, v ); } catch ( e ) {} }
     function t( k )      { return window.NayiveI18n ? NayiveI18n.t( k ) : k; }
@@ -60,21 +68,41 @@
     //------------------------------------------------------------------------//
     // SETTINGS
 
+    // v2 (2026-09-30): id "" is the plain BLACK screen, and min 0 turns the
+    // locking off. Before, id "" meant "off": such a setting (no v) - and no
+    // setting at all - reads as min 0, so nobody starts locking unasked.
     function settings()
     {
         var s = null;
         try { s = JSON.parse( get( SET_KEY ) || "null" ); } catch ( e ) {}
         s = s || {};
+        var id  = LOCKERS.indexOf( s.id ) >= 0 ? s.id : "";
         var min = Math.floor( Number( s.min ) );
-        return { id:   LOCKERS.indexOf( s.id ) >= 0 ? s.id : "",
-                 min:  min >= 1 ? min : MIN_DEFAULT,
+        if( ! s.v && ! id ) min = 0;
+        return { v:    2,
+                 id:   id,
+                 min:  min >= 0 ? Math.min( min, 999 ) : MIN_DEFAULT,
                  text: typeof s.text === "string" ? s.text : "" };
     }
 
     // Merges `part` into the saved settings; returns the clean result.
+    // A locker this copy of the file does not know (a newer build's, chosen in
+    // another tab or kept by an older cached copy) is KEPT, never turned into
+    // black: with it, saving the minutes wiped the choice.
     function save( part )
     {
+        var raw = null;
+        try { raw = JSON.parse( get( SET_KEY ) || "null" ); } catch ( e ) {}
         var s = settings();
+        if( raw && typeof raw.id === "string" && raw.id && LOCKERS.indexOf( raw.id ) < 0 &&
+            ! Object.prototype.hasOwnProperty.call( part, "id" ) )
+        {
+            for( var j in part ) if( Object.prototype.hasOwnProperty.call( part, j ) ) s[ j ] = part[ j ];
+            s.id = raw.id;
+            put( SET_KEY, JSON.stringify( s ) );
+            poke( true );
+            return settings();
+        }
         for( var k in part ) if( Object.prototype.hasOwnProperty.call( part, k ) ) s[ k ] = part[ k ];
         put( SET_KEY, JSON.stringify( s ) );
         s = settings();
@@ -112,9 +140,9 @@
     function tick()
     {
         var s = settings();
-        if( ! s.id || ! signedIn() || locked() ) return;
+        if( ! s.min || ! signedIn() || locked() ) return;
         if( videoPlaying() ) { poke(); return; }
-        if( isTop && Date.now() - ( Number( get( SEEN_KEY ) ) || 0 ) >= s.min * 60000 ) lock();
+        if( isDesk && Date.now() - ( Number( get( SEEN_KEY ) ) || 0 ) >= s.min * 60000 ) lock();
     }
 
     [ "pointerdown", "pointermove", "keydown", "wheel", "touchstart" ].forEach( function ( ev )
@@ -127,7 +155,7 @@
 
     function lock()
     {
-        if( ! signedIn() ) return;
+        if( ! isDesk || ! signedIn() ) return;
         put( LOCK_KEY, "1" );
         show();
     }
@@ -193,6 +221,7 @@
     {
         dlg = document.createElement( "dialog" );
         dlg.className = "lock-dlg";
+        dlg.tabIndex = -1;                       // hideCard gives it the focus back
 
         host = document.createElement( "div" );
         host.className = "lock-host";
@@ -238,9 +267,27 @@
         dlg.addEventListener( "close",  function () { if( dlg && locked() ) dlg.showModal(); } );
 
         // Any key or press shows the password box. The key is not lost: the
-        // focus moves before it is typed, so it lands in the box.
-        dlg.addEventListener( "keydown", showCard );
-        dlg.addEventListener( "pointerdown", showCard );
+        // focus moves before it is typed, so it lands in the box. Esc too
+        // opens it (2026-09-30, his call); while it shows, Esc or a press
+        // outside it hides it again; the locker runs on.
+        dlg.addEventListener( "keydown", function ( e )
+        {
+            if( e.key !== "Escape" ) { showCard(); return; }
+            e.preventDefault();
+            if( card.hidden ) showCard(); else hideCard();
+        } );
+        dlg.addEventListener( "pointerdown", function ( e )
+        {
+            // A locker's link (a news story, a painting...) opens in a new
+            // tab of the browser; the lock stays, the password box does not come up.
+            if( e.target.closest && e.target.closest( ".lock-host a[href]" ) ) return;
+            if( card.hidden || card.contains( e.target ) ) showCard();
+            else { e.preventDefault(); hideCard(); }
+        } );
+        // The press's own default action then focuses the dialog (tabIndex -1)
+        // and takes the caret out of the password box: only a press on the box
+        // itself may move it (a button still gets its click).
+        dlg.addEventListener( "mousedown", function ( e ) { if( e.target !== inp ) e.preventDefault(); } );
 
         dlg.showModal();
         startLocker();
@@ -261,11 +308,15 @@
         if( card.hidden ) { card.hidden = false; msg.hidden = true; }
         if( document.activeElement !== inp && ! inp.disabled ) inp.focus();
         clearTimeout( cardTimer );
-        cardTimer = setTimeout( function ()
-        {
-            if( ! card || busy ) return;
-            card.hidden = true; inp.value = ""; inp.blur();
-        }, CARD_MS );
+        cardTimer = setTimeout( function () { if( ! busy ) hideCard(); }, CARD_MS );
+    }
+
+    function hideCard()
+    {
+        if( ! card || busy ) return;
+        clearTimeout( cardTimer );
+        card.hidden = true; inp.value = "";
+        dlg.focus();                             // not inp.blur(): the keys must still reach dlg
     }
 
     function say( key )

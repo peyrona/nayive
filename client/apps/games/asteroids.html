@@ -2,7 +2,7 @@
 
      Not a page of its own: index.html fetches this file at boot and takes
      out its three parts: the style goes into its head, the pane into
-     #gameHost, and the script runs, reaching the helpers the six games
+     #gameHost, and the script runs, reaching the helpers the nine games
      share through window.NayiveGames. -->
     <style>
         /* ---- Asteroids -----------------------------------------------------
@@ -122,7 +122,7 @@
 
                     <div class="ast-area">
                         <canvas class="ast-canvas" id="astCanvas" tabindex="0" data-i18n-attr="aria-label:games.asteroids"></canvas>
-                        <div class="game-cover tappable ast-over" id="astOver" hidden>
+                        <div class="game-cover tappable" id="astOver" hidden>
                             <p class="game-cover-t" id="astOverTitle"></p>
                             <p class="game-cover-s" id="astOverSub"></p>
                             <button class="text-btn" id="astOverBtn" type="button"></button>
@@ -153,7 +153,7 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE SIX GAMES"): the same twelve
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
         // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
@@ -353,13 +353,6 @@
                     if( ! dust.length ) A.loop.halt();
                     return;
                 }
-
-                // Any dialog over the app pauses it, the same rule Space
-                // Invaders has: the help sheet, the install prompt and "session
-                // expired" all cover the pane and swallow the keys (see onKey),
-                // and a ship that cannot be steered is a ship drifting into a
-                // rock.
-                if( document.querySelector( '.sheet-backdrop.open' ) ) { A.pause(); return; }
 
                 if( ship ) fly();
                 else
@@ -770,8 +763,18 @@
             {
                 var k = KEYS[ e.key ], el = e.target;
 
-                if( ! A.isLive() || ! k || e.ctrlKey || e.altKey || e.metaKey ) return;
+                if( ! A.isLive() || e.ctrlKey || e.altKey || e.metaKey ) return;
                 if( keyBusy( e ) ) return;
+
+                // P pauses and resumes, as in Space Invaders and Tetris.
+                if( e.key === 'p' || e.key === 'P' )
+                {
+                    if( state === 'paused' ) A.resume(); else A.pause();
+                    e.preventDefault();
+                    return;
+                }
+
+                if( ! k ) return;
 
                 // Space belongs to whatever button has the focus - the overlay's
                 // own, or "new game" in the toolbar. Taking it here as well

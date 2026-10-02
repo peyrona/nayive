@@ -1551,6 +1551,17 @@ func (s *Server) chatStore(a chatActor, c *chatConv, m *ChatMsg) {
 // store adds a new message to one of `o`'s conversations: id, rev, the
 // sender's read cursor, disk, notifications. Caller holds h.mu and has set m.ID.
 func (h *ChatHub) store(o *chatOwner, c *chatConv, m *ChatMsg) {
+	h.record(o, c, m)
+	if who := o.typing[c.id]; who != nil {
+		delete(who, m.From)
+	}
+	h.announce(o, c, m)
+}
+
+// record is store without the notifications: id, rev, the sender's read
+// cursor, disk. A call's bubble (endCall) goes in this way - its call already
+// rang. Caller holds h.mu and has set m.ID.
+func (h *ChatHub) record(o *chatOwner, c *chatConv, m *ChatMsg) {
 	c.st.Next = m.ID + 1
 	c.msgs = append(c.msgs, m)
 	c.byID[m.ID] = m
@@ -1558,12 +1569,8 @@ func (h *ChatHub) store(o *chatOwner, c *chatConv, m *ChatMsg) {
 		c.cids[m.From+"|"+m.CID] = m.ID
 	}
 	c.st.Read[m.From] = m.ID
-	if who := o.typing[c.id]; who != nil {
-		delete(who, m.From)
-	}
 	o.bump(c, m)
 	h.saveMonth(c, m)
-	h.announce(o, c, m)
 }
 
 // chatLater: texts scheduled for a time to come (chat.go "LATER").

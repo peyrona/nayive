@@ -125,7 +125,3 @@ export const QUIRKS =
 
 // Q.loadFiresChange and friends - what write.js reads.
 export const Q = Object.freeze( QUIRKS.reduce( function ( o, q ) { o[ q.id ] = q.value; return o; }, {} ) );
-
-// The version every record above was last checked against.
-export const VERIFIED_ON = QUIRKS.reduce(
-    function ( v, q ) { return v && v === q.verifiedOn ? v : ( v === null ? q.verifiedOn : ( v === q.verifiedOn ? v : 'mixed' ) ); }, null );

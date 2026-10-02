@@ -13,6 +13,10 @@
  * hides the rows at once and offers Undo too: the server deletes them only
  * when the Undo is gone (or the page closes). Empty Trash asks once.
  *
+ * THE PICK DIALOG's fields leave only the matching rows in sight, all ticked,
+ * to untick the ones to spare before the action; leaving the picking (or the
+ * action) brings every row back.
+ *
  * PARTLY DONE. Every call goes account by account, and a server may refuse
  * some messages one by one ("failed"): what went through leaves the list,
  * what did not stays, and the toast says how many.
@@ -21,7 +25,7 @@
 {
     "use strict";
 
-    var E = window.NayiveMail, S = E.S;
+    var E = window.NayiveMail, S = E.S, h = E.h;
 
     // ---------------------------------------------------------------------
     // picking several
@@ -50,6 +54,7 @@
         S.selecting = false;
         S.sel.forEach( function ( m ) { if( m._row ) m._row.classList.remove( "is-picked" ); } );
         S.sel.clear();
+        showOnly( null );
         document.body.classList.remove( "selecting" );
         E.syncBar();
     };
@@ -67,7 +72,7 @@
         var writing = E.isComposing && E.isComposing();
         var reading = !! S.open && ! writing, picking = S.selecting && ! reading && ! writing;
         var list = targets(), n = list.length;
-        E.$( "backBtn" ).hidden = ! reading && ! picking && ! writing;
+        E.$( "backBtn" ).hidden = ! ( reading && ! E.split ) && ! picking && ! writing;     // split: the list is there
         E.$( "actions" ).hidden = ! reading && ! picking;
         var count = E.$( "selCount" );
         count.hidden = ! picking;
@@ -80,7 +85,7 @@
         function show( id, on ) { E.$( id ).hidden = ! on; E.$( id ).disabled = n === 0; }
         show( "actAll",      picking && S.items.length > 0 );
         E.$( "actAll" ).disabled = false;
-        E.$( "actAll" ).classList.toggle( "is-on", picking && S.items.length > 0 && S.items.every( function ( m ) { return S.sel.has( m ); } ) );
+        E.$( "actAll" ).classList.toggle( "is-on", picking && everyPicked() );
         show( "actReply",    reading );
         show( "actReplyAll", reading );
         show( "actForward",  reading );
@@ -100,6 +105,115 @@
     };
 
     // ---------------------------------------------------------------------
+    // the pick dialog (the tick-all button)
+    // ---------------------------------------------------------------------
+
+    // The rows in sight: the dialog's matches, or every one.
+    function pool() { return S.only ? S.items.filter( function ( m ) { return S.only.has( m ); } ) : S.items; }
+
+    function everyPicked() { var p = pool(); return p.length > 0 && p.every( function ( m ) { return S.sel.has( m ); } ); }
+
+    // showOnly( list ): only these rows in sight (null = every row again)
+    function showOnly( list )
+    {
+        if( ! list && ! S.only ) return;
+        S.only = list ? new Set( list ) : null;
+        S.items.forEach( function ( m ) { if( m._row ) m._row.hidden = !! S.only && ! S.only.has( m ); } );
+    }
+
+    function setPicked( list )
+    {
+        S.items.forEach( function ( m )
+        {
+            var on = list.indexOf( m ) >= 0;
+            if( on ) S.sel.add( m ); else S.sel.delete( m );
+            if( m._row ) m._row.classList.toggle( "is-picked", on );
+        } );
+        E.syncBar();
+    }
+
+    function openPick()
+    {
+        var every = everyPicked();
+        E.$( "pickAllBtn" ).textContent = E.T( every ? "mail.pickNone" : "mail.pickAll" );
+        var sel = E.$( "pickLabel" ), was = sel.value;
+        sel.textContent = "";
+        sel.appendChild( h( "option", { text: E.T( "mail.pickAny" ), attrs: { value: "" } } ) );
+        S.labels.forEach( function ( l ) { sel.appendChild( h( "option", { text: l.name, attrs: { value: l.id } } ) ); } );
+        sel.value = S.labels.some( function ( l ) { return l.id === was; } ) ? was : "";
+        E.$( "pickLabel" ).parentNode.hidden = ! S.labels.length;
+        NayiveUI.open( "pickSheet" );
+    }
+
+    // Every page of this list, so the fields see all of it (a label's list
+    // is one page), with a bar in the middle of the screen while it reads.
+    // Stops when the list on screen changes, or on the bar's ✕.
+    var stopped = false;
+
+    async function loadAll()
+    {
+        var gen = S.gen;
+        stopped = false;
+        try
+        {
+            for( var i = 0; i < 100 && S.next && ! S.label && gen === S.gen && ! stopped; i++ )
+            {
+                progress();
+                while( S.loading && gen === S.gen ) await new Promise( function ( ok ) { setTimeout( ok, 150 ); } );
+                if( gen !== S.gen || ! S.next || stopped ) break;
+                await E.loadList( true );
+            }
+        }
+        finally { E.bar( null ); }
+        return gen === S.gen && ! stopped;
+    }
+
+    // The bar: the rows read of the tray's total (a search has no total:
+    // just how many so far, the fill sliding).
+    function progress()
+    {
+        var t = ! S.query && S.trays.filter( function ( x ) { return x.role === S.tray; } )[ 0 ];
+        var n = S.items.length, total = ( t && t.total ) || 0;
+        E.bar( total ? E.TF( "mail.pickReading", { n: n, total: total } ) : E.TF( "mail.pickReadingN", { n: n } ),
+               total ? n * 100 / total : null, function () { stopped = true; } );
+    }
+
+    async function pickMatching()
+    {
+        var days = +E.$( "pickOlder" ).value, seen = E.$( "pickSeen" ).value;
+        var from = E.$( "pickFrom" ).value.trim().toLowerCase(), subj = E.$( "pickSubject" ).value.trim().toLowerCase();
+        var label = E.$( "pickLabel" ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
+        var before = days ? Date.now() - days * 86400000 : 0;
+        NayiveUI.close( "pickSheet" );
+        if( ! await loadAll() ) return;
+        var list = S.items.filter( function ( m )
+        {
+            if( before && ! ( new Date( m.date ).getTime() < before ) ) return false;
+            if( seen === "unread" && m.seen ) return false;
+            if( seen === "read" && ! m.seen ) return false;
+            if( from && ! ( m.from || [] ).some( function ( a ) { return ( ( a.name || "" ) + " " + ( a.addr || "" ) ).toLowerCase().indexOf( from ) >= 0; } ) ) return false;
+            if( subj && ( m.subject || "" ).toLowerCase().indexOf( subj ) < 0 ) return false;
+            if( label && ( m.labels || [] ).indexOf( label ) < 0 ) return false;
+            if( attach && ! m.attach ) return false;
+            if( starred && ! m.flagged ) return false;
+            return true;
+        } );
+        NayiveUI.toast( E.TF( "mail.pickedN", { n: list.length } ) );
+        if( ! list.length ) return;
+        // only the matches in sight, all ticked: a tap unticks the ones to spare
+        showOnly( list );
+        setPicked( list );
+        E.$( "listView" ).parentNode.scrollTop = 0;
+    }
+
+    E.$( "pickAllBtn" ).addEventListener( "click", function ()
+    {
+        NayiveUI.close( "pickSheet" );
+        setPicked( everyPicked() ? [] : pool() );
+    } );
+    E.$( "pickGoBtn" ).addEventListener( "click", pickMatching );
+
+    // ---------------------------------------------------------------------
     // the calls
     // ---------------------------------------------------------------------
 
@@ -107,28 +221,40 @@
     // targets that went through (not those of an account that failed, nor
     // those its server refused one by one) - and what went wrong, if anything.
     // A move also answers `moved`: target -> its new ref, where the server
-    // told it.
+    // told it. A big pick goes in pieces (E.CHUNK), the bar in the middle
+    // of the screen (E.job) counting them; an account whose piece failed is left.
     async function perAccount( list, path, body )
     {
         var groups = {}, out = { done: [], err: null, refused: 0, moved: new Map() };
         list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m ); } );
-        for( var acct in groups )
+        var job = E.job( list.length ), sent = 0;
+        try
         {
-            var b = Object.assign( { refs: groups[ acct ].map( function ( m ) { return m.ref; } ) }, body || {} );
-            try
+            for( var acct in groups )
             {
-                var data = await E.api( "POST", encodeURIComponent( acct ) + "/" + path, b );
-                var failed = {};
-                ( ( data && data.failed ) || [] ).forEach( function ( r ) { failed[ r ] = true; } );
-                groups[ acct ].forEach( function ( m )
+                var pieces = E.chunks( groups[ acct ] );
+                for( var i = 0; i < pieces.length; i++ )
                 {
-                    if( failed[ m.ref ] ) { out.refused++; return; }
-                    out.done.push( m );
-                    if( data && data.moved && data.moved[ m.ref ] ) out.moved.set( m, data.moved[ m.ref ] );
-                } );
+                    job.step( sent );
+                    var b = Object.assign( { refs: pieces[ i ].map( function ( m ) { return m.ref; } ) }, body || {} );
+                    try
+                    {
+                        var data = await E.api( "POST", encodeURIComponent( acct ) + "/" + path, b );
+                        var failed = {};
+                        ( ( data && data.failed ) || [] ).forEach( function ( r ) { failed[ r ] = true; } );
+                        pieces[ i ].forEach( function ( m )
+                        {
+                            if( failed[ m.ref ] ) { out.refused++; return; }
+                            out.done.push( m );
+                            if( data && data.moved && data.moved[ m.ref ] ) out.moved.set( m, data.moved[ m.ref ] );
+                        } );
+                    }
+                    catch( err ) { out.err = out.err || err; break; }
+                    sent += pieces[ i ].length;
+                }
             }
-            catch( err ) { out.err = out.err || err; }
         }
+        finally { job.end(); }
         return out;
     }
 
@@ -212,17 +338,8 @@
             var list = targets();
             setFlags( list, { flagged: ! list.every( function ( m ) { return m.flagged; } ) } );
         },
-        // picking: every row loaded ticks (or, all ticked, none)
-        all:     function ()
-        {
-            var every = S.items.length > 0 && S.items.every( function ( m ) { return S.sel.has( m ); } );
-            S.items.forEach( function ( m )
-            {
-                if( every ) S.sel.delete( m ); else S.sel.add( m );
-                if( m._row ) m._row.classList.toggle( "is-picked", ! every );
-            } );
-            E.syncBar();
-        },
+        // picking: the dialog - All, or the rows that match some fields
+        all:     function () { openPick(); },
         // to Spam, with Undo: each back to the tray it came from, by the new
         // ref the server answered for it (a server that does not tell it - an
         // IMAP one without UIDPLUS - gets no Undo; "Not spam" still works)
@@ -259,7 +376,18 @@
                     {
                         var groups = {};
                         list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m.mid ); } );
-                        for( var acct in groups ) await E.api( "POST", encodeURIComponent( acct ) + "/restore", { mids: groups[ acct ] } );
+                        var job = E.job( list.length ), sent = 0;
+                        try
+                        {
+                            for( var acct in groups )
+                                for( var piece of E.chunks( groups[ acct ] ) )
+                                {
+                                    job.step( sent );
+                                    await E.api( "POST", encodeURIComponent( acct ) + "/restore", { mids: piece } );
+                                    sent += piece.length;
+                                }
+                        }
+                        finally { job.end(); }
                         E.loadList( false );
                     } );
                 } );
@@ -316,9 +444,14 @@
             var yes = await NayiveUI.confirm( { title: E.T( spam ? "mail.emptySpamAsk" : "mail.emptyTrashAsk" ), body: E.T( "mail.cannotUndo" ),
                                                 confirm: E.T( spam ? "mail.emptySpam" : "mail.emptyTrash" ), danger: true } );
             if( ! yes ) return;
+            // one call does it all: the bar slides while it works (E.job)
+            var t = S.trays.filter( function ( x ) { return x.role === S.tray; } )[ 0 ];
+            var n = ( t && t.total ) || Math.max( S.items.length, E.MANY );
             run( async function ()
             {
-                var r = await E.api( "POST", encodeURIComponent( S.acct ) + ( spam ? "/spam/empty" : "/trash/empty" ), {} );
+                var job = E.job( n, E.T( spam ? "mail.emptyingSpam" : "mail.emptyingTrash" ) ), r;
+                try { r = await E.api( "POST", encodeURIComponent( S.acct ) + ( spam ? "/spam/empty" : "/trash/empty" ), {} ); }
+                finally { job.end(); }
                 NayiveUI.toast( E.TF( spam ? "mail.emptiedSpam" : "mail.emptied", { n: r.deleted || 0 } ) );
                 E.loadList( false );
             } );
@@ -334,7 +467,7 @@
         if( S.label )
         {
             var off = list.filter( function ( m ) { return ( m.labels || [] ).indexOf( S.label ) < 0; } );
-            if( off.length && ! S.open ) E.dropRows( off );
+            if( off.length && E.listShown() ) E.dropRows( off );
         }
         E.syncBar();
     };

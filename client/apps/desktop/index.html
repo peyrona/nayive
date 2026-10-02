@@ -1,23 +1,25 @@
 <!-- desktop/index.html - the desktop for big screens (2026-09-23). The launcher sends
-     a big screen here (at least 1024 x 600 with a mouse; see the <head> of
-     ../index.html), unless this device's settings say otherwise.
+     a big screen here (at least 1024 x 600 with a mouse, or as this device's "Open
+     the desktop" says - see the <head> of ../index.html and OPEN THE DESKTOP).
+     On a tablet (2026-10-01): finger-sized buttons, a long press for the "⋮",
+     Tile by itself when held upright, and the window in front kept clear of
+     the on-screen keyboard (see TOUCH, UPRIGHT, KEYBOARD).
 
      One bar (bottom by default): on its left the menu button, which pops up the real
      launcher (../index.html, framed); then one button per open window, in the order
      they were opened, named after the document it shows; on its right a clock
      ("<weekday> <hh:mm>" by default) - a press on it opens a countdown, whose
      time left then sits on the bar just before the clock; after the clock a "?" opens
-     the desktop's help card. The desktop's settings - per device: how it
-     starts, the bar and its font, the clock - open from two places only:
-     the round button in the menu's bottom-left corner, and a right-click on an
-     empty spot of the desk (not the bar).
+     the desktop's help card. The desktop's settings - per device: the clock,
+     the bar's place and height - live in the "⋮" menu after the clock, which a
+     right-click on an empty spot of the desk (not the bar) opens too.
 
      Every app runs in its own window - a same-origin <iframe>. An app whose top row
      holds its icon, name and toolbar uses that row as the title bar (close /
      minimise / maximise dots at its start, see adoptHead); the others get a bar of
-     ours. Windows drag, resize from any edge, snap to half the desk at the left /
-     right edge and fill it at the top edge, and come back where they were the next
-     time the desktop opens. A phone-sized screen is sent to the launcher. -->
+     ours. Windows drag, resize from any edge, and - with "Sticky windows" on (the "⋮"
+     menu) - snap to half the desk at its left / right / top / bottom edge; they come
+     back where they were the next time the desktop opens. A phone-sized screen is sent to the launcher. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -95,7 +97,7 @@
         .desk
         {
             position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
-            isolation: isolate;          /* window z-indexes stay under the settings dialog */
+            isolation: isolate;          /* window z-indexes stay under the dialogs */
             background: var(--desk-bg);
             --engrave-groove: color-mix(in srgb, var(--desk-bg) 55%, #000);
             --engrave-lit:    color-mix(in srgb, var(--desk-bg) 88%, #fff);
@@ -128,8 +130,8 @@
         .snap-ghost
         {
             position: absolute; z-index: 99999; pointer-events: none;
-            border: 2px solid var(--accent); border-radius: var(--radius-m);
-            background: color-mix(in srgb, var(--accent) 14%, transparent);
+            border: 3px dotted var(--accent); border-radius: var(--radius-m);
+            background: color-mix(in srgb, var(--accent) 22%, transparent);
         }
         .snap-ghost[hidden] { display: none; }
 
@@ -183,14 +185,35 @@
         .grip.ne { right: calc(-4 * var(--win-px)); top: calc(-4 * var(--win-px));    cursor: nesw-resize; }
         .grip.sw { left: calc(-4 * var(--win-px));  bottom: calc(-4 * var(--win-px)); cursor: nesw-resize; }
         .win.max .grip { display: none; }
+        /* A finger drags these: the browser must not take the press for a scroll. */
+        .win-bar, .grip { touch-action: none; }
 
-        /* THE BAR - its height and font come from the settings. */
+        /* ON-SCREEN KEYBOARD (see KEYBOARD): the window in front, made shorter
+           down to the keyboard's edge - also when that is under 200px or the
+           window is maximised. */
+        .win.kb       { min-height: 0; }
+        .win.max.kb   { height: var(--kb-h) !important; }
+
+        /* TOUCH (a touch screen: a tablet; see TOUCH) - finger-sized resize
+           edges, window buttons and countdown buttons; the bar's own floor is in
+           applyLayout. A PC with no touch screen never gets body.touch. */
+        body.touch .grip.n, body.touch .grip.s { left: calc(16 * var(--win-px)); right: calc(16 * var(--win-px)); height: calc(20 * var(--win-px)); }
+        body.touch .grip.e, body.touch .grip.w { top: calc(16 * var(--win-px)); bottom: calc(16 * var(--win-px)); width: calc(20 * var(--win-px)); }
+        body.touch .grip.n  { top: calc(-10 * var(--win-px)); }    body.touch .grip.s  { bottom: calc(-10 * var(--win-px)); }
+        body.touch .grip.e  { right: calc(-10 * var(--win-px)); }  body.touch .grip.w  { left: calc(-10 * var(--win-px)); }
+        body.touch .grip.ne, body.touch .grip.nw, body.touch .grip.se, body.touch .grip.sw { width: calc(32 * var(--win-px)); height: calc(32 * var(--win-px)); }
+        body.touch .grip.nw { left: calc(-12 * var(--win-px));  top: calc(-12 * var(--win-px)); }
+        body.touch .grip.se { right: calc(-12 * var(--win-px)); bottom: calc(-12 * var(--win-px)); }
+        body.touch .grip.ne { right: calc(-12 * var(--win-px)); top: calc(-12 * var(--win-px)); }
+        body.touch .grip.sw { left: calc(-12 * var(--win-px));  bottom: calc(-12 * var(--win-px)); }
+
+        /* THE BAR - its place and height come from the settings (the "⋮" menu). */
         .bar
         {
             display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
             height: var(--bar-h); padding: 0 8px;
             border-top: 1px solid var(--desk-edge); background: var(--desk-bar);
-            font-family: var(--bar-font, var(--font-sans));
+            font-family: var(--font-sans);
         }
         .bar button { font-family: inherit; position: relative; }   /* position: holds the Chat and eMail dots */
         /* Unread Chat (red) and eMail (blue), see CHAT and EMAIL below. On the
@@ -206,7 +229,7 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 10px; font-weight: 700; line-height: 1; color: #fff;
         }
-        .bar .task > .chat-dot.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon, clear of the name */
+        .bar .task > .chat-dot.has-count { top: 1px; right: auto; left: 3px; }   /* over the app icon */
         .bar .chat-dot[hidden]   { display: none; }   /* .has-count's flex would beat app.css's */
 
         /* The menu button carries the Nayive logo, sized to the bar. */
@@ -217,26 +240,28 @@
 
         .tasks { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; overflow: hidden; }
 
-        /* A window's button: the shared quiet .text-btn.ghost, narrowed to fit a bar. */
-        .task { flex: 0 1 190px; min-width: 44px; height: calc(var(--bar-h) - 14px);
-                justify-content: flex-start; padding: 0 10px; font-weight: 500; }
-        .task > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* A window's button: the shared quiet .text-btn.ghost, narrowed to fit a bar.
+           Only the app's icon - no name; the tooltip says the app and its document. */
+        .task { flex: 0 0 auto; width: calc(var(--bar-h) - 8px); min-width: 0; height: calc(var(--bar-h) - 14px);
+                justify-content: center; padding: 0; font-weight: 500; }
+        .task > span:first-of-type { display: none; }
         .task svg { color: var(--accent); }
-        /* Desktop-only state: the window in front gets an accent underline; a minimised one fades. */
+        /* Desktop-only state: the window in front gets an accent border; one behind
+           keeps the plain solid --line; a minimised one fades behind a dashed border. */
         .task.front { color: var(--text); border-color: var(--accent);
                       background: color-mix(in srgb, var(--accent) 12%, transparent); }
-        .task.min   { opacity: 0.6; }
+        .task.min   { opacity: 0.6; border-style: dashed; border-color: var(--text-dim); }
+        /* A window behind others (or minimised) with a dialog open: an amber dot at
+           the icon's foot, clear of the unread disc on top. See DIALOG MARK. */
+        .task.has-dialog::after { content: ''; position: absolute; bottom: 3px; left: 3px; width: 8px; height: 8px;
+                                  border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 1.5px var(--bg); }
         /* THE WINDOW'S BUTTONS - Scale / Resize, minimise, maximise, close - at the
            right end of the bar button of the window IN FRONT only (the others show
-           just their icon and name): small .icon-btn's sized to the bar, each in the
+           just their icon): small .icon-btn's sized to the bar, each in the
            colour the old title-bar dots had, Scale / Resize in blue (--win-scale). */
-        .task           { padding-right: 3px; }
-        /* The one in front keeps the others' size (190px) while its name, 1rem and
-           its buttons fit in it - the buttons then at its right end. A longer name
-           widens it, 1rem always between name and buttons, up to 300px; past that
-           the name is cut (...). */
-        .task.front     { flex: 0 1 auto; min-width: 190px; max-width: 300px; }
-        .task.front > span:first-of-type { margin-right: calc(1rem - 6px); }   /* + .text-btn's 6px gap = 1rem */
+        /* The one in front grows to its icon, 1rem, then its buttons. */
+        .task.front     { width: auto; padding: 0 3px 0 10px; }
+        .task.front > svg { margin-right: calc(1rem - 6px); }   /* + .text-btn's 6px gap = 1rem */
         .task > .task-ctl { display: flex; flex: 0 0 auto; margin-left: auto; overflow: visible; }
         .task:not(.front) > .task-ctl { display: none; }
         .task-ctl > .task-x, #cdChip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
@@ -248,18 +273,37 @@
         .task-ctl > [data-win="close"] { color: var(--danger); }
         #cdChip > .task-x svg   { width: 12px; height: 12px; color: inherit; }
         #cdChip > .task-x:hover { color: var(--text); }
+        body.touch .task-ctl > .task-x, body.touch #cdChip > .task-x { width: 36px; height: 36px; }
+        body.touch .task-ctl > .task-x svg { width: 18px; height: 18px; }
+        body.touch #cdChip > .task-x svg   { width: 16px; height: 16px; }
 
         /* The "⋮" sits closer to its neighbours: half the room a plain .icon-btn
            leaves on each side (his call for the "?" it replaced, 2026-09-28).
-           Margins only - the button is the shared .icon-btn. Its right side counts
-           the sync dot when it shows, the bar's end when it does not. */
-        #moreBtn { margin: 0 -8px 0 -13px; }
-        #moreBtn:has(+ #syncIndicator:not([hidden])) { margin-right: -10px; }
+           Margins only - the button is the shared .icon-btn. */
+        #moreBtn { margin: 0 -4px 0 -13px; }
+        /* The "?" after it (back on the bar, 2026-09-28): the same tight room. It
+           ends the bar: the sync plug floats off it as a chip (theme.css). */
+        #helpBtn { margin: 0 -8px 0 -4px; }
         #moreBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 14%, transparent); }
         /* Its menu: the shared .top-menu, above the windows; the Free/Tile switch
            is a row of it, as tall as a .menu-item. */
         #moreMenu { z-index: 100000; }
         #moreMenu .tile-sw { padding: 8px 12px; }
+        /* Sticky windows, the clock and the bar: rows of the menu with the shared
+           .switch, a <select> or the height slider at their end. */
+        #moreMenu .menu-item > .switch,
+        #moreMenu .menu-item > select { margin-left: auto; }
+        #moreMenu .menu-item > select { width: auto; min-width: 0; padding: 4px 8px; }
+        #moreMenu .set-range          { margin-left: auto; width: 150px; }
+        /* The screen locker: its <select> first, the minutes at the end; the
+           clock's text row hides unless the clock is picked. */
+        #moreMenu .lock-row > select  { margin-left: 0; }
+        #moreMenu .lock-min           { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); }
+        #moreMenu #lockMin            { width: calc(4.5em + 10px); text-align: center; }
+        #moreMenu #lockText           { margin-left: auto; width: 150px; }
+        #moreMenu .menu-item[hidden]  { display: none; }
+        /* The (i) dots of the menu: their popup must sit above it. */
+        .info-popup { z-index: 100001; }
 
         /* THE TILE SWITCH (see TILE / UNTILE): "Free ()== Tile" - the shared .switch
            between two words. A word picks its side, the switch flips; the side in
@@ -271,12 +315,29 @@
         .tile-sw.on .tile-word[data-tile="on"] { color: var(--text); font-weight: 600; }
         .tile-sw.idle { opacity: 0.5; }
         .tile-sw.idle .tile-word { cursor: default; }
+        .tile-sw.idle .switch input:disabled + .track { opacity: 1; }   /* the row is dimmed already */
+
+        /* WEATHER - the bar's sky icon and its popup: the hour, the sky, the
+           temperature, 5 times side by side. The sun and the bolt amber, rain blue. */
+        #wxBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 14%, transparent); }
+        #wxBtn svg  { width: 22px; height: 22px; }
+        #wxPop      { z-index: 100000; min-width: 0; padding: 10px 12px 12px; gap: 8px; }
+        .wx-head    { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
+        #wxPop .transfer-row { width: 300px; }
+        .wx-cols    { display: flex; gap: 4px; }
+        .wx-col     { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
+        .wx-col > span { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+        .wx-col > svg  { width: 30px; height: 30px; }
+        .wx-col > b    { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .wx-fail    { width: 300px; color: var(--text-dim); font-size: 0.9rem; }
+        .wx-ico .s  { stroke: #e9a10d; }
+        .wx-ico .r  { stroke: #3b8fd9; }
 
         /* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
            .text-btn.ghost with no border: a press opens the countdown dialog. */
         #clock      { gap: 6px; height: calc(var(--bar-h) - 14px); padding: 0 10px; border-color: transparent;
                       font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
-        #clock b    { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+        #clock b    { font-weight: 500; font-variant-numeric: tabular-nums; }
 
         /* A running countdown, just before the clock: its time left, in the accent (its
            text shows only once time is up). A press on it (not on its small buttons) opens the dialog. */
@@ -321,7 +382,35 @@
         body.bar-top .menu    { bottom: auto; top: calc(var(--bar-h) + 8px); }
         body.bar-top .menu.full { top: 0; bottom: 0; }     /* a launcher dialog still gets the whole screen */
         body.bar-top .session-bar          { top: var(--bar-h); }
-        body:not(.bar-top) .quota-card     { bottom: calc(var(--bar-h) + 16px); }
+        body.bar-bottom .quota-card        { bottom: calc(var(--bar-h) + 16px); }
+
+        /* Bar on the left or right (bar-side): a column --bar-h wide. Window buttons
+           show only their icon - the one in front its window buttons under it -, the
+           clock and the countdown stack their parts. The menu pops out beside it. */
+        body.bar-left  .desktop { flex-direction: row-reverse; }
+        body.bar-right .desktop { flex-direction: row; }
+        body.bar-side  .desk    { min-width: 0; }
+        body.bar-side  .bar     { flex-direction: column; width: var(--bar-h); height: auto; padding: 8px 0; border-top: 0; }
+        body.bar-left  .bar     { border-right: 1px solid var(--desk-edge); }
+        body.bar-right .bar     { border-left: 1px solid var(--desk-edge); }
+        body.bar-side  .tasks   { flex-direction: column; width: 100%; height: auto; min-height: 0; }
+        body.bar-side  .task,
+        body.bar-side  .task.front { flex: 0 0 auto; width: calc(var(--bar-h) - 8px); min-width: 0; max-width: none;
+                                     height: calc(var(--bar-h) - 14px); justify-content: center; padding: 0; }
+        body.bar-side  .task.front { flex-direction: column; height: auto; padding: 6px 0; gap: 4px; }
+        body.bar-side  .task.front > svg { margin: 0; }
+        body.bar-side  .task > .task-ctl { flex-direction: column; margin: 0; }
+        body.bar-side  #clock,
+        body.bar-side  #cdChip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
+                                  padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
+                                  font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
+        body.bar-side  #cdChip > .cd-text { display: none; }
+        body.bar-side  #cdChip > .task-x  { margin: 0; }
+        body.bar-side  #moreBtn,
+        body.bar-side  #helpBtn { margin: 0; }
+        body.bar-left  .menu    { left: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
+        body.bar-right .menu    { left: auto; right: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
+        body.bar-side  .menu.full { left: 0; right: 0; }
 
         /* THE WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER): one
            tile per window, the last used first, in the middle of the screen. */
@@ -332,7 +421,7 @@
             width: max-content; max-width: min(90vw, 760px); padding: 14px;
             border: 1px solid var(--desk-edge); border-radius: var(--radius-l);
             background: var(--card); box-shadow: 0 20px 52px var(--desk-shadow);
-            font-family: var(--bar-font, var(--font-sans));
+            font-family: var(--font-sans);
         }
         /* A tile: the shared quiet .text-btn.ghost, stood up - the app's icon over the
            window's name. The chosen one gets the bar's "in front" look. */
@@ -345,9 +434,7 @@
                               background: color-mix(in srgb, var(--accent) 12%, transparent); }
         .sw-item:focus-visible { outline: none; }      /* .sel already shows it */
 
-        /* SETTINGS: one pill per tab, the tick-box rows, the bar-height slider. */
-        .set-tabs   { display: flex; gap: 6px; margin: 0 0 16px; }
-        .set-check  { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; cursor: pointer; }
+        /* The bar-height slider (the "⋮" menu). */
         .set-range  { display: flex; align-items: center; gap: 10px; }
         .set-range input { flex: 1 1 auto; }
         .set-range output { flex: 0 0 auto; min-width: 4em; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
@@ -362,11 +449,15 @@
             <button class="icon-btn" id="menuBtn" data-i18n-attr="title:ui.toApps" title="Apps"><img src="../icons/icon-192.png" alt=""></button>
             <div class="tasks" id="tasks"></div>
             <button id="cdChip" class="text-btn ghost" type="button" hidden><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button>
+            <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
+            <button id="wxBtn" class="icon-btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
             <button id="clock" class="text-btn ghost" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
-                 bar (Free/Tile, the "?") and what has no room there (Lock now).
+                 bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
                  More rows will come; see MORE below. -->
             <button id="moreBtn" class="icon-btn" type="button" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
+            <!-- HELP - the shared help card (NayiveUI.firstRun, see HELP below). -->
+            <button id="helpBtn" class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
             <!-- ONE connection status for every window (see SYNC below); hidden until one has its own. -->
             <button id="syncIndicator" class="sync-indicator" type="button" hidden data-i18n-attr="title:ui.synced"></button>
         </div>
@@ -374,6 +465,20 @@
         <div class="menu" id="menu" hidden></div>
 
         <div class="top-menu" id="moreMenu" role="menu" hidden>
+            <!-- OPEN THE DESKTOP - Auto / Always / Never, on this device (set.mode;
+                 see OPEN THE DESKTOP). A label, so a change leaves the menu open. -->
+            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg><span data-i18n="desktop.openMode"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.openModeInfo"></span>
+                <select id="setMode">
+                    <option value="auto"   data-i18n="desktop.openAuto"></option>
+                    <option value="always" data-i18n="desktop.openAlways"></option>
+                    <option value="never"  data-i18n="desktop.openNever"></option>
+                </select></label>
+            <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
+                 (see WEATHER). A label, so flipping it leaves the menu open. -->
+            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="switch sm"><input type="checkbox" id="weatherBarChk"><span class="track"></span></span></label>
+            <!-- WINDOWS - how the windows behave on the desk. -->
+            <div class="menu-sep"></div>
+            <div class="menu-label" data-i18n="desktop.windowsLabel"></div>
             <!-- TILE - one switch for the whole desk (see TILE / UNTILE): Free <-> Tile.
                  Not a button, so flipping it leaves the menu open. -->
             <div class="tile-sw" id="tileSw" data-i18n-attr="title:desktop.tileTip">
@@ -381,11 +486,55 @@
                 <label class="switch sm"><input type="checkbox" id="tileChk" data-i18n-attr="aria-label:desktop.tileTip"><span class="track"></span></label>
                 <span class="tile-word" data-tile="on" data-i18n="desktop.tileOn"></span>
             </div>
+            <!-- STICKY WINDOWS - on: a window dropped on an edge of the desk takes that
+                 half (see drag). A label, not a button, so flipping it leaves the menu open. -->
+            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg><span data-i18n="desktop.sticky"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.stickyInfo"></span><span class="switch sm"><input type="checkbox" id="stickyChk"><span class="track"></span></span></label>
+            <!-- SCALE ON OPEN - new windows start with Scale on (set.scaleNew; see SCALE).
+                 The (i) is a span, not a button: a button would close the menu. -->
+            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 11 5 5 11 5"></polyline><polyline points="19 13 19 19 13 19"></polyline><line x1="5" y1="5" x2="19" y2="19"></line></svg><span data-i18n="desktop.scaleNew"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.scaleNewInfo"></span><span class="switch sm"><input type="checkbox" id="scaleNewChk"><span class="track"></span></span></label>
+            <!-- THE CLOCK - what it shows beside the time (see THE CLOCK). Labels, not
+                 buttons, so a change leaves the menu open. -->
             <div class="menu-sep"></div>
+            <div class="menu-label" data-i18n="desktop.tabClock"></div>
+            <label class="menu-item"><span data-i18n="desktop.weekday"></span>
+                <select id="setDow">
+                    <option value="none"  data-i18n="desktop.weekdayNone"></option>
+                    <option value="short" data-i18n="desktop.weekdayShort"></option>
+                    <option value="long"  data-i18n="desktop.weekdayLong"></option>
+                </select></label>
+            <label class="menu-item"><span data-i18n="desktop.showDate"></span><span class="switch sm"><input type="checkbox" id="setDate"><span class="track"></span></span></label>
+            <label class="menu-item"><span data-i18n="desktop.showSeconds"></span><span class="switch sm"><input type="checkbox" id="setSecs"><span class="track"></span></span></label>
+            <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
+            <div class="menu-sep"></div>
+            <div class="menu-label" data-i18n="desktop.tabDesktop"></div>
+            <label class="menu-item"><span data-i18n="desktop.barPos"></span>
+                <select id="setBar">
+                    <option value="top"    data-i18n="desktop.barTop"></option>
+                    <option value="bottom" data-i18n="desktop.barBottom"></option>
+                    <option value="left"   data-i18n="desktop.barLeft"></option>
+                    <option value="right"  data-i18n="desktop.barRight"></option>
+                </select></label>
+            <label class="menu-item"><span data-i18n="desktop.barHeight"></span>
+                <span class="set-range"><input type="range" id="setBarH" min="36" max="72" step="2"><output id="setBarHOut" for="setBarH"></output></span></label>
+            <!-- SCREEN LOCKER (shared/locker.js): which one + after how many idle
+                 minutes (ONE value for every locker, his rule 2026-09-30); the clock's own line of text only shows with the clock.
+                 DEVICE state (localStorage "nayive-locker"); moved here from My account 2026-09-28. -->
+            <div class="menu-sep"></div>
+            <div class="menu-label" data-i18n="acct.locker"></div>
+            <div class="menu-item lock-row">
+                <select id="lockSel" data-i18n-attr="aria-label:acct.locker"></select>
+                <span class="lock-min"><input id="lockMin" type="number" min="0" max="999" step="1" inputmode="numeric"
+                       data-i18n-attr="title:acct.lockerMin, aria-label:acct.lockerMin"> <span data-i18n="acct.lockerUnit"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:acct.lockerOff"></span></span></div>
+            <label class="menu-item" id="lockTextWrap" hidden><span data-i18n="acct.lockerText"></span>
+                <input id="lockText" type="text" maxlength="60" spellcheck="false"></label>
+            <!-- Bellas artes' or Science's own settings (shared/lockers/culture-settings.js): per USER. -->
+            <button class="menu-item" id="salonBtn" type="button" role="menuitem" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="salon.settings"></span></button>
             <button class="menu-item" id="lockNowBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span data-i18n="desktop.lockNow"></span></button>
-            <!-- HELP - the shared help card (NayiveUI.firstRun, see HELP below). -->
-            <button class="menu-item" id="helpBtn" data-intro-open type="button" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span data-i18n="ui.help"></span></button>
         </div>
+
+        <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
+             (see WEATHER): a sliding bar until the forecast comes, then 5 hours. -->
+        <div class="top-menu" id="wxPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.weather"></div>
 
         <!-- WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER). -->
         <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
@@ -409,70 +558,6 @@
             <div class="sheet-actions">
                 <button data-act="close" type="button" data-i18n-attr="title:ui.close"></button>
                 <button id="cdPlay" type="button" data-act="primary:play" data-i18n-attr="title:desktop.cdStart"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- DESKTOP SETTINGS - this device's desktop, not the account (that is the
-         launcher's cog -> My account). Every change applies at once. Its colours
-         are not here: they follow the account's scheme (see THE DESKTOP'S COLOURS). -->
-    <div class="sheet-backdrop" id="setBackdrop">
-        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:desktop.settings">
-            <h2 data-i18n="desktop.settings"></h2>
-            <div class="set-tabs" role="tablist">
-                <button class="pill is-active" type="button" role="tab" data-tab="desk"    data-i18n="desktop.tabDesktop"></button>
-                <button class="pill"           type="button" role="tab" data-tab="clock"   data-i18n="desktop.tabClock"></button>
-            </div>
-
-            <div data-pane="desk">
-                <div class="field">
-                    <label for="setStart" data-i18n="desktop.start"></label>
-                    <select id="setStart">
-                        <option value="auto"     data-i18n="desktop.startAuto"></option>
-                        <option value="desktop"  data-i18n="desktop.startDesktop"></option>
-                        <option value="launcher" data-i18n="desktop.startLauncher"></option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="setBar" data-i18n="desktop.barPos"></label>
-                    <select id="setBar">
-                        <option value="bottom" data-i18n="desktop.barBottom"></option>
-                        <option value="top"    data-i18n="desktop.barTop"></option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="setBarH" data-i18n="desktop.barHeight"></label>
-                    <div class="set-range">
-                        <input type="range" id="setBarH" min="40" max="72" step="2">
-                        <output id="setBarHOut" for="setBarH"></output>
-                    </div>
-                </div>
-                <div class="field">
-                    <label for="setFont" data-i18n="desktop.font"></label>
-                    <select id="setFont">
-                        <option value="system"  data-i18n="desktop.fontSystem"></option>
-                        <option value="serif"   data-i18n="desktop.fontSerif"></option>
-                        <option value="rounded" data-i18n="desktop.fontRounded"></option>
-                        <option value="mono"    data-i18n="desktop.fontMono"></option>
-                    </select>
-                </div>
-            </div>
-
-            <div data-pane="clock" hidden>
-                <div class="field">
-                    <label for="setDow" data-i18n="desktop.weekday"></label>
-                    <select id="setDow">
-                        <option value="none"  data-i18n="desktop.weekdayNone"></option>
-                        <option value="short" data-i18n="desktop.weekdayShort"></option>
-                        <option value="long"  data-i18n="desktop.weekdayLong"></option>
-                    </select>
-                </div>
-                <label class="set-check"><input type="checkbox" id="setDate"><span data-i18n="desktop.showDate"></span></label>
-                <label class="set-check"><input type="checkbox" id="setSecs"><span data-i18n="desktop.showSeconds"></span></label>
-            </div>
-
-            <div class="sheet-actions">
-                <button data-act="close" data-i18n-attr="title:ui.close, aria-label:ui.close"></button>
             </div>
         </div>
     </div>
@@ -508,34 +593,38 @@
 
     //------------------------------------------------------------------------//
     // SETTINGS - this device's desktop (a PC and a tablet can each want their
-    // own), in localStorage "balata-desktop". The launcher reads `start` too.
+    // own), in localStorage "balata-desktop"; set from the "⋮" menu (see MORE).
 
     var SET_KEY = 'balata-desktop';
-    var set = { start: 'auto', bar: 'bottom', barH: 48, font: 'system',
-                dow: 'short', date: false, secs: false };
+    var set = { bar: 'bottom', barH: 48, dow: 'short', date: false, secs: false, sticky: true };
     Object.assign( set, store( SET_KEY ) || {} );
     // Until 2026-09-26 the desktop had its own colour schemes; they now follow the account's.
-    delete set.scheme; delete set.active; delete set.schemes;
-    // `scaleNew` (new windows start with Scale on) is set by the launcher's My
-    // account, in the menu's frame: read fresh, never written back from here.
-    function saveSet() { set.scaleNew = !! ( store( SET_KEY ) || {} ).scaleNew; store( SET_KEY, set ); }
+    // Until 2026-09-28 it had "Start with" and a bar font too (dropped with the settings dialog).
+    delete set.scheme; delete set.active; delete set.schemes; delete set.start; delete set.font;
+    if( [ 'top', 'bottom', 'left', 'right' ].indexOf( set.bar ) < 0 ) set.bar = 'bottom';
+    function saveSet() { store( SET_KEY, set ); }
 
-    var FONTS = {
-        system:  '',
-        serif:   'Georgia, "Times New Roman", Times, serif',
-        rounded: 'ui-rounded, "SF Pro Rounded", "Varela Round", "Nunito", "Arial Rounded MT Bold", system-ui, sans-serif',
-        mono:    'var(--font-mono)'
-    };
+    // TOUCH - a touch screen (a tablet, with or without its mouse): body.touch
+    // makes the resize edges, the window buttons and the bar finger-sized (the
+    // bar at least 56px, whatever the menu's slider says), and a long press on
+    // the desk opens the "⋮" menu (see the desk's contextmenu). A PC with no
+    // touch screen sees no change.
+    var coarse = window.matchMedia( '(any-pointer: coarse)' );
+    var TOUCH_BAR_H = 56;
 
+    // One body class for the bar's side (bar-top, bar-bottom, bar-left, bar-right),
+    // plus bar-side for left and right; and body.touch.
     function applyLayout()
     {
-        document.body.classList.toggle( 'bar-top', set.bar === 'top' );
-        document.documentElement.style.setProperty( '--bar-h', Math.max( 40, Math.min( 72, +set.barH || 48 ) ) + 'px' );
-        if( FONTS[ set.font ] ) desktop.style.setProperty( '--bar-font', FONTS[ set.font ] );
-        else                    desktop.style.removeProperty( '--bar-font' );
+        [ 'top', 'bottom', 'left', 'right' ].forEach( function ( p ) { document.body.classList.toggle( 'bar-' + p, set.bar === p ); } );
+        document.body.classList.toggle( 'bar-side', set.bar === 'left' || set.bar === 'right' );
+        document.body.classList.toggle( 'touch', coarse.matches );
+        var h = Math.max( 36, Math.min( 72, +set.barH || 48 ) );
+        document.documentElement.style.setProperty( '--bar-h', ( coarse.matches ? Math.max( TOUCH_BAR_H, h ) : h ) + 'px' );
     }
 
     applyLayout();
+    if( coarse.addEventListener ) coarse.addEventListener( 'change', applyLayout );
 
     //------------------------------------------------------------------------//
     // APP ICONS AND NAMES - read once from the launcher's own tiles (Office's
@@ -594,7 +683,7 @@
 
         var info = APPS[ app ] || { name: app ? app.charAt( 0 ).toUpperCase() + app.slice( 1 ) : 'Nayive', svg: ICON_WIN };
         var w = { app: app, name: info.name, svg: info.svg, url: '', pre: null,
-                  scale: !! ( store( SET_KEY ) || {} ).scaleNew, nat: null, s: 1, g: null };     // see SCALE; My account sets the default
+                  scale: !! set.scaleNew, nat: null, s: 1, g: null };     // see SCALE; the menu's "Scale on open" sets the default
 
         var el = document.createElement( 'div' );
         el.className = 'win';
@@ -647,6 +736,7 @@
         placeUnread();
         placeMail();
         retile();
+        upright();
         return w;
     }
 
@@ -688,6 +778,7 @@
         if( back ) { queueMeasure( w ); retile(); }
         if( was && was !== w && was.app === 'chat' ) pokeUnread();
         if( was && was !== w && was.app === 'email' ) askMail();
+        kbFit();
     }
 
     function minimise( w )
@@ -699,8 +790,24 @@
         retile();
     }
 
+    // An app with work not yet saved (Image) asks first: its window.nayiveBeforeClose
+    // answers true to go, false to stay. While it asks, the window is in front.
     function close( w )
     {
+        var ask = null;
+        try { ask = w.frame.contentWindow.nayiveBeforeClose; } catch( e ) {}
+        if( typeof ask !== 'function' ) { shut( w ); return; }
+        if( w.asking ) return;
+        w.asking = true;
+        focus( w );
+        Promise.resolve().then( ask ).then( function ( ok ) { w.asking = false; if( ok ) shut( w ); },
+                                            function () { w.asking = false; shut( w ); } );
+    }
+
+    function shut( w )
+    {
+        if( wins.indexOf( w ) < 0 ) return;     // gone already
+        if( kbWin === w ) kbWin = null;
         w.el.remove(); w.btn.remove();
         wins.splice( wins.indexOf( w ), 1 );
         if( front === w ) front = topmost();
@@ -708,7 +815,7 @@
         placeUnread();
         placeMail();
         if( w.app === 'email' ) askMail();
-        if( tiled ) { tiled.snaps.delete( w ); if( ! wins.length ) tiled = null; }
+        if( tiled ) { tiled.snaps.delete( w ); if( ! wins.length ) { autoWant = !! tiled.auto; tiled = null; } }   // see UPRIGHT
         paintTile();
         saveWins();
         retile();
@@ -729,6 +836,7 @@
             w.el.classList.toggle( 'focused', isFront );
             w.btn.classList.toggle( 'front', isFront );
             w.btn.classList.toggle( 'min', w.el.hidden );
+            w.btn.classList.toggle( 'has-dialog', !! w.dialog && ! isFront );
             paintScale( w );
         } );
         paintTile();
@@ -785,9 +893,10 @@
             // kept without the origin: a site moved to https still finds its windows
             if( cw.location.href !== 'about:blank' ) { w.url = cw.location.pathname + cw.location.search + cw.location.hash; saveWins(); }
             w.el.classList.remove( 'chromeless' );
-            cw.addEventListener( 'pointerdown', function () { closeMenu(); if( front !== w ) focus( w ); }, true );
+            cw.addEventListener( 'pointerdown', function () { closeMenu(); closeMore(); if( front !== w ) focus( w ); }, true );
             hookAlt( cw );
             hookInner( w, cw );
+            watchDialog( w, cw );
             // Taking the keys out of a frame drops its caret: kept here for giveKeys.
             cw.document.addEventListener( 'focusin', function ( e ) { w.lastFocus = e.target; }, true );
             // A plain link to the launcher (Planner's name) opens the menu instead.
@@ -799,6 +908,7 @@
                 openMenu();
             }, true );
             hookOpen( cw );
+            cw.close = function () { close( w ); };     // an app's own "close" (Image's ✗ / Escape) closes its window
             trackTitle( w, cw );
             adoptHead( w, cw );
             paint();
@@ -829,6 +939,7 @@
                 icw.addEventListener( 'pointerdown', function () { closeMenu(); closeMore(); if( front !== w ) focus( w ); }, true );
                 hookAlt( icw );
                 hookInner( w, icw );
+                watchDialog( w, icw );
             }
             f.addEventListener( 'load', on );
             on();
@@ -839,6 +950,40 @@
         {
             recs.forEach( function ( r ) { r.addedNodes.forEach( scan ); } );
         } ).observe( cw.document.documentElement, { childList: true, subtree: true } );
+    }
+
+    // DIALOG MARK - a dialog (the shared .sheet-backdrop.open) open in the
+    // window's page, or in a frame inside it (Planner's Calendar...), marks its
+    // bar button while the window is behind others or minimised, so a question
+    // left waiting is not forgotten. Dialogs stay modal to their own window.
+    function hasDialog( doc )
+    {
+        if( doc.querySelector( '.sheet-backdrop.open' ) ) return true;
+        var fs = doc.querySelectorAll( 'iframe' );
+        for( var i = 0; i < fs.length; i++ )
+        {
+            var d = null;
+            try { d = fs[ i ].contentDocument; } catch( e ) {}
+            if( d && hasDialog( d ) ) return true;
+        }
+        return false;
+    }
+    function markDialog( w )
+    {
+        w.dialogQueued = false;
+        var on = false;
+        try { on = hasDialog( w.frame.contentDocument ); } catch( e ) {}
+        if( on === !! w.dialog ) return;
+        w.dialog = on;
+        paint();
+    }
+    // Class changes are many (a Calc selection...): one look per frame is enough.
+    function watchDialog( w, cw )
+    {
+        function queue() { if( ! w.dialogQueued ) { w.dialogQueued = true; requestAnimationFrame( function () { markDialog( w ); } ); } }
+        new cw.MutationObserver( queue )
+            .observe( cw.document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'class' ] } );
+        queue();
     }
 
     // The bar button says which DOCUMENT the window shows: Write / Calc / Text
@@ -915,16 +1060,26 @@
         if( inFrame ) tgt.ownerDocument.documentElement.style.userSelect = 'none';
         if( ! dir ) { grabCursor( document, true ); if( inFrame ) grabCursor( tgt.ownerDocument, true ); }
 
+        // Sticky windows: the half of the desk an edge offers.
+        function zoneRect( z )
+        {
+            var hw = Math.round( r.w / 2 ), hh = Math.round( r.h / 2 );
+            return z === 'left'   ? { l: 0,  t: 0,  w: hw,       h: r.h }
+                 : z === 'right'  ? { l: hw, t: 0,  w: r.w - hw, h: r.h }
+                 : z === 'top'    ? { l: 0,  t: 0,  w: r.w,      h: hh }
+                 :                  { l: 0,  t: hh, w: r.w,      h: r.h - hh };
+        }
+
         function showZone( z )
         {
             zone = z;
             ghost.hidden = ! z;
             if( ! z ) return;
-            var half = Math.round( r.w / 2 );
-            ghost.style.left   = ( z === 'right' ? half : 0 ) + 'px';
-            ghost.style.top    = '0px';
-            ghost.style.width  = ( z === 'top' ? r.w : half ) + 'px';
-            ghost.style.height = r.h + 'px';
+            var g = zoneRect( z );
+            ghost.style.left   = g.l + 'px';
+            ghost.style.top    = g.t + 'px';
+            ghost.style.width  = g.w + 'px';
+            ghost.style.height = g.h + 'px';
         }
 
         function move( ev )
@@ -936,7 +1091,11 @@
                 var kx = Math.min( 80, W ), ky = Math.min( 38, H );
                 moveTo( w, Math.min( r.w - kx, Math.max( kx - W, L + dx ) ), Math.min( r.h - ky, Math.max( 0, T + dy ) ) );
                 var cx = px + dx, cy = py + dy;
-                showZone( cx <= 6 ? 'left' : cx >= r.w - 6 ? 'right' : cy <= 6 ? 'top' : '' );
+                // Bottom: the window's own lower edge pushed 6px past the desk's
+                // (the pointer, up on the title bar, is far from it) - for a window
+                // that started above it; one already on it (tiled) needs the pointer.
+                var low = ( T + H < r.h && w.g.t + H >= r.h + 6 ) || cy >= r.h - 6;
+                if( set.sticky ) showZone( cx <= 6 ? 'left' : cx >= r.w - 6 ? 'right' : cy <= 6 ? 'top' : low ? 'bottom' : '' );
                 return;
             }
             var nl = L, nt = T, nw = W, nh = H;
@@ -959,13 +1118,7 @@
             tgt.removeEventListener( 'pointermove', move );
             tgt.removeEventListener( 'pointerup', up );
             tgt.removeEventListener( 'pointercancel', up );
-            if( zone === 'top' ) { moveTo( w, L, T ); setMax( w, true ); }
-            else if( zone )
-            {
-                w.pre = { w: W, h: H };
-                var half = Math.round( r.w / 2 );
-                place( w, { l: zone === 'right' ? half : 0, t: 0, w: zone === 'right' ? r.w - half : half, h: r.h } );
-            }
+            if( zone ) { w.pre = { w: W, h: H }; place( w, zoneRect( zone ) ); }
             showZone( '' );
             saveWins();
         }
@@ -1036,6 +1189,8 @@
             if( w.frame.contentWindow !== cw ) { mo.disconnect(); return; }
             if( ! head || ! head.isConnected ) head = findHead( doc );
             if( ! head ) return;
+            // a finger on it drags the window: the browser must not take it for a scroll
+            if( head.style.touchAction !== 'none' ) head.style.touchAction = 'none';
             if( ! w.el.classList.contains( 'chromeless' ) ) { w.el.classList.add( 'chromeless' ); paint(); }
         }
         // style / hidden too: an app that starts with its whole page hidden
@@ -1052,7 +1207,8 @@
         // fill most of the row with their file name, which a plain click edits,
         // and Trips with its name, which a plain click takes to the menu.
         // The empty strip ABOVE the row drags too, and so does any empty spot
-        // of a layer that covers the row (data-win-drag: Chat's call screen),
+        // of a layer that covers the row (data-win-drag: Chat's call screen,
+        // and its open chat's bar when the window is as narrow as a phone),
         // except its own boxes (data-win-nodrag: the picture in the corner).
         doc.addEventListener( 'pointerdown', function ( e )
         {
@@ -1085,7 +1241,10 @@
         } );
         doc.addEventListener( 'dblclick', function ( e )
         {
-            if( head && head.contains( e.target ) && ! e.target.closest( INTERACTIVE ) ) act( w, 'max' );
+            // the same spots a press drags from: the row, or a data-win-drag layer
+            var cover = e.target.closest( '[data-win-drag]' );
+            if( e.target.closest( INTERACTIVE ) || ( cover ? e.target.closest( '[data-win-nodrag]' ) : ! ( head && head.contains( e.target ) ) ) ) return;
+            act( w, 'max' );
         } );
     }
 
@@ -1100,9 +1259,21 @@
             url = url || '';
             if( url && ! appOf( url ) ) return real.call( cw, url, target, features );
             var abs = url ? new URL( url, cw.location.href ).href : 'about:blank';
-            var w = openApp( abs, { fresh: true } );
+            var w = sameImage( abs );
+            if( w ) focus( w ); else w = openApp( abs, { fresh: true } );
             return /noopener/.test( features || '' ) ? null : w.frame.contentWindow;
         };
+    }
+
+    // A picture already open in Image: its window, never a second editor on
+    // the same file (two would each save over the other).
+    function sameImage( abs )
+    {
+        if( appOf( abs ) !== 'image' ) return null;
+        var u = new URL( abs ), want = u.pathname + u.search;
+        for( var i = 0; i < wins.length; i++ )
+            if( wins[ i ].app === 'image' && wins[ i ].url === want ) return wins[ i ];
+        return null;
     }
 
     //------------------------------------------------------------------------//
@@ -1128,7 +1299,7 @@
                     return rec;
                 } );
             store( WINS_KEY, list );
-            store( TILE_KEY, tiled ? { dw: tiled.dw, dh: tiled.dh } : null );
+            store( TILE_KEY, tiled ? { dw: tiled.dw, dh: tiled.dh, auto: !! tiled.auto } : null );
         }, 300 );
     }
 
@@ -1137,7 +1308,7 @@
         var list = store( WINS_KEY ) || [];
         var tl   = store( TILE_KEY );
         restoring = true;
-        if( tl ) tiled = { snaps: new Map(), dw: tl.dw, dh: tl.dh };
+        if( tl ) tiled = { snaps: new Map(), dw: tl.dw, dh: tl.dh, auto: !! tl.auto };
         var minimised = [];
         list.forEach( function ( s )
         {
@@ -1221,6 +1392,7 @@
         st.width = px( f.lw ); st.height = px( f.lh );
         st.transform = f.s < 1 ? 'scale(' + f.s + ')' : '';
         if( f.s < 1 ) st.setProperty( '--win-s', f.s ); else st.removeProperty( '--win-s' );
+        if( kbWin === w ) kbShrink( w );         // the keyboard is still up: keep clear of it
     }
 
     function moveTo( w, l, t )
@@ -1299,7 +1471,8 @@
     var RETILE   = true;
     var TILE_GAP = 0;               // pixels between two tiled windows
     var TILE_KEY = 'balata-desktop-tile';
-    var tiled    = null;            // while tiled: { snaps: Map( window -> its state before ), dw, dh: the desk tiled }
+    var tiled    = null;            // while tiled: { snaps: Map( window -> its state before ), dw, dh: the desk tiled,
+                                    //                auto: tiled by UPRIGHT, not by hand }
     var retiling = false;
 
     function stateOf( w )
@@ -1366,8 +1539,33 @@
 
     new ResizeObserver( function ()
     {
+        upright();
         if( tiled && ( desk.clientWidth !== tiled.dw || desk.clientHeight !== tiled.dh ) ) retile( true );
     } ).observe( desk );
+
+    // UPRIGHT (2026-10-01) - a touch screen narrower than 1024px (a tablet held
+    // upright) tiles the desk by itself: windows side by side, never on top of
+    // each other. Wide again, the desk goes back to Free - only if this did the
+    // tiling (tiled.auto, saved with it, so a reload in between still knows);
+    // a desk tiled by hand stays tiled. It acts when the width CROSSES 1024px,
+    // so Free picked by hand while upright stays Free; with no window yet, the
+    // first one opened is tiled. The "⋮" switch is the same one; nothing else
+    // is saved. A PC (no touch screen) never does this.
+    var narrow = null, autoWant = false;
+    function upright()
+    {
+        if( restoring ) return;
+        var n = coarse.matches && window.innerWidth < 1024;
+        if( n !== narrow )
+        {
+            narrow = n;
+            autoWant = n;
+            if( ! n && tiled && tiled.auto ) untile();
+        }
+        if( autoWant && ! tiled && tile() ) tiled.auto = true;
+        if( tiled ) autoWant = false;
+    }
+    if( coarse.addEventListener ) coarse.addEventListener( 'change', upright );
 
     // THE SWITCH on the bar: "Free ()== Tile". A word picks its side, the switch
     // flips. The word Tile while tiled deals the desk out again - after windows
@@ -1395,9 +1593,10 @@
 
     //------------------------------------------------------------------------//
     // MORE - the "⋮" after the clock (2026-09-28): the shared .top-menu
-    // (NayiveUI.wireMenu), set just off the bar's edge: above it, or below it
-    // when the bar is at the top.
-    // Holds the Free/Tile switch, Lock now and the "?" help; more to come.
+    // (NayiveUI.wireMenu), set just off the bar's edge: above it, below it when
+    // the bar is at the top, beside it when the bar is at a side.
+    // Holds the Free/Tile switch, Sticky windows, Lock now, the clock, the bar
+    // and the screen locker.
 
     var moreBtn = document.getElementById( 'moreBtn' ), moreMenu = document.getElementById( 'moreMenu' );
     var more = null;
@@ -1409,17 +1608,335 @@
         {
             if( b.id === 'lockNowBtn' && window.NayiveLock ) NayiveLock.lock();
         } } );
-        moreBtn.addEventListener( 'click', function ()             // after wireMenu's own: it placed it under the button
+        moreBtn.addEventListener( 'click', placeMore );            // after wireMenu's own: it placed it under the button
+    } );
+
+    function placeMore() { placeBy( moreBtn, moreMenu ); }
+
+    // A popup of the bar's (`pop`, opened by `btn`) just off the bar, on the
+    // desk's side: its right edge at the button's, beside the button when the bar is at a side.
+    function placeBy( btn, pop )
+    {
+        if( pop.hidden ) return;
+        var r = bar.getBoundingClientRect(), s = pop.style;
+        if( set.bar === 'left' || set.bar === 'right' )
         {
-            if( moreMenu.hidden ) return;
-            var r = document.getElementById( 'bar' ).getBoundingClientRect();
-            moreMenu.style.top = ( document.body.classList.contains( 'bar-top' )
-                                   ? r.bottom + 6 : Math.max( 6, r.top - 6 - moreMenu.offsetHeight ) ) + 'px';
+            var b = btn.getBoundingClientRect();
+            s.top = Math.max( 6, Math.min( b.top, window.innerHeight - 6 - pop.offsetHeight ) ) + 'px';
+            if( set.bar === 'left' ) { s.left = ( r.right + 6 ) + 'px'; s.right = 'auto'; }
+            else                     { s.left = 'auto'; s.right = ( window.innerWidth - r.left + 6 ) + 'px'; }
+            return;
+        }
+        var m = btn.getBoundingClientRect();
+        s.left = 'auto'; s.right = Math.max( 6, window.innerWidth - m.right ) + 'px';
+        s.top  = ( set.bar === 'top' ? r.bottom + 6 : Math.max( 6, r.top - 6 - pop.offsetHeight ) ) + 'px';
+    }
+
+    // A press inside a window's frame never reaches this document (see the
+    // frames' pointerdown); a frame we cannot hook still takes the focus.
+    function closeMore() { if( more ) more.close(); }
+    window.addEventListener( 'blur', closeMore );
+
+    // STICKY WINDOWS - this device's choice (set.sticky); see drag.
+    var stickyChk = document.getElementById( 'stickyChk' );
+    stickyChk.checked = set.sticky !== false;
+    stickyChk.addEventListener( 'change', function () { set.sticky = stickyChk.checked; saveSet(); } );
+
+    // SCALE ON OPEN - this device's choice (set.scaleNew); see SCALE.
+    var scaleNewChk = document.getElementById( 'scaleNewChk' );
+    scaleNewChk.checked = !! set.scaleNew;
+    scaleNewChk.addEventListener( 'change', function () { set.scaleNew = scaleNewChk.checked; saveSet(); } );
+
+    // OPEN THE DESKTOP - this device's choice (set.mode): auto (a big screen
+    // with a mouse or touchpad), always (a big screen, mouse or not), never
+    // (the simple view). The launcher reads it before it sends a big screen
+    // here; wantDesk is ITS rule (../index.html, nayiveWantDesk), copied: this
+    // page must not wait for the launcher's. A choice that no longer wants the
+    // desktop leaves for the simple view at once.
+    function wantDesk( mode )
+    {
+        function mq( q ) { return window.matchMedia( q ).matches; }
+        if( mode === 'never' || mq( '(max-width: 640px)' ) ) return false;
+        if( mode === 'always' ) return mq( '(min-width: 1024px) and (min-height: 600px)' ) || mq( '(min-width: 600px) and (min-height: 1024px)' );
+        return mq( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' );
+    }
+    function toSimple() { location.replace( '../index.html' ); }
+    var modeSel = document.getElementById( 'setMode' );
+    if( set.mode !== 'always' && set.mode !== 'never' ) set.mode = 'auto';
+    modeSel.value = set.mode;
+    modeSel.addEventListener( 'change', function ()
+    {
+        set.mode = modeSel.value;
+        saveSet();
+        if( ! wantDesk( set.mode ) ) toSimple();
+    } );
+
+    // MOUSE CHIP - on Auto, the mouse or touchpad taken away offers the simple
+    // view (the launcher offers the desktop when one comes back): the shared
+    // toast with a button. Never a move on its own: left alone, it goes.
+    var finePtr = window.matchMedia( '(any-pointer: fine)' );
+    function onFineChange()
+    {
+        if( finePtr.matches || set.mode !== 'auto' || ! window.NayiveUI ) return;
+        NayiveUI.undoToast( t( 'desktop.toSimpleAsk' ), toSimple, { label: t( 'desktop.toSimpleGo' ), ms: 10000 } );
+    }
+    if( finePtr.addEventListener ) finePtr.addEventListener( 'change', onFineChange );
+
+    // THE CLOCK AND THE BAR - every change applies at once; the menu stays open,
+    // and follows the bar when it moves or changes size.
+    var F = {
+        dow:  document.getElementById( 'setDow' ), date: document.getElementById( 'setDate' ),
+        secs: document.getElementById( 'setSecs' ), bar: document.getElementById( 'setBar' ),
+        barH: document.getElementById( 'setBarH' )
+    };
+    var barHOut = document.getElementById( 'setBarHOut' );
+    F.dow.value = set.dow; F.date.checked = !! set.date; F.secs.checked = !! set.secs;
+    F.bar.value = set.bar; F.barH.value = set.barH; barHOut.textContent = set.barH + ' px';
+    Object.keys( F ).forEach( function ( k )
+    {
+        F[ k ].addEventListener( k === 'barH' ? 'input' : 'change', function ()
+        {
+            set.dow = F.dow.value; set.date = F.date.checked; set.secs = F.secs.checked;
+            set.bar = F.bar.value; set.barH = +F.barH.value;
+            barHOut.textContent = set.barH + ' px';
+            saveSet();
+            applyLayout();
+            tick();
+            placeMore();
         } );
     } );
 
-    // A press inside a window's frame never reaches this document.
-    function closeMore() { if( more ) more.close(); }
+    // SCREEN LOCKER - saved at once, on this device (see #lockSel).
+    var lockSel = document.getElementById( 'lockSel' ), lockMin = document.getElementById( 'lockMin' ),
+        lockText = document.getElementById( 'lockText' );
+    function loadLocker()
+    {
+        if( ! window.NayiveLock ) return;
+        var s = NayiveLock.settings();
+        lockSel.innerHTML = '';
+        NayiveLock.LOCKERS.concat( [ '' ] ).forEach( function ( id )    // '' = plain black, last
+        {
+            var o = document.createElement( 'option' );
+            o.value = id;
+            o.textContent = t( id ? 'scrlock.' + id : 'scrlock.none' );
+            lockSel.appendChild( o );
+            // A line after Science: the two "learn something" lockers above, the rest below.
+            if( id === 'science' ) lockSel.appendChild( document.createElement( 'hr' ) );
+        } );
+        lockSel.value  = s.id;
+        lockMin.value  = s.min;
+        lockText.value = s.text;
+        document.getElementById( 'lockTextWrap' ).hidden = s.id !== 'clock';
+        var sb = document.getElementById( 'salonBtn' ), sbl = sb.querySelector( 'span' );
+        sb.hidden = s.id !== 'culture' && s.id !== 'science';
+        sbl.setAttribute( 'data-i18n', s.id === 'science' ? 'sci.settings' : 'salon.settings' );
+        sbl.textContent = t( sbl.getAttribute( 'data-i18n' ) );
+        placeMore();
+    }
+    // The minutes are ONE value for every locker: choosing a locker never
+    // touches them (it used to turn 0 into 15, which looked like minutes per locker).
+    lockSel.addEventListener( 'change', function ()
+    {
+        NayiveLock.save( { id: lockSel.value } );
+        loadLocker();
+    } );
+    // Saved at every key and arrow, not only when the field is left: a menu
+    // closed or a page reloaded with the focus still in it lost the number.
+    function saveMin()                                    // 0 = off, never below
+    {
+        if( lockMin.value.trim() === '' ) return;         // half typed: wait
+        var n = Math.floor( Number( lockMin.value ) );
+        if( isFinite( n ) ) NayiveLock.save( { min: n >= 0 ? Math.min( n, 999 ) : 0 } );
+    }
+    lockMin.addEventListener( 'input', saveMin );
+    lockMin.addEventListener( 'change', function () { saveMin(); loadLocker(); } );
+    lockText.addEventListener( 'input', function () { NayiveLock.save( { text: lockText.value } ); } );
+    // Bellas artes' / Science's settings: their scripts are loaded the first time
+    // they are asked for (Science needs Bellas artes' too: the shared engine).
+    function loadScript( src ) { return new Promise( function ( ok, fail ) { var sc = document.createElement( 'script' ); sc.src = src; sc.onload = ok; sc.onerror = fail; document.head.appendChild( sc ); } ); }
+    document.getElementById( 'salonBtn' ).addEventListener( 'click', function ()
+    {
+        var sci = NayiveLock.settings().id === 'science';
+        closeMore();
+        ( window.NayiveSalon ? Promise.resolve() : loadScript( '../shared/lockers/culture.js' ) )
+            .then( function () { return ! sci || window.NayiveScience || loadScript( '../shared/lockers/science.js' ); } )
+            .then( function () { return window.NayiveSalonSettings || loadScript( '../shared/lockers/culture-settings.js' ); } )
+            .then( function () { NayiveSalonSettings.open( sci ? 'science' : 'culture' ); }, function () {} );
+    } );
+    loadLocker();
+    moreBtn.addEventListener( 'click', loadLocker );   // again at each open: names in the current language
+
+    //------------------------------------------------------------------------//
+    // WEATHER - this device's choice (set.weatherBar, the "⋮" menu): the sky
+    // now as an icon on the bar, again every 30 min; a press opens today's
+    // forecast beside it, fetched then (never on its own). The place, the units
+    // and who gives it are the screen locker's (Bellas artes' settings, per
+    // user), and so is the engine: shared/lockers/culture.js, loaded only when
+    // this is on. Its cache too ("nv-culture:"): the locker reuses our call.
+
+    var wxBtn = document.getElementById( 'wxBtn' ), wxPop = document.getElementById( 'wxPop' ),
+        wxChk = document.getElementById( 'weatherBarChk' );
+    var wxTimer = 0, wxGen = 0, wxPopGen = 0, wxMenu = null, wxCached = null;
+    var WX_EVERY = 30 * 60000;
+
+    // One icon per sky of the engine's skyOf (clear, partly cloudy, cloudy, fog,
+    // drizzle, rain, snow, showers, storm), [ day, night ] where they differ.
+    // Class "s" paints amber (sun, bolt), "r" blue (rain, snow).
+    var WX_CLOUD = '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>';
+    var WX_RAYS  = '<path class="s" d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.947 12.65a4 4 0 0 0-5.925-4.128"/>';
+    var WX_ICONS =
+    [
+        [ '<g class="s"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g>',
+          '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>' ],
+        [ WX_RAYS + '<path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>',
+          '<path d="M13 16a3 3 0 1 1 0 6H7a5 5 0 1 1 4.9-6Z"/><path d="M10.1 9A6 6 0 0 1 16 4a4 4 0 0 0 6 6 6 6 0 0 1-3 5.197"/>' ],
+        [ '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>' ],
+        [ WX_CLOUD + '<path d="M16 17H7M17 21H9"/>' ],
+        [ WX_CLOUD + '<path class="r" d="M8 19v1M8 14v1M16 19v1M16 14v1M12 21v1M12 16v1"/>' ],
+        [ WX_CLOUD + '<path class="r" d="M16 14v6M8 14v6M12 16v6"/>' ],
+        [ WX_CLOUD + '<path class="r" d="M8 15h.01M8 19h.01M12 17h.01M12 21h.01M16 15h.01M16 19h.01"/>' ],
+        [ WX_RAYS + '<path d="M3 20a5 5 0 1 1 8.9-4H13a3 3 0 0 1 2 5.24"/><path class="r" d="M11 20v2M7 19v2"/>',
+          WX_CLOUD + '<path class="r" d="M16 14v6M8 14v6M12 16v6"/>' ],
+        [ '<path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/><path class="s" d="m13 12-3 5h4l-3 5"/>' ]
+    ];
+    function wxSvg( k, day )
+    {
+        var i = WX_ICONS[ k ] || WX_ICONS[ 2 ];
+        return '<svg class="wx-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+               ( day || i.length < 2 ? i[ 0 ] : i[ 1 ] ) + '</svg>';
+    }
+
+    // Day or night at place-local time `iso` ("YYYY-MM-DDTHH:MM"): Open-Meteo says
+    // so for now (is_day); else that day's sunrise and sunset; day when unknown.
+    function wxDay( w, iso, isDay )
+    {
+        if( isDay != null ) return !! isDay;
+        var i = w.daily.time.indexOf( iso.slice( 0, 10 ) ), up = w.daily.sunrise[ i ], down = w.daily.sunset[ i ];
+        return i < 0 || ! up || ! down || ( iso >= up && iso < down );
+    }
+
+    function wxEngine()
+    {
+        return window.NayiveSalon && NayiveSalon.engine ? Promise.resolve( NayiveSalon )
+             : loadScript( '../shared/lockers/culture.js' ).then( function () { return NayiveSalon; } );
+    }
+
+    // The locker's settings, the place, the weather. `fresh`: a new call (the
+    // 30-min turn, a press); else the cache while under 30 min old (a reload).
+    // The place keeps its own long cache (no new name lookup each time).
+    function wxGet( fresh )
+    {
+        return wxEngine().then( function ( S )
+        {
+            var E = S.engine;
+            wxCached = wxCached || E.store( 'nv-culture:' );
+            var get = fresh ? function ( k, ttl, fn ) { return wxCached( k, 0, fn ); } : wxCached;
+            return S.read().then( function ( cfg )
+            {
+                return E.placeOf( cfg, wxCached ).then( function ( p )
+                {
+                    return E.weatherAt( get, p, cfg.units, cfg.weather ).then( function ( w ) { return { S: S, cfg: cfg, p: p, w: w }; } );
+                } );
+            } );
+        } );
+    }
+
+    function wxT( S )                         // the engine's words, in the interface language
+    {
+        var l = window.NayiveI18n && NayiveI18n.lang ? String( NayiveI18n.lang() ).slice( 0, 2 ) : '';
+        return S.engine.T[ l ] || S.engine.T.en;
+    }
+
+    function wxPaint( d )                     // the bar's icon: the sky now
+    {
+        var E = d.S.engine, c = d.w.current;
+        wxBtn.innerHTML = wxSvg( E.skyOf( c.weather_code ), wxDay( d.w, c.time, c.is_day ) );
+        wxBtn.title = t( 'desktop.weather' ) + ': ' + E.deg( c.temperature_2m ) + ', ' + wxT( d.S ).sky[ E.skyOf( c.weather_code ) ];
+    }
+
+    function wxTick( fresh )
+    {
+        clearTimeout( wxTimer );
+        wxTimer = setTimeout( function () { wxTick( true ); }, WX_EVERY );
+        var g = ++wxGen;
+        wxGet( fresh ).then( function ( d ) { if( g === wxGen ) wxPaint( d ); }, function () {} );
+    }
+
+    function wxEl( tag, cls, text, parent )
+    {
+        var e = document.createElement( tag );
+        if( cls ) e.className = cls;
+        if( text != null ) e.textContent = text;
+        if( parent ) parent.appendChild( e );
+        return e;
+    }
+
+    // The popup: the place first, a sliding bar until the forecast comes, then
+    // the next 5 times 3 hours apart from the coming hour: "hh:mm", the sky, the temperature.
+    function wxOpen()
+    {
+        var g = ++wxPopGen;
+        wxPop.innerHTML = '';
+        var head = wxEl( 'div', 'wx-head', t( 'desktop.weather' ), wxPop );
+        var busy = wxEl( 'div', 'transfer-row is-sliding', null, wxPop );
+        busy.setAttribute( 'role', 'progressbar' );
+        wxEl( 'span', 'transfer-fill', null, wxEl( 'span', 'transfer-track', null, busy ) );
+        placeBy( wxBtn, wxPop );
+        wxGet( true ).then( function ( d )
+        {
+            if( set.weatherBar ) wxPaint( d );
+            if( g !== wxPopGen ) return;
+            var E = d.S.engine, T = wxT( d.S ), w = d.w, hr = w.hourly, now = w.current.time;
+            head.textContent = ( d.p.name ? T.weather.replace( '{c}', d.p.name ) : T.here ) + ' · ' + d.S.WEATHER[ d.cfg.weather ].name;
+            var cols = wxEl( 'div', 'wx-cols' ), i = 0;
+            while( i < hr.time.length && hr.time[ i ] <= now ) i++;
+            for( ; i < hr.time.length && cols.childNodes.length < 5; i += 3 )
+            {
+                var k = E.skyOf( hr.weather_code[ i ] ), col = wxEl( 'div', 'wx-col', null, cols );
+                col.title = T.sky[ k ];
+                wxEl( 'span', '', hr.time[ i ].slice( 11, 16 ), col );
+                col.insertAdjacentHTML( 'beforeend', wxSvg( k, wxDay( w, hr.time[ i ] ) ) );
+                wxEl( 'b', '', E.deg( hr.temperature_2m[ i ] ), col );
+            }
+            if( ! cols.childNodes.length ) throw new Error( 'no hours' );
+            wxPop.replaceChild( cols, busy );
+            placeBy( wxBtn, wxPop );
+        } ).catch( function ()
+        {
+            if( g !== wxPopGen || ! busy.parentNode ) return;
+            wxPop.replaceChild( wxEl( 'div', 'wx-fail', t( 'ui.loadFailed' ) ), busy );
+            placeBy( wxBtn, wxPop );
+        } );
+    }
+
+    function wxApply()
+    {
+        wxChk.checked = !! set.weatherBar;
+        wxBtn.hidden = ! set.weatherBar;
+        if( set.weatherBar )
+        {
+            if( ! wxBtn.firstChild ) wxBtn.innerHTML = wxSvg( 2, true );     // a cloud until the first answer
+            wxTick( false );
+            return;
+        }
+        clearTimeout( wxTimer );
+        wxGen++; wxPopGen++;
+        if( wxMenu ) wxMenu.close();
+    }
+    wxChk.addEventListener( 'change', function () { set.weatherBar = wxChk.checked; saveSet(); wxApply(); placeMore(); } );
+    wxApply();
+
+    document.addEventListener( 'DOMContentLoaded', function ()     // ui.js is deferred
+    {
+        if( ! window.NayiveUI ) return;
+        wxMenu = NayiveUI.wireMenu( { btn: wxBtn, menu: wxPop } );
+        // After wireMenu's own click (it toggles the popup and stops the click, so
+        // the "⋮" menu would stay open: closed here, and this popup by the "⋮").
+        wxBtn.addEventListener( 'click', function () { closeMore(); if( ! wxPop.hidden ) wxOpen(); else wxPopGen++; } );
+        moreBtn.addEventListener( 'click', function () { if( wxMenu ) wxMenu.close(); } );
+    } );
+    // A press inside a window's frame never reaches this document: it takes the focus.
+    window.addEventListener( 'blur', function () { if( wxMenu ) wxMenu.close(); } );
 
     // A window by its place on the bar (0, 1...), its app's folder ("drive"), or itself.
     function winOf( which )
@@ -1480,8 +1997,6 @@
         doc.documentElement.classList.add( 'in-desktop' );
         var st = doc.createElement( 'style' );
         st.textContent = 'html,body{overflow:hidden auto;scrollbar-width:thin}.launcher{min-height:0;padding:0}.panel{border:0;border-radius:0;box-shadow:none;background:transparent}' +
-                         '.desk-set-btn{position:absolute;left:30px;bottom:26px;transition:opacity .2s ease,visibility .2s}.desk-set-btn svg{width:20px;height:20px}' +
-                         '.panel:has(.tools.open) .desk-set-btn{opacity:0;visibility:hidden}' +
                          // full screen for a dialog: the desk shows behind it, not the launcher's tiles
                          'html.desk-full,html.desk-full body{background:transparent}html.desk-full .launcher{visibility:hidden}';
         doc.head.appendChild( st );
@@ -1494,25 +2009,6 @@
             menu.style.width  = Math.ceil( r.width  + 2 ) + 'px';   // + the menu's 1px border, each side
             menu.style.height = Math.ceil( r.bottom + 2 ) + 'px';
         } ).observe( panel );
-
-        // Desktop only: the desktop's settings, in the panel's bottom-left corner (the
-        // launcher's "find my phone" has the bottom-right one). It steps aside while
-        // the gear's row is open, as that one does.
-        if( panel )
-        {
-            var setBtn = doc.createElement( 'button' );
-            setBtn.type = 'button';
-            setBtn.className = 'theme-btn desk-set-btn';
-            setBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-                               '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
-            setBtn.addEventListener( 'click', function () { openSettings( 'desk' ); } );
-            panel.appendChild( setBtn );
-            ( window.NayiveI18n && NayiveI18n.ready ? NayiveI18n.ready : Promise.resolve() ).then( function ()
-            {
-                setBtn.title = t( 'desktop.settings' );
-                setBtn.setAttribute( 'aria-label', setBtn.title );
-            } );
-        }
 
         doc.addEventListener( 'click', function ( e )
         {
@@ -1565,8 +2061,8 @@
     window.NayiveDesktop = { menu: function () { if( menu.hidden ) openMenu(); else closeMenu(); } };
 
     // A press on the desk or the bar closes an open menu. A right-click on an empty
-    // spot of the desk (not the bar) opens the desktop's settings - unless that very
-    // press was the one closing the menu.
+    // spot of the desk (not the bar) opens the "⋮" menu, where the desktop's
+    // settings are - unless that very press was the one closing the launcher's menu.
     var menuWasOpen = false;
     [ desk, bar ].forEach( function ( el )
     {
@@ -1577,11 +2073,39 @@
             closeMenu();
         } );
     } );
+    function openMoreHere()
+    {
+        if( ! menuWasOpen && more && ! more.isOpen() ) { more.open(); placeMore(); }
+    }
     desk.addEventListener( 'contextmenu', function ( e )
     {
         if( e.target !== desk ) return;
         e.preventDefault();
-        if( ! menuWasOpen ) openSettings( 'desk' );
+        openMoreHere();
+    } );
+    // A finger's right-click: a long press (half a second, still) on an empty
+    // spot of the desk. Android sends its own contextmenu too; iPad does not.
+    // The click a browser may send when the finger lifts must not close the menu again.
+    var LONG_MS = 550;
+    desk.addEventListener( 'pointerdown', function ( e )
+    {
+        if( e.target !== desk || e.pointerType === 'mouse' ) return;
+        var x0 = e.clientX, y0 = e.clientY, id = e.pointerId, fired = false;
+        var timer = setTimeout( function () { fired = true; openMoreHere(); }, LONG_MS );
+        function eat( c ) { c.stopPropagation(); c.preventDefault(); }
+        function move( ev ) { if( ev.pointerId === id && ! fired && Math.abs( ev.clientX - x0 ) + Math.abs( ev.clientY - y0 ) > 10 ) done(); }
+        // The finger lifts: a click the browser sends now is eaten, until the next tick.
+        function lift() { if( fired ) { document.addEventListener( 'click', eat, true ); setTimeout( function () { document.removeEventListener( 'click', eat, true ); }, 0 ); } done(); }
+        function done()
+        {
+            clearTimeout( timer );
+            document.removeEventListener( 'pointermove', move, true );
+            document.removeEventListener( 'pointerup', lift, true );
+            document.removeEventListener( 'pointercancel', done, true );
+        }
+        document.addEventListener( 'pointermove', move, true );
+        document.addEventListener( 'pointerup', lift, true );
+        document.addEventListener( 'pointercancel', done, true );
     } );
 
     //------------------------------------------------------------------------//
@@ -1717,62 +2241,6 @@
     } );
 
     hookAlt( window );
-
-    //------------------------------------------------------------------------//
-    // THE SETTINGS DIALOG
-
-    var back  = document.getElementById( 'setBackdrop' );
-    var F = {
-        start: document.getElementById( 'setStart' ), bar:  document.getElementById( 'setBar' ),
-        barH:  document.getElementById( 'setBarH' ),  font: document.getElementById( 'setFont' ),
-        dow:   document.getElementById( 'setDow' ),   date: document.getElementById( 'setDate' ),
-        secs:  document.getElementById( 'setSecs' )
-    };
-    var barHOut = document.getElementById( 'setBarHOut' );
-
-    function showTab( name )
-    {
-        [].forEach.call( back.querySelectorAll( '[data-tab]' ), function ( b )
-        {
-            var on = b.getAttribute( 'data-tab' ) === name;
-            b.classList.toggle( 'is-active', on );
-            b.setAttribute( 'aria-selected', on ? 'true' : 'false' );
-        } );
-        [].forEach.call( back.querySelectorAll( '[data-pane]' ), function ( p )
-        {
-            p.hidden = p.getAttribute( 'data-pane' ) !== name;
-        } );
-    }
-
-    function openSettings( tab )
-    {
-        closeMenu();
-        F.start.value = set.start; F.bar.value = set.bar; F.barH.value = set.barH; F.font.value = set.font;
-        F.dow.value = set.dow; F.date.checked = !! set.date; F.secs.checked = !! set.secs;
-        barHOut.textContent = set.barH + ' px';
-        showTab( tab );
-        if( window.NayiveUI ) NayiveUI.open( 'setBackdrop' );
-        else back.classList.add( 'open' );
-    }
-
-    back.querySelector( '.set-tabs' ).addEventListener( 'click', function ( e )
-    {
-        var b = e.target.closest( '[data-tab]' );
-        if( b ) showTab( b.getAttribute( 'data-tab' ) );
-    } );
-
-    Object.keys( F ).forEach( function ( k )
-    {
-        F[ k ].addEventListener( k === 'barH' ? 'input' : 'change', function ()
-        {
-            set.start = F.start.value; set.bar = F.bar.value; set.barH = +F.barH.value; set.font = F.font.value;
-            set.dow = F.dow.value; set.date = F.date.checked; set.secs = F.secs.checked;
-            barHOut.textContent = set.barH + ' px';
-            saveSet();
-            applyLayout();
-            tick();
-        } );
-    } );
 
     //------------------------------------------------------------------------//
     // THE CLOCK - "<weekday> <yyyy-mm-dd> <hh:mm[:ss]>", weekday and date as the
@@ -2149,8 +2617,80 @@
     } );
 
     //------------------------------------------------------------------------//
-    // HELP - the "?" after the clock opens the shared help card: one row per
-    // thing on the bar, then what has no button (moving windows, Alt, settings).
+    // KEYBOARD (2026-10-01) - while the on-screen keyboard is up, the window in
+    // front gets shorter, down to the keyboard's top edge, so the field typed
+    // into stays in sight; when it goes, the window gets its size back. Seen
+    // through visualViewport: the keyboard is up while the visible height is
+    // 120px or more below the tallest seen at this width. A browser that
+    // shrinks the whole page for it instead (the Android app may) shrinks the
+    // desk too: the edge is the lower of the two. Only the window's style
+    // changes - w.g, what is saved and restored, keeps its real size.
+
+    var vv = window.visualViewport, kbWin = null, kbBase = 0, kbW = 0, kbEdge = 0;
+    var KB_MIN = 120, KB_KEEP = 240;    // a keyboard is at least this tall; the window keeps at least this much
+
+    function kbFit()
+    {
+        if( ! vv ) return;
+        if( window.innerWidth !== kbW ) { kbW = window.innerWidth; kbBase = 0; }   // turned: a new tallest
+        kbBase = Math.max( kbBase, vv.height );
+        var dr = desk.getBoundingClientRect();
+        kbEdge = Math.min( dr.bottom, vv.offsetTop + vv.height ) - dr.top;         // in desk pixels
+        var w = kbBase - vv.height >= KB_MIN && front && ! front.el.hidden && wins.indexOf( front ) >= 0 ? front : null;
+        if( kbWin && kbWin !== w ) kbRelease();
+        if( ! w ) return;
+        kbWin = w;
+        kbShrink( w );
+        // the field typed into: back in sight inside the shorter window
+        try
+        {
+            var el = w.frame.contentDocument.activeElement;
+            if( el && el !== w.frame.contentDocument.body && el.scrollIntoView ) el.scrollIntoView( { block: 'nearest' } );
+        }
+        catch( e ) {}
+    }
+
+    // Style only (place() calls it again while the keyboard is up).
+    function kbShrink( w )
+    {
+        var st = w.el.style;
+        if( isMax( w ) )
+        {
+            w.el.classList.add( 'kb' );
+            st.setProperty( '--kb-h', Math.max( 1, kbEdge ) + 'px' );
+            return;
+        }
+        st.removeProperty( '--kb-h' );
+        if( w.g.t + w.g.h <= kbEdge )                              // clear of it: its own size
+        {
+            if( w.el.classList.contains( 'kb' ) ) { w.el.classList.remove( 'kb' ); kbWin = null; place( w, w.g ); kbWin = w; }
+            return;
+        }
+        var top = Math.max( 0, Math.min( w.g.t, kbEdge - KB_KEEP ) );
+        w.el.classList.add( 'kb' );
+        st.top    = px( top );
+        st.height = px( Math.max( 1, kbEdge - top ) / w.s );     // laid-out pixels: a shrunk window is drawn w.s smaller
+    }
+
+    function kbRelease()
+    {
+        var w = kbWin;
+        kbWin = null;
+        if( ! w || wins.indexOf( w ) < 0 ) return;
+        w.el.classList.remove( 'kb' );
+        w.el.style.removeProperty( '--kb-h' );
+        place( w, w.g );
+    }
+
+    if( vv )
+    {
+        vv.addEventListener( 'resize', kbFit );
+        vv.addEventListener( 'scroll', kbFit );
+    }
+
+    //------------------------------------------------------------------------//
+    // HELP - the "?" after the "⋮" opens the shared help card: one row per
+    // thing on the bar, then what has no button (moving windows, Alt).
 
     var CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
 
@@ -2169,10 +2709,10 @@
                 { icon: 'fullscr', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ) },
                 { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ) },
                 { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ) },
+                { svg: wxSvg( 1, true ), name: t( 'desktop.weather' ), text: t( 'desktop.helpWeather' ) },   // listed even while off: it says where to turn it on
                 { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
                 { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) },
-                { sel: '#syncIndicator:not([hidden])', text: t( 'desktop.helpSync' ) },
-                { icon: 'gear',    name: t( 'desktop.settings' ),       text: t( 'desktop.helpSettings' ) }
+                { sel: '#syncIndicator:not([hidden])', text: t( 'desktop.helpSync' ) }
             ]
         } );
     } ); } );
@@ -2196,7 +2736,8 @@
         isTiled:    function () { return !! tiled; }
     } );
 
-    appsReady.then( restoreWins );
+    // narrow = null: looked at afresh, so a desk tiled upright and reloaded wide goes back to Free
+    appsReady.then( function () { restoreWins(); narrow = null; upright(); } );
 } )();
 </script>
 </body>

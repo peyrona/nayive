@@ -15,6 +15,9 @@
     <string name="step_batt_why">Para que Nayive siga despierto con la pantalla apagada. Elige «Permitir».</string>
     <string name="step_full_title">Pantalla completa</string>
     <string name="step_full_why">Para que una llamada se vea aunque el móvil esté bloqueado.</string>
+    <string name="step_media_title">Fotos y vídeos</string>
+    <string name="step_media_why">Para subir a Nayive las fotos nuevas de la cámara, si lo activas en Mi cuenta. Nunca borra nada del móvil.</string>
+    <string name="step_media_partial">Has elegido solo algunas fotos: toca Permitir y elige «Permitir todo».</string>
     <string name="step_do">Permitir</string>
     <string name="step_ok">Hecho</string>
     <string name="setup_continue">Continuar</string>
@@ -25,6 +28,7 @@
     <string name="chan_find">Buscar mi móvil</string>
     <string name="chan_pending">Pendientes</string>
     <string name="chan_updates">Actualizaciones</string>
+    <string name="chan_media">Fotos subidas</string>
 
     <string name="link_on">Nayive está conectado</string>
     <string name="link_tracking">Nayive guarda tu posición del viaje</string>
@@ -48,6 +52,18 @@
 
     <string name="update_title">Hay una versión nueva de Nayive</string>
     <string name="update_text">Toca para descargarla.</string>
+
+    <string name="media_done">Fotos subidas a Nayive</string>
+    <plurals name="media_photos">
+        <item quantity="one">%d foto</item>
+        <item quantity="other">%d fotos</item>
+    </plurals>
+    <plurals name="media_videos">
+        <item quantity="one">%d vídeo</item>
+        <item quantity="other">%d vídeos</item>
+    </plurals>
+    <string name="media_fix_title">Nayive no puede ver tus fotos</string>
+    <string name="media_fix_text">Toca para darle permiso y subir las fotos nuevas.</string>
 
     <string name="shortcut_setup">Permisos</string>
     <string name="shortcut_setup_long">Permisos de Nayive</string>

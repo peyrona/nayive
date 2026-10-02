@@ -16,6 +16,7 @@ What the service does, all through ONE long poll to `/api/device/wait`
 | Unread messages | a silent notification carrying the number: the icon's badge (a dot on Pixel) |
 | "Buscar mi móvil" | rings on the ALARM stream - heard with the phone silenced - until Parar on the phone, and sends where it is |
 | A new APK | once a day, `<origin>/app/version.json` → a notification |
+| New photos and videos | once a day on Wi-Fi, when switched on in Mi cuenta: to the trip's photo folder, else `files/Camera/<year>/`; nothing deleted on the phone |
 
 The first run is a permissions screen (notifications, location "all the time",
 battery, full screen). Long-press the icon → **Permisos** to get back to it.
@@ -60,3 +61,4 @@ minSdk 26, android-browser-helper 2.7.3.
 | `Ringer`, `RingActivity`, `Notes` | the sound, the full-screen page, every notification |
 | `Actions`, `ActionReceiver` | Rechazar / Parar / Contestar, wherever they were pressed |
 | `Api`, `Prefs` | HTTP (token in the `X-Nayive-Device` header), the little the app keeps |
+| `Media`, `MediaJob`, `MediaUploader` | "Upload new photos and videos": the camera's new files, once a day on Wi-Fi, resumable (server: `api_device_media.go`) |

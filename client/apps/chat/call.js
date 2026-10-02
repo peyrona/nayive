@@ -11,6 +11,8 @@
  * On screen (a full-screen layer, no ×): calling / ringing, incoming,
  * connecting, the talk timer, reconnecting, and how it ended (2 s). The phone's
  * Back does nothing while a call is on - leaving is hanging up (his call, D3).
+ * The "small" button turns the layer into a box over the chat, dragged
+ * anywhere; a tap on it brings the whole screen back.
  *
  * This page's id (S.dev) goes on every wait: signals are addressed to a page,
  * so the owner's second tab never reads the answer meant for the first one.
@@ -474,7 +476,7 @@
         if( call.state !== "ended" ) stopAll();
         var el = call.el;
         call = null;
-        if( el ) { el.remove(); C.popNav( "call" ); }
+        if( el ) { el.remove(); C.popNav( isSmall( el ) ? "callguard" : "call" ); }
         if( S.open && C.renderConvHead ) C.renderConvHead();
     }
 
@@ -571,9 +573,110 @@
         el.appendChild( h( "div", { class: "call-btns" } ) );
         document.body.appendChild( el );
         // Back must not end a call: the step is put back each time it is used.
-        var stay = function () { if( call && call.el === el ) C.pushNav( "call", stay ); };
+        var stay = call.stay = function () { if( call && call.el === el && ! isSmall( el ) ) C.pushNav( "call", stay ); };
         C.pushNav( "call", stay );
+        boxMoves( el );
         render();
+    }
+
+    // ---------------------------------------------------------------------
+    // the small box: the call over the chat, which stays usable
+    // ---------------------------------------------------------------------
+
+    var BOX_KEY = "nayive.chat.callBox", GAP = 8;
+
+    function isSmall( el ) { return el.classList.contains( "small" ); }
+
+    function setSmall( on )
+    {
+        var el = call && call.el;
+        if( ! el || isSmall( el ) === on ) return;
+        el.classList.toggle( "small", on );
+        // Big, it covers Chat's top row, so it drags the desktop window; small,
+        // it drags itself. Back works in the chat while it is small.
+        if( on )
+        {
+            el.removeAttribute( "data-win-drag" );
+            el.setAttribute( "role", "button" );
+            el.setAttribute( "tabindex", "0" );
+            el.setAttribute( "title", T( "chat.openCall" ) );
+            el.setAttribute( "aria-label", T( "chat.openCall" ) );
+            el.removeAttribute( "aria-modal" );
+            C.popNav( "call", guard );
+        }
+        else
+        {
+            el.setAttribute( "data-win-drag", "" );
+            el.setAttribute( "role", "dialog" );
+            el.setAttribute( "aria-modal", "true" );
+            [ "tabindex", "title", "aria-label", "style" ].forEach( function ( a ) { el.removeAttribute( a ); } );
+            C.popNav( "callguard", function () { if( call && call.el === el ) C.pushNav( "call", call.stay ); } );
+        }
+        render();
+        if( on ) place( savedBox() );
+    }
+
+    // Small, Back works in the chat - but not past the list: leaving the page
+    // would end the call. One last step stays under the list for that.
+    function guard()
+    {
+        if( call && call.el && isSmall( call.el ) && ! C.navDepth() ) C.pushNav( "callguard", null );
+    }
+    window.addEventListener( "popstate", function () { setTimeout( guard, 0 ); } );
+
+    function savedBox()
+    {
+        try { var b = JSON.parse( localStorage.getItem( BOX_KEY ) || "null" ); if( b && isFinite( b.x ) && isFinite( b.y ) ) return b; } catch( _ ) {}
+        return { x: 1e6, y: 64 };     // top right, under Chat's top row
+    }
+
+    // Keep the box inside the page: the window may have been made smaller.
+    function place( at )
+    {
+        var el = call && call.el;
+        if( ! el || ! isSmall( el ) ) return;
+        var x = Math.max( GAP, Math.min( at.x, innerWidth  - el.offsetWidth  - GAP ) );
+        var y = Math.max( GAP, Math.min( at.y, innerHeight - el.offsetHeight - GAP ) );
+        el.style.left = x + "px";
+        el.style.top  = y + "px";
+        return { x: x, y: y };
+    }
+
+    window.addEventListener( "resize", function () { if( call && call.el ) place( { x: call.el.offsetLeft, y: call.el.offsetTop } ); } );
+
+    // Small: a drag moves it, a tap (or Enter) opens the whole screen again.
+    function boxMoves( el )
+    {
+        // Its size changes with the call (connected, camera off): stay inside.
+        if( window.ResizeObserver ) new ResizeObserver( function () { if( isSmall( el ) ) place( { x: el.offsetLeft, y: el.offsetTop } ); } ).observe( el );
+        el.addEventListener( "pointerdown", function ( e )
+        {
+            if( ! isSmall( el ) || e.button !== 0 || e.target.closest( "button" ) ) return;
+            e.stopPropagation();                  // not the desktop window's drag
+            var x0 = e.clientX, y0 = e.clientY, left = el.offsetLeft, top = el.offsetTop, moved = false, at = null;
+            el.setPointerCapture( e.pointerId );
+            function move( ev )
+            {
+                if( ! moved && Math.abs( ev.clientX - x0 ) + Math.abs( ev.clientY - y0 ) < 4 ) return;
+                moved = true;
+                at = place( { x: left + ev.clientX - x0, y: top + ev.clientY - y0 } );
+            }
+            function up()
+            {
+                el.removeEventListener( "pointermove", move );
+                el.removeEventListener( "pointerup", up );
+                el.removeEventListener( "pointercancel", up );
+                if( ! moved ) setSmall( false );
+                else if( at ) try { localStorage.setItem( BOX_KEY, JSON.stringify( at ) ); } catch( _ ) {}
+            }
+            el.addEventListener( "pointermove", move );
+            el.addEventListener( "pointerup", up );
+            el.addEventListener( "pointercancel", up );
+        } );
+        el.addEventListener( "keydown", function ( e )
+        {
+            if( isSmall( el ) && e.target === el && ( e.key === "Enter" || e.key === " " ) ) { e.preventDefault(); setSmall( false ); }
+        } );
     }
 
     // My own picture, small, in a corner of theirs. A triangle in each of its
@@ -623,15 +726,19 @@
         self.parentNode.hidden = ! ( call.video && call.local && call.cam );
         self.classList.toggle( "mirror", call.facing !== "environment" );
 
+        // Small: only the red and green buttons, at the normal size.
+        var small = isSmall( el ), lg = small ? "" : "lg";
         var btns = el.querySelector( ".call-btns" );
         btns.textContent = "";
+        if( call.state === "ended" ) return;
+        if( ! small ) btns.appendChild( C.btn( "minimize", "chat.shrinkCall", function () { setSmall( true ); }, "lg" ) );
         if( call.state === "incoming" )
         {
-            btns.appendChild( C.btn( "phone-off", "chat.decline", C.declineCall, "lg solid-danger" ) );
-            btns.appendChild( C.btn( call.video ? "video" : "phone", "chat.answer", C.answerCall, "lg solid-ok" ) );
+            btns.appendChild( C.btn( "phone-off", "chat.decline", C.declineCall, lg + " solid-danger" ) );
+            btns.appendChild( C.btn( call.video ? "video" : "phone", "chat.answer", C.answerCall, lg + " solid-ok" ) );
             return;
         }
-        if( call.state === "ended" ) return;
+        if( small ) { btns.appendChild( C.btn( "phone-off", "chat.hangUp", function () { hangUp(); }, "solid-danger" ) ); return; }
         var mic = C.btn( call.mic ? "mic" : "mic-off", call.mic ? "chat.muteMic" : "chat.unmuteMic", toggleMic, "lg" + ( call.mic ? "" : " is-active" ) );
         mic.disabled = ! call.local;
         btns.appendChild( mic );

@@ -439,12 +439,6 @@
             catch ( e ) { /* private mode: fall back to the fixed window */ }
 
             if( isAuto() ) tick();
-        },
-
-        clearGeo: function ()
-        {
-            try { localStorage.removeItem( GKEY ); } catch ( e ) { /* ignore */ }
-            if( isAuto() ) tick();
         }
     };
 

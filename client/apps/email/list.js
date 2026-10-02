@@ -138,9 +138,7 @@
     {
         leaveModes();
         S.label = id;
-        S.query = "";
-        E.$( "searchInput" ).value = "";
-        E.$( "searchClear" ).hidden = true;
+        E.resetSearch();
         E.renderSide();
         E.loadList( false );
     };
@@ -150,10 +148,8 @@
         leaveModes();
         S.acct = id;
         S.trays = [];
-        S.query = "";
         S.label = "";
-        E.$( "searchInput" ).value = "";
-        E.$( "searchClear" ).hidden = true;
+        E.resetSearch();
         E.remember();
         E.renderSide();
         E.loadList( false );
@@ -175,6 +171,7 @@
             S.items = [];
             S.next = "";
             S.sel.clear();
+            S.only = null;
             E.$( "list" ).textContent = "";
             E.$( "listEmpty" ).hidden = true;
             E.$( "listView" ).parentNode.scrollTop = 0;
@@ -205,9 +202,12 @@
         {
             var page = await E.api( "GET", path );
             if( gen !== S.gen ) return;
-            var items = ( page.items || [] ).filter( shown );
-            S.items = S.items.concat( items );
             S.next = page.next || "";
+            var items = E.advFilter( ( page.items || [] ).filter( shown ), more );   // search.js (may end S.next)
+            // split: the message open beside the list keeps its object (the
+            // reader and the bar hold it), with what the list says now
+            if( S.open ) items = items.map( function ( m ) { return E.acctOf( m ) === E.acctOf( S.open ) && m.ref === S.open.ref ? Object.assign( S.open, m ) : m; } );
+            S.items = S.items.concat( items );
             E.showProblem( null );
             E.plug( "synced" );
             appendRows( items );
@@ -227,7 +227,8 @@
                 moreBox.hidden = ! S.next;
                 moreBox.textContent = S.next ? E.T( "mail.loading" ) : "";
                 E.showEmpty();
-                if( S.next ) watchMore();
+                if( S.next && E.advPaused() ) pauseMore();
+                else if( S.next ) watchMore();
                 if( S.selecting ) E.syncBar();
             }
         }
@@ -245,7 +246,7 @@
     {
         var empty = ! S.items.length && E.$( "acctProblem" ).hidden;
         E.$( "listEmpty" ).hidden = ! empty;
-        E.$( "listEmptyText" ).textContent = E.T( S.label ? "mail.labelEmpty" : S.query ? "mail.noResults" : "mail.empty" );
+        E.$( "listEmptyText" ).textContent = E.T( S.label ? "mail.labelEmpty" : S.query || S.adv ? "mail.noResults" : "mail.empty" );
     };
 
     function appendRows( items )
@@ -268,13 +269,15 @@
         if( m.flagged ) subj.insertAdjacentHTML( "beforeend", E.icon( "star", "star" ) );
         subj.appendChild( E.chips( m.labels ) );
 
-        var el = h( "button", { class: "mail-row" + ( m.seen ? "" : " unread" ) + ( S.sel.has( m ) ? " is-picked" : "" ),
+        var el = h( "button", { class: "mail-row" + ( m.seen ? "" : " unread" ) + ( S.sel.has( m ) ? " is-picked" : "" ) +
+                                       ( E.split && S.open === m ? " is-current" : "" ),
                                 attrs: { type: "button", "data-ref": m.ref } },
                     h( "i", { class: "mail-tick", html: NayiveUI.icon( "check" ) } ),
                     h( "div", { class: "who", text: who } ),
                     h( "div", { class: "when", text: E.shortDate( m.date ), attrs: { title: E.longDate( m.date ) } } ),
                     subj,
                     m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null );
+        if( S.only && ! S.only.has( m ) ) el.hidden = true;
         wirePress( el, m );
         m._row = el;
         return el;
@@ -349,22 +352,20 @@
         if( ! io )
             io = new IntersectionObserver( function ( entries )
             {
-                if( entries.some( function ( e ) { return e.isIntersecting; } ) && ! S.open ) E.loadList( true );
+                if( entries.some( function ( e ) { return e.isIntersecting; } ) && E.listShown() ) E.loadList( true );
             }, { root: E.$( "listView" ).parentNode, rootMargin: "300px" } );
         io.disconnect();
         io.observe( E.$( "listMore" ) );
     }
 
-    // ---------------------------------------------------------------------
-    // search
-    // ---------------------------------------------------------------------
-
-    E.search = function ( words )
+    // An advanced search found nothing in many pages in a row (search.js):
+    // the list stops reading by itself, and a button reads on.
+    function pauseMore()
     {
-        words = ( words || "" ).trim();
-        E.$( "searchClear" ).hidden = ! words;
-        if( words === S.query ) return;
-        S.query = words;
-        E.loadList( false );
-    };
+        if( io ) io.disconnect();
+        var box = E.$( "listMore" );
+        box.textContent = "";
+        box.appendChild( E.h( "button", { class: "pill", text: E.T( "mail.advKeep" ), attrs: { type: "button" },
+            on: { click: function () { S.advDry = 0; E.loadList( true ); } } } ) );
+    }
 } )();

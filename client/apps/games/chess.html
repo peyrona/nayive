@@ -178,7 +178,7 @@
                                  one is not: there is nothing left to work out
                                  from a board that is over, and everything to
                                  work out from one that is only waiting. -->
-                            <div class="game-cover chess-over" id="chessOver" hidden>
+                            <div class="game-cover" id="chessOver" hidden>
                                 <p class="game-cover-t" id="chessOverTitle"></p>
                                 <p class="game-cover-s" id="chessOverSub"></p>
                                 <button class="text-btn" id="chessOverBtn" type="button"></button>
@@ -186,7 +186,7 @@
 
                             <!-- A pawn that reached the far rank, waiting to be
                                  told what it became. -->
-                            <div class="game-cover chess-promo" id="chessPromo" hidden>
+                            <div class="game-cover" id="chessPromo" hidden>
                                 <p class="game-cover-t" data-i18n="games.chessPromote"></p>
                                 <div class="chess-promo-row">
                                     <button class="text-btn" type="button" data-promo="5" data-i18n-attr="title:games.chessQueen, aria-label:games.chessQueen">&#9819;</button>
@@ -208,8 +208,8 @@
     {
         'use strict';
 
-        // The shell's helpers (index.html, "THE GAMES"): the same twelve in
-        // every game, whether it uses them all or not.
+        // The shell's helpers (index.html, "THE NINE GAMES"): the same twelve
+        // in every game, whether it uses them all or not.
         var T           = NayiveGames.T,
             TF          = NayiveGames.TF,
             STEP        = NayiveGames.STEP,
@@ -230,10 +230,10 @@
         // is, and which of them may be played), the MACHINE (which of them it
         // chooses) and the GAME (the board on screen and the turns going round).
         //
-        // It keeps no record. The other six games end with a number - a score
-        // or a time - and chess ends with a result, which is not a thing to
-        // beat, so there is no line for it in games.json and nothing for the
-        // shell's loadData() to merge.
+        // It keeps no record. The other games but Checkers end with a number -
+        // a score or a time - and chess ends with a result, which is not a
+        // thing to beat, so there is no line for it in games.json and nothing
+        // for the shell's loadData() to merge.
 
         // The ENGINE - the rules and the machine, and nothing else: no screen,
         // no sound, not one name from outside its own braces. It is kept that
@@ -1170,8 +1170,8 @@
             // which is the whole of what it is for: a game left in the middle
             // is a position anyone walking past can read and think about. It is
             // in the toolbar for the reason 2048's is, too: a button that is
-            // there in six games of seven and missing in the seventh reads as a
-            // bug rather than as a decision.
+            // there in every other game and missing in this one reads as a bug
+            // rather than as a decision.
 
             function pause()
             {

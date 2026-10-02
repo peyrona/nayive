@@ -8,9 +8,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -105,14 +102,7 @@ func TestChatLaterRestart(t *testing.T) {
 	f.call(t, f.owner, "POST", "/api/chat/conv/"+javi+"/later", fmt.Sprintf(`{"text":"adiós","at":%d}`, at), 201, nil)
 	f.call(t, f.owner, "DELETE", "/api/chat/contacts/"+f.ids["Javi"], "", 200, nil)
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv2, err := NewServer(f.srv.cfg, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { srv2.Close() })
-	ts2 := httptest.NewServer(srv2.routes())
-	defer ts2.Close()
+	srv2, ts2 := f.restart(t)
 	srv2.chat.sendDue(time.Now().Add(2 * time.Hour))
 
 	resp := do(t, anonymous(), "GET", ts2.URL+"/api/c/"+f.carmen+"/conv/"+carmen+"/messages", nil, nil)

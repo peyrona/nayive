@@ -175,5 +175,5 @@ export function createToolbar( o )
         for( const p of pairs ) sel.appendChild( new Option( p[ 1 ], p[ 0 ] ) );
     }
 
-    return { refresh: refresh, paint: paint };
+    return { refresh: refresh };
 }

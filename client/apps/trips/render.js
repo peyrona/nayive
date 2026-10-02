@@ -9,9 +9,15 @@ function renderHeader()
     header.innerHTML = '';
 
     // Trailing controls go in their own group so the whole button bar
-    // wraps below the title as a unit when the header is too narrow.
+    // wraps below the title as a unit when the header is too narrow. Inside
+    // it, the two groups of every header (shared/app.css HEADER): the tools,
+    // then the help.
     const actions = document.createElement( 'div' );
-    actions.className = 'trip-header-actions';
+    actions.className = 'trip-header-actions header-actions';
+    const tools = document.createElement( 'div' );
+    tools.className = 'tb-group';
+    const sys = document.createElement( 'div' );
+    sys.className = 'tb-group tb-sys';
 
     if( view === 'list' )
     {
@@ -29,19 +35,22 @@ function renderHeader()
         addBtn.title = T( 'trips.addTrip' );
         addBtn.appendChild( svgIcon( ICON_PLUS, 18 ) );
         addBtn.addEventListener( 'click', openAddTrip );
-        actions.appendChild( addBtn );
+        tools.appendChild( addBtn );
 
-        // "My location": the location URL that feeds every trip's Journey map.
-        const locBtn = document.createElement( 'button' );
-        locBtn.className = 'icon-btn';
-        locBtn.id    = 'myLocationBtn';       // the help dialog points at it
-        locBtn.title = T( 'trips.myLocation' );
-        locBtn.appendChild( svgIcon( ICON_PIN, 17 ) );
-        locBtn.addEventListener( 'click', openMyLocation );
-        actions.appendChild( locBtn );
+        // Settings: Location (the URL that feeds every trip's Journey map)
+        // and General (the trip reminder) - route.js openSettings.
+        const setBtn = document.createElement( 'button' );
+        setBtn.className = 'icon-btn';
+        setBtn.type  = 'button';
+        setBtn.id    = 'settingsBtn';         // the help dialog points at it
+        setBtn.title = T( 'ui.settings' );
+        setBtn.setAttribute( 'aria-label', setBtn.title );
+        setBtn.innerHTML = NayiveUI.icon( 'gear' );
+        setBtn.addEventListener( 'click', openSettings );
+        sys.appendChild( setBtn );
 
-        actions.appendChild( buildHelpBtn() );
-        actions.appendChild( buildSyncIndicator() );
+        sys.appendChild( buildHelpBtn() );
+        actions.append( tools, sys, buildSyncIndicator() );
         header.appendChild( actions );
     }
     else
@@ -84,7 +93,7 @@ function renderHeader()
         mapBtn.title = T( 'trips.routeMap' );
         mapBtn.appendChild( svgIcon( ICON_MAP, 17 ) );
         mapBtn.addEventListener( 'click', openMapSheet );
-        actions.appendChild( mapBtn );
+        tools.appendChild( mapBtn );
 
         // The currency converter lives in the header only when the whole trip uses one
         // currency (or has no stages yet). When stages span several currencies it moves
@@ -113,7 +122,7 @@ function renderHeader()
                 calcBtn.title = T( 'trips.fxTitle' );
             }
 
-            actions.appendChild( calcBtn );
+            tools.appendChild( calcBtn );
         }
 
         // Share and export-PDF are NOT here: both sit on the trip's card in the
@@ -130,23 +139,27 @@ function renderHeader()
             editBtn.title = T( 'trips.editTrip' );
             editBtn.appendChild( svgIcon( ICON_PENCIL, 17 ) );
             editBtn.addEventListener( 'click', openEditTrip );
-            actions.appendChild( editBtn );
+            tools.appendChild( editBtn );
 
             const delBtn = document.createElement( 'button' );
             delBtn.className = 'icon-btn danger';
             delBtn.title = T( 'trips.deleteTrip' );
             delBtn.appendChild( svgIcon( ICON_TRASH, 16 ) );
-            delBtn.addEventListener( 'click', function()
+            // A whole trip asks first (NayiveUI.confirm); a stage or a document
+            // goes at once, with an Undo instead.
+            delBtn.addEventListener( 'click', async function()
             {
-                openConfirm( T( 'trips.deleteTrip' ), TF( 'trips.deleteTripBody', { name: trip.destination } ), NayiveUI.t( 'ui.delete' ), deleteTrip );
+                if( await NayiveUI.confirm( { title: T( 'trips.deleteTrip' ), body: TF( 'trips.deleteTripBody', { name: trip.destination } ),
+                                              confirm: NayiveUI.t( 'ui.delete' ), danger: true } ) )
+                    deleteTrip();
             });
-            actions.appendChild( delBtn );
+            tools.appendChild( delBtn );
 
             // The stages help: a shared trip has none of the buttons it explains.
-            actions.appendChild( buildHelpBtn() );
+            sys.appendChild( buildHelpBtn() );
         }
 
-        actions.appendChild( buildSyncIndicator() );
+        actions.append( tools, sys, buildSyncIndicator() );
         header.appendChild( actions );
     }
 
@@ -185,7 +198,7 @@ function renderContent()
 function buildListView()
 {
     const wrap  = document.createElement( 'div' );
-    const today = todayIso();
+    const today = NayiveUI.todayIso();
 
     const upcoming = trips.filter( function( t ) { return t.endDate >= today; } ).sort( function( a, b ) { return a.startDate.localeCompare( b.startDate, NayiveUI.lang() ); } );
     const past     = trips.filter( function( t ) { return t.endDate < today; } ).sort( function( a, b ) { return b.startDate.localeCompare( a.startDate, NayiveUI.lang() ); } );
@@ -226,7 +239,7 @@ function sectionLabel( sText, bSpaced )
 function daysUntil( isoDate )
 {
     if( ! isoDate ) return null;
-    const ms = new Date( isoDate + 'T00:00:00' ) - new Date( todayIso() + 'T00:00:00' );
+    const ms = new Date( isoDate + 'T00:00:00' ) - new Date( NayiveUI.todayIso() + 'T00:00:00' );
     return isNaN( ms ) ? null : Math.round( ms / 86400000 );
 }
 

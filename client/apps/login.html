@@ -62,14 +62,9 @@
         .pw-eye svg { width: 18px; height: 18px; margin: 0; }
         .remember
         {
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; justify-content: flex-start; gap: 10px;
             text-transform: none; letter-spacing: 0; font-size: 0.85rem;
             color: var(--text-dim); margin: -4px 0 6px 2px; cursor: pointer;
-        }
-        .remember input
-        {
-            width: 16px; height: 16px; margin: 0; padding: 0;
-            flex: 0 0 auto; accent-color: var(--accent);
         }
         button
         {
@@ -82,9 +77,12 @@
         button:hover  { filter: brightness(1.12); }
         button:active { filter: brightness(0.93); }
         button:disabled { opacity: 0.55; cursor: default; filter: none; }
+        /* Bottom row: error message at the left, Continue button at the right. */
+        .foot { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+        .foot button { margin: 0 0 0 auto; }
         .error
         {
-            color: var(--danger); font-size: 0.88rem; margin: 0 0 14px; min-height: 1.2em;
+            color: var(--danger); font-size: 0.88rem; margin: 0; line-height: 1.3;
         }
     </style>
 </head>
@@ -95,10 +93,8 @@
             <span>Nayive</span>
         </div>
 
-        <p class="error" id="error" role="alert"></p>
-
         <label for="user" data-i18n="login.user"></label>
-        <input id="user" name="user" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        <input id="user" name="user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
 
         <label for="password" data-i18n="login.password"></label>
         <div class="pw-wrap">
@@ -107,13 +103,16 @@
         </div>
 
         <label class="remember" for="remember">
-            <input type="checkbox" id="remember" name="remember" checked>
             <span data-i18n="login.remember"></span>
+            <span class="switch sm"><input type="checkbox" id="remember" name="remember" checked><span class="track"></span></span>
         </label>
 
-        <button type="submit" id="submit" data-i18n-attr="title:login.signIn, aria-label:login.signIn">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        </button>
+        <div class="foot">
+            <p class="error" id="error" role="alert"></p>
+            <button type="submit" id="submit" data-i18n-attr="title:login.signIn, aria-label:login.signIn">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+        </div>
     </form>
 
     <script>

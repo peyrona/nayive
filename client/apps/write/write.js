@@ -199,7 +199,7 @@ const session = NayiveOffice.session( {
     finishName : docxName,
     renameName : docxName,
     canOpen    : isOpenable,                                 // what the Open dialog lists
-    onPick     : function( path ) { openPickedFile( path ); },   // a foreign format is converted first
+    onPick     : function( path ) { openPickedFile( path ); },   // any other format is turned away
     emptyKey   : 'write.noDocs',
     ready      : function() { return ready; },
     focus      : function() { focusEditor(); }                        // the caret stays where it was
@@ -209,7 +209,7 @@ const session = NayiveOffice.session( {
 // keeps its own; the dialog reads the document itself (getPageSetup).
 let pageSetup = { size: 'A4', orientation: 'portrait', top: 2, bottom: 1.6, left: 2, right: 1.6 };
 
-// Spell-check languages. Persisted; the spell check reads this live (plan Phase 4).
+// Spell-check languages. Persisted; the spell check reads this live.
 const PROOF_LANG_KEY = 'nayive-write-prooflang';
 let proofLangs = readProofLangs();
 
@@ -218,7 +218,8 @@ function readProofLangs()
     try
     {
         const raw = localStorage.getItem( PROOF_LANG_KEY );
-        if( raw !== null ) return raw ? raw.split( ',' ) : [];
+        // a dropped dictionary (Italian, 2026-09-28) may still be in there
+        if( raw !== null ) return raw ? raw.split( ',' ).filter( c => PROOF_LANGS.indexOf( c ) >= 0 ) : [];
     }
     catch( _ ) {}
     return defaultProofLangs();
@@ -326,7 +327,7 @@ function wireStaticUI()
     // setHelpMenu tells shared/ui.js to leave the click to this menu instead of
     // opening the guide card itself (the card is the third entry).
     document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-    helpMenu = NayiveOffice.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: HELP_IDS } );
+    helpMenu = NayiveOffice.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: NayiveOffice.HELP_IDS } );
     NayiveUI.setHelpMenu( true );
     groups =
     [
@@ -425,8 +426,8 @@ function wireStaticUI()
         if( e.key === 'Escape' )
         {
             if( fileMenu && fileMenu.isOpen() ) { fileMenu.close(); return; }
-            if( document.getElementById( 'tbPopup'  ).classList.contains( 'open' ) ) { closeTbPopup();  return; }
-            if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { closeSymPopup(); return; }
+            if( document.getElementById( 'tbPopup'  ).classList.contains( 'open' ) ) { tbPopup.close();  return; }
+            if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
 
             const open = document.querySelector( '.sheet-backdrop.open' );
             if( open ) { setBackdrop( open.id, false ); return; }
@@ -466,9 +467,6 @@ function initEditor( who )
     // A click on a link shows what it points at (and open / edit / remove);
     // Ctrl+K asks for one. The engine draws the link, Write the sheet and menu.
     editor.setHyperlinkChrome( { onPopover: showLinkMenu, onRequest: openLinkDialog } );
-
-    window.__write = editor;   // handy for the browser console, and for the checks
-    window.__spell = spell;
 }
 
 // Resolves once the document just handed to load() is on screen: parsed, laid
@@ -940,40 +938,17 @@ function selectBack( pid, from, to )
 // Templates are just .docx files in a folder you pick. Nothing is shipped: the
 // folder is yours, so what counts as a template is your business. Its own key in
 // data/write/config.json, NOT the launcher-folder slot, so a future "open Write
-// in folder X" cannot collide with it.
-const WRITE_CFG = 'data/write/config.json';
-let   cfgWarned = false;   // "your saved settings could not be read" is said once
-
-// Nothing saved yet (a 404) is {}. Any other failure - offline, a 5xx, bad
-// JSON - throws: a file that could not be read must never be written over
-// with just the key being changed (the templates folder, the menu bar).
-async function readWriteCfg()
-{
-    const cfg = await GumApi.readJson( WRITE_CFG );
-    if( cfg !== null && ( typeof cfg !== 'object' || Array.isArray( cfg ) ) ) throw new Error( WRITE_CFG + ' is not an object' );
-    return cfg || {};
-}
-
-async function writeWriteCfg( patch )
-{
-    let cfg;
-    try { cfg = await readWriteCfg(); }
-    catch( _ )
-    {
-        if( ! cfgWarned ) { cfgWarned = true; NayiveUI.toast( NayiveUI.t( 'ui.prefsUnread' ) ); }
-        return null;
-    }
-    Object.assign( cfg, patch );
-    try { await GumApi.writeJson( WRITE_CFG, cfg ); } catch( _ ) {}
-    return cfg;
-}
+// in folder X" cannot collide with it. Read-modify-write (shared/office.js,
+// appConfig): a file that could not be read is never written over with just
+// the key being changed (the templates folder, the menu bar).
+const writeCfg = NayiveOffice.appConfig( 'data/write/config.json', 'ui.prefsUnread' );
 
 async function openTemplates()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
     let cfg;
-    try { cfg = await readWriteCfg(); }
+    try { cfg = await writeCfg.read(); }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'ui.prefsUnread' ) ); return; }   // where the templates are is not known
 
     let dir = cfg.templatesDir;
@@ -984,7 +959,7 @@ async function openTemplates()
                                            note : NayiveUI.t( 'write.pickTemplatesNote' ),
                                            allowRoot: true } );
         if( ! dir ) return;
-        await writeWriteCfg( { templatesDir: dir } );
+        await writeCfg.write( { templatesDir: dir } );
     }
 
     setBackdrop( 'tplBackdrop', true );
@@ -1061,7 +1036,7 @@ async function changeTemplatesDir()
                                              allowRoot: true } );
     if( ! dir ) return;
 
-    await writeWriteCfg( { templatesDir: dir } );
+    await writeCfg.write( { templatesDir: dir } );
     renderTemplates( dir );
 }
 
@@ -1087,10 +1062,10 @@ function openSymbols()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { closeSymPopup(); return; }
+    if( document.getElementById( 'symPopup' ).classList.contains( 'open' ) ) { symPopup.close(); return; }
 
     renderSymbols();
-    openSymPopup();
+    symPopup.open();
 }
 
 function renderSymbols()
@@ -1127,45 +1102,7 @@ function renderSymbols()
 
 function insertSymbol( ch ) { runExec( { type: 'insertText', text: ch } ); }
 
-function openSymPopup()
-{
-    const pop = document.getElementById( 'symPopup' );
-
-    pop.classList.add( 'open' );   // lay it out before measuring
-
-    const r  = anchorRect( '#symbolsBtn' );
-    const vw = document.documentElement.clientWidth;
-
-    let left = Math.min( r.left, vw - pop.offsetWidth - 8 );
-    if( left < 8 ) left = 8;
-
-    pop.style.top  = ( r.bottom + 4 ) + 'px';
-    pop.style.left = left + 'px';
-
-    setTimeout( function()   // deferred, else the opening click closes it again
-    {
-        document.addEventListener( 'pointerdown', onSymOutside, true );
-        window.addEventListener( 'resize', closeSymPopup );
-    }, 0 );
-}
-
-function closeSymPopup()
-{
-    document.getElementById( 'symPopup' ).classList.remove( 'open' );
-    document.removeEventListener( 'pointerdown', onSymOutside, true );
-    window.removeEventListener( 'resize', closeSymPopup );
-}
-
-function onSymOutside( e )
-{
-    const pop = document.getElementById( 'symPopup' );
-    if( pop.contains( e.target ) ) return;
-
-    // Let the trigger's own click through, so the button can toggle it shut.
-    if( e.target.closest && e.target.closest( '#symbolsBtn' ) ) return;
-
-    closeSymPopup();
-}
+const symPopup = anchoredPopup( 'symPopup', '#symbolsBtn' );
 
 //----------------------------------------------------------------------------//
 // PARRAFO  (spacing, indents, keep-together, tab stops, list number format)
@@ -1192,9 +1129,8 @@ let paraTouched = new Set();
 let paraFmt     = null;     // snapshot().formatting when the dialog opened
 let paraList    = null;     // { paraId, numId, ilvl, formats } when the caret is in a numbered list
 
-function cmToTwips( v ) { return Math.round( ( v || 0 ) * 1440 / CM_PER_IN ); }
-
-// "1,5" in Spanish, "1.5" in English - the dialog's own numbers.
+// "1,5" in Spanish, "1.5" in English - the dialogs' own numbers (this one's
+// and the page setup's).
 function fmtNum( v ) { return ( Math.round( v * 100 ) / 100 ).toLocaleString( NayiveUI.locale(), { maximumFractionDigits: 2 } ); }
 function parseNum( raw ) { const n = parseFloat( String( raw ).replace( ',', '.' ) ); return Number.isFinite( n ) ? n : null; }
 
@@ -1352,11 +1288,11 @@ function paragraphCommand()
     if( paraTouched.has( 'paIndent' ) )
     {
         const l = parseCm( val( 'paLeft' ), 20 ), r = parseCm( val( 'paRight' ), 20 );
-        if( l !== null ) cmd.indentLeftTwips  = cmToTwips( l );
-        if( r !== null ) cmd.indentRightTwips = cmToTwips( r );
+        if( l !== null ) cmd.indentLeftTwips  = cmToTw( l );
+        if( r !== null ) cmd.indentRightTwips = cmToTw( r );
 
         const special = val( 'paSpecial' );
-        const by      = cmToTwips( parseCm( val( 'paSpecialBy' ), 20 ) ?? 0 );
+        const by      = cmToTw( parseCm( val( 'paSpecialBy' ), 20 ) ?? 0 );
         cmd.indentFirstLineTwips = special === 'first' ? by : special === 'hanging' ? -by : 0;
     }
 
@@ -1371,7 +1307,7 @@ function paragraphCommand()
     if( paraTouched.has( 'paTabs' ) )
     {
         const pos = parseCm( val( 'paTabPos' ), 50 );
-        cmd.tabStops = pos === null || pos <= 0 ? [] : tabStopsWith( cmToTwips( pos ), val( 'paTabAlign' ) );
+        cmd.tabStops = pos === null || pos <= 0 ? [] : tabStopsWith( cmToTw( pos ), val( 'paTabAlign' ) );
     }
 
     return Object.keys( cmd ).length > 1 ? cmd : null;
@@ -1504,7 +1440,7 @@ function fmtCount( n )
 // that back. "Documento nuevo" gets Alt+N, exactly as Drive's "nueva carpeta"
 // did for the same reason.
 
-const IS_MAC = /Mac|iPhone|iPad|iPod/.test( navigator.platform || navigator.userAgent || '' );
+const IS_MAC = NayiveUI.isMac;
 
 function kMod()   { return IS_MAC ? '⌘' : NayiveUI.t( 'ui.keyCtrl'  ); }
 function kAlt()   { return IS_MAC ? '⌥' : NayiveUI.t( 'ui.keyAlt'   ); }
@@ -1533,13 +1469,15 @@ function modShift( e )
 }
 
 const SHORTCUTS = [
-    { el: 'saveAsBtn', key: 'write.sc.save',   label: () => combo( [ kMod(), 'S' ] ),
+    // Saves in place, so no button carries its hint ("Guardar como" asks for a
+    // name); the Archivo menu's Guardar row shows it.
+    { key: 'write.sc.save',   label: () => combo( [ kMod(), 'S' ] ), browserDialog: true,
       match: e => modOnly( e ) && e.code === 'KeyS', run: saveNow },
 
-    { el: 'printBtn',  key: 'write.print',     label: () => combo( [ kMod(), 'P' ] ),
+    { el: 'printBtn',  key: 'write.print',     label: () => combo( [ kMod(), 'P' ] ), browserDialog: true,
       match: e => modOnly( e ) && e.code === 'KeyP', run: () => printDocument( false ) },
 
-    { el: 'openBtn',   key: 'ui.openDoc',      label: () => combo( [ kMod(), 'O' ] ),
+    { el: 'openBtn',   key: 'ui.openDoc',      label: () => combo( [ kMod(), 'O' ] ), browserDialog: true,
       match: e => modOnly( e ) && e.code === 'KeyO' },
 
     { el: 'newBtn',    key: 'write.newDoc',    label: () => combo( [ kAlt(), 'N' ] ),
@@ -1591,8 +1529,8 @@ let toolbar = null;    // toolbar.js, made in wireStaticUI
 function refreshToolbar() { if( toolbar ) toolbar.refresh(); }
 
 // A toolbar slot of the engine's own chrome vocabulary ('alignment.left',
-// 'styles.style' + a style id ...): the same call the toolbar's buttons will
-// make (plan Phase 2), so a shortcut and its button can never disagree.
+// 'styles.style' + a style id ...): the same call the toolbar's buttons make,
+// so a shortcut and its button can never disagree.
 function runSlot( slot, value )
 {
     if( ! ready || ! editor || slotBlocked( slot ) ) return;
@@ -1777,8 +1715,13 @@ function onShortcutKey( e )
     const s = SHORTCUTS.find( function( x ) { return x.match( e ); } );
     if( ! s ) return;
 
-    if( document.querySelector( '.sheet-backdrop.open' ) ) return;
-    if( inOwnField( e.target ) ) return;
+    // A sheet or a field of ours has the keys: the shortcut waits - but the
+    // browser's own save / print / open dialog must not open over it either.
+    if( document.querySelector( '.sheet-backdrop.open' ) || inOwnField( e.target ) )
+    {
+        if( s.browserDialog ) e.preventDefault();
+        return;
+    }
 
     // Swallowed even when the action cannot run, so the browser's own print /
     // open / bookmark never appears over the document.
@@ -1921,30 +1864,12 @@ function printDocument( pdfHint )
 //                             toolbar (an `el` entry gets its button's by itself)
 //   { icon:'cut' }            ... or a NayiveUI.icon() name, for no-button entries
 
-// AYUDA, wherever it is asked for: the pull-down menu below and the toolbar's
-// "?" show the SAME three entries, each clicking its own real button - so the
-// two chromes cannot drift and there is still one set of handlers.
-const HELP_ITEMS =
-[
-    { key: 'write.stats',        el: 'statsBtn' },
-    { key: 'write.shortcuts',    el: 'scBtn'    },
-    { key: 'ui.toolbarButtons',  el: 'guideBtn' }
-];
-const HELP_IDS = HELP_ITEMS.map( function( it ) { return it.el; } );
-
 const MENU_FONTS  = [ 'Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia',
                       'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana' ];
 const MENU_SIZES  = [ '8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '36', '48', '72' ];
 const MENU_ZOOMS  = [ 50, 75, 100, 125, 150, 200 ];
 const MENU_LINES  = [ 1, 1.15, 1.5, 2 ];
 const MENU_GRIDS  = [ [ 2, 2 ], [ 2, 3 ], [ 3, 3 ], [ 4, 4 ], [ 5, 5 ] ];
-
-// Word's own first row of text colours, plus white: [ swatch, name key ]. The
-// engine takes the six hex digits without the '#'. The names are keys because
-// no interface string lives in the source (docs/i18n.md).
-const MENU_COLORS = [ [ '#000000', 'black'  ], [ '#808080', 'gray'   ], [ '#C00000', 'red'    ],
-                      [ '#E36C0A', 'orange' ], [ '#FFC000', 'yellow' ], [ '#00B050', 'green'  ],
-                      [ '#0070C0', 'blue'   ], [ '#7030A0', 'purple' ], [ '#FFFFFF', 'white'  ] ];
 
 // Highlighting is Word's fixed set of named colours (ST_HighlightColor), not
 // any hex: [ swatch, name key, the engine's name ]. Word calls magenta "Pink".
@@ -1975,7 +1900,9 @@ function sizeItems()
 
 function textColorItems()
 {
-    return MENU_COLORS.map( function( c )
+    // Word's own first row of text colours, plus white (NayiveMenus.COLORS,
+    // Calc's too). The engine takes the six hex digits without the '#'.
+    return NayiveMenus.COLORS.map( function( c )
     {
         return { key: 'ui.color.' + c[1], swatch: c[0], slot: 'text.color', value: c[0].slice( 1 ) };
     } );
@@ -2258,7 +2185,7 @@ const MENUS = [
 },
 {
     key: 'ui.menu.help',
-    items: HELP_ITEMS
+    items: NayiveOffice.HELP_ITEMS   // the "?" shows the same three (shared/office.js)
 } ];
 
 // What the toolbar's drop-downs open (toolbar.js): the same tables.
@@ -2332,8 +2259,8 @@ const CHROME = NayiveMenus.chrome(
 {
     key   : 'nayive-write-chrome',
     menus : MENUBAR,
-    load  : async function() { return ( await readWriteCfg() ).chrome; },
-    save  : function( mode ) { return writeWriteCfg( { chrome: mode } ); },
+    load  : async function() { return ( await writeCfg.read() ).chrome; },
+    save  : function( mode ) { return writeCfg.write( { chrome: mode } ); },
 
     // What CSS cannot do: an unfolded / folded state left over from the phone
     // must not decide anything once the strip is back, and the "?" has to go
@@ -2354,6 +2281,53 @@ function menusOn() { return CHROME.on(); }
 function anchorRect( selector )
 {
     return MENUBAR.anchorRect( selector, menusOn(), 'toolbar' );
+}
+
+// One anchored popup: shown just under its trigger (anchorRect), clamped to stay
+// inside the viewport, and closed by a press anywhere outside it or a resize. A
+// press on the trigger itself is let through, so the button's own command can
+// toggle it shut. `onClose` runs on every close, after the popup is hidden.
+function anchoredPopup( id, trigger, onClose )
+{
+    function outside( e )
+    {
+        if( document.getElementById( id ).contains( e.target ) ) return;
+        if( e.target.closest && e.target.closest( trigger ) ) return;
+
+        close();
+    }
+
+    function open()
+    {
+        const pop = document.getElementById( id );
+
+        pop.classList.add( 'open' );   // lay it out before measuring
+
+        const r  = anchorRect( trigger );
+        const vw = document.documentElement.clientWidth;
+
+        let left = Math.min( r.left, vw - pop.offsetWidth - 8 );
+        if( left < 8 ) left = 8;
+
+        pop.style.top  = ( r.bottom + 4 ) + 'px';
+        pop.style.left = left + 'px';
+
+        setTimeout( function()   // deferred, else the opening click closes it again
+        {
+            document.addEventListener( 'pointerdown', outside, true );
+            window.addEventListener( 'resize', close );
+        }, 0 );
+    }
+
+    function close()
+    {
+        document.getElementById( id ).classList.remove( 'open' );
+        if( onClose ) onClose();
+        document.removeEventListener( 'pointerdown', outside, true );
+        window.removeEventListener( 'resize', close );
+    }
+
+    return { open: open, close: close };
 }
 
 //----------------------------------------------------------------------------//
@@ -2664,7 +2638,7 @@ async function openTableBorders()
 {
     if( ! ready ) return;
 
-    if( document.getElementById( 'tbPopup' ).classList.contains( 'open' ) ) { closeTbPopup(); return; }
+    if( document.getElementById( 'tbPopup' ).classList.contains( 'open' ) ) { tbPopup.close(); return; }
 
     openTbPopup();
 }
@@ -2801,16 +2775,16 @@ function wireTableBorders()
         tbState.color        = tbDraft.color;
 
         applyTableBorderPreset( which );   // persists tbState on success
-        closeTbPopup();
+        tbPopup.close();
     } );
 }
 
-// Show the popup anchored just under the toolbar's "Bordes de tabla" button,
-// clamped to stay inside the viewport.
+// The popup hangs under the toolbar's "Bordes de tabla" button (anchoredPopup).
+// Closing it drops the preset picked in it.
+const tbPopup = anchoredPopup( 'tbPopup', '#tableBordersBtn', function() { tbDraft.preset = null; } );
+
 function openTbPopup()
 {
-    const pop = document.getElementById( 'tbPopup' );
-
     // Fresh draft each time: last-used weight / style / colour, no preset yet.
     tbDraft.preset       = null;
     tbDraft.lineStyle    = tbState.lineStyle;
@@ -2818,41 +2792,7 @@ function openTbPopup()
     tbDraft.color        = tbState.color;
     syncTbUI();
 
-    pop.classList.add( 'open' );   // must be laid out before we can measure it
-
-    const r  = anchorRect( '#tableBordersBtn' );
-    const vw = document.documentElement.clientWidth;
-    let   left = Math.min( r.left, vw - pop.offsetWidth - 8 );
-    if( left < 8 ) left = 8;
-
-    pop.style.top  = ( r.bottom + 4 ) + 'px';
-    pop.style.left = left + 'px';
-
-    setTimeout( function()
-    {
-        document.addEventListener( 'pointerdown', onTbOutside, true );
-        window.addEventListener( 'resize', closeTbPopup );
-    }, 0 );
-}
-
-function closeTbPopup()
-{
-    document.getElementById( 'tbPopup' ).classList.remove( 'open' );
-    tbDraft.preset = null;
-    document.removeEventListener( 'pointerdown', onTbOutside, true );
-    window.removeEventListener( 'resize', closeTbPopup );
-}
-
-// Close on any pointer-down outside the popup — but not on the toolbar button
-// itself, so its own command can toggle the popup shut.
-function onTbOutside( e )
-{
-    const pop = document.getElementById( 'tbPopup' );
-    if( pop.contains( e.target ) ) return;
-
-    if( e.target.closest && e.target.closest( '#tableBordersBtn' ) ) return;
-
-    closeTbPopup();
+    tbPopup.open();
 }
 
 //----------------------------------------------------------------------------//
@@ -2866,14 +2806,13 @@ function onTbOutside( e )
 const CM_PER_IN = 2.54;
 const TWIPS_PER_IN = 1440;
 
-function fmtCm( v ) { return fmtNum( v ); }     // "2,5" in Spanish, "2.5" in English
-
-// `max` defaults to 10 cm, which is right for a MARGIN. A custom page size has
-// to pass its own ceiling, or a 15 x 20 cm page comes out 10 x 10.
+// parseNum held between 0 and `max`. `max` defaults to 10 cm, which is right
+// for a MARGIN. A custom page size has to pass its own ceiling, or a 15 x 20 cm
+// page comes out 10 x 10.
 function parseCm( raw, max )
 {
-    const n = parseFloat( String( raw ).replace( ',', '.' ) );
-    return Number.isFinite( n ) ? Math.min( Math.max( n, 0 ), max === undefined ? 10 : max ) : null;
+    const n = parseNum( raw );
+    return n === null ? null : Math.min( Math.max( n, 0 ), max === undefined ? 10 : max );
 }
 
 function twipsToCm( t ) { return ( t || 0 ) / TWIPS_PER_IN * CM_PER_IN; }
@@ -2893,14 +2832,12 @@ function openPageSetup()
 
     document.getElementById( 'psSize'   ).value = PAGE_SIZES[ v.size ] ? v.size : 'custom';
     document.getElementById( 'psOrient' ).value = v.orientation;
-    document.getElementById( 'psTop'    ).value = fmtCm( v.top );
-    document.getElementById( 'psBottom' ).value = fmtCm( v.bottom );
-    document.getElementById( 'psLeft'   ).value = fmtCm( v.left );
-    document.getElementById( 'psRight'  ).value = fmtCm( v.right );
-    document.getElementById( 'psWidth'  ).value = fmtCm( ( v.width  || 0 ) * CM_PER_IN );
-    document.getElementById( 'psHeight' ).value = fmtCm( ( v.height || 0 ) * CM_PER_IN );
-
-    document.getElementById( 'psSection' ).hidden = true;   // the engine reports the caret's section only
+    document.getElementById( 'psTop'    ).value = fmtNum( v.top );
+    document.getElementById( 'psBottom' ).value = fmtNum( v.bottom );
+    document.getElementById( 'psLeft'   ).value = fmtNum( v.left );
+    document.getElementById( 'psRight'  ).value = fmtNum( v.right );
+    document.getElementById( 'psWidth'  ).value = fmtNum( ( v.width  || 0 ) * CM_PER_IN );
+    document.getElementById( 'psHeight' ).value = fmtNum( ( v.height || 0 ) * CM_PER_IN );
 
     syncPageSizeRows();
     setBackdrop( 'pageSetupBackdrop', true );
@@ -3009,49 +2946,19 @@ function saveNow() { session.saveNow(); }
 // recent documents over a folder browser. Write only says which files it lists
 // and what to do with the one picked.)
 
-// Extensions the Open dialog shows. A `.docx` loads straight away; a file in
-// CONVERT_EXTS (LibreOffice Writer, ...) is converted to .docx on the server
-// first (see convertToDocx). That conversion isn't wired up yet, so
-// CONVERT_EXTS is empty for now and only .docx appears.
-const OPEN_EXTS     = [ '.docx' ];
-const CONVERT_EXTS  = [];
-const OPENABLE_EXTS = OPEN_EXTS.concat( CONVERT_EXTS );
+// Extensions the Open dialog shows: Write opens .docx alone.
+const OPEN_EXTS = [ 'docx' ];
 
-function extOf( path )
-{
-    const m = /\.[^./]+$/.exec( String( path ) );
-    return m ? m[ 0 ].toLowerCase() : '';
-}
+function isOpenable( path ) { return OPEN_EXTS.indexOf( NayiveOffice.extOf( path ) ) !== -1; }
 
-function isOpenable( path ) { return OPENABLE_EXTS.indexOf( extOf( path ) ) !== -1; }
-
-// Straight through to shared/office.js - this was an identical copy. Kept as a
-// function declaration, not a const: the old ones were hoisted, and half of
-// write.js calls them from code that runs before this line.
-function byBaseName( a, b ) { return NayiveOffice.byBaseName( a, b ); }
-
-// Open a file the user picked in the browser: a .docx directly, anything else
-// via a server-side conversion to .docx first.
+// Open a file the user picked. The Open dialog lists only .docx, but
+// "Recientes" hands over any path the session ever opened (a ?file= from
+// Drive included), so anything else is still turned away here.
 async function openPickedFile( path )
 {
-    if( OPEN_EXTS.indexOf( extOf( path ) ) !== -1 )
-    {
-        await session.open( path );
-        return;
-    }
+    if( isOpenable( path ) ) { await session.open( path ); return; }
 
-    const docxPath = await convertToDocx( path );
-    if( docxPath ) await session.open( docxPath );
-}
-
-// Convert a non-.docx word-processor file (LibreOffice Writer .odt, legacy
-// .doc, .rtf, …) to .docx on the server, save it next to the original and
-// return its path. The LibreOffice-backed endpoint isn't deployed yet, so
-// CONVERT_EXTS is empty and this is never reached — the toast is just a guard.
-async function convertToDocx( path )
-{
     NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) );
-    return null;
 }
 
 //----------------------------------------------------------------------------//
@@ -3099,10 +3006,9 @@ async function toBytes( body )
 //----------------------------------------------------------------------------//
 // HELPERS
 
-// Straight through to shared/office.js — these were identical copies. Function
-// declarations on purpose: they are hoisted, and the session above uses them.
+// Straight through to shared/office.js — this was an identical copy. A function
+// declaration on purpose: it is hoisted, and code above uses it.
 function baseName( path ) { return NayiveOffice.baseName( path ); }
-function dirName( path )  { return NayiveOffice.dirName( path ); }
 
 // Write's file-name rule, for "Guardar como" and a rename: always .docx.
 function docxName( name ) { return /\.docx$/i.test( name ) ? name : name + '.docx'; }

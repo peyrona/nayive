@@ -22,8 +22,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -95,7 +93,7 @@ func TestMailE2EServe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := NewServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv, err := NewServer(cfg, quietLog())
 	if err != nil {
 		t.Fatal(err)
 	}

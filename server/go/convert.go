@@ -417,11 +417,10 @@ func freeMP4Name(root *os.Root, srcRel string) string {
 
 // freeBytes is the space left on the disk holding `dir`, or -1 when unknown.
 func freeBytes(dir string) int64 {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
-		return -1
+	if total, free := diskUsage(dir); total > 0 {
+		return free
 	}
-	return int64(st.Bavail) * int64(st.Bsize)
+	return -1
 }
 
 // -----------------------------------------------------------------------------

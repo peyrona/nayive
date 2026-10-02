@@ -31,20 +31,14 @@
     //------------------------------------------------------------------------//
     // TEXT / PATH HELPERS
 
-    function esc( s )
-    {
-        return String( s == null ? "" : s ).replace( /[&<>"']/g, function ( c )
-        { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ c ]; } );
-    }
+    // The shared copies (shared/ui.js). ui.js loads deferred, after this file
+    // in Movies / Music / Photos, so these look NayiveUI up when called.
+    function esc( s )         { return NayiveUI.escapeHtml( s ); }
     function cssEsc( s ) { return String( s ).replace( /["\\]/g, "\\$&" ); }
     function cssUrl( u ) { return "url(\"" + cssEsc( u ) + "\")"; }
 
-    function extOf( name )
-    {
-        var m = /\.([a-z0-9]+)$/i.exec( String( name ) );
-        return m ? m[ 1 ].toLowerCase() : "";
-    }
-    function baseName( path ) { return String( path ).slice( String( path ).lastIndexOf( "/" ) + 1 ); }
+    function extOf( name )    { return NayiveUI.extOf( name ); }
+    function baseName( path ) { return NayiveUI.baseName( path ); }
     function dirOf( path )    { var i = String( path ).lastIndexOf( "/" ); return i < 0 ? "" : String( path ).slice( 0, i ); }
     function stripExt( name ) { return String( name ).replace( /\.[a-z0-9]+$/i, "" ); }
     // Letters and digits of every script, so "Alién" is not "Alin" and two
@@ -84,12 +78,17 @@
         var m = mins % 60;
         return h > 0 ? ( h + " h " + m + " min" ) : ( m + " min" );
     }
+    // Photos' own look ("1 KB", "15.3 MB"), not NayiveUI.fmtBytes ("1.5 KB",
+    // "15 MB"): the info panel keeps what it always showed, but a big video
+    // reads "5.0 GB", not "5120.0 MB".
     function fmtSize( b )
     {
         if( ! b ) return "";
         if( b < 1024 )    return b + " B";
         if( b < 1048576 ) return Math.round( b / 1024 ) + " KB";
-        return ( b / 1048576 ).toFixed( 1 ) + " MB";
+        if( b < 1073741824 ) return ( b / 1048576 ).toFixed( 1 ) + " MB";
+        if( b < 1099511627776 ) return ( b / 1073741824 ).toFixed( 1 ) + " GB";
+        return ( b / 1099511627776 ).toFixed( 1 ) + " TB";
     }
 
     function sleep( ms ) { return new Promise( function ( r ) { setTimeout( r, ms ); } ); }
@@ -165,11 +164,21 @@
         return s.replace( /^files\//, "" ).replace( /^data\//, "" ) || NayiveUI.t( "ui.filesRoot" );
     }
 
-    // The header crumb: folder icon + the label.
+    // The crumb (first row of the folder-? menu): folder icon + the label.
     function setCrumb( label )
     {
         var el = document.getElementById( "crumb" );
         if( el ) el.innerHTML = NayiveUI.icon( "folder" ) + "<span>" + esc( label ) + "</span>";
+    }
+
+    // The folder-? button (#folderInfoBtn) opens its menu (#folderMenu): the
+    // crumb, then the counts line (#subStrip). See FOLDER-BACKED VIEWERS in
+    // shared/app.css. Photos calls this before the deferred ui.js has run.
+    function wireFolderInfo()
+    {
+        var wire = function () { NayiveUI.wireMenu( { btn: "folderInfoBtn", menu: "folderMenu" } ); };
+        if( window.NayiveUI ) wire();
+        else document.addEventListener( "DOMContentLoaded", wire );
     }
 
     // The crumb re-opens the folder picker; a new choice reloads the app on
@@ -187,18 +196,26 @@
         } );
     }
 
-    // Phone only: the magnifier (#searchToggle) folds the search field
-    // (#searchInput) open / closed; closing it clears the search.
+    // The magnifier (#searchToggle) unfolds the search field (#searchInput,
+    // in its .search-wrap) - the shared fold (NayiveUI.searchFold); its × and
+    // Escape clear the search (an "input" event) and fold it away. Photos
+    // calls this before the deferred ui.js has run: it then waits for it.
+    var searchFold = null;
     function wireSearchToggle()
     {
         var btn = document.getElementById( "searchToggle" ), box = document.getElementById( "searchInput" );
         if( ! btn || ! box ) return;
-        btn.addEventListener( "click", function ()
-        {
-            box.classList.toggle( "show" );
-            if( box.classList.contains( "show" ) ) box.focus();
-            else if( box.value ) { box.value = ""; box.dispatchEvent( new Event( "input" ) ); }
-        } );
+        var wire = function () { searchFold = NayiveUI.searchFold( { box: box.parentElement, input: box, toggle: btn } ); };
+        if( window.NayiveUI ) wire();
+        else document.addEventListener( "DOMContentLoaded", wire );
+    }
+
+    // "12 / 300" inside the search field while it holds text; nothing else.
+    function searchCount( shown, total )
+    {
+        var box = document.getElementById( "searchInput" );
+        if( ! searchFold || ! box ) return;
+        searchFold.count( box.value.trim() ? shown + " / " + total : "" );
     }
 
     //------------------------------------------------------------------------//
@@ -311,7 +328,7 @@
     // PATH-KEYED SIDECARS
     //
     // Two of our files are keyed by the file's own path: the per-photo comments
-    // (data/photos/comments.json, written by Photos and by Drive's image editor)
+    // (data/photos/comments.json, written by Photos and by the image editor (apps/image))
     // and the scan caches above (data/<app>/scan-cache.json). Whoever moves,
     // renames, copies or trashes a file has to keep them in step, or a note
     // ends up on the wrong photo and a shuffled folder is re-scanned from
@@ -503,11 +520,6 @@
         x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
     };
 
-    function emptyHint( text, iconSvg )
-    {
-        return '<div class="empty-hint">' + ( iconSvg || "" ) + '<p>' + esc( text ) + '</p></div>';
-    }
-
     // The "filtered by X" strip with its clear button (#clearScopeBtn).
     function scopeBarHtml( label, clearTitle )
     {
@@ -563,6 +575,23 @@
         } );
     }
 
+    // The lock screen's progress bar: where `el` (the <audio> / <video>) is now.
+    // Nothing until the length is known.
+    function positionState( el )
+    {
+        if( ! ( "mediaSession" in navigator ) || ! navigator.mediaSession.setPositionState ) return;
+        if( ! isFinite( el.duration ) || el.duration <= 0 ) return;
+        try
+        {
+            navigator.mediaSession.setPositionState( {
+                duration: el.duration,
+                position: Math.min( el.currentTime, el.duration ),
+                playbackRate: el.playbackRate || 1
+            } );
+        }
+        catch( e ) {}
+    }
+
     //------------------------------------------------------------------------//
 
     window.NayiveMedia =
@@ -573,11 +602,11 @@
         fmtClock: fmtClock, fmtRuntime: fmtRuntime, fmtSize: fmtSize,
         sleep: sleep, pool: pool,
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
-        dirLabel: dirLabel, setCrumb: setCrumb, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle,
+        dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
         readComments: readComments, writeComments: writeComments,
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
-        ICONS: ICONS, emptyHint: emptyHint, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
-        setPlayIcon: setPlayIcon, mediaSession: mediaSession
+        ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
+        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState
     };
 } )();

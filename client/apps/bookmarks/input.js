@@ -34,7 +34,6 @@ function wireAll()
 
 function wireHeader()
 {
-    $( 'searchBtn' ).addEventListener( 'click', focusSearch );
     $( 'addBtn' ).addEventListener( 'click', function() { openBookmarkSheet( null ); } );
     $( 'newFolderBtn' ).addEventListener( 'click', function() { openFolderSheet( null ); } );
     $( 'gridBtn' ).addEventListener( 'click', function() { setMode( 'grid' ); } );
@@ -51,10 +50,9 @@ function setMode( m ) { ui.mode = m; saveUi(); render(); }
 
 function focusSearch()
 {
-    const input = $( 'searchInput' );
     $( 'listPane' ).scrollTop = 0;
-    input.focus();
-    input.select();
+    searchFold.open();                  // unfolds and focuses it
+    $( 'searchInput' ).select();
 }
 
 // The "⋮": Import, Export, Find duplicates, the sort order, Select - and on
@@ -429,9 +427,14 @@ function setQuery( q, tag )
     query = q;
     chipTag = tag != null ? tag : null;
     $( 'searchInput' ).value = q;
+    if( q && searchFold ) searchFold.open( true );    // a chip's search shows in the field
     render();
     $( 'listPane' ).scrollTop = 0;
 }
+
+// The magnifier unfolds the field (the shared fold); its × and Escape clear
+// the search and fold it away.
+let searchFold = null;
 
 function wireSearch()
 {
@@ -441,11 +444,8 @@ function wireSearch()
         clearTimeout( searchTimer );
         searchTimer = setTimeout( function() { query = input.value.trim(); chipTag = null; render(); }, 90 );
     } );
-    $( 'searchClear' ).addEventListener( 'click', function() { setQuery( '' ); input.focus(); } );
-    input.addEventListener( 'keydown', function( e )
-    {
-        if( e.key === 'Escape' && input.value ) { e.preventDefault(); e.stopPropagation(); setQuery( '' ); }
-    } );
+    searchFold = NayiveUI.searchFold( { box: input.parentElement, input: input, toggle: $( 'searchBtn' ),
+                                        onClose: function() { clearTimeout( searchTimer ); setQuery( '' ); } } );
 }
 
 //------------------------------------------------------------------------//
@@ -542,8 +542,8 @@ function enterSubmits( backId, fn )
 const DROP_SEL = '.tree-row, .bm-item.is-folder, .crumb-seg';
 
 // Which part of a tree row the pointer is over: 'before' / 'after' (the top
-// and bottom 30 %) or 'inside'. Only folders reorder; a card, or the "All"
-// row, always goes inside.
+// and bottom 30 %) or 'inside'. Only folders reorder; a card always goes
+// inside.
 function treeZone( row, e, ids )
 {
     if( ! row.classList.contains( 'tree-row' ) || row.dataset.id === ROOT ) return 'inside';
@@ -683,23 +683,9 @@ function applyTreeWidth()
 
 function wireResizer()
 {
-    const rz = $( 'paneResizer' ), tp = $( 'treePane' );
-    let startX = 0, startW = 0, dragging = false;
-    rz.addEventListener( 'pointerdown', function( e )
+    NayiveUI.paneResizer( $( 'paneResizer' ), $( 'treePane' ),
     {
-        if( isPhone() ) return;
-        dragging = true; startX = e.clientX; startW = tp.getBoundingClientRect().width;
-        rz.setPointerCapture( e.pointerId );
-        rz.classList.add( 'dragging' );
+        min: TREE_MIN, max: TREE_MAX, def: TREE_DEF, off: isPhone, save: saveUi,
+        set: function( w ) { ui.treeW = w; applyTreeWidth(); }
     } );
-    rz.addEventListener( 'pointermove', function( e )
-    {
-        if( ! dragging ) return;
-        ui.treeW = Math.max( TREE_MIN, Math.min( TREE_MAX, Math.round( startW + e.clientX - startX ) ) );
-        applyTreeWidth();
-    } );
-    const end = function() { if( ! dragging ) return; dragging = false; rz.classList.remove( 'dragging' ); saveUi(); };
-    rz.addEventListener( 'pointerup', end );
-    rz.addEventListener( 'pointercancel', end );
-    rz.addEventListener( 'dblclick', function() { ui.treeW = TREE_DEF; applyTreeWidth(); saveUi(); } );
 }

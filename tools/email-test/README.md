@@ -14,12 +14,12 @@ no internet, nothing of the real `store/` touched.
   in-memory IMAP server. The SMTP is a fake that keeps what is "sent". A few `/e2e/...` routes let
   the driver make draft saves slow or fail, read what was sent, and see which "pictures" were
   fetched and whether they carried the session cookie.
-- `run.mjs` drives headless Chromium over the DevTools protocol (`tools/locktest/cdp.mjs`).
+- `run.mjs` drives headless Chromium over the DevTools protocol (`tools/cdp.mjs`).
 - Screenshots go to a temp folder, named at the end of the run.
 
-## What is covered (80 checks)
+## What is covered (88 checks)
 
-The trays (not read / all, on a phone too), the clip's panel (Chat's, three choices), the writer (a file added during a save, a failed save
+The trays (not read / all, on a phone too), the clip's panel (Chat's, three choices), the writer (the format bar: placeholder, bold, a list, a link, sent as HTML + plain text; a file added during a save, a failed save
 keeps the text, Discard + Undo, Bcc), the message frame (no allow-same-origin, sized by its own
 script, its own pictures as `data:`, nothing sent with the session cookie after "Show pictures",
 links in a new tab), the head (From/To/Date folded, the chevron after the subject, on a phone

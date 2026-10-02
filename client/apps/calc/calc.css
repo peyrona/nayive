@@ -81,6 +81,8 @@
 html, body { height: 100%; overflow: hidden; }
 
 .topbar { background: var(--calc-chrome); }
+/* The name keeps its own width, so the chrome switch sits right after it (app.css HEADER). */
+.topbar .file-label { flex: 0 1 auto; }
 
 .sync-indicator { margin-left: 4px; }   /* base rule + states in ../shared/theme.css */
 
@@ -98,16 +100,14 @@ html, body { height: 100%; overflow: hidden; }
     overflow-x: visible;
 }
 .fmt-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--line); flex: 0 0 auto; }
-/* Toolbar buttons: a distinct component from the header .icon-btn - 30px
-   rounded squares with an accent-tinted hover (they act on the cells). */
+/* Toolbar buttons: 30px circles; hover = GROWING WASH in app.css. */
 .fmt-btn, .fmt-color-btn
 {
     display: flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; flex: 0 0 auto;
-    border-radius: var(--radius-s); border: none; background: transparent; color: var(--text-dim);
+    border-radius: 50%; border: none; color: var(--text-dim);
     cursor: pointer; padding: 0; font-weight: 700; font-size: 0.95rem; font-family: inherit;
 }
-.fmt-btn:hover, .fmt-color-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
 .fmt-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 .fmt-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 /* Text/fill colour buttons — the same TinyMCE 'text-color' / 'highlight-bg-color'
@@ -227,25 +227,16 @@ html, body { height: 100%; overflow: hidden; }
                        in the HTML), so this is the only way to them.
      "Aa"  #fmtBtn   - phone only; folds the toolbar away while you type.
    #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
-   glance. (Note it is the HEADER toggle - not one of the .fmt-btn
-   toolbar buttons, in spite of the name.) .is-active (shared app.css)
-   marks it while the toolbar is showing. */
+   glance (its type is in shared/app.css, Write's too). (Note it is the
+   HEADER toggle - not one of the .fmt-btn toolbar buttons, in spite of the
+   name.) .is-active (shared app.css) marks it while the toolbar is showing. */
 #fmtBtn { display: none; }
-#fmtBtn
-{
-    font-family: var(--font-sans);
-    font-size: 0.95rem;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: 0.5px;
-}
 
 /* The "⋮" menu: .top-menu / .menu-item from app.css, anchored by shared/ui.js. */
 
-/* The toolbar's own "⋮": opens the rest of it in place. Phone only, and
-   last in the DOM so it is last in the row. */
+/* The toolbar's own "⋮": opens the rest of it in place (its open tint is
+   in shared/app.css). Phone only, and last in the DOM so it is last in the row. */
 #moreToolsBtn { display: none; }
-#moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 
 /* ---- MENU MODE (see PULL-DOWN MENUS in the script) -------------------
    The user picks ONE chrome: the icon toolbar, or the classic
@@ -402,13 +393,12 @@ html, body { height: 100%; overflow: hidden; }
 .fe-actions            { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 640px) { #fePanel.open { display: none; } }
 
-/* Checkbox rows in the number-format dialog */
+/* On / off rows in the number-format dialog: the text, then the shared .switch */
 .field label.check
 {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0;
     font-size: 0.9rem; color: var(--text); cursor: pointer;
 }
-.field label.check input { width: auto; }
 
 .nf-preview
 {

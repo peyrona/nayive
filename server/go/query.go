@@ -1,24 +1,17 @@
 package main
 
 // =============================================================================
-// Query - the query string, read the way the Python reads it.
+// Query - the query string, with its blank values dropped.
 // =============================================================================
 //
-// This tiny type exists because of ONE difference that would otherwise change
-// answers all over the file API.
+// This tiny type exists because the file API tests for PRESENCE - is there a
+// "dir", is there a "trash" - and a blank value must count as absent:
 //
-// Python's parse_qs DROPS BLANK VALUES by default: "?dir=" produces no "dir"
-// key at all. Go's url.ParseQuery keeps it, as an empty string. That does not
-// matter where the code reads a value (both end up with ""), but the file API
-// tests for PRESENCE - `if "dir" in query`, `if "trash" in query` - and there
-// the two disagree:
-//
-//	"?dir="      Python: no key -> falls through to the whole-tree answer
-//	             Go, naively: key present -> answers with the root's children
+//	"?dir="      no key -> falls through to the whole-tree answer
+//	             (url.ParseQuery alone keeps it, as "": the root's children)
 //
 // So every blank value is filtered out ONCE, here, and every route reads the
-// query through this type. "?dir=&dir=x" keeps the "x", exactly as parse_qs
-// does.
+// query through this type. "?dir=&dir=x" keeps the "x".
 
 import "net/http"
 

@@ -31,7 +31,7 @@ NayiveUI.firstRun( {
     title: 'Bookmarks',
     lead:  T( 'bookmarks.introLead' ),
     buttons: [
-        { sel: '#searchBtn',    text: T( 'bookmarks.introSearch' ) },
+        { icon: 'search', name: T( 'ui.search' ), text: T( 'bookmarks.introSearch' ) },
         { sel: '#addBtn',       text: T( 'bookmarks.introAdd' ) },
         { sel: '#newFolderBtn', text: T( 'bookmarks.introFolder' ) },
         { sel: '#moreBtn',      text: T( 'bookmarks.introMore' ) },
