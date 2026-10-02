@@ -35,6 +35,12 @@ window.GumApi = {
         } );
         return "{}";
     },
+    binPaths: async function ( ps )
+    {
+        var before = BIN.length;
+        await GumApi.deletePaths( ps );
+        return BIN.slice( before ).map( function ( it ) { return it.id; } );
+    },
     trashList:   async function () { return BIN.map( function ( it ) { return { id: it.id, name: it.name, orig: it.orig }; } ); },
     trashDelete: async function ( ids ) { BIN = BIN.filter( function ( it ) { return ids.indexOf( it.id ) === -1; } ); return {}; },
     probeAccess: async function () { return { user: "t", role: "user" }; }

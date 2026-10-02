@@ -3,10 +3,12 @@
  * for its top-level await of the dictionary.
  *
  * ✓ writes the edit back to the file (and the photo note), and the editor
- * stays open on it. "Save a copy" writes a new file beside it and goes on
- * editing the copy. Leaving with something unsaved asks first: the ← (not in
- * a desktop window), Escape, and the desktop window's own close, which asks
- * through window.nayiveBeforeClose (desktop/index.html, close).
+ * stays open on it - the first ✓ of a session sends the original to the bin
+ * first, with an Undo (saveTo). "Save a copy" writes a new file beside it
+ * and goes on editing the copy. Leaving with something unsaved asks first:
+ * the ← (not in a desktop window), Escape, and the desktop window's own
+ * close, which asks through window.nayiveBeforeClose (desktop/index.html,
+ * close).
  *
  * Nothing here tells Drive or Photos what changed: every write goes through
  * GumApi, whose file news (onFilesChanged) they already listen to.
@@ -30,6 +32,7 @@ let savedOnce   = false;   // after a save the undo stack still holds what was s
 let commentBase = '';      // the photo note as last loaded / saved
 let saving      = false;   // a write in flight: no second one, no leaving
 let closing     = false;   // leaving was already asked about
+const keptOnce  = new Set();   // paths whose original is safe this session: binned by a first ✓, or written here
 
 function extOf( name ) { const i = name.lastIndexOf( '.' ); return i < 0 ? '' : name.slice( i + 1 ).toLowerCase(); }
 function nameOf( path ) { return path.split( '/' ).pop(); }
@@ -126,9 +129,16 @@ function formatFor( name )
 
 // `replaced`: set when "Save a copy" sent a file of the same name to the
 // bin first (confirmSaveCopy) - the "Saved" toast then carries its Undo.
+// True when the picture was written (a note-only save counts).
+//
+// The FIRST ✓ over a picture in a session keeps its original: it goes to the
+// bin first (Drive's bin brings it back for days) and the toast's Undo puts
+// it back now. Re-encoding in place left the camera original nowhere once
+// the window closed. Later ✓s of the same session write over the edited
+// version only - the original is already safe.
 async function saveTo( dest, replaced )
 {
-    if( ! imageEditor || saving ) return;
+    if( ! imageEditor || saving ) return false;
 
     // Only the note changed: the picture on disk is already right, and
     // encoding it again would only lose quality.
@@ -136,7 +146,7 @@ async function saveTo( dest, replaced )
     {
         await saveNote( dest );
         NayiveUI.toast( T( 'drive.imageSaved' ) );
-        return;
+        return true;
     }
 
     const fmt  = formatFor( dest );
@@ -145,19 +155,33 @@ async function saveTo( dest, replaced )
 
     let bytes;
     try { bytes = NayivePhoto.dataUrlBytes( imageEditor.toDataURL( opts ) ); }
-    catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return; }
+    catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return false; }
     const size = imageEditor.getCanvasSize();
 
     saving = true;
     setBusy( true );
+    let kept = null;      // the original, binned by this ✓: put back if the write fails
     try
     {
+        // Both read the file at its path: before it goes to the bin.
         bytes = await NayivePhoto.keepExif( editorPath, bytes, size.width, size.height );
         const oldThumb = await NayivePhoto.thumbOf( dest );   // a file being rewritten
+
+        if( ! replaced && dest === editorPath && ! keptOnce.has( dest ) )
+        {
+            const note = await noteOf( dest );
+            let ids = null;
+            try { ids = await GumApi.binPaths( [ dest ] ); }
+            catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); return false; }   // the original stays as it is
+            if( ids ) kept = { ids: ids, note: note, from: dest };
+            keptOnce.add( dest );
+        }
+
         await GumApi.writeFileBytes( dest, bytes );
         NayivePhoto.dropThumb( oldThumb );
         editorDirty = false;
         savedOnce   = true;
+        keptOnce.add( dest );                  // written here: nothing of the past to keep at that name
 
         // "Save a copy" → keep editing the copy from now on.
         editorPath = dest;
@@ -165,11 +189,32 @@ async function saveTo( dest, replaced )
 
         await saveNote( dest );
 
-        if( replaced ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( dest, replaced ); } );
-        else           NayiveUI.toast( T( 'drive.imageSaved' ) );
+        const back = replaced || kept;
+        if( back ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( dest, back ); } );
+        else       NayiveUI.toast( T( 'drive.imageSaved' ) );
+        return true;
     }
-    catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); }
+    catch( _ )
+    {
+        if( kept ) { keptOnce.delete( dest ); await putBack( dest, kept ); }
+        else       NayiveUI.toast( T( 'drive.imageSaveFailed' ) );
+        return false;
+    }
     finally { saving = false; setBusy( false ); }
+}
+
+// A write that did not happen after its name was cleared for it (the
+// original of a first ✓, the file "Save a copy" replaces): the binned file
+// goes back to its name, and the toast says what is there now.
+async function putBack( dest, r )
+{
+    let res = null;
+    try { res = await GumApi.trashRestore( r.ids ); }
+    catch( _ ) { NayiveUI.toast( TF( 'drive.imageNotSavedBin', { name: nameOf( dest ) } ), { ms: 8000 } ); return; }
+    GumApi.announce( [ dest ], false );             // a restore says nothing by itself
+
+    const renamed = res && res.renamed && res.renamed.length ? res.renamed[ 0 ] : '';
+    NayiveUI.toast( TF( 'drive.imageNotSavedBack', { name: nameOf( renamed || dest ) } ), { ms: 8000 } );
 }
 
 function save() { if( editorPath ) saveTo( editorPath ); }
@@ -235,10 +280,13 @@ async function confirmSaveCopy()
         if( ids ) replaced = { ids: ids, note: note, from: editorPath };
     }
 
-    saveTo( dest, replaced );
+    // Not written - it failed, or a ✓ pressed meanwhile was still saving:
+    // the file it was to replace comes back out of the bin, and is said so.
+    if( ! await saveTo( dest, replaced ) && replaced ) await putBack( dest, replaced );
 }
 
-// Undo of "Save a copy" over an existing name: the copy goes to the bin,
+// Undo of "Save a copy" over an existing name - and of a first ✓, whose
+// "copy" is the picture itself (r.from === dest): the copy goes to the bin,
 // THEN the file it replaced comes back to its name (the other order would
 // land it as "name (2)"), with its note. An editor still on the copy goes
 // back to the picture it was editing, unsaved - otherwise its ✓ would
@@ -260,6 +308,7 @@ async function undoSaveCopy( dest, r )
     try { res = await GumApi.trashRestore( r.ids ); }
     catch( _ ) { NayiveUI.toast( T( 'drive.restoreFailed' ) ); return; }
     GumApi.announce( [ dest ], false );             // a restore says nothing by itself
+    if( r.from === dest ) keptOnce.delete( dest );  // the original is back: the next ✓ keeps it again
 
     // Its note, unless it had to land under another name.
     const renamed = res && res.renamed && res.renamed.length ? res.renamed[ 0 ] : '';

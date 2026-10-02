@@ -778,9 +778,7 @@ async function addPersonalWord( word )
     personalWords.push( word );
     setPersonalWords( personalWords );
 
-    let saved = true;
-    try { await GumApi.writeJson( PERSONAL_DICT, { words: personalWords } ); }
-    catch( _ ) { saved = false; }
+    const saved = await changeDict( function( words ) { if( words.indexOf( word ) === -1 ) words.push( word ); } );
 
     if( spell ) spell.forget( word );        // its red lines go at once
 
@@ -800,8 +798,34 @@ async function removePersonalWord( word )
     setPersonalWords( personalWords );
     if( spell ) spell.reset();
 
-    try { await GumApi.writeJson( PERSONAL_DICT, { words: personalWords } ); }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) ); }
+    if( ! await changeDict( function( words ) { const j = words.indexOf( word ); if( j !== -1 ) words.splice( j, 1 ); } ) )
+        NayiveUI.toast( NayiveUI.t( 'write.dictSaveFailed' ) );
+}
+
+// One word in or out of the list ON THE SERVER, read again right before: two
+// Write windows are normal on a PC, and writing this page's boot-time list
+// dropped every word another window had added since. The list is a set, so
+// the change is made to what is up there now, and that becomes this page's
+// list too. A list that cannot be read is never written (it would keep only
+// one word): false, as for a write that failed.
+async function changeDict( change )
+{
+    let words;
+    try
+    {
+        const j = await GumApi.readJson( PERSONAL_DICT );
+        if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
+        words = j ? j.words.slice() : [];
+    }
+    catch( _ ) { return false; }
+
+    change( words );
+    try { await GumApi.writeJson( PERSONAL_DICT, { words: words } ); }
+    catch( _ ) { return false; }
+
+    personalWords = words;
+    setPersonalWords( personalWords );
+    return true;
 }
 
 //----------------------------------------------------------------------------//
@@ -1009,7 +1033,7 @@ async function renderTemplates( dir )
 async function useTemplate( path )
 {
     const dropping = session.dirty() && ! session.path();
-    const kept     = dropping ? await session.keepUntitled() : null;
+    let   kept     = dropping ? await session.keepUntitled() : null;
     if( dropping && ! kept && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
                                                           confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
 
@@ -1018,8 +1042,15 @@ async function useTemplate( path )
     try
     {
         await session.flush();
+        const bytes = await fetchBytes( path );
 
-        await loadIntoEditor( await fetchBytes( path ) );
+        // Keys typed while the template came down went into the document on
+        // screen: kept now (its file, or its draft - and its Undo takes them
+        // too), before the template replaces it.
+        await session.catchUp();
+        if( kept ) kept = await session.keepUntitled() || kept;
+
+        await loadIntoEditor( bytes );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
         session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: baseName( path ).replace( /\.docx$/i, '' ) } ) ),
