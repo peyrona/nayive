@@ -192,7 +192,7 @@ function prKvTable( rows )
     return kv;
 }
 
-function tripFolderPath( trip ) { return 'data/trips/' + trip.dirName + '/'; }
+function tripFolderPath( trip ) { return tripBase( trip ) + '/'; }
 
 function coordText( lat, lon )
 {

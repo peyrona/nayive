@@ -18,12 +18,14 @@ function closeSheet( sId ) { NayiveUI.close( sId ); }
 // TRIP ACTIONS
 
 let tripDraft         = null;
+let tripOpen          = null;   // the trip as the sheet opened it, moved on by each merge (patchDraft)
 let isEditingTrip     = false;
 let tripDocsCollapsed = true;   // the trip sheet's doc list starts folded
 
 function openAddTrip()
 {
     tripDraft = { id: null, destination: '', startDate: '', endDate: '', documents: [] };
+    tripOpen  = null;
     isEditingTrip = false;
     tripDocsCollapsed = true;
     tripSaveError = '';
@@ -40,6 +42,7 @@ function openEditTrip()
         return;
 
     tripDraft = { ...t, documents: ( t.documents || [] ).map( function( d ) { return { ...d }; } ) };
+    tripOpen  = JSON.parse( JSON.stringify( t ) );
     isEditingTrip = true;
     tripDocsCollapsed = true;
     tripSaveError = '';
@@ -48,7 +51,7 @@ function openEditTrip()
     openSheet( 'tripSheetBackdrop' );
 }
 
-function closeTripSheet() { closeSheet( 'tripSheetBackdrop' ); tripDraft = null; tripSaveError = ''; tripSheetBusy = false; }
+function closeTripSheet() { closeSheet( 'tripSheetBackdrop' ); tripDraft = null; tripOpen = null; tripSaveError = ''; tripSheetBusy = false; }
 
 function addTripDoc()      { tripDraft.documents.push( { id: newId(), name: '', type: 'passport' } ); tripDocsCollapsed = false; renderTripSheet(); }
 
@@ -103,9 +106,16 @@ async function saveTrip()
         };
         let updated = build( tripDraft.documents );
 
+        // Removed in THIS sheet: rows of its opening copy (moved on by each merge,
+        // patchDraft) that the trip still has and the draft does not - never a
+        // document another device added meanwhile (H6: its file went to the bin).
+        const nowIds  = new Set( ( original ? original.documents : [] ).map( function( d ) { return d.id; } ) );
+        const oldDocs = ( tripOpen ? tripOpen.documents || [] : original ? original.documents : [] )
+                            .filter( function( d ) { return nowIds.has( d.id ); } );
+
         // Attachments (upload a picked file / delete a removed one) need the network;
         // a text-only edit still saves offline through the store.
-        if( docFilesDirty( updated.documents, original ? original.documents : [] ) )
+        if( docFilesDirty( updated.documents, oldDocs ) )
         {
             if( ! navigator.onLine )
             {
@@ -116,11 +126,14 @@ async function saveTrip()
 
             try
             {
-                await syncDocFiles( updated.dirName, updated.documents, original ? original.documents : [] );
+                const stored = await syncDocFiles( tripBase( original || updated ), updated.documents, oldDocs,
+                                                   allTripDocs( { stages: original ? original.stages : [] } ) );
 
                 // Another device's save merged in during the upload patched the
-                // draft (persistence.js onTripMerged): built again, or it is lost.
-                if( tripDraft ) updated = build( updated.documents );
+                // draft (persistence.js onTripMerged): built again from it, with
+                // the names the uploads got, or that is lost.
+                if( tripDraft ) updated = build( tripDraft.documents );
+                storedNames( updated.documents, stored );
             }
             catch( _ )
             {
@@ -147,10 +160,10 @@ async function saveTrip()
     try
     {
         const dirName = resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
-        const created = { ...tripDraft, id: newId(), stages: [], dirName: dirName };
+        const created = { ...tripDraft, id: newId(), stages: [], dirName: dirName, _base: 'data/trips/' + dirName };
 
         await GumApi.makeDir( 'data/trips', dirName );
-        await syncDocFiles( dirName, created.documents, [] );
+        await syncDocFiles( tripBase( created ), created.documents, [], [] );
         await persistTrip( created );
 
         trips = [ ...trips, created ];
@@ -191,8 +204,10 @@ async function deleteTrip()
 
     try
     {
-        ids = await GumApi.binPaths( 'data/trips/' + trip.dirName );
-        await store.forget( 'data/trips/' + trip.dirName + '/trip.json' );
+        // Its own folder (tripBase), never 'data/trips/' + dirName: a restored
+        // copy's dirName named the OTHER trip's folder (H7).
+        ids = await GumApi.binPaths( tripBase( trip ) );
+        await store.forget( tripBase( trip ) + '/trip.json' );
         trips = trips.filter( function( t ) { return t.id !== trip.id; } );
         setSyncStatus( 'synced' );
         syncActiveTripDocs();
@@ -242,6 +257,7 @@ async function deleteTrip()
 // STAGE ACTIONS
 
 let stageDraft         = null;
+let stageOpen          = null;   // the stage as the sheet opened it, moved on by each merge (patchDraft)
 let editingStageId     = null;
 let stageSaveError     = '';
 let stageSheetBusy     = false;
@@ -255,6 +271,7 @@ function openAddStage()
     // null here left a stage saved before its lookup returned - or saved offline -
     // without a pin forever. JSON.stringify drops undefined keys, so it persists as absent.
     stageDraft = { id: null, location: '', startDate: '', startTime: '', endDate: '', endTime: '', transport: 'other', tz: null, tzLabel: '', tzStatus: 'idle', lat: undefined, lon: undefined, accommodation: '', notes: '', enabled: true, documents: [] };
+    stageOpen  = null;
     editingStageId = null;
     stageSaveError = '';
     stageDocsCollapsed = true;
@@ -279,6 +296,7 @@ function openEditStage( stageId )
         tzLabel: st.tzLabel || st.tz || '',
         documents: ( st.documents || [] ).map( function( d ) { return { ...d }; } )
     };
+    stageOpen = JSON.parse( JSON.stringify( st ) );
     editingStageId = stageId;
     stageSaveError = '';
     stageDocsCollapsed = true;
@@ -286,7 +304,7 @@ function openEditStage( stageId )
     openSheet( 'stageSheetBackdrop' );
 }
 
-function closeStageSheet() { closeSheet( 'stageSheetBackdrop' ); stageDraft = null; editingStageId = null; stageSaveError = ''; stageSheetBusy = false; }
+function closeStageSheet() { closeSheet( 'stageSheetBackdrop' ); stageDraft = null; stageOpen = null; editingStageId = null; stageSaveError = ''; stageSheetBusy = false; }
 
 function addStageDoc()      { stageDraft.documents.push( { id: newId(), name: '', type: 'ticket' } ); stageDocsCollapsed = false; renderStageSheet(); }
 function removeStageDoc(id) { stageDraft.documents = stageDraft.documents.filter( function( d ) { return d.id !== id; } ); renderStageSheet(); }
@@ -313,7 +331,15 @@ async function saveStage()
     const parentTrip   = findTrip( selectedTripId );
     const originalStage = editingStageId && parentTrip
         ? parentTrip.stages.find( function( s ) { return s.id === stageDraft.id; } ) : null;
-    const oldDocs = originalStage ? originalStage.documents : [];
+
+    // Removed in THIS sheet: rows of its opening copy (moved on by each merge,
+    // patchDraft) that the stage still has and the draft does not - never a
+    // document another device added meanwhile (H6: its file went to the bin).
+    const nowIds  = new Set( ( originalStage ? originalStage.documents : [] ).map( function( d ) { return d.id; } ) );
+    const oldDocs = ( stageOpen ? stageOpen.documents || [] : [] ).filter( function( d ) { return nowIds.has( d.id ); } );
+    const others  = parentTrip ? ( parentTrip.documents || [] ).concat( ...parentTrip.stages
+                        .filter( function( s ) { return s.id !== stageDraft.id; } )
+                        .map( function( s ) { return s.documents || []; } ) ) : [];
 
     if( docFilesDirty( stageDraft.documents, oldDocs ) )
     {
@@ -329,13 +355,15 @@ async function saveStage()
 
         try
         {
-            await syncDocFiles( parentTrip.dirName, stageDraft.documents, oldDocs );
+            const stored = await syncDocFiles( tripBase( parentTrip ), stageDraft.documents, oldDocs, others );
+            if( ! stageDraft ) return;                    // closed meanwhile (Escape)
+            storedNames( stageDraft.documents, stored );  // a merge meanwhile may have swapped the rows (patchDraft)
         }
         catch( _ )
         {
             stageSheetBusy = false;
             stageSaveError = T( 'trips.uploadFailed' );
-            renderStageSheet();
+            if( stageDraft ) renderStageSheet();
             return;
         }
 
@@ -348,7 +376,11 @@ async function saveStage()
 
         if( editingStageId )
         {
-            stages = t.stages.map( function( st ) { return st.id === stageDraft.id ? { ...stageDraft } : st; } );
+            // Deleted on another device while this sheet was open: it comes
+            // back, as edited here - an edit is never lost to a delete.
+            const there = t.stages.some( function( st ) { return st.id === stageDraft.id; } );
+            stages = there ? t.stages.map( function( st ) { return st.id === stageDraft.id ? { ...stageDraft } : st; } )
+                           : [ ...t.stages, { ...stageDraft } ];
         }
         else
         {
@@ -418,7 +450,12 @@ async function deleteDocWithUndo( stageId, doc )
 
     let ids = null;                                                        // the file's bin id, for the Undo
 
-    if( docFilesDirty( docs.filter( function( x ) { return x !== doc; } ), docs ) )
+    // A file name another document of the trip still uses (two lists once
+    // shared one, D2) is not this row's alone: only the row goes.
+    const file   = docStoredFile( doc );
+    const shared = !! file && allTripDocs( trip ).some( function( x ) { return x !== doc && docStoredFile( x ) === file; } );
+
+    if( ! shared && docFilesDirty( docs.filter( function( x ) { return x !== doc; } ), docs ) )
     {
         if( ! navigator.onLine )
         {
@@ -428,7 +465,7 @@ async function deleteDocWithUndo( stageId, doc )
 
         // Straight to the bin (not syncDocFiles) so the Undo knows its bin id.
         // A failure is not fatal, as there: never uploaded / already gone.
-        try { ids = await GumApi.binPaths( 'data/trips/' + trip.dirName + '/' + docStoredFile( doc ) ); }
+        try { ids = await GumApi.binPaths( tripBase( trip ) + '/' + file ); }
         catch( _ ) { ids = null; }
     }
 

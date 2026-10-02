@@ -222,9 +222,24 @@ function save()
     // During a merge too: the write only joins the held-back one (not sent),
     // and keeps the edit safe if the merge fails; the merge's own write
     // replaces it.
-    sent = serialize();
-    store.write( FILE, sent );
+    // `base` becomes this body once THIS file's PUT has gone through (H5,
+    // list-apps #19): from the write's own answer, here, and - for a save
+    // queued offline and sent later by the store - from "synced" (watchBase).
+    // "synced" alone waited for the whole outbox to be empty, which any other
+    // waiting save (an office document held back, another app's) put off: the
+    // next merge then started from an older copy and undid another device's
+    // newer change to the same bookmark. Both are needed.
+    const body = serialize();
+    sent = body;
+    store.write( FILE, body ).then( function( r ) { if( r && r.ok && ! merging ) base = body; } );
     return true;
+}
+
+// The store says "synced" when the outbox is empty: our last write is the
+// server's file now (a save that waited offline included; see save()).
+function watchBase( s )
+{
+    if( s === 'synced' && sent !== null && ! merging ) base = sent;
 }
 
 // A deep copy of the whole file, for Replace all's Undo.
@@ -239,13 +254,6 @@ function snapshot() { return JSON.parse( JSON.stringify( data ) ); }
 // goes. Without a base (the page was opened with the write already held back)
 // nothing counts as deleted: both sides' nodes stay. repair() then makes one
 // clean tree of it. Checked by tools/bookmarks-test.
-
-// The store says "synced" when the outbox is empty: our last write is the
-// server's file now.
-function watchBase( s )
-{
-    if( s === 'synced' && sent !== null && ! merging ) base = sent;
-}
 
 async function resolveConflict()
 {

@@ -417,7 +417,9 @@ export function calendarToIcs( file, defs )
 // by event - by uid + RECURRENCE-ID (def.key):
 //   - added on either side: kept;
 //   - deleted on one side and untouched on the other: deleted;
-//   - changed on both: the newer by its LAST-MODIFIED, else DTSTAMP, else mine;
+//   - changed on both: merged property by property against base (mergeEvent);
+//     with no base copy of it, the newer by its LAST-MODIFIED, else DTSTAMP,
+//     else mine;
 //   - changed on one side and deleted on the other: kept, as changed (an edit
 //     is never lost to a delete).
 // The server's file is the frame (its VTIMEZONEs, to-dos, order); an event of
@@ -450,9 +452,12 @@ export function mergeIcs( base, mine, theirs )
         if( B && tv === bv ) return mv;                  // only mine changed (or deleted it)
         if( mv === null ) return tv;                     // deleted here, changed there: kept
         if( tv === null ) return mv;
-        // Changed on both: the newer; with no stamps, mine - or theirs when
-        // base is unknown (store.js mergeLists: this device shows the result
-        // at once, the other device's edit would be undone unseen).
+        // Changed on both, and base had it: property by property, so neither
+        // side's edit is dropped whole (H1: a rename here, a place set there).
+        if( bv !== null ) return mergeEvent( bv, mv, tv );
+        // Added on both (no base copy): the newer; with no stamps, mine - or
+        // theirs when base is unknown (store.js mergeLists: this device shows
+        // the result at once, the other device's edit would be undone unseen).
         const sm = stampOf( mv ), st = stampOf( tv );
         if( sm !== st ) return st > sm ? tv : mv;
         return B ? mv : tv;
@@ -501,6 +506,146 @@ function stampOf( raw )
 {
     const one = n => { const r = new RegExp( '^' + n + '(?:;[^:\r\n]*)?:(\\d{8}T\\d{6}Z?)', 'mi' ).exec( raw ); return r ? r[ 1 ] : ''; };
     return one( 'LAST-MODIFIED' ) || one( 'DTSTAMP' );
+}
+
+// ONE EVENT CHANGED ON BOTH SIDES (H1, list-apps #11 / #12). Taking the newer
+// VEVENT whole dropped the other side's edit of a DIFFERENT field (the PC's
+// rename lost the phone's place), and "delete only this one" competed with any
+// other change of its series: the deleted day came back. So the event is
+// merged property by property against its base copy:
+//   - a property only one side changed takes that side's;
+//   - both changed it: the newer event's (stampOf; a tie is mine);
+//   - EXDATE / RDATE are sets of lines: one either side added stays, one
+//     either side removed goes (two days deleted on two devices both stay
+//     deleted, and they survive a rename of the series);
+//   - DTSTART / DTEND / DURATION are one "when" (a move sets them together),
+//     and the sub-components (VALARMs...) one block.
+// The server's VEVENT is the frame: a property whose value is theirs stays
+// as its own lines, in its place; one that changes is written where theirs
+// stood; one theirs lacks goes before the first sub-component (or the END).
+const EVENT_SETS  = [ 'EXDATE', 'RDATE' ];
+const EVENT_WHEN  = [ 'DTSTART', 'DTEND', 'DURATION' ];
+const EVENT_SUBS  = '#SUB';
+
+// A VEVENT's own lines as units: key -> { set, items: [ { raw, text } ] }, in
+// the order met. A set unit (EXDATE, RDATE) has one item per line.
+function eventUnits( raw )
+{
+    const units = new Map();
+    let   depth = 0;
+
+    const add = function( key, set, item )
+    {
+        if( ! units.has( key ) ) units.set( key, { set: set, items: [] } );
+        units.get( key ).items.push( item );
+    };
+
+    for( const l of icsLines( raw ) )
+    {
+        const text = l.raw.replace( /^﻿/, '' ).replace( /\r?\n[ \t]/g, '' ).replace( /[\r\n]+$/, '' );
+        const d    = depth;
+        if( l.begin ) depth++;
+        if( l.end )   depth--;
+
+        if( d === 0 || ( d === 1 && l.end ) ) continue;                                   // BEGIN / END:VEVENT
+        if( d >= 2 || l.begin ) { add( EVENT_SUBS, false, { raw: l.raw, text: text } ); continue; }
+        if( ! text.trim() ) continue;
+
+        const name = l.name;
+        if( EVENT_SETS.indexOf( name ) !== -1 )      add( name, true, { raw: l.raw, text: text } );
+        else if( EVENT_WHEN.indexOf( name ) !== -1 ) add( 'WHEN', false, { raw: l.raw, text: text } );
+        else                                         add( name, false, { raw: l.raw, text: text } );
+    }
+
+    return units;
+}
+
+function unitKey( name ) { return EVENT_WHEN.indexOf( name ) !== -1 ? 'WHEN' : name; }
+
+function mergeEvent( bv, mv, tv )
+{
+    const B = eventUnits( bv ), M = eventUnits( mv ), T = eventUnits( tv );
+    const newerT = stampOf( tv ) > stampOf( mv );
+    const val    = u => u ? u.items.map( i => i.text ).join( '\n' ) : null;
+
+    // key -> the items to write, or 'T' when theirs' own lines stay as they are.
+    const result = new Map();
+    const keys   = [];
+    for( const k of [ ...T.keys(), ...M.keys(), ...B.keys() ] ) if( keys.indexOf( k ) === -1 ) keys.push( k );
+
+    for( const k of keys )
+    {
+        const b = B.get( k ), m = M.get( k ), t = T.get( k );
+
+        if( ( m || t || b ).set )
+        {
+            const has = ( u, x ) => !! u && u.items.some( i => i.text === x.text );
+            const out = [];
+            for( const x of ( t ? t.items : [] ).concat( m ? m.items : [] ) )
+            {
+                if( out.some( i => i.text === x.text ) ) continue;
+                const inM = has( m, x ), inT = has( t, x );
+                if( ( inM && inT ) || ! has( b, x ) ) out.push( x );   // on both, or added by one: kept
+            }
+            result.set( k, val( { items: out } ) === val( t ) ? 'T' : out );
+            continue;
+        }
+
+        const vb = val( b ), vm = val( m ), vt = val( t );
+        let   side;
+        if( vm === vt || vm === vb ) side = 'T';
+        else if( vt === vb )         side = 'M';
+        else                         side = newerT ? 'T' : 'M';
+
+        result.set( k, side === 'T' || vm === vt ? 'T' : ( m ? m.items : [] ) );
+    }
+
+    // Written: theirs' lines, each unit that changes at its first line, the
+    // ones theirs lacks before its first sub-component (or its END).
+    const fresh = keys.filter( k => ! T.has( k ) && result.get( k ) !== 'T' && k !== EVENT_SUBS );
+    const items = k => result.get( k ).map( i => i.raw ).join( '' );
+    const done  = new Set();
+    let   out   = '', depth = 0, placed = false;
+
+    const putFresh = function()
+    {
+        if( placed ) return '';
+        placed = true;
+        return fresh.map( items ).join( '' );
+    };
+
+    for( const l of icsLines( tv ) )
+    {
+        const d = depth;
+        if( l.begin ) depth++;
+        if( l.end )   depth--;
+
+        if( d === 0 ) { out += l.raw; continue; }                                // BEGIN:VEVENT
+
+        if( d === 1 && l.end )                                                   // END:VEVENT
+        {
+            out += putFresh();
+            if( ! T.has( EVENT_SUBS ) && result.get( EVENT_SUBS ) && result.get( EVENT_SUBS ) !== 'T' ) out += items( EVENT_SUBS );
+            out += l.raw;
+            continue;
+        }
+
+        if( d >= 2 || l.begin )                                                  // a sub-component
+        {
+            out += putFresh();
+            if( result.get( EVENT_SUBS ) === 'T' ) out += l.raw;
+            else if( ! done.has( EVENT_SUBS ) ) { done.add( EVENT_SUBS ); out += items( EVENT_SUBS ); }
+            continue;
+        }
+
+        const k = unitKey( l.name );
+        if( ! result.has( k ) || result.get( k ) === 'T' ) { out += l.raw; continue; }   // theirs, in its place
+        if( done.has( k ) ) continue;
+        done.add( k );
+        out += items( k );                                                       // empty: the property goes
+    }
+
+    return out;
 }
 
 // Deleting a moved occurrence (an override: the series' uid + a RECURRENCE-ID)
@@ -640,6 +785,15 @@ function patchEvent( src, def, eol )
     for( const l of icsLines( defToVEventComponent( def ).toString() ) )
         if( names.indexOf( l.name ) !== -1 )
             ( fresh[ l.name ] = fresh[ l.name ] || [] ).push( l.raw.replace( /\r?\n$/, '' ).replace( /\r\n/g, eol ) + eol );
+
+    // An event that carries a LAST-MODIFIED (Google / Outlook imports) gets it
+    // moved on with DTSTAMP: a merge reads it FIRST (stampOf), and left as it
+    // came, two edits of it on two devices could never tell the newer (H1).
+    if( fresh.DTSTAMP && src.lines.some( l => l.name === 'LAST-MODIFIED' ) )
+    {
+        names.push( 'LAST-MODIFIED' );
+        fresh[ 'LAST-MODIFIED' ] = fresh.DTSTAMP.map( s => s.replace( /^DTSTAMP/, 'LAST-MODIFIED' ) );
+    }
 
     const done = {};
     const put  = function( n )

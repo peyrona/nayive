@@ -1736,11 +1736,18 @@
             closeSheet( 'entrySheetBackdrop' );
             renderGroup();
 
+            // Undo puts that one entry back into the group as it is NOW, found by
+            // folder (H3, list-apps #7): a re-read in between (tab switch, the
+            // plug) swaps every group for a fresh copy, maybe with another
+            // device's entries, and saving the old `g` dropped them - and never
+            // reached the screen.
             showUndo( T( 'split.deleted' ), function()
             {
-                g.entries.splice( Math.min( at, g.entries.length ), 0, removed );
-                persist( g );
-                if( current === g ) renderGroup();
+                const cur = groups.find( x => x._base === g._base );
+                if( ! cur || cur.entries.some( x => x.id === removed.id ) ) return;
+                cur.entries.splice( Math.min( at, cur.entries.length ), 0, removed );
+                persist( cur );
+                if( current && current._base === cur._base ) renderGroup();
             } );
         }
 
