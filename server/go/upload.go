@@ -20,6 +20,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,10 +66,17 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// own photos into a shared album; letting a PUT land on a name that already
 	// exists would quietly destroy the owner's file, with no trip through the
 	// papelera. Their own second upload of the same name gets the same 409 the
-	// client already knows how to explain.
-	if IsSharedPath(fileRel) && target.Exists() {
-		sendError(w, r, http.StatusConflict,
-			"ya existe un archivo con ese nombre; en una carpeta compartida sólo puedes añadir")
+	// client already knows how to explain. Checked here, so a long body is not
+	// sent for nothing, AND again at the end (streamToFile, `clash`): the owner
+	// may put a file of that name there while the guest's video streams (D9).
+	clash := 0 // 0: this PUT may replace a file; else the answer when the name is taken
+	if IsSharedPath(fileRel) {
+		clash = http.StatusConflict
+	} else if createOnly(r) {
+		clash = http.StatusPreconditionFailed
+	}
+	if clash != 0 && target.Exists() {
+		sendError(w, r, clash, clashText(clash))
 		return
 	}
 
@@ -116,7 +124,7 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	written, err := s.streamToFile(w, r, target, budget)
+	written, err := s.streamToFile(w, r, target, budget, clash)
 	if err != nil {
 		return // streamToFile already answered
 	}
@@ -157,10 +165,30 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// createOnly: the PUT says "If-None-Match: *" - make the file only if the name
+// is free (RFC 9110 13.1.2). An upload the user never confirmed as "Replace"
+// sends it, so a file another device put there since the client last looked
+// is never written over (data-safety D1-D7, drive-files G1). There are no
+// ETags here, so any other If-None-Match value is not a condition.
+func createOnly(r *http.Request) bool {
+	return strings.TrimSpace(r.Header.Get("If-None-Match")) == "*"
+}
+
+// clashText is the answer to a PUT whose name is taken (see filesWrite).
+func clashText(code int) string {
+	if code == http.StatusConflict {
+		return "ya existe un archivo con ese nombre; en una carpeta compartida sólo puedes añadir"
+	}
+	return "ya existe un archivo con ese nombre"
+}
+
 // streamToFile is the write itself. It answers the request on every failure and
-// returns the byte count on success.
+// returns the byte count on success. `clash` 0 lets the file replace one of
+// its name; any other value is the status answered when the name is taken -
+// checked again under the path's lock, and the file then takes its name
+// without ever replacing (renameNoReplace).
 func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
-	target Resolved, budget int64) (int64, error) {
+	target Resolved, budget int64, clash int) (int64, error) {
 
 	// A body that cannot be sized -> 411.
 	//
@@ -320,8 +348,32 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	if info, err := target.Stat(); err == nil {
 		prev = info.ModTime()
 	}
-	// Atomic: readers never see a partial file.
-	if err := root.Rename(tmpName, target.Rel); err != nil {
+	if clash != 0 {
+		// NAME TAKEN WHILE THE BODY STREAMED? (D9, G1) The check before the
+		// body is minutes old for a video. The lock keeps other uploads out;
+		// renameNoReplace keeps out everything else (a move, a restore, the
+		// converter), which take no lock.
+		if target.Exists() {
+			sendError(w, r, clash, clashText(clash))
+			return 0, errors.New("name taken while the body streamed")
+		}
+		err := renameNoReplace(root, tmpName, target.Rel)
+		if errors.Is(err, errSourceLeft) {
+			// Saved: only the temp's own name stayed. An error here would make
+			// a retry meet its own file (412). The deferred remove tries
+			// again; the startup sweep takes what is left.
+			s.log.Warn("upload saved; its temp name stayed", "path", target.Abs, "err", err)
+			err = nil
+		}
+		if err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				sendError(w, r, clash, clashText(clash))
+			} else {
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			}
+			return 0, err
+		}
+	} else if err := root.Rename(tmpName, target.Rel); err != nil { // atomic: readers never see a partial file
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 		return 0, err
 	}

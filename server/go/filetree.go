@@ -117,6 +117,10 @@ func NewFileTree(baseDir, homesDir, configDir string, shares *Shares) *FileTree 
 //	                         file never has it.
 //	".convert-<8 chars>"     convert.go's ffmpeg output. Same rules as
 //	                         ".upload-": anywhere, and only while still 0600.
+//	                         Either one, 0644, is also taken while it has a
+//	                         SECOND name: renameNoReplace linked it to its
+//	                         real name and could not unlink the temp's. Taking
+//	                         that name frees nothing and loses nothing.
 //	".up-<n>" ".jpg-<n>"     the chat's temps (os.CreateTemp's shape). Only
 //	".fw-<n>"                under homes/<u>/data/chat/, only while 0600.
 //
@@ -176,7 +180,7 @@ func (t *FileTree) SweepStaleTemp() int {
 			if !d.Type().IsRegular() || !isTemp {
 				return nil
 			}
-			if info, err := d.Info(); err == nil && info.Mode().Perm()&0o077 == 0 {
+			if info, err := d.Info(); err == nil && (info.Mode().Perm()&0o077 == 0 || linkCount(info) > 1) {
 				remove(path)
 			}
 			return nil

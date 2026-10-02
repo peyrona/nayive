@@ -323,6 +323,17 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 
 	positionsMu.Lock()
 	defer positionsMu.Unlock()
+	// The file's upload stripe (lockPath, upload.go), from the read to the
+	// rename: positions.json shows in the trip's folder in Drive, and a move
+	// or bin of it (link, then unlink: renameNoReplace) must not take this
+	// write with it. Resolved, as a PUT's path is, so both pick one stripe.
+	file := filepath.Join(lt.root, tripPositionsFile)
+	key, err := resolveExisting(file)
+	if err != nil {
+		key = file
+	}
+	unlock := lockPath(key)
+	defer unlock()
 	doc, ok := s.positionsForWrite(lt.root)
 	if !ok {
 		return 0
@@ -330,7 +341,7 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 	for _, p := range fit {
 		mergePosition(&doc, p)
 	}
-	if err := atomicWriteJSON(filepath.Join(lt.root, tripPositionsFile), doc, 1); err != nil {
+	if err := atomicWriteJSON(file, doc, 1); err != nil {
 		s.log.Error("cannot save a trip position", "err", err)
 		return 0
 	}

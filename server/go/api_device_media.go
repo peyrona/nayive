@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"os"
@@ -546,6 +547,16 @@ func (s *Server) mediaEnd(w http.ResponseWriter, r *http.Request, dev *deviceRow
 	}
 	defer root.Close()
 
+	// The part's bytes to disk BEFORE the lock: a whole video's fsync takes
+	// seconds, and the bin waits on this stripe for any file that shares it,
+	// holding every user's bin meanwhile (Trash.MoveIn). fileMediaPart syncs
+	// again under the lock - by then a no-op. Best effort: a part that is
+	// not there is answered below.
+	if f, err := root.OpenFile(partRel, os.O_WRONLY, 0); err == nil {
+		f.Sync()
+		f.Close()
+	}
+
 	// Gone (a second "end" whose first answer was lost): 404, and the phone
 	// asks `start` again, which knows it was filed.
 	unlock := lockPath(home.Abs)
@@ -621,6 +632,9 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 	// A rename replaces what is there: two phones filing "IMG_1.jpg" into one
 	// folder at once must not both find the name free. Its own lock, never a
 	// lockPath stripe - the caller already holds one, and two stripes can be one.
+	// The lock stops other phones only, not a Drive upload or move of that name
+	// in the instant between the look and the move (D10): renameNoReplace
+	// refuses a name taken then, and the next one is tried.
 	mediaFileMu.Lock()
 	defer mediaFileMu.Unlock()
 	for i := 1; i < 10000; i++ {
@@ -634,7 +648,9 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 		} else if !os.IsNotExist(err) {
 			return "", err
 		}
-		if err := root.Rename(partRel, filepath.FromSlash(rel)); err != nil {
+		if err := renameNoReplace(root, partRel, filepath.FromSlash(rel)); errors.Is(err, fs.ErrExist) {
+			continue
+		} else if err != nil && !errors.Is(err, errSourceLeft) { // errSourceLeft: filed, the part's name stayed
 			return "", err
 		}
 		// Durable before the phone is told "filed" and may let it go (K1).

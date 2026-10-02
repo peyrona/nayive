@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"net/url"
 	"os"
@@ -380,8 +381,8 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 			return "", err
 		}
 	}
-	outRel := freeMP4Name(root, src.Rel)
-	if err := root.Rename(tmpRel, outRel); err != nil {
+	outRel, err := placeMP4(root, tmpRel, src.Rel)
+	if err != nil {
 		return "", err
 	}
 	// Its name durable before the original goes to the papelera (K1): a power
@@ -396,28 +397,45 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 	// Only now, with the mp4 in place and proven, does the original go. A
 	// failure here is not a failed conversion: the user has the mp4 and still
 	// has the original.
-	if _, err := c.trash.MoveIn("user", job.User, src, job.Path); err != nil {
+	//
+	// And only if it IS the original (D11): the run can take hours, and the
+	// name may hold another file by now - the film renamed away and a new one
+	// saved as x.avi, or x.avi replaced by an upload. That one is not what
+	// was converted: it stays where it is. The look is made under the path's
+	// stripe, inside MoveInIfSame, so no save lands between it and the move.
+	if _, err := c.trash.MoveInIfSame("user", job.User, src, job.Path, info); errors.Is(err, errNotSameFile) {
+		c.log.Warn("convert: the mp4 is ready; the original's name holds another file now, left in place",
+			"path", job.Path)
+	} else if err != nil {
 		c.log.Warn("convert: the mp4 is ready but the original could not go to the papelera",
 			"path", job.Path, "err", err)
 	}
 	return path.Join(path.Dir(job.Path), filepath.Base(outRel)), nil
 }
 
-// freeMP4Name is "<name>.mp4" beside the original, or "<name> (1).mp4" and so
-// on when that is taken. Never an existing file: nothing is overwritten.
-func freeMP4Name(root *os.Root, srcRel string) string {
+// placeMP4 gives the finished temp its name - "<name>.mp4" beside the
+// original, or "<name> (1).mp4" and so on when that is taken - and answers it.
+// Never an existing file: a free name seen by a look and then taken by a
+// save or an upload before a plain rename was replaced (D10); renameNoReplace
+// refuses it, and the next name is tried.
+func placeMP4(root *os.Root, tmpRel, srcRel string) (string, error) {
 	dir := filepath.Dir(srcRel)
 	base := strings.TrimSuffix(filepath.Base(srcRel), filepath.Ext(srcRel))
-	for n := 0; ; n++ {
+	for n := 0; n < 10000; n++ {
 		name := base + ".mp4"
 		if n > 0 {
 			name = base + " (" + strconv.Itoa(n) + ").mp4"
 		}
 		rel := filepath.Join(dir, name)
-		if _, err := root.Lstat(rel); errors.Is(err, os.ErrNotExist) {
-			return rel
+		err := renameNoReplace(root, tmpRel, rel)
+		if errors.Is(err, errSourceLeft) {
+			return rel, nil // in place; the temp's name goes with the caller's deferred remove
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return rel, err
 		}
 	}
+	return "", errors.New("no free name for the mp4")
 }
 
 // freeBytes is the space left on the disk holding `dir`, or -1 when unknown.

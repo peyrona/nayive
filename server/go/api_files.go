@@ -21,15 +21,16 @@ package main
 //	       (nothing)                   the whole tree
 //	POST   ?old=&new=                  rename / move
 //	       ?from=&new=                 copy (copy.go)
-//	       ?trash=restore|empty        undelete / empty
+//	       ?trash=restore|empty        undelete / empty (&ids=a;b: only those)
 //	PUT    ?type=dir&name=&parent=     mkdir
-//	       ?file=<path>                upload
+//	       ?file=<path>                upload (If-None-Match: * = only a new file)
 //	DELETE ?paths=a&paths=b            move to the trash
 //	       &purge=1                    really delete (a user's data/ only)
 //	       ?trash=&ids=a;b             purge from the trash
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -444,14 +445,32 @@ func (s *Server) filesMove(w http.ResponseWriter, r *http.Request, role, user st
 	// delete it outright, with no trip through the papelera. (sameResolved
 	// guards a pure case-change on a case-insensitive filesystem, where src and
 	// dst are the same inode.)
-	if dst.Exists() && !sameResolved(src, dst) {
-		sendError(w, r, http.StatusConflict,
-			"ya existe un archivo o carpeta con ese nombre en el destino")
+	const taken = "ya existe un archivo o carpeta con ese nombre en el destino"
+	caseOnly := sameResolved(src, dst)
+	if dst.Exists() && !caseOnly {
+		sendError(w, r, http.StatusConflict, taken)
 		return
 	}
 
 	dst.MkdirParent()
-	if err := renameResolved(src, dst); err != nil {
+	// The check above is not enough on its own: a file saved or uploaded to
+	// dst a moment after it would be replaced by a plain rename (D10). Only a
+	// case-only rename - one file under two spellings - renames plainly.
+	// The source's upload stripe: a save of it cannot land between the
+	// link and the unlink of renameNoReplace and be unlinked with it.
+	unlock := lockPath(src.Abs)
+	var err error
+	if caseOnly {
+		err = renameResolved(src, dst)
+	} else {
+		err = renameResolvedNoReplace(src, dst)
+	}
+	unlock()
+	if errors.Is(err, fs.ErrExist) {
+		sendError(w, r, http.StatusConflict, taken)
+		return
+	}
+	if err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo mover")
 		return
 	}
@@ -670,7 +689,16 @@ func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user s
 			map[string]any{"message": "restored", "renamed": renamed})
 
 	case r.Method == http.MethodPost && mode == "empty":
-		n, err := s.trash.Purge(role, user, nil)
+		// &ids=: empty only the items the user was shown and confirmed - one
+		// deleted on another device after that look (a phone's Undo toast
+		// still up) stays in the bin (G4). An empty list purges nothing - so
+		// presence is read off the raw query, where a blank "ids=" still
+		// counts. No ids parameter at all is an older page: the whole bin.
+		var wanted []string
+		if _, sent := r.URL.Query()["ids"]; sent {
+			wanted = ids
+		}
+		n, err := s.trash.Purge(role, user, wanted)
 		if err != nil {
 			sendError(w, r, http.StatusInternalServerError, errTrashText)
 			return

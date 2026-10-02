@@ -137,7 +137,7 @@ func TestCopyTree(t *testing.T) {
 	linked := os.Symlink("a.txt", filepath.Join(src, "enlace")) == nil
 
 	dst := filepath.Join(t.TempDir(), "copia")
-	if err := copyTree(src, dst); err != nil {
+	if err := copyTree(src, dst, nil); err != nil {
 		t.Fatal(err)
 	}
 	if raw, _ := os.ReadFile(filepath.Join(dst, "sub", "b.txt")); string(raw) != "bb" {
