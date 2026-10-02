@@ -23,7 +23,8 @@ package main
 //	       ?from=&new=                 copy (copy.go)
 //	       ?trash=restore|empty        undelete / empty (&ids=a;b: only those)
 //	PUT    ?type=dir&name=&parent=     mkdir
-//	       ?file=<path>                upload (If-None-Match: * = only a new file)
+//	       ?file=<path>                upload (If-None-Match: * = only a new file;
+//	                                   If-Match: <ETag> = only over that version, etag.go)
 //	DELETE ?paths=a&paths=b            move to the trash
 //	       &purge=1                    really delete (a user's data/ only)
 //	       ?trash=&ids=a;b             purge from the trash
@@ -230,6 +231,20 @@ func (s *Server) filesRead(w http.ResponseWriter, r *http.Request, target Resolv
 	// with fetch() (Text edits them), which a response's CSP does not touch.
 	if scriptable(ctype) {
 		w.Header().Set("Content-Security-Policy", "sandbox")
+	}
+	// The version tag of what was opened (etag.go): the page's next save sends
+	// it back as If-Match. Set before serving, so a conditional GET is judged
+	// by it in both tiers (ServeContent, serveGzipTier).
+	w.Header().Set("ETag", fileETag(info))
+	// NEVER A 304 BY DATE here. A copy the browser cached before the tag
+	// revalidates by If-Modified-Since alone; after a change inside that
+	// second (a restore, a server write) a 304 would hand out the CURRENT
+	// file's tag for the OLD body it keeps, and its next save - If-Match with
+	// that tag - would pass over the change. Without If-None-Match the file
+	// goes out whole: the browser gets the bytes the tag names. Static assets
+	// and sites have no tag and keep their 304 by date.
+	if r.Header.Get("If-None-Match") == "" {
+		r.Header.Del("If-Modified-Since")
 	}
 	// NO .gz SIDECAR here: a user's own "foo.txt.gz" must stay a file. Only the
 	// static apps use sidecars.
