@@ -4,10 +4,12 @@
  * and the full-screen photo and map. See core.js.
  *
  * The owner can also do three things with Nayive itself: send a document
- * that is already in their files, KEEP a photo (Copiar: it moves into their
- * Photos folder and the chat shows it from there, so deleting the message
- * never loses it) and EDIT one with the image editor Drive and Photos use -
- * on the kept file, so everybody in the chat sees the edit.
+ * that is already in their files, KEEP a photo (Copiar: it is also put in
+ * their Photos folder, so deleting the message never loses it) and EDIT one
+ * with the image editor Drive and Photos use. The edit is always a NEW file
+ * beside the photo - never written over it, which may be the camera original
+ * in their library (J1) - and ✓ points the message at it, so everybody in
+ * the chat sees the edit.
  */
 ( function ()
 {
@@ -704,9 +706,9 @@
                                           rootLabel: T( "ui.fp.allFiles" ) } );
     }
 
-    // Copiar: the photo moves into the owner's Photos folder and the chat
-    // shows it from there. Resolves the file's path ("files/..."), or null.
-    // quiet: no "copied" toast (Editar says what happened itself).
+    // Copiar: the photo is also put in the owner's Photos folder. Resolves
+    // where it is in their files now ("files/..."), or null. quiet: no
+    // "copied" toast (Editar says what happened itself).
     C.keepPhoto = async function ( m, quiet )
     {
         if( ! m || m.id <= 0 ) return null;
@@ -717,20 +719,33 @@
             dir = await photosFolder();
             if( ! dir || S.open !== conv ) return null;
         }
+        function take( msg )
+        {
+            if( S.open !== conv || ! msg ) return;
+            var cur = S.msgs.get( m.id );
+            if( cur && cur._v ) msg._v = cur._v;
+            S.msgs.set( msg.id, msg );
+            C.redraw( msg.id );
+        }
         try
         {
             var out = await C.api( "POST", "conv/" + conv + "/messages/" + m.id + "/keep", { dir: dir } );
-            if( S.open === conv && out.msg )
-            {
-                var cur = S.msgs.get( m.id );
-                if( cur && cur._v ) out.msg._v = cur._v;
-                S.msgs.set( out.msg.id, out.msg );
-                C.redraw( out.msg.id );
-            }
+            take( out.msg );
             if( ! quiet ) NayiveUI.toast( C.TF( "chat.kept", { path: shortPath( out.path ) } ), { ms: 3500 } );
             return out.path;
         }
-        catch( e ) { C.fail( e ); return null; }
+        catch( e )
+        {
+            // Kept once, but no longer in their files (binned, deleted): the
+            // chat still has it - it is copied again, to the Photos folder.
+            if( e.status === 410 && e.body && e.body.msg && ! e.body.msg.kept && m.kept )
+            {
+                take( e.body.msg );
+                return C.keepPhoto( e.body.msg, quiet );
+            }
+            C.fail( e );
+            return null;
+        }
     };
 
     // "Abrir en Fotos": the Photos app at that photo's folder, the photo open
@@ -751,11 +766,31 @@
 
     function shortPath( p ) { return String( p || "" ).replace( /^files\/?/, "" ) || T( "ui.filesRoot" ); }
 
+    // A NEW file beside `path` holding `bytes`: "<name>-editado.jpg" (the
+    // word in the user's language), "(2)" and on when taken. Never over a
+    // file - not even one another device saved there a moment ago: the
+    // server refuses a taken name (412) and the next one is tried. Resolves
+    // its path.
+    async function saveBeside( path, bytes )
+    {
+        var dir  = path.slice( 0, path.lastIndexOf( "/" ) );
+        var stem = path.slice( dir.length + 1 ).replace( /\.[^.]*$/, "" ) + "-" + T( "ui.editedSuffix" );
+        for( var i = 1; i < 1000; i++ )
+        {
+            var name = dir + "/" + stem + ( i > 1 ? " (" + i + ")" : "" ) + ".jpg";
+            try { await GumApi.createFileBytes( name, bytes ); return name; }
+            catch( e ) { if( e.status !== 412 ) throw e; }
+        }
+        throw new Error( T( "chat.failed" ) );
+    }
+
     // Editar foto (TOAST UI Image Editor, as Drive and Photos: shared/photo.js
-    // loads and builds it). The photo is kept first - the editor writes the owner's own
-    // file, never the chat's - so everybody in the chat sees the edit. The bar:
-    // save (the chat shows it), save a copy beside it (the chat does not
-    // change), close. onSaved: the caller redraws (the full-screen viewer).
+    // loads and builds it). The photo is kept first, so it is safe in the
+    // owner's files. The edit NEVER goes over it (it may be the camera
+    // original of their library): both saves write a new file beside it. The
+    // bar: save (the chat shows the edit, to everybody), save a copy (the
+    // chat does not change), close. onSaved: the caller redraws (the
+    // full-screen viewer).
     C.editPhoto = async function ( m, onSaved )
     {
         if( ! m || m.id <= 0 || document.querySelector( ".photo-editor" ) ) return;
@@ -824,32 +859,41 @@
             return NayivePhoto.keepExif( path, bytes, sz.width, sz.height );
         }
 
+        // ✓: the edit as a new file beside the photo, then the message shows
+        // it (the server points it there); the photo itself is not touched.
         saveB.addEventListener( "click", async function ()
         {
             if( busy || ! editor ) return;
             if( ! dirty ) { leave(); return; }
             var bytes = pixels();
             if( ! bytes ) return;
+            var sz = editor.getCanvasSize();
             busy = true;
+            var made = null;
             try
             {
                 bytes = await withExif( bytes );
-                var oldThumb = await NayivePhoto.thumbOf( path );     // Photos' thumbnail of the old picture
-                await GumApi.writeFileBytes( path, bytes );
-                NayivePhoto.dropThumb( oldThumb );
+                made = await saveBeside( path, bytes );
+                var out = await C.api( "POST", "conv/" + conv + "/messages/" + m.id + "/edited",
+                                       { ref: made, w: Math.round( sz.width ), h: Math.round( sz.height ) } );
                 dirty = false;
                 busy = false;
-                var cur = S.msgs.get( m.id );
-                if( cur && S.open === conv ) { cur._v = Date.now(); C.redraw( cur.id ); }
+                if( out && out.msg && S.open === conv ) { out.msg._v = Date.now(); S.msgs.set( out.msg.id, out.msg ); C.redraw( out.msg.id ); }
                 leave();
                 if( onSaved ) onSaved();
-                NayiveUI.toast( C.TF( "chat.photoSaved", { path: shortPath( path ) } ), { ms: 3500 } );
+                NayiveUI.toast( C.TF( "chat.photoSaved", { path: shortPath( made ) } ), { ms: 3500 } );
             }
-            catch( e ) { busy = false; C.fail( e ); }
+            catch( e )
+            {
+                busy = false;
+                // Saved, but the chat could not be pointed at it: it is a copy
+                // beside the photo, and is said so (the edit is not lost).
+                if( made ) { dirty = false; leave(); NayiveUI.toast( C.TF( "chat.copySaved", { path: shortPath( made ) } ), { ms: 6000 } ); }
+                else C.fail( e );
+            }
         } );
 
-        // A copy beside the photo: "<name>-editado.jpg" (the word in the
-        // user's language), "(2)" and on when taken.
+        // A copy beside the photo; the chat does not change.
         copyB.addEventListener( "click", async function ()
         {
             if( busy || ! editor ) return;
@@ -858,18 +902,12 @@
             busy = true;
             try
             {
-                var dir  = path.slice( 0, path.lastIndexOf( "/" ) );
-                var name = path.slice( dir.length + 1 );
-                var stem = name.replace( /\.[^.]*$/, "" ) + "-" + T( "ui.editedSuffix" );
-                var taken = new Set( ( ( await GumApi.listDir( dir ) ).nodes || [] ).map( function ( n ) { return String( n.path ).split( "/" ).pop().toLowerCase(); } ) );
-                var copy = stem + ".jpg";
-                for( var i = 2; taken.has( copy.toLowerCase() ); i++ ) copy = stem + " (" + i + ").jpg";
                 bytes = await withExif( bytes );
-                await GumApi.writeFileBytes( dir + "/" + copy, bytes );
+                var copy = await saveBeside( path, bytes );
                 dirty = false;
                 busy = false;
                 leave();
-                NayiveUI.toast( C.TF( "chat.copySaved", { path: shortPath( dir + "/" + copy ) } ), { ms: 3500 } );
+                NayiveUI.toast( C.TF( "chat.copySaved", { path: shortPath( copy ) } ), { ms: 3500 } );
             }
             catch( e ) { busy = false; C.fail( e ); }
         } );

@@ -617,6 +617,9 @@ button.who { cursor: pointer; }
 /* Auto-delete: the days box and "Días (0 = nunca)" on one row */
 .days-field        { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 0.9rem; }
 .days-field input  { flex: 0 0 auto; width: 6em; text-align: center; }
+/* ...and how many messages that would delete now (J7: a typo shows) */
+.days-count        { margin: -6px 0 14px; min-height: 1.45em; font-size: 0.85rem; font-weight: 600; color: var(--danger); }
+.days-count.none   { font-weight: 400; color: var(--text-dim); }
 .linkbox           { padding: 12px; border-radius: var(--radius-m); border: 1px solid var(--line); background: var(--card2); }
 .linkbox code      { display: block; margin: 4px 0 10px; font-family: var(--font-mono); font-size: 0.76rem; overflow-wrap: anywhere; }
 .linkbox .btns     { display: flex; gap: 8px; }

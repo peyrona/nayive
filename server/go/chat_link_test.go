@@ -36,8 +36,10 @@ func TestChatLinkPhoto(t *testing.T) {
 		m.File.W != 40 || m.File.Size != int64(len(keepJPEG)) {
 		t.Fatalf("linked photo = %+v %+v", m, m.File)
 	}
-	if entries, _ := os.ReadDir(filepath.Join(home, "data", "chat", "conv", conv, "media")); len(entries) != 0 {
-		t.Fatalf("a copy landed under media/: %d entries", len(entries))
+	// The chat's own name for it (J4) is the same file - a hard link, no copy.
+	orig, _ := os.Stat(filepath.Join(home, "files", "Fotos", "IMG_7.jpeg"))
+	if own, err := os.Stat(filepath.Join(home, "data", "chat", "conv", conv, "media", fmt.Sprintf("%d.jpg", m.ID))); err != nil || !os.SameFile(orig, own) {
+		t.Fatalf("media/ does not hold the photo itself: %v", err)
 	}
 	if got := f.srv.users.UserUsageBytes("ana"); got != usage {
 		t.Fatalf("usage moved %d -> %d: nothing was copied", usage, got)
@@ -67,20 +69,24 @@ func TestChatLinkPhoto(t *testing.T) {
 	get(media, keepJPEG)
 	os.Rename(filepath.Join(home, "files", "Fotos", "playa.jpeg"), filepath.Join(home, "files", "Fotos", "Viaje", "playa.jpeg"))
 	get(media, keepJPEG)
+	// Where it is now is what "keep" answers (the editor, "Abrir en Fotos").
+	var where struct{ Path string }
+	f.call(t, f.owner, "POST", fmt.Sprintf("/api/chat/conv/%s/messages/%d/keep", conv, m.ID), `{}`, 200, &where)
 	f.srv.chat.mu.Lock()
 	path := f.srv.chat.conv(f.srv.chat.owner("ana"), conv).st.Kept[m.ID]
 	f.srv.chat.mu.Unlock()
-	if path != "files/Fotos/Viaje/playa.jpeg" {
-		t.Fatalf("the link was not updated: %q", path)
+	if where.Path != "files/Fotos/Viaje/playa.jpeg" || path != where.Path {
+		t.Fatalf("the link was not updated: %q, %q", where.Path, path)
 	}
 
-	// Saved anew at the same path (an edit): followed by its path.
+	// Another file saved at the same path: never shown in the old message,
+	// which keeps showing what was sent (J4).
 	edited := append([]byte{}, keepJPEG...)
 	edited[6] = 0x33
 	p := filepath.Join(home, "files", "Fotos", "Viaje", "playa.jpeg")
 	os.WriteFile(p+".tmp", edited, 0o644)
 	os.Rename(p+".tmp", p)
-	get(media, edited)
+	get(media, keepJPEG)
 
 	// Deleting the message never deletes the owner's photo.
 	f.call(t, f.owner, "DELETE", fmt.Sprintf("/api/chat/conv/%s/messages/%d", conv, m.ID), "", 200, nil)
@@ -88,12 +94,8 @@ func TestChatLinkPhoto(t *testing.T) {
 		t.Fatal("deleting the message deleted the owner's photo")
 	}
 
-	// Gone from the files: gone from the chat, no error page.
+	// Gone from the files: still in the chat (J4).
 	f.call(t, f.owner, "POST", send, `{"ref":"files/Fotos/Viaje/playa.jpeg"}`, 201, &m)
 	os.Remove(p)
-	resp := do(t, anonymous(), "GET", fmt.Sprintf("%s/api/c/%s/conv/%s/media/%d", f.base, f.carmen, conv, m.ID), nil, nil)
-	readBody(t, resp)
-	if resp.StatusCode != 404 {
-		t.Fatalf("a removed photo = %d", resp.StatusCode)
-	}
+	get(fmt.Sprintf("%s/api/c/%s/conv/%s/media/%d", f.base, f.carmen, conv, m.ID), edited)
 }
