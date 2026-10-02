@@ -61,7 +61,8 @@
         {
             NayiveI18n.ready.then( function ()
             {
-                NayiveUI.bootWithStore( null, function () { return NayiveChat.start( { mode: 'owner', api: '/api/chat' } ); } );
+                // who: its account names what this page keeps on the device (core.js C.scope)
+                NayiveUI.bootWithStore( null, function ( who ) { return NayiveChat.start( { mode: 'owner', api: '/api/chat', user: who && who.user } ); } );
             } );
         } );
     </script>

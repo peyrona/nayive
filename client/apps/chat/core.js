@@ -44,6 +44,7 @@
         mode:     "owner",      // "owner" | "guest"
         api:      "",           // "/api/chat" | "/api/c/<token>"
         token:    "",
+        user:     "",           // the owner's Nayive account (chat.js; C.scope)
         me:       "o",          // my participant id
         owner:    "",           // the owner's name, as people see it
         motto:    "",           // the owner's own line under the app's name (optional)
@@ -247,6 +248,25 @@
     C.mediaUrl = function ( conv, id, dl )
     {
         return C.W( conv ).api + "/conv/" + encodeURIComponent( conv ) + "/media/" + id + ( dl ? "?dl=1" : "" );
+    };
+
+    // Whose are the things this page keeps on the device (compose.js: the
+    // outbox, the words being written): the account signed in, or the
+    // person's link. "" while not known (the owner's page started offline).
+    C.scope = function ()
+    {
+        if( C.S.mode === "guest" ) return C.S.token ? "t:" + C.S.token : "";
+        return C.S.user ? "u:" + C.S.user : "";
+    };
+
+    // The owner's account, asked when the boot's probe brought none.
+    C.whoami = async function ()
+    {
+        if( C.S.mode === "owner" && ! C.S.user && window.GumApi )
+        {
+            try { var w = await GumApi.probeAccess(); C.S.user = ( w && w.user ) || ""; } catch( _ ) {}
+        }
+        return C.S.user;
     };
 
     // A short random id: the client's name for a message on its way.

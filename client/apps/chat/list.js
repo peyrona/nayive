@@ -96,6 +96,7 @@
         var all = S.list.slice();
         Object.keys( S.vias ).forEach( function ( u ) { all = all.concat( S.vias[ u ].list ); } );
         S.convs = all;
+        C.checkOutbox();     // compose.js: waiting messages of a chat that is gone (kept, said)
         C.renderList();
         if( S.open )
         {
@@ -207,6 +208,7 @@
         if( ! S.api ) return;
         if( document.hidden ) { if( ! C.inCall() ) C.stopLoop(); return; }
         C.loadSummary().then( C.startLoop, C.startLoop );
+        C.flushOutbox();     // mine still waiting (compose.js, THE OUTBOX)
     } );
 
     // ---------------------------------------------------------------------
@@ -314,7 +316,12 @@
         return C.fold( c.name ).indexOf( q ) >= 0 || ( c.last && C.fold( c.last.text ).indexOf( q ) >= 0 );
     }
 
-    function sortKey( c ) { return c.last ? c.last.at : c.created * 1000; }
+    // A message of mine still waiting on this device counts as the newest.
+    function sortKey( c )
+    {
+        var un = C.unsentOf( c );
+        return Math.max( c.last ? c.last.at : c.created * 1000, un ? un.r.at : 0 );
+    }
 
     C.sortedConvs = function ()
     {
@@ -372,9 +379,15 @@
         var typing = typers.length > 0;
         var last   = c.last;
         var pv     = C.preview( last, c.id );
+        var un     = C.unsentOf( c );     // mine still on this device (compose.js, THE OUTBOX)
         var prev   = h( "span", { class: "prev" + ( typing ? " typing" : "" ) } );
         if( typing )
             prev.appendChild( h( "span", { text: c.kind === "g" ? C.TF( "chat.isTyping", { name: C.nameOf( typers[ 0 ], c.id ) } ) : T( "chat.typing" ) } ) );
+        else if( un )
+        {
+            prev.appendChild( un.failed ? C.ic( "alert", "failed-ic" ) : C.ic( "clock" ) );
+            prev.appendChild( h( "span", { text: C.preview( un.r.body, c.id )[ 1 ] } ) );
+        }
         else if( last )
         {
             if( last.from === w.me && ! last.deleted ) prev.appendChild( C.tickEl( c.id, last ) );
@@ -401,7 +414,7 @@
             C.withDot( C.avatar( c.id, c.name, "lg" ), c.id ),
             h( "div", { class: "body" },
                 h( "div", { class: "l1" }, h( "span", { class: "name", text: c.name } ),
-                    h( "time", { text: last ? C.listTime( last.at ) : "" } ) ),
+                    h( "time", { text: last || un ? C.listTime( Math.max( last ? last.at : 0, un ? un.r.at : 0 ) ) : "" } ) ),
                 l2 ) );
     }
 

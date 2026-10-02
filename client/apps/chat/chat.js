@@ -27,6 +27,7 @@
         S.mode  = cfg.mode;
         S.api   = cfg.api;
         S.token = cfg.token || "";
+        S.user  = cfg.user || "";
 
         var side = h( "section", { class: "side" } );
         var main = h( "section", { class: "main" } );
@@ -51,6 +52,9 @@
             C.setConn( "offline" );
             C.fail( e );
         }
+        // the messages a page before this one could not send (compose.js,
+        // THE OUTBOX): shown, and on their way again
+        C.loadOutbox();
 
         if( S.mode === "guest" )
         {

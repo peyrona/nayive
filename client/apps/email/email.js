@@ -48,6 +48,7 @@
                 await E.loadSettings();
                 applyLast( S.last || {} );
                 E.showAccounts();
+                E.restoreLocal();       // compose.js: a mail not saved last time
                 return;
             }
             if( ! S.accounts.length ) { E.showAccounts(); return; }
@@ -157,13 +158,25 @@
         }
         applyLast( last );
         E.showAccounts();
+        E.restoreLocal();               // compose.js: a mail not saved last time
+    };
+
+    // The account signed in here (its copies on this device are its own,
+    // compose.js): from the boot's probe, or asked now when that had none.
+    E.whoami = async function ()
+    {
+        if( ! S.user )
+        {
+            try { var w = await GumApi.probeAccess(); S.user = ( w && w.user ) || ""; } catch( e ) {}
+        }
+        return S.user;
     };
 
     document.addEventListener( "DOMContentLoaded", function ()
     {
         NayiveI18n.ready.then( function ()
         {
-            NayiveUI.bootWithStore( null, function () { return E.start(); } );
+            NayiveUI.bootWithStore( null, function ( who ) { S.user = ( who && who.user ) || ""; return E.start(); } );
         } );
     } );
 } )();
