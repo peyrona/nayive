@@ -1455,7 +1455,8 @@
     //   session.openDialog()  .recent()        the "Abrir documento" sheet
     //   session.locked()                       it is written encrypted
     //   session.keepUntitled()                 the untitled document about to go, for an Undo (null = none)
-    //   session.offerBack( kept )              its "Borrador descartado [Deshacer]" (Write: a template over it)
+    //   session.offerBack( kept, aside )       its "Borrador descartado [Deshacer]" (Write: a template over it);
+    //                                          aside: its draft was kept - "apartado", not "descartado"
     //   session.offerUndo( msg, back )         an Undo toast the next key or edit makes final (Write: the dictionary)
     //
     // THE PADLOCK (#lockBtn, optional): a password on the open document. The
@@ -1661,7 +1662,7 @@
             opened( p );
             saver.setLock( got ? got.lock : null );      // opened() reopened the saver: set it after
             showLock();                                  // ...and light the padlock by it (opened() drew the last one's)
-            if( kept ) offerBack( kept );
+            if( kept ) offerBack( kept, true );
             return true;
         }
 
@@ -1699,7 +1700,7 @@
             // As Open does (see open): the document it replaces keeps its draft and gets an Undo.
             await saver.catchUp();
             var kept = await keepUntitled();
-            if( await importBytes( bytes, file.name ) && kept ) offerBack( kept );
+            if( await importBytes( bytes, file.name ) && kept ) offerBack( kept, true );
         }
 
         // Drive's "Abrir con" of a file another app owns: ?import=<path>.
@@ -1805,11 +1806,17 @@
             if( newWindow() ) return;
 
             var dropping = saver.dirty() && ! path;
-            var kept     = dropping ? await keepUntitled() : null;
+            // Edits to someone else's document are only in the device draft
+            // too: never dropped - the draft stays where it is (the blank one
+            // drafts under a key of its own) and the toast says so.
+            var aside    = saver.dirty() && !! path && readOnly;
+            var kept     = dropping || aside ? await keepUntitled() : null;
             if( dropping && ! kept && ! await NayiveUI.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
                                                                   confirm: t( "write.newDoc" ) } ) ) return;
 
-            if( await startBlank( dropping ) && kept ) offerBack( kept );
+            if( ! await startBlank( dropping ) ) return;
+            if( kept )       offerBack( kept, aside );
+            else if( aside ) toast( "write.draftSetAside" );      // a password on it: no copy in memory, so no Undo
         }
 
         // "Guardar como"'s bin, shown only for a document that is nowhere but
@@ -1890,11 +1897,13 @@
         }
 
         // Its Undo: back on screen and back in the device draft - now, not in 7 s.
-        function offerBack( kept )
+        // aside: its draft was KEPT (Open, Import, New over someone else's
+        // document), not dropped - the toast must not say "discarded".
+        function offerBack( kept, aside )
         {
             var on = path;                             // what took its place (null: New's blank)
 
-            offerUndo( t( "write.draftDiscarded" ), async function ()
+            offerUndo( t( aside ? "write.draftSetAside" : "write.draftDiscarded" ), async function ()
             {
                 if( path !== on ) return;              // another document now: leave it be
 
@@ -2181,6 +2190,20 @@
             if( ! prev || ! prev.length ) { toast( "write.noBackupYet" ); return; }
             var raw = prev;                    // the .bak's bytes as they are on the server
 
+            // An app that may restore by swapping the files (Calc): edits its
+            // gate held back are in neither copy, and the swap would take them
+            // off the screen. Said BEFORE anything is asked - "save a copy
+            // first" (the gate's own way out), never a promise the swap breaks.
+            if( o.restoreBytes )
+            {
+                await saver.settle( CLOSE_WAIT_MS );
+                if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
+            }
+
+            // A copy sealed with a password, back into a document that has none
+            // now: it is written without one (see below) - and the toast says so.
+            var doneKey = NayiveCrypt.looksLocked( prev ) && ! saver.lock() ? "write.restoredNoPassword" : "write.restored";
+
             var undoable = ! saver.lock() && ! NayiveCrypt.looksLocked( prev ) &&
                            ! ( o.store.isBlocked && o.store.isBlocked( p ) ) && ( ! o.lossless || o.lossless() );
 
@@ -2219,7 +2242,7 @@
             if( o.restoreBytes )
                 try { swap = await o.restoreBytes( prev, p ); }
                 catch ( e ) { toast( "write.actionFailed" ); return; }
-            if( swap ) { await swapFiles( p, bak, raw, prev, undoable ); return; }
+            if( swap ) { await swapFiles( p, bak, raw, prev, undoable, doneKey ); return; }
 
             var bakWas = undoable ? prev.slice() : null;     // the .bak's own bytes, whatever load() does with prev
 
@@ -2238,7 +2261,7 @@
             }
             catch ( e ) { toast( "write.actionFailed" ); return; }
 
-            if( ! undoable ) { toast( "write.restored" ); return; }
+            if( ! undoable ) { toast( doneKey ); return; }
 
             // Undo: the .bak as it was, and what was on screen back on screen -
             // to be saved over the document again.
@@ -2267,11 +2290,17 @@
         // Order: .bak first (a failure there changes nothing), then the file
         // through the store - its outbox holds the bytes before the PUT, and its
         // server time stays right (a GumApi write left it stale: a false 412).
-        async function swapFiles( p, bak, raw, plain, undoable )
+        async function swapFiles( p, bak, raw, plain, undoable, doneKey )
         {
             await saver.settle( CLOSE_WAIT_MS );
             try { await o.store.flush(); await o.store.resting(); } catch ( e ) {}
             if( ! saver.kept() || o.store.state !== "synced" || path !== p ) { toast( "write.actionFailed" ); return; }
+
+            // Edits the file never got (Calc's gate held them back): neither
+            // copy has them, and a swap would take them off the screen with
+            // no way back but an orphan draft. restorePrevious already says
+            // so before asking; this is in case one was made since.
+            if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
 
             var cur;
             try { cur = await GumApi.readFileBytes( p ); }
@@ -2294,17 +2323,19 @@
             try { await o.load( plain, p, "restore" ); }
             catch ( e )
             {
-                // The file is the copy now, the screen still what was: both back.
-                await putFile( p, cur );
-                try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
+                // The file is the copy now, the screen still what was: both
+                // back - the .bak only once the file has `cur` again, or `cur`
+                // would be nowhere.
+                if( await putFile( p, cur ) )
+                    try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
                 toast( "write.actionFailed" );
                 return;
             }
             saver.opened();                    // the screen IS the file now: nothing waits to be saved
 
-            if( ! undoable ) { toast( "write.restored" ); return; }
+            if( ! undoable ) { toast( doneKey ); return; }
 
-            offerUndo( t( "write.restored" ), async function ()
+            offerUndo( t( doneKey ), async function ()
             {
                 if( path !== p ) return;               // another document now
                 try
@@ -2312,7 +2343,12 @@
                     if( NayiveCrypt.looksLocked( cur ) ) throw new Error( "sealed" );   // undoable said no key is on either side
                     await GumApi.writeFileBytes( bak, raw );
                     saver.bakTaken( p );
-                    if( ! await putFile( p, cur ) ) throw new Error( "not written" );
+                    if( ! await putFile( p, cur ) )
+                    {
+                        // `cur` is only in memory now: back into the .bak it came from.
+                        try { await GumApi.writeFileBytes( bak, cur ); } catch ( e2 ) {}
+                        throw new Error( "not written" );
+                    }
                     await o.load( cur, p, "restore" );
                     saver.opened();
                 }

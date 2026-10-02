@@ -53,6 +53,24 @@ const opens = await c.evaluate( `( async function () {
 ok( opens.mine === "texto viejo\n", "the file now holds the old text, sealed with the document's OWN password", opens );
 ok( opens.old === null, "not with the old one", opens );
 
+section( "A6 · A SEALED COPY BACK INTO A DOCUMENT WITH NO PASSWORD NOW" );
+
+ok( await textPage( "/nayive/text/?new=1" ), "Text is up" );
+const oldSealed = await c.evaluate( `( async function () {
+    return NayiveCrypt.seal( await NayiveCrypt.newLock( 'clave-de-antes-1' ), 'texto sellado\\n' ); } )()` );
+put( s, "files/m.txt", "texto ahora\n" );
+put( s, "files/.bak/m.txt", oldSealed );
+ok( await textPage( "/nayive/text/?file=files/m.txt" ), "m.txt (no password) is open" );
+ok( await c.until( `${CM}.getValue() === 'texto ahora\\n'` ), "with its text" );
+await c.evaluate( "document.getElementById('restoreBtn').click(), true" );
+ok( await c.until( "window.__sheet().indexOf( NayiveUI.t('write.restore') ) !== -1" ), "Restore asks first (the copy has a password)" );
+await c.evaluate( "window.__pressConfirm()" );
+ok( await c.evaluate( "window.__typePassword( 'clave-de-antes-1' )" ), "the copy's password" );
+ok( await c.until( `${CM}.getValue() === 'texto sellado\\n'` ), "the previous copy is on screen" );
+ok( await c.until( "( window.__toasts || [] ).some( function ( t ) { return t.indexOf( NayiveUI.t('write.restoredNoPassword') ) !== -1; } )", 3000 ),
+    "and the toast says it goes on WITHOUT a password", await c.toasts() );
+ok( ! await c.evaluate( "document.getElementById('lockBtn').classList.contains('is-active')" ), "the padlock is off, as it says" );
+
 //----------------------------------------------------------------------------//
 section( "G6 · \"CLEAN COPY\" AND AN OLDER FILE OF THE SAME NAME IN THE BIN" );
 

@@ -1033,7 +1033,9 @@ async function renderTemplates( dir )
 async function useTemplate( path )
 {
     const dropping = session.dirty() && ! session.path();
-    let   kept     = dropping ? await session.keepUntitled() : null;
+    // Edits to someone else's document: kept in their draft, and said so (as New does).
+    const aside    = session.dirty() && !! session.path() && session.readOnly();
+    let   kept     = dropping || aside ? await session.keepUntitled() : null;
     if( dropping && ! kept && ! await NayiveUI.confirm( { title: NayiveUI.t( 'write.newDoc' ), body: NayiveUI.t( 'write.newDropsDraft' ),
                                                           confirm: NayiveUI.t( 'write.newDoc' ) } ) ) return;
 
@@ -1055,7 +1057,8 @@ async function useTemplate( path )
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
         session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
-        if( kept ) session.offerBack( kept );
+        if( kept )       session.offerBack( kept, aside );
+        else if( aside ) NayiveUI.toast( NayiveUI.t( 'write.draftSetAside' ) );
     }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.openDocFailed' ) ); }
 }

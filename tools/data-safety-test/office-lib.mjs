@@ -39,6 +39,47 @@ export function zip( files )
     return Buffer.concat( [ ...locals, cd, end ] );
 }
 
+// One entry of a zip, as text (stored or deflated); null when it is not there.
+export function unzipText( buf, name )
+{
+    let end = buf.length - 22;
+    while( end >= 0 && buf.readUInt32LE( end ) !== 0x06054b50 ) end--;
+    if( end < 0 ) return null;
+    let at = buf.readUInt32LE( end + 16 );
+    const count = buf.readUInt16LE( end + 10 );
+    for( let i = 0; i < count; i++ )
+    {
+        const method = buf.readUInt16LE( at + 10 ), size = buf.readUInt32LE( at + 20 );
+        const nl = buf.readUInt16LE( at + 28 ), el = buf.readUInt16LE( at + 30 ), cl = buf.readUInt16LE( at + 32 );
+        const local = buf.readUInt32LE( at + 42 );
+        if( buf.toString( "utf8", at + 46, at + 46 + nl ) === name )
+        {
+            const start = local + 30 + buf.readUInt16LE( local + 26 ) + buf.readUInt16LE( local + 28 );
+            const data  = buf.subarray( start, start + size );
+            return ( method === 8 ? zlib.inflateRawSync( data ) : data ).toString( "utf8" );
+        }
+        at += 46 + nl + el + cl;
+    }
+    return null;
+}
+
+// The body of the device draft named `name`, as base64 (page expression).
+export const DRAFT_B64 = name => `new Promise( function ( res ) {
+    var rq = indexedDB.open( 'nayive-drafts', 1 );
+    rq.onupgradeneeded = function () { rq.result.createObjectStore( 'drafts', { keyPath: 'app' } ); };
+    rq.onerror = function () { res( null ); };
+    rq.onsuccess = function () {
+        var db = rq.result, g = db.transaction( 'drafts', 'readonly' ).objectStore( 'drafts' ).getAll();
+        g.onsuccess = function () {
+            var d = g.result.filter( function ( r ) { return r.name === ${JSON.stringify( name )}; } )[ 0 ];
+            db.close();
+            if( ! d || d.body == null ) { res( null ); return; }
+            var b = typeof d.body === 'string' ? new TextEncoder().encode( d.body ) : d.body, s = '';
+            for( var i = 0; i < b.length; i++ ) s += String.fromCharCode( b[ i ] );
+            res( btoa( s ) );
+        };
+    } } )`;
+
 const NS = "http://schemas.openxmlformats.org";
 
 // One sheet, A1 = a1. landscape / protect: parts Calc cannot write back

@@ -9,6 +9,7 @@ import { put, untilDisk, untilDraft } from "./office-lib.mjs";
 const s = await server();
 put( s, "files/b.txt", "keep\n" );
 put( s, "files/c.txt", "see\n" );
+put( s, "files/d.csv", "a,b\n1,2\n" );
 const c = await browser( s, { width: 1600, height: 1000 } );
 
 await c.evaluate( `localStorage.setItem( 'balata-desktop', JSON.stringify( { mode: 'always' } ) );
@@ -73,6 +74,14 @@ ok( await c.evaluate( WINS ) === n3, "c.txt (what the window shows NOW) goes to 
 
 await c.evaluate( `${FRAME}.open( '/nayive/text/index.html?file=files%2Fb.txt', '_blank' ), true` );
 ok( await c.until( `${WINS} === ${n3 + 1}` ), "b.txt (no longer shown anywhere) gets a window of its own" );
+
+// The same file in ANOTHER of the three: a .csv open in Calc, then "Open with > Text".
+const n4 = await c.evaluate( WINS );
+await c.evaluate( "NayiveDesktop.open( '/nayive/calc/index.html?file=files/d.csv' ), true" );
+ok( await c.until( `${WINS} === ${n4 + 1} && ( function () { try { return ${FRAME}.document.getElementById('fileLabel').textContent === 'd.csv'; } catch ( e ) { return false; } } )()`, 20000 ),
+    "d.csv open in a Calc window" );
+await c.evaluate( `${FRAME}.open( '/nayive/text/index.html?file=files%2Fd.csv', '_blank' ), true` );
+ok( await c.evaluate( WINS ) === n4 + 1, "Text on d.csv shows the Calc window, no second editor" );
 
 ok( /window/i.test( await c.evaluate( "NayiveUI.t('ui.conflictTitle')" ) ), "the 412 question says another window, too" );
 
