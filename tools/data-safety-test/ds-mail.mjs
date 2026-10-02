@@ -138,11 +138,14 @@ section( "I1 - A TAB CLOSED RIGHT AFTER TYPING: NOTHING COMES BACK TWICE" );
 // (a guard for the copy itself: the save sent as the page goes arrives, so
 // the copy left here must not pop up as "recovered" nor make a second draft)
 await compose( "bob@example.com", "Rápido", "<div>cerrado enseguida</div>" );
+// the app's own pause (300 ms) before the copy here is written
+ok( await settles( COPIES + ".then( l => l.includes( 'Rápido' ) )", 5000 ), "typed: the copy here is written" );
 await away();
 got = false;
 for( let i = 0; i < 100 && ! got; i++ ) { got = ( await drafts() ).some( d => d.subject === "Rápido" ); if( ! got ) await sleep( 100 ); }
 ok( got, "closed before its first save: the save as the page went reached Drafts" );
-ok( await openMail() && await settles( COPIES + ".then( l => ! l.length )", 8000 ), "opened again: the copy here is dropped", await c.evaluate( COPIES ) );
+ok( ( await c.evaluate( COPIES ) ).includes( "Rápido" ), "(the copy is still here: the page could not know)" );
+ok( await openMail() && await settles( COPIES + ".then( l => ! l.length )", 8000 ), "opened again: the copy, same words as the draft, is dropped", await c.evaluate( COPIES ) );
 ok( ! await writing(), "…and no writer pops up" );
 ok( ( await drafts() ).filter( d => d.subject === "Rápido" ).length === 1, "one draft of it", await drafts() );
 
