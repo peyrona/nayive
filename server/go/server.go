@@ -171,11 +171,13 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	listener = newLimitListener(listener, maxConcurrent)
 
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
 		// Give in-flight requests a moment to finish before we pull the rug.
 		// Shutdown stops accepting, then waits for the live ones.
-		grace, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		grace, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
 		if err := s.httpd.Shutdown(grace); err != nil {
 			s.log.Warn("shutdown was not clean", "err", err)
@@ -191,10 +193,19 @@ func (s *Server) Start(ctx context.Context) error {
 		err = s.httpd.Serve(listener)
 	}
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil // the normal end of a graceful shutdown
+		// The normal end of a graceful shutdown - but Serve returns the moment
+		// Shutdown BEGINS, and main exits as soon as Start does. Wait for
+		// Shutdown itself, or the grace above never happens: a request still
+		// running (an admin rename between its steps, a save whose answer is on
+		// its way) would be killed with the process (K6).
+		<-stopped
+		return nil
 	}
 	return err
 }
+
+// shutdownGrace is how long a stop waits for the requests still running.
+const shutdownGrace = 10 * time.Second
 
 // Close releases what the server owns.
 func (s *Server) Close() error {

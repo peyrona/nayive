@@ -181,6 +181,12 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 			sendError(w, r, http.StatusNotFound, "este enlace ya no está disponible")
 			return
 		}
+		// chat.json failed to load: reading what loaded is fine, a change is
+		// refused - it would be saved over every person, link and group (F5).
+		if a.o.damaged && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			sendError(w, r, http.StatusInternalServerError, chatDamagedText)
+			return
+		}
 		fn(a)
 	}
 	method := func(allowed ...string) bool {
@@ -1117,7 +1123,15 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 				sendError(w, r, http.StatusForbidden, "no estás en esta conversación")
 				return
 			}
-			fn(a, s.chat.conv(a.o, conv))
+			c := s.chat.conv(a.o, conv)
+			// A file of this conversation failed to load: it is served as it
+			// loaded, and no change is taken - the next write would replace
+			// that file from memory, which holds none of it (F5).
+			if c.isDamaged() && r.Method != http.MethodGet && r.Method != http.MethodHead {
+				sendError(w, r, http.StatusInternalServerError, chatDamagedText)
+				return
+			}
+			fn(a, c)
 		})
 	}
 	msgID := func(seg string) int64 {
@@ -1509,10 +1523,24 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 		if linkRel != "" {
 			h.setKept(c, m.ID, linkRel, linkIno)
 		}
-		s.chatStore(a, c, m)
+		if err := s.chatStore(a, c, m); err != nil {
+			// Not on disk: never answered "sent" (J5). Its copied file goes too.
+			if copyFrom != nil {
+				h.dropMediaFile(a.o, c, m)
+			}
+			sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
+			return
+		}
 		sendJSON(w, r, http.StatusCreated, c.out(m))
 	})
 }
+
+// chatNotSavedText answers a message that could not be written to disk.
+const chatNotSavedText = "no se pudo guardar el mensaje; inténtalo otra vez"
+
+// chatDamagedText answers a change refused because a file of that chat failed
+// to load (chatOwner.damaged, chatConv.damaged).
+const chatDamagedText = "un archivo de este chat está dañado: no se puede cambiar nada (avisa al administrador)"
 
 // chatLinkPhoto checks the JPEG the owner sends from their own files and
 // describes it; nil + status + message when it cannot be sent that way.
@@ -1544,24 +1572,39 @@ func (s *Server) chatLinkPhoto(a chatActor, req chatSendReq) (*ChatFileRef, stri
 }
 
 // chatStore adds a new message (store). Caller holds h.mu and has set m.ID.
-func (s *Server) chatStore(a chatActor, c *chatConv, m *ChatMsg) {
-	s.chat.store(a.o, c, m)
+func (s *Server) chatStore(a chatActor, c *chatConv, m *ChatMsg) error {
+	return s.chat.store(a.o, c, m)
 }
 
 // store adds a new message to one of `o`'s conversations: id, rev, the
 // sender's read cursor, disk, notifications. Caller holds h.mu and has set m.ID.
-func (h *ChatHub) store(o *chatOwner, c *chatConv, m *ChatMsg) {
-	h.record(o, c, m)
+// An error: the message is not stored (see record) and nobody is notified.
+func (h *ChatHub) store(o *chatOwner, c *chatConv, m *ChatMsg) error {
+	if err := h.record(o, c, m); err != nil {
+		return err
+	}
 	if who := o.typing[c.id]; who != nil {
 		delete(who, m.From)
 	}
 	h.announce(o, c, m)
+	return nil
 }
 
 // record is store without the notifications: id, rev, the sender's read
 // cursor, disk. A call's bubble (endCall) goes in this way - its call already
 // rang. Caller holds h.mu and has set m.ID.
-func (h *ChatHub) record(o *chatOwner, c *chatConv, m *ChatMsg) {
+//
+// A message is only stored once it is ON DISK (J5): when its month or the
+// state cannot be written, it is taken out of memory again and the error is
+// answered - never "sent" for a message a restart would lose.
+func (h *ChatHub) record(o *chatOwner, c *chatConv, m *ChatMsg) error {
+	month := monthOf(m.At) + ".json"
+	if !c.canWrite(month) || !c.canWrite("state.json") {
+		h.forgetKept(c, m.ID)
+		return errChatDamaged // a file that failed to load is never written over (F5)
+	}
+	next := c.st.Next
+	read, hadRead := c.st.Read[m.From]
 	c.st.Next = m.ID + 1
 	c.msgs = append(c.msgs, m)
 	c.byID[m.ID] = m
@@ -1570,7 +1613,46 @@ func (h *ChatHub) record(o *chatOwner, c *chatConv, m *ChatMsg) {
 	}
 	c.st.Read[m.From] = m.ID
 	o.bump(c, m)
-	h.saveMonth(c, m)
+	err := h.saveMonth(c, m)
+	if err == nil {
+		return nil
+	}
+	// Undo: the message leaves memory, and the month is written again without
+	// it - one that did land must not bring it back after a restart.
+	c.msgs = c.msgs[:len(c.msgs)-1]
+	delete(c.byID, m.ID)
+	if m.CID != "" {
+		delete(c.cids, m.From+"|"+m.CID)
+	}
+	c.st.Next = next
+	if hadRead {
+		c.st.Read[m.From] = read
+	} else {
+		delete(c.st.Read, m.From)
+	}
+	h.forgetKept(c, m.ID)
+	h.writeMonth(c, monthOf(m.At))
+	h.log.Error("chat: a message could not be saved - not sent", "user", o.user, "conv", c.id, "err", err)
+	return err
+}
+
+// forgetKept drops the link a message that was never stored had to the
+// owner's file (setKept before record).
+func (h *ChatHub) forgetKept(c *chatConv, id int64) {
+	delete(c.st.Kept, id)
+	delete(c.st.KeptID, id)
+}
+
+// dropMediaFile removes the file under media/ of a message that was never
+// stored, and gives its bytes back to the quota. Caller holds h.mu.
+func (h *ChatHub) dropMediaFile(o *chatOwner, c *chatConv, m *ChatMsg) {
+	if m.File == nil {
+		return
+	}
+	path := filepath.Join(c.dir, "media", mediaName(m))
+	if info, err := os.Stat(path); err == nil && os.Remove(path) == nil {
+		h.users.AdjustUsage(o.user, -info.Size())
+	}
 }
 
 // chatLater: texts scheduled for a time to come (chat.go "LATER").
@@ -1661,7 +1743,12 @@ func (s *Server) chatLater(w http.ResponseWriter, r *http.Request, rest []string
 			a.o.data.Later = keep
 			var m *ChatMsg
 			if len(rest) == 2 {
-				_, m = h.sendLater(a.o, l)
+				var err error
+				if _, m, err = h.sendLater(a.o, l); err != nil {
+					a.o.data.Later = append(a.o.data.Later, l) // still scheduled (J5)
+					sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
+					return
+				}
 			}
 			h.saveData(a.o)
 			a.o.changed(true)
@@ -1952,6 +2039,14 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 		pos = photoPos(clean)
 	}
 
+	// The bytes on disk before the file takes its name (J5): the month that
+	// will point at it is synced too, and must never point at an empty photo
+	// after a power cut. Done here, before the lock.
+	if err := syncFile(tmpPath); err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
+
 	// 3. The message (under the lock again).
 	resolve(func(a chatActor) {
 		if a.o.user != owner || !a.o.isMember(conv, a.pid) {
@@ -1984,7 +2079,16 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 			return
 		}
 		h.users.AdjustUsage(a.o.user, size)
-		s.chatStore(a, c, m)
+		if err := syncDir(mediaDir); err != nil { // its name durable too (K1)
+			h.dropMediaFile(a.o, c, m)
+			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+			return
+		}
+		if err := s.chatStore(a, c, m); err != nil {
+			h.dropMediaFile(a.o, c, m) // not stored: never answered "sent" (J5)
+			sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
+			return
+		}
 		sendJSON(w, r, http.StatusCreated, c.out(m))
 	})
 }
@@ -2056,14 +2160,22 @@ func copyMedia(src io.Reader, dir, name string) (int64, error) {
 		return 0, err
 	}
 	n, err := io.Copy(tmp, src)
+	if err == nil {
+		err = tmp.Sync() // on disk before it takes its name (J5)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
-		tmp.Close()
 		os.Remove(tmp.Name())
 		return 0, err
 	}
-	tmp.Close()
 	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
 		os.Remove(tmp.Name())
+		return 0, err
+	}
+	if err := syncDir(dir); err != nil { // and its name (K1)
+		os.Remove(filepath.Join(dir, name))
 		return 0, err
 	}
 	return n, nil
@@ -2119,6 +2231,11 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 	if err := renameResolved(src, dst); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
 		return
+	}
+	// Its new name durable before the message points there (K1). The move is
+	// done either way, so the message must follow it: a failure is only logged.
+	if err := syncDir(filepath.Dir(dst.Abs)); err != nil {
+		h.log.Error("chat: a kept photo's folder could not be synced", "file", dst.Abs, "err", err)
 	}
 	var ino keptID
 	if info, err := dst.Stat(); err == nil {

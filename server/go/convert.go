@@ -384,6 +384,11 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 	if err := root.Rename(tmpRel, outRel); err != nil {
 		return "", err
 	}
+	// Its name durable before the original goes to the papelera (K1): a power
+	// cut must not find neither the mp4 nor the original in the folder.
+	if err := syncRootDir(root, filepath.Dir(outRel)); err != nil {
+		return "", err
+	}
 	if st, err := root.Stat(outRel); err == nil {
 		c.users.AdjustUsage(job.User, st.Size())
 	}

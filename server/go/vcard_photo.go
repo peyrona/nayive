@@ -53,13 +53,20 @@ func setCardPhoto(path, uid string, img []byte) error {
 	tmp := filepath.Join(filepath.Dir(path), fmt.Sprintf("%s.%d.%d.tmp",
 		filepath.Base(path), os.Getpid(), tmpCounter.Add(1)))
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// The whole address book on disk before it takes the name, and the name
+	// durable after (K1): a power cut must leave either book, never a cut one.
+	if err := syncFile(tmp); err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
 		return err
 	}
-	return nil
+	return syncDir(filepath.Dir(path))
 }
 
 // imageKind is "JPEG" or "PNG" by the bytes' own signature, or "".

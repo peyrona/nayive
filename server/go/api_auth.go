@@ -272,6 +272,10 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "contraseña actualizada"})
 }
 
+// errAccountDamaged is the answer to a change of a setting kept in a
+// config.json that cannot be read or parsed (Users.ConfigDamaged).
+const errAccountDamaged = "no se pudo guardar: el archivo de tu cuenta está dañado (avisa al administrador)"
+
 // unlockRequest is the body of POST /api/unlock.
 type unlockRequest struct {
 	Password string `json:"password"`
@@ -340,7 +344,8 @@ func (s *Server) apiTZ(w http.ResponseWriter, r *http.Request) {
 
 // accountSetting is apiLang and apiTZ: one per-account setting, read with GET
 // ({key: value | null}) and stored with POST ?value= ({key: stored}). A value
-// `set` refuses answers 400 `bad`.
+// `set` refuses answers 400 `bad` - unless the refusal is a damaged
+// config.json, which is never written over (F1): 500, and the log names it.
 func (s *Server) accountSetting(w http.ResponseWriter, r *http.Request, key, bad string,
 	get func(role, user string) *string, set func(role, user, value string) (string, bool)) {
 
@@ -353,6 +358,10 @@ func (s *Server) accountSetting(w http.ResponseWriter, r *http.Request, key, bad
 		sendJSON(w, r, http.StatusOK, map[string]any{key: get(sess.Role, sess.User)})
 	case http.MethodPost:
 		stored, good := set(sess.Role, sess.User, queryValue(r, "value"))
+		if !good && sess.Role == "user" && s.users.ConfigDamaged(sess.User) {
+			sendError(w, r, http.StatusInternalServerError, errAccountDamaged)
+			return
+		}
 		if !good {
 			sendError(w, r, http.StatusBadRequest, bad)
 			return

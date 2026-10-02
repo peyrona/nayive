@@ -29,6 +29,7 @@ package main
 //	       ?trash=&ids=a;b             purge from the trash
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -577,6 +578,12 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 			// <base>/.trash, outside every home, so an admin trashing someone's
 			// file really does shrink that home: re-measure it.
 			id, err := s.trash.MoveIn(role, user, j.p, j.rel)
+			if errors.Is(err, errTrashDamaged) {
+				// Every item goes to the same can, so nothing went in yet: say
+				// so, never "trashed" (F2). The items stay where they are.
+				sendError(w, r, http.StatusInternalServerError, errTrashText)
+				return
+			}
 			if err != nil {
 				continue
 			}
@@ -602,6 +609,10 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 // the trash routes
 // -----------------------------------------------------------------------------
 
+// errTrashText answers any bin operation refused because the bin's index.json
+// cannot be read (errTrashDamaged): nothing was moved, listed or deleted.
+const errTrashText = "la papelera está dañada: no se ha hecho nada (avisa al administrador)"
+
 func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user string, q Query) {
 	mode := q.Get("trash")
 	// The ids of a trash operation DO travel joined by ";" - unlike ?paths=,
@@ -615,8 +626,12 @@ func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user s
 
 	switch {
 	case r.Method == http.MethodGet && mode == "list":
-		sendJSON(w, r, http.StatusOK,
-			map[string]any{"items": s.trash.List(role, user)})
+		items, err := s.trash.List(role, user)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, errTrashText)
+			return
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{"items": items})
 
 	case mode == "days":
 		var def *int
@@ -625,7 +640,11 @@ func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user s
 			s.users.UserTrashDays, s.users.SetUserTrashDays)
 
 	case r.Method == http.MethodPost && mode == "restore":
-		renamed := s.trash.Restore(role, user, ids)
+		renamed, err := s.trash.Restore(role, user, ids)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, errTrashText)
+			return
+		}
 		// A user's own trash lives INSIDE their home, so restoring from it moves
 		// no total: the bytes already counted. The admin trash is <base>/.trash,
 		// outside every home, so a restore from there adds bytes to whichever
@@ -638,12 +657,20 @@ func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user s
 			map[string]any{"message": "restored", "renamed": renamed})
 
 	case r.Method == http.MethodPost && mode == "empty":
-		sendJSON(w, r, http.StatusOK, map[string]any{
-			"message": "emptied", "count": s.trash.Purge(role, user, nil)})
+		n, err := s.trash.Purge(role, user, nil)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, errTrashText)
+			return
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{"message": "emptied", "count": n})
 
 	case r.Method == http.MethodDelete:
-		sendJSON(w, r, http.StatusOK, map[string]any{
-			"message": "purged", "count": s.trash.Purge(role, user, ids)})
+		n, err := s.trash.Purge(role, user, ids)
+		if err != nil {
+			sendError(w, r, http.StatusInternalServerError, errTrashText)
+			return
+		}
+		sendJSON(w, r, http.StatusOK, map[string]any{"message": "purged", "count": n})
 
 	default:
 		sendError(w, r, http.StatusBadRequest, "bad trash request")
@@ -673,6 +700,10 @@ func (s *Server) daysSetting(w http.ResponseWriter, r *http.Request, role, user 
 
 	case http.MethodPost:
 		stored, ok := setter(role, user, q.Get("value"))
+		if !ok && role == "user" && s.users.ConfigDamaged(user) {
+			sendError(w, r, http.StatusInternalServerError, errAccountDamaged) // never written over (F1)
+			return
+		}
 		if !ok {
 			sendError(w, r, http.StatusBadRequest, "valor no válido")
 			return
@@ -779,8 +810,14 @@ func (s *Server) isAccountFile(t string) bool {
 // config.json (a user who could write it could lift their own quota), and
 // every file directly in config/. The admin panel is the way to change them.
 // `t` must already be resolved.
+//
+// The admin is refused an account's config.json too (B5): the server rewrites
+// that file itself (password, language, time zone - even the launcher's
+// automatic one) under its own lock, so a copy saved from Text or Drive races
+// it - the admin's edit or the person's new password is silently undone - and
+// one stray comma there is a damaged account (F1).
 func (s *Server) isProtectedFile(role, t string) bool {
-	return (role != "admin" && s.isAccountFile(t)) || s.isServerData(t) || s.isServerConfig(t)
+	return s.isAccountFile(t) || s.isServerData(t) || s.isServerConfig(t)
 }
 
 // isServerConfig is config/<anything> - server.json, shares.json, mail.key,

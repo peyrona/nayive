@@ -407,7 +407,10 @@ func placeFile(from string, dst Resolved) error {
 	if err != nil {
 		return err
 	}
-	return root.Rename(tmpRel, dst.Rel)
+	if err := root.Rename(tmpRel, dst.Rel); err != nil {
+		return err
+	}
+	return syncRootDir(root, filepath.Dir(dst.Rel)) // the name durable too (K1)
 }
 
 // readHead is the first n bytes of a file, or fewer.

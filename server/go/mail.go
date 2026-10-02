@@ -85,6 +85,11 @@ type mailUser struct {
 	labels   mailLabelsFile            // mail_labels.go
 	trash    map[string]mailTrashEntry // "<acct>|<message-id>" -> when, from where
 	settings MailSettings
+	// damaged: the files that were there but could not be read or parsed
+	// (file name -> why). writeMailFile never writes over one (F4): what
+	// memory holds of it is empty, and the file still has every account, label
+	// or clock. They stay refused until a restart reads them whole again.
+	damaged map[string]error
 }
 
 type MailHub struct {
@@ -227,7 +232,7 @@ func (h *MailHub) userLocked(name string) *mailUser {
 	}
 	u := &mailUser{}
 	var f mailAccountsFile
-	loadJSONFile(filepath.Join(h.dir(name), "accounts.json"), &f)
+	h.loadMailFile(name, u, "accounts.json", &f)
 	u.next = f.Next
 	for _, a := range f.Accounts {
 		sealed := a.Pass

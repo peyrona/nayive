@@ -140,7 +140,7 @@ func TestSandboxRefusesSwappedFolder(t *testing.T) {
 			t.Errorf("the trash took a file through the swapped folder")
 		}
 		checkUntouched(t, outside, "x.txt")
-		if items := srv.trash.List("user", "ana"); len(items) != 0 {
+		if items, _ := srv.trash.List("user", "ana"); len(items) != 0 {
 			t.Errorf("a refused move left %d row(s) in the papelera", len(items))
 		}
 	})

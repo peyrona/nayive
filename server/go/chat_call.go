@@ -516,10 +516,18 @@ func (h *ChatHub) endCall(o *chatOwner, c *chatCall, reason string, now time.Tim
 		m := &ChatMsg{ID: cv.st.Next, At: nowMs(), From: c.From, Kind: "call", Call: info}
 		// A call both of them had is not news to either: it must not light
 		// the unread badge. A missed one is exactly the news.
-		if was == "active" && cv.st.Read[c.To] >= before {
+		read, hadRead := cv.st.Read[c.To]
+		if was == "active" && read >= before {
 			cv.st.Read[c.To] = m.ID
 		}
-		h.record(o, cv, m) // no push: the call itself did the ringing
+		if err := h.record(o, cv, m); err != nil { // no push: the call itself did the ringing
+			// Not stored (record logged it): the cursor must not point past it.
+			if hadRead {
+				cv.st.Read[c.To] = read
+			} else {
+				delete(cv.st.Read, c.To)
+			}
+		}
 	}
 
 	keep := o.cs().sigs[:0]
