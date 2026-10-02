@@ -2381,6 +2381,7 @@
   "chat.enablePush": "Ativar avisos",
   "chat.failed": "Não foi possível. Verifica a tua ligação.",
   "chat.retry": "Tentar de novo",
+  "chat.waitingGone": "Mensagens por enviar de uma conversa que já não existe: {n}. Continuam guardadas neste dispositivo.",
   "chat.fAll": "Todas",
   "chat.fetchingFile": "A preparar o ficheiro…",
   "chat.fGroups": "Grupos",

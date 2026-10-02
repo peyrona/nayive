@@ -128,6 +128,40 @@ const RECORDS = `new Promise( r => { const q = indexedDB.open( 'nayive-drafts', 
 // The writer saves now: the page going out of sight does that (the 4 s, or
 // a minute with files, would otherwise have to pass)
 const saveNow = () => c.evaluate( "Object.defineProperty( document, 'hidden', { value: true, configurable: true } ); document.dispatchEvent( new Event( 'visibilitychange' ) ); delete document.hidden; true" );
+// another device's draft, files and all (round-2 review helpers)
+const enc = encodeURIComponent;
+const save = async ( o, files = [] ) =>
+{
+    const fd = new FormData();
+    fd.append( "json", JSON.stringify( { to: o.to || "bob@example.com", cc: "", bcc: "", subject: o.subject, text: o.text,
+                                         html: o.html ?? ( "<div>" + o.text + "</div>" ), mid: o.mid, draftRef: o.ref || "",
+                                         keep: o.keep || [], drive: [] } ) );
+    for( const [ name, data ] of files ) fd.append( "file", new Blob( [ data ] ), name );
+    const r = await phone.call( "POST", `/api/mail/${enc( acct )}/draft`, fd );
+    return { status: r.status, ...( JSON.parse( r.text || "{}" ) ) };
+};
+const byMid = async ( tray, mid ) => ( await rows( tray ) ).filter( m => m.mid === mid );
+const attBytes = async ( ref, part ) => ( await phone.call( "GET", `/api/mail/${enc( acct )}/att/${enc( ref )}/${enc( part )}` ) ).text;
+const filesOf = async ref => { const m = await msgOf( ref ); const out = []; for( const p of ( m.parts || [] ).filter( p => ! p.inline ) ) out.push( p.name + "=" + await attBytes( ref, p.id ) ); return out; };
+async function attachMany( t, paths )
+{
+    const { root } = ( await t.send( "DOM.getDocument", {} ) ).result;
+    const input = await t.send( "DOM.querySelector", { nodeId: root.nodeId, selector: "#cFileInput" } );
+    await t.send( "DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: paths } );
+}
+const mkfile = ( dir, name, text ) => { const d = path.join( os.tmpdir(), "ds-" + dir ); fs.mkdirSync( d, { recursive: true } ); const f = path.join( d, name ); fs.writeFileSync( f, text ); return f; };
+// The Drafts tray on screen, read: its list has come in
+const readDrafts = async ( t = c ) => { await t.evaluate( "NayiveMail.openTray( 'inbox' ); true" ); await sleep( 300 );
+                                        await t.evaluate( "NayiveMail.openTray( 'drafts' ); true" );
+                                        return t.until( "NayiveMail.S.tray === 'drafts' && ! NayiveMail.S.loading" ); };
+// a file's bytes kept for a copy (IndexedDB "nayive-mail-files")
+const BYTES = ( op, key ) => `new Promise( r => { const q = indexedDB.open( 'nayive-mail-files', 1 );
+    q.onupgradeneeded = () => q.result.createObjectStore( 'files', { keyPath: 'key' } );
+    q.onsuccess = () => { const t = q.result.transaction( 'files', 'readwrite' ), os = t.objectStore( 'files' ), out = {};
+        if( ${JSON.stringify( op )} === 'put' ) os.put( { key: ${JSON.stringify( key )}, at: Date.now(), blob: new Blob( [ 'x' ] ) } );
+        else { const g = os.get( ${JSON.stringify( key )} ); g.onsuccess = () => { out.v = !! g.result; }; }
+        t.oncomplete = () => { q.result.close(); r( out.v ); }; }; } )`;
+
 async function attach( name, text )
 {
     const file = path.join( os.tmpdir(), name );
@@ -290,7 +324,7 @@ ok( ( await drafts() ).some( d => d.subject === "Dos veces 0" && d.text.includes
 await closeWriter();
 await c.evaluate( FORGET );
 
-section( "I4 - TWINS OF ONE WRITER: THE OLDER GOES TO THE TRASH, NOT AWAY (review RV-C)" );
+section( "I4 - TWINS OF ONE WRITER: BOTH STAY, NOTHING IS TRASHED (review RV-C, round 2)" );
 await knob( "slow=3000" );
 await compose( "bob@example.com", "Dos veces", "<div>uno</div>" );
 ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a slow save is on its way" );
@@ -301,10 +335,12 @@ ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos 
     ( await drafts() ).filter( d => d.subject === "Dos veces" ) );
 await knob( "slow=0" );
 ok( await openMail(), "eMail again (the copy here makes it look at that draft)" );
-ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos veces" ).length === 1, 15000 ), "one draft of it stays",
+ok( await settles( COPIES + ".then( l => ! l.includes( 'Dos veces' ) )", 15000 ), "the copy (same words as the newest) only goes" );
+ok( await readDrafts(), "the Drafts tray is read" );
+ok( ( await drafts() ).filter( d => d.subject === "Dos veces" ).length === 2, "both drafts stay (a duplicate is not a loss)",
     ( await drafts() ).filter( d => d.subject === "Dos veces" ) );
-ok( ( await drafts() ).some( d => d.subject === "Dos veces" && d.text.includes( "uno dos tres" ) ), "…the newest, with the last words" );
-ok( ( await rows( "trash" ) ).some( m => m.subject === "Dos veces" ), "the older is in the Trash (not deleted)" );
+ok( ( await drafts() ).some( d => d.subject === "Dos veces" && d.text.includes( "uno dos tres" ) ), "…the last words among them" );
+ok( ! ( await rows( "trash" ) ).some( m => m.subject === "Dos veces" ), "nothing went to the Trash" );
 await closeWriter();
 await c.evaluate( FORGET );
 
@@ -347,5 +383,106 @@ await c.evaluate( "NayiveMail.S.user = ''; true" );        // as after a start w
 await compose( "bob@example.com", "Sin dueño", "<div>de quién</div>" );
 ok( await settles( RECORDS + ".then( l => l.some( x => x.endsWith( '=ana=Sin dueño' ) ) )", 8000 ), "the copy is written again with its owner", await c.evaluate( RECORDS ) );
 await closeWriter();
+
+section( "ROUND 2 T1 - TWINS THAT DIFFER (SUBJECT, TO, A FILE, EMPTY TEXT) BOTH STAY" );
+await c.evaluate( FORGET );
+ok( await openMail(), "eMail again" );
+const M1 = "nayive.dstwinone" + Date.now() + "@example.com", M1b = "nayive.dstwinempty" + Date.now() + "@example.com";
+await save( { mid: M1, to: "carlos@example.com", subject: "Factura firmada", text: "Hola" }, [ [ "factura.pdf", "PDF-FACTURA-BYTES" ] ] );
+await save( { mid: M1b, to: "carlos@example.com", subject: "Plano de la casa", text: "", html: "" }, [ [ "plano.pdf", "PLANO-BYTES" ] ] );
+await sleep( 1300 );     // the twins land in another second (the server's date has whole seconds)
+await save( { mid: M1, to: "bob@example.com", subject: "Factura", text: "Hola Juan" } );
+await save( { mid: M1b, to: "bob@example.com", subject: "otra cosa", text: "", html: "" } );
+ok( ( await byMid( "drafts", M1 ) ).length === 2 && ( await byMid( "drafts", M1b ) ).length === 2, "two pairs of twins in Drafts" );
+ok( await readDrafts(), "the Drafts tray is read" );
+await sleep( 1500 );     // what the app does after reading Drafts has had its time
+ok( ( await byMid( "drafts", M1 ) ).length === 2 && ! ( await byMid( "trash", M1 ) ).length, "twins with other subject, To and a file both stay" );
+ok( ( await byMid( "drafts", M1b ) ).length === 2 && ! ( await byMid( "trash", M1b ) ).length, "twins with empty text both stay" );
+
+section( "ROUND 2 T3 - A DRAFT OPEN IN ANOTHER TAB'S WRITER KEEPS ITS FILE" );
+const M3 = "nayive.dstwintab" + Date.now() + "@example.com";
+await save( { mid: M3, subject: "Contrato", text: "Adjunto el contrato" }, [ [ "contrato.pdf", "CONTRATO-BYTES" ] ] );
+const t2 = await c.tab();
+await t2.open( PAGE );
+await t2.until( "NayiveMail.S.acct" );
+ok( await readDrafts( t2 ) && await t2.until( `NayiveMail.S.items.some( m => m.mid === ${JSON.stringify( M3 )} )` ), "tab 2 lists the draft" );
+await t2.evaluate( `NayiveMail.openDraft( NayiveMail.S.items.find( m => m.mid === ${JSON.stringify( M3 )} ) ); true` );
+ok( await t2.until( "! document.getElementById( 'composeView' ).hidden && document.getElementById( 'cFiles' ).textContent.includes( 'contrato.pdf' )" ), "tab 2 writes it, with contrato.pdf" );
+await sleep( 1300 );
+await save( { mid: M3, subject: "Contrato", text: "Adjunto el contrato firmado" } );       // the phone: a twin, newer, more words, no file
+await c.front();
+ok( await readDrafts(), "tab 1 reads Drafts" );
+await sleep( 1500 );     // what the app does after reading Drafts has had its time
+ok( ! ( await byMid( "trash", M3 ) ).length, "the draft open in tab 2 is not trashed" );
+await t2.evaluate( "( async () => { document.getElementById( 'cText' ).innerHTML = '<div>Adjunto el contrato. Saludos desde la pestana 2</div>'; await new Promise( r => setTimeout( r, 80 ) ); return true; } )()" );
+await t2.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; true" );
+await t2.evaluate( "Object.defineProperty( document, 'hidden', { value: true, configurable: true } ); document.dispatchEvent( new Event( 'visibilitychange' ) ); delete document.hidden; true" );
+ok( await t2.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "tab 2 saves" );
+let t3 = null;
+for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "pestana 2" ) ) t3 = r; }
+ok( t3 && ( await filesOf( t3.ref ) ).some( f => f.startsWith( "contrato.pdf=CONTRATO-BYTES" ) ), "tab 2's draft still has contrato.pdf" );
+await t2.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
+await c.front();
+
+section( "ROUND 2 T4 - A FILE GONE: NEVER ANOTHER FILE OF THE SAME NAME" );
+await c.evaluate( "NayiveMail.openTray( 'inbox' ); true" );
+await compose( "bob@example.com", "Mismo nombre", "<div>foto del PC</div>" );
+await attachMany( c, [ mkfile( "a", "image.png", "IMAGEN-ORIGINAL-DEL-PC" ) ] );
+await c.until( "document.getElementById( 'cFiles' ).textContent.includes( 'image.png' )" );
+await saveNow();
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "saved with image.png" );
+const r4 = ( await rows( "drafts" ) ).find( m => m.subject === "Mismo nombre" );
+await save( { mid: r4.mid, ref: r4.ref, subject: "Mismo nombre", text: "foto del movil" }, [ [ "image.png", "OTRA-IMAGEN-DEL-MOVIL" ] ] );
+await body( "<div>foto del PC y mas del PC cuatro</div>" );
+await c.evaluate( "window.__toasts = []; document.getElementById( 'cStatus' ).textContent = ''; true" );
+await saveNow();
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "the PC's save mends and saves", await status() );
+let t4 = null;
+for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "mas del PC cuatro" ) ) t4 = r; }
+ok( t4 && ! ( await filesOf( t4.ref ) ).some( f => f.includes( "OTRA-IMAGEN-DEL-MOVIL" ) ), "the PC's draft does not carry the phone's other image.png", t4 && await filesOf( t4.ref ) );
+ok( /Ya no están: image\.png/.test( await toastNow() ), "…and it names the file to add again", await toastNow() );
+await closeWriter();
+
+section( "ROUND 2 T5 - TWO KEPT FILES OF ONE NAME STAY TWO" );
+await compose( "bob@example.com", "Dos imagenes", "<div>dos capturas</div>" );
+await attachMany( c, [ mkfile( "b", "image.png", "CAPTURA-UNO" ), mkfile( "c", "image.png", "CAPTURA-DOS" ) ] );
+await c.until( "( document.getElementById( 'cFiles' ).textContent.match( /image\\.png/g ) || [] ).length >= 2" );
+await saveNow();
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "saved with two image.png" );
+const r5 = ( await rows( "drafts" ) ).find( m => m.subject === "Dos imagenes" );
+const p5 = ( ( await msgOf( r5.ref ) ).parts || [] ).filter( p => ! p.inline );
+await save( { mid: r5.mid, ref: r5.ref, subject: "Dos imagenes", text: "dos capturas y del movil", keep: p5.map( p => ( { acct, ref: r5.ref, part: p.id } ) ) } );
+await body( "<div>dos capturas y mas del PC cinco</div>" );
+await c.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; true" );
+await saveNow();
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "the PC's save mends and saves" );
+let t5 = null;
+for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "mas del PC cinco" ) ) t5 = r; }
+const t5files = t5 ? await filesOf( t5.ref ) : [];
+ok( t5files.some( f => f.includes( "CAPTURA-UNO" ) ) && t5files.some( f => f.includes( "CAPTURA-DOS" ) ), "both captures are in the PC's draft", t5files );
+await closeWriter();
+
+section( "ROUND 2 (6) - NO LOCK QUERIES: FILE BYTES ARE NEVER SWEPT" );
+await c.evaluate( BYTES( "put", "dsorphan#f1" ) );
+const t6 = await c.tab();
+// a browser that cannot list who holds a lock (navigator.locks.query)
+await t6.send( "Page.addScriptToEvaluateOnNewDocument", { source: "try { Object.defineProperty( LockManager.prototype, 'query', { value: undefined, configurable: true } ); } catch( e ) {}" } );
+await t6.open( PAGE );
+ok( await t6.until( "NayiveMail.S.accounts.length && typeof navigator.locks.query === 'undefined'" ), "eMail opens in a tab with no lock queries" );
+await sleep( 2500 );     // eMail's opening (restoreLocal, where the sweep is) has had its time
+ok( await c.evaluate( BYTES( "get", "dsorphan#f1" ) ), "bytes with no copy are left alone there (it cannot tell a writer on screen)" );
+await t6.evaluate( "location.href = 'about:blank'; true" );
+ok( await openMail() && await settles( BYTES( "get", "dsorphan#f1" ) + ".then( v => ! v )", 8000 ), "(a browser that can tell sweeps them)" );
+
+section( "ROUND 2 (5) - A COPY'S DRAFT BEYOND THE FIRST PAGE OF DRAFTS IS FOUND" );
+await compose( "bob@example.com", "Lejos", "<div>en la segunda pagina</div>" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Lejos' ) )", 5000 ), "the copy here is written" );
+await away();
+ok( await until( async () => ( await rows( "drafts" ) ).some( m => m.subject === "Lejos" ) ), "the save as the page went reached Drafts" );
+for( let i = 0; i < 52; i++ ) await save( { mid: "nayive.dsfill" + i + "." + Date.now() + "@example.com", subject: "Relleno " + i, text: "relleno" } );
+ok( ! ( await rows( "drafts" ) ).some( m => m.subject === "Lejos" ), "(52 newer drafts: it is past the first page)" );
+ok( await openMail() && await settles( COPIES + ".then( l => ! l.includes( 'Lejos' ) )", 15000 ), "the copy finds its draft (same words) and only goes",
+    await c.evaluate( COPIES ) );
+ok( ! await c.evaluate( ASKED ) && ! await writing(), "no question, no writer" );
 
 await done( c, s );

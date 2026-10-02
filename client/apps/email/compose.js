@@ -1105,6 +1105,7 @@
     // copies) and whose writer is on screen nowhere.
     async function sweepBytes()
     {
+        if( ! ( navigator.locks && navigator.locks.query ) ) return;     // no way to tell a writer on screen: leave them
         var keys = await bytesTx( "readonly", function ( os ) { return os.getAllKeys(); } ) || [];
         if( ! keys.length ) return;
         var have = new Set( ( await localTx( "readonly", function ( os ) { return os.getAllKeys( IDBKeyRange.bound( "email:", "email:￿" ) ); } ) || [] )
@@ -1186,78 +1187,32 @@
         return doc.body ? plainText( doc.body ) : "";
     }
 
-    // The drafts with this Message-ID in the Drafts tray (its first page),
-    // read whole, newest first - { all: [] } when there is none; null when
-    // the server did not answer (nothing is decided then). Twins of one of
-    // this app's own are settled first (twins).
+    // The drafts with this Message-ID in the Drafts tray - every page of it,
+    // read whole, newest first: { all: [] } when there is none; null when
+    // the server did not answer (nothing is decided then). Two of them (two
+    // saves of one writer that both landed, two devices on one draft) both
+    // stay: a duplicate is not a loss, and nothing here ever moves or
+    // deletes a draft on its own.
     async function serverDrafts( acct, mid )
     {
         if( ! mid || ! E.account( acct ) ) return { all: [] };
         try
         {
-            var l = await E.api( "GET", encodeURIComponent( acct ) + "/list?tray=drafts" );
-            var rows = ( l.items || [] ).filter( function ( m ) { return m.mid === mid; } );
-            if( rows.length > 1 ) rows = await twins( acct, rows );
+            var rows = [], cursor = "";
+            do
+            {
+                var l = await E.api( "GET", encodeURIComponent( acct ) + "/list?tray=drafts" + ( cursor ? "&cursor=" + encodeURIComponent( cursor ) : "" ) );
+                rows = rows.concat( ( l.items || [] ).filter( function ( m ) { return m.mid === mid; } ) );
+                cursor = l.next || "";
+            }
+            while( cursor );
             var all = [];
             for( var i = 0; i < rows.length; i++ ) all.push( await E.api( "GET", encodeURIComponent( acct ) + "/msg/" + encodeURIComponent( rows[ i ].ref ) ) );
+            all.sort( function ( x, y ) { return ( Date.parse( y.date ) || 0 ) - ( Date.parse( x.date ) || 0 ); } );
             return { all: all };
         }
         catch( e ) { return null; }
     }
-
-    // TWINS: two drafts with one Message-ID of this app's own ("nayive."):
-    // two saves of one writer that both landed - one on its way as the page
-    // went, and the keepalive one sent after it (mail-chat #10). The newest
-    // by the server's date stays; an older one goes to the Trash (never
-    // deleted: the Trash keeps it its N days) - only when every word of it
-    // is in the newest, in order (that one was written from it). Twins that
-    // differ otherwise (two devices on one draft, G4) both stay, and so do
-    // twins of one date (which is newer cannot be told), the draft the
-    // writer here holds, and the one of a mail waiting for its Undo.
-    // Returns the rows that stay, newest first.
-    async function twins( acct, rows )
-    {
-        var at = function ( m ) { return Date.parse( m.date ) || 0; };
-        rows = rows.slice().sort( function ( a, b ) { return at( b ) - at( a ); } );
-        if( ! /^nayive\./.test( rows[ 0 ].mid || "" ) || at( rows[ 0 ] ) === at( rows[ 1 ] ) ) return rows;
-        var held = function ( ref )
-        {
-            return ( C && C.draftAcct === acct && C.draftRef === ref ) || ( waiting && waiting.mine.draftAcct === acct && waiting.mine.draftRef === ref );
-        };
-        var newest = words( ( await E.api( "GET", encodeURIComponent( acct ) + "/msg/" + encodeURIComponent( rows[ 0 ].ref ) ) ).text ).toLowerCase().split( " " );
-        var stay = [ rows[ 0 ] ], out = [];
-        for( var i = 1; i < rows.length; i++ )
-        {
-            var old = at( rows[ i ] ) < at( rows[ 0 ] ) && ! held( rows[ i ].ref ) &&
-                      words( ( await E.api( "GET", encodeURIComponent( acct ) + "/msg/" + encodeURIComponent( rows[ i ].ref ) ) ).text ).toLowerCase().split( " " );
-            if( old && within( old, newest ) ) out.push( rows[ i ].ref );
-            else stay.push( rows[ i ] );
-        }
-        if( out.length ) await E.api( "POST", encodeURIComponent( acct ) + "/set", { refs: out, tray: "trash" } );
-        return stay;
-    }
-
-    // Every word of `a` is in `b`, in order.
-    function within( a, b )
-    {
-        var j = 0;
-        for( var i = 0; i < b.length && j < a.length; i++ ) if( b[ i ] === a[ j ] ) j++;
-        return j === a.length;
-    }
-
-    // The Drafts tray read (list.js): twins of this app's own settled.
-    // True when some went to the Trash (the list is read again).
-    E.settleTwins = async function ( acct, items )
-    {
-        var by = {}, moved = false;
-        items.forEach( function ( m ) { if( /^nayive\./.test( m.mid || "" ) ) ( by[ m.mid ] = by[ m.mid ] || [] ).push( m ); } );
-        for( var mid in by )
-        {
-            if( by[ mid ].length < 2 ) continue;
-            try { if( ( await twins( acct, by[ mid ] ) ).length < by[ mid ].length ) moved = true; } catch( e ) {}
-        }
-        return moved;
-    };
 
     // That draft already holds the copy's words (the save sent as the page
     // went did arrive): the same subject, addresses, text and number of
@@ -1276,8 +1231,10 @@
     // What a copy is, against the drafts of it the server holds (`all`,
     // newest first):
     //   "drop"     one holds its words already: the copy only goes
-    //   "replace"  the newest is the very draft it was written on: newer,
-    //              the copy takes its place
+    //   "replace"  the very draft it was written on is still there (a ref
+    //              never changes: that draft is as the copy knew it) -
+    //              newer, the copy takes its place; another of it (a twin)
+    //              stays as it is
     //   "apart"    the draft changed elsewhere since (another device, the
     //              save as the page went): both stay - the copy as a draft
     //              of its own
@@ -1287,22 +1244,36 @@
     {
         if( ! all.length ) return "ask";
         if( all.some( function ( m ) { return sameWords( d, m ); } ) ) return "drop";
-        if( d.draftRef && all[ 0 ].ref === d.draftRef && ( d.draftAcct || d.acct ) === d.acct ) return "replace";
+        if( d.draftRef && ( d.draftAcct || d.acct ) === d.acct && all.some( function ( m ) { return m.ref === d.draftRef; } ) ) return "replace";
         return "apart";
     }
 
     // Kept files whose source is gone (stale( f )), read from `msg` (the
-    // newest draft with this Message-ID) instead, by name. Returns the
-    // names of those it does not have - they leave the writer, unless
-    // `keep` (heal then tells, when a save meets them).
+    // newest draft with this Message-ID) instead: a part of the same name
+    // AND size, each part once. When as many of mine as of its parts share
+    // a name and size, they pair up (the same files, whichever order);
+    // otherwise none of that name and size is guessed - never a wrong file
+    // (pasted pictures are all "image.png"). Returns the names of those not
+    // found - they leave the writer, unless `keep` (heal then tells, when a
+    // save meets them).
     function repoint( mine, acct, msg, stale, keep )
     {
-        var parts = ( ( msg && msg.parts ) || [] ).filter( function ( p ) { return ! p.inline; } ), lost = [];
+        var key = function ( name, size ) { return name + "\u0000" + ( size || 0 ); };
+        var free = {}, lost = [];
+        ( ( msg && msg.parts ) || [] ).forEach( function ( p ) { if( ! p.inline ) ( free[ key( p.name, p.size ) ] = free[ key( p.name, p.size ) ] || [] ).push( p ); } );
+        var want = {};
+        mine.files.forEach( function ( f ) { if( f.kind === "keep" && stale( f ) ) want[ key( f.name, f.size ) ] = ( want[ key( f.name, f.size ) ] || 0 ) + 1; } );
         mine.files = mine.files.filter( function ( f )
         {
             if( f.kind !== "keep" || ! stale( f ) ) return true;
-            var p = parts.filter( function ( q ) { return q.name === f.name; } )[ 0 ];
-            if( p ) { f.acct = acct; f.ref = msg.ref; f.part = p.id; return true; }
+            var k = key( f.name, f.size ), ps = free[ k ] || [];
+            if( ps.length && ps.length === want[ k ] )
+            {
+                var p = ps.shift();
+                want[ k ]--;
+                f.acct = acct; f.ref = msg.ref; f.part = p.id;
+                return true;
+            }
             lost.push( f.name );
             return !! keep;
         } );
@@ -1421,10 +1392,20 @@
             var msg = got.all[ 0 ] || null;
             if( msg && msg.ref !== mine.draftRef ) mine.mid = newMid( acct );
             var lost = repoint( mine, acct, msg, function ( f ) { return gone[ f.acct + "|" + f.ref ]; } );
+            // a file left out that this writer's own draft still holds: that
+            // draft stays as it is (the next save would replace it, and the
+            // file with it) - the writer goes on as a draft of its own
+            if( lost.length && msg && msg.ref === mine.draftRef )
+            {
+                mine.mid = newMid( acct );
+                mine.draftRef = mine.draftAcct = "";
+            }
             if( C === mine ) { renderFiles(); E.$( "cStatus" ).textContent = ""; }
             if( lost.length ) NayiveUI.toast( E.TF( "mail.filesGone", { names: lost.join( ", " ) } ), { ms: 8000 } );
             mine.dirty = true;
-            if( C === mine ) { localSoon( mine ); saveDraft(); }     // now: with files the next save would wait a minute
+            // now (with files the next save would wait a minute) - not while
+            // Send is on: it saves by itself
+            if( C === mine && ! mine.sending ) { localSoon( mine ); saveDraft(); }
             return true;
         }
         catch( e ) { return false; }

@@ -601,33 +601,37 @@
         if( ! who ) return;
         var all = await outTx( "readonly", function ( os ) { return os.getAll( IDBKeyRange.bound( "chat:", "chat:\uffff" ) ); } ) || [];
         all.forEach( function ( r ) { if( r.who === who && r.cid && ! outbox.has( r.cid ) ) outbox.set( r.cid, r ); } );
-        if( S.v >= 0 ) C.pruneOutbox();    // the list is in: what is left of a chat that is gone goes
+        if( S.v >= 0 ) C.checkOutbox();    // the list is in: some waiting for a chat that is gone?
         if( ! outbox.size ) return;
         C.renderList();
         if( S.open ) C.showUnsent( S.open );
         C.flushOutbox();
     };
 
-    // A waiting message of a chat that is gone - deleted, or I am no longer
-    // in it (its world's list no longer has it; a home that dropped me is no
-    // world any more): it can never go, nor be shown. It leaves the outbox
-    // (sign-out counts what can still be sent). Run once a list has come in
-    // (list.js afterLoad).
-    C.pruneOutbox = function ()
+    // Waiting messages of a chat that is gone - deleted, or I am no longer
+    // in it (a world that has loaded - v >= 0 - no longer lists it): they
+    // can never go, but they are never thrown away for that - they stay
+    // here (sign-out counts them) and a toast says so, once per page. A
+    // world that has not loaded (a first try that failed) says nothing.
+    // Run once a list has come in (list.js afterLoad).
+    var toldGone = false;
+    C.checkOutbox = function ()
     {
+        if( toldGone ) return;
         var worlds = {};
-        worlds[ S.api ] = S.list;
-        Object.keys( S.vias ).forEach( function ( u ) { worlds[ S.vias[ u ].api ] = S.vias[ u ].list; } );
-        var gone = false;
+        [ S ].concat( Object.keys( S.vias ).map( function ( u ) { return S.vias[ u ]; } ) ).forEach( function ( w )
+        {
+            if( w.v >= 0 && w.api ) worlds[ w.api ] = w.list || [];
+        } );
+        var n = 0;
         outbox.forEach( function ( r )
         {
             var list = worlds[ r.api ];
-            if( list ? list.some( function ( c ) { return c.id === r.conv; } ) : ! /\/via\//.test( r.api ) ) return;
-            outbox.delete( r.cid );
-            outDel( r.cid );
-            gone = true;
+            if( list && ! list.some( function ( c ) { return c.id === r.conv; } ) ) n++;
         } );
-        if( gone ) C.renderList();
+        if( ! n ) return;
+        toldGone = true;
+        NayiveUI.toast( C.TF( "chat.waitingGone", { n: n } ), { ms: 6000 } );
     };
 
     // Every chat's waiting messages on their way again (conv: that chat's only).

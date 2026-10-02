@@ -139,7 +139,7 @@ ok( edited, "Send: the message is edited on the server", await onServer( CA ) );
 ok( await box() === "", "the box is empty" );
 ok( await load() && await openChat( CA ) && ( await box() ) === "", "sent: after a reload nothing comes back", await box() );
 
-section( "J2 - A CHAT THAT IS GONE TAKES ITS WAITING MESSAGES WITH IT (review 7)" );
+section( "J2 - A CHAT THAT IS GONE: ITS WAITING MESSAGE IS KEPT, AND SAID (review round 2)" );
 await c.evaluate( "localStorage.setItem( 'ds-fail-send', '1' ); true" );
 ok( await openChat( JA ), "Javi's chat" );
 await write( "para nadie" );
@@ -150,7 +150,9 @@ const gone = await phone.del( "/api/chat/contacts/" + javi.id );
 ok( gone.status < 300, "Javi is deleted on another device", gone.status );
 await c.evaluate( "localStorage.removeItem( 'ds-fail-send' ); true" );
 ok( await load(), "the page loads again" );
-ok( await settles( OUTBOX + ".then( l => ! l.includes( 'para nadie' ) )" ), "it leaves the outbox: it can never go (sign-out counts what can)",
-    await c.evaluate( OUTBOX ) );
+ok( await c.until( "( window.__toasts || [] ).concat( document.getElementById( 'toast' ).textContent ).some( t => /chat que ya no está: 1/.test( t ) )", 10000 ),
+    "a toast says one waits for a chat that is gone", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
+await new Promise( r => setTimeout( r, 1500 ) );    // the opening's own work (flush, list) has had its time
+ok( ( await c.evaluate( OUTBOX ) ).includes( "para nadie" ), "the message is still kept (never thrown away)", await c.evaluate( OUTBOX ) );
 
 await done( c, s );

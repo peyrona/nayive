@@ -211,13 +211,6 @@
             E.showProblem( null );
             E.plug( "synced" );
             appendRows( items );
-            // Drafts: two saves of one writer that both landed - the older
-            // to the Trash, and the list read again (compose.js, TWINS)
-            if( ! more && ! S.label && S.tray === "drafts" )
-            {
-                var acct = S.acct;
-                E.settleTwins( acct, items ).then( function ( moved ) { if( moved && gen === S.gen && S.acct === acct ) E.loadList( false ); } );
-            }
         }
         catch( err )
         {

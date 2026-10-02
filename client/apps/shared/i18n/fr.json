@@ -2381,6 +2381,7 @@
   "chat.enablePush": "Activer les notifications",
   "chat.failed": "Ça n'a pas marché. Vérifie ta connexion.",
   "chat.retry": "Réessayer",
+  "chat.waitingGone": "Messages non envoyés d'une discussion qui n'existe plus : {n}. Ils restent enregistrés sur cet appareil.",
   "chat.fAll": "Toutes",
   "chat.fetchingFile": "Préparation du fichier…",
   "chat.fGroups": "Groupes",

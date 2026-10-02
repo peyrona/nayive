@@ -2381,6 +2381,7 @@
   "chat.enablePush": "Hinweise aktivieren",
   "chat.failed": "Hat nicht geklappt. Prüfe deine Verbindung.",
   "chat.retry": "Erneut versuchen",
+  "chat.waitingGone": "Nicht gesendete Nachrichten eines Chats, den es nicht mehr gibt: {n}. Sie bleiben auf diesem Gerät gespeichert.",
   "chat.fAll": "Alle",
   "chat.fetchingFile": "Datei wird vorbereitet…",
   "chat.fGroups": "Gruppen",
