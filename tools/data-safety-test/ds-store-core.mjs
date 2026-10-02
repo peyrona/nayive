@@ -94,6 +94,8 @@ section( "A1 · ONE DOCUMENT IN TWO TABS (CONFLICTS STORE)" );
     const qb = JSON.parse( await B.evaluate( `J( SC.write( '${G}', M.off + 'offline in tab B\\n' ) )` ) );
     ok( qa.offline, "tab A's save waits in the outbox", qa );
     ok( ! qb.ok && qb.pageOnly && ! qb.offline, "tab B's waits in tab B (NOT \"saved\": it is in that page only)", qb );
+    ok( await B.evaluate( "SC.state === 'error'" ), "and tab B's plug says so (not \"offline - saved when you reconnect\")",
+        await B.evaluate( "SC.state" ) );
     const box = await B.evaluate( `idb( 'outbox', '${G}' )` );
     ok( box && box.body === "o0\noffline in tab A\n", "tab A's waiting save was not replaced", box && box.body );
     for( const c of [ A, B ] ) await c.evaluate( "offline( false )" );

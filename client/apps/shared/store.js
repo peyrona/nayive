@@ -662,9 +662,11 @@
         async function settle()
         {
             var db      = await dbPromise;
-            var pending = ( await ownEntries( db ) ).concat( Object.keys( pageOnly ).map( function ( k ) { return pageOnly[ k ]; } ) );
+            var here    = Object.keys( pageOnly ).map( function ( k ) { return pageOnly[ k ]; } );
+            var pending = ( await ownEntries( db ) ).concat( here );
 
             if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
+            else if( here.length )          emit( "error" );   // kept only in this page (K2): not safe, never "offline"
             else if( pending.length === 0 ) emit( navigator.onLine ? "synced"  : "offline" );
             else                            emit( navigator.onLine ? "pending" : "offline" );
         }
@@ -1159,10 +1161,12 @@
             var res = await flushPath( path, { id: idOf( e ) } );
 
             // Not sent and kept nowhere but here: never "saved" (none of
-            // offline / needsAuth, which the apps take as "safe on this device").
+            // offline / needsAuth, which the apps take as "safe on this device"),
+            // and the plug never says "offline - saved when you reconnect".
             if( here && ! res.ok )
             {
-                if( ! q.stored ) { pageOnlyToast(); emit( "error" ); }
+                if( res.conflict ) emit( "conflict" );
+                else { pageOnlyToast(); emit( "error" ); }
                 return { ok: false, pageOnly: true, conflict: !! res.conflict };
             }
             return res;
@@ -1790,8 +1794,9 @@
                                       : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ), { ms: 6000 } );
         }
 
-        // The browser's storage failed and the server was not reached: the save
-        // is only in this page (K2). Said once in a while, not per keystroke.
+        // The save could not be sent and is only in this page (the browser's
+        // storage failed: K2, or another page's save holds the outbox and the
+        // server was not reached). Said once in a while, not per keystroke.
         function pageOnlyToast()
         {
             var now = Date.now();
