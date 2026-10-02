@@ -506,6 +506,9 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 	// homes/<name>/data/mail, nor a new person with this name get their
 	// mailboxes (L1, admin_mail.go).
 	s.mail.DropUser(name)
+	// And their queued films: never converted, binned or told of under the
+	// name once a new person has it (L1).
+	s.convert.DropUser(name)
 	// A request let in just before (its session was alive) stops at its next
 	// open: it must not re-create the home, nor reach a new person's (L2).
 	s.users.EndRequests(name)

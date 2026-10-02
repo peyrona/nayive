@@ -788,7 +788,9 @@ func (d *Devices) NoteLast(owner string, p lastPos) {
 		return
 	}
 	path := d.lastPath(owner)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// Never the home itself: the look above is a moment old, and an owner
+	// the admin renamed or deleted since must not come back as a ghost (L2).
+	if err := mkdirInHome(d.homes, filepath.Dir(path)); err != nil {
 		return
 	}
 	if err := atomicWriteJSON(path, p, 1); err != nil {

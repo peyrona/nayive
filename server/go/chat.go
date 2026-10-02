@@ -660,7 +660,9 @@ func (h *ChatHub) saveData(o *chatOwner) error {
 	if o.damaged {
 		return errChatDamaged
 	}
-	if err := os.MkdirAll(o.dir, 0o755); err != nil {
+	// Never the home itself (mkdirInHome): an owner the admin renamed or
+	// deleted a moment ago must not come back as a ghost homes/<old>/ (L2).
+	if err := mkdirInHome(h.cfg.HomesDir, o.dir); err != nil {
 		return err
 	}
 	if o.data.Contacts == nil {
@@ -967,7 +969,7 @@ func (h *ChatHub) writeMonth(c *chatConv, month string) error {
 	if !c.canWrite(month + ".json") {
 		return errChatDamaged
 	}
-	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+	if err := mkdirInHome(h.cfg.HomesDir, c.dir); err != nil { // never the home itself (L2)
 		h.log.Error("chat: cannot create a conversation folder", "err", err)
 		return err
 	}
@@ -1148,7 +1150,7 @@ func (h *ChatHub) keepBytes(o *chatOwner, c *chatConv, m *ChatMsg, rel string, w
 		return 0, os.ErrNotExist
 	}
 	media := filepath.Join(c.dir, "media")
-	if err := os.MkdirAll(media, 0o755); err != nil {
+	if err := mkdirInHome(h.cfg.HomesDir, media); err != nil { // never the home itself (L2)
 		return 0, err
 	}
 	dir := "data/chat/conv/" + c.id + "/media/"
@@ -1639,7 +1641,7 @@ func (h *ChatHub) saveState(c *chatConv) error {
 	if !c.canWrite("state.json") {
 		return errChatDamaged
 	}
-	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+	if err := mkdirInHome(h.cfg.HomesDir, c.dir); err != nil { // never the home itself (L2)
 		return err
 	}
 	if err := atomicWriteJSON(filepath.Join(c.dir, "state.json"), c.st, 1); err != nil {

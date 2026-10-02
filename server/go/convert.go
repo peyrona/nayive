@@ -212,8 +212,8 @@ func (c *Converter) Status(user string) []ConvertStatus {
 // The job RUNNING right now is renamed too, on purpose: Run pops a finished job
 // only when it is still the very same value, so this one is not popped and runs
 // once more under the new name. Its first run has almost surely failed - the
-// folder its paths point into moved away mid-way - and the push for that
-// failure went to the old name, which has no devices any more.
+// folder its paths point into moved away mid-way - and nobody is told of that
+// run (stillQueued): the old name has no devices any more, or a new person's.
 func (c *Converter) RenameUser(oldName, newName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -226,6 +226,40 @@ func (c *Converter) RenameUser(oldName, newName string) {
 	if moved {
 		c.saveLocked()
 	}
+}
+
+// DropUser forgets an account the admin deleted: its jobs go, from memory
+// and from convert.json. Left queued, they ran under the name against
+// whoever is given it next - a NEW person with their own Pelis/x.avi, its
+// original binned in their home - and the push told them of it (L1).
+//
+// The job RUNNING right now goes too, and nothing shows it as running any
+// more: its paths' folder is gone (sandbox.go: its opens fail), Run pops a
+// finished job only when it is still the very same value at the head, and
+// runOne tells nobody of a job that left the queue (stillQueued).
+func (c *Converter) DropUser(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	kept := make([]ConvertJob, 0, len(c.queue))
+	for i, j := range c.queue {
+		if j.User != name {
+			kept = append(kept, j)
+		} else if i == 0 {
+			c.running = false
+		}
+	}
+	if len(kept) != len(c.queue) {
+		c.queue = kept
+		c.saveLocked()
+	}
+}
+
+// stillQueued: `job` is still the head of the queue - the admin neither
+// renamed nor deleted its owner while it ran.
+func (c *Converter) stillQueued(job ConvertJob) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.queue) > 0 && c.queue[0] == job
 }
 
 func (c *Converter) saveLocked() {
@@ -287,7 +321,9 @@ func (c *Converter) runOne(ctx context.Context, job ConvertJob) {
 	defer func() {
 		if err := recover(); err != nil {
 			c.log.Error("convert: crashed", "path", job.Path, "err", err)
-			c.notify(job, "")
+			if c.stillQueued(job) {
+				c.notify(job, "")
+			}
 		}
 	}()
 
@@ -295,6 +331,13 @@ func (c *Converter) runOne(ctx context.Context, job ConvertJob) {
 	out, err := c.convert(ctx, job)
 	if ctx.Err() != nil {
 		return // stopped, not failed: no push
+	}
+	// Its owner renamed or deleted meanwhile (RenameUser, DropUser): the
+	// name is no one's now, or a NEW person's - who must not be told of
+	// another's film. A renamed owner hears of the run under the new name.
+	if !c.stillQueued(job) {
+		c.log.Info("convert: its owner changed while it ran; nobody told", "user", job.User, "path", job.Path, "err", err)
+		return
 	}
 	if err != nil {
 		c.log.Warn("convert: failed", "user", job.User, "path", job.Path, "err", err)

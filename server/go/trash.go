@@ -232,10 +232,12 @@ func (t *Trash) loadIndex(tdir string) (*trashIndex, error) {
 	return index, nil
 }
 
+// saveIndex writes the can's index into a can that is THERE: it never makes
+// the folder. Only moveIn makes a can, through the home's own handle. Made
+// here by path, a delete or a restore under way when the admin renamed or
+// deleted the account brought back homes/<old name>/.trash - a ghost home
+// (L2). A can that is missing now fails the write (ENOENT) instead.
 func saveIndex(tdir string, index *trashIndex) error {
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		return err
-	}
 	return atomicWriteJSON(indexPath(tdir), index, 2)
 }
 
@@ -276,14 +278,17 @@ func (t *Trash) MoveInIfSame(role, user string, p Resolved, origRel string, was 
 
 func (t *Trash) moveIn(role, user string, p Resolved, origRel string, was os.FileInfo) (string, error) {
 	tdir := t.Dir(role, user)
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		return "", err
-	}
 	// The can sits inside the file's own root - a user's in their home, the
 	// admin's in the base - so the move is one rename through the sandbox.
 	trashRel, ok := p.relTo(tdir)
 	if !ok {
 		return "", errCrossRoot
+	}
+	// Made through that root, never by path: a home the admin renamed or
+	// deleted under this request is errRootGone, not a ghost homes/<old>/
+	// (L2). The file stays where it is.
+	if err := p.at(trashRel).MkdirAll(); err != nil {
+		return "", err
 	}
 
 	entryID := newEntryID()
