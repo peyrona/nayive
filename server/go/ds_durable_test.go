@@ -80,6 +80,23 @@ func TestDS_K1_SavesSyncTheirFolder(t *testing.T) {
 		t.Error("a folder copy did not sync its folders")
 	}
 
+	// a save at the very top of its root: a guest's photo into an "add"
+	// share (the root is the shared folder), and the admin at the base dir
+	os.MkdirAll(filepath.Join(home, "files", "buzon"), 0o755)
+	g := f.srv.shares.Create("ana", "beto", "files/buzon", "photos", "Buzón", "add")
+	guest := signedInClient(t, f.base, "beto", "xyz")
+	resp = do(t, guest, "PUT", f.base+"/api/files?file=shared/"+g.Slug+"/IMG_9.jpg", bytes.NewReader(keepJPEG), nil)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !synced(filepath.Join(home, "files", "buzon")) {
+		t.Errorf("a guest's save into a share's top (%d) did not sync it", resp.StatusCode)
+	}
+	admin := signedInClient(t, f.base, "jefe", "secreto")
+	resp = do(t, admin, "PUT", f.base+"/api/files?file=nota-admin.txt", strings.NewReader("hola"), nil)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !synced(f.srv.cfg.BaseDir) {
+		t.Errorf("the admin's save at the base (%d) did not sync it", resp.StatusCode)
+	}
+
 	// a phone's photo filed into Drive (api_device_media.go)
 	root, err := os.OpenRoot(home)
 	if err != nil {
