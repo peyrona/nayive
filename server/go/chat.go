@@ -1327,11 +1327,8 @@ func (h *ChatHub) countExpiring(o *chatOwner, days int, now time.Time) int {
 	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
 	n := 0
 	h.eachConvOnDisk(o, func(c *chatConv) {
-		for _, m := range c.msgs {
-			if m.At >= cutoff {
-				break // by id, so by time: the rest are newer
-			}
-			if !m.Deleted {
+		for _, m := range c.msgs { // all of them, as expireConv looks at all
+			if m.At < cutoff && !m.Deleted {
 				n++
 			}
 		}
