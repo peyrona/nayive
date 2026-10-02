@@ -140,7 +140,7 @@ function askReplace( collisions, total )
     collisions.slice( 0, SHOWN ).forEach( function( it )
     {
         const li    = document.createElement( 'li' );
-        const shown = clashName( it ) || it.relPath;   // a twin's name, when it is the twin that clashes
+        const shown = it.clash || it.relPath;   // a twin's name, when it is the twin that clashes
         li.textContent = shown;
         li.title = shown;
         ul.appendChild( li );
@@ -559,28 +559,144 @@ async function runAppImports( imports )
 // name that is already taken: a photo converted to .jpg lands on a name
 // the collision question at the top of uploadItems never asked about,
 // so it gets "(copia)" instead of overwriting anything.
-// `used` holds the paths this same batch has already written. Like the
-// collision check itself, currentChild() only knows the folder on
-// screen, so inside a dragged-in sub-folder only `used` protects.
-function renameTo( relPath, name, used )
+// `used` holds the paths this same batch has already written; `there` the
+// files at the destination (filesThere).
+function renameTo( relPath, name, used, there )
 {
     const i    = relPath.lastIndexOf( '/' );
     const dir  = i < 0 ? '' : relPath.slice( 0, i + 1 );
     // uniqueName() only ever calls taken.has(), so a small object with
     // that one method does the job of a Set here.
-    const taken = { has: n => !! currentChild( dir + n ) || used.has( dir + n ) };
+    const taken = { has: n => there.has( dir + n ) || used.has( dir + n ) };
     return dir + uniqueName( name, taken );
 }
 
-// The name an upload would overwrite in the folder on screen: the file
-// itself, or - for a LibreOffice document - its twin. '' when nothing.
-function clashName( it )
+// THE FILES AT THE DESTINATION, AS THE SERVER HAS THEM NOW (D1, D3 -
+// drive-files #1, #2): the open folder's own files, and every file inside
+// each dropped top folder, at any depth. A Map relPath -> size. Read fresh,
+// never from the listing on screen: that one knew only the open folder's
+// top level - so a folder dropped again replaced every same-named file in
+// it with no question - and it misses what another device put there since.
+// null when a folder cannot be read: then nothing is sent (a 404 is a top
+// folder that is not there yet, so it holds nothing).
+async function filesThere( items )
 {
-    const node = currentChild( it.relPath );
-    if( node && ! isDir( node ) ) return it.relPath;
+    const there  = new Map();
+    const prefix = currentFolder ? currentFolder + '/' : '';
+    const add = function( nodes )
+    {
+        ( nodes || [] ).forEach( function( n )
+        {
+            if( isDir( n ) ) add( n.nodes );
+            else if( n.path.indexOf( prefix ) === 0 ) there.set( n.path.slice( prefix.length ), n.size || 0 );
+        } );
+    };
+
+    const tops = new Set();
+    items.forEach( function( it ) { const i = it.relPath.indexOf( '/' ); if( i > 0 ) tops.add( it.relPath.slice( 0, i ) ); } );
+
+    try
+    {
+        add( ( await withBusy( GumApi.listDir( currentFolder ) ) ).nodes );     // one level: its sub-folders come back empty
+        for( const top of tops )
+        {
+            try { add( ( await withBusy( GumApi.listDirRecursive( joinPath( currentFolder, top ) ) ) ).nodes ); }
+            catch( err ) { if( ! err || err.status !== 404 ) throw err; }
+        }
+    }
+    catch( _ ) { return null; }
+    return there;
+}
+
+// What an upload item would land on at the destination: the file itself,
+// and - for a LibreOffice document - its twin. Kept on the item, for the
+// question (askReplace shows it.clash) and for what "Replace" may replace.
+// Returns the name to show, '' when nothing clashes.
+function markClash( it, there )
+{
     const twin = officeTwinRel( it.relPath );
-    const tn   = twin && currentChild( twin );
-    return tn && ! isDir( tn ) ? twin : '';
+    it.fileThere = there.has( it.relPath );
+    it.twinThere = !! twin && there.has( twin );
+    it.clash     = it.fileThere ? it.relPath : ( it.twinThere ? twin : '' );
+    return it.clash;
+}
+
+// createFileBytes with Drive's "&convert=mp4": the same create-only PUT
+// (If-None-Match: *, a 412 when the name is taken), plus the query.
+function createUpload( path, blob, conv )
+{
+    if( ! conv ) return GumApi.createFileBytes( path, blob );
+    return GumApi.putBinary( GumApi.fileUrl( path ) + '&convert=mp4', blob, { 'If-None-Match': '*' } )
+                 .then( function() { GumApi.announce( [ path ], false ); } );
+}
+
+// A 412 can be this upload's own first try: putBinary sends again after a
+// dropped connection, and the first one may have landed. The same size there
+// - and the same bytes, when small enough to read back - is that, not a file
+// someone else put there.
+const SAME_CHECK_MAX = 8 * 1024 * 1024;
+
+async function sameAsSent( path, blob )
+{
+    try
+    {
+        const i = path.lastIndexOf( '/' );
+        const r = await withBusy( GumApi.listDir( i < 0 ? '' : path.slice( 0, i ) ) );
+        const n = ( r.nodes || [] ).find( function( x ) { return x.path === path; } );
+        if( ! n || isDir( n ) || n.size !== blob.size ) return false;
+        if( blob.size > SAME_CHECK_MAX ) return true;
+        const have = await withBusy( GumApi.readFileBytes( path ) );
+        const mine = new Uint8Array( await blob.arrayBuffer() );
+        if( have.length !== mine.length ) return false;
+        for( let k = 0; k < have.length; k++ ) if( have[ k ] !== mine[ k ] ) return false;
+        return true;
+    }
+    catch( _ ) { return false; }
+}
+
+// A name free in relPath's folder NOW (a fresh listing) and not written by
+// this batch: "x (copia).jpg", "x (copia 2).jpg"...
+async function freeRel( relPath, used )
+{
+    const i      = relPath.lastIndexOf( '/' );
+    const dir    = i < 0 ? '' : relPath.slice( 0, i + 1 );
+    const parent = dir ? joinPath( currentFolder, dir.slice( 0, -1 ) ) : currentFolder;
+    const r      = await withBusy( GumApi.listDir( parent ) );
+    const names  = new Set( ( r.nodes || [] ).map( function( n ) { return n.path.split( '/' ).pop(); } ) );
+    return dir + uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) } );
+}
+
+// Sends a file the user did NOT say "Replace" to: it may only make a new
+// file. A 412 is a name taken since filesThere looked (another device or
+// window), or this very upload's first try (sameAsSent). The user then
+// picks: replace it, or keep both - this one goes up as "x (copia).jpg".
+// Resolves the relPath it was saved under; null when the user cancels (the
+// rest of the upload stops too).
+async function sendNew( relPath, blob, conv, used )
+{
+    for( ;; )
+    {
+        const path = joinPath( currentFolder, relPath );
+        try { await withBusy( createUpload( path, blob, conv ) ); return relPath; }
+        catch( err ) { if( ! err || err.status !== 412 ) throw err; }
+
+        if( await sameAsSent( path, blob ) ) return relPath;
+
+        const choice = await NayiveUI.confirm( {
+            title:     T( 'drive.alreadyExistOne' ),
+            body:      TF( 'drive.appearedBody', { name: relPath } ),
+            confirm:   T( 'drive.replace' ), danger: true,
+            other:     T( 'drive.keepBoth' ),
+            otherIcon: 'copy' } );
+        if( choice === false ) return null;
+        if( choice === true )
+        {
+            await withBusy( GumApi.writeFileBytes( path, blob, conv ? { convert: 'mp4' } : null ) );
+            return relPath;
+        }
+        relPath = await freeRel( relPath, used );
+        used.add( relPath );
+    }
 }
 
 async function uploadItems( items )
@@ -611,8 +727,10 @@ async function uploadItems( items )
 
     // Warn before overwriting anything that already exists at the destination.
     // A LibreOffice document also lands its twin ("x.odt" -> "x.docx"), so
-    // a twin already here is a clash too - see clashName.
-    const collisions = items.filter( function( it ) { return !! clashName( it ); } );
+    // a twin already here is a clash too - see markClash.
+    const there = await filesThere( items );
+    if( ! there ) { setStatus( '' ); NayiveUI.toast( T( 'drive.checkDestFailed' ), { ms: 6000 } ); return; }
+    const collisions = items.filter( function( it ) { return !! markClash( it, there ); } );
 
     if( collisions.length )
     {
@@ -626,7 +744,9 @@ async function uploadItems( items )
             items = items.filter( function( it ) { return ! drop.has( it ); } );
             if( ! items.length ) { setStatus( '' ); return; }
         }
-        // choice === 'overwrite': fall through with every item
+        // "Replace" replaces exactly what the question listed - the file, and
+        // the twin that was there. Everything else goes up create-only (sendNew).
+        else collisions.forEach( function( it ) { it.replaceFile = it.fileThere; it.replaceTwin = it.twinThere; } );
     }
 
     // Videos a browser cannot play (.avi, .wmv, ...): offer to turn them
@@ -654,8 +774,7 @@ async function uploadItems( items )
         need += it.file.size;
         if( toConvert.has( it ) ) need += it.file.size;   // the mp4 sits beside it until done
         if( officeTwinRel( it.relPath ) ) need += it.file.size;   // its twin, about as big
-        const node = currentChild( it.relPath );
-        if( node && ! isDir( node ) && node.size ) need -= node.size;   // overwrite frees the old bytes
+        if( it.replaceFile ) need -= there.get( it.relPath ) || 0;   // overwrite frees the old bytes
     }
     if( ! await NayiveUI.ensureRoom( need ) ) { setStatus( '' ); return; }
 
@@ -698,18 +817,31 @@ async function uploadItems( items )
         {
             // No limit, or not a photo -> ready.blob IS it.file.
             const ready   = await NayivePhoto.prepare( it.file, maxPx );
-            const relPath = ready.changed && ready.name !== it.file.name
-                          ? renameTo( it.relPath, ready.name, used )
+            let   relPath = ready.changed && ready.name !== it.file.name
+                          ? renameTo( it.relPath, ready.name, used, there )
                           : it.relPath;
             used.add( relPath );
-            const path    = joinPath( currentFolder, relPath );
 
             // Send the Blob itself: the browser streams it from disk.
             // Reading it into memory first crashed the tab on big files.
-            const conv = toConvert.has( it );
-            await withBusy( GumApi.writeFileBytes( path, ready.blob, conv ? { convert: 'mp4' } : null ) );
+            // Only a file the user said "Replace" to is PUT over; any other
+            // may only make a new file (sendNew): one that took the name
+            // since the check is never written over (D1, D3).
+            const conv    = toConvert.has( it );
+            const replace = it.replaceFile && relPath === it.relPath;
+            if( replace )
+                await withBusy( GumApi.writeFileBytes( joinPath( currentFolder, relPath ), ready.blob, conv ? { convert: 'mp4' } : null ) );
+            else
+            {
+                const got = await sendNew( relPath, ready.blob, conv, used );
+                if( got === null ) break;               // cancelled: nothing more is sent
+                relPath = got;
+            }
             if( conv ) converting++;
-            if( officeTwinRel( relPath ) ) toOffice.push( { path: path, name: relPath.split( '/' ).pop() } );
+            // Its twin replaces one only when "Replace" was said to it too.
+            if( officeTwinRel( relPath ) )
+                toOffice.push( { path: joinPath( currentFolder, relPath ), name: relPath.split( '/' ).pop(),
+                                 replace: !! it.replaceTwin && relPath === it.relPath } );
         }
         catch( err )
         {
@@ -727,22 +859,33 @@ async function uploadItems( items )
     if( toOffice.length )
     {
         NayiveUI.toast( T( 'drive.officeStart' ), { ms: 4000 } );
-        const done = [], failed = [];
+        const done = [], failed = [], kept = [];
         let   off  = false;
         for( let i = 0; i < toOffice.length && ! off; i++ )
         {
             setStatus( TF( 'drive.officeConvertingN', { i: i + 1, n: toOffice.length } ) );
-            try { await officeTwin( toOffice[i].path, true ); done.push( toOffice[i].name ); }
+            // Without `replace` an existing twin is the server's answer, left
+            // as it is ("converted": false), and one that took the name while
+            // LibreOffice ran is kept too (409, api_office.go): a twin the
+            // user never said "Replace" to is never rebuilt over (D1).
+            try
+            {
+                const r = await officeTwin( toOffice[i].path, toOffice[i].replace );
+                if( r && r.converted === false ) kept.push( officeTwinRel( toOffice[i].name ) );
+                else                             done.push( toOffice[i].name );
+            }
             catch( err )
             {
-                if( err && err.status === 503 ) off = true;   // no LibreOffice: none will
-                else failed.push( toOffice[i].name );
+                if( err && err.status === 503 )      off = true;   // no LibreOffice: none will
+                else if( err && err.status === 409 ) kept.push( officeTwinRel( toOffice[i].name ) );
+                else                                 failed.push( toOffice[i].name );
             }
         }
-        if( off )                  notes.push( T( 'drive.officeOffUpload' ) );
-        else if( failed.length )   notes.push( TF( 'drive.officeFailedN', { names: failed.join( ', ' ) } ) );
-        else if( done.length > 1 ) notes.push( TF( 'drive.officeConvertedN', { n: done.length } ) );
-        else                       notes.push( TF( 'drive.officeConverted', { name: officeTwinRel( done[0] ) } ) );
+        if( off )                    notes.push( T( 'drive.officeOffUpload' ) );
+        else if( failed.length )     notes.push( TF( 'drive.officeFailedN', { names: failed.join( ', ' ) } ) );
+        else if( done.length > 1 )   notes.push( TF( 'drive.officeConvertedN', { n: done.length } ) );
+        else if( done.length === 1 ) notes.push( TF( 'drive.officeConverted', { name: officeTwinRel( done[0] ) } ) );
+        if( kept.length && ! off )   notes.push( TF( 'drive.officeTwinKept', { names: kept.join( ', ' ) } ) );
     }
 
     setStatus( '' );

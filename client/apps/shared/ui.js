@@ -1657,14 +1657,28 @@
         var held  = s.trash || 0;
         var short = tf( "ui.room.short", { need: fmtBytes( need ), free: fmtBytes( s.usable ) } );
 
+        // Only what the bin holds when the user is asked is deleted - those
+        // ids, never "empty everything": an item deleted on another device
+        // after that (its Undo toast maybe still up there) stays (G4). The
+        // ids travel in the URL: at most 2000 a call.
+        var ids = null;
         if ( held > 0 && need <= s.usable + held )
+        {
+            try { ids = ( await GumApi.trashList() ).map( function ( it ) { return it.id; } ); }
+            catch ( e ) { ids = null; }
+        }
+        if ( ids && ids.length )
         {
             var ok = await confirmDialog( {
                 title:   t( "ui.room.title" ),
                 body:    short + "\n\n" + tf( "ui.room.trashBody", { held: fmtBytes( held ) } ),
                 confirm: t( "ui.room.empty" ), danger: true } );
             if ( ! ok ) return false;
-            try { await GumApi.trashEmpty(); return true; }
+            try
+            {
+                for ( var i = 0; i < ids.length; i += 2000 ) await GumApi.trashDelete( ids.slice( i, i + 2000 ) );
+                return true;
+            }
             catch ( e ) { toast( t( "ui.room.emptyFail" ) ); return false; }
         }
 

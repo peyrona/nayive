@@ -240,18 +240,33 @@ function purgeOneLater( ids )
     } } );
 }
 
+// "EMPTY THE BIN" DELETES WHAT THE USER SAW, NOTHING ELSE (G4, drive-files
+// #6): exactly these bin ids - the rows on screen, or the bin as read just
+// before the question. Never the server's "empty everything": an item
+// deleted on another device after this one looked (its Undo toast maybe
+// still up there) stays in the bin. The ids travel in the URL, so at most
+// 2000 a call. Used by the bin view and the disk bar (toolbar.js).
+const PURGE_BATCH = 2000;
+
+async function purgeBinIds( ids )
+{
+    for( let i = 0; i < ids.length; i += PURGE_BATCH )
+        await withBusy( GumApi.trashDelete( ids.slice( i, i + PURGE_BATCH ) ) );
+}
+
 async function emptyTrash()
 {
     if( ! trashItems.length ) return;
+    const ids = trashItems.map( function( it ) { return it.id; } );   // what the question counts
     if( ! await NayiveUI.confirm( {
         title: T( 'drive.emptyTrashTitle' ),
-        body: TF( 'drive.emptyTrashBody', { n: trashItems.length } ),
+        body: TF( 'drive.emptyTrashBody', { n: ids.length } ),
         confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
     NayiveUI.undoSettle();            // a one-item delete waiting on its Undo goes now: all of it is going
     setStatus( T( 'drive.emptyingTrash' ) );
     try
     {
-        await withBusy( GumApi.trashEmpty() );
+        await purgeBinIds( ids );
         await refreshTrash();
         flashStatus( T( 'drive.trashEmptied' ) );
     }

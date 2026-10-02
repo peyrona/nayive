@@ -139,11 +139,16 @@ function offerEmptyTrash( on, held )
     bar.classList.toggle( 'disk-bar--offer', !! on );
     bar.onclick = ! on ? null : async function ()
     {
+        // The bin as it is when asked: only those go (purgeBinIds, G4).
+        let ids;
+        try { ids = ( await withBusy( GumApi.trashList() ) ).map( function( it ) { return it.id; } ); }
+        catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
+        if( ! ids.length ) { reload(); return; }
         if( ! await NayiveUI.confirm( {
                 title:   T( 'drive.emptyTrashTitle' ),
                 body:    TF( 'drive.diskFullBody', { held: fmtSize( held ) } ),
                 confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
-        try { await GumApi.trashEmpty(); }
+        try { await purgeBinIds( ids ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
         NayiveUI.toast( T( 'drive.trashEmptied' ) );
         reload();

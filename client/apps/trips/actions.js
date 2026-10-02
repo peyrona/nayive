@@ -66,6 +66,7 @@ function addTripDocFromDetail()
 function removeTripDoc(id) { tripDraft.documents = tripDraft.documents.filter( function( d ) { return d.id !== id; } ); renderTripSheet(); }
 
 let tripSaveError = '';
+let newTripClaim  = null;     // { draft, id, dirName }: the folder a new trip's failed save already claimed (saveTrip)
 
 // Editing an already-saved trip goes through the store, so it works offline.
 // Creating one makes its directory server-side first (GumApi.makeDir), so a
@@ -159,12 +160,29 @@ async function saveTrip()
 
     try
     {
-        const dirName = resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
-        const created = { ...tripDraft, id: newId(), stages: [], dirName: dirName, _base: 'data/trips/' + dirName };
+        // The folder is claimed on the server first (claimNewTripDir, D7) -
+        // its trip.json made create-only, never over another device's trip -
+        // and only then do the documents go in. A retry after a failed upload
+        // keeps this sheet's claim: picked again, the folder it already made
+        // would read as taken, and the trip would be made twice.
+        const draft = tripDraft;
+        const claim = newTripClaim && newTripClaim.draft === draft ? newTripClaim : null;
+        const id    = claim ? claim.id : newId();
+        const make  = function( dirName ) { return { ...draft, id: id, stages: [], dirName: dirName, _base: 'data/trips/' + dirName }; };
+        const dirName = claim ? claim.dirName
+                      : await claimNewTripDir( draft.destination, draft.startDate, function( d )
+                        {
+                            // Never a document whose file is not up yet: a failed upload
+                            // must not leave the trip pointing at a missing file.
+                            const t = make( d );
+                            return JSON.stringify( { ...t, documents: t.documents.filter( function( x ) { return ! x._pending; } ) }, null, 2 );
+                        } );
+        newTripClaim = { draft: draft, id: id, dirName: dirName };
+        const created = make( dirName );
 
-        await GumApi.makeDir( 'data/trips', dirName );
         await syncDocFiles( tripBase( created ), created.documents, [], [] );
         await persistTrip( created );
+        newTripClaim = null;
 
         trips = [ ...trips, created ];
         if( created.documents.length ) expandSection( 'docs' );

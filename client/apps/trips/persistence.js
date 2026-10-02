@@ -496,10 +496,11 @@ function buildSyncIndicator()
 // that name is already used by another trip currently known in memory (which is always
 // kept in sync with disk - see loadTrips()/persistTrip()). Computed once at creation
 // time only; see the PERSISTENCE comment above for why it is never recomputed later.
-function resolveNewTripDirName( sDestination, sStartDate )
+function resolveNewTripDirName( sDestination, sStartDate, alsoTaken )
 {
     const base  = dirNameFor( sDestination, sStartDate );
     const taken = new Set( trips.map( function( t ) { return t.dirName; } ) );
+    ( alsoTaken || [] ).forEach( function( n ) { taken.add( n ); } );
 
     if( ! taken.has( base ) )
         return base;
@@ -510,6 +511,54 @@ function resolveNewTripDirName( sDestination, sStartDate )
         n++;
 
     return base + '-' + n;
+}
+
+// A BRAND NEW trip's folder, claimed on the server (D7, list-apps #24). The
+// trips in memory are not all there is: another device may have made
+// "japan-2026" since this page loaded, and the new trip's trip.json then went
+// over that trip's own. So the name is picked against the folders data/trips
+// has NOW too, and trip.json is made create-only: a name taken in between
+// answers 412 and the next one is tried. A 412 can also be this very claim's
+// first try, landed before a dropped connection made the PUT go again (the
+// same bytes there). `bodyFor( dirName )` is what goes in trip.json; the store
+// then takes the file over as usual. Throws when data/trips cannot be read
+// (a 404 is a fresh account: no folder yet) - the trip is then not created.
+async function claimNewTripDir( sDestination, sStartDate, bodyFor )
+{
+    const onServer = [];
+    try
+    {
+        ( ( await GumApi.listDir( 'data/trips' ) ).nodes || [] ).forEach( function( n )
+        {
+            onServer.push( n.name || String( n.path || '' ).split( '/' ).pop() );
+        } );
+    }
+    catch( err ) { if( ! err || err.status !== 404 ) throw err; }
+
+    for( let tries = 0; ; tries++ )
+    {
+        const dirName = resolveNewTripDirName( sDestination, sStartDate, onServer );
+        const path    = 'data/trips/' + dirName + '/trip.json';
+        const bytes   = new TextEncoder().encode( bodyFor( dirName ) );
+
+        await GumApi.makeDir( 'data/trips', dirName );
+        try { await GumApi.createFileBytes( path, bytes ); return dirName; }
+        catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
+        if( await sameBytes( path, bytes ) ) return dirName;
+        onServer.push( dirName );
+    }
+}
+
+async function sameBytes( path, bytes )
+{
+    try
+    {
+        const have = await GumApi.readFileBytes( path );
+        if( have.length !== bytes.length ) return false;
+        for( let i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
+        return true;
+    }
+    catch( _ ) { return false; }
 }
 
 // What folder the trip currently open in the Add/Edit Trip sheet will be saved under -
