@@ -706,7 +706,10 @@
     //   - a file saved from another device since it was opened: the store gets
     //     a 412, keeps the edits here, and the user is offered a copy
     //   - closing the tab asks only while something is NOT safe yet: a save
-    //     waiting or running, or one that was refused
+    //     waiting or running, one that was refused, or edits the app holds
+    //     back (Calc's loss gate - those are in the device draft meanwhile)
+    //   - a desktop window asks its page before it closes (settle, and the
+    //     session's window.nayiveBeforeClose): what waits is kept first
     //
     // Paired CSS: .saved-at in the OFFICE CHROME block of app.css.
 
@@ -881,12 +884,37 @@
         var pristine = null;        // imported bytes: the .bak when the server has no copy yet
         var backedUp = new Set();   // paths already copied to .bak/ this session
         var lock     = null;        // set = this document is written encrypted (shared/crypt.js)
+        var held     = false;       // the app will not have it written now (Calc's loss gate): its edits go to the device draft
+        var gen      = 0;           // which document is on screen (opened() counts them)
+        var draftOk  = true;        // the last device draft of THIS document was written
+        var waiters  = [];          // idle(): resolved when nothing is running any more
+        var slotQ    = Promise.resolve();   // one device-draft write at a time (keepDraft / dropDraft)
 
         draftKey( o.app );          // this tab's draft key and its lock, from the start: the tab counts as open
 
         function sync( s )  { if( o.setSync ) o.setSync( s ); }
         function path()     { return o.path(); }
         function writable() { return !! path() && ! o.readOnly(); }
+
+        // busy-- and, at zero, wake whoever waits for idle().
+        function done()
+        {
+            busy--;
+            if( busy ) return;
+            var w = waiters;
+            waiters = [];
+            w.forEach( function ( f ) { f(); } );
+        }
+        function idle() { return busy ? new Promise( function ( r ) { waiters.push( r ); } ) : Promise.resolve(); }
+
+        // The device-draft slot is read, maybe moved and written in one go:
+        // two drafts of one tab must not both decide the slot is someone else's.
+        function inSlot( fn )
+        {
+            var p = slotQ.then( fn );
+            slotQ = p.catch( function () {} );
+            return p;
+        }
 
         function stamp( key, at, note )
         {
@@ -912,7 +940,7 @@
             clearTimeout( timer );
             timer = null;
             since = 0;
-            return writable() ? writeTo( path() ) : keepDraft();
+            return writable() && ! held ? writeTo( path() ) : keepDraft();
         }
 
         function edited()
@@ -921,8 +949,12 @@
 
             if( writable() )
             {
-                if( o.blocked && o.blocked( path() ) ) return;   // the app decides; no timer meanwhile
-                sync( navigator.onLine ? "saving" : "offline" );
+                // The app decides (Calc's loss gate, which asks by itself). A
+                // document it holds back is not written - but its edits still
+                // go to the device draft, or they lived only in memory and a
+                // close lost them with no question (held makes closing ask).
+                held = !! ( o.blocked && o.blocked( path() ) );
+                if( ! held ) sync( navigator.onLine ? "saving" : "offline" );
             }
             else if( ! path() ) sync( "unsaved" );              // nothing on the server to save TO yet
 
@@ -930,6 +962,45 @@
         }
 
         function flush() { return timer ? run() : Promise.resolve(); }
+
+        // Keys typed while something else was awaited (a file coming down for
+        // Open) went into the document still on screen: saved now, round after
+        // round while typing goes on - the caller is about to replace that
+        // document, and opened() drops a waiting timer with its edits.
+        async function catchUp()
+        {
+            for( var i = 0; timer && i < 10; i++ ) await run();
+        }
+
+        // Nothing on screen is only on screen: it is on the server, queued in
+        // the store's outbox, or in the device draft - and nothing is waiting,
+        // running or refused.
+        function kept()
+        {
+            if( timer || busy || failed ) return false;
+            return ( writable() && ! held ) || ! dirty || ( drafted && draftOk );
+        }
+
+        // ...and nothing is held back either (in the draft, never in the file).
+        function safe() { return kept() && ! held; }
+
+        // The page is about to be removed with no beforeunload and no time for
+        // pagehide's flush (a desktop window's close). What waits goes NOW, an
+        // edit with no timer behind it (an import, a template, a draft that
+        // failed) gets its device draft, and what is on its way is waited for,
+        // up to `ms` - a PUT has no time limit of its own. True = safe().
+        async function settle( ms )
+        {
+            var all = ( async function ()
+            {
+                await catchUp();
+                if( dirty && ( ! writable() || held ) && ! ( drafted && draftOk ) ) await keepDraft();
+                await idle();
+                return true;
+            } )();
+            var late = new Promise( function ( r ) { setTimeout( function () { r( false ); }, ms ); } );
+            return ( await Promise.race( [ all, late ] ) ) && safe();
+        }
 
         // ---- the password ----------------------------------------------------
         //
@@ -982,7 +1053,14 @@
 
         async function writeTo( p )
         {
-            if( o.blocked && o.blocked( p ) ) return null;
+            // Not written now (the app's gate). The open document's edits go
+            // to the device draft instead (see edited) - Ctrl+S included.
+            if( o.blocked && o.blocked( p ) )
+            {
+                if( p !== path() ) return null;
+                held = true;
+                return keepDraft();
+            }
 
             var mine = ++seq;
             busy++;
@@ -1025,39 +1103,56 @@
                 if( ! failed )
                 {
                     if( ! timer ) dirty = false;       // an edit made meanwhile is still waiting
+                    held = false;                      // written ("Save anyway", a copy): not held any more
+                    if( drafted ) dropDraft();         // the edits it held are in the store now
                     stamp( "write.savedAt", Date.now() );
                 }
                 return res;
             }
-            finally { busy--; }
+            finally { done(); }
         }
 
         async function keepDraft()
         {
             var mine = ++seq;
+            var g    = gen;
             busy++;
             try
             {
                 var body;
                 try { body = await sealed( await o.encode( null ) ); }
-                catch ( e ) { return null; }
+                catch ( e ) { if( g === gen ) draftOk = false; return null; }
                 if( mine !== seq ) return null;
 
                 var at  = Date.now();
-                var key = await ownDraftKey();
-                var put = await draftTx( "readwrite", function ( os )
+                var put = await inSlot( async function ()
                 {
-                    return os.put( { app: key, name: ( o.name && o.name() ) || null, body: body, at: at,
-                                     who: draftWho() } );
+                    var key = await ownDraftKey();
+
+                    // The slot still holds ANOTHER document's body - an unnamed
+                    // one that Open, Import or New took off the screen, or edits
+                    // to someone else's document. Never written over: it stays,
+                    // and becomes an orphan the next tab of this app takes
+                    // over (takeDraft); this document gets a key of its own.
+                    if( ! drafted || g !== gen )
+                    {
+                        var had = await draftTx( "readonly", function ( os ) { return os.get( key ); } );
+                        if( had && had.body != null ) key = await newDraftKey( o.app );
+                    }
+
+                    var ok = await draftTx( "readwrite", function ( os )
+                    {
+                        return os.put( { app: key, name: ( o.name && o.name() ) || null, body: body, at: at,
+                                         who: draftWho() } );
+                    } );
+                    if( ok && g === gen ) drafted = true;     // the slot is this document's now
+                    return ok;
                 } );
-                if( put && mine === seq )
-                {
-                    drafted = true;
-                    stamp( "ui.draftAt", at, t( "ui.draftNote" ) );
-                }
+                if( g === gen ) draftOk = !! put;
+                if( put && mine === seq ) stamp( "ui.draftAt", at, t( "ui.draftNote" ) );
                 return null;
             }
-            finally { busy--; }
+            finally { done(); }
         }
 
         // One copy of the server's version per document per session, taken
@@ -1169,9 +1264,12 @@
             clearTimeout( timer );
             timer    = null;
             since    = 0;
+            gen++;
             dirty    = !! x.dirty;
             failed   = false;
-            drafted  = false;
+            held     = false;
+            draftOk  = true;
+            drafted  = false;           // the slot may still hold the last document: keepDraft leaves it be
             askedFor = null;
             pristine = x.pristine || null;
             stamp( null );
@@ -1261,11 +1359,19 @@
             stamp( "ui.draftAt", d.at, t( "ui.draftNote" ) );
         }
 
-        async function dropDraft()
+        // Only THIS document's own draft: a slot that still holds another
+        // document's body (see keepDraft) is left alone - New's red bin on a
+        // blank page dropped the unnamed one before it. force: the boot's
+        // locked draft, which is in the slot before anything is on screen.
+        function dropDraft( force )
         {
+            if( ! drafted && ! force ) return Promise.resolve( null );
             drafted = false;
-            var key = await ownDraftKey();
-            return draftTx( "readwrite", function ( os ) { return os.delete( key ); } );
+            return inSlot( async function ()
+            {
+                var key = await ownDraftKey();
+                return draftTx( "readwrite", function ( os ) { return os.delete( key ); } );
+            } );
         }
 
         // ---- leaving --------------------------------------------------------
@@ -1274,7 +1380,7 @@
         window.addEventListener( "pagehide", function () { flush(); } );
         window.addEventListener( "beforeunload", function ( e )
         {
-            if( ! timer && ! busy && ! failed ) return;
+            if( ! timer && ! busy && ! failed && ! held ) return;   // held: in the device draft only, the file never got it
             flush();                          // start it now, in case they stay
             e.preventDefault();
             e.returnValue = "";
@@ -1286,6 +1392,9 @@
         return {
             edited:    edited,
             flush:     flush,
+            catchUp:   catchUp,
+            settle:    settle,
+            kept:      kept,
             saveNow:   saveNow,
             saveTo:    saveTo,
             opened:    opened,
@@ -1327,6 +1436,7 @@
     //       blocked:     function ( path ) {...},       // true = do not write it now (Calc's loss gate)
     //       lossless:    function () {...},             // false = what is on screen, written back, loses something
     //                                                   //   the file has (Calc: charts): Restore asks, no Undo
+    //       restoreBytes: async function ( copy, path ) {...}, // true = Restore swaps the two FILES as bytes (Calc)
     //       ready:       function () {...},             // false = the editor is not up yet (Write)
     //       busy:        function () {...},             // true = not a moment to ask for a name (Calc: a cell is being typed)
     //       onChange:    function () {...},             // the document's name changed (Text re-picks the language)
@@ -1340,11 +1450,13 @@
     //   session.open( path )                   a file from the server; resolves true when it is on screen
     //   session.untitled( name, o )            the app put a new untitled document on screen (o.dirty, o.pristine)
     //   session.edited()  .flush()  .saveNow()  .openSaveAs()  .dirty()
+    //   session.catchUp()                      keys typed while something was awaited: saved now (Write: a template)
     //   session.dropDraft()                    the untitled document was thrown away (Write: a template over it)
     //   session.openDialog()  .recent()        the "Abrir documento" sheet
     //   session.locked()                       it is written encrypted
     //   session.keepUntitled()                 the untitled document about to go, for an Undo (null = none)
-    //   session.offerBack( kept )              its "Borrador descartado [Deshacer]" (Write: a template over it)
+    //   session.offerBack( kept, aside )       its "Borrador descartado [Deshacer]" (Write: a template over it);
+    //                                          aside: its draft was kept - "apartado", not "descartado"
     //   session.offerUndo( msg, back )         an Undo toast the next key or edit makes final (Write: the dictionary)
     //
     // THE PADLOCK (#lockBtn, optional): a password on the open document. The
@@ -1528,6 +1640,17 @@
                 body = got.body;
             }
 
+            // Keys typed while the file came down (seconds, on a phone) went
+            // into the document still on screen: saved to IT now - load()
+            // replaces it, and opened() drops a waiting autosave.
+            await saver.catchUp();
+
+            // What is on screen only on this device (unnamed, or edits to
+            // someone else's) is not thrown away: its device draft stays (the
+            // next draft of this tab takes a key of its own) and, as with New,
+            // the toast's Undo brings it straight back.
+            var kept = await keepUntitled();
+
             try { await o.load( body, p, "open" ); }
             catch ( e )
             {
@@ -1538,6 +1661,8 @@
 
             opened( p );
             saver.setLock( got ? got.lock : null );      // opened() reopened the saver: set it after
+            showLock();                                  // ...and light the padlock by it (opened() drew the last one's)
+            if( kept ) offerBack( kept, true );
             return true;
         }
 
@@ -1572,7 +1697,10 @@
             try { bytes = new Uint8Array( await file.arrayBuffer() ); }
             catch ( e ) { toast( "text.importFailed" ); return; }
 
-            await importBytes( bytes, file.name );
+            // As Open does (see open): the document it replaces keeps its draft and gets an Undo.
+            await saver.catchUp();
+            var kept = await keepUntitled();
+            if( await importBytes( bytes, file.name ) && kept ) offerBack( kept, true );
         }
 
         // Drive's "Abrir con" of a file another app owns: ?import=<path>.
@@ -1585,13 +1713,20 @@
             return importBytes( bytes, baseName( p ) );
         }
 
+        // The ?file= this page was opened on, until boot() has opened it (nayiveDocPath).
+        var booting = new URLSearchParams( location.search ).get( "file" );
+
         async function boot()
         {
             var q    = new URLSearchParams( location.search );
             var file = q.get( "file" );
             var imp  = q.get( "import" );
 
-            if( file && await open( file ) ) return;
+            booting = file;
+            var shown = false;
+            try { shown = !! file && await open( file ); }
+            finally { booting = null; }
+            if( shown ) return;
             if( ! file && imp && await importPath( imp ) ) return;
 
             if( ! file && ! imp && ! START_NEW )
@@ -1640,7 +1775,7 @@
                                                      confirm: t( "ui.discardDoc" ),
                                                      cancel:  t( "lock.tryAgain" ),
                                                      danger:  true } );
-                if( drop ) { await saver.dropDraft(); return null; }
+                if( drop ) { await saver.dropDraft( true ); return null; }
             }
         }
 
@@ -1671,11 +1806,17 @@
             if( newWindow() ) return;
 
             var dropping = saver.dirty() && ! path;
-            var kept     = dropping ? await keepUntitled() : null;
+            // Edits to someone else's document are only in the device draft
+            // too: never dropped - the draft stays where it is (the blank one
+            // drafts under a key of its own) and the toast says so.
+            var aside    = saver.dirty() && !! path && readOnly;
+            var kept     = dropping || aside ? await keepUntitled() : null;
             if( dropping && ! kept && ! await NayiveUI.confirm( { title: t( "write.newDoc" ), body: t( "write.newDropsDraft" ),
                                                                   confirm: t( "write.newDoc" ) } ) ) return;
 
-            if( await startBlank( dropping ) && kept ) offerBack( kept );
+            if( ! await startBlank( dropping ) ) return;
+            if( kept )       offerBack( kept, aside );
+            else if( aside ) toast( "write.draftSetAside" );      // a password on it: no copy in memory, so no Undo
         }
 
         // "Guardar como"'s bin, shown only for a document that is nowhere but
@@ -1738,28 +1879,42 @@
 
         // The untitled document about to be thrown away: its body as the device
         // draft keeps it, its name, and whether "Guardar como" was offered
-        // already (✗ = not again). Null when there is nothing to bring back -
-        // no edits, it cannot be read - or it has a password: no copy of that
-        // is ever kept in the clear, not even here (THE PADLOCK).
+        // already (✗ = not again). Edits to someone else's document count too
+        // (Open / Import over them): they are only in the draft as well.
+        // Null when there is nothing to bring back - no edits, it cannot be
+        // read - or it has a password: no copy of that is ever kept in the
+        // clear, not even here (THE PADLOCK).
         async function keepUntitled()
         {
-            if( path || ! saver.dirty() || saver.lock() ) return null;
+            if( ( path && ! readOnly ) || ! saver.dirty() || saver.lock() ) return null;
 
-            try { return { body: await o.encode( null ), name: pending, asked: asked, pristine: saver.pristine() }; }
+            try
+            {
+                return { body: await o.encode( null ), name: pending || ( path && baseName( path ) ), asked: asked,
+                         pristine: saver.pristine(), drafted: saver.drafted() };
+            }
             catch ( e ) { return null; }
         }
 
         // Its Undo: back on screen and back in the device draft - now, not in 7 s.
-        function offerBack( kept )
+        // aside: its draft was KEPT (Open, Import, New over someone else's
+        // document), not dropped - the toast must not say "discarded".
+        function offerBack( kept, aside )
         {
-            offerUndo( t( "write.draftDiscarded" ), async function ()
+            var on = path;                             // what took its place (null: New's blank)
+
+            offerUndo( t( aside ? "write.draftSetAside" : "write.draftDiscarded" ), async function ()
             {
-                if( path ) return;                     // a file is open now: leave it be
+                if( path !== on ) return;              // another document now: leave it be
 
                 try { await o.load( kept.body, kept.name, "draft" ); }
                 catch ( e ) { toast( "ui.openFailed" ); return; }
 
                 untitled( kept.name, { dirty: true, pristine: kept.pristine } );
+                // Open / Import left its draft in this tab's slot: that one is
+                // written again, not copied to a new key (nothing else wrote it
+                // meanwhile - the first key in what replaced it ends the Undo).
+                if( kept.drafted ) saver.restored( { at: Date.now() } );
                 asked = kept.asked;
                 saver.edited();
                 saver.flush();
@@ -2017,6 +2172,11 @@
         // write the file as it is (Text: not UTF-8; Calc: a sheet it could not
         // read), or when the app says what is on screen could not be written
         // back whole (Calc: charts, pivots) - the Undo would write it so.
+        //
+        // An app that cannot carry one side whole (o.restoreBytes - Calc with
+        // pivot tables, print setup...) never goes through encode() / load()
+        // for the files: they swap as BYTES (swapFiles). Re-encoding wrote what
+        // Calc drops out of BOTH copies.
         async function restorePrevious()
         {
             if( notReady() ) return;
@@ -2028,6 +2188,21 @@
             var prev = null;
             try { prev = await GumApi.readFileBytes( bak ); } catch ( e ) { prev = null; }
             if( ! prev || ! prev.length ) { toast( "write.noBackupYet" ); return; }
+            var raw = prev;                    // the .bak's bytes as they are on the server
+
+            // An app that may restore by swapping the files (Calc): edits its
+            // gate held back are in neither copy, and the swap would take them
+            // off the screen. Said BEFORE anything is asked - "save a copy
+            // first" (the gate's own way out), never a promise the swap breaks.
+            if( o.restoreBytes )
+            {
+                await saver.settle( CLOSE_WAIT_MS );
+                if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
+            }
+
+            // A copy sealed with a password, back into a document that has none
+            // now: it is written without one (see below) - and the toast says so.
+            var doneKey = NayiveCrypt.looksLocked( prev ) && ! saver.lock() ? "write.restoredNoPassword" : "write.restored";
 
             var undoable = ! saver.lock() && ! NayiveCrypt.looksLocked( prev ) &&
                            ! ( o.store.isBlocked && o.store.isBlocked( p ) ) && ( ! o.lossless || o.lossless() );
@@ -2040,6 +2215,12 @@
             // hold, or - after the password changed - one only the user knows.
             // Opened BEFORE anything is written: a cancel here must leave the
             // .bak exactly as it was.
+            //
+            // It opens with that password, but the document KEEPS its own (or
+            // none, if it has none now): every save from here seals it with the
+            // padlock's key, as before the restore. Taking the old key on, as
+            // this did, silently switched the document to a password the user
+            // typed once - and a forgotten password is a lost document.
             if( NayiveCrypt.looksLocked( prev ) )
             {
                 var plain = null;
@@ -2050,12 +2231,18 @@
                 {
                     var got = await unsealAsk( prev, baseName( bak ) );
                     if( ! got ) return;
-                    saver.setLock( got.lock );
-                    showLock();
                     plain = got.body;
                 }
                 prev = plain;
             }
+
+            // Asked with the plain copy; one the app cannot read at all throws -
+            // and nothing has been written yet.
+            var swap = false;
+            if( o.restoreBytes )
+                try { swap = await o.restoreBytes( prev, p ); }
+                catch ( e ) { toast( "write.actionFailed" ); return; }
+            if( swap ) { await swapFiles( p, bak, raw, prev, undoable, doneKey ); return; }
 
             var bakWas = undoable ? prev.slice() : null;     // the .bak's own bytes, whatever load() does with prev
 
@@ -2065,13 +2252,16 @@
                 var now = await o.encode( path );
                 var up  = saver.lock() ? await NayiveCrypt.seal( saver.lock(), now ) : now;
                 await GumApi.writeFileBytes( bak, typeof up === "string" ? new TextEncoder().encode( up ) : up );
+                // The session's first save must not take a NEW .bak over it: it
+                // holds what was on screen - the way back (Undo, or Restore again).
+                saver.bakTaken( p );
 
                 await o.load( prev, path, "restore" );
                 saver.edited();                // the restored copy still has to be saved over the document
             }
             catch ( e ) { toast( "write.actionFailed" ); return; }
 
-            if( ! undoable ) { toast( "write.restored" ); return; }
+            if( ! undoable ) { toast( doneKey ); return; }
 
             // Undo: the .bak as it was, and what was on screen back on screen -
             // to be saved over the document again.
@@ -2087,6 +2277,98 @@
                 }
                 catch ( e ) { toast( "write.actionFailed" ); }
             } );
+        }
+
+        // Restore as a swap of the two FILES on the server, byte for byte: the
+        // document's file becomes the .bak, the .bak becomes the file, and the
+        // screen shows the copy as the app reads it (Calc's gate then guards it
+        // like any opened file). raw: the .bak's bytes; plain: the same, opened.
+        //
+        // What is on screen must be somewhere first - in the file (a flush), or
+        // held back in the device draft (Calc's gate): that draft then stays as
+        // it is, an orphan the next Calc tab offers. Otherwise nothing is done.
+        // Order: .bak first (a failure there changes nothing), then the file
+        // through the store - its outbox holds the bytes before the PUT, and its
+        // server time stays right (a GumApi write left it stale: a false 412).
+        async function swapFiles( p, bak, raw, plain, undoable, doneKey )
+        {
+            await saver.settle( CLOSE_WAIT_MS );
+            try { await o.store.flush(); await o.store.resting(); } catch ( e ) {}
+            if( ! saver.kept() || o.store.state !== "synced" || path !== p ) { toast( "write.actionFailed" ); return; }
+
+            // Edits the file never got (Calc's gate held them back): neither
+            // copy has them, and a swap would take them off the screen with
+            // no way back but an orphan draft. restorePrevious already says
+            // so before asking; this is in case one was made since.
+            if( saver.dirty() ) { toast( "write.restoreSaveFirst" ); return; }
+
+            var cur;
+            try { cur = await GumApi.readFileBytes( p ); }
+            catch ( e ) { toast( "write.actionFailed" ); return; }
+
+            // Sealed with the document's own password, or none (see restorePrevious).
+            var back = saver.lock() ? await NayiveCrypt.seal( saver.lock(), plain ) : plain;
+
+            try { await GumApi.writeFileBytes( bak, cur ); }
+            catch ( e ) { toast( "write.actionFailed" ); return; }
+            saver.bakTaken( p );               // never a first-save copy over it: it is the way back
+
+            if( ! await putFile( p, back ) )
+            {
+                try { await GumApi.writeFileBytes( bak, raw ); } catch ( e ) {}
+                toast( "write.actionFailed" );
+                return;
+            }
+
+            try { await o.load( plain, p, "restore" ); }
+            catch ( e )
+            {
+                // The file is the copy now, the screen still what was: both
+                // back - the .bak only once the file has `cur` again, or `cur`
+                // would be nowhere.
+                if( await putFile( p, cur ) )
+                    try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
+                toast( "write.actionFailed" );
+                return;
+            }
+            saver.opened();                    // the screen IS the file now: nothing waits to be saved
+
+            if( ! undoable ) { toast( doneKey ); return; }
+
+            offerUndo( t( doneKey ), async function ()
+            {
+                if( path !== p ) return;               // another document now
+                try
+                {
+                    if( NayiveCrypt.looksLocked( cur ) ) throw new Error( "sealed" );   // undoable said no key is on either side
+                    await GumApi.writeFileBytes( bak, raw );
+                    saver.bakTaken( p );
+                    if( ! await putFile( p, cur ) )
+                    {
+                        // `cur` is only in memory now: back into the .bak it came from.
+                        try { await GumApi.writeFileBytes( bak, cur ); } catch ( e2 ) {}
+                        throw new Error( "not written" );
+                    }
+                    await o.load( cur, p, "restore" );
+                    saver.opened();
+                }
+                catch ( e ) { toast( "write.actionFailed" ); }
+            } );
+        }
+
+        // The file's own bytes through the store. Not refused for what the
+        // SCREEN cannot write (a block: Calc's unread sheet) - these are not the
+        // screen's; load() blocks the path again when what it shows needs it.
+        // False = not kept anywhere (refused for good).
+        async function putFile( p, bytes )
+        {
+            var why = o.store.isBlocked ? o.store.isBlocked( p ) : "";
+            if( why && why !== "loading" ) o.store.unblock( p );
+            var res;
+            try { res = ( await o.store.write( p, bytes ) ) || {}; }
+            catch ( e ) { res = { ok: false, forbidden: true }; }
+            finally { if( why && why !== "loading" ) o.store.block( p, why ); }
+            return ! res.blocked && ! res.forbidden;
         }
 
         // ---- the padlock: put a password on, or take it off ---------------------
@@ -2170,18 +2452,21 @@
                 recent.remove( old );
 
                 // One at a time: a document with no .bak yet must not stop the
-                // deletion of the document itself.
+                // deletion of the document itself. Each delete only moves it
+                // to the papelera, and says under which ids: exactly those are
+                // taken out again. Matching the bin by name purged OTHER items
+                // too - last year's file of that name, an older .bak.
+                var ids = [], gone = false;
                 for( var i = 0; i < paths.length; i++ )
-                    try { await GumApi.deletePaths( [ paths[ i ] ] ); } catch ( e ) {}
-
-                // deletePaths() only moves them to the papelera - take them out
-                // of it too, by the entryIds the trash listing gives back.
-                var items = await GumApi.trashList();
-                var ids   = items.filter( function ( it ) { return paths.indexOf( it.orig ) !== -1; } )
-                                 .map( function ( it ) { return it.id; } );
+                {
+                    var got = null;
+                    try { got = await GumApi.binPaths( [ paths[ i ] ] ); } catch ( e ) {}
+                    if( got ) ids = ids.concat( got );
+                    if( i === 0 ) gone = !! ( got && got.length );
+                }
 
                 if( ids.length ) await GumApi.trashDelete( ids );
-                toast( "lock.wiped" );
+                toast( gone ? "lock.wiped" : "lock.wipeFailed" );
             }
             catch ( e ) { toast( "lock.wipeFailed" ); }
         }
@@ -2225,6 +2510,32 @@
         on( "saveAsDeleteBtn",  "click",   function () { discardUntitled(); } );
         on( "saveName",         "keydown", function ( e ) { if( e.key === "Enter" ) confirmSaveAs(); } );
 
+        // ---- a desktop window ---------------------------------------------------
+        //
+        // The desktop removes a window's frame at once: no beforeunload, and
+        // pagehide's flush dies with it (desktop/index.html, close). So it asks
+        // here first. What waits is kept NOW - the store's outbox or the device
+        // draft, both in IndexedDB - and only what could not be kept is asked
+        // about (a refused save, a sheet Calc's gate holds back, a save still
+        // running after CLOSE_WAIT_MS). Never throws: the desktop closes on a throw.
+        var CLOSE_WAIT_MS = 10000;
+
+        window.nayiveBeforeClose = async function ()
+        {
+            try { if( await saver.settle( CLOSE_WAIT_MS ) ) return true; }
+            catch ( e ) {}
+
+            return NayiveUI.confirm( { title:   t( "drive.unsavedTitle" ),
+                                       body:    t( "drive.unsavedBody" ),
+                                       confirm: t( "drive.closeWithout" ),
+                                       danger:  true } );
+        };
+
+        // Which document this window shows, so the desktop opens a second
+        // ?file= of it in THIS window, not in another editor that would save
+        // over it. While boot() is still opening ?file=, that one.
+        window.nayiveDocPath = function () { return path || booting; };
+
         return {
             path:       function () { return path; },
             readOnly:   function () { return readOnly; },
@@ -2234,6 +2545,7 @@
             untitled:   untitled,
             edited:     edited,
             flush:      saver.flush,
+            catchUp:    saver.catchUp,
             saveNow:    saver.saveNow,
             dirty:      saver.dirty,
             dropDraft:  saver.dropDraft,

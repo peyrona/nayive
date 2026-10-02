@@ -790,8 +790,9 @@
         retile();
     }
 
-    // An app with work not yet saved (Image) asks first: its window.nayiveBeforeClose
-    // answers true to go, false to stay. While it asks, the window is in front.
+    // An app with work not yet saved (Image; Write, Calc and Text keep theirs
+    // first, shared/office.js) asks first: its window.nayiveBeforeClose answers
+    // true to go, false to stay. While it asks, the window is in front.
     function close( w )
     {
         var ask = null;
@@ -1259,7 +1260,7 @@
             url = url || '';
             if( url && ! appOf( url ) ) return real.call( cw, url, target, features );
             var abs = url ? new URL( url, cw.location.href ).href : 'about:blank';
-            var w = sameImage( abs );
+            var w = sameImage( abs ) || sameDoc( abs );
             if( w ) focus( w ); else w = openApp( abs, { fresh: true } );
             return /noopener/.test( features || '' ) ? null : w.frame.contentWindow;
         };
@@ -1273,6 +1274,32 @@
         var u = new URL( abs ), want = u.pathname + u.search;
         for( var i = 0; i < wins.length; i++ )
             if( wins[ i ].app === 'image' && wins[ i ].url === want ) return wins[ i ];
+        return null;
+    }
+
+    // The same for a document already open in Write, Calc or Text (Drive
+    // opens one on every double-click): two editors on one file each saved
+    // over the other with no question. The window is asked what it shows NOW
+    // (shared/office.js, nayiveDocPath) - another document may have been
+    // opened in it since; its address only while its page cannot answer yet.
+    // Any of the three counts: a .csv open in Calc and "Open with > Text"
+    // would be two editors on one file just the same.
+    var DOC_APPS = [ 'write', 'calc', 'text' ];
+
+    function sameDoc( abs )
+    {
+        if( DOC_APPS.indexOf( appOf( abs ) ) < 0 ) return null;
+        var want = new URL( abs ).searchParams.get( 'file' );
+        if( ! want ) return null;
+        for( var i = 0; i < wins.length; i++ )
+        {
+            var w = wins[ i ], has = null, ask = null;
+            if( DOC_APPS.indexOf( w.app ) < 0 ) continue;
+            try { ask = w.frame.contentWindow.nayiveDocPath; } catch( e ) {}
+            if( typeof ask === 'function' ) { try { has = ask(); } catch( e ) {} }
+            else has = new URL( w.url || w.frame.src, location.href ).searchParams.get( 'file' );
+            if( has === want ) return w;
+        }
         return null;
     }
 

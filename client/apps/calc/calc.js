@@ -98,6 +98,7 @@ const session = O.session( {
     // dialog) unless it is a .csv, which loses things wherever it goes.
     blocked    : function( path ) { return lossyBlocked( path ); },
     lossless   : function() { return keepsAll( session.path() ); },   // Restore's Undo, see keepsAll
+    restoreBytes: restoreAsBytes,                                     // Restore swaps the FILES, see restoreAsBytes
     onSavedAs  : sheetSavedAs,
     // a cell half typed (maybe a formula picked with the mouse): the name can wait
     busy       : function() { const ed = table && table.getActiveEditor(); return !! ( ed && ed.isOpened() ); },
@@ -845,6 +846,18 @@ function keepsAll( path )
 {
     if( doc.lossy.length && ! doc.lossyAck ) return false;
     return O.extOf( path || '' ) !== 'csv' || ! csvLosses().length;
+}
+
+// "Restaurar la copia anterior" (shared/office.js, swapFiles): true = the two
+// files swap as BYTES on the server instead of going through Calc's model.
+// So when either side has what Calc cannot write - the sheet on screen (its
+// file's loss list, "Guardar igualmente" said or not, or what a .csv cannot
+// hold) or the copy coming back. Through the model, both copies lost it.
+// A copy that cannot be read at all throws: nothing is written then.
+async function restoreAsBytes( copy, path )
+{
+    if( doc.lossy.length || ! keepsAll( path ) ) return true;
+    return ( await decodeToDoc( copy, O.extOf( path ) ) ).lossy.length > 0;
 }
 
 // What a .csv cannot hold of what is on screen: it keeps the values of one
