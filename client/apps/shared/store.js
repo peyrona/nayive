@@ -18,42 +18,86 @@
  *                  short timer.
  *
  * Single user, one file per app: the outbox holds at most one pending write per
- * path and newer replaces older (last-write-wins). By default there is no
- * conflict resolution - if the same file is edited on another device while this
- * one is offline, the offline device wins on reconnect. The outbox is shared by
- * every store on the origin, so each entry records how it must be sent (bytes
- * or text, with or without If-Unmodified-Since) and any page can flush it.
+ * path. A newer save from the same page replaces the older one (it holds it);
+ * a save from ANOTHER page never does (see VERSIONS). A plain store (no
+ * `conflicts`) has no conflict resolution: if the same file is edited on
+ * another device while this one is offline, the offline device wins on
+ * reconnect. The outbox is shared by every store on the origin, so each entry
+ * records how it must be sent (bytes or text, with or without its version
+ * check) and any page can flush it.
  *
  * CONFLICTS  (opt-in: createStore( { conflicts: true } ) - the office editors)
- * The store remembers the server's own time for each file (`srv`, taken ONLY
- * from a GET's or a PUT's Last-Modified - never this device's clock) and sends
- * it as If-Unmodified-Since. A file saved from another device since answers 412:
- * the outbox entry is flagged `conflict`, is never sent again (so no flush can
- * overwrite theirs), and onConflict listeners hear about it. The app resolves it
- * by saving elsewhere and forget()-ing the old path.
+ * Every save says which version of the file it was made from (VERSIONS below):
+ * If-Match with the server's own tag for it, and If-Unmodified-Since with the
+ * server's own time (`srv`, taken ONLY from a GET's or a PUT's Last-Modified -
+ * never this device's clock; kept for a server from before the tag). A file
+ * saved from another device since answers 412: the outbox entry is flagged
+ * `conflict`, is never sent again (so no flush can overwrite theirs), and
+ * onConflict listeners hear about it. The app resolves it by saving elsewhere
+ * and forget()-ing the old path. A file deleted since (also a 412 under
+ * If-Match) is made again, create-only - what every save did before the tag.
  *
  * MERGE  (opt-in: createStore( { conflicts: true, merge: fn } ) - 2026-09-28)
  * The small list apps (Habits, Split, Contacts, Calendar, Tasks, Trips, Games)
  * save one whole file, so a phone's offline ticks used to overwrite the PC's.
- * With `merge` the store keeps `base` per path - the body this device last
- * read from or saved to the server - and on a 412 it GETs the server copy and
- * calls fn( path, base, mine, theirs ) (base null when unknown). A string back
- * is the merged body: it goes to the cache and the outbox, onMerged( path,
- * body ) listeners reload the app's data, and it goes up with the new
- * If-Unmodified-Since (a few tries). null = the CONFLICTS path above. While a
- * merge is being made, write() waits for it and merges its own body onto the
- * result (fn( path, mine-before, body, merged )): that body was built before
- * the app reloaded, and would otherwise drop the other device's changes.
- * Every page may flush any entry, but only a page whose store claimed the path
- * (read or wrote it with `merge`) can merge it: elsewhere a 412 just leaves it
- * queued for its own app. So a merging store reads and writes only its own
- * app's files; another app's file is read with GumApi (or a plain store).
- * Every store keeps `base` for a text file (a plain store reading or writing a
- * merged path must not wipe it), and a plain store's write over a queued
- * merging save keeps it merge-protected (`mrg`, If-Unmodified-Since). A clean
- * copy cached by an older store.js gets its body as `base` at the next save.
- * A merge that said null is tried again each time its app reads the file. The
- * merge's GET is dropped when another account signed in since (whoNow).
+ * With `merge`, on a 412 the store GETs the server copy and calls
+ * fn( path, base, mine, theirs ) - base = the body of the version the queued
+ * save was made from (null when unknown). A string back is the merged body: it
+ * goes to the cache and the outbox, onMerged( path, body ) listeners reload the
+ * app's data, and it goes up checked against the version just read (a few
+ * tries). null = the CONFLICTS path above. Every page may flush any entry, but
+ * only a page whose store claimed the path (read or wrote it with `merge`) can
+ * merge it: elsewhere a 412 just leaves it queued for its own app. So a merging
+ * store reads and writes only its own app's files; another app's file is read
+ * with GumApi (or a plain store). A plain store's write over a queued merging
+ * save keeps it merge-protected (`mrg`, its version check). A merge that said
+ * null is tried again each time its app reads the file. The merge's GET is
+ * dropped when another account signed in since (whoNow).
+ *
+ * VERSIONS  (2026-10-02, data-safety A1 A2 E6 K2-K5 L4)
+ * The cache and the outbox are shared by every page of the browser, but each
+ * page has its OWN model of a file: two tabs, two desktop windows, Planner's
+ * pane beside the app itself. The version a save was checked against used to
+ * be read from the shared cache at send time - the last version ANY page
+ * saved - so the second page's save passed the server's check and silently
+ * replaced the first page's work. Now:
+ *
+ *   - Each page keeps, per path, the version its model came from (`held`):
+ *     the server's strong ETag + time + body of its own last read, its own
+ *     last good save, or the merge it took in - never another page's.
+ *   - write() puts that version ON THE OUTBOX ENTRY, taken when it is called
+ *     (a merge landing before the entry is stored must not pass for the
+ *     version this body was built from). Whoever sends the entry sends ITS
+ *     version. The cache's version is only the fallback for an entry queued by
+ *     an older store.js (no version of its own).
+ *   - Every entry has an `id`; `inc` lists the entries it took the place of
+ *     (it holds their content) and `anc` the versions its body descends from.
+ *     A page's next save replaces the queued entry only when that page holds
+ *     it (wrote it, or read it). A save sent OK moves the version of the page
+ *     that holds it, of a later save of the same page queued meanwhile, and
+ *     the cache (`sent` = the ids it took to the server); other pages keep
+ *     theirs, so their next save gets 412 -> merge, or the conflict question.
+ *   - Another page's save waiting in the outbox is never replaced: a merging
+ *     store merges this page's body into it (from this page's own base when
+ *     that base is one the queued body descends from, else with no base, which
+ *     keeps every item) and its app reloads (onMerged); a conflicts store
+ *     sends this page's save on its own, kept in this page until it is sent
+ *     (`direct`), and whichever of the two reaches the server second gets the
+ *     conflict question; a plain store replaces it, as it always did. A
+ *     refused save is told to the page holding it (onConflict there only), and
+ *     conflicted() / forget() mean this page's save, not another window's.
+ *   - The cache and the outbox change in ONE transaction (K4): a read never
+ *     replaces a cached copy that holds a save still waiting - this page's,
+ *     another page's or another account's (K3, L4); a cached copy left dirty
+ *     with nothing queued is queued again when its app reads it.
+ *   - When the browser's storage fails (full disk, iPhone after resume) the
+ *     save goes up directly and is kept in this page only (`pageOnly`) until it
+ *     does: write() then answers { ok: false, pageOnly: true } - never "saved"
+ *     with nothing kept (K2). The same for a `direct` save not sent yet.
+ *   - A save that vanished before it was sent (cleared by a sign-out in another
+ *     tab) answers { ok: false, unknown: true } (K5).
+ * A page that never read a path (a new name, a path forget()-ten) saves with no
+ * check, as before; one whose read found no file saves create-only.
  *
  * A 403 / 409 on a PUT (a read-only share, a protected file) can never succeed:
  * the entry is dropped and the write reports `forbidden`, instead of sitting in
@@ -71,8 +115,13 @@
  * read, sent or counted by this page. No cookie (a page that loaded signed
  * out, or before the cookie existed) = no name: untagged records, taken as
  * before. The key stays the path and DB_VERSION stays 1 - an older store.js in
- * another tab must still read and send every record.
- * Signing out clears the lot (localCount / clearLocal, used by the launcher).
+ * another tab must still read and send every record. When the path's record
+ * holds ANOTHER account's waiting save, this account's goes beside it, under
+ * "\u0001<who>\u0001<path>" (altKey), flagged `conflict` for an older store.js
+ * so it never sends that key as a file name; its real path and flag are
+ * `file` and `xc` (L4).
+ * Signing out clears what was counted (localCount / clearLocal / leaveDevice,
+ * used by the launcher).
  *
  * Auth: /api/files is authenticated by the nayive_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
@@ -123,6 +172,8 @@
     var MERGE_TRIES       = 4;      // 412 -> merge -> PUT rounds before waiting for the next flush
     var GZIP_MIN          = 1400;   // same cutoff the server uses on the way down:
                                     // below ~one packet, compression is a net loss
+    var KEEP_IDS          = 50;     // ids an entry remembers it took the place of (VERSIONS)
+    var KEEP_ANC          = 20;     // versions an entry remembers its body descends from
 
     // Page-wide, shared by every store on the page (the outbox is shared too):
     var inflight = {};   // path -> the PUT being sent for it; one at a time per path
@@ -132,8 +183,12 @@
     var loaded   = {};   // path -> a read() of it has succeeded on this page
     var firstOut = {};   // path -> reads out before the first success: writes refused
     var mergers  = {};   // path -> { fn, fire, get } of the store that merges it (see MERGE)
-    var merging  = {};   // path -> a merge being made: resolves { mine, merged } | null
+    var held     = {};   // path -> the version THIS page's model came from (VERSIONS)
+    var seen     = {};   // path -> count of changes to this page's model (a read, a write, a merge taken in)
+    var pageOnly = {};   // path -> a save kept only in this page: the browser's storage failed (K2)
+    var savedFns = [];   // onSaved listeners of every store on the page
     var toastAt  = 0;
+    var lastQ    = 0;
 
     // Who this page belongs to: the "nayive_who" cookie AS IT WAS WHEN THE PAGE
     // LOADED - never read again, so a tab left open across another account's
@@ -163,6 +218,99 @@
     // A record this page may use: untagged, or this page's own account. Only a
     // record KNOWN to be another account's is skipped.
     function ours( rec ) { return ! rec || ! rec.who || ! ME || rec.who === ME; }
+
+    //------------------------------------------------------------------------//
+    // VERSIONS AND ENTRIES  (see VERSIONS above)
+    //
+    // A version: { tag, srv, base, none } - the server's strong ETag, its
+    // Last-Modified (ms), the text the server held then (null = unknown), and
+    // `none` = there was no file. Records keep them as fields of their own.
+
+    function newId() { return Date.now().toString( 36 ) + "-" + Math.random().toString( 36 ).slice( 2, 10 ); }
+
+    // A queuedAt no other save of this page shares: an older store.js tells
+    // entries apart by it.
+    function nextQueuedAt()
+    {
+        var t = Date.now();
+        lastQ = t > lastQ ? t : lastQ + 1;
+        return lastQ;
+    }
+
+    // Only a strong tag goes back as If-Match: the server refuses every save
+    // whose If-Match it cannot match exactly (a weak one included).
+    function strongTag( t ) { return typeof t === "string" && /^"[^"]*"$/.test( t ) ? t : null; }
+
+    function verOf( r )
+    {
+        r = r || {};
+        return { tag: strongTag( r.tag ), srv: r.srv || null, base: typeof r.base === "string" ? r.base : null, none: !! r.none };
+    }
+
+    // The version's name, to compare two ("" = unknown).
+    function vkey( v ) { return ! v ? "" : v.tag ? "t" + v.tag : v.srv ? "s" + v.srv : v.none ? "none" : ""; }
+
+    function setVer( rec, v )
+    {
+        rec.tag  = v.tag || null;
+        rec.srv  = v.srv || null;
+        rec.tsrv = v.srv || null;   // the time the tag came with (docVer)
+        rec.base = v.base == null ? undefined : v.base;
+        rec.none = !! v.none;
+        return rec;
+    }
+
+    // The version a cached copy holds. Its tag only while its time is the one
+    // the tag came with: an older store.js moves `srv` alone, and the tag then
+    // names a version that is not the copy's any more.
+    function docVer( d )
+    {
+        var base = typeof d.base === "string" ? d.base
+                 : d.dirty === false && typeof d.body === "string" ? d.body : null;   // a clean copy of an older store.js: its body IS what the server had
+        return { tag: d.tsrv === d.srv ? strongTag( d.tag ) : null, srv: d.srv || null, base: base, none: !! d.none };
+    }
+
+    // The version an entry was made from. One queued by an older store.js has
+    // none of its own: then the cached copy's, as that store.js sent it.
+    function entryVer( e, doc )
+    {
+        if( e.ver ) return verOf( e );
+        if( doc && ( ! doc.who || ! e.who || doc.who === e.who ) ) return docVer( doc );
+        return verOf( null );
+    }
+
+    function idOf( e ) { return e.id || "q" + e.queuedAt; }
+    function sameEntry( a, b ) { return !! a && !! b && idOf( a ) === idOf( b ); }
+
+    // This page's model holds the queued entry `e`: it wrote or read it, or a
+    // save of its own took its place.
+    function holds( h, e ) { return !! h && !! h.id && !! e && ( h.id === idOf( e ) || ( h.inc || [] ).indexOf( idOf( e ) ) !== -1 ); }
+
+    function keepIds( e ) { return ( e.inc || [] ).concat( [ idOf( e ) ] ).slice( -KEEP_IDS ); }
+
+    function addKeys( list, more )
+    {
+        var out = ( list || [] ).slice();
+        more.forEach( function ( k ) { if( k && out.indexOf( k ) === -1 ) out.push( k ); } );
+        return out.slice( -KEEP_ANC );
+    }
+
+    // What this page holds once its model is entry `e`.
+    function heldOf( e ) { return Object.assign( verOf( e ), { id: idOf( e ), inc: e.inc || [], anc: e.anc || [] } ); }
+
+    // This page's model of `path` changed (a read handed it, a merge was
+    // taken in): `h` is what it holds now.
+    function setHeld( path, h )
+    {
+        held[ path ] = h;
+        seen[ path ] = ( seen[ path ] || 0 ) + 1;
+    }
+
+    // The cached copy knows `id` went to the server (or a save holding it):
+    // `sent` = every save it saw go up, `last` = the one its version is the
+    // answer to (and the saves that one held).
+    function wasSent( doc, id ) { return !! doc && ours( doc ) && ( doc.sent || [] ).indexOf( id ) !== -1; }
+    function lastSent( doc, id ) { return !! doc && ours( doc ) && ! doc.dirty && ( doc.last || [] ).indexOf( id ) !== -1; }
 
     //------------------------------------------------------------------------//
     // TINY INDEXEDDB PROMISE WRAPPER
@@ -238,67 +386,195 @@
 
         try
         {
-            return idbReq( db.transaction( storeName, "readonly" ).objectStore( storeName ).getAll() );
+            return idbReq( db.transaction( storeName, "readonly" ).objectStore( storeName ).getAll() ).catch( function () { return []; } );
         }
         catch ( e ) { return Promise.resolve( [] ); }
     }
 
-    function idbPut( db, storeName, record )
-    {
-        if( ! db ) { memStore( storeName ).set( record.path, record ); return Promise.resolve(); }
+    // ANOTHER ACCOUNT'S SLOT (WHOSE SAVE, L4): where this account's record goes
+    // when the path's own record holds another account's waiting save.
+    function altKey( path ) { return "\u0001" + ME + "\u0001" + path; }
 
-        try
+    // A record as stored -> as the code uses it (its real path and conflict
+    // flag), always a copy: the in-memory stores hand out their own objects.
+    function norm( raw )
+    {
+        if( ! raw ) return raw;
+        var e = Object.assign( {}, raw );
+        if( raw.file )
         {
-            return idbReq( db.transaction( storeName, "readwrite" ).objectStore( storeName ).put( record ) );
+            e.path     = raw.file;
+            e.conflict = !! raw.xc;
+            delete e.file;
+            delete e.xc;
         }
-        catch ( e ) { return Promise.resolve(); }
+        return e;
     }
 
-    // Read-modify-write of one record in ONE readwrite transaction, so it cannot
-    // interleave with another one on the same store (a save arriving while the
-    // previous PUT's answer is being recorded). fn( current ) returns the record
-    // to put, null to delete it, or undefined to leave it alone.
-    function idbUpdate( db, storeName, key, fn )
+    // ...and back, to be stored at `key`.
+    function denorm( e, key )
     {
+        var r = Object.assign( {}, e );
+        if( key === e.path ) { delete r.file; delete r.xc; return r; }
+        r.path     = key;
+        r.file     = e.path;
+        r.xc       = !! e.conflict;
+        r.conflict = true;   // an older store.js never sends an entry held back as a conflict
+        return r;
+    }
+
+    // ONE TRANSACTION over the cache and the outbox for one path (K3, K4): the
+    // cached copy and this account's queued save are read, fn( c ) decides, and
+    // both change together or not at all.
+    //   c.doc   the cached copy (any account's), c.out this account's queued
+    //           save (normalised), c.slot the record in the path's own slot
+    //           (any account's)
+    //   fn returns { doc, out, ret }: a record to put, null to delete,
+    //   undefined to leave; `ret` is what the promise gives back.
+    // Resolves { ok: true, ret } once committed, { ok: false } when the
+    // browser's storage failed (a throw, an abort, a full disk) - never
+    // "nothing there" for "could not read" (K2).
+    function pathTx( db, path, mode, fn )
+    {
+        var alt = ME ? altKey( path ) : null;
+
+        function apply( doc, slot, altRec, writer )
+        {
+            var own = slot && ours( slot ) ? slot : ( altRec && ours( altRec ) ? altRec : undefined );
+            var r   = fn( { doc: doc ? Object.assign( {}, doc ) : doc, out: norm( own ), slot: slot } ) || {};
+
+            if( writer )
+            {
+                if( r.doc === null ) writer.del( DOCS, path );
+                else if( r.doc )     writer.put( DOCS, r.doc );
+
+                if( r.out !== undefined )
+                {
+                    // Its own record's place; the path's slot when that is free.
+                    var key = own ? own.path : ( slot && ! ours( slot ) && alt ? alt : path );
+                    if( r.out === null ) writer.del( OUTBOX, key );
+                    else                 writer.put( OUTBOX, denorm( r.out, key ) );
+                }
+            }
+            return r.ret;
+        }
+
         if( ! db )
         {
-            var m    = memStore( storeName );
-            var next = fn( m.get( key ) );
-            if( next === null ) m.delete( key );
-            else if( next )     m.set( key, next );
-            return Promise.resolve();
+            try
+            {
+                var mo  = memStore( OUTBOX );
+                var ret = apply( memStore( DOCS ).get( path ), mo.get( path ), alt ? mo.get( alt ) : undefined,
+                                 mode === "readwrite" ? { put: function ( s, r ) { memStore( s ).set( r.path, r ); },
+                                                          del: function ( s, k ) { memStore( s ).delete( k ); } } : null );
+                return Promise.resolve( { ok: true, ret: ret } );
+            }
+            catch ( e ) { return Promise.resolve( { ok: false } ); }
         }
 
         return new Promise( function ( resolve )
         {
+            var over = false, bad = false, ret;
+            function end( v ) { if( ! over ) { over = true; resolve( v ); } }
+
             try
             {
-                var tx = db.transaction( storeName, "readwrite" );
-                var os = tx.objectStore( storeName );
-                var rq = os.get( key );
-
-                rq.onsuccess = function ()
+                var tx = db.transaction( [ DOCS, OUTBOX ], mode );
+                var ds = tx.objectStore( DOCS ), os = tx.objectStore( OUTBOX );
+                var rD = ds.get( path ), rP = os.get( path ), rA = alt ? os.get( alt ) : null;
+                var left = rA ? 3 : 2;
+                var step = function ()
                 {
-                    var next = fn( rq.result );
-                    if( next === null )    os.delete( key );
-                    else if( next )        os.put( next );
+                    if( --left ) return;
+                    try
+                    {
+                        ret = apply( rD.result, rP.result, rA ? rA.result : undefined,
+                                     mode === "readwrite" ? { put: function ( s, r ) { tx.objectStore( s ).put( r ); },
+                                                              del: function ( s, k ) { tx.objectStore( s ).delete( k ); } } : null );
+                    }
+                    catch ( e )
+                    {
+                        bad = true;
+                        try { tx.abort(); } catch ( e2 ) {}
+                    }
                 };
-                tx.oncomplete = function () { resolve(); };
-                tx.onerror = tx.onabort = function () { resolve(); };
+                rD.onsuccess = rP.onsuccess = step;
+                if( rA ) rA.onsuccess = step;
+                tx.oncomplete = function () { end( bad ? { ok: false } : { ok: true, ret: ret } ); };
+                tx.onerror = tx.onabort = function () { end( { ok: false } ); };
             }
-            catch ( e ) { resolve(); }
+            catch ( e ) { end( { ok: false } ); }
         } );
     }
 
-    function idbDelete( db, storeName, key )
+    // This account's queued saves (normalised), every path.
+    async function ownEntries( db )
     {
-        if( ! db ) { memStore( storeName ).delete( key ); return Promise.resolve(); }
+        return ( await idbGetAll( db, OUTBOX ) ).filter( ours ).map( norm );
+    }
 
-        try
+    //------------------------------------------------------------------------//
+    // "SAVED" FROM ANY PAGE  (onSaved, and the version of the page that holds it)
+    //
+    // A save sent OK by any page of this browser is told to every page: the
+    // one holding it (it wrote it, or a later save of its own was built on it)
+    // takes the server's new version; onSaved listeners hear about it.
+    // m = { path, who, id, rebased, tag, srv, body } - body null for bytes
+    // (not shipped across pages).
+
+    var channel = null;
+    try { if( typeof BroadcastChannel === "function" ) channel = new BroadcastChannel( "nayive-store" ); }
+    catch ( e ) { channel = null; }
+    if( channel ) channel.onmessage = function ( ev )
+    {
+        var m = ev.data || {};
+        if( m.t === "saved" )    heardSaved( m, m.body );
+        if( m.t === "conflict" ) heardConflict( m );
+    };
+
+    function heardSaved( m, body )
+    {
+        if( m.who && ME && m.who !== ME ) return;
+        var h    = held[ m.path ];
+        var mine = !! h && ( h.id === m.id || ( !! m.rebased && h.id === m.rebased ) );
+
+        if( mine )
         {
-            return idbReq( db.transaction( storeName, "readwrite" ).objectStore( storeName ).delete( key ) );
+            var k = vkey( h );
+            held[ m.path ] = Object.assign( {}, h, verOf( { tag: m.tag, srv: m.srv, base: typeof body === "string" ? body : null } ),
+                                            { anc: addKeys( h.anc, [ k ] ) } );
         }
-        catch ( e ) { return Promise.resolve(); }
+        savedFns.forEach( function ( fn ) { try { fn( m.path, body, m.tag, mine ); } catch ( e ) {} } );
+    }
+
+    function toldSaved( m, body )
+    {
+        heardSaved( m, body );
+        if( ! channel ) return;
+        try { channel.postMessage( Object.assign( { t: "saved" }, m, { body: typeof body === "string" ? body : null } ) ); }
+        catch ( e ) {}
+    }
+
+    // A save refused as changed elsewhere (CONFLICTS) is told to the page
+    // whose model holds it - this one or another: any page may have sent it.
+    // Only there do onConflict listeners hear it (a Write window must not ask
+    // about another window's save).
+    var conflictHub = [];   // each store's onConflict listeners
+
+    function heardConflict( m )
+    {
+        if( m.who && ME && m.who !== ME ) return;
+        if( ! holds( held[ m.path ], { id: m.id } ) ) return;
+        conflictHub.forEach( function ( fn ) { try { fn( m.path ); } catch ( e ) {} } );
+    }
+
+    function toldConflict( path, entry )
+    {
+        var m = { path: path, who: entry.who || ME, id: idOf( entry ) };
+        heardConflict( m );
+        if( ! channel ) return;
+        try { channel.postMessage( Object.assign( { t: "conflict" }, m ) ); }
+        catch ( e ) {}
     }
 
     //------------------------------------------------------------------------//
@@ -311,7 +587,7 @@
         var api       = opts.apiBase || ( window.location.origin + "/api/files" );
         var binary    = !! opts.binary;   // body is raw bytes (Uint8Array), not text
         var mergeFn   = typeof opts.merge === "function" ? opts.merge : null;   // see MERGE above
-        var conflicts = !! opts.conflicts || !! mergeFn; // send If-Unmodified-Since (see CONFLICTS above)
+        var conflicts = !! opts.conflicts || !! mergeFn; // send the version check (see CONFLICTS above)
         var listeners = [];
         var conflictFns = [];
         var mergedFns   = [];
@@ -320,6 +596,8 @@
         var flushing   = false;
 
         var dbPromise = openDb();
+
+        conflictHub.push( function ( p ) { conflictFns.forEach( function ( fn ) { try { fn( p ); } catch ( e ) {} } ); } );
 
         // Best-effort: ask the browser not to evict our cache. Harmless where
         // unsupported; on iOS this is what keeps an installed app's data past a
@@ -384,7 +662,7 @@
         async function settle()
         {
             var db      = await dbPromise;
-            var pending = ( await idbGetAll( db, OUTBOX ) ).filter( ours );
+            var pending = ( await ownEntries( db ) ).concat( Object.keys( pageOnly ).map( function ( k ) { return pageOnly[ k ]; } ) );
 
             if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
             else if( pending.length === 0 ) emit( navigator.onLine ? "synced"  : "offline" );
@@ -397,8 +675,8 @@
         // Same retry shape as the apps' old fetchIt(): two retries, only for a
         // thrown TypeError - a genuine connectivity drop, whatever the browser
         // calls it (Chrome "Failed to fetch", Safari "Load failed", Firefox
-        // "NetworkError...") - never for an HTTP error status. Only GET and PUT
-        // come through here, and both are safe to send twice.
+        // "NetworkError...") - never for an HTTP error status. Only GET, HEAD
+        // and PUT come through here, and all are safe to send twice.
         // A 401 means the session is gone (idle timeout, or a server restart -
         // the session table is in RAM). Raise the shared bar so the user learns
         // why the red dot appeared. Only 401: the "needs-auth" state below also
@@ -435,13 +713,17 @@
             {
                 var r = await netFetch( api + "?file=" + encodeURIComponent( path ), { method: "GET" } );
 
+                // The service worker's offline copy of a trip document (sw.js,
+                // tripDocOrNetwork) is not the server's version: as offline (B6).
+                if( r.headers.get( "X-Nayive-Copy" ) ) return { ok: false, status: 0, netError: true };
+
                 if( r.ok )
                 {
                     var body  = binary ? new Uint8Array( await r.arrayBuffer() ) : await r.text();
                     var srv   = Date.parse( r.headers.get( "Last-Modified" ) ) || null;
                     var mtime = srv || Date.now();
 
-                    return { ok: true, status: r.status, body: body, mtime: mtime, srv: srv };
+                    return { ok: true, status: r.status, body: body, mtime: mtime, srv: srv, tag: strongTag( r.headers.get( "ETag" ) ) };
                 }
 
                 // A 404 is "no file yet" - a reachable server with nothing there -
@@ -456,6 +738,13 @@
             {
                 return { ok: false, status: 0, netError: true };
             }
+        }
+
+        // Is the file there? The status of a HEAD (0 = not reached).
+        async function netHead( path )
+        {
+            try { return ( await netFetch( api + "?file=" + encodeURIComponent( path ), { method: "HEAD" } ) ).status; }
+            catch ( e ) { return 0; }
         }
 
         // Request-side gzip. The server has always gzipped its RESPONSES, but a PUT
@@ -492,10 +781,12 @@
             }
         }
 
-        // `since` (ms, the server's own time for this file) becomes
-        // If-Unmodified-Since - see CONFLICTS above. The answer's Last-Modified
-        // comes back as `srv`, the base for the next save.
-        async function netPut( path, body, since, bin, who )
+        // `v` (a version, or null = no check) is what the save was made from:
+        // If-Match = its tag, If-Unmodified-Since = its time (a server from
+        // before the tag judges by that; with both, If-Match decides), and
+        // If-None-Match: * when it was made from no file (create only). The
+        // answer's ETag and Last-Modified come back as the NEW version.
+        async function netPut( path, body, v, bin, who )
         {
             try
             {
@@ -503,14 +794,17 @@
                 var headers = {};
 
                 if( packed ) headers[ "Content-Encoding" ] = "gzip";
-                if( since )  headers[ "If-Unmodified-Since" ] = new Date( since ).toUTCString();
+                if( v && v.tag )  headers[ "If-Match" ] = v.tag;
+                if( v && v.srv )  headers[ "If-Unmodified-Since" ] = new Date( v.srv ).toUTCString();
+                if( v && v.none ) headers[ "If-None-Match" ] = "*";
                 if( who )    headers[ "X-Nayive-User" ] = who;
 
                 var r = await netFetch( api + "?file=" + encodeURIComponent( path ),
                                         { method: "PUT", headers: headers, body: packed || body } );
 
                 if( r.ok )
-                    return { ok: true, status: r.status, srv: Date.parse( r.headers.get( "Last-Modified" ) ) || null };
+                    return { ok: true, status: r.status, srv: Date.parse( r.headers.get( "Last-Modified" ) ) || null,
+                             tag: strongTag( r.headers.get( "ETag" ) ) };
 
                 if( r.status === 412 )
                     return { ok: false, status: 412, conflict: true };
@@ -562,6 +856,9 @@
         // refuses it too ("loading"): whatever the app would save then was built
         // before it knew the file - an add pressed during a slow first GET would
         // otherwise replace a 716-card address book with the one new card.
+        //
+        // What a read hands back becomes this page's model, so its version is
+        // what this page's next save is made from (`held`, VERSIONS).
         async function read( path )
         {
             var first = ! loaded[ path ];
@@ -587,6 +884,35 @@
             return res;
         }
 
+        // A save that waits to go up is this page's model from now on.
+        function adopt( path, e ) { setHeld( path, heldOf( e ) ); }
+
+        // A cached copy is this page's model: its version, no queued save held.
+        function fromCache( path, d ) { setHeld( path, Object.assign( docVer( d ), { id: null, inc: [], anc: [] } ) ); }
+
+        // This page's own latest copy of `path`: a save kept here, its queued
+        // save, or the cached copy.
+        async function ownCopy( db, path )
+        {
+            if( pageOnly[ path ] ) return pageOnly[ path ];
+            var r = await pathTx( db, path, "readonly", function ( c )
+            {
+                return { ret: c.out || ( c.doc && ours( c.doc ) ? c.doc : null ) };
+            } );
+            return r.ok ? r.ret : null;
+        }
+
+        // A cached copy left dirty with nothing queued (a save an older store.js
+        // stored in two steps, cut in between): queued again, from the version
+        // it was made from (K4).
+        function requeued( doc )
+        {
+            var e = { path: doc.path, body: doc.body, queuedAt: nextQueuedAt(), conflict: false,
+                      bin: doc.body instanceof Uint8Array, ius: conflicts || !! ( doc.tag || doc.srv ), who: doc.who || ME,
+                      mrg: !! mergeFn, ver: 1, id: newId(), inc: [], anc: [] };
+            return setVer( e, docVer( doc ) );
+        }
+
         async function readNow( path )
         {
             // A write() from here on is seen after the GET (writeSeq); one that
@@ -594,31 +920,40 @@
             var seq    = writeSeq[ path ] || 0;
             if( writing[ path ] ) { try { await writing[ path ]; } catch ( e ) {} }
             var db     = await dbPromise;
-            var cached = await idbGet( db, DOCS, path );
-            var queued = await idbGet( db, OUTBOX, path );
 
-            // Another account's copy is not this person's file: as if absent.
-            if( ! ours( cached ) ) cached = null;
-            if( ! ours( queued ) ) queued = null;
+            // The cached copy and the queued save, in one look. A merge that said
+            // null (MERGE) is tried again each time its app opens the file: the
+            // other side may be fine by now.
+            var look = await pathTx( db, path, "readwrite", function ( c )
+            {
+                var doc = c.doc && ours( c.doc ) ? c.doc : null;
+                var out = c.out;
+
+                if( ! out && doc && doc.dirty && ! doc.refused )
+                {
+                    out = requeued( doc );
+                    return { out: out, ret: { doc: doc, out: out } };
+                }
+                if( out && out.conflict && out.mrg && mergeFn )
+                {
+                    out = Object.assign( {}, out, { conflict: false } );
+                    return { out: out, ret: { doc: doc, out: out } };
+                }
+                return { ret: { doc: doc, out: out } };
+            } );
+            var cached = look.ok ? look.ret.doc : null;
+            var queued = pageOnly[ path ] || ( look.ok ? look.ret.out : null );
 
             // A not-yet-flushed local write is the truth - never let a network
-            // GET clobber the user's pending edit on screen.
+            // GET clobber the user's pending edit on screen. Its body, not the
+            // cached one: the two differ when another page cached a read over it.
             if( queued )
             {
-                // A merge that said null (MERGE) is tried again each time its
-                // app opens the file: the other side may be fine by now.
-                if( queued.conflict && queued.mrg && mergeFn )
-                    await idbUpdate( db, OUTBOX, path, function ( c ) { if( ! c || ! c.conflict ) return undefined; c.conflict = false; return c; } );
-
                 scheduleFlush();
-
-                if( cached )
-                {
-                    emit( navigator.onLine ? "pending" : "offline" );
-                    return { body: cached.body, source: "cache", mtime: cached.mtime };
-                }
-
-                return { body: queued.body, source: "cache", mtime: queued.queuedAt };
+                adopt( path, queued );
+                emit( navigator.onLine ? "pending" : "offline" );
+                return { body: queued.body, source: "cache",
+                         mtime: cached && cached.body === queued.body ? cached.mtime : queued.queuedAt };
             }
 
             if( navigator.onLine )
@@ -631,33 +966,58 @@
                 if( ( writeSeq[ path ] || 0 ) !== seq )
                 {
                     try { await writing[ path ]; } catch ( e ) {}
-                    var mine = await idbGet( db, DOCS, path );
+                    var mine = await ownCopy( db, path );
                     scheduleFlush();
-                    if( mine ) return { body: mine.body, source: "cache", mtime: mine.mtime };
+                    if( mine ) return { body: mine.body, source: "cache", mtime: mine.mtime || mine.queuedAt };
                 }
 
                 if( res.ok )
                 {
-                    // Checked again INSIDE the cache transaction: a write() that
-                    // lands now must not have its edit replaced by this body.
-                    await idbUpdate( db, DOCS, path, function ()
+                    // Checked again INSIDE the transaction: a write() that lands
+                    // now must not have its edit replaced by this body. Nor may a
+                    // save another page - or another account - queued meanwhile:
+                    // its cached copy stays, and a save of this account's is what
+                    // this page shows (K3, L4).
+                    var put = await pathTx( db, path, "readwrite", function ( c )
                     {
-                        if( ( writeSeq[ path ] || 0 ) !== seq ) return undefined;
+                        if( ( writeSeq[ path ] || 0 ) !== seq ) return { ret: {} };
+                        if( c.out ) return { ret: { queued: c.out } };
+                        if( c.slot || ( c.doc && c.doc.dirty ) ) return { ret: {} };
+
                         // `base` for every text file, merging store or not: a
                         // plain store (Drive's import) reading a merged path must
                         // not leave it without one (see MERGE).
-                        return { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false,
-                                 srv: res.srv, who: ME, base: typeof res.body === "string" ? res.body : undefined };
+                        var d = setVer( { path: path, body: res.body, mtime: res.mtime, cachedAt: Date.now(), dirty: false, who: ME },
+                                        { tag: res.tag, srv: res.srv, base: typeof res.body === "string" ? res.body : null } );
+                        // What the cache knows went up stays known; the save its
+                        // version answers, while it is the same version.
+                        if( c.doc && ours( c.doc ) )
+                        {
+                            d.sent = c.doc.sent;
+                            if( vkey( docVer( c.doc ) ) === vkey( docVer( d ) ) ) d.last = c.doc.last;
+                        }
+                        return { doc: d, ret: {} };
                     } );
 
                     if( ( writeSeq[ path ] || 0 ) !== seq )
                     {
                         try { await writing[ path ]; } catch ( e ) {}
-                        var newer = await idbGet( db, DOCS, path );
+                        var newer = await ownCopy( db, path );
                         scheduleFlush();
-                        if( newer ) return { body: newer.body, source: "cache", mtime: newer.mtime };
+                        if( newer ) return { body: newer.body, source: "cache", mtime: newer.mtime || newer.queuedAt };
                     }
 
+                    if( put.ok && put.ret.queued )
+                    {
+                        var q = put.ret.queued;
+                        adopt( path, q );
+                        scheduleFlush();
+                        emit( navigator.onLine ? "pending" : "offline" );
+                        return { body: q.body, source: "cache", mtime: q.queuedAt };
+                    }
+
+                    setHeld( path, { id: null, inc: [], anc: [], tag: res.tag, srv: res.srv,
+                                     base: typeof res.body === "string" ? res.body : null, none: false } );
                     scheduleFlush();               // other paths may still be queued
                     emit( "synced" );
                     return { body: res.body, source: "network", mtime: res.mtime };
@@ -667,7 +1027,9 @@
                 {
                     // Reachable server, file absent - safe first run. The cache
                     // (if any) is left in place rather than wiped on the server's
-                    // say-so.
+                    // say-so. This page's next save makes it, create-only.
+                    if( ( writeSeq[ path ] || 0 ) === seq )
+                        setHeld( path, { id: null, inc: [], anc: [], tag: null, srv: null, base: null, none: true } );
                     emit( "synced" );
                     return { body: null, source: "empty" };
                 }
@@ -677,7 +1039,10 @@
                     emit( "needs-auth" );
 
                     if( cached )
+                    {
+                        fromCache( path, cached );
                         return { body: cached.body, source: "cache", mtime: cached.mtime };
+                    }
 
                     return { body: null, source: "unauth" };
                 }
@@ -685,6 +1050,7 @@
                 // some other HTTP error, or the fetch threw
                 if( cached )
                 {
+                    fromCache( path, cached );
                     emit( res.netError ? "offline" : "error" );
                     return { body: cached.body, source: "cache", mtime: cached.mtime };
                 }
@@ -696,6 +1062,7 @@
             // offline
             if( cached )
             {
+                fromCache( path, cached );
                 emit( "offline" );
                 return { body: cached.body, source: "cache", mtime: cached.mtime };
             }
@@ -708,11 +1075,14 @@
         // WRITE
 
         // Caches the body, queues the PUT, tries to flush now. Resolves after the
-        // attempt with { ok, offline?, needsAuth?, forbidden?, conflict? }. The
-        // caller does not need to await it - the local copy is already safe once
-        // this returns or not.
+        // attempt with { ok, offline?, needsAuth?, forbidden?, conflict?,
+        // pageOnly?, unknown? }. The caller does not need to await it - the local
+        // copy is already safe once this returns or not; `pageOnly` (the
+        // browser's storage failed and the server was not reached: the save is
+        // only in this page) and `unknown` (it vanished before it was sent) are
+        // NOT safe, and say so by setting none of offline / needsAuth.
         //
-        // The server time (`srv`) and a conflict flag survive the rewrite: a
+        // The version check and a conflict flag survive the rewrite: a
         // conflicted file keeps collecting the user's edits locally, and none of
         // them goes up until the app has resolved it.
         async function write( path, body )
@@ -729,102 +1099,217 @@
             loaded[ path ] = true;   // this page now holds the file's content: later reads are RE-reads
             claim( path );
 
-            var now = Date.now();
-            var conflicted = false;
-            var held = merging[ path ];   // a merge is being made: this body predates it (see MERGE)
+            // What this body was built from, taken NOW (VERSIONS): a merge that
+            // lands before the outbox is updated moves `held`, not this body. From
+            // here on this page's model is this body, whatever the outbox says:
+            // the next write() is built on it.
+            var basis = held[ path ] || null;
+            var id    = newId();
+            var now   = nextQueuedAt();
+            setHeld( path, Object.assign( {}, basis || { id: null, inc: [], anc: [] }, { id: id } ) );
+            var mark  = seen[ path ];
 
-            // Each entry says how it must be sent (bytes or text, with or without
-            // If-Unmodified-Since): the outbox is shared by every store, and a
-            // Calendar page flushing Write's queued .docx must send it as Write would.
             // Counted and started in the same tick, so a read() whose GET is out
-            // sees this write and waits for it (see readNow).
+            // sees this write and waits for it (see readNow). The body goes to
+            // the browser's storage at once - also while a merge waits for a
+            // slow network (E6): a page closed meanwhile keeps it.
             writeSeq[ path ] = ( writeSeq[ path ] || 0 ) + 1;
             var queued = ( async function ()
             {
-                if( held )
+                var db   = await dbPromise;
+                var made = null;
+                var r    = await pathTx( db, path, "readwrite", function ( c )
                 {
-                    var mr = await held;
-                    if( mr && mergeFn )
-                    {
-                        try
-                        {
-                            var again = mergeFn( path, mr.mine, body, mr.merged );
-                            if( typeof again === "string" ) body = again;
-                        }
-                        catch ( e ) { /* keep the body as the app built it */ }
-                    }
-                }
-
-                var db = await dbPromise;
-                // Another account's record under the same path gives nothing
-                // to this one - not its server time, not its conflict.
-                // `base` is kept whatever store writes. A clean copy cached by an
-                // older store.js has none: its body IS what the server had.
-                await idbUpdate( db, DOCS, path, function ( old )
-                {
-                    var mineOld = old && ours( old );
-                    var base    = mineOld ? old.base : undefined;
-                    if( mineOld && base === undefined && old.dirty === false && typeof old.body === "string" ) base = old.body;
-                    return { path: path, body: body, mtime: now, cachedAt: now, dirty: true,
-                             srv: mineOld ? old.srv : null, who: ME, base: base };
+                    made = queueIn( c, path, body, basis, id, now );
+                    return made.tx;
                 } );
-                // A save queued by a merging store stays merge-protected when a
-                // plain store (Drive's import) writes the same path: it keeps
-                // If-Unmodified-Since and `mrg`, and waits for its own app to
-                // merge it. A merging entry's next save merges again instead of
-                // staying held: whatever the last merge refused may be fine now.
-                await idbUpdate( db, OUTBOX, path, function ( old )
-                {
-                    var was = old && ours( old ) ? old : null;
-                    var mrg = !! mergeFn || !! ( was && was.mrg );
-                    conflicted = ! mrg && !! ( was && was.conflict );
-                    return { path: path, body: body, queuedAt: now, conflict: conflicted,
-                             bin: binary || body instanceof Uint8Array, ius: conflicts || !! ( was && was.ius ), who: ME,
-                             mrg: mrg };
-                } );
+                // The browser's storage failed (K2): the save is kept in this page.
+                if( ! r.ok ) made = queueIn( {}, path, body, basis, id, now );
+                return { made: made, stored: r.ok };
             } )();
 
             writing[ path ] = queued;
-            await queued;
+            var q = await queued;
+            var m = q.made;
+            var e = m.entry;
 
-            if( conflicted )
+            // Kept in this page until it is sent: the browser's storage failed
+            // (K2), or another page's save holds the outbox (`direct`). Queued:
+            // it holds whatever this page kept before.
+            var here = ! q.stored || !! m.direct;
+            if( here ) pageOnly[ path ] = e;
+            else       delete pageOnly[ path ];
+
+            if( m.merged != null )
+            {
+                // Another page's save, taken in: the app shows both - and, when a
+                // merge of this page's landed meanwhile, this body's edits again.
+                setHeld( path, heldOf( e ) );
+                fireMerged( path, m.merged );
+            }
+            else if( seen[ path ] === mark ) held[ path ] = heldOf( e );   // nothing newer on this page: its model is this save
+
+            if( e.conflict )
             {
                 emit( "conflict" );
                 return { ok: false, conflict: true };
             }
 
             emit( "saving" );
-            return flushPath( path );
+            var res = await flushPath( path, { id: idOf( e ) } );
+
+            // Not sent and kept nowhere but here: never "saved" (none of
+            // offline / needsAuth, which the apps take as "safe on this device").
+            if( here && ! res.ok )
+            {
+                if( ! q.stored ) { pageOnlyToast(); emit( "error" ); }
+                return { ok: false, pageOnly: true, conflict: !! res.conflict };
+            }
+            return res;
+        }
+
+        // The outbox entry (and cached copy) a write() makes, inside its
+        // transaction - see VERSIONS. Returns { tx, entry, merged, direct }:
+        // `direct` = not queued (tx changes nothing), sent from this page.
+        function queueIn( c, path, body, basis, id, now )
+        {
+            var old     = c.out;
+            var docMine = c.doc && ours( c.doc ) ? c.doc : null;
+            var v, inc, anc, merged = null;
+            var ius = conflicts || !! ( old && old.ius );
+            var mrg = !! mergeFn || !! ( old && old.mrg );
+
+            if( old && holds( basis, old ) )
+            {
+                // This page's own save (or one it read): replaced, from its version.
+                v   = entryVer( old, docMine );
+                inc = keepIds( old );
+                anc = old.anc || [];
+            }
+            else if( old && conflicts && ! ( mergeFn && typeof body === "string" && typeof old.body === "string" ) )
+            {
+                // Another page's save, not in this page's model, and no merging
+                // here: both stay. This one goes up on its own, checked against
+                // this page's version, and is kept in this page until it has
+                // (`direct`); the other is checked against its own - whichever
+                // reaches the server second gets the conflict question.
+                return { entry: freshEntry(), direct: true, merged: null, tx: {} };
+            }
+            else if( old && mergeFn && typeof body === "string" && typeof old.body === "string" )
+            {
+                // Another page's save, not in this page's model: merged into it,
+                // from this page's own base when the queued body descends from
+                // it; else with no base - every item of both is kept.
+                var ov    = entryVer( old, docMine );
+                var exact = !! basis && ( vkey( basis ) === vkey( ov ) || ( !! vkey( basis ) && ( old.anc || [] ).indexOf( vkey( basis ) ) !== -1 ) );
+                try { merged = mergeFn( path, exact ? verOf( basis ).base : null, body, old.body ); }
+                catch ( e ) { merged = null; }
+                if( typeof merged !== "string" ) return { entry: freshEntry(), direct: true, merged: null, tx: {} };
+                body = merged;
+                id   = newId();   // a new save: no page holds it until its app has taken it in
+                v    = ov;
+                inc  = keepIds( old );
+                anc  = addKeys( old.anc, exact ? [] : [ vkey( basis ) ] );
+            }
+            else if( old )
+            {
+                // A plain store: the newer save wins (see the top).
+                v   = entryVer( old, docMine );
+                inc = keepIds( old );
+                anc = old.anc || [];
+            }
+            else
+            {
+                var f = freshEntry();
+                return { entry: f, merged: null, tx: { out: f, doc: cached( f ) } };
+            }
+
+            var e = setVer( { path: path, body: body, queuedAt: now,
+                              conflict: ! mrg && !! old.conflict,   // a merging save merges again instead of staying held
+                              bin: binary || body instanceof Uint8Array, ius: ius, who: ME, mrg: mrg,
+                              ver: 1, id: id, inc: inc, anc: anc }, v );
+
+            return { entry: e, merged: merged, tx: { out: e, doc: cached( e ) } };
+
+            // A save of this page's alone: from the version its model came from -
+            // or, when the save it holds was sent a moment ago by another page,
+            // that save's answer (in the cache before it reaches this page).
+            function freshEntry()
+            {
+                var fv = basis && basis.id && lastSent( docMine, basis.id ) ? docVer( docMine ) : verOf( basis );
+                return setVer( { path: path, body: body, queuedAt: now, conflict: false,
+                                 bin: binary || body instanceof Uint8Array, ius: conflicts, who: ME, mrg: !! mergeFn,
+                                 ver: 1, id: id, inc: basis && basis.id ? [ basis.id ].concat( basis.inc || [] ).slice( -KEEP_IDS ) : [],
+                                 anc: basis && basis.anc ? basis.anc : [] }, fv );
+            }
+
+            // The cached copy follows the queued save - unless it holds another
+            // account's save still waiting (L4): that one stays as it is.
+            function cached( q )
+            {
+                if( c.doc && ! ours( c.doc ) && ( c.doc.dirty || ( c.slot && ! ours( c.slot ) ) ) ) return undefined;
+                var d = setVer( { path: path, body: q.body, mtime: now, cachedAt: now, dirty: true, who: ME }, verOf( q ) );
+                if( docMine && docMine.sent ) d.sent = docMine.sent;
+                return d;
+            }
         }
 
         //--------------------------------------------------------------------//
         // FLUSH
 
         // One PUT per path at a time on this page: two in flight would both carry
-        // the same If-Unmodified-Since, and the second would come back 412 - a
-        // false "saved on another device". The next one waits, then re-reads the
-        // outbox and the new server time.
-        async function flushPath( path )
+        // the same version check, and the second would come back 412 - a false
+        // "saved on another device". The next one waits, then re-reads the
+        // outbox. `mine` = { id } of the entry a write() just queued.
+        async function flushPath( path, mine )
         {
             while( inflight[ path ] )
             {
                 try { await inflight[ path ]; } catch ( e ) {}
             }
 
-            var p = flushPathNow( path );
+            var p = flushPathNow( path, mine, 0 );
             inflight[ path ] = p;
 
             try { return await p; }
             finally { if( inflight[ path ] === p ) delete inflight[ path ]; }
         }
 
-        async function flushPathNow( path )
+        async function flushPathNow( path, mine, again )
         {
-            var db    = await dbPromise;
-            var entry = await idbGet( db, OUTBOX, path );
+            var db = await dbPromise;
 
-            if( ! entry ) return { ok: true };
-            if( ! ours( entry ) ) return { ok: false, otherAccount: true };  // waits for its owner
+            // This page's own save kept here goes first; once it is up, what the
+            // outbox holds for the path is another page's, sent later (its page,
+            // or the next flush): this answer is this page's.
+            if( pageOnly[ path ] )
+            {
+                var pr = await sendPageOnly( db, path, pageOnly[ path ] );
+                if( pr.ok ) { scheduleFlush(); await settle(); }
+                return pr;
+            }
+
+            var look = await pathTx( db, path, "readonly", function ( c ) { return { ret: { out: c.out, doc: c.doc } }; } );
+
+            // Not "nothing to send": the browser's storage could not be read (K2).
+            if( ! look.ok )
+            {
+                emit( "error" );
+                return { ok: false, unknown: true };
+            }
+
+            var entry = look.ret.out;
+            var doc   = look.ret.doc;
+
+            // Nothing queued. For the save a write() just queued that is fine only
+            // when it went up (another page sent it, or a later save holding it):
+            // gone without that - cleared by a sign-out - it is NOT saved (K5).
+            if( ! entry )
+            {
+                if( ! mine || wasSent( doc, mine.id ) ) return { ok: true };
+                emit( "error" );
+                return { ok: false, unknown: true };
+            }
             if( entry.conflict ) return { ok: false, conflict: true };   // waits for the app, never re-sent
 
             var merger = entry.mrg ? mergers[ path ] : null;   // see MERGE above
@@ -835,79 +1320,74 @@
                 return { ok: false, offline: true };
             }
 
-            // Sent the way the store that queued it would send it. Entries from
-            // before `bin`/`ius` existed: bytes are Write/Calc's, which use
-            // If-Unmodified-Since; text never did, bar Text's own.
-            var bin   = entry.bin != null ? !! entry.bin : ( entry.body instanceof Uint8Array );
-            var ius   = entry.ius != null ? !! entry.ius : bin;
-            var known = ius ? await idbGet( db, DOCS, path ) : null;
-            var who   = entry.who || ME;
-            if( known && known.who && entry.who && known.who !== entry.who ) known = null;
+            // Sent the way the store that queued it would send it, checked against
+            // ITS version (VERSIONS). Entries from before `bin`/`ius` existed:
+            // bytes are Write/Calc's, which use the check; text never did, bar
+            // Text's own.
+            var bin = entry.bin != null ? !! entry.bin : ( entry.body instanceof Uint8Array );
+            var ius = entry.ius != null ? !! entry.ius : bin;
+            var who = entry.who || ME;
 
             emit( "saving" );                      // a PUT is in flight - sending data
-            var res = await netPut( path, entry.body, known && known.srv, bin, who );
-
-            // Saved from another device since: merge both (see MERGE above).
-            // `entry` is then the merged one, and `res` the answer to it.
-            if( res.conflict && entry.mrg )
-            {
-                if( ! merger )
-                {
-                    // Not this page's app: it stays queued, as it was, for the
-                    // page that can merge it.
-                    emit( "pending" );
-                    return { ok: false, deferred: true };
-                }
-
-                var m = await mergeAndPut( db, path, entry, merger, bin, who );
-                if( m.done ) return m.done;
-                res   = m.res;
-                entry = m.entry;
-            }
-
-            // Only the entry that was sent is settled: a newer one queued while
-            // the PUT was in flight stays for the next flush.
-            function sameEntry( cur ) { return cur && cur.queuedAt === entry.queuedAt; }
-
-            if( res.ok )
-            {
-                var cleared = false;
-
-                await idbUpdate( db, OUTBOX, path, function ( cur )
-                {
-                    if( ! sameEntry( cur ) ) return undefined;
-                    cleared = true;
-                    return null;
-                } );
-                await idbUpdate( db, DOCS, path, function ( doc )
-                {
-                    if( ! doc ) return undefined;
-                    if( res.srv ) doc.srv   = res.srv;   // the base for the next save
-                    if( cleared ) doc.dirty = false;
-                    if( typeof entry.body === "string" ) doc.base = entry.body;   // what the server holds now
-                    return doc;
-                } );
-
-                await settle();
-                return { ok: true };
-            }
+            var res = await netPut( path, entry.body, ius ? entryVer( entry, doc ) : null, bin, who );
 
             if( res.conflict )
             {
-                await idbUpdate( db, OUTBOX, path, function ( cur )
+                if( entry.mrg )
                 {
-                    if( ! cur ) return undefined;
-                    cur.conflict = true;
-                    return cur;
+                    // Saved from another device since: merge both (see MERGE above).
+                    // `entry` is then the merged one, and `res` the answer to it.
+                    if( ! merger )
+                    {
+                        // Not this page's app: it stays queued, as it was, for the
+                        // page that can merge it.
+                        emit( "pending" );
+                        return { ok: false, deferred: true };
+                    }
+
+                    var m = await mergeAndPut( db, path, entry, merger, bin, who, mine );
+                    if( m.done ) return m.done;
+                    res   = m.res;
+                    entry = m.entry;
+                }
+                else
+                {
+                    // Changed since - or gone (also a 412 under If-Match), or sent
+                    // by another page this very moment (two pages flush one save at
+                    // once), or the save before it was, which moved its version.
+                    // Looked at AFTER the HEAD's round trip: the other page's answer
+                    // is in by then.
+                    var head  = await netHead( path );
+                    var since = await since412( db, path, entry );
+                    if( since === "sent" ) { await settle(); return { ok: true }; }
+                    if( since === "again" && again < 3 ) return flushPathNow( path, mine, again + 1 );
+                    if( head === 404 ) res = await netPut( path, entry.body, { none: true }, bin, who );   // made again - never over a file put there since
+                }
+            }
+
+            if( res.ok ) return saved( db, path, entry, res );
+
+            if( res.conflict )
+            {
+                // Only the entry that was refused: a newer one is checked on its own.
+                await pathTx( db, path, "readwrite", function ( c )
+                {
+                    return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
                 } );
                 emit( "conflict" );
-                conflictFns.forEach( function ( fn ) { try { fn( path ); } catch ( e ) {} } );
+                toldConflict( path, entry );
                 return { ok: false, conflict: true };
             }
 
             if( res.forbidden )
             {
-                await idbUpdate( db, OUTBOX, path, function ( cur ) { return sameEntry( cur ) ? null : undefined; } );
+                // Dropped; its body stays in the cached copy, never queued again
+                // by a read (`refused`).
+                await pathTx( db, path, "readwrite", function ( c )
+                {
+                    if( ! sameEntry( c.out, entry ) ) return {};
+                    return { out: null, doc: c.doc && ours( c.doc ) ? Object.assign( c.doc, { refused: true } ) : undefined };
+                } );
                 emit( "error" );
                 return { ok: false, forbidden: true };
             }
@@ -930,6 +1410,140 @@
             return { ok: false, offline: !! res.netError };
         }
 
+        // After a 412 on `entry`: "sent" (another page sent it, or a save
+        // holding it), "again" (still queued, its version moved: the save
+        // before it went up meanwhile), or "same".
+        async function since412( db, path, entry )
+        {
+            var r = await pathTx( db, path, "readonly", function ( c ) { return { ret: c }; } );
+            if( ! r.ok ) return "same";
+            var cur = r.ret.out, doc = r.ret.doc;
+            if( wasSent( doc, idOf( entry ) ) ) return "sent";
+            if( sameEntry( cur, entry ) && vkey( entryVer( cur, doc ) ) !== vkey( entryVer( entry, doc ) ) ) return "again";
+            return "same";
+        }
+
+        // `entry` went up: the server's file is its body, at version res.
+        // Dropped from the outbox (only that entry: a newer one queued while
+        // the PUT was in flight stays for the next flush, and when it holds this
+        // one and was made from the same version, it is made from the new one
+        // now); the cached copy knows it was sent; the page holding it takes the
+        // new version, and every page hears it (onSaved).
+        async function saved( db, path, entry, res )
+        {
+            var ver = { tag: res.tag, srv: res.srv, base: typeof entry.body === "string" ? entry.body : null, none: false };
+            var eid = idOf( entry );
+
+            var r = await pathTx( db, path, "readwrite", function ( c )
+            {
+                var cur = c.out, out, rebased = null, d;
+                var sent = entryVer( entry, c.doc );
+
+                if( sameEntry( cur, entry ) ) out = null;
+                else if( cur && ( cur.inc || [] ).indexOf( eid ) !== -1 && vkey( entryVer( cur, c.doc ) ) === vkey( sent ) )
+                {
+                    out     = setVer( Object.assign( {}, cur, { ver: 1, anc: addKeys( cur.anc, [ vkey( sent ) ] ) } ), ver );
+                    rebased = idOf( cur );
+                }
+
+                if( c.doc && ours( c.doc ) )
+                {
+                    var took = ( entry.inc || [] ).concat( [ eid ] );
+                    d = c.doc;
+                    if( out === null ) { d.body = entry.body; d.dirty = false; setVer( d, ver ); d.last = took.slice( -KEEP_IDS ); }
+                    else if( rebased ) setVer( d, ver );   // still dirty: the queued save's new version
+                    d.sent = ( d.sent || [] ).concat( took ).slice( -KEEP_IDS );
+                    delete d.refused;
+                }
+                return { out: out, doc: d, ret: rebased };
+            } );
+
+            toldSaved( { path: path, who: entry.who || ME, id: eid, rebased: r.ok ? r.ret : null, tag: ver.tag, srv: ver.srv }, entry.body );
+            await settle();
+            return { ok: true };
+        }
+
+        // A save kept only in this page (K2) goes up directly, checked against
+        // its version; a 412 merges it here once (MERGE) or, when the file is
+        // gone, makes it again create-only. Sent: forgotten here, and an older
+        // queued save of this page it holds leaves the outbox too.
+        async function sendPageOnly( db, path, po )
+        {
+            if( po.conflict ) return { ok: false, conflict: true };
+            if( ! navigator.onLine ) { emit( "offline" ); return { ok: false, offline: true }; }
+
+            var who    = po.who || ME;
+            var merger = po.mrg ? mergers[ path ] : null;
+            emit( "saving" );
+            var res = await netPut( path, po.body, po.ius ? entryVer( po ) : null, po.bin, who );
+
+            // A newer save of this page came meanwhile: it goes next, and meets
+            // this answer on its own.
+            if( res.conflict && pageOnly[ path ] !== po ) return { ok: false };
+
+            if( res.conflict && merger )
+            {
+                var theirs = await merger.get( path );
+                var merged = null;
+                if( theirs.ok )
+                {
+                    try { merged = merger.fn( path, entryVer( po ).base, po.body, theirs.body ); }
+                    catch ( e ) { merged = null; }
+                }
+                if( typeof merged === "string" )
+                {
+                    po = setVer( Object.assign( {}, po, { body: merged, id: newId(), inc: keepIds( po ), anc: addKeys( po.anc, [ vkey( entryVer( po ) ) ] ) } ),
+                                 { tag: theirs.tag, srv: theirs.srv, base: theirs.body } );
+                    pageOnly[ path ] = po;
+                    setHeld( path, heldOf( po ) );
+                    merger.fire( path, merged );
+                    res = await netPut( path, po.body, entryVer( po ), po.bin, who );
+                }
+                else if( theirs.missing ) res = await netPut( path, po.body, { none: true }, po.bin, who );
+            }
+            else if( res.conflict && await netHead( path ) === 404 )
+                res = await netPut( path, po.body, { none: true }, po.bin, who );
+
+            if( res.ok )
+            {
+                // A newer save of this page made while this one was out is made
+                // from the version this one moved to now (as in saved()).
+                var next = pageOnly[ path ];
+                if( next === po ) delete pageOnly[ path ];
+                else if( next && ( next.inc || [] ).indexOf( idOf( po ) ) !== -1 && vkey( entryVer( next ) ) === vkey( entryVer( po ) ) )
+                    pageOnly[ path ] = setVer( Object.assign( {}, next, { anc: addKeys( next.anc, [ vkey( entryVer( po ) ) ] ) } ),
+                                               { tag: res.tag, srv: res.srv, base: typeof po.body === "string" ? po.body : null } );
+                await pathTx( db, path, "readwrite", function ( c )
+                {
+                    var drop = !! c.out && ( po.inc || [] ).indexOf( idOf( c.out ) ) !== -1;
+                    if( ! c.doc || ! ours( c.doc ) ) return drop ? { out: null } : {};
+                    var d    = c.doc;
+                    var took = ( po.inc || [] ).concat( [ idOf( po ) ] );
+                    d.sent = ( d.sent || [] ).concat( took ).slice( -KEEP_IDS );
+                    if( drop || ( ! c.out && ! d.dirty ) )
+                    {
+                        setVer( Object.assign( d, { body: po.body, dirty: false, last: took.slice( -KEEP_IDS ) } ),
+                                { tag: res.tag, srv: res.srv, base: typeof po.body === "string" ? po.body : null } );
+                        delete d.refused;
+                    }
+                    return { out: drop ? null : undefined, doc: d };
+                } );
+                toldSaved( { path: path, who: who, id: idOf( po ), rebased: next && next !== po ? idOf( next ) : null,
+                             tag: res.tag, srv: res.srv }, po.body );
+                return { ok: true };
+            }
+
+            if( res.conflict )
+            {
+                if( pageOnly[ path ] === po ) pageOnly[ path ] = Object.assign( {}, po, { conflict: true } );
+                emit( "conflict" );
+                toldConflict( path, po );
+                return { ok: false, conflict: true };
+            }
+            emit( res.netError ? "offline" : "error" );
+            return { ok: false, offline: !! res.netError, needsAuth: !! res.needsAuth };
+        }
+
         // MERGE (see above): this page's merging store for `path` from now on.
         function claim( path )
         {
@@ -942,96 +1556,79 @@
         }
 
         // A PUT of `entry` came back 412. Up to MERGE_TRIES times: GET the
-        // server's copy, merge the queued body onto it, put the result in the
-        // cache and the outbox, tell the app, PUT it with the server's new time.
-        // Returns { res, entry } - the last answer (never a 412 unless the merge
-        // said null: the CONFLICTS path) and the entry it answers - or { done }
-        // when there is nothing more to do here.
-        async function mergeAndPut( db, path, entry, merger, bin, who )
+        // server's copy, merge the queued save (whichever is queued NOW - one
+        // made while the GET was out included) onto it from that save's own
+        // base, put the result in the cache and the outbox in one step, tell the
+        // app, PUT it checked against the version just read. Returns
+        // { res, entry } - the last answer (never a 412 unless the merge said
+        // null: the CONFLICTS path) and the entry it answers - or { done } when
+        // there is nothing more to do here.
+        async function mergeAndPut( db, path, entry, merger, bin, who, mine )
         {
             var res = { ok: false, status: 412, conflict: true };
 
             for( var tries = 0; tries < MERGE_TRIES; tries++ )
             {
-                // From the GET until the app has the merged body, write() waits
-                // and merges its own body onto ours: whatever it brings was
-                // built from the list before the merge.
-                var open = null;
-                merging[ path ] = new Promise( function ( r ) { open = r; } );
-                var result = null;
-                var theirs, gone = false;
+                var theirs = await merger.get( path );
 
-                try
+                // Another account signed in on this browser since the save
+                // was queued (WHOSE SAVE): that GET brought THEIR file, which
+                // must not be merged into this one. It waits for its owner.
+                if( who && whoNow() && whoNow() !== who )
+                    return { res: { ok: false, status: 423, otherAccount: true }, entry: entry };
+
+                // Gone from the server since: nothing to merge with, it goes up
+                // as it is, create-only (below).
+                if( ! theirs.ok && ! theirs.missing )
+                    return { res: { ok: false, status: theirs.status, netError: theirs.netError,
+                                    needsAuth: theirs.status === 401 }, entry: entry };
+
+                var r = await pathTx( db, path, "readwrite", function ( c )
                 {
-                    theirs = await merger.get( path );
+                    var cur = c.out;
+                    if( ! cur ) return { ret: { none: true, sent: wasSent( c.doc, idOf( entry ) ) } };
+                    if( cur.conflict ) return { ret: { held: true } };
+                    if( theirs.missing ) return { ret: { gone: cur } };
 
-                    // Another account signed in on this browser since the save
-                    // was queued (WHOSE SAVE): that GET brought THEIR file, which
-                    // must not be merged into this one. It waits for its owner.
-                    if( who && whoNow() && whoNow() !== who )
-                        return { res: { ok: false, status: 423, otherAccount: true }, entry: entry };
+                    var cv     = entryVer( cur, c.doc );
+                    var merged = null;
+                    try { merged = merger.fn( path, cv.base, cur.body, theirs.body ); }
+                    catch ( e ) { merged = null; }
+                    if( typeof merged !== "string" ) return { ret: { refused: cur } };   // -> CONFLICTS
 
-                    if( ! theirs.ok )
-                    {
-                        // Gone from the server since: nothing to merge with, it
-                        // goes up as it is (below; what every save did before).
-                        if( theirs.missing ) gone = true;
-                        else return { res: { ok: false, status: theirs.status, netError: theirs.netError,
-                                             needsAuth: theirs.status === 401 }, entry: entry };
-                    }
-                    else
-                    {
-                        var cur = await idbGet( db, OUTBOX, path );
-                        var doc = await idbGet( db, DOCS, path );
+                    var tv = { tag: theirs.tag, srv: theirs.srv, base: theirs.body, none: false };
+                    var mm = setVer( Object.assign( {}, cur, { body: merged, conflict: false, queuedAt: nextQueuedAt(), ver: 1, id: newId(),
+                                                              inc: keepIds( cur ), anc: addKeys( cur.anc, [ vkey( cv ) ] ) } ), tv );
+                    var d  = c.doc && ours( c.doc ) ? c.doc
+                           : c.doc && c.doc.dirty ? null : { path: path, cachedAt: Date.now(), who: ME };
+                    if( d ) { d.body = merged; d.mtime = Date.now(); d.dirty = true; setVer( d, tv ); }
+                    return { out: mm, doc: d || undefined, ret: { merged: mm } };
+                } );
 
-                        if( ! cur || ! ours( cur ) ) return { done: { ok: true } };   // nothing queued any more
+                if( ! r.ok ) return { res: { ok: false, status: 0, netError: true }, entry: entry };   // storage failed: tried again later
+                var t = r.ret;
 
-                        var base   = doc && ours( doc ) && typeof doc.base === "string" ? doc.base : null;
-                        var merged = null;
+                if( t.none )   return { done: t.sent || ! mine ? { ok: true } : { ok: false, unknown: true } };   // nothing queued any more (K5)
+                if( t.held )   return { done: { ok: false, conflict: true } };
+                if( t.refused ) return { res: res, entry: t.refused };
 
-                        try { merged = merger.fn( path, base, cur.body, theirs.body ); }
-                        catch ( e ) { merged = null; }
-
-                        if( typeof merged !== "string" ) return { res: res, entry: cur };   // -> CONFLICTS
-
-                        var kept = false;
-                        await idbUpdate( db, OUTBOX, path, function ( c )
-                        {
-                            if( ! c || c.queuedAt !== cur.queuedAt ) return undefined;
-                            kept = true;
-                            c.body = merged;
-                            c.conflict = false;
-                            return c;
-                        } );
-
-                        if( ! kept ) continue;   // a newer save landed meanwhile: merge that one
-
-                        await idbUpdate( db, DOCS, path, function ( d )
-                        {
-                            d = d && ours( d ) ? d : { path: path, cachedAt: Date.now(), who: ME };
-                            d.body  = merged;
-                            d.mtime = Date.now();
-                            d.dirty = true;
-                            d.base  = theirs.body;   // what the server holds - until the PUT below lands
-                            d.srv   = theirs.srv;
-                            return d;
-                        } );
-
-                        merger.fire( path, merged );
-                        result = { mine: cur.body, merged: merged };
-                        entry  = Object.assign( {}, cur, { body: merged, conflict: false } );
-                    }
-                }
-                finally
+                if( t.gone )
                 {
-                    delete merging[ path ];
-                    open( result );
+                    entry = t.gone;
+                    emit( "saving" );
+                    res = await netPut( path, entry.body, { none: true }, bin, who );
+                    if( ! res.conflict ) return { res: res, entry: entry };
+                    continue;   // made there meanwhile: merge with it
                 }
 
-                if( gone ) return { res: await netPut( path, entry.body, null, bin, who ), entry: entry };
+                // This page's app takes the merged body (onMerged): its model,
+                // and the version its next save is made from.
+                entry = t.merged;
+                setHeld( path, heldOf( entry ) );
+                merger.fire( path, entry.body );
 
                 emit( "saving" );
-                res = await netPut( path, entry.body, theirs.srv, bin, who );
+                res = await netPut( path, entry.body, entryVer( entry ), bin, who );
                 if( ! res.conflict ) return { res: res, entry: entry };
             }
 
@@ -1048,12 +1645,14 @@
 
             try
             {
-                var db      = await dbPromise;
-                var pending = await idbGetAll( db, OUTBOX );
+                var db    = await dbPromise;
+                var paths = [];
+                ( await ownEntries( db ) ).map( function ( e ) { return e.path; } ).concat( Object.keys( pageOnly ) )
+                    .forEach( function ( p ) { if( paths.indexOf( p ) === -1 ) paths.push( p ); } );
 
-                for( var i = 0; i < pending.length; i++ )
+                for( var i = 0; i < paths.length; i++ )
                 {
-                    var r = await flushPath( pending[ i ].path );
+                    var r = await flushPath( paths[ i ] );
 
                     if( r && ( r.needsAuth || r.offline ) )
                         break;                     // stop early; a later trigger retries
@@ -1090,7 +1689,7 @@
         async function hasCache( path )
         {
             var db  = await dbPromise;
-            var rec = await idbGet( db, DOCS, path );
+            var rec = await idbGet( db, DOCS, path ).catch( function () { return null; } );
             return !! rec && ours( rec );
         }
 
@@ -1107,20 +1706,47 @@
         }
 
         // Drop a path from the cache and the outbox (e.g. its file was deleted
-        // on the server).
+        // on the server) - this account's records only, and a save another page
+        // queued after this one read the file stays (that page's work) - and
+        // the version this page held for it: a save to it from now on is
+        // unchecked, as for a path never read.
         async function forget( path )
         {
             var db = await dbPromise;
-            await idbDelete( db, DOCS, path );
-            await idbDelete( db, OUTBOX, path );
+            var h  = held[ path ];
+            delete held[ path ];
+            delete pageOnly[ path ];
+            seen[ path ] = ( seen[ path ] || 0 ) + 1;
+            await pathTx( db, path, "readwrite", function ( c )
+            {
+                if( c.out && h && ! holds( h, c.out ) ) return {};
+                return { out: c.out ? null : undefined, doc: c.doc && ours( c.doc ) ? null : undefined };
+            } );
         }
 
-        // A write to `path` is held back as a conflict (see CONFLICTS above).
+        // THIS page's write to `path` is held back as a conflict (see
+        // CONFLICTS above) - not another window's.
         async function conflicted( path )
         {
-            var db    = await dbPromise;
-            var entry = await idbGet( db, OUTBOX, path );
-            return !! ( entry && ours( entry ) && entry.conflict );
+            var e = await pending( path );
+            return !! ( e && e.conflict && e.mine );
+        }
+
+        // What waits to go up for `path` from this account: null when nothing
+        // does, else { conflict, mine, page, at } - conflict: held back as
+        // changed elsewhere (CONFLICTS); mine: this page's model holds it; page:
+        // kept only in this page (K2); at: when it was queued. { unknown: true }
+        // when the browser's storage cannot be read.
+        async function pending( path )
+        {
+            var po = pageOnly[ path ];
+            if( po ) return { conflict: !! po.conflict, mine: true, page: true, at: po.queuedAt };
+
+            var db = await dbPromise;
+            var r  = await pathTx( db, path, "readonly", function ( c ) { return { ret: c.out }; } );
+            if( ! r.ok ) return { unknown: true };
+            var e = r.ret;
+            return e ? { conflict: !! e.conflict, mine: holds( held[ path ], e ), page: false, at: e.queuedAt } : null;
         }
 
         // fn( path ) - a flush found `path` saved from another device since.
@@ -1129,6 +1755,20 @@
         // fn( path, body ) - a flush merged `path` with another device's save
         // (see MERGE above): the app reloads its data from `body`.
         function onMerged( fn ) { mergedFns.push( fn ); }
+
+        // fn( path, body, tag, mine ) - a save of `path` went up, sent by ANY
+        // page of this browser for this account: body = what the server holds
+        // now (null for bytes saved by another page), tag its version, mine =
+        // this page's model holds that save. Returns off().
+        function onSaved( fn )
+        {
+            savedFns.push( fn );
+            return function off()
+            {
+                var i = savedFns.indexOf( fn );
+                if( i !== -1 ) savedFns.splice( i, 1 );
+            };
+        }
 
         // BLOCKED PATHS - "never save over what we could not read".
         // read() blocks a path it could not read ('unknown' / 'unauth'); an app
@@ -1150,6 +1790,16 @@
                                       : reason === "loading" ? "ui.store.loading" : "ui.store.notRead" ), { ms: 6000 } );
         }
 
+        // The browser's storage failed and the server was not reached: the save
+        // is only in this page (K2). Said once in a while, not per keystroke.
+        function pageOnlyToast()
+        {
+            var now = Date.now();
+            if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! NayiveUI.t ) return;
+            toastAt = now;
+            NayiveUI.toast( NayiveUI.t( "ui.store.pageOnly" ), { ms: 8000 } );
+        }
+
         //--------------------------------------------------------------------//
 
         return {
@@ -1161,8 +1811,10 @@
             listCached:   listCached,
             forget:       forget,
             conflicted:   conflicted,
+            pending:      pending,
             onConflict:   onConflict,
             onMerged:     onMerged,
+            onSaved:      onSaved,
             block:        block,
             unblock:      unblock,
             isBlocked:    isBlocked,
@@ -1178,25 +1830,33 @@
     // What this browser keeps must not outlive the session: the next person to
     // sign in here would be offered it. localCount() is how many saves and
     // untitled drafts are still only here - EVERY account's, since they all go -
-    // so the button can ask first; clearLocal() empties the store's database
-    // and shared/office.js's "nayive-drafts". Each store is emptied with clear()
-    // in place: deleteDatabase() waits for every other open tab and, meanwhile,
-    // does nothing.
+    // so the button can ask first; clearLocal() then deletes EXACTLY what was
+    // counted (a save or draft made while the question was up is not: K5), the
+    // cached copies of every path with nothing left to send, eMail's files and
+    // Chat's typed drafts. leaveDevice( ask ) does the lot: send, count, ask,
+    // clear - and counts and asks again when something came in meanwhile. Each
+    // store is emptied in place: deleteDatabase() waits for every other open
+    // tab and, meanwhile, does nothing.
 
-    // "nayive-drafts" as shared/office.js opens it - the same upgrade, so
-    // opening it here first never leaves a database with no "drafts" store.
-    function openDraftsDb()
+    var counted = null;   // what the last localCount() counted: outbox "path\0id", drafts "app\0at"
+
+    // A database as its owner opens it - the same upgrade, so opening it here
+    // first never leaves one with no store: "nayive-drafts" (shared/office.js),
+    // "nayive-mail-files" (email/compose.js).
+    function openSide( name, store, keyPath )
     {
         return new Promise( function ( resolve )
         {
             var rq;
-            try { rq = indexedDB.open( "nayive-drafts", 1 ); }
+            try { rq = indexedDB.open( name, 1 ); }
             catch ( e ) { resolve( null ); return; }
-            rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
+            rq.onupgradeneeded = function () { rq.result.createObjectStore( store, { keyPath: keyPath } ); };
             rq.onsuccess = function () { resolve( rq.result ); };
             rq.onerror = rq.onblocked = function () { resolve( null ); };
         } );
     }
+
+    function openDraftsDb() { return openSide( "nayive-drafts", "drafts", "app" ); }
 
     // fn( objectStore ) -> request, in one transaction; its result, or null.
     function oneTx( db, name, mode, fn )
@@ -1215,15 +1875,21 @@
         } );
     }
 
+    function outName( r )   { return r.path + "\u0000" + idOf( r ); }
+    function draftName( r ) { return r.app + "\u0000" + ( r.at || "" ); }
+
+    // How many saves and drafts are only here. What could not be read counts
+    // as nothing - and is then never deleted either.
     async function localCount()
     {
         var store  = await openDb();
         var drafts = await openDraftsDb();
-        var n = ( await oneTx( store,  OUTBOX,   "readonly", function ( os ) { return os.count(); } ) ) || 0;
-        n    += ( await oneTx( drafts, "drafts", "readonly", function ( os ) { return os.count(); } ) ) || 0;
+        var outs   = ( await oneTx( store,  OUTBOX,   "readonly", function ( os ) { return os.getAll(); } ) ) || [];
+        var drs    = ( await oneTx( drafts, "drafts", "readonly", function ( os ) { return os.getAll(); } ) ) || [];
         if( store )  store.close();
         if( drafts ) drafts.close();
-        return n;
+        counted = { out: outs.map( outName ), drafts: drs.map( draftName ) };
+        return outs.length + drs.length;
     }
 
     // The saves still waiting here get one more chance to go up before the
@@ -1237,15 +1903,111 @@
                                new Promise( function ( r ) { setTimeout( r, ms || 10000 ); } ) ] );
     }
 
+    // Deletes what localCount() counted (with no count before it: what is here
+    // now). Resolves how many saves and drafts came in since and were kept.
     async function clearLocal()
     {
-        var store  = await openDb();
-        var drafts = await openDraftsDb();
-        await oneTx( store,  OUTBOX,   "readwrite", function ( os ) { return os.clear(); } );
-        await oneTx( store,  DOCS,     "readwrite", function ( os ) { return os.clear(); } );
-        await oneTx( drafts, "drafts", "readwrite", function ( os ) { return os.clear(); } );
-        if( store )  store.close();
-        if( drafts ) drafts.close();
+        var seen = counted;
+        if( ! seen ) { await localCount(); seen = counted; }
+        counted = null;
+
+        var left  = 0;
+        var store = await openDb();
+        if( store )
+        {
+            // One transaction: a save is kept with its cached copy, or both go.
+            left += await new Promise( function ( resolve )
+            {
+                var kept = 0, keep = {};
+                try
+                {
+                    var tx = store.transaction( [ DOCS, OUTBOX ], "readwrite" );
+                    var os = tx.objectStore( OUTBOX ), ds = tx.objectStore( DOCS );
+                    var rq = os.getAll();
+                    rq.onsuccess = function ()
+                    {
+                        rq.result.forEach( function ( r )
+                        {
+                            if( seen.out.indexOf( outName( r ) ) !== -1 ) os.delete( r.path );
+                            else { kept++; keep[ r.file || r.path ] = true; }
+                        } );
+                        var kq = ds.getAllKeys();
+                        kq.onsuccess = function () { kq.result.forEach( function ( k ) { if( ! keep[ k ] ) ds.delete( k ); } ); };
+                    };
+                    tx.oncomplete = function () { resolve( kept ); };
+                    tx.onerror = tx.onabort = function () { resolve( kept ); };
+                }
+                catch ( e ) { resolve( 0 ); }
+            } );
+            store.close();
+        }
+
+        var mailKept = false;
+        var drafts   = await openDraftsDb();
+        if( drafts )
+        {
+            left += await new Promise( function ( resolve )
+            {
+                var kept = 0;
+                try
+                {
+                    var tx = drafts.transaction( "drafts", "readwrite" );
+                    var os = tx.objectStore( "drafts" );
+                    var rq = os.getAll();
+                    rq.onsuccess = function ()
+                    {
+                        rq.result.forEach( function ( r )
+                        {
+                            if( seen.drafts.indexOf( draftName( r ) ) !== -1 ) os.delete( r.app );
+                            else { kept++; if( String( r.app ).indexOf( "email:" ) === 0 ) mailKept = true; }
+                        } );
+                    };
+                    tx.oncomplete = function () { resolve( kept ); };
+                    tx.onerror = tx.onabort = function () { resolve( kept ); };
+                }
+                catch ( e ) { resolve( 0 ); }
+            } );
+            drafts.close();
+        }
+
+        // eMail's files go with its drafts - unless a draft was kept: its files
+        // stay (eMail sweeps the ones no draft needs when it next opens).
+        if( ! mailKept )
+        {
+            var files = await openSide( "nayive-mail-files", "files", "key" );
+            await oneTx( files, "files", "readwrite", function ( os ) { return os.clear(); } );
+            if( files ) files.close();
+        }
+
+        // Chat's typed, unsent text (chat/compose.js).
+        try
+        {
+            for( var i = localStorage.length - 1; i >= 0; i-- )
+            {
+                var k = localStorage.key( i );
+                if( k && k.indexOf( "nayive-chat-draft:" ) === 0 ) localStorage.removeItem( k );
+            }
+        }
+        catch ( e ) {}
+
+        return left;
+    }
+
+    // The sign-out, in one call: send, count, ask( n ) (resolves true = sign
+    // out) when anything is left, clear what was counted. What came in while
+    // asking is counted and asked about again - twice at most; after that it
+    // stays here, kept for its owner's next sign-in. Resolves false when the
+    // user chose to stay.
+    async function leaveDevice( ask )
+    {
+        for( var round = 0; round < 3; round++ )
+        {
+            try { await sendWaiting( round ? 3000 : 10000 ); } catch ( e ) {}
+            var n = await localCount();
+            if( n > 0 && ! await ask( n ) ) { counted = null; return false; }
+            if( ! await clearLocal() ) return true;
+        }
+        return true;
     }
 
     //------------------------------------------------------------------------//
@@ -1446,7 +2208,7 @@
     }
 
     window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting,
-                           localCount: localCount, clearLocal: clearLocal,
+                           localCount: localCount, clearLocal: clearLocal, leaveDevice: leaveDevice,
                            mergeLists: mergeLists, mergeFields: mergeFields, mergeSets: mergeSets,
                            hashText: hashText };
 } )();

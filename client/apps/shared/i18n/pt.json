@@ -583,6 +583,7 @@
   "ui.store.notRead": "Não foi possível ler o arquivo: nada é guardado até ser possível lê-lo.",
   "ui.store.loading": "O arquivo ainda está a ser lido: tenta de novo daqui a pouco.",
   "ui.store.badFile": "Este arquivo tem algo que não entendo: abre só para leitura, para não o estragar.",
+  "ui.store.pageOnly": "Este dispositivo não conseguiu guardar a alteração (sem espaço?): só está nesta página. Não a feches até ser enviada.",
   "ui.settingsNotRead": "Não foi possível ler os ajustes: não são guardados até ser possível lê-los.",
   "tasks.addPh": "Descreve uma tarefa para a adicionares…",
   "tasks.addTask": "Adicionar tarefa",

@@ -583,6 +583,7 @@
   "ui.store.notRead": "The file could not be read: nothing is saved until it can be.",
   "ui.store.loading": "The file is still being read: try again in a moment.",
   "ui.store.badFile": "This file holds something I do not understand: it opens read-only, so it is not damaged.",
+  "ui.store.pageOnly": "This device could not keep the change (out of space?): it is only in this page. Do not close it until it is uploaded.",
   "ui.settingsNotRead": "Your settings could not be read: they are not saved until they can be.",
   "tasks.addPh": "Describe a task to add it…",
   "tasks.addTask": "Add task",
