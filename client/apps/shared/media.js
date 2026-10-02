@@ -305,20 +305,31 @@
                 if( timer ) { clearTimeout( timer ); timer = null; }
                 unsaved = 0;
 
-                var disk;
-                try { disk = ( await GumApi.readJson( path ) ) || {}; }
+                // Version-checked (GumApi.updateJson): a re-key or a scan saved
+                // elsewhere between the read and the write makes it read again
+                // and merge again, never write over it. `out` is made afresh on
+                // each round, from this page's map and the file as it is then.
+                var map = self.map, out, fresh;
+                try
+                {
+                    out = await GumApi.updateJson( path, function ( disk )
+                    {
+                        if( ! disk || typeof disk !== "object" || Array.isArray( disk ) ) disk = {};
+                        var next = Object.assign( {}, map );
+                        fresh = {};
+                        Object.keys( disk ).forEach( function ( k )
+                        {
+                            if( ! ( k in map ) && ! known[ k ] ) next[ k ] = fresh[ k ] = disk[ k ];   // new there since
+                        } );
+                        return next;
+                    } );
+                }
                 catch( e ) { return; }
-                if( typeof disk !== "object" || Array.isArray( disk ) ) disk = {};
 
                 // Into self.map in place: callers hold it and write to it.
-                var map = self.map;
-                Object.keys( disk ).forEach( function ( k )
-                {
-                    if( ! ( k in map ) && ! known[ k ] ) map[ k ] = disk[ k ];   // new there since
-                } );
+                Object.keys( fresh ).forEach( function ( k ) { if( ! ( k in map ) ) map[ k ] = fresh[ k ]; } );
                 known = {};
-                Object.keys( map ).forEach( function ( k ) { known[ k ] = true; } );
-                try { await GumApi.writeJson( path, map ); } catch( e ) {}
+                Object.keys( out ).forEach( function ( k ) { known[ k ] = true; } );
             }
         };
         return self;
@@ -362,12 +373,31 @@
     // masquerade as "no comments" - the next write would wipe every one of them.
     async function readComments()
     {
-        var map = ( await GumApi.readJson( COMMENTS_PATH ) ) || {};
+        return notesMap( await GumApi.readJson( COMMENTS_PATH ) );
+    }
+
+    function notesMap( map )
+    {
+        map = map || {};
         if( typeof map !== "object" || Array.isArray( map ) ) throw new Error( "comments.json is not a map" );
         return map;
     }
 
-    function writeComments( map ) { return GumApi.writeJson( COMMENTS_PATH, map ); }
+    // The ONLY way the notes are written: `change( map )` gets the notes as
+    // they are on the server now and changes them in place - false: nothing
+    // to write. Version-checked (GumApi.updateJson): a note saved elsewhere
+    // between the read and the write makes the read and `change` happen
+    // again, so `change` must be its own edit only, made again on what it is
+    // given. Resolves the map as written (or read); throws, writing nothing,
+    // when the notes cannot be read (readComments' rule) or the write fails.
+    function updateComments( change )
+    {
+        return GumApi.updateJson( COMMENTS_PATH, function ( raw )
+        {
+            var map = notesMap( raw );
+            return change( map ) === false ? false : map;
+        } );
+    }
 
     // PARKED NOTES. A binned photo keeps its note at its old path (purgePaths
     // below), so a restore brings it back. But when another item then takes
@@ -409,16 +439,22 @@
     }
 
     // Read one sidecar, hand the map to `mutate`, write it back if that returns
-    // true. A missing or unreadable file is simply left alone. `mutate` runs
-    // synchronously on the copy just read (C7, see remapComments): Movies'
-    // resume points share this file with other devices.
+    // true. A missing or unreadable file is simply left alone. Version-checked
+    // (C7, GumApi.updateJson): Movies' resume points and the scan caches are
+    // saved by other devices too, and one saved between this read and this
+    // write makes it read again and `mutate` again - never written over.
     async function editSidecar( path, mutate )
     {
-        var map;
-        try { map = ( await GumApi.readJson( path ) ) || {}; }
-        catch( e ) { return; }
-        if( typeof map !== "object" || Array.isArray( map ) ) return;
-        if( mutate( map ) ) try { await GumApi.writeJson( path, map ); } catch( e ) {}
+        try
+        {
+            await GumApi.updateJson( path, function ( map )
+            {
+                map = map || {};
+                if( typeof map !== "object" || Array.isArray( map ) ) return false;
+                return mutate( map ) ? map : false;
+            } );
+        }
+        catch( e ) {}
     }
 
     // rekey() for the notes, one pair at a time and in order: first whatever
@@ -494,18 +530,13 @@
     }
 
     // C7: the notes file is shared with Photos, the image editor and every
-    // other device, and this write is not version-checked yet. So the window
-    // a note saved elsewhere could fall into is kept to the bare GET -> PUT:
-    // the change is worked out on the copy JUST read, synchronously - nothing
-    // may be awaited between readComments() and writeComments() - and only
-    // this operation's keys move.
+    // other device. Only this operation's keys move, and the write is
+    // version-checked (updateComments): a note saved elsewhere meanwhile
+    // makes the move be worked out again on the fresh copy.
     async function remapComments( pairs, keep )
     {
-        var map;
-        try { map = await readComments(); }
-        catch( e ) { return; }
-        if( moveNotes( map, pairs, keep ) )
-            try { await writeComments( map ); } catch( e ) {}
+        try { await updateComments( function ( map ) { return moveNotes( map, pairs, keep ); } ); }
+        catch( e ) {}
     }
 
     // A move / rename: both sidecars follow the file. os.rename keeps the size
@@ -570,6 +601,8 @@
         var thumbs = [];
         for( var i = 0; i < SCAN_CACHES.length; i++ )
             await purgeFrom( SCAN_CACHES[ i ], paths, thumbs );
+        // A cache read again after a 412 (editSidecar) collects its thumbnails again.
+        thumbs = Array.from( new Set( thumbs ) );
         for( var j = 0; j < thumbs.length; j += 100 )      // keep each URL a sane length
             try { await GumApi.purgePaths( thumbs.slice( j, j + 100 ) ); } catch( e ) {}
     }
@@ -699,7 +732,7 @@
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
         dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
-        readComments: readComments, writeComments: writeComments, NOTES_ASIDE: ASIDE,
+        readComments: readComments, updateComments: updateComments, NOTES_ASIDE: ASIDE,
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,

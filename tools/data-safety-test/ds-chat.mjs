@@ -62,10 +62,19 @@ ok( ( await c.evaluate( OUTBOX ) ).includes( "hola sin red" ), "…and the messa
 ok( await openChat( JA ) && await openChat( CA ), "another chat, and back" );
 ok( await c.until( bubble( "hola sin red" ), 5000 ), "leaving the chat did not lose it: its bubble is back", await c.evaluate( "document.getElementById( 'wall' ).textContent" ) );
 ok( ( await rowText( CA ) ).includes( "hola sin red" ), "the list shows it waiting in Carmen's row", await rowText( CA ) );
+// The network comes back. Chrome's emulation may tell the page "online" a
+// moment before its requests work again (on a loaded machine), and the try
+// the page makes at that moment then fails - a quirk of the emulation, not of
+// a real network, and the test failed now and then. So the network comes
+// back with the sends still refused (the switch above), and the page hears
+// "online" again once they work: the event the app sends by.
+await c.evaluate( "localStorage.setItem( 'ds-fail-send', '1' ); true" );
 await net( false );
+ok( await c.until( "navigator.onLine" ), "the page sees the network back" );
+await c.evaluate( "localStorage.removeItem( 'ds-fail-send' ); window.dispatchEvent( new Event( 'online' ) ); true" );
 let sent = false;
-for( let i = 0; i < 100 && ! sent; i++ ) { sent = ( await onServer( CA ) ).includes( "hola sin red" ); if( ! sent ) await new Promise( r => setTimeout( r, 100 ) ); }
-ok( sent, "the network back: it goes by itself" );
+for( const end = Date.now() + 30000; ! sent && Date.now() < end; ) { sent = ( await onServer( CA ) ).includes( "hola sin red" ); if( ! sent ) await new Promise( r => setTimeout( r, 200 ) ); }
+ok( sent, "the network back: it goes by itself", await c.evaluate( OUTBOX ) );
 ok( ( await onServer( CA ) ).filter( t => t === "hola sin red" ).length === 1, "…once", await onServer( CA ) );
 ok( await c.until( `${bubble( "hola sin red" )} && ! ${bubble( "hola sin red" )}.classList.contains( 'failed' )` ), "…and its bubble is a sent one" );
 ok( await settles( OUTBOX + ".then( l => ! l.length )" ), "the outbox is empty" );

@@ -1373,6 +1373,7 @@
   "image.introBack": "Closes the editor and goes back to where you were. Asks first if there are unsaved changes.",
   "image.introSave": "Saves the picture and the note over the file. The editor stays open.",
   "image.introCopy": "Saves the picture as a new file in the same folder and goes on editing the copy.",
+  "image.offlineCopy": "This picture was opened from the offline copy, which may be old: it is not saved over the file. “Save a copy” saves it as a new file.",
   "photos.galleryMode": "Gallery mode",
   "photos.grid": "Grid",
   "photos.list": "List",

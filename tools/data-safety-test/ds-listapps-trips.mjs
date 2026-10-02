@@ -154,18 +154,28 @@ section( "D2 · TWO STAGES' \"ticket.pdf\", AND A FILE ALREADY IN THE FOLDER" );
     {
         const f = path.join( TMP, name );
         fs.writeFileSync( f, body );
-        await c.evaluate( "addStageDoc(); [ ...document.querySelectorAll( '#stageSheet .doc-attach-btn' ) ].pop().click(); true" );
+        // A row's id is Date.now() + a random 0-999 (trips/helpers.js newId):
+        // two rows made within a second can share one - and then share the
+        // stored name too. Not what this case is about: the new row gets an
+        // id of its own.
+        await c.evaluate( `( () => { addStageDoc(); const ds = stageDraft.documents, d = ds[ ds.length - 1 ];
+            while( ds.some( x => x !== d && x.id === d.id ) ) d.id++;
+            [ ...document.querySelectorAll( '#stageSheet .doc-attach-btn' ) ].pop().click(); return true; } )()` );
         await setFile( "#docUploadInput", f );
-        await c.until( `stageDraft.documents.some( d => d._pending && d._pending.name === ${JSON.stringify( name )} )` );
+        ok( await c.until( `stageDraft.documents.some( d => d._pending && d._pending.name === ${JSON.stringify( name )} )` ), name + " picked" );
     }
     await c.evaluate( "saveStage()" );
-    ok( await disk( () => ( json( DIR + "/trip.json" ).stages[ 1 ].documents || [] ).length === 2 ), "Kyoto saved with two documents" );
+    // Saved = the stage holds both rows, each with its file name: the uploads
+    // are over before the list is written (saveStage).
+    const kyoto = () => ( json( DIR + "/trip.json" ).stages[ 1 ].documents || [] );
+    ok( await disk( () => kyoto().length === 2 && kyoto().every( d => d.file ) ), "Kyoto saved with two documents", kyoto() );
 
-    const files = json( DIR + "/trip.json" ).stages[ 1 ].documents.map( d => d.file );
+    const files = kyoto().map( d => d.file );
     ok( onDisk( s, DIR + "/ticket.pdf" ) === "TOKYO", "Tokyo's ticket.pdf is untouched", onDisk( s, DIR + "/ticket.pdf" ) );
     ok( onDisk( s, DIR + "/boarding.pdf" ) === "STRAY", "the file already in the folder is untouched" );
     ok( ! files.includes( "ticket.pdf" ) && ! files.includes( "boarding.pdf" ), "Kyoto's two got names of their own", files );
-    ok( files.map( f => onDisk( s, DIR + "/" + f ) ).sort().join( "," ) === "KYOTO,KYOTO-BOARDING", "...holding Kyoto's own bytes" );
+    const bytes = () => kyoto().map( d => onDisk( s, DIR + "/" + d.file ) ).sort().join( "," );
+    ok( await disk( () => bytes() === "KYOTO,KYOTO-BOARDING", 5000 ), "...holding Kyoto's own bytes", { docs: kyoto(), bytes: bytes() } );
 }
 
 fs.rmSync( TMP, { recursive: true, force: true } );

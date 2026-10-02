@@ -1473,7 +1473,17 @@
 
                 if( body.indexOf( '\uFFFD' ) !== -1 )
                 {
-                    try { ( { text, enc } = decodeText( await GumApi.readFileBytes( name ), name ) ); }
+                    // The bytes the store's text came from - never the offline
+                    // copy (X-Nayive-Copy): an older version that reads as good
+                    // UTF-8 would open editable, and its next save carry the
+                    // store's newer version tag over the newer file. Such a copy
+                    // is "no bytes": read-only.
+                    try
+                    {
+                        const got = await GumApi.readVersion( name, { bytes: true } );
+                        if( got.offline ) throw new Error( 'offline copy' );
+                        ( { text, enc } = decodeText( got.body, name ) );
+                    }
                     catch( e )
                     {
                         if( e.said ) throw e;                 // the bytes say it is not text

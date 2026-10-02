@@ -624,37 +624,13 @@ function markClash( it, there )
 }
 
 // createFileBytes with Drive's "&convert=mp4": the same create-only PUT
-// (If-None-Match: *, a 412 when the name is taken), plus the query.
+// (If-None-Match: *, a 412 when the name is taken), plus the query. A 412
+// that is this upload's own first try (sent again after a dropped
+// connection, its first try landed) is a success already: GumApi's "our own
+// first try" reads the file back and finds these bytes.
 function createUpload( path, blob, conv )
 {
-    if( ! conv ) return GumApi.createFileBytes( path, blob );
-    return GumApi.putBinary( GumApi.fileUrl( path ) + '&convert=mp4', blob, { 'If-None-Match': '*' } )
-                 .then( function() { GumApi.announce( [ path ], false ); } );
-}
-
-// A 412 can be this upload's own first try: putBinary sends again after a
-// dropped connection, and the first one may have landed. The same bytes
-// there are that, not a file someone else put there. Only a file small
-// enough to read back is judged so: a bigger one of the same size may still
-// be another file - it gets the question.
-const SAME_CHECK_MAX = 8 * 1024 * 1024;
-
-async function sameAsSent( path, blob )
-{
-    if( blob.size > SAME_CHECK_MAX ) return false;
-    try
-    {
-        const i = path.lastIndexOf( '/' );
-        const r = await withBusy( GumApi.listDir( i < 0 ? '' : path.slice( 0, i ) ) );
-        const n = ( r.nodes || [] ).find( function( x ) { return x.path === path; } );
-        if( ! n || isDir( n ) || n.size !== blob.size ) return false;
-        const have = await withBusy( GumApi.readFileBytes( path ) );
-        const mine = new Uint8Array( await blob.arrayBuffer() );
-        if( have.length !== mine.length ) return false;
-        for( let k = 0; k < have.length; k++ ) if( have[ k ] !== mine[ k ] ) return false;
-        return true;
-    }
-    catch( _ ) { return false; }
+    return GumApi.createFileBytes( path, blob, conv ? { convert: 'mp4' } : null );
 }
 
 // A name free in relPath's folder (under `dest`) NOW - a fresh listing - and
@@ -673,8 +649,9 @@ function inShared( path ) { return path === 'shared' || path.indexOf( 'shared/' 
 
 // Sends a file the user did NOT say "Replace" to, into `dest`: it may only
 // make a new file. A 412 is a name taken since filesThere looked (another
-// device or window), or this very upload's first try (sameAsSent). The user
-// then picks: replace it, or keep both - this one goes up as "x (copia).jpg".
+// device or window; this very upload's first try never gets here, see
+// createUpload). The user then picks: replace it, or keep both - this one
+// goes up as "x (copia).jpg".
 // In a folder shared with us the name taken is a 409 and there is nothing to
 // pick (it only ever gains files): this one goes up beside it. Resolves the
 // relPath it was saved under; null when the user cancels (the rest of the
@@ -691,8 +668,6 @@ async function sendNew( dest, relPath, blob, conv, used )
             status = err && err.status;
             if( ( status !== 412 && ! ( status === 409 && inShared( path ) ) ) || tries >= 20 ) throw err;
         }
-
-        if( await sameAsSent( path, blob ) ) return relPath;
 
         if( status === 412 )
         {

@@ -909,13 +909,17 @@ async function refreshStat( p )
     e.size = p.size; e.mtime = p.mtime;
     // Only this entry goes to the file, laid over a fresh read of it: this
     // page's copy may be hours old, and written whole it would undo Drive's
-    // re-keys and other devices' scans made since.
+    // re-keys and other devices' scans made since. Version-checked
+    // (GumApi.updateJson): one saved in between makes it read again.
     try
     {
-        const disk = ( await GumApi.readJson( SCAN_PATH ) ) || {};
-        if( typeof disk !== "object" || Array.isArray( disk ) ) return;
-        disk[ p.path ] = Object.assign( disk[ p.path ] || {}, e );
-        await GumApi.writeJson( SCAN_PATH, disk );
+        await GumApi.updateJson( SCAN_PATH, disk =>
+        {
+            disk = disk || {};
+            if( typeof disk !== "object" || Array.isArray( disk ) ) return false;
+            disk[ p.path ] = Object.assign( disk[ p.path ] || {}, e );
+            return disk;
+        } );
     }
     catch( _ ) {}
 }
@@ -1014,6 +1018,37 @@ function setSync( state )
     NayiveUI.applySyncState( 'sync', state, SYNC_TITLES );
 }
 
+/* One photo into DIR as a NEW file only (create-only PUT, D3): the names on
+ * screen are from the last listing, and a photo of that name another device
+ * put there since (the phone's daily upload, a second tab, a guest in a shared
+ * album) must never be written over. Its 412 asks, as Drive does: replace it,
+ * or keep both - this one goes up as "x (2).jpg". Resolves the name it was
+ * saved under; null when the user cancels. `taken` gains every name tried.
+ * 20 names in a row taken is not a race: an error. */
+async function sendPhoto( name, blob, taken )
+{
+    for( let tries = 0; ; tries++ )
+    {
+        try { await GumApi.createFileBytes( DIR + "/" + name, blob ); return name; }
+        catch( err ) { if( ! err || err.status !== 412 || tries >= 20 ) throw err; }
+
+        const choice = await NayiveUI.confirm( {
+            title:     NayiveUI.t( 'drive.alreadyExistOne' ),
+            body:      NayiveUI.tf( 'drive.appearedBody', { name: name } ),
+            confirm:   NayiveUI.t( 'drive.replace' ), danger: true,
+            other:     NayiveUI.t( 'drive.keepBoth' ),
+            otherIcon: 'copy' } );
+        if( choice === false ) return null;
+        if( choice === true )
+        {
+            await GumApi.writeFileBytes( DIR + "/" + name, blob );
+            return name;
+        }
+        name = NayiveUI.uniqueName( name, taken );
+        taken.add( name );
+    }
+}
+
 /* Upload the picked images into the folder Photos is showing (DIR), then
  * reload so the scan cache picks up just the new files. Wired to #addBtn. */
 async function handleAddPhotos( fileList )
@@ -1059,12 +1094,13 @@ async function handleAddPhotos( fileList )
             NayiveUI.toast( NayiveUI.tf( "photos.notAPhoto", { name: f.name } ) );
             continue;
         }
-        const name  = NayiveUI.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
+        let name = NayiveUI.uniqueName( ready.name || ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
         taken.add( name );
 
         try
         {
-            await GumApi.writeFileBytes( DIR + "/" + name, ready.blob );   // fetch() streams it
+            name = await sendPhoto( name, ready.blob, taken );
+            if( name === null ) break;                             // the user cancelled: the rest stops too
             PENDING_FILES.set( name, ready.blob );                 // its thumb is made from these bytes, not re-downloaded
             done++;
         }
@@ -1534,20 +1570,26 @@ async function geocodeRun( my )
 // A run lasts minutes and other devices save places too: each save reads the
 // file again and adds only this run's places to it - never the copy read at
 // the start, which would drop theirs (asked again later, against his
-// Nominatim budget). What they found meanwhile is kept here as well, so this
-// run does not ask for it. A file that cannot be read is not written: the
-// next save carries every place of the run anyway.
+// Nominatim budget) - and version-checked (GumApi.updateJson): places saved
+// between that read and this write make it read again. What they found
+// meanwhile is kept here as well, so this run does not ask for it. A file
+// that cannot be read is not written: the next save carries every place of
+// the run anyway.
 async function savePlaces( mine )
 {
     let disk;
-    try { disk = await GumApi.readJson( PLACES_PATH ); }
+    try
+    {
+        disk = await GumApi.updateJson( PLACES_PATH, raw =>
+        {
+            const d = raw === null ? {} : raw;
+            if( typeof d !== "object" || Array.isArray( d ) ) return false;
+            return Object.assign( d, mine );
+        } );
+    }
     catch( _ ) { return; }
-    if( disk === null ) disk = {};
-    if( typeof disk !== "object" || Array.isArray( disk ) ) return;
+    if( ! disk || typeof disk !== "object" || Array.isArray( disk ) ) return;
     for( const k of Object.keys( disk ) ) if( ! ( k in mine ) ) PLACES[ k ] = disk[ k ];
-    Object.assign( disk, mine );
-    try { await GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( disk, null, 1 ) ) ); }
-    catch( _ ) {}
 }
 async function reverseGeocode( lat, lon )
 {
@@ -1610,21 +1652,17 @@ async function saveComment( id, text )
         try { localStorage.setItem( "photos-comments", JSON.stringify( COMMENTS ) ); } catch( _ ) {}
         return true;
     }
-    // read-modify-write the whole sidecar, so a stale in-memory copy can't wipe
-    // a note added elsewhere (Drive's editor) since we loaded. Only a missing
-    // file (404) is an empty map: on any other read error, or a file that is
-    // not a map (readComments throws for both), nothing is written - it would
-    // put this one note over all. True when the note is on disk.
-    let map;
-    try { map = await NayiveMedia.readComments(); }
-    catch( _ )
+    // This one note, laid on the sidecar as it is on the server NOW, so a
+    // stale in-memory copy can't wipe a note added elsewhere (the image
+    // editor, another device) - and version-checked (updateComments): one
+    // saved between the read and the write makes it read again. Only a
+    // missing file (404) is an empty map: on any other read error, or a file
+    // that is not a map, nothing is written - it would put this one note over
+    // all. True when the note is on disk.
+    try
     {
-        NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) );
-        return false;
+        COMMENTS = await NayiveMedia.updateComments( map => { if( text ) map[ id ] = text; else delete map[ id ]; } );
     }
-    if( text ) map[ id ] = text; else delete map[ id ];
-    COMMENTS = map;
-    try { await NayiveMedia.writeComments( map ); }
     catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); return false; }
     return true;
 }
@@ -1672,16 +1710,16 @@ async function sweepComments()
 
     // The removals go to a fresh read of the file - this page's copy is never
     // written back, or a note added elsewhere since it was read would go with
-    // it. Only a missing file is empty; on any other read error nothing is
-    // written (the sweep runs again on the next load).
-    let map;
-    try { map = await NayiveMedia.readComments(); }
-    catch( _ ) { return; }
-    let removed = false;
-    for( const key of dead )
-        if( Object.prototype.hasOwnProperty.call( map, key ) ) { delete map[ key ]; removed = true; }
-    if( removed )
-        NayiveMedia.writeComments( map ).catch( () => {} );
+    // it - version-checked (updateComments). Only a missing file is empty; on
+    // any other read error nothing is written (the sweep runs again on the
+    // next load).
+    NayiveMedia.updateComments( map =>
+    {
+        let removed = false;
+        for( const key of dead )
+            if( Object.prototype.hasOwnProperty.call( map, key ) ) { delete map[ key ]; removed = true; }
+        return removed;
+    } ).catch( () => {} );
 }
 
 /* ---------------------------------------------------------------------------

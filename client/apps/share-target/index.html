@@ -237,10 +237,11 @@ function setDest( folder )
 
 // A photo goes up as a NEW file only (create-only PUT): a name another device
 // took after the listing answers 412 (409 in an album shared with us), and
-// the next free one is used - "IMG_1 (2).jpg" - never written over. A 412 can
-// also be this very photo's first try, landed before a dropped connection
-// made the PUT go again: the same bytes there mean it is saved. `taken` gains
-// every name tried; 50 names in a row taken is not a race any more: an error.
+// the next free one is used - "IMG_1 (2).jpg" - never written over. (A 412
+// that is this very photo's first try, landed before a dropped connection
+// made the PUT go again, is a success already: GumApi's "our own first try".)
+// `taken` gains every name tried; 50 names in a row taken is not a race any
+// more: an error.
 async function sendNew( want, bytes, taken )
 {
     for( let tries = 0; ; tries++ )
@@ -249,20 +250,7 @@ async function sendNew( want, bytes, taken )
         taken.add( name );
         try { await GumApi.createFileBytes( DEST + "/" + name, bytes ); return name; }
         catch ( err ) { if( ! err || ( err.status !== 412 && err.status !== 409 ) || tries >= 50 ) throw err; }
-        if( await sameBytes( DEST + "/" + name, bytes ) ) return name;
     }
-}
-
-async function sameBytes( path, bytes )
-{
-    try
-    {
-        const have = await GumApi.readFileBytes( path );
-        if( have.length !== bytes.length ) return false;
-        for( let i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
-        return true;
-    }
-    catch ( _ ) { return false; }
 }
 
 async function upload()
@@ -362,13 +350,16 @@ async function upload()
 
     // Remember this album as the Photos folder, then open it there. Only
     // `folder` changes: the file's other keys are kept, and an unreadable one
-    // (not a 404) is left as it is rather than written over.
+    // (not a 404) is left as it is rather than written over. Version-checked
+    // (GumApi.updateJson): a setting saved meanwhile is kept, not put back.
     try
     {
-        const cfg  = await GumApi.readJson( "data/photos/config.json" );   // null = no file yet
-        const next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
-        next.folder = DEST;
-        await GumApi.writeJson( "data/photos/config.json", next );
+        await GumApi.updateJson( "data/photos/config.json", cfg =>   // null = no file yet
+        {
+            const next = ( cfg && typeof cfg === "object" && ! Array.isArray( cfg ) ) ? cfg : {};
+            next.folder = DEST;
+            return next;
+        } );
     }
     catch ( _ ) {}
 

@@ -249,9 +249,9 @@
 
     // The attachment goes up as a NEW file only (create-only PUT): a name
     // another device took after the listing answers 412 and the next free one
-    // is used, never written over. A 412 can also be this very save's first
-    // try, landed before a dropped connection made the PUT go again: the same
-    // bytes there mean it is saved. 50 names in a row taken: an error.
+    // is used, never written over. (A 412 that is this very save's first try,
+    // landed before a dropped connection made the PUT go again, is a success
+    // already: GumApi's "our own first try".) 50 names in a row taken: an error.
     async function saveNew( dir, want, bytes )
     {
         var also = [];
@@ -260,21 +260,8 @@
             var name = await freeName( dir, want, also );
             try { await GumApi.createFileBytes( dir + "/" + name, bytes ); return name; }
             catch( e ) { if( ! e || e.status !== 412 || tries >= 50 ) throw e; }
-            if( await sameBytes( dir + "/" + name, bytes ) ) return name;
             also.push( name );
         }
-    }
-
-    async function sameBytes( path, bytes )
-    {
-        try
-        {
-            var have = await GumApi.readFileBytes( path );
-            if( have.length !== bytes.length ) return false;
-            for( var i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
-            return true;
-        }
-        catch( e ) { return false; }
     }
 
     async function saveToDrive( p, url, btn )

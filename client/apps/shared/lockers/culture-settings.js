@@ -507,14 +507,16 @@ function open( kind )
     // ✓ writes only what THIS dialog changed, over the settings read again
     // now: one changed on another device while the dialog was open (the
     // phone's units, say) is not put back. Field by field; the boxes ("cards")
-    // box by box. A read that fails now writes nothing: the dialog stays open,
+    // box by box. Version-checked (A.update): a save made elsewhere between
+    // that read and this write makes it read again and lay these changes
+    // again. A read that fails now writes nothing: the dialog stays open,
     // the changes kept, and ✓ can be pressed again.
     function save()
     {
         if( ! cfg || readOnly || ! base ) return;
         bSave.disabled = true;
         var same = function ( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); };
-        A.readStrict().then( function ( now )
+        A.update( function ( now )
         {
             var out = JSON.parse( JSON.stringify( now ) );
             Object.keys( cfg ).forEach( function ( k )
@@ -526,20 +528,22 @@ function open( kind )
                     if( ! same( cfg.cards[ c ], base.cards && base.cards[ c ] ) ) out.cards[ c ] = cfg.cards[ c ];
                 } );
             } );
-            A.write( out ).then( function ()
-            {
-                ui.close();
-                NayiveUI.toast( t( "salon.saved" ) );
-            }, function ()
-            {
-                // Kept on this device anyway (S.write keeps the local copy first).
-                ui.close();
-                NayiveUI.toast( t( "salon.saveFail" ) );
-            } );
-        }, function ()
+            return out;
+        } ).then( function ()
         {
-            bSave.disabled = false;
-            NayiveUI.toast( t( "salon.readFail" ) );
+            ui.close();
+            NayiveUI.toast( t( "salon.saved" ) );
+        }, function ( e )
+        {
+            if( e && e.read )
+            {
+                bSave.disabled = false;
+                NayiveUI.toast( t( "salon.readFail" ) );
+                return;
+            }
+            // Kept on this device anyway (update keeps the local copy first).
+            ui.close();
+            NayiveUI.toast( t( "salon.saveFail" ) );
         } );
     }
 }

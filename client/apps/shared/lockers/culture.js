@@ -273,14 +273,64 @@ function readStrict()
     } );
 }
 
-function write( s )
+// The server's copy of `file` WITH its version: { s: the JSON as it is, null
+// when it was never saved (404), tag: its ETag }. Anything that is not a good
+// answer in `ms` rejects, as fetchSettings. (Science's file too.)
+function fetchTagged( file, ms )
 {
-    s = normalise( s );
-    keepLocal( s );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify( s, null, 2 ) } )
-        .then( function ( r ) { if( ! r.ok ) throw new Error( "status " + r.status ); return s; } );
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
+    return fetch( "/api/files?file=" + encodeURIComponent( file ),
+                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
+        .then( function ( r )
+        {
+            if( r.status === 404 ) return { s: null, tag: null };
+            if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) throw new Error( "status " + r.status );
+            var tag = r.headers.get( "ETag" );
+            return r.json().then( function ( s ) { return { s: s, tag: /^"[^"]*"$/.test( tag || "" ) ? tag : null }; } );
+        } )
+        .then( function ( v ) { clearTimeout( timer ); return v; },
+               function ( e ) { clearTimeout( timer ); throw e; } );
+}
+
+// ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
+// server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes
+// up only over the version just read (If-Match; create-only when there was
+// no file): a save made meanwhile on another device answers 412, and the
+// read and `fn` run again - never written over (F6). Kept on this device
+// first (keepLocal). Rejects, writing nothing, when the settings cannot be
+// read: e.read = true then; any other rejection is the write's.
+function updateFile( file, readNow, fn, norm, keep )
+{
+    var round = 0;
+    function attempt()
+    {
+        round++;
+        return readNow().then( function ( now )
+        {
+            var out = norm( fn( now.s ) );
+            keep( out );
+            var h = { "Content-Type": "application/json" };
+            if( now.tag ) h[ "If-Match" ] = now.tag; else h[ "If-None-Match" ] = "*";
+            return fetch( "/api/files?file=" + encodeURIComponent( file ),
+                          { method: "PUT", credentials: "same-origin", headers: h, body: JSON.stringify( out, null, 2 ) } )
+                .then( function ( r )
+                {
+                    if( r.status === 412 && round < 4 ) return attempt();
+                    if( ! r.ok ) throw new Error( "status " + r.status );
+                    return out;
+                } );
+        }, function ( e ) { var err = new Error( "settings not read: " + ( e && e.message || e ) ); err.read = true; throw err; } );
+    }
+    return attempt();
+}
+
+function update( fn )
+{
+    return updateFile( FILE, function ()
+    {
+        return fetchTagged( FILE, 10000 ).then( function ( v ) { return { s: normalise( v.s || {} ), tag: v.tag }; } );
+    }, fn, normalise, keepLocal );
 }
 
 window.NayiveSalon =
@@ -296,7 +346,8 @@ window.NayiveSalon =
     },
     read:      read,
     readStrict: readStrict,
-    write:     write
+    update:    update,
+    fetchTagged: fetchTagged, updateFile: updateFile     // for Science's file (science.js)
 };
 
 // The locker: the settings first (4 s at most), then the screen.

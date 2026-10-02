@@ -33,6 +33,12 @@ let commentBase = '';      // the photo note as last loaded / saved
 let saving      = false;   // a write in flight: no second one, no leaving
 let closing     = false;   // leaving was already asked about
 const keptOnce  = new Set();   // paths whose original is safe this session: binned by a first ✓, or written here
+// The version (ETag) of editorPath this edit started from: the one loaded,
+// then the one each save made. ✓ writes only over THAT version (C4) - a
+// picture saved meanwhile in another window, on another device or by Photos
+// is never written over, nor sent to the bin unseen.
+let heldTag     = null;
+let fromCopy    = false;   // loaded from the offline copy (X-Nayive-Copy): never saved over
 
 function extOf( name ) { const i = name.lastIndexOf( '.' ); return i < 0 ? '' : name.slice( i + 1 ).toLowerCase(); }
 function nameOf( path ) { return path.split( '/' ).pop(); }
@@ -67,15 +73,21 @@ async function loadNote( path )
 // this picture's: it is the note of the file the copy replaced (in the bin
 // now) or of a photo binned earlier under that name - parked (media.js), not
 // written over, so a restore or the Undo can bring it back. True when a note
-// was parked and saved so.
+// was parked and saved so. Version-checked (updateComments): a note saved
+// elsewhere meanwhile is kept, this change made again over it.
 async function saveNote( path, copy )
 {
-    let map;
-    try { map = await NayiveMedia.readComments(); } catch( _ ) { return false; }
     const text = commentValue();
-    const parked = !! copy && NayiveMedia.parkNotes( map, path );
-    if( text ) map[ path ] = text; else delete map[ path ];
-    try { await NayiveMedia.writeComments( map ); commentBase = text; }
+    let parked = false;
+    try
+    {
+        await NayiveMedia.updateComments( function( map )
+        {
+            parked = !! copy && NayiveMedia.parkNotes( map, path );
+            if( text ) map[ path ] = text; else delete map[ path ];
+        } );
+        commentBase = text;
+    }
     catch( _ ) { return false; /* non-fatal: the image itself was saved */ }
     return parked;
 }
@@ -106,12 +118,29 @@ async function start()
     try { await NayivePhoto.loadEditor(); }
     catch( _ ) { setMsg( T( 'drive.editorFailed' ) ); return; }
 
+    // The picture's bytes AND their version, in one read: the editor shows
+    // exactly the version ✓ will check against (C4).
+    let src;
+    try
+    {
+        const v = await GumApi.readVersion( file, { bytes: true } );
+        heldTag  = v.tag;
+        fromCopy = v.offline;
+        src = URL.createObjectURL( new Blob( [ v.body ], { type: mimeOf( file ) } ) );
+    }
+    catch( err )
+    {
+        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        setMsg( T( 'ui.loadFailed' ) );
+        return;
+    }
+
     editorPath = file;
     loadNote( file );
 
     const host = $( 'tuiEditor' );
     host.innerHTML = '';
-    imageEditor = NayivePhoto.newEditor( host, GumApi.fileUrl( file ), nameOf( file ) );
+    imageEditor = NayivePhoto.newEditor( host, src, nameOf( file ) );
     imageEditor.on( 'undoStackChanged', function( len ) { editorDirty = savedOnce || len > 0; } );
     setBusy( false );
 }
@@ -134,6 +163,19 @@ function formatFor( name )
     return 'png';
 }
 
+function mimeOf( name ) { return 'image/' + formatFor( name ); }
+
+// ✓ over a picture saved meanwhile somewhere else: nothing was written - not
+// over it, and it did not go to the bin. The edit stays here, unsaved, and
+// can go to a NEW file beside it ("Save a copy").
+async function changedMeanwhile( path )
+{
+    if( await NayiveUI.confirm( {
+        title:   T( 'ui.conflictTitle' ),
+        body:    TF( 'ui.conflictBody', { name: nameOf( path ) } ),
+        confirm: T( 'ui.conflictCopy' ) } ) ) openSaveCopy();
+}
+
 // `replaced`: set when "Save a copy" sent a file of the same name to the
 // bin first (confirmSaveCopy) - the "Saved" toast then carries its Undo.
 // True when the picture was written (a note-only save counts).
@@ -143,6 +185,13 @@ function formatFor( name )
 // it back now. Re-encoding in place left the camera original nowhere once
 // the window closed. Later ✓s of the same session write over the edited
 // version only - the original is already safe.
+//
+// Every ✓ is version-checked (C4): the first one sends the original to the
+// bin only while it is still the version this edit started from (heldTag),
+// and writes create-only into the name it cleared; a later one writes only
+// over the version the last save made (If-Match). A picture changed since,
+// anywhere, is left as it is: changedMeanwhile() offers "Save a copy". A
+// picture opened from the offline copy is never saved over.
 async function saveTo( dest, replaced )
 {
     if( ! imageEditor || saving ) return false;
@@ -156,6 +205,12 @@ async function saveTo( dest, replaced )
         return true;
     }
 
+    const copy = dest !== editorPath;      // "Save a copy" to another name: a new file there
+
+    // An old copy of the picture: what is on the server may be newer. Only a
+    // copy beside it can be saved.
+    if( fromCopy && ! copy ) { NayiveUI.toast( T( 'image.offlineCopy' ), { ms: 8000 } ); return false; }
+
     const fmt  = formatFor( dest );
     const opts = { format: fmt };
     if( fmt !== 'png' ) opts.quality = 0.92;
@@ -165,11 +220,12 @@ async function saveTo( dest, replaced )
     catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return false; }
     const size = imageEditor.getCanvasSize();
 
-    const copy = dest !== editorPath;      // "Save a copy" to another name: a new file there
-
     saving = true;
     setBusy( true );
-    let kept = null;      // the original, binned by this ✓: put back if the write fails
+    let kept     = null;    // the original, binned by this ✓: put back if the write fails
+    let cleared  = false;   // this ✓ sent the original to the bin: the name is free now
+    let saved    = false;
+    let conflict = false;   // changed since: nothing written, the edit stays
     try
     {
         // Both read the file at its path: before it goes to the bin.
@@ -178,15 +234,26 @@ async function saveTo( dest, replaced )
 
         if( ! replaced && dest === editorPath && ! keptOnce.has( dest ) )
         {
+            // Still the version this edit started from? Else it would go to
+            // the bin unseen, and this edit take its place.
+            let now = null;
+            try { now = await GumApi.versionOf( dest ); }
+            catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); return false; }
+            if( ! now.tag || now.tag !== heldTag ) throw { status: 412 };   // as the server would answer
+
             const note = await noteOf( dest );
             let ids = null;
             try { ids = await GumApi.binPaths( [ dest ] ); }
             catch( _ ) { NayiveUI.toast( T( 'drive.imageSaveFailed' ) ); return false; }   // the original stays as it is
-            if( ids ) kept = { ids: ids, note: note, from: dest };
+            if( ids ) kept = { ids: ids, note: note, from: dest, tag: heldTag };
             keptOnce.add( dest );
+            cleared = true;
         }
 
-        await GumApi.writeFileBytes( dest, bytes );
+        // A new file (a copy, or the name this ✓ just cleared) only where
+        // there is none; else only over the version held.
+        const w = await GumApi.writeFileBytes( dest, bytes, copy || cleared ? { createOnly: true } : { ifMatch: heldTag } );
+        heldTag = w.tag;
         NayivePhoto.dropThumb( oldThumb );
         editorDirty = false;
         savedOnce   = true;
@@ -201,15 +268,23 @@ async function saveTo( dest, replaced )
         const back = replaced || kept;
         if( back ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( dest, back ); } );
         else       NayiveUI.toast( T( 'drive.imageSaved' ) );
-        return true;
+        saved = true;
     }
-    catch( _ )
+    catch( err )
     {
-        if( kept ) { keptOnce.delete( dest ); await putBack( dest, kept ); }
-        else       NayiveUI.toast( T( 'drive.imageSaveFailed' ) );
-        return false;
+        // 412: a copy's name taken meanwhile (create-only), or the picture
+        // changed since the version held. After the original went to the bin
+        // the name is put back (putBack says what happened).
+        const changed = !! err && err.status === 412;
+        if( kept )                       { keptOnce.delete( dest ); await putBack( dest, kept ); }
+        else if( changed && copy )       NayiveUI.toast( T( 'drive.nameExistsTitle' ) );
+        else if( changed && ! cleared )  conflict = true;
+        else                             NayiveUI.toast( T( 'drive.imageSaveFailed' ) );
     }
     finally { saving = false; setBusy( false ); }
+
+    if( conflict ) await changedMeanwhile( dest );
+    return saved;
 }
 
 // A write that did not happen after its name was cleared for it (the
@@ -286,7 +361,7 @@ async function confirmSaveCopy()
         await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
 
         // An old server does not say the bin ids: no Undo then.
-        if( ids ) replaced = { ids: ids, note: note, from: editorPath };
+        if( ids ) replaced = { ids: ids, note: note, from: editorPath, tag: heldTag };
     }
 
     // Not written - it failed, or a ✓ pressed meanwhile was still saving:
@@ -310,6 +385,7 @@ async function undoSaveCopy( dest, r )
     {
         editorPath  = r.from;
         editorDirty = true;
+        heldTag     = r.tag || null;   // the version it held there (the original's, back from the bin as it was)
         showName( r.from );
     }
 
@@ -326,10 +402,12 @@ async function undoSaveCopy( dest, r )
     {
         try
         {
-            const map = await NayiveMedia.readComments();
-            const back = !! r.parked && NayiveMedia.unparkNotes( map, dest );
-            if( ! back && r.note !== null ) { if( r.note ) map[ dest ] = r.note; else delete map[ dest ]; }
-            if( back || r.note !== null ) await NayiveMedia.writeComments( map );
+            await NayiveMedia.updateComments( function( map )
+            {
+                const back = !! r.parked && NayiveMedia.unparkNotes( map, dest );
+                if( ! back && r.note !== null ) { if( r.note ) map[ dest ] = r.note; else delete map[ dest ]; }
+                return back || r.note !== null;
+            } );
         }
         catch( _ ) { /* non-fatal: the file itself is back */ }
     }

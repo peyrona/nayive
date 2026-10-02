@@ -1373,6 +1373,7 @@
   "image.introBack": "Cierra el editor y vuelve a donde estabas. Si hay cambios sin guardar, pregunta antes.",
   "image.introSave": "Guarda la imagen y la nota sobre el archivo. El editor sigue abierto.",
   "image.introCopy": "Guarda la imagen como un archivo nuevo en la misma carpeta y sigue editando la copia.",
+  "image.offlineCopy": "Esta imagen se abrió desde la copia sin conexión, que puede ser antigua: no se guarda encima. «Guardar copia» la guarda como un archivo nuevo.",
   "photos.galleryMode": "Modo de la galería",
   "photos.grid": "Cuadrícula",
   "photos.list": "Lista",
