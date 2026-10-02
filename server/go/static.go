@@ -411,15 +411,19 @@ func serveGzipTier(w http.ResponseWriter, r *http.Request, content io.ReadSeeker
 	// If-None-Match, that alone decides, by the exact tag, as ServeContent
 	// does (RFC 9110 13.1.3). The date is whole seconds: a change inside the
 	// second of the cached copy would read back as that old copy (store-core
-	// G4). If-Modified-Since alone - a copy cached before the tag, or a static
-	// asset, which has none - is judged as before.
+	// G4). An answer WITH a tag is never a 304 by date at all (filesRead says
+	// why); If-Modified-Since alone still serves a static asset or a site,
+	// which have none.
 	w.Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
+	// Byte ranges count the PLAIN file; offered on a gzipped answer, a
+	// download resumed with If-Range would append plain bytes to gzip ones.
+	w.Header().Del("Accept-Ranges")
 	if inm := r.Header.Get("If-None-Match"); inm != "" {
 		if noneMatchHit(inm, w.Header().Get("Etag")) {
 			w.WriteHeader(http.StatusNotModified)
 			return true
 		}
-	} else if notModified(r, info.ModTime()) {
+	} else if w.Header().Get("Etag") == "" && notModified(r, info.ModTime()) {
 		w.WriteHeader(http.StatusNotModified)
 		return true
 	}

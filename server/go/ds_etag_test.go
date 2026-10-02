@@ -160,6 +160,30 @@ func TestDS_B3_SameSecondDirectWriteRefused(t *testing.T) {
 	if got := dsRead(p); got != phone {
 		t.Errorf("the disk write was overwritten: %q", got)
 	}
+
+	// The same, but the disk write keeps the SIZE: same inode, same size -
+	// only the nanoseconds of its time tell it apart.
+	const phone2 = `{"links":["a","w"]}` // as long as the save below
+	code, tag = dsPutTag(t, client, ts.URL, "data/marcas.json", `{"links":["a","v"]}`, nil)
+	if code != http.StatusOK {
+		t.Fatalf("PUT = %d", code)
+	}
+	held = dsHeld(t, tag, "the third PUT")
+	// The kernel's file clock moves in ticks of a few ms; a write inside the
+	// same tick, of the same size, is the known limit (etag.go). So the one
+	// fixed wait of this suite: the clock itself must move.
+	time.Sleep(20 * time.Millisecond)
+	if err := os.WriteFile(p, []byte(phone2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _ = dsPutTag(t, client, ts.URL, "data/marcas.json", `{"links":["a","u"]}`,
+		map[string]string{"If-Match": held})
+	if code != http.StatusPreconditionFailed {
+		t.Errorf("a save from before a same-size disk write = %d, want 412", code)
+	}
+	if got := dsRead(p); got != phone2 {
+		t.Errorf("the same-size disk write was overwritten: %q", got)
+	}
 }
 
 // TestDS_B3_ExtractOldDateRefused: an editor holds Fotos/notas.txt; the
@@ -265,8 +289,9 @@ func TestDS_ETag_StableAcrossRename(t *testing.T) {
 // for the exact tag, in both tiers (ServeContent for a small or binary file,
 // the request-time gzip tier for a big text one). A change inside the same
 // second as the cached copy - which If-Modified-Since cannot see - now comes
-// back 200 with the new bytes (store-core G4). If-Modified-Since alone still
-// answers 304, for a cached copy from before the tag.
+// back 200 with the new bytes (store-core G4). If-Modified-Since alone is
+// never a 304 here (TestDS_ETag_NoDate304UnderATag says why). A gzipped
+// answer offers no byte ranges.
 func TestDS_ETag_GetConditional(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "ana", "abc")
@@ -310,6 +335,11 @@ func TestDS_ETag_GetConditional(t *testing.T) {
 		if gz := first.Header.Get("Content-Encoding") == "gzip"; gz != tier.gzipped {
 			t.Fatalf("%s: gzipped = %v - the test is not on the tier it names", tier.name, gz)
 		}
+		// Ranges are of the plain bytes: offered on a gzipped answer, a resumed
+		// download would append plain bytes to gzip ones.
+		if ranges := first.Header.Get("Accept-Ranges"); tier.gzipped && ranges != "" {
+			t.Errorf("%s: a gzipped answer offers Accept-Ranges %q", tier.name, ranges)
+		}
 		lm := first.Header.Get("Last-Modified")
 		tag := dsHeld(t, first.Header.Get("ETag"), tier.name+" GET")
 
@@ -327,8 +357,8 @@ func TestDS_ETag_GetConditional(t *testing.T) {
 		if r, _ := get(map[string]string{"If-None-Match": `"other"`, "If-Modified-Since": lm}); r.StatusCode != http.StatusOK {
 			t.Errorf("%s: another tag, a current date = %d, want 200 (the tag decides)", tier.name, r.StatusCode)
 		}
-		if r, _ := get(map[string]string{"If-Modified-Since": lm}); r.StatusCode != http.StatusNotModified {
-			t.Errorf("%s: If-Modified-Since alone = %d, want 304 (old copies)", tier.name, r.StatusCode)
+		if r, body := get(map[string]string{"If-Modified-Since": lm}); r.StatusCode != http.StatusOK || body != tier.body {
+			t.Errorf("%s: If-Modified-Since alone = %d, want 200 with the bytes (never a 304 by date)", tier.name, r.StatusCode)
 		}
 
 		// A change written inside the same second: what a browser's cache
@@ -345,6 +375,66 @@ func TestDS_ETag_GetConditional(t *testing.T) {
 		}
 		if r.Header.Get("ETag") == "" || r.Header.Get("ETag") == tag {
 			t.Errorf("%s: the changed file's tag is %q (was %q)", tier.name, r.Header.Get("ETag"), tag)
+		}
+	}
+}
+
+// TestDS_ETag_NoDate304UnderATag: a browser copy cached before the tag (a
+// body and its Last-Modified only) revalidates with If-Modified-Since alone,
+// after a change made inside that second by another writer. A 304 by date
+// would hand out the CURRENT file's tag for the OLD body the browser keeps:
+// its next save, If-Match with that tag, would pass over the change. So the
+// file API never answers 304 by date: the browser gets the bytes the tag names.
+func TestDS_ETag_NoDate304UnderATag(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
+
+	for _, tier := range []struct {
+		name, rel, old string
+		gzipped        bool
+	}{
+		{"ServeContent", "x.txt", "old cached body", false},
+		{"gzip tier", "y.txt", strings.Repeat("old cached line\n", 200), true},
+	} {
+		p := filepath.Join(files, tier.rel)
+		os.WriteFile(p, []byte(tier.old), 0o644)
+		info, _ := os.Stat(p)
+		cached := info.ModTime().UTC().Format(http.TimeFormat) // the old copy's Last-Modified
+
+		changed := tier.old + "NEW, written in the same second"
+		os.WriteFile(p, []byte(changed), 0o644)
+		sec := info.ModTime().Truncate(time.Second)
+		os.Chtimes(p, sec, sec)
+
+		resp := do(t, client, "GET", ts.URL+"/api/files?file=files/"+tier.rel, nil,
+			map[string]string{"If-Modified-Since": cached, "Accept-Encoding": "gzip"})
+		var rd io.Reader = resp.Body
+		gzipped := resp.Header.Get("Content-Encoding") == "gzip"
+		if gzipped {
+			zr, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				t.Fatalf("%s: bad gzip: %v", tier.name, err)
+			}
+			rd = zr
+		}
+		body, _ := io.ReadAll(rd)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK && gzipped != tier.gzipped {
+			t.Fatalf("%s: gzipped = %v - the test is not on the tier it names", tier.name, gzipped)
+		}
+		if resp.StatusCode != http.StatusOK || string(body) != changed {
+			t.Errorf("%s: revalidation by date alone = %d (%d bytes), want 200 with the changed file",
+				tier.name, resp.StatusCode, len(body))
+		}
+		tag := resp.Header.Get("ETag")
+		if tag == "" {
+			t.Errorf("%s: no ETag", tier.name)
+		}
+		// What the page holds now IS the version the tag names: its save passes.
+		if code, _ := dsPutTag(t, client, ts.URL, "files/"+tier.rel, changed+" + an edit",
+			map[string]string{"If-Match": tag}); code != http.StatusOK {
+			t.Errorf("%s: a save from the bytes that came with the tag = %d, want 200", tier.name, code)
 		}
 	}
 }
@@ -460,7 +550,8 @@ func TestDS_ETag_IfMatchCheckedAtPlacement(t *testing.T) {
 // the deploy) sends If-Unmodified-Since only; it is judged exactly as
 // before: a stale date 412, its own Last-Modified 200, a garbled or missing
 // header no check, and two saves in one second still get different times.
-// A guard, not a red test: it passes on the old code by design.
+// A COMPATIBILITY GUARD, not a red test: it passes on the old code by design
+// (accepted in review) - it fails only if this batch changed old pages' rules.
 func TestDS_ETag_OldClientsUnchanged(t *testing.T) {
 	_, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "ana", "abc")
