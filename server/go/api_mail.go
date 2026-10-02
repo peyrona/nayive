@@ -416,7 +416,7 @@ func (s *Server) mailAccountAnswer(w http.ResponseWriter, r *http.Request, user 
 		sendJSON(w, r, http.StatusUnprocessableEntity, map[string]string{"error": "el servidor de correo lo rechazó", "code": "rejected",
 			"text": clipRunes(mailErrText(err), 300)})
 	case errors.Is(err, errDamaged): // accounts.json failed to load: never written over (F4)
-		sendJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "no se pudo guardar: un archivo del correo está dañado (avisa al administrador)", "code": "down"})
+		sendJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "no se pudo guardar: un archivo del correo está dañado (avisa al administrador)", "code": "damaged"})
 	default:
 		s.log.Warn("mail: adding an account failed", "user", user, "err", err)
 		sendJSON(w, r, http.StatusBadGateway, map[string]string{"error": "no se pudo conectar con el servidor", "code": "down"})

@@ -180,7 +180,12 @@ func betterNearby(route []tripPosition, i int) bool {
 func readPositionsDoc(tripDir string) positionsDoc {
 	var raw positionsDoc
 	loadJSONFile(filepath.Join(tripDir, tripPositionsFile), &raw)
+	return cleanPositionsDoc(raw)
+}
 
+// cleanPositionsDoc keeps a positions file's valid entries, the route sorted
+// by time, and gives a file from before "latest" was kept its last point.
+func cleanPositionsDoc(raw positionsDoc) positionsDoc {
 	doc := positionsDoc{Positions: []tripPosition{}}
 	for _, p := range raw.Positions {
 		if p.At > 0 && validLatLon(p.Lat, p.Lon) {
@@ -318,10 +323,10 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 
 	positionsMu.Lock()
 	defer positionsMu.Unlock()
-	if !s.positionsWritable(lt.root) {
+	doc, ok := s.positionsForWrite(lt.root)
+	if !ok {
 		return 0
 	}
-	doc := readPositionsDoc(lt.root)
 	for _, p := range fit {
 		mergePosition(&doc, p)
 	}
@@ -332,39 +337,42 @@ func (s *Server) storePositions(owner string, lt trackedTrip, ps []tripPosition)
 	return len(fit)
 }
 
-// positionsWritable checks a trip's positions.json before a new point is
+// positionsForWrite reads a trip's positions.json ONCE for a new point to be
 // merged into it and the whole file written back (F3). readPositionsDoc reads
-// a damaged file as an empty route, and writing that back would replace the
-// whole route with the new point. So:
+// a damaged or unreadable file as an empty route, and writing that back would
+// replace the whole route with the new point. So:
 //
-//   - not there yet, or it parses: write as usual;
+//   - not there yet: an empty route;
+//   - it parses: that route - the very bytes just read, never a second read
+//     that could fail on its own and come back empty;
 //   - it does not parse: moved aside, dated, as saveTable does - the old route
 //     stays on disk for the admin - and the route starts again from here;
-//   - it cannot be read (EIO, EACCES...): not written at all this time, the
-//     file is left exactly as it is. A read that fails now may work later.
+//   - it cannot be read (EIO, EACCES, EMFILE...): false, nothing is written
+//     this time and the file is left exactly as it is. A read that fails now
+//     may work later.
 //
 // Caller holds positionsMu.
-func (s *Server) positionsWritable(tripDir string) bool {
+func (s *Server) positionsForWrite(tripDir string) (positionsDoc, bool) {
 	path := filepath.Join(tripDir, tripPositionsFile)
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return true
+		return cleanPositionsDoc(positionsDoc{}), true
 	}
 	if err != nil {
 		s.log.Error("positions.json cannot be read - the new point is not stored", "file", path, "err", err)
-		return false
+		return positionsDoc{}, false
 	}
 	var doc positionsDoc
 	if json.Unmarshal(raw, &doc) == nil {
-		return true
+		return cleanPositionsDoc(doc), true
 	}
 	aside := path + ".broken-" + time.Now().Format("2006-01-02-150405")
 	if err := os.Rename(path, aside); err != nil {
 		s.log.Error("positions.json is damaged and cannot be moved aside - the new point is not stored", "file", path, "err", err)
-		return false
+		return positionsDoc{}, false
 	}
 	s.log.Warn("damaged positions.json moved aside - the route starts again", "kept", aside)
-	return true
+	return cleanPositionsDoc(positionsDoc{}), true
 }
 
 // cleanPosition rounds p and tells whether it can be stored at all.

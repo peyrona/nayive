@@ -552,7 +552,9 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 	}
 
 	done := 0
-	ids := []string{} // the bin entry of each item trashed, so an app's Undo can restore it
+	ids := []string{}    // the bin entry of each item trashed, so an app's Undo can restore it
+	failed := []string{} // the items the bin could not take (they stay put)
+	damaged := false     // ...because the bin's index cannot be read
 	for _, j := range resolved {
 		info, err := j.p.Lstat()
 		if err != nil {
@@ -578,13 +580,12 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 			// <base>/.trash, outside every home, so an admin trashing someone's
 			// file really does shrink that home: re-measure it.
 			id, err := s.trash.MoveIn(role, user, j.p, j.rel)
-			if errors.Is(err, errTrashDamaged) {
-				// Every item goes to the same can, so nothing went in yet: say
-				// so, never "trashed" (F2). The items stay where they are.
-				sendError(w, r, http.StatusInternalServerError, errTrashText)
-				return
-			}
 			if err != nil {
+				// Not binned: it stays where it is. Never answered as binned -
+				// an app that replaces a file after "trashed" would then write
+				// over one that has no copy in the bin (F2).
+				failed = append(failed, j.rel)
+				damaged = damaged || errors.Is(err, errTrashDamaged)
 				continue
 			}
 			ids = append(ids, id)
@@ -602,6 +603,17 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 		sendJSON(w, r, http.StatusOK, map[string]any{"message": "purged", "count": done})
 		return
 	}
+	if len(failed) > 0 {
+		// An error, with what DID go to the bin (its ids, for an Undo) and
+		// what did not: those stay in their folders.
+		msg := "no se pudo llevar a la papelera: " + strings.Join(failed, ", ")
+		if damaged {
+			msg = errTrashText
+		}
+		sendJSON(w, r, http.StatusInternalServerError,
+			map[string]any{"error": msg, "count": done, "ids": ids, "failed": failed})
+		return
+	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"message": "trashed", "count": done, "ids": ids})
 }
 
@@ -610,7 +622,8 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 // -----------------------------------------------------------------------------
 
 // errTrashText answers any bin operation refused because the bin's index.json
-// cannot be read (errTrashDamaged): nothing was moved, listed or deleted.
+// cannot be read (errTrashDamaged): what it was asked to move, list or delete
+// stays as it was.
 const errTrashText = "la papelera está dañada: no se ha hecho nada (avisa al administrador)"
 
 func (s *Server) filesTrash(w http.ResponseWriter, r *http.Request, role, user string, q Query) {

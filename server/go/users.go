@@ -499,8 +499,9 @@ func numberOrRemove[T ~int | ~float64](raw json.RawMessage) (value *T, remove bo
 // it never races the user's own password write.
 //
 // It returns a status string the API maps to an HTTP response: "created",
-// "updated", "exists", "missing", "bad-quota", "bad-photo-max" or "damaged"
-// (a config.json that cannot be read or parsed: left exactly as it is).
+// "updated", "exists", "missing", "bad-quota", "bad-photo-max", "damaged" (a
+// config.json that cannot be read or parsed: left exactly as it is) or
+// "write-failed" (it could not be written: nothing changed).
 func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	home := u.homeDir(name)
 	path := u.cfgPath(name)
@@ -576,7 +577,10 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	os.MkdirAll(filepath.Join(home, "data"), 0o755)
 	os.MkdirAll(filepath.Join(home, "files"), 0o755)
 	if err := writeUserConfig(path, cfg); err != nil {
-		u.log.Error("cannot save account", "user", name, "err", err)
+		// Never "usuario guardado" for a password reset or a quota that did
+		// not reach the disk: the admin must know to try again.
+		u.log.Error("cannot save account", "user", name, "file", path, "err", err)
+		return "write-failed"
 	}
 
 	if existed {

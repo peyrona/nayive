@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -479,9 +480,19 @@ func syncDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	err = d.Sync()
+	err = dirSyncErr(d.Sync())
 	if cerr := d.Close(); err == nil {
 		err = cerr
+	}
+	return err
+}
+
+// dirSyncErr drops the refusal of a filesystem that cannot sync a folder at
+// all (EINVAL, ENOTSUP: some FUSE and network mounts). There the rename is as
+// durable as that filesystem makes it, and a save must never fail for it.
+func dirSyncErr(err error) error {
+	if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) {
+		return nil
 	}
 	return err
 }
@@ -496,7 +507,7 @@ func syncRootDir(root *os.Root, rel string) error {
 	if err != nil {
 		return err
 	}
-	err = d.Sync()
+	err = dirSyncErr(d.Sync())
 	if cerr := d.Close(); err == nil {
 		err = cerr
 	}
@@ -562,6 +573,19 @@ func readJSONStrict(path string, dst any) (bool, error) {
 	}
 	return true, nil
 }
+
+// isReadError tells a readJSONStrict error that came from READING the file
+// (EIO, EACCES, EMFILE on a busy server: it may read on the next try) from one
+// that came from parsing it (it stays damaged until somebody repairs it).
+func isReadError(err error) bool {
+	var pe *fs.PathError
+	return errors.As(err, &pe)
+}
+
+// damagedRetryEvery is how often a file kept read-only because it could not be
+// READ is tried again (Chat, eMail): a passing EMFILE must not leave a chat or
+// a mailbox read-only until the next restart.
+var damagedRetryEvery = 10 * time.Second
 
 // loadTable reads one of the server's own JSON tables (shares.json,
 // location.json, devices.json, sessions.json) into `dst`. ok is false when

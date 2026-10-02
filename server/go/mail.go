@@ -88,8 +88,11 @@ type mailUser struct {
 	// damaged: the files that were there but could not be read or parsed
 	// (file name -> why). writeMailFile never writes over one (F4): what
 	// memory holds of it is empty, and the file still has every account, label
-	// or clock. They stay refused until a restart reads them whole again.
+	// or clock. They stay refused until they read whole again.
 	damaged map[string]error
+	// retryAt: when the damaged files that could not be READ (EIO, EMFILE -
+	// not those that do not parse) are tried again; zero = none to retry.
+	retryAt time.Time
 }
 
 type MailHub struct {
@@ -228,11 +231,49 @@ type mailAccountsFile struct {
 // user is `name`'s accounts, read from disk the first time. h.mu held.
 func (h *MailHub) userLocked(name string) *mailUser {
 	if u := h.owners[name]; u != nil {
+		if !u.retryAt.IsZero() && !time.Now().Before(u.retryAt) {
+			h.retryDamagedLocked(name, u) // a read that failed may work now
+		}
 		return u
 	}
 	u := &mailUser{}
+	h.loadAccountsLocked(name, u, true)
+	for _, file := range []string{"labels.json", "trash.json", "settings.json"} {
+		h.loadExtraLocked(name, u, file, true)
+	}
+	h.owners[name] = u
+	return u
+}
+
+// retryDamagedLocked reads again the files of `name` that could not be read
+// (not those that do not parse). Nothing was written over them meanwhile, so
+// a whole read replaces what memory has. h.mu held.
+func (h *MailHub) retryDamagedLocked(name string, u *mailUser) {
+	for file, err := range u.damaged {
+		if !isReadError(err) {
+			continue
+		}
+		if file == "accounts.json" {
+			if len(u.accts) == 0 { // none could be added while it was damaged
+				h.loadAccountsLocked(name, u, false)
+			}
+		} else {
+			h.loadExtraLocked(name, u, file, false)
+		}
+		if u.damaged[file] == nil {
+			h.log.Warn("mail: a file reads again", "user", name, "file", file)
+		}
+	}
+}
+
+// loadAccountsLocked reads accounts.json into u, each password opened. first:
+// the account's first read - what loaded is kept even from a damaged file; a
+// retry takes only a whole read. h.mu held.
+func (h *MailHub) loadAccountsLocked(name string, u *mailUser, first bool) {
 	var f mailAccountsFile
-	h.loadMailFile(name, u, "accounts.json", &f)
+	if !h.loadMailFile(name, u, "accounts.json", &f) && !first {
+		return
+	}
 	u.next = f.Next
 	for _, a := range f.Accounts {
 		sealed := a.Pass
@@ -249,9 +290,6 @@ func (h *MailHub) userLocked(name string) *mailUser {
 		acct.prov = h.newProvider(acct.MailAccount)
 		u.accts = append(u.accts, acct)
 	}
-	h.loadExtrasLocked(name, u)
-	h.owners[name] = u
-	return u
 }
 
 // saveLocked writes `name`'s accounts, the passwords sealed. h.mu held.

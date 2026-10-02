@@ -25,8 +25,8 @@ func TestDS_F4_DamagedMailFilesNotOverwritten(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "accounts.json"), []byte(accounts), 0o600)
 	os.WriteFile(filepath.Join(dir, "labels.json"), []byte(labels), 0o600)
 
-	if out := f.addAccount(t, mailTestPass, http.StatusInternalServerError); out == nil {
-		t.Error("adding an account over a cut accounts.json answered no error")
+	if out := f.addAccount(t, mailTestPass, http.StatusInternalServerError); out["code"] != "damaged" {
+		t.Errorf("adding an account over a cut accounts.json = %v, want code \"damaged\"", out)
 	}
 	if code, body := callJSON(t, f.owner, "POST", f.base+"/api/mail/labels", `{"name":"Nueva"}`); code == http.StatusOK {
 		t.Errorf("a new label over a cut labels.json = 200 %s", body)

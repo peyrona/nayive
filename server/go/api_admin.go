@@ -399,6 +399,8 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 		// Never "usuario guardado": nothing was written (F1).
 		sendError(w, r, http.StatusConflict, "homes/"+name+"/data/config.json está dañado o no se puede leer: "+
 			"no se ha cambiado nada; arréglalo a mano (el registro del servidor dice por qué)")
+	case "write-failed":
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar el usuario: el disco no lo aceptó (el registro del servidor dice por qué)")
 	default:
 		s.log.Info("user saved", "status", status, "name", name)
 		sendJSON(w, r, http.StatusOK,
