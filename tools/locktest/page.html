@@ -61,10 +61,12 @@ window.makeStore = function ( binary )
         flush:      async function () {},
         forget:     async function ( p ) { CALLS.push( [ "forget", p ] ); },
         conflicted: async function () { return false; },
+        pending:    async function () { return null; },
         listCached: async function () { return []; },
         resting:    function () {},
         onState:    function () {},
-        onConflict: function () {}
+        onConflict: function () {},
+        onSaved:    function () { return function () {}; }
     };
 };
 </script>

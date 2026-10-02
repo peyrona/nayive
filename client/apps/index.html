@@ -2166,19 +2166,14 @@
         // trip's PDFs and the share inbox. Before the logout: the DELETE needs
         // the session. getRegistration(), not .ready - .ready never settles
         // with no service worker, and a sign-out must never hang (3 s cap).
-        // Also the saves and drafts still only here (shared/store.js, SIGNING
-        // OUT - the button asked first), and THIS phone's link to the account:
-        // unlinked, the Android app asks to be linked again, and the next
-        // person to sign in on it gets it (server/go/devices.go, ENROLMENT).
+        // Also THIS phone's link to the account: unlinked, the Android app
+        // asks to be linked again, and the next person to sign in on it gets
+        // it (server/go/devices.go, ENROLMENT). (The saves and drafts still
+        // only here went before this, in the button's own step: see below.)
         function forgetThisBrowser()
         {
             var work = ( async function ()
             {
-                try
-                {
-                    if( window.NayiveStore ) await NayiveStore.clearLocal();
-                }
-                catch ( e ) {}
                 try
                 {
                     var phone = JSON.parse( localStorage.getItem( 'nayive-device' ) || 'null' );
@@ -2217,10 +2212,12 @@
         // Sign out is a POST (a GET could be fired by a picture in an email,
         // or a link on another site): the link only works through this.
         //
-        // First the saves still waiting here get one more chance to go up
-        // (NayiveStore.sendWaiting: up to 10 s while one is being sent, no
-        // wait offline); what is left - saves and untitled drafts - is
-        // counted, and the button asks before signing out deletes it.
+        // First the saves still waiting here get one more chance to go up (up
+        // to 10 s while one is being sent, no wait offline); what is left -
+        // saves and untitled drafts - is counted, the button asks, and only
+        // what was counted is deleted: a save another tab makes while the
+        // question is up is counted and asked about again, never deleted
+        // unseen (NayiveStore.leaveDevice, shared/store.js SIGNING OUT).
         var signingOut = false;
         document.getElementById( 'logoutBtn' ).addEventListener( 'click', async function ( e )
         {
@@ -2231,17 +2228,18 @@
             {
                 if( window.NayiveStore )
                 {
-                    var n = 0;
+                    var go = true;
                     try
                     {
-                        await NayiveStore.sendWaiting( 10000 );
-                        n = await NayiveStore.localCount();
+                        go = await NayiveStore.leaveDevice( function ( n )
+                        {
+                            return NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
+                                                       body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
+                                                       confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } );
+                        } );
                     }
                     catch ( err ) {}
-                    if( n > 0 && ! await NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
-                                                             body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
-                                                             confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } ) )
-                        return;
+                    if( ! go ) return;
                 }
                 await forgetThisBrowser();
                 try { await fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } catch ( err ) {}

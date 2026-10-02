@@ -584,6 +584,7 @@
   "ui.store.notRead": "Die Datei konnte nicht gelesen werden: Nichts wird gespeichert, bis sie lesbar ist.",
   "ui.store.loading": "Die Datei wird noch gelesen: versuche es gleich noch einmal.",
   "ui.store.badFile": "Diese Datei enthält etwas, das ich nicht verstehe: Sie öffnet schreibgeschützt, damit sie nicht beschädigt wird.",
+  "ui.store.pageOnly": "Diese Änderung ist noch nicht gespeichert und nur in dieser Seite: Schließe sie nicht, bevor sie hochgeladen ist.",
   "ui.settingsNotRead": "Die Einstellungen konnten nicht gelesen werden: Sie werden erst gespeichert, wenn sie lesbar sind.",
   "tasks.addPh": "Beschreibe eine Aufgabe, um sie hinzuzufügen…",
   "tasks.addTask": "Aufgabe hinzufügen",

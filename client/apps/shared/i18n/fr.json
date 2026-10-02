@@ -584,6 +584,7 @@
   "ui.store.notRead": "Impossible de lire le fichier : rien n'est enregistré tant qu'il ne peut pas être lu.",
   "ui.store.loading": "Le fichier est encore en cours de lecture : réessaie dans un instant.",
   "ui.store.badFile": "Ce fichier contient quelque chose que je ne comprends pas : il s'ouvre en lecture seule, pour ne pas l'abîmer.",
+  "ui.store.pageOnly": "Ce changement n'est pas encore enregistré et n'est que dans cette page : ne la ferme pas avant qu'il soit envoyé.",
   "ui.settingsNotRead": "Impossible de lire les réglages : ils ne sont pas enregistrés tant qu'ils ne peuvent pas être lus.",
   "tasks.addPh": "Décris une tâche pour l'ajouter…",
   "tasks.addTask": "Ajouter une tâche",

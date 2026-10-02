@@ -444,19 +444,13 @@
 
     // The account signed in here is a regular one (the 403 below): what this
     // browser keeps for it goes before the logout, as the launcher's sign-out
-    // does - the saves and drafts still only here (shared/store.js, SIGNING
-    // OUT - the link asked first), its push subscription (DELETE needs the
-    // session), the trip PDFs and the share inbox. Capped at 3 s: a sign-out
-    // never hangs.
+    // does - its push subscription (DELETE needs the session), the trip PDFs
+    // and the share inbox (the saves and drafts still only here went before
+    // this: signOut below). Capped at 3 s: a sign-out never hangs.
     function forgetThisBrowser()
     {
         var work = ( async function ()
         {
-            try
-            {
-                if ( window.NayiveStore ) await NayiveStore.clearLocal();
-            }
-            catch ( e ) {}
             try
             {
                 var reg = ( 'serviceWorker' in navigator ) ? await navigator.serviceWorker.getRegistration( '/nayive/' ) : null;
@@ -483,8 +477,8 @@
 
     // The launcher's sign-out, step for step (index.html, logoutBtn): the
     // saves still waiting here get their chance to go up (up to 10 s while
-    // one is being sent, no wait offline), what is left is counted, and the
-    // link asks before signing out deletes it.
+    // one is being sent, no wait offline), what is left is counted, the link
+    // asks, and only what was counted is deleted (NayiveStore.leaveDevice).
     var signingOut = false;
     async function signOut()
     {
@@ -494,17 +488,18 @@
         {
             if ( window.NayiveStore )
             {
-                var n = 0;
+                var go = true;
                 try
                 {
-                    await NayiveStore.sendWaiting( 10000 );
-                    n = await NayiveStore.localCount();
+                    go = await NayiveStore.leaveDevice( function ( n )
+                    {
+                        return NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
+                                                   body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
+                                                   confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } );
+                    } );
                 }
                 catch ( err ) {}
-                if ( n > 0 && ! await NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
-                                                          body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
-                                                          confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } ) )
-                    return;
+                if ( ! go ) return;
             }
             await forgetThisBrowser();
             try { await fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ); } catch ( err ) {}
