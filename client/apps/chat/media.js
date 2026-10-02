@@ -886,9 +886,9 @@
             catch( e )
             {
                 busy = false;
-                // Saved, but the chat could not be pointed at it: it is a copy
-                // beside the photo, and is said so (the edit is not lost).
-                if( made ) { dirty = false; leave(); NayiveUI.toast( C.TF( "chat.copySaved", { path: shortPath( made ) } ), { ms: 6000 } ); }
+                // Saved, but the message could not be changed: the edit is a
+                // file beside the photo (not lost), and is said so.
+                if( made ) { dirty = false; leave(); NayiveUI.toast( C.TF( "chat.editedNotShown", { path: shortPath( made ) } ), { ms: 8000 } ); }
                 else C.fail( e );
             }
         } );

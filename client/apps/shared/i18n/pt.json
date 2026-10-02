@@ -2384,6 +2384,7 @@
   "chat.editMsg": "Editar mensagem",
   "chat.editorFailed": "Não foi possível abrir o editor de imagens.",
   "chat.editPhoto": "Editar foto",
+  "chat.editedNotShown": "A edição está guardada em {path}, mas a mensagem não mudou.",
   "chat.editProfile": "Editar o teu perfil",
   "chat.emoji": "Emoji",
   "chat.emptyGuest": "Ainda não há conversas.",

@@ -2378,6 +2378,7 @@ func (s *Server) chatEdited(w http.ResponseWriter, r *http.Request, a chatActor,
 		return
 	}
 	if rel != was || ino != c.st.KeptID[id] {
+		wasID, wasFile := c.st.KeptID[id], *m.File
 		n, err := h.keepBytes(a.o, c, m, rel, ino)
 		if err != nil {
 			sendError(w, r, http.StatusConflict, "esa foto acaba de cambiar; inténtalo otra vez")
@@ -2390,7 +2391,19 @@ func (s *Server) chatEdited(w http.ResponseWriter, r *http.Request, a chatActor,
 		m.File.Name, m.File.Size, m.File.W, m.File.H, m.File.Pos = ref.Name, ref.Size, ref.W, ref.H, ref.Pos
 		a.o.bump(c, m) // a new rev: every page asks for the photo again
 		if err := h.saveMonth(c, m); err != nil {
-			h.log.Error("chat: an edited photo's message could not be saved", "user", a.o.user, "conv", c.id, "id", id, "err", err)
+			// Not on disk: never answered "done" (J5). The message goes back
+			// to the photo it showed - safe in their files, checked above -
+			// as a restart would bring it back; the edit stays a file of theirs.
+			h.log.Error("chat: an edited photo's message could not be saved - not changed", "user", a.o.user, "conv", c.id, "id", id, "err", err)
+			*m.File = wasFile
+			h.setKept(c, id, was, wasID)
+			if _, err := h.keepBytes(a.o, c, m, was, wasID); err != nil {
+				h.log.Error("chat: the photo a message showed could not be put back under media/", "user", a.o.user, "conv", c.id, "id", id, "err", err)
+			}
+			a.o.bump(c, m)
+			h.saveState(c) // its kept link as it was, should the state have landed
+			sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
+			return
 		}
 	}
 	sendJSON(w, r, http.StatusOK, map[string]any{"path": rel, "msg": c.out(m)})

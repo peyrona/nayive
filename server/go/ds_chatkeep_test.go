@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -282,5 +283,174 @@ func TestDS_J8_NoAutoDeleteOnAJumpedClock(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(f.srv.cfg.ConfigDir, "chat-autodelete.json"))
 	if json.Unmarshal(raw, &kept); time.Since(time.UnixMilli(kept.Ran)) > time.Minute {
 		t.Errorf("the pass's time was not kept: %s", raw)
+	}
+}
+
+// dsChatJSON is the bytes of the owner's chat data outside media/: what a
+// message adds to the quota besides its photo.
+func dsChatJSON(home string) int64 {
+	var n int64
+	filepath.WalkDir(filepath.Join(home, "data", "chat"), func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() && d.Name() == "media" {
+			return filepath.SkipDir
+		}
+		if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
+			n += info.Size()
+		}
+		return nil
+	})
+	return n
+}
+
+// dsBigJPEG is a JPEG of about 64 KB: big next to a message's JSON.
+func dsBigJPEG() []byte {
+	b := []byte{0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02}
+	b = append(b, bytes.Repeat([]byte{0x11}, 64<<10)...)
+	return append(b, 0xFF, 0xD9)
+}
+
+// TestDS_J4_LinkedPhotoCountedOnce: a photo sent from the library, or kept,
+// has two names in the home (media/ and files/) but takes its room once: the
+// quota, measured again from the disk, counts it once.
+func TestDS_J4_LinkedPhotoCountedOnce(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	home := filepath.Join(f.srv.cfg.HomesDir, "ana")
+	os.MkdirAll(filepath.Join(home, "files", "Fotos"), 0o755)
+	os.WriteFile(filepath.Join(home, "files", "Fotos", "IMG_7.jpg"), dsBigJPEG(), 0o644)
+	measure := func() (int64, int64) {
+		f.srv.users.ForgetUsage("ana")
+		return f.srv.users.UserUsageBytes("ana"), dsChatJSON(home)
+	}
+
+	before, json0 := measure()
+	f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", `{"ref":"files/Fotos/IMG_7.jpg"}`, 201, nil)
+	after, json1 := measure()
+	if grew := after - before - (json1 - json0); grew != 0 {
+		t.Errorf("sending a library photo of %d bytes added %d to the quota", len(dsBigJPEG()), grew)
+	}
+
+	photo := f.upload(t, "photo", "IMG_1.jpg", dsBigJPEG())
+	before, json0 = measure()
+	f.call(t, f.owner, "POST", fmt.Sprintf("/api/chat/conv/%s/messages/%d/keep", conv, photo.ID), `{"dir":"files/Fotos"}`, 200, nil)
+	after, json1 = measure()
+	if grew := after - before - (json1 - json0); grew != 0 {
+		t.Errorf("keeping a chat photo of %d bytes added %d to the quota", len(dsBigJPEG()), grew)
+	}
+}
+
+// TestDS_J1_EditNotSavedIsUndone: the message that would show the edit
+// cannot be written (disk full, I/O error): answered with an error, and the
+// message still shows the photo it showed - now and after a restart. The
+// edit stays a file of the owner's.
+func TestDS_J1_EditNotSavedIsUndone(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes into a 0500 folder")
+	}
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	home := filepath.Join(f.srv.cfg.HomesDir, "ana")
+	os.MkdirAll(filepath.Join(home, "files", "Fotos"), 0o755)
+	os.WriteFile(filepath.Join(home, "files", "Fotos", "IMG_7.jpeg"), keepJPEG, 0o644)
+	var m chatMsgOut
+	f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", `{"ref":"files/Fotos/IMG_7.jpeg"}`, 201, &m)
+	edit := dsOtherJPEG(0x44)
+	os.WriteFile(filepath.Join(home, "files", "Fotos", "IMG_7-editado.jpg"), edit, 0o644)
+
+	dir := filepath.Join(home, "data", "chat", "conv", conv)
+	os.Chmod(dir, 0o500) // its month and state cannot be written; media/ can
+	code, body := callJSON(t, f.owner, "POST", fmt.Sprintf("%s/api/chat/conv/%s/messages/%d/edited", f.base, conv, m.ID),
+		`{"ref":"files/Fotos/IMG_7-editado.jpg"}`)
+	os.Chmod(dir, 0o755)
+	if code < 400 {
+		t.Errorf("an edit that could not be saved = %d %s", code, body)
+	}
+	if code, got := f.dsMedia(t, conv, m.ID); code != 200 || !bytes.Equal(got, keepJPEG) {
+		t.Errorf("the message shows the unsaved edit: %v (%d)", bytes.Equal(got, edit), code)
+	}
+	var where struct{ Path string }
+	f.call(t, f.owner, "POST", fmt.Sprintf("/api/chat/conv/%s/messages/%d/keep", conv, m.ID), `{}`, 200, &where)
+	if where.Path != "files/Fotos/IMG_7.jpeg" {
+		t.Errorf("the message is kept as %q", where.Path)
+	}
+	f.srv.chat.DropUser("ana") // a restart
+	if code, got := f.dsMedia(t, conv, m.ID); code != 200 || !bytes.Equal(got, keepJPEG) {
+		t.Errorf("after a restart the message shows the unsaved edit: %v (%d)", bytes.Equal(got, edit), code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, "files", "Fotos", "IMG_7-editado.jpg")); !bytes.Equal(b, edit) {
+		t.Error("the edit's file was lost")
+	}
+}
+
+// TestDS_J8_DoubtSurvivesRestart: the clock was doubted 25 hours ago and
+// looked at an hour ago (the server restarted since): a day has gone by on a
+// steady clock, so auto-delete runs. Had the clock jumped again since the
+// last look, the doubt starts over.
+func TestDS_J8_DoubtSurvivesRestart(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	for i := 1; i <= 3; i++ {
+		f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", fmt.Sprintf(`{"kind":"text","text":"m%d"}`, i), 201, nil)
+	}
+	f.age(t, conv, 2, 40)
+	h := f.srv.chat
+	h.mu.Lock()
+	h.owner("ana").data.DeleteAfter = 30
+	h.saveData(h.owner("ana"))
+	h.mu.Unlock()
+	clockFile := filepath.Join(f.srv.cfg.ConfigDir, "chat-autodelete.json")
+	left := func() int {
+		var list msgList
+		f.call(t, f.owner, "GET", "/api/chat/conv/"+conv+"/messages", "", 200, &list)
+		return len(list.Msgs)
+	}
+	at := func(d time.Duration) int64 { return time.Now().Add(-d).UnixMilli() }
+	restart := func(disk map[string]int64) {
+		raw, _ := json.Marshal(disk)
+		os.WriteFile(clockFile, raw, 0o644)
+		h.mu.Lock()
+		h.clockRead = false // read again, as after a restart
+		h.mu.Unlock()
+	}
+
+	// A jump since the last look (3 days of gap): the doubt starts over.
+	restart(map[string]int64{"ran": at(96 * time.Hour), "doubt": at(50 * time.Hour), "seen": at(72 * time.Hour)})
+	h.expireAll(time.Now())
+	if n := left(); n != 3 {
+		t.Errorf("a clock that jumped again since the last look was believed: %d of 3 left", n)
+	}
+	var disk struct{ Doubt int64 }
+	raw, _ := os.ReadFile(clockFile)
+	if json.Unmarshal(raw, &disk); time.Since(time.UnixMilli(disk.Doubt)) > time.Minute {
+		t.Errorf("the doubt did not start over: %s", raw)
+	}
+
+	// Doubted 25 h ago, last looked at an hour ago, a restart since: believed.
+	restart(map[string]int64{"ran": at(96 * time.Hour), "doubt": at(25 * time.Hour), "seen": at(time.Hour)})
+	h.expireAll(time.Now())
+	if n := left(); n != 1 {
+		t.Errorf("a day of steady clock across a restart: %d left, want 1", n)
+	}
+}
+
+// TestDS_J4_LeftoverLinkSwept: a link made for media/ and never put in place
+// (the server stopped between the two) is swept when the chat is read again.
+func TestDS_J4_LeftoverLinkSwept(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	photo := f.upload(t, "photo", "IMG_1.jpg", keepJPEG)
+	media := filepath.Join(f.srv.cfg.HomesDir, "ana", "data", "chat", "conv", conv, "media")
+	left := filepath.Join(media, ".ln-0123456789")
+	os.WriteFile(left, keepJPEG, 0o644)
+	f.srv.chat.DropUser("ana") // a restart
+	f.call(t, f.owner, "GET", "/api/chat/conv/"+conv+"/messages", "", 200, nil)
+	if _, err := os.Lstat(left); err == nil {
+		t.Error("the leftover link is still there")
+	}
+	if code, _ := f.dsMedia(t, conv, photo.ID); code != 200 {
+		t.Errorf("the photo itself = %d", code)
 	}
 }

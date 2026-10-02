@@ -304,13 +304,28 @@ func ListChildren(fsDir, relPrefix string) []Node {
 // DirSize is the total size in bytes of every file under `path` (symlinks not
 // followed). A user's quota uses DirSize(home): .trash included, because a
 // trashed file still occupies the disk until the trash is emptied.
+//
+// A file with more than one name - a Chat photo is a hard link in the
+// owner's files AND under data/chat/.../media/ (chat.go, J4) - takes its
+// room once, and is counted once: else every photo sent from the library
+// would cost its owner's quota twice.
 func DirSize(path string) int64 {
 	var total int64
+	var seen map[hardLinkKey]bool
 	filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
 		if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
+			if key, many := hardLinkOf(info); many {
+				if seen[key] {
+					return nil // its other name was counted
+				}
+				if seen == nil {
+					seen = map[hardLinkKey]bool{}
+				}
+				seen[key] = true
+			}
 			total += info.Size()
 		}
 		return nil

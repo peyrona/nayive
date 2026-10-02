@@ -409,12 +409,12 @@ type ChatHub struct {
 
 	laterRead bool // every home's scheduled texts are in memory (sendDue)
 
-	// The clock auto-delete believes (expiryClockOK, J8): the last pass's
-	// time (unix ms, read once from disk), and since when - monotonic - the
-	// clock has been doubted (zero: it is not).
-	clockRead  bool
-	clockRan   int64
-	clockDoubt time.Time
+	// The clock auto-delete believes (expiryClockOK, J8): the last pass, the
+	// doubt and the last look, as on disk (read once); the last look again
+	// with this run's monotonic time (zero: not seen by this run).
+	clockRead bool
+	clock     chatClockDisk
+	clockSeen time.Time
 }
 
 func NewChatHub(cfg *Config, users *Users, push *VapidStore, log Logger) *ChatHub {
@@ -940,6 +940,13 @@ func (h *ChatHub) loadConv(c *chatConv) {
 	if c.st.Next < 1 {
 		c.st.Next = 1
 	}
+	// A link made for media/ but never renamed into place (the server stopped
+	// between the two, keepBytes) is nobody's: it goes. Links are only made
+	// under h.mu, which the caller holds, so none is half-way now.
+	tmps, _ := filepath.Glob(filepath.Join(c.dir, "media", ".ln-*"))
+	for _, p := range tmps {
+		os.Remove(p)
+	}
 }
 
 func monthOf(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01") }
@@ -1345,11 +1352,18 @@ func (h *ChatHub) countExpiring(o *chatOwner, days int, now time.Time) int {
 // restored with a wrong date) would delete every message "older than N days"
 // of the wrong date. So the time of every pass is kept on disk
 // (config/chat-autodelete.json), and a clock more than chatClockJump ahead of
-// it is not believed: nothing is deleted, and it is logged. It is believed
-// again once it has run steady for chatClockTrust - its wall time moving as
-// the process's own monotonic time does - which gives a late NTP a day to put
-// it right, and after a real day off delays auto-delete by one day only. A
-// clock put right in the meantime (back near the last pass) is believed at once.
+// it is doubted: nothing is deleted, and it is logged. It is believed again
+// once chatClockTrust has gone by on it since the doubt began, the clock
+// running steady all along - which gives a late NTP a day to put it right,
+// and after a real day off delays auto-delete by one day only. A clock put
+// right in the meantime (back near the last pass) is believed at once.
+//
+// "Steady" is checked at every look (hourly): within one run of the server,
+// its wall time must have moved as the process's own monotonic time did;
+// across a restart, the gap since the last look must be a reboot's (forward,
+// under chatClockJump). Anything else is a new jump, and the doubt starts
+// over. The doubt and the last look are kept on disk with the pass's time,
+// so a server restarted every day still comes out of a doubt.
 
 // chatClockJump: how far past the last pass a clock may be before it is doubted.
 const chatClockJump = 24 * time.Hour
@@ -1360,6 +1374,13 @@ var chatClockTrust = 24 * time.Hour
 
 // chatClockDrift: what "steady" forgives between wall and monotonic time.
 const chatClockDrift = time.Minute
+
+// chatClockDisk is config/chat-autodelete.json (unix ms; 0 = none).
+type chatClockDisk struct {
+	Ran   int64 `json:"ran"`             // the last auto-delete pass
+	Doubt int64 `json:"doubt,omitempty"` // when the clock began to be doubted
+	Seen  int64 `json:"seen,omitempty"`  // the last look at a doubted clock
+}
 
 // expiryClockFile is where the time of the last auto-delete pass is kept
 // ("" with no config folder: memory only).
@@ -1373,45 +1394,56 @@ func (h *ChatHub) expiryClockFile() string {
 // expiryClockOK: auto-delete may believe `now`. Caller holds h.mu.
 func (h *ChatHub) expiryClockOK(now time.Time) bool {
 	if !h.clockRead {
-		h.clockRead = true
-		var last struct {
-			Ran int64 `json:"ran"`
-		}
-		if path := h.expiryClockFile(); path != "" && loadJSONFile(path, &last) {
-			h.clockRan = last.Ran
+		h.clockRead, h.clock, h.clockSeen = true, chatClockDisk{}, time.Time{} // no look seen by this run yet
+		if path := h.expiryClockFile(); path != "" {
+			loadJSONFile(path, &h.clock)
 		}
 	}
-	ahead := time.Duration(now.UnixMilli()-h.clockRan) * time.Millisecond
-	if h.clockRan == 0 || ahead <= chatClockJump {
-		h.clockDoubt = time.Time{} // no pass known, or close to the last one (a clock put back: fine)
+	ms := now.UnixMilli()
+	if h.clock.Ran == 0 || time.Duration(ms-h.clock.Ran)*time.Millisecond <= chatClockJump {
+		// No pass known, or close to the last one (a clock put back: fine).
+		h.clock.Doubt, h.clock.Seen, h.clockSeen = 0, 0, time.Time{}
 		return true
 	}
-	if !h.clockDoubt.IsZero() {
-		mono := now.Sub(h.clockDoubt)                   // monotonic: both carry it
-		wall := now.Round(0).Sub(h.clockDoubt.Round(0)) // wall: Round(0) drops it
-		if d := wall - mono; d > chatClockDrift || d < -chatClockDrift {
-			h.clockDoubt = time.Time{} // the clock was moved meanwhile: start over
-		} else if mono >= chatClockTrust {
-			h.log.Warn("chat: auto-delete believes the clock again - it ran steady since it jumped",
-				"lastPass", time.UnixMilli(h.clockRan).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339))
-			h.clockDoubt = time.Time{}
-			return true
-		}
+	steady := h.clock.Doubt != 0
+	if steady && !h.clockSeen.IsZero() {
+		// Seen by this run: wall and monotonic time moved alike since.
+		mono := now.Sub(h.clockSeen)                   // monotonic: both carry it
+		wall := now.Round(0).Sub(h.clockSeen.Round(0)) // wall: Round(0) drops it
+		steady = wall-mono <= chatClockDrift && mono-wall <= chatClockDrift
+	} else if steady {
+		// Seen before a restart: the gap is a reboot's, not a jump.
+		gap := time.Duration(ms-h.clock.Seen) * time.Millisecond
+		steady = gap >= -chatClockDrift && gap <= chatClockJump
 	}
-	if h.clockDoubt.IsZero() {
-		h.clockDoubt = now
+	if !steady {
+		h.clock.Doubt = ms // a doubt begins (again)
 	}
+	h.clock.Seen, h.clockSeen = ms, now
+	if time.Duration(ms-h.clock.Doubt)*time.Millisecond >= chatClockTrust {
+		h.log.Warn("chat: auto-delete believes the clock again - it ran steady since it jumped",
+			"lastPass", time.UnixMilli(h.clock.Ran).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339))
+		h.clock.Doubt, h.clock.Seen, h.clockSeen = 0, 0, time.Time{}
+		return true // the caller keeps the pass (expiryRan)
+	}
+	h.saveExpiryClock()
 	h.log.Warn("chat: the clock is more than a day past the last auto-delete pass - nothing deleted until it has run steady for a while",
-		"lastPass", time.UnixMilli(h.clockRan).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339),
-		"believedAfter", h.clockDoubt.Add(chatClockTrust).UTC().Format(time.RFC3339))
+		"lastPass", time.UnixMilli(h.clock.Ran).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339),
+		"believedAfter", time.UnixMilli(h.clock.Doubt).Add(chatClockTrust).UTC().Format(time.RFC3339))
 	return false
 }
 
 // expiryRan keeps `now` as the time of the last pass, on disk. Caller holds h.mu.
 func (h *ChatHub) expiryRan(now time.Time) {
-	h.clockRan = now.UnixMilli()
+	h.clock = chatClockDisk{Ran: now.UnixMilli()}
+	h.clockSeen = time.Time{}
+	h.saveExpiryClock()
+}
+
+// saveExpiryClock writes config/chat-autodelete.json. Caller holds h.mu.
+func (h *ChatHub) saveExpiryClock() {
 	if path := h.expiryClockFile(); path != "" {
-		if err := atomicWriteJSON(path, map[string]int64{"ran": h.clockRan}, 1); err != nil {
+		if err := atomicWriteJSON(path, h.clock, 1); err != nil {
 			h.log.Error("chat: cannot keep the time of the auto-delete pass", "file", path, "err", err)
 		}
 	}

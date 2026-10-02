@@ -29,7 +29,8 @@ func TestChatLinkPhoto(t *testing.T) {
 	f.call(t, f.owner, "POST", send, `{"ref":"files/Fotos/nope.jpg"}`, 404, nil)
 	f.call(t, f.owner, "POST", send, `{"ref":"files/../data/x.jpg"}`, 404, nil)
 
-	usage := f.srv.users.UserUsageBytes("ana")
+	f.srv.users.ForgetUsage("ana")
+	usage, data := f.srv.users.UserUsageBytes("ana"), dsChatJSON(home)
 	var m chatMsgOut
 	f.call(t, f.owner, "POST", send, `{"ref":"files/Fotos/IMG_7.jpeg","text":"mira","w":40,"h":30}`, 201, &m)
 	if m.Kind != "photo" || !m.Kept || m.Text != "mira" || m.File == nil || m.File.Name != "IMG_7.jpeg" ||
@@ -41,8 +42,10 @@ func TestChatLinkPhoto(t *testing.T) {
 	if own, err := os.Stat(filepath.Join(home, "data", "chat", "conv", conv, "media", fmt.Sprintf("%d.jpg", m.ID))); err != nil || !os.SameFile(orig, own) {
 		t.Fatalf("media/ does not hold the photo itself: %v", err)
 	}
-	if got := f.srv.users.UserUsageBytes("ana"); got != usage {
-		t.Fatalf("usage moved %d -> %d: nothing was copied", usage, got)
+	// Measured for real: two names, one file - only the message's own data grew.
+	f.srv.users.ForgetUsage("ana")
+	if got, grew := f.srv.users.UserUsageBytes("ana"), dsChatJSON(home)-data; got != usage+grew {
+		t.Fatalf("usage moved %d -> %d (the chat's data grew %d): nothing was copied", usage, got, grew)
 	}
 
 	media := fmt.Sprintf("%s/api/c/%s/conv/%s/media/%d", f.base, f.carmen, conv, m.ID)
