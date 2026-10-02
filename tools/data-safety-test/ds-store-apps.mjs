@@ -85,6 +85,30 @@ section( "A2 · HABITS IN ITS PAGE AND IN PLANNER'S PANE" );
     ok( names().includes( "B-from-page" ), "and the page's new habit is still in the file", names() );
     ok( await P.until( `[ ...${PANE}.querySelectorAll('.habit-row .row-title') ].some( e => e.textContent === 'B-from-page' )` ),
         "the pane now shows it too (merged)" );
+
+    // Both offline: the page adds a habit (it waits here), the pane ticks one
+    // (its save is merged into the page's waiting one); back online, both go
+    // up; then the page - which never re-read - adds one more.
+    const OFF = "Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } ), true";
+    const ON  = "( delete navigator.onLine, window.dispatchEvent( new Event( 'online' ) ), true )";
+    const PW  = "document.getElementById('habitsPane').contentWindow";
+    await H.evaluate( OFF );
+    await P.evaluate( `${PW}.eval( ${JSON.stringify( OFF )} )` );
+    await H.evaluate( "document.getElementById('addBtn').click(), true" );
+    await H.until( "document.getElementById('nameInput') && document.getElementById('nameInput').offsetParent !== null", 5000 );
+    await H.evaluate( "document.getElementById('nameInput').value = 'D-offline-page', document.getElementById('saveBtn').click(), true" );
+    ok( await H.until( `[ ...document.querySelectorAll('.habit-row .row-title') ].some( e => e.textContent === 'D-offline-page' )` ), "offline, the page adds a habit" );
+    await P.evaluate( `( [ ...${PANE}.querySelectorAll('#dueList .habit-row') ].find( r => r.querySelector('.row-title').textContent === 'B-from-page' )
+                         .querySelector('.check-btn').click(), true )` );
+    await H.evaluate( ON );
+    await P.evaluate( `${PW}.eval( ${JSON.stringify( ON )} )` );
+    ok( await untilNode( () => { const n = names(); return n.includes( "D-offline-page" ) && n.includes( "B-from-page(done)" ) && n.includes( "A(done)" ); }, 20000 ),
+        "back online: the page's habit and the pane's tick are both in the file", names() );
+    await H.evaluate( "document.getElementById('addBtn').click(), true" );
+    await H.until( "document.getElementById('nameInput') && document.getElementById('nameInput').offsetParent !== null", 5000 );
+    await H.evaluate( "document.getElementById('nameInput').value = 'E-after', document.getElementById('saveBtn').click(), true" );
+    ok( await untilNode( () => names().includes( "E-after" ), 20000 ) && names().includes( "B-from-page(done)" ) && names().includes( "D-offline-page" ),
+        "the page saves once more: the pane's tick is still in the file", names() );
     await H.stop();
 }
 

@@ -60,6 +60,50 @@ section( "A2 · ONE LIST IN TWO TABS (MERGING STORE)" );
     for( const c of [ A, B ] ) await c.evaluate( "offline( false )" );
     await B.evaluate( "SM.flush().then( () => true )" );
     ok( await untilNode( () => { const g = ids( G ) || []; return g.includes( "x-offline-A" ) && g.includes( "y-offline-B" ); } ), "both go up", disk( G ) );
+    ok( await A.until( `EV.some( e => e.merged === '${G}' && e.body.indexOf( 'y-offline-B' ) !== -1 )` ),
+        "tab A, whose save tab B merged into, is handed the merged list too" );
+    // Tab A's own list (this test page does not take the merged one in) saves
+    // once more: what tab B merged in must survive it.
+    const qa2 = JSON.parse( await A.evaluate( `( M.off.push( { id: 'z-A-again' } ), J( SM.write( '${G}', JSON.stringify( M.off ) ) ) )` ) );
+    ok( await untilNode( () => ( ids( G ) || [] ).includes( "z-A-again" ) ) && ( ids( G ) || [] ).includes( "y-offline-B" ),
+        "tab A saves again: tab B's item is still in the file", { qa2, disk: disk( G ) } );
+
+    // A phone saves while tab A's save waits; tab B sends and merges it; tab A
+    // (its model still the old one) saves again.
+    const H = "data/t/list-other.json";
+    await seed( phone, H, '[{"id":"a"}]' );
+    for( const c of [ A, B ] ) await c.evaluate( `SM.read( '${H}' ).then( r => { M.oth = JSON.parse( r.body ); EV.length = 0; return true; } )` );
+    const w1 = JSON.parse( await A.evaluate( `( offline( true ), M.oth.push( { id: 'A1' } ), J( SM.write( '${H}', JSON.stringify( M.oth ) ) ) )` ) );
+    ok( w1.offline, "tab A's save waits", w1 );
+    await seed( phone, H, '[{"id":"a"},{"id":"P"}]' );
+    await A.evaluate( "offline( false )" );
+    await B.evaluate( "SM.flush().then( () => true )" );
+    ok( await untilNode( () => { const g = ids( H ) || []; return g.length === 3 && g.includes( "A1" ) && g.includes( "P" ); } ), "tab B sends it, merged with the phone's", disk( H ) );
+    ok( await A.until( `EV.some( e => e.merged === '${H}' && e.body.indexOf( '"P"' ) !== -1 )` ), "tab A is handed the merged list" );
+    const w2 = JSON.parse( await A.evaluate( `( M.oth.push( { id: 'A2' } ), J( SM.write( '${H}', JSON.stringify( M.oth ) ) ) )` ) );
+    ok( await untilNode( () => ( ids( H ) || [] ).includes( "A2" ) ) && ( ids( H ) || [] ).includes( "P" ),
+        "tab A saves again from its older list: the phone's item is still in the file", { w2, disk: disk( H ) } );
+}
+
+//----------------------------------------------------------------------------//
+section( "A3 · A PLAIN STORE (DRIVE'S IMPORT) BUILDS ON A WAITING SAVE" );
+{
+    // Tab A (the list's own app) saves offline; tab B (Drive's import, a plain
+    // store) reads it - the waiting save - adds to it and saves; it goes up.
+    // Tab A, its list never re-read, saves again: the import must stay.
+    const F = "data/t/imported.json";
+    await seed( phone, F, '[{"id":"a"}]' );
+    await A.evaluate( `SM.read( '${F}' ).then( r => { M.imp = JSON.parse( r.body ); EV.length = 0; return true; } )` );
+    const qa = JSON.parse( await A.evaluate( `( offline( true ), M.imp.push( { id: 'x-app' } ), J( SM.write( '${F}', JSON.stringify( M.imp ) ) ) )` ) );
+    ok( qa.offline, "the app's save waits", qa );
+    await A.evaluate( "offline( false )" );
+    const rb = await B.evaluate( `SP.read( '${F}' ).then( r => r.body )` );
+    ok( String( rb ).indexOf( "x-app" ) !== -1, "the import reads the waiting save", rb );
+    await B.evaluate( `SP.write( '${F}', JSON.stringify( JSON.parse( ${JSON.stringify( rb )} ).concat( [ { id: 'imported' } ] ) ) ).then( () => true )` );
+    ok( await untilNode( () => ( ids( F ) || [] ).join() === "a,x-app,imported" ), "and its save goes up with it", disk( F ) );
+    const wa = JSON.parse( await A.evaluate( `( M.imp.push( { id: 'y-app' } ), J( SM.write( '${F}', JSON.stringify( M.imp ) ) ) )` ) );
+    ok( await untilNode( () => ( ids( F ) || [] ).includes( "y-app" ) ) && ( ids( F ) || [] ).includes( "imported" ),
+        "the app saves again from its older list: the import is still in the file (checked, merged - not blind)", { wa, disk: disk( F ) } );
 }
 
 //----------------------------------------------------------------------------//
@@ -81,6 +125,8 @@ section( "A1 · ONE DOCUMENT IN TWO TABS (CONFLICTS STORE)" );
     ok( held && held.conflict && held.body === "v0\ntyped in tab B\n", "tab B's text is kept, held back, in the outbox", held );
     const ra2 = JSON.parse( await A.evaluate( `J( SC.write( '${F}', M.doc + 'typed in tab A\\nmore in tab A\\n' ) )` ) );
     ok( ra2.ok && disk( F ) === "v0\ntyped in tab A\nmore in tab A\n", "tab A goes on saving: tab B's held text does not block it", { ra2, disk: disk( F ) } );
+    ok( await A.evaluate( "SC.state !== 'conflict' && SM.state !== 'conflict'" ) && await B.evaluate( "SC.state === 'conflict'" ),
+        "only tab B's plug says conflict", { A: await A.evaluate( "SC.state" ), B: await B.evaluate( "SC.state" ) } );
     ok( ! await A.evaluate( `SC.conflicted( '${F}' )` ) && await B.evaluate( `SC.conflicted( '${F}' )` ),
         "conflicted() is tab B's alone" );
     const still = await A.evaluate( `idb( 'outbox', '${F}' )` );
@@ -122,6 +168,31 @@ section( "A1 · TWO SAVES OF ONE TAB WHILE THE FIRST IS STILL ON ITS WAY" );
 }
 
 //----------------------------------------------------------------------------//
+section( "A1 · TWO SAVES OF ONE TAB, SENT DIRECTLY (ANOTHER TAB'S SAVE WAITS)" );
+{
+    // Tab B's save waits in the outbox, so tab A's go up on their own. The
+    // answer to tab A's first one arrives just while its second one is being
+    // stored: the second must not be refused against the first.
+    const F = "files/direct2.txt";
+    await seed( phone, F, "v0\n" );
+    for( const c of [ A, B ] ) await c.evaluate( `SC.read( '${F}' ).then( () => ( EV.length = 0, LOG.length = 0, true ) )` );
+    await B.evaluate( `( offline( true ), SC.write( '${F}', 'v0\\nB\\n' ).then( () => offline( false ) ) )` );
+    await A.evaluate( `( () => { const f1 = window.fetch; window.ah = null; window.after = false;
+        window.fetch = async function ( u, o ) { const r = await f1.apply( this, arguments );
+            if( window.after && o && o.method === 'PUT' ) { window.after = false; await new Promise( res => { window.ah = res; } ); }
+            return r; };
+        const t0 = IDBDatabase.prototype.transaction;
+        IDBDatabase.prototype.transaction = function () { if( window.relOnTx && window.ah ) { window.relOnTx = false; const a = window.ah; window.ah = null; a(); } return t0.apply( this, arguments ); };
+        return true; } )()` );
+    await A.evaluate( `window.after = true, window.p1 = J( SC.write( '${F}', 'v0\\nA1\\n' ) ), true` );
+    ok( await A.until( "!! window.ah" ), "tab A's first save is answered (the answer held)" );
+    await A.evaluate( `window.relOnTx = true, window.p2 = J( SC.write( '${F}', 'v0\\nA1\\nA2\\n' ) ), true` );
+    const p1 = JSON.parse( await A.evaluate( "p1" ) ), p2 = JSON.parse( await A.evaluate( "p2" ) );
+    ok( p1.ok && p2.ok && disk( F ) === "v0\nA1\nA2\n", "both go up, the second last: no conflict against itself", { p1, p2, disk: disk( F ) } );
+    ok( ! await A.evaluate( `EV.some( e => e.conflict === '${F}' )` ), "and tab A is asked nothing" );
+}
+
+//----------------------------------------------------------------------------//
 section( "A1 · TWO TABS SEND ONE SAVE AT THE SAME MOMENT" );
 {
     const F = "files/both.txt";
@@ -131,7 +202,7 @@ section( "A1 · TWO TABS SEND ONE SAVE AT THE SAME MOMENT" );
     ok( q.offline, "tab A's save waits (offline)", q );
     await Promise.all( [ A.evaluate( "SC.flush().then( () => true )" ), B.evaluate( "SC.flush().then( () => true )" ) ] );
     ok( await untilNode( () => disk( F ) === "b0\nqueued in tab A\n" ), "it is on the server", disk( F ) );
-    ok( ! await A.evaluate( "EV.some( e => e.conflict )" ) && ! await B.evaluate( "EV.some( e => e.conflict )" ),
+    ok( ! await A.evaluate( `EV.some( e => e.conflict === '${F}' )` ) && ! await B.evaluate( `EV.some( e => e.conflict === '${F}' )` ),
         "and no tab heard a false \"changed on another device\"" );
     const r = JSON.parse( await A.evaluate( `J( SC.write( '${F}', 'b0\\nqueued in tab A\\nnext\\n' ) )` ) );
     ok( r.ok && disk( F ) === "b0\nqueued in tab A\nnext\n", "tab A's next save goes up (its version moved with the save, whoever sent it)", { r, disk: disk( F ) } );
@@ -160,13 +231,17 @@ section( "K2 · THE BROWSER'S STORAGE FAILS" );
     const r3 = JSON.parse( await A.evaluate( `( () => { const real = IDBDatabase.prototype.transaction;
         IDBDatabase.prototype.transaction = function () { throw new DOMException( 'Connection to Indexed Database server lost.', 'UnknownError' ); };
         netDown = true;
-        return J( SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'saved-while-idb-is-broken' }, { id: 'kept-in-the-page' } ] ) ) )
-               .then( r => { IDBDatabase.prototype.transaction = real; netDown = false; return r; } ); } )()` ) );
+        return SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'saved-while-idb-is-broken' }, { id: 'kept-in-the-page' } ] ) )
+               .then( r => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev );
+                             r.guard = ev.defaultPrevented; IDBDatabase.prototype.transaction = real; netDown = false; return JSON.stringify( r ); } ); } )()` ) );
     ok( ! r3.ok && r3.pageOnly && ! r3.offline && ! r3.needsAuth,
         "storage AND network down: NOT saved (pageOnly, none of offline / needsAuth - the apps' \"safe here\")", r3 );
+    ok( r3.guard === true, "and leaving that page asks first (the edit is only there)", r3 );
     ok( await A.evaluate( `SM.read( '${F}' ).then( r => r.body.indexOf( 'kept-in-the-page' ) !== -1 )` ), "a read in that page still shows the edit" );
     await A.evaluate( "SM.flush().then( () => true )" );   // (a flush already running answers at once: the disk is waited for)
     ok( await untilNode( () => ( ids( F ) || [] ).includes( "kept-in-the-page" ) ), "and it goes up once the network is back", disk( F ) );
+    ok( await A.until( "( () => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev ); return ! ev.defaultPrevented; } )()" ),
+        "...after which leaving asks nothing" );
 }
 
 //----------------------------------------------------------------------------//
@@ -253,15 +328,22 @@ section( "PENDING / ONSAVED / SIGN-OUT CLEARS ALL (needs of earlier batches)" );
         q.onsuccess = () => { const db = q.result, tx = db.transaction( 'files', 'readwrite' );
             tx.objectStore( 'files' ).put( { key: 'm1#f1', at: Date.now(), blob: new Blob( [ 'x' ] ) } );
             tx.oncomplete = () => { db.close(); res( true ); }; }; } )` );
-    await A.evaluate( "localStorage.setItem( 'nayive-chat-draft:user:test|w|c1', 'hola' ), localStorage.setItem( 'other-key', 'stays' ), true" );
-    await A.evaluate( "NayiveStore.localCount().then( () => NayiveStore.clearLocal() ).then( () => true )" );
+    const before = await A.evaluate( "NayiveStore.localCount()" );
+    await A.evaluate( "localStorage.setItem( 'nayive-chat-draft:user:test|w|c1', '{\"text\":\"hola\"}' ), localStorage.setItem( 'other-key', 'stays' ), true" );
+    const counted = await A.evaluate( "NayiveStore.localCount()" );
+    ok( counted === before + 1, "Chat's typed text is counted in the sign-out question", { before, counted } );
+    // ...and one typed after the count (while the question is up) is not deleted.
+    await A.evaluate( "localStorage.setItem( 'nayive-chat-draft:user:test|w|c2', '{\"text\":\"typed later\"}' ), true" );
+    const left = await A.evaluate( "NayiveStore.clearLocal()" );
     const files = await A.evaluate( `new Promise( res => { const q = indexedDB.open( 'nayive-mail-files', 1 );
         q.onupgradeneeded = () => q.result.createObjectStore( 'files', { keyPath: 'key' } );
         q.onsuccess = () => { const db = q.result, g = db.transaction( 'files' ).objectStore( 'files' ).count();
             g.onsuccess = () => { db.close(); res( g.result ); }; }; } )` );
     ok( files === 0, "sign-out's clear empties eMail's files", files );
     ok( await A.evaluate( "localStorage.getItem( 'nayive-chat-draft:user:test|w|c1' ) === null && localStorage.getItem( 'other-key' ) === 'stays'" ),
-        "...and Chat's typed drafts (nothing else)" );
+        "...and the Chat text it counted (nothing else)" );
+    ok( left >= 1 && await A.evaluate( "localStorage.getItem( 'nayive-chat-draft:user:test|w|c2' ) !== null" ),
+        "the Chat text typed after the count is kept (and said to be left)", left );
 }
 
 const errs = A.logs.concat( B.logs ).filter( l => /EXCEPTION/.test( l ) );

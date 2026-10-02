@@ -15,7 +15,7 @@
  *               versioned libs -> cache-first (filenames carry the version)
  *               a file GET      -> the network first, untouched; the "nayive-trips-docs"
  *               (/api/files?file=)  copy (the trips page fills it with just the active
- *                                 trip's files) only when the network fails
+ *                                 trip's files) only when the network fails or is slow
  *               /api/*          -> passed straight through; the app and
  *                                 shared/store.js own the data path, never cached.
  *
@@ -470,7 +470,7 @@ self.addEventListener( "fetch", function ( event )
 
     // A trip's documents are /api/files?file=... URLs (trips/helpers.js
     // docHref), kept per exact URL in TRIP_DOCS for the active trip: the
-    // network first, that copy only offline (tripDocOrNetwork). Not a Range
+    // network first, that copy only when it fails (tripDocOrNetwork). Not a Range
     // request (music, a film): those never go through here. No other method
     // either (above): a PUT and its If-Match go straight to the server.
     if( url.pathname === "/api/files" && url.searchParams.has( "file" ) &&
@@ -613,32 +613,41 @@ async function swText( req, key )
     return key;
 }
 
-// A file GET: the network FIRST, always - the request as the page made it
+// A file GET: the network FIRST - the request as the page made it
 // (If-None-Match and all) and the answer as the server gave it (ETag and
-// all). The active trip's copy in TRIP_DOCS answers only when the network
-// fails: it was the answer to every app, never refreshed, so an editor showed
-// an old copy as the server's and the Image editor saved over the newer file
-// (data-safety B6). That copy says what it is (X-Nayive-Copy: offline):
-// shared/store.js reads it as "offline", not as the file's current version. No
-// copy either: the failure stays a failure (a rejected fetch), which is what
-// shared/store.js reads as "offline" too.
+// all). The active trip's copy in TRIP_DOCS used to answer every app first,
+// never refreshed, so an editor showed an old copy as the server's and the
+// Image editor saved over the newer file (data-safety B6). Now that copy
+// answers only when the network fails: no connection, a gateway's 5xx, or no
+// answer within TRIP_WAIT_MS (an airport's Wi-Fi - the boarding pass must
+// open at the gate). It says what it is (X-Nayive-Copy: offline):
+// shared/store.js reads it as "offline", not as the file's current version.
+// Not a trip document: the network alone, and a failure stays a failure (a
+// rejected fetch), which is what shared/store.js reads as "offline" too.
+var TRIP_WAIT_MS = 4000;
+
 async function tripDocOrNetwork( req )
 {
+    var net = fetch( req );
+    var hit = null;
+    try { hit = await ( await caches.open( TRIP_DOCS ) ).match( req ); }
+    catch ( e ) {}
+    if( ! hit ) return net;
+
+    var timer = null;
+    var late  = new Promise( function ( r ) { timer = setTimeout( function () { r( null ); }, TRIP_WAIT_MS ); } );
     try
     {
-        return await fetch( req );
+        var res = await Promise.race( [ net, late ] );
+        if( res && res.status < 500 ) return res;
     }
-    catch ( err )
-    {
-        var hit = null;
-        try { hit = await ( await caches.open( TRIP_DOCS ) ).match( req ); }
-        catch ( e ) {}
-        if( ! hit ) throw err;
+    catch ( e ) {}
+    finally { clearTimeout( timer ); }
+    net.catch( function () {} );   // an answer that comes too late is not waited for
 
-        var headers = new Headers( hit.headers );
-        headers.set( "X-Nayive-Copy", "offline" );
-        return new Response( hit.body, { status: hit.status, statusText: hit.statusText, headers: headers } );
-    }
+    var headers = new Headers( hit.headers );
+    headers.set( "X-Nayive-Copy", "offline" );
+    return new Response( hit.body, { status: hit.status, statusText: hit.statusText, headers: headers } );
 }
 
 // Trips PDFs - cache-first against the trips-managed store; never populated here

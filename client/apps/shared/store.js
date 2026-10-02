@@ -75,12 +75,16 @@
  *     A page's next save replaces the queued entry only when that page holds
  *     it (wrote it, or read it). A save sent OK moves the version of the page
  *     that holds it, of a later save of the same page queued meanwhile, and
- *     the cache (`sent` = the ids it took to the server); other pages keep
- *     theirs, so their next save gets 412 -> merge, or the conflict question.
+ *     the cache (`sent` = the ids it took to the server, `last` = the ONE
+ *     save the cache's version answers - never one it took in from another
+ *     page); other pages keep theirs, so their next save gets 412 -> merge,
+ *     or the conflict question.
  *   - Another page's save waiting in the outbox is never replaced: a merging
- *     store merges this page's body into it (from this page's own base when
- *     that base is one the queued body descends from, else with no base, which
- *     keeps every item) and its app reloads (onMerged); a conflicts store
+ *     store merges this page's body into it (from the older of the two bases
+ *     when one descends from the other, else with no base, which keeps every
+ *     item) and its app reloads (onMerged) - and so does the app of the page
+ *     whose save it took in (a "took" message), though that page's next save
+ *     stays checked against its own version; a conflicts store
  *     sends this page's save on its own, kept in this page until it is sent
  *     (`direct`), and whichever of the two reaches the server second gets the
  *     conflict question; a plain store replaces it, as it always did. A
@@ -295,8 +299,18 @@
         return out.slice( -KEEP_ANC );
     }
 
-    // What this page holds once its model is entry `e`.
-    function heldOf( e ) { return Object.assign( verOf( e ), { id: idOf( e ), inc: e.inc || [], anc: e.anc || [] } ); }
+    // What this page holds once its model is entry `e` (its body kept by
+    // reference, to know a cached copy of it again: freshEntry).
+    function heldOf( e ) { return Object.assign( verOf( e ), { id: idOf( e ), inc: e.inc || [], anc: e.anc || [], body: e.body } ); }
+
+    // Two bodies, text or bytes, the same.
+    function sameBody( a, b )
+    {
+        if( typeof a === "string" || typeof b === "string" ) return a === b;
+        if( ! ( a instanceof Uint8Array ) || ! ( b instanceof Uint8Array ) || a.length !== b.length ) return false;
+        for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
+        return true;
+    }
 
     // This page's model of `path` changed (a read handed it, a merge was
     // taken in): `h` is what it holds now.
@@ -306,11 +320,19 @@
         seen[ path ] = ( seen[ path ] || 0 ) + 1;
     }
 
-    // The cached copy knows `id` went to the server (or a save holding it):
-    // `sent` = every save it saw go up, `last` = the one its version is the
-    // answer to (and the saves that one held).
+    // The cached copy knows `id` went to the server: `sent` = every save it
+    // saw go up, with the saves each one held (their content went up too);
+    // `last` = the ONE save its version is the answer to, exactly as it went
+    // up. Never a save it held: a save that took another page's place (a
+    // merge, a page that read it and added) holds content that page never saw
+    // - that page's next save must be checked against its own version, or it
+    // passes and drops it.
     function wasSent( doc, id ) { return !! doc && ours( doc ) && ( doc.sent || [] ).indexOf( id ) !== -1; }
     function lastSent( doc, id ) { return !! doc && ours( doc ) && ! doc.dirty && ( doc.last || [] ).indexOf( id ) !== -1; }
+
+    // The cached copy is clean and holds exactly `body`: it went up (sent by
+    // a page that keeps no `sent` - an older store.js, open across a deploy).
+    function upAsIs( doc, body ) { return !! doc && ours( doc ) && doc.dirty === false && body != null && sameBody( doc.body, body ); }
 
     //------------------------------------------------------------------------//
     // TINY INDEXEDDB PROMISE WRAPPER
@@ -517,10 +539,13 @@
     // "SAVED" FROM ANY PAGE  (onSaved, and the version of the page that holds it)
     //
     // A save sent OK by any page of this browser is told to every page: the
-    // one holding it (it wrote it, or a later save of its own was built on it)
-    // takes the server's new version; onSaved listeners hear about it.
-    // m = { path, who, id, rebased, tag, srv, body } - body null for bytes
-    // (not shipped across pages).
+    // one holding it (it wrote it, or a save of its own was built on it - also
+    // one still being stored) and made from the same version takes the
+    // server's new version; onSaved listeners hear about it.
+    // m = { path, who, id, rebased, prev, tag, srv, body } - prev = the version
+    // the save was made from, body null for bytes (not shipped across pages).
+
+    var lastSaved = {};   // path -> the last save heard of: { id, prev, tag, srv, base } (write()'s page-only race)
 
     var channel = null;
     try { if( typeof BroadcastChannel === "function" ) channel = new BroadcastChannel( "nayive-store" ); }
@@ -530,20 +555,39 @@
         var m = ev.data || {};
         if( m.t === "saved" )    heardSaved( m, m.body );
         if( m.t === "conflict" ) heardConflict( m );
+        if( m.t === "took" )     heardTook( m );
     };
+
+    // A save kept only in this page (`pageOnly`: the browser's storage failed,
+    // or another page's save held the outbox, and the server was not reached)
+    // is lost with the page: leaving it asks first - in every app, not only
+    // the office editors, which ask on their own.
+    try
+    {
+        window.addEventListener( "beforeunload", function ( e )
+        {
+            if( ! Object.keys( pageOnly ).length ) return;
+            e.preventDefault();
+            e.returnValue = "";
+        } );
+    }
+    catch ( e ) {}
 
     function heardSaved( m, body )
     {
         if( m.who && ME && m.who !== ME ) return;
         var h    = held[ m.path ];
-        var mine = !! h && ( h.id === m.id || ( !! m.rebased && h.id === m.rebased ) );
+        var base = typeof body === "string" ? body : null;
+        var mine = !! h && ( holds( h, { id: m.id } ) || ( !! m.rebased && holds( h, { id: m.rebased } ) ) );
 
-        if( mine )
-        {
-            var k = vkey( h );
-            held[ m.path ] = Object.assign( {}, h, verOf( { tag: m.tag, srv: m.srv, base: typeof body === "string" ? body : null } ),
-                                            { anc: addKeys( h.anc, [ k ] ) } );
-        }
+        if( mine && vkey( h ) === m.prev )
+            held[ m.path ] = Object.assign( {}, h, verOf( { tag: m.tag, srv: m.srv, base: base } ), { anc: addKeys( h.anc, [ m.prev ] ) } );
+        // A save of this page kept here and built on that one, from the same
+        // version: made from the answer now (as saved() does for a queued one).
+        var po = pageOnly[ m.path ];
+        if( po && idOf( po ) !== m.id && ( po.inc || [] ).indexOf( m.id ) !== -1 && vkey( po ) === m.prev )
+            pageOnly[ m.path ] = setVer( Object.assign( {}, po, { anc: addKeys( po.anc, [ m.prev ] ) } ), { tag: m.tag, srv: m.srv, base: base } );
+        lastSaved[ m.path ] = { id: m.id, rebased: m.rebased, prev: m.prev, tag: m.tag, srv: m.srv, base: base };
         savedFns.forEach( function ( fn ) { try { fn( m.path, body, m.tag, mine ); } catch ( e ) {} } );
     }
 
@@ -575,6 +619,29 @@
         if( ! channel ) return;
         try { channel.postMessage( Object.assign( { t: "conflict" }, m ) ); }
         catch ( e ) {}
+    }
+
+    // A queued save took the place of saves it holds - another page's save
+    // merged in, or one this page read and added to. A page whose model is
+    // one of those (and whose app merges this file) is handed the new body
+    // (onMerged): its screen shows what the other page added. Its version
+    // stays the one its model came from - its next save is checked against
+    // that and merged, so nothing is lost even where an app takes a merged
+    // body in only in part.
+    function heardTook( m )
+    {
+        if( m.who && ME && m.who !== ME ) return;
+        var h  = held[ m.path ];
+        var mg = mergers[ m.path ];
+        if( ! mg || typeof m.body !== "string" || ! h || ! h.id || h.id === m.id || ( m.inc || [] ).indexOf( h.id ) === -1 ) return;
+        mg.fire( m.path, m.body );
+    }
+
+    function toldTook( path, e )
+    {
+        if( ! channel || typeof e.body !== "string" || ! ( e.inc || [] ).length ) return;
+        try { channel.postMessage( { t: "took", path: path, who: e.who || ME, id: idOf( e ), inc: e.inc, body: e.body } ); }
+        catch ( err ) {}
     }
 
     //------------------------------------------------------------------------//
@@ -663,7 +730,10 @@
         {
             var db      = await dbPromise;
             var here    = Object.keys( pageOnly ).map( function ( k ) { return pageOnly[ k ]; } );
-            var pending = ( await ownEntries( db ) ).concat( here );
+            // Another window's save held back as a conflict waits for THAT
+            // window: not this page's conflict, nor anything to send.
+            var pending = ( await ownEntries( db ) ).filter( function ( e ) { return ! e.conflict || holds( held[ e.path ], e ); } )
+                                                     .concat( here );
 
             if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
             else if( here.length )          emit( "error" );   // kept only in this page (K2): not safe, never "offline"
@@ -1104,11 +1174,14 @@
             // What this body was built from, taken NOW (VERSIONS): a merge that
             // lands before the outbox is updated moves `held`, not this body. From
             // here on this page's model is this body, whatever the outbox says:
-            // the next write() is built on it.
+            // the next write() is built on it - and holds what this one held (a
+            // save of it sent meanwhile moves this page's version: heardSaved).
             var basis = held[ path ] || null;
             var id    = newId();
             var now   = nextQueuedAt();
-            setHeld( path, Object.assign( {}, basis || { id: null, inc: [], anc: [] }, { id: id } ) );
+            var b0    = basis || { id: null, inc: [], anc: [] };
+            setHeld( path, Object.assign( {}, b0, { id: id, body: body,
+                                                    inc: b0.id ? [ b0.id ].concat( b0.inc || [] ).slice( -KEEP_IDS ) : ( b0.inc || [] ) } ) );
             var mark  = seen[ path ];
 
             // Counted and started in the same tick, so a read() whose GET is out
@@ -1139,8 +1212,21 @@
             // (K2), or another page's save holds the outbox (`direct`). Queued:
             // it holds whatever this page kept before.
             var here = ! q.stored || !! m.direct;
-            if( here ) pageOnly[ path ] = e;
-            else       delete pageOnly[ path ];
+            if( here )
+            {
+                // A save this one holds went up while it was being made, from the
+                // same version: this one is made from the answer (as saved() does
+                // for a queued one), or it would meet a 412 against itself.
+                var ls = lastSaved[ path ];
+                if( ls && ( e.inc || [] ).indexOf( ls.id ) !== -1 && vkey( e ) === ls.prev )
+                    setVer( Object.assign( e, { anc: addKeys( e.anc, [ ls.prev ] ) } ), { tag: ls.tag, srv: ls.srv, base: ls.base } );
+                pageOnly[ path ] = e;
+            }
+            else
+            {
+                delete pageOnly[ path ];
+                toldTook( path, e );   // the pages whose save this one holds are handed it
+            }
 
             if( m.merged != null )
             {
@@ -1158,13 +1244,14 @@
             }
 
             emit( "saving" );
-            var res = await flushPath( path, { id: idOf( e ) } );
+            var res = await flushPath( path, { id: idOf( e ), body: e.body } );
 
             // Not sent and kept nowhere but here: never "saved" (none of
             // offline / needsAuth, which the apps take as "safe on this device"),
             // and the plug never says "offline - saved when you reconnect".
             if( here && ! res.ok )
             {
+                if( res.superseded ) return { ok: false, pageOnly: true };   // a newer save of this page goes next: its answer tells
                 if( res.conflict ) emit( "conflict" );
                 else { pageOnlyToast(); emit( "error" ); }
                 return { ok: false, pageOnly: true, conflict: !! res.conflict };
@@ -1202,24 +1289,29 @@
             else if( old && mergeFn && typeof body === "string" && typeof old.body === "string" )
             {
                 // Another page's save, not in this page's model: merged into it,
-                // from this page's own base when the queued body descends from
-                // it; else with no base - every item of both is kept.
+                // from the older of the two bases when one descends from the
+                // other (this page's version is, or came before, the queued
+                // one's - or the other way round); else with no base - every
+                // item of both is kept.
                 var ov    = entryVer( old, docMine );
-                var exact = !! basis && ( vkey( basis ) === vkey( ov ) || ( !! vkey( basis ) && ( old.anc || [] ).indexOf( vkey( basis ) ) !== -1 ) );
-                try { merged = mergeFn( path, exact ? verOf( basis ).base : null, body, old.body ); }
+                var bk    = vkey( basis ), qk = vkey( ov );
+                var mine  = !! basis && ( bk === qk || ( !! bk && ( old.anc || [] ).indexOf( bk ) !== -1 ) );   // the queued body descends from this page's base
+                var later = ! mine && !! basis && !! qk && ( basis.anc || [] ).indexOf( qk ) !== -1;          // this page's descends from the queued one's
+                try { merged = mergeFn( path, mine ? verOf( basis ).base : later ? ov.base : null, body, old.body ); }
                 catch ( e ) { merged = null; }
                 if( typeof merged !== "string" ) return { entry: freshEntry(), direct: true, merged: null, tx: {} };
                 body = merged;
                 id   = newId();   // a new save: no page holds it until its app has taken it in
-                v    = ov;
+                v    = later ? verOf( basis ) : ov;   // the newer of the two versions it holds
                 inc  = keepIds( old );
-                anc  = addKeys( old.anc, exact ? [] : [ vkey( basis ) ] );
+                anc  = addKeys( addKeys( old.anc, basis ? basis.anc || [] : [] ), mine ? [] : [ later ? qk : bk ] );
             }
             else if( old )
             {
-                // A plain store: the newer save wins (see the top).
+                // A plain store: the newer save wins (see the top). It does not
+                // hold the other one's content: no `inc`.
                 v   = entryVer( old, docMine );
-                inc = keepIds( old );
+                inc = [];
                 anc = old.anc || [];
             }
             else
@@ -1230,17 +1322,19 @@
 
             var e = setVer( { path: path, body: body, queuedAt: now,
                               conflict: ! mrg && !! old.conflict,   // a merging save merges again instead of staying held
-                              bin: binary || body instanceof Uint8Array, ius: ius, who: ME, mrg: mrg,
+                              bin: binary || body instanceof Uint8Array, ius: ius, who: ME || old.who || "", mrg: mrg,
                               ver: 1, id: id, inc: inc, anc: anc }, v );
 
             return { entry: e, merged: merged, tx: { out: e, doc: cached( e ) } };
 
             // A save of this page's alone: from the version its model came from -
             // or, when the save it holds was sent a moment ago by another page,
-            // that save's answer (in the cache before it reaches this page).
+            // that save's answer (in the cache before it reaches this page; one
+            // sent by an older store.js left only its body there, clean).
             function freshEntry()
             {
-                var fv = basis && basis.id && lastSent( docMine, basis.id ) ? docVer( docMine ) : verOf( basis );
+                var up = basis && basis.id && ( lastSent( docMine, basis.id ) || upAsIs( docMine, basis.body ) );
+                var fv = up ? docVer( docMine ) : verOf( basis );
                 return setVer( { path: path, body: body, queuedAt: now, conflict: false,
                                  bin: binary || body instanceof Uint8Array, ius: conflicts, who: ME, mrg: !! mergeFn,
                                  ver: 1, id: id, inc: basis && basis.id ? [ basis.id ].concat( basis.inc || [] ).slice( -KEEP_IDS ) : [],
@@ -1252,7 +1346,7 @@
             function cached( q )
             {
                 if( c.doc && ! ours( c.doc ) && ( c.doc.dirty || ( c.slot && ! ours( c.slot ) ) ) ) return undefined;
-                var d = setVer( { path: path, body: q.body, mtime: now, cachedAt: now, dirty: true, who: ME }, verOf( q ) );
+                var d = setVer( { path: path, body: q.body, mtime: now, cachedAt: now, dirty: true, who: q.who }, verOf( q ) );
                 if( docMine && docMine.sent ) d.sent = docMine.sent;
                 return d;
             }
@@ -1310,7 +1404,7 @@
             // gone without that - cleared by a sign-out - it is NOT saved (K5).
             if( ! entry )
             {
-                if( ! mine || wasSent( doc, mine.id ) ) return { ok: true };
+                if( ! mine || wasSent( doc, mine.id ) || upAsIs( doc, mine.body ) ) return { ok: true };
                 emit( "error" );
                 return { ok: false, unknown: true };
             }
@@ -1378,7 +1472,10 @@
                 {
                     return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
                 } );
-                emit( "conflict" );
+                // This page's plug says so only for its own save (another
+                // window's waits for that window).
+                if( holds( held[ path ], entry ) ) emit( "conflict" );
+                else await settle();
                 toldConflict( path, entry );
                 return { ok: false, conflict: true };
             }
@@ -1423,6 +1520,7 @@
             if( ! r.ok ) return "same";
             var cur = r.ret.out, doc = r.ret.doc;
             if( wasSent( doc, idOf( entry ) ) ) return "sent";
+            if( ! sameEntry( cur, entry ) && upAsIs( doc, entry.body ) ) return "sent";   // sent by an older store.js
             if( sameEntry( cur, entry ) && vkey( entryVer( cur, doc ) ) !== vkey( entryVer( entry, doc ) ) ) return "again";
             return "same";
         }
@@ -1437,11 +1535,13 @@
         {
             var ver = { tag: res.tag, srv: res.srv, base: typeof entry.body === "string" ? entry.body : null, none: false };
             var eid = idOf( entry );
+            var sentKey = vkey( entryVer( entry ) );
 
             var r = await pathTx( db, path, "readwrite", function ( c )
             {
                 var cur = c.out, out, rebased = null, d;
                 var sent = entryVer( entry, c.doc );
+                sentKey  = vkey( sent );
 
                 if( sameEntry( cur, entry ) ) out = null;
                 else if( cur && ( cur.inc || [] ).indexOf( eid ) !== -1 && vkey( entryVer( cur, c.doc ) ) === vkey( sent ) )
@@ -1454,7 +1554,7 @@
                 {
                     var took = ( entry.inc || [] ).concat( [ eid ] );
                     d = c.doc;
-                    if( out === null ) { d.body = entry.body; d.dirty = false; setVer( d, ver ); d.last = took.slice( -KEEP_IDS ); }
+                    if( out === null ) { d.body = entry.body; d.dirty = false; setVer( d, ver ); d.last = [ eid ]; }
                     else if( rebased ) setVer( d, ver );   // still dirty: the queued save's new version
                     d.sent = ( d.sent || [] ).concat( took ).slice( -KEEP_IDS );
                     delete d.refused;
@@ -1462,7 +1562,7 @@
                 return { out: out, doc: d, ret: rebased };
             } );
 
-            toldSaved( { path: path, who: entry.who || ME, id: eid, rebased: r.ok ? r.ret : null, tag: ver.tag, srv: ver.srv }, entry.body );
+            toldSaved( { path: path, who: entry.who || ME, id: eid, rebased: r.ok ? r.ret : null, prev: sentKey, tag: ver.tag, srv: ver.srv }, entry.body );
             await settle();
             return { ok: true };
         }
@@ -1483,12 +1583,14 @@
 
             // A newer save of this page came meanwhile: it goes next, and meets
             // this answer on its own.
-            if( res.conflict && pageOnly[ path ] !== po ) return { ok: false };
+            var orig = po;
+            if( res.conflict && pageOnly[ path ] !== orig ) return { ok: false, superseded: true };
 
             if( res.conflict && merger )
             {
                 var theirs = await merger.get( path );
                 var merged = null;
+                if( pageOnly[ path ] !== orig ) return { ok: false, superseded: true };
                 if( theirs.ok )
                 {
                     try { merged = merger.fn( path, entryVer( po ).base, po.body, theirs.body ); }
@@ -1526,14 +1628,14 @@
                     d.sent = ( d.sent || [] ).concat( took ).slice( -KEEP_IDS );
                     if( drop || ( ! c.out && ! d.dirty ) )
                     {
-                        setVer( Object.assign( d, { body: po.body, dirty: false, last: took.slice( -KEEP_IDS ) } ),
+                        setVer( Object.assign( d, { body: po.body, dirty: false, last: [ idOf( po ) ] } ),
                                 { tag: res.tag, srv: res.srv, base: typeof po.body === "string" ? po.body : null } );
                         delete d.refused;
                     }
                     return { out: drop ? null : undefined, doc: d };
                 } );
                 toldSaved( { path: path, who: who, id: idOf( po ), rebased: next && next !== po ? idOf( next ) : null,
-                             tag: res.tag, srv: res.srv }, po.body );
+                             prev: vkey( entryVer( po ) ), tag: res.tag, srv: res.srv }, po.body );
                 return { ok: true };
             }
 
@@ -1590,7 +1692,7 @@
                 var r = await pathTx( db, path, "readwrite", function ( c )
                 {
                     var cur = c.out;
-                    if( ! cur ) return { ret: { none: true, sent: wasSent( c.doc, idOf( entry ) ) } };
+                    if( ! cur ) return { ret: { none: true, sent: wasSent( c.doc, idOf( entry ) ) || upAsIs( c.doc, entry.body ) } };
                     if( cur.conflict ) return { ret: { held: true } };
                     if( theirs.missing ) return { ret: { gone: cur } };
 
@@ -1604,7 +1706,7 @@
                     var mm = setVer( Object.assign( {}, cur, { body: merged, conflict: false, queuedAt: nextQueuedAt(), ver: 1, id: newId(),
                                                               inc: keepIds( cur ), anc: addKeys( cur.anc, [ vkey( cv ) ] ) } ), tv );
                     var d  = c.doc && ours( c.doc ) ? c.doc
-                           : c.doc && c.doc.dirty ? null : { path: path, cachedAt: Date.now(), who: ME };
+                           : c.doc && c.doc.dirty ? null : { path: path, cachedAt: Date.now(), who: mm.who };
                     if( d ) { d.body = merged; d.mtime = Date.now(); d.dirty = true; setVer( d, tv ); }
                     return { out: mm, doc: d || undefined, ret: { merged: mm } };
                 } );
@@ -1626,10 +1728,12 @@
                 }
 
                 // This page's app takes the merged body (onMerged): its model,
-                // and the version its next save is made from.
+                // and the version its next save is made from. A page whose save
+                // was merged here is handed it too (toldTook).
                 entry = t.merged;
                 setHeld( path, heldOf( entry ) );
                 merger.fire( path, entry.body );
+                toldTook( path, entry );
 
                 emit( "saving" );
                 res = await netPut( path, entry.body, entryVer( entry ), bin, who );
@@ -1833,17 +1937,18 @@
     // SIGNING OUT  (the launcher's button, and admin.html's)
     //
     // What this browser keeps must not outlive the session: the next person to
-    // sign in here would be offered it. localCount() is how many saves and
-    // untitled drafts are still only here - EVERY account's, since they all go -
-    // so the button can ask first; clearLocal() then deletes EXACTLY what was
-    // counted (a save or draft made while the question was up is not: K5), the
-    // cached copies of every path with nothing left to send, eMail's files and
-    // Chat's typed drafts. leaveDevice( ask ) does the lot: send, count, ask,
+    // sign in here would be offered it. localCount() is how many saves,
+    // untitled drafts and Chat's typed messages are still only here - EVERY
+    // account's, since they all go - so the button can ask first; clearLocal()
+    // then deletes EXACTLY what was counted (a save or draft made while the
+    // question was up is not: K5), the cached copies of every path with nothing
+    // left to send, and eMail's files. leaveDevice( ask ) does the lot: send, count, ask,
     // clear - and counts and asks again when something came in meanwhile. Each
     // store is emptied in place: deleteDatabase() waits for every other open
     // tab and, meanwhile, does nothing.
 
-    var counted = null;   // what the last localCount() counted: outbox "path\0id", drafts "app\0at"
+    var counted = null;   // what the last localCount() counted: outbox "path\0id", drafts "app\0at", chat "key\0text"
+    var waitStore = null; // sendWaiting's store: one per page (each store listens to the page's events)
 
     // A database as its owner opens it - the same upgrade, so opening it here
     // first never leaves one with no store: "nayive-drafts" (shared/office.js),
@@ -1893,8 +1998,28 @@
         var drs    = ( await oneTx( drafts, "drafts", "readonly", function ( os ) { return os.getAll(); } ) ) || [];
         if( store )  store.close();
         if( drafts ) drafts.close();
-        counted = { out: outs.map( outName ), drafts: drs.map( draftName ) };
-        return outs.length + drs.length;
+        var chat = chatDrafts();
+        counted = { out: outs.map( outName ), drafts: drs.map( draftName ), chat: chat };
+        return outs.length + drs.length + chat.length;
+    }
+
+    // Chat's typed, unsent text (chat/compose.js: localStorage
+    // "nayive-chat-draft:<whose>|<world>|<chat>"), as "key\0text": counted and
+    // asked about like every other unsaved thing.
+    function chatDrafts()
+    {
+        var out = [];
+        try
+        {
+            for( var i = 0; i < localStorage.length; i++ )
+            {
+                var k = localStorage.key( i );
+                var v = k && k.indexOf( "nayive-chat-draft:" ) === 0 ? localStorage.getItem( k ) : null;
+                if( v ) out.push( k + "\u0000" + v );
+            }
+        }
+        catch ( e ) {}
+        return out;
     }
 
     // The saves still waiting here get one more chance to go up before the
@@ -1904,7 +2029,8 @@
     function sendWaiting( ms )
     {
         if( ! navigator.onLine ) return Promise.resolve();
-        return Promise.race( [ createStore().flush().catch( function () {} ),
+        waitStore = waitStore || createStore();
+        return Promise.race( [ waitStore.flush().catch( function () {} ),
                                new Promise( function ( r ) { setTimeout( r, ms || 10000 ); } ) ] );
     }
 
@@ -1984,16 +2110,14 @@
             if( files ) files.close();
         }
 
-        // Chat's typed, unsent text (chat/compose.js).
-        try
+        // Chat's typed text: what was counted, as it was then (one typed on
+        // since is kept, and counted as left).
+        chatDrafts().forEach( function ( d )
         {
-            for( var i = localStorage.length - 1; i >= 0; i-- )
-            {
-                var k = localStorage.key( i );
-                if( k && k.indexOf( "nayive-chat-draft:" ) === 0 ) localStorage.removeItem( k );
-            }
-        }
-        catch ( e ) {}
+            var k = d.slice( 0, d.indexOf( "\u0000" ) );
+            if( ( seen.chat || [] ).indexOf( d ) !== -1 ) { try { localStorage.removeItem( k ); } catch ( e ) {} }
+            else left++;
+        } );
 
         return left;
     }
