@@ -43,6 +43,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -203,6 +204,12 @@ func (h *MailHub) writeMailFile(user, name string, v any) error {
 		return fmt.Errorf("mail: %s: %w", name, errDamaged)
 	}
 	dir := h.dir(user)
+	// Never make the HOME itself: a write that outlives an admin delete or
+	// rename must not leave a ghost homes/<old>/ (L2). Only data/mail below
+	// an existing home is made, 0700 like the files in it.
+	if _, err := os.Stat(filepath.Join(h.cfg.HomesDir, user)); errors.Is(err, fs.ErrNotExist) {
+		return errRootGone
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
