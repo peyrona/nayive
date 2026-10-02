@@ -23,16 +23,26 @@ package main
 //	conv/<conv>/state.json       rev, next id, read cursors, pins and mutes
 //	conv/<conv>/media/<id>.<ext> the photo or file of message <id>
 //
-// A photo the owner KEPT (Copiar, keep in api_chat.go) left media/ for the
+// A photo the owner KEPT (Copiar, keep in api_chat.go) is ALSO one of the
 // owner's own files - files/<their Photos folder>/<name> - and the message
-// points there (state.json "kept"), so deleting the message never takes it.
-// A JPEG the owner sends from their own files is kept from the start: no copy
-// at all (POST messages {"ref"}). A kept file is followed by its inode
-// ("keptId") when it is renamed or moved.
+// knows where (state.json "kept"), so deleting the message never takes it.
+// A JPEG the owner sends from their own files is kept from the start (POST
+// messages {"ref"}). A kept file is followed by its inode ("keptId") when it
+// is renamed or moved.
+//
+// MEDIA/ ALWAYS HOLDS WHAT THE MESSAGE SHOWS (J4). A kept or linked photo is
+// a HARD LINK there of the owner's file - the same bytes, no room taken (a
+// copy only on a disk that refuses links). Binning, emptying the bin,
+// renaming or replacing the owner's file never takes the photo out of the
+// conversation, and a NEW file later saved at that path (cameras reuse
+// IMG_0001.jpg) never shows in the old message. "Editar" never writes over
+// the owner's file: the edit is a new file of theirs, and the message is
+// pointed at it (chatEdited).
 //
 // AUTO-DELETE. With chat.json "deleteAfter" = N days, every message older
-// than that is deleted for good - its photo or file too, unless kept (expire,
-// run hourly by RunExpiry and at once when N changes).
+// than that is deleted for good - its photo or file too; a kept photo stays
+// in the owner's files (expire, run hourly by RunExpiry and at once when N
+// changes). Never on a clock that just jumped forward (expiryClockOK, J8).
 //
 // LATER. A text scheduled for a time to come (the send button held down ->
 // "Schedule message") waits in chat.json "later" - only its sender sees it -
@@ -70,6 +80,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"net"
 	"net/url"
@@ -142,6 +153,11 @@ type ChatGroup struct {
 	Created int64    `json:"created"`
 	Photo   int64    `json:"photo,omitempty"` // the group's picture's version; 0 = none
 	Deleted bool     `json:"deleted,omitempty"`
+	// Left: people taken out of the group who may be put back (an Undo, or
+	// later). Their history must still be there when they are: purge counts
+	// them as members (J6). A deleted person never comes back (a new one gets
+	// a new id), so dropContact takes them off.
+	Left []string `json:"left,omitempty"`
 }
 
 type chatMe struct {
@@ -257,12 +273,15 @@ type chatState struct {
 	// chat leaves their list until a newer message arrives. Once EVERY member
 	// has cleared past a message, it is purged from the disk (purge).
 	Cleared map[string]int64 `json:"cleared,omitempty"`
-	// Kept: a photo the owner copied into their own files - message id ->
-	// "files/...". It is no longer under media/; the message shows that file.
+	// Kept: a photo that is also one of the owner's files (copied there, or
+	// sent from there) - message id -> "files/...": where it lives in them.
+	// The message shows its own copy under media/ (a hard link of that file);
+	// one kept before media/ held it (an older server) shows that file.
 	Kept map[int64]string `json:"kept,omitempty"`
 	// KeptID: the kept file's inode (fileID) and size - message id -> them.
 	// Renamed or moved, the file is found again by both (openMedia): the size
-	// too, as a freed inode number can come back on another file.
+	// too, as a freed inode number can come back on another file. Another
+	// file at the kept path is never taken for it (J4).
 	KeptID map[int64]keptID `json:"keptId,omitempty"`
 	// Gone: every message up to this id was deleted for its age (expire). A
 	// page still showing one drops it.
@@ -389,6 +408,13 @@ type ChatHub struct {
 	skipPush func(account, endpoint string) bool                // that Chrome's phone rings the call itself
 
 	laterRead bool // every home's scheduled texts are in memory (sendDue)
+
+	// The clock auto-delete believes (expiryClockOK, J8): the last pass, the
+	// doubt and the last look, as on disk (read once); the last look again
+	// with this run's monotonic time (zero: not seen by this run).
+	clockRead bool
+	clock     chatClockDisk
+	clockSeen time.Time
 }
 
 func NewChatHub(cfg *Config, users *Users, push *VapidStore, log Logger) *ChatHub {
@@ -508,6 +534,7 @@ func (h *ChatHub) dropContact(o *chatOwner, c *ChatContact) {
 	}
 	for _, g := range o.data.Groups {
 		g.Members = without(g.Members, c.ID)
+		g.Left = without(g.Left, c.ID) // never back: no history to keep for them (J6)
 	}
 	if c.User != "" {
 		// Their own Chat drops this home at once (its "via" list moved).
@@ -913,6 +940,13 @@ func (h *ChatHub) loadConv(c *chatConv) {
 	if c.st.Next < 1 {
 		c.st.Next = 1
 	}
+	// A link made for media/ but never renamed into place (the server stopped
+	// between the two, keepBytes) is nobody's: it goes. Links are only made
+	// under h.mu, which the caller holds, so none is half-way now.
+	tmps, _ := filepath.Glob(filepath.Join(c.dir, "media", ".ln-*"))
+	for _, p := range tmps {
+		os.Remove(p)
+	}
 }
 
 func monthOf(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01") }
@@ -955,11 +989,23 @@ func (h *ChatHub) writeMonth(c *chatConv, month string) error {
 	return nil
 }
 
-// purge drops from memory and disk every message that all the current
-// members have deleted the chat past - its photo or file too. Caller holds h.mu.
+// purge drops from memory and disk every message that all its members have
+// deleted the chat past - its photo or file too. Caller holds h.mu.
+//
+// The members include the people taken out of a group who may be put back
+// (ChatGroup.Left): one removed by mistake, then re-added with the Undo, never
+// cleared that history, and must find it there (J6).
 func (h *ChatHub) purge(o *chatOwner, c *chatConv) {
+	who := o.members(c.id)
+	if strings.HasPrefix(c.id, "g-") && len(who) > 0 { // members: the group is there
+		for _, p := range o.group(c.id[2:]).Left {
+			if ct := o.contact(p); ct != nil && !ct.Deleted && !contains(who, p) {
+				who = append(who, p)
+			}
+		}
+	}
 	floor := int64(-1)
-	for _, p := range o.members(c.id) {
+	for _, p := range who {
 		f, ok := c.st.Cleared[p]
 		if !ok {
 			return // somebody still has it all
@@ -1002,64 +1048,185 @@ func (h *ChatHub) dropMessages(o *chatOwner, c *chatConv, gone func(*ChatMsg) bo
 	return top
 }
 
-// dropMedia deletes the photo or file of a message that is going away - but
-// never a KEPT photo: that one is the owner's file now, and only the link to
-// it goes. Caller holds h.mu.
+// dropMedia deletes the photo or file of a message that is going away. A
+// KEPT photo is the owner's file too: only the chat's own name for it goes
+// (its media/ hard link) and the link to it - the owner's file stays. Caller
+// holds h.mu.
 func (h *ChatHub) dropMedia(o *chatOwner, c *chatConv, m *ChatMsg) {
-	if _, kept := c.st.Kept[m.ID]; kept {
-		delete(c.st.Kept, m.ID)
-		delete(c.st.KeptID, m.ID)
-		return
-	}
+	_, kept := c.st.Kept[m.ID]
+	delete(c.st.Kept, m.ID)
+	delete(c.st.KeptID, m.ID)
 	if m.File == nil {
 		return
 	}
 	path := filepath.Join(c.dir, "media", mediaName(m))
-	if info, err := os.Stat(path); err == nil && os.Remove(path) == nil {
+	if info, err := os.Lstat(path); err == nil && os.Remove(path) == nil && !kept {
+		// A kept one's bytes are still the owner's file's: nothing freed
+		// (a copy, on a disk with no links, is seen by the next measure).
 		h.users.AdjustUsage(o.user, -info.Size())
 	}
 }
 
-// openMedia opens a message's photo or file: under media/, or - kept - the
-// owner's own file, through the file API's sandbox. A kept file renamed or
-// moved since is found again by its inode (KeptID), and the new path saved; one
-// saved anew at the same path (an edit) is followed by its path. Caller holds h.mu.
+// openMedia opens a message's photo or file: the chat's own, under media/
+// (J4: a kept photo too - a hard link of the owner's file). A kept photo
+// from before media/ held it is the owner's file, through the file API's
+// sandbox - only while it is still THAT file (KeptID): renamed or moved, it
+// is found again by its inode and the new path saved; ANOTHER file saved at
+// its path (a new photo of the same name) is never shown in the old message.
+// Found, it is linked under media/ there and then. Caller holds h.mu.
 func (h *ChatHub) openMedia(o *chatOwner, c *chatConv, m *ChatMsg) (*os.File, os.FileInfo, error) {
+	file, info, err := openInside(filepath.Join(c.dir, "media"), mediaName(m))
 	kept := c.st.Kept[m.ID]
-	if kept == "" {
-		return openInside(filepath.Join(c.dir, "media"), mediaName(m))
+	if err == nil || kept == "" {
+		return file, info, err
 	}
 	want := c.st.KeptID[m.ID]
-	file, info, err := h.openKept(o.user, kept)
-	if err == nil && want.Ino != 0 && keptIDOf(info) == want {
-		return file, info, nil
+	if want.Ino == 0 {
+		return h.openKept(o.user, kept) // no inodes on this system: the path is all there is
 	}
-	if want.Ino != 0 && (err != nil || fileID(info) != want.Ino) && time.Since(c.missed[m.ID]) > chatFindAgain {
-		rel := h.findKept(o.user, want)
-		if rel == "" {
-			if c.missed == nil {
-				c.missed = map[int64]time.Time{}
-			}
-			c.missed[m.ID] = time.Now()
-		} else if rel != kept {
-			if f2, i2, err2 := h.openKept(o.user, rel); err2 == nil {
-				if file != nil {
-					file.Close()
-				}
-				c.st.Kept[m.ID] = rel
-				h.saveState(c)
-				return f2, i2, nil
-			}
+	rel, file, info := h.keptFile(o, c, m.ID)
+	if file == nil {
+		return nil, nil, os.ErrNotExist
+	}
+	// From now on the chat holds these bytes itself (best effort: the photo
+	// shows either way, and the next look tries again).
+	if c.canWrite("state.json") {
+		if n, err := h.keepBytes(o, c, m, rel, want); err != nil {
+			h.log.Warn("chat: a kept photo could not be linked under media/", "user", o.user, "conv", c.id, "id", m.ID, "err", err)
+		} else if n > 0 {
+			h.users.AdjustUsage(o.user, n)
 		}
 	}
-	if err != nil {
-		return nil, nil, err
-	}
-	if id := keptIDOf(info); id.Ino != 0 && id != want {
-		h.setKept(c, m.ID, kept, id)
-		h.saveState(c)
-	}
 	return file, info, nil
+}
+
+// keptFile opens the owner's file that message `id` is kept as - at its kept
+// path while that is still the file known by KeptID, else found again by its
+// inode (the new path saved) - and answers its path; nils when it is in none
+// of their files any more (binned, deleted, or replaced by another file).
+// Not looked for again for chatFindAgain after a miss. Caller holds h.mu.
+func (h *ChatHub) keptFile(o *chatOwner, c *chatConv, id int64) (string, *os.File, os.FileInfo) {
+	kept, want := c.st.Kept[id], c.st.KeptID[id]
+	if kept == "" {
+		return "", nil, nil
+	}
+	file, info, err := h.openKept(o.user, kept)
+	if err == nil && (want.Ino == 0 || keptIDOf(info) == want) {
+		return kept, file, info
+	}
+	if file != nil {
+		file.Close()
+	}
+	if want.Ino == 0 || time.Since(c.missed[id]) <= chatFindAgain {
+		return "", nil, nil
+	}
+	rel := h.findKept(o.user, want)
+	if rel != "" {
+		if f2, i2, err := h.openKept(o.user, rel); err == nil && keptIDOf(i2) == want {
+			c.st.Kept[id] = rel
+			h.saveState(c)
+			return rel, f2, i2
+		} else if f2 != nil {
+			f2.Close()
+		}
+	}
+	if c.missed == nil {
+		c.missed = map[int64]time.Time{}
+	}
+	c.missed[id] = time.Now()
+	return "", nil, nil
+}
+
+// keepBytes puts the owner's file `rel` (known by `want`; zero: by its path)
+// under media/ as message m's photo: a hard link - the same bytes, no room
+// taken - or a copy where no link can be made (another disk). A file already
+// there is replaced (an edit, chatEdited): media/<id> is only ever this
+// message's. Answers the bytes a copy took (0 for a link). Caller holds h.mu.
+func (h *ChatHub) keepBytes(o *chatOwner, c *chatConv, m *ChatMsg, rel string, want keptID) (int64, error) {
+	src, ok := h.users.Resolve("user", o.user, rel)
+	if !ok {
+		return 0, os.ErrNotExist
+	}
+	media := filepath.Join(c.dir, "media")
+	if err := os.MkdirAll(media, 0o755); err != nil {
+		return 0, err
+	}
+	dir := "data/chat/conv/" + c.id + "/media/"
+	tmp, ok1 := h.users.Resolve("user", o.user, dir+".ln-"+newChatID())
+	final, ok2 := h.users.Resolve("user", o.user, dir+mediaName(m))
+	if !ok1 || !ok2 {
+		return 0, os.ErrNotExist
+	}
+	n, err := linkNoReplace(src, tmp, want)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.Rename(tmp.Abs, final.Abs); err != nil {
+		os.Remove(tmp.Abs)
+		return 0, err
+	}
+	if err := syncDir(media); err != nil { // its name durable before anyone relies on it (K1)
+		h.log.Warn("chat: media folder not synced", "dir", media, "err", err)
+	}
+	return n, nil
+}
+
+// linkNoReplace gives the file `src` a second name, `dst` (both in the same
+// home): a hard link, or - on a disk that refuses one - a copy made only
+// where no file is. Never over a file: a taken name answers fs.ErrExist (a
+// plain rename or a "free?" look first would replace one saved meanwhile,
+// D10). `want` non-zero: the file linked must be that one (the path may
+// have been given to another file since it was checked) - else nothing is
+// left at `dst` and fs.ErrNotExist is answered. Answers the bytes a copy
+// took (0 for a link).
+func linkNoReplace(src, dst Resolved, want keptID) (int64, error) {
+	if src.Root != dst.Root {
+		return 0, errCrossRoot
+	}
+	root, err := src.open()
+	if err != nil {
+		return 0, err
+	}
+	defer root.Close()
+	if hook := testPlaceHook.Load(); hook != nil {
+		(*hook)(root, src.Rel, dst.Rel, false) // a test puts a file at `dst` now
+	}
+	err = root.Link(src.Rel, dst.Rel)
+	if err == nil {
+		if info, err := root.Lstat(dst.Rel); err == nil && info.Mode().IsRegular() && (want.Ino == 0 || keptIDOf(info) == want) {
+			return 0, nil
+		}
+		root.Remove(dst.Rel) // another file (or a link) at that path now: not it
+		return 0, fs.ErrNotExist
+	}
+	if errors.Is(err, fs.ErrExist) {
+		return 0, err
+	}
+	// No hard links here: a copy, from the file checked to be the one.
+	in, err := root.Open(src.Rel)
+	if err != nil {
+		return 0, err
+	}
+	defer in.Close()
+	if info, err := in.Stat(); err != nil || !info.Mode().IsRegular() || (want.Ino != 0 && keptIDOf(info) != want) {
+		return 0, fs.ErrNotExist
+	}
+	out, err := root.OpenFile(dst.Rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(out, in)
+	if err == nil {
+		err = out.Sync() // on disk before anything points at it (J5)
+	}
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		root.Remove(dst.Rel)
+		return 0, err
+	}
+	return n, nil
 }
 
 // setKept links message `id` to the owner's file `rel`, known by `id2`.
@@ -1122,13 +1289,28 @@ const chatMaxDeleteAfter = 3650
 
 // expire deletes, for good, every message of `o` older than their
 // "deleteAfter" days, in every conversation on disk (a deleted person's too).
-// Caller holds h.mu.
+// Nothing while the clock is not believed (expiryClockOK, J8). Caller holds h.mu.
 func (h *ChatHub) expire(o *chatOwner, now time.Time) {
+	if o.data.DeleteAfter <= 0 || !h.expiryClockOK(now) {
+		return
+	}
+	h.expireOwner(o, now)
+	h.expiryRan(now)
+}
+
+// expireOwner is expire once the clock is believed. Caller holds h.mu.
+func (h *ChatHub) expireOwner(o *chatOwner, now time.Time) {
 	days := o.data.DeleteAfter
 	if days <= 0 {
 		return
 	}
 	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+	h.eachConvOnDisk(o, func(c *chatConv) { h.expireConv(o, c, cutoff) })
+}
+
+// eachConvOnDisk runs `fn` on every conversation of `o` on disk - a deleted
+// person's or group's too. Caller holds h.mu.
+func (h *ChatHub) eachConvOnDisk(o *chatOwner, fn func(c *chatConv)) {
 	entries, err := os.ReadDir(filepath.Join(o.dir, "conv"))
 	if err != nil {
 		return
@@ -1136,7 +1318,133 @@ func (h *ChatHub) expire(o *chatOwner, now time.Time) {
 	for _, e := range entries {
 		n := e.Name()
 		if e.IsDir() && (strings.HasPrefix(n, "d-") || strings.HasPrefix(n, "g-")) {
-			h.expireConv(o, h.conv(o, n), cutoff)
+			fn(h.conv(o, n))
+		}
+	}
+}
+
+// countExpiring is how many messages of `o` an auto-delete of `days` would
+// delete now, in every conversation - what the page shows BEFORE it is set
+// (J7: a typo, 1 for 10, reads "deletes 12 345 messages"). Messages already
+// deleted for everyone do not count. Caller holds h.mu.
+func (h *ChatHub) countExpiring(o *chatOwner, days int, now time.Time) int {
+	if days <= 0 {
+		return 0
+	}
+	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+	n := 0
+	h.eachConvOnDisk(o, func(c *chatConv) {
+		for _, m := range c.msgs { // all of them, as expireConv looks at all
+			if m.At < cutoff && !m.Deleted {
+				n++
+			}
+		}
+	})
+	return n
+}
+
+// -----------------------------------------------------------------------------
+// the clock auto-delete believes (J8)
+// -----------------------------------------------------------------------------
+//
+// Auto-delete measures age against the server's clock, and deletes for good.
+// A clock that jumps forward at boot (no clock battery, NTP late, a VPS
+// restored with a wrong date) would delete every message "older than N days"
+// of the wrong date. So the time of every pass is kept on disk
+// (config/chat-autodelete.json), and a clock more than chatClockJump ahead of
+// it is doubted: nothing is deleted, and it is logged. It is believed again
+// once chatClockTrust has gone by on it since the doubt began, the clock
+// running steady all along - which gives a late NTP a day to put it right,
+// and after a real day off delays auto-delete by one day only. A clock put
+// right in the meantime (back near the last pass) is believed at once.
+//
+// "Steady" is checked at every look (hourly): within one run of the server,
+// its wall time must have moved as the process's own monotonic time did;
+// across a restart, the gap since the last look must be a reboot's (forward,
+// under chatClockJump). Anything else is a new jump, and the doubt starts
+// over. The doubt and the last look are kept on disk with the pass's time,
+// so a server restarted every day still comes out of a doubt.
+
+// chatClockJump: how far past the last pass a clock may be before it is doubted.
+const chatClockJump = 24 * time.Hour
+
+// chatClockTrust: how long a doubted clock must run steady to be believed.
+// A var: the tests shorten it.
+var chatClockTrust = 24 * time.Hour
+
+// chatClockDrift: what "steady" forgives between wall and monotonic time.
+const chatClockDrift = time.Minute
+
+// chatClockDisk is config/chat-autodelete.json (unix ms; 0 = none).
+type chatClockDisk struct {
+	Ran   int64 `json:"ran"`             // the last auto-delete pass
+	Doubt int64 `json:"doubt,omitempty"` // when the clock began to be doubted
+	Seen  int64 `json:"seen,omitempty"`  // the last look at a doubted clock
+}
+
+// expiryClockFile is where the time of the last auto-delete pass is kept
+// ("" with no config folder: memory only).
+func (h *ChatHub) expiryClockFile() string {
+	if h.cfg.ConfigDir == "" {
+		return ""
+	}
+	return filepath.Join(h.cfg.ConfigDir, "chat-autodelete.json")
+}
+
+// expiryClockOK: auto-delete may believe `now`. Caller holds h.mu.
+func (h *ChatHub) expiryClockOK(now time.Time) bool {
+	if !h.clockRead {
+		h.clockRead, h.clock, h.clockSeen = true, chatClockDisk{}, time.Time{} // no look seen by this run yet
+		if path := h.expiryClockFile(); path != "" {
+			loadJSONFile(path, &h.clock)
+		}
+	}
+	ms := now.UnixMilli()
+	if h.clock.Ran == 0 || time.Duration(ms-h.clock.Ran)*time.Millisecond <= chatClockJump {
+		// No pass known, or close to the last one (a clock put back: fine).
+		h.clock.Doubt, h.clock.Seen, h.clockSeen = 0, 0, time.Time{}
+		return true
+	}
+	steady := h.clock.Doubt != 0
+	if steady && !h.clockSeen.IsZero() {
+		// Seen by this run: wall and monotonic time moved alike since.
+		mono := now.Sub(h.clockSeen)                   // monotonic: both carry it
+		wall := now.Round(0).Sub(h.clockSeen.Round(0)) // wall: Round(0) drops it
+		steady = wall-mono <= chatClockDrift && mono-wall <= chatClockDrift
+	} else if steady {
+		// Seen before a restart: the gap is a reboot's, not a jump.
+		gap := time.Duration(ms-h.clock.Seen) * time.Millisecond
+		steady = gap >= -chatClockDrift && gap <= chatClockJump
+	}
+	if !steady {
+		h.clock.Doubt = ms // a doubt begins (again)
+	}
+	h.clock.Seen, h.clockSeen = ms, now
+	if time.Duration(ms-h.clock.Doubt)*time.Millisecond >= chatClockTrust {
+		h.log.Warn("chat: auto-delete believes the clock again - it ran steady since it jumped",
+			"lastPass", time.UnixMilli(h.clock.Ran).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339))
+		h.clock.Doubt, h.clock.Seen, h.clockSeen = 0, 0, time.Time{}
+		return true // the caller keeps the pass (expiryRan)
+	}
+	h.saveExpiryClock()
+	h.log.Warn("chat: the clock is more than a day past the last auto-delete pass - nothing deleted until it has run steady for a while",
+		"lastPass", time.UnixMilli(h.clock.Ran).UTC().Format(time.RFC3339), "now", now.UTC().Format(time.RFC3339),
+		"believedAfter", time.UnixMilli(h.clock.Doubt).Add(chatClockTrust).UTC().Format(time.RFC3339))
+	return false
+}
+
+// expiryRan keeps `now` as the time of the last pass, on disk. Caller holds h.mu.
+func (h *ChatHub) expiryRan(now time.Time) {
+	h.clock = chatClockDisk{Ran: now.UnixMilli()}
+	h.clockSeen = time.Time{}
+	h.saveExpiryClock()
+}
+
+// saveExpiryClock writes config/chat-autodelete.json. Caller holds h.mu.
+func (h *ChatHub) saveExpiryClock() {
+	if path := h.expiryClockFile(); path != "" {
+		if err := atomicWriteJSON(path, h.clock, 1); err != nil {
+			h.log.Error("chat: cannot keep the time of the auto-delete pass", "file", path, "err", err)
 		}
 	}
 }
@@ -1172,8 +1480,21 @@ func (h *ChatHub) RunExpiry(ctx context.Context) {
 }
 
 // expireAll runs expire for every account whose chat.json asks for it - read
-// from disk for an owner nobody has opened since the start.
+// from disk for an owner nobody has opened since the start. The clock is
+// checked once for all (J8), and the pass is kept on disk even when no
+// account asks: the reference an account switching auto-delete on later needs.
 func (h *ChatHub) expireAll(now time.Time) {
+	h.mu.Lock()
+	ok := h.expiryClockOK(now)
+	h.mu.Unlock()
+	if !ok {
+		return
+	}
+	defer func() {
+		h.mu.Lock()
+		h.expiryRan(now)
+		h.mu.Unlock()
+	}()
 	entries, err := os.ReadDir(h.cfg.HomesDir)
 	if err != nil {
 		return
@@ -1195,7 +1516,7 @@ func (h *ChatHub) expireAll(now time.Time) {
 		}
 		if days > 0 {
 			if o := h.owner(user); o != nil {
-				h.expire(o, now)
+				h.expireOwner(o, now)
 			}
 		}
 		h.mu.Unlock()

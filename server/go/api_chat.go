@@ -50,8 +50,12 @@ package main
 //	PUT    cards/photo?uid=<UID>            the raw JPEG/PNG: that card's PHOTO in the
 //	                                        Contacts app's data/contacts.vcf
 //	PUT    autodelete                       {"days"}: delete messages older than that (0 = never)
-//	POST   conv/<c>/messages/<id>/keep      {"dir"}: move that photo into the owner's
-//	                                        files/<dir> and show it from there -> {"path"}
+//	GET    autodelete?days=N                {"n"}: how many messages that would delete now
+//	POST   conv/<c>/messages/<id>/keep      {"dir"}: that photo, also in the owner's
+//	                                        files/<dir> (a hard link) -> {"path"}
+//	POST   conv/<c>/messages/<id>/edited    {"ref","w","h"}: the message shows that NEW
+//	                                        file of the owner's (their edit of the photo,
+//	                                        saved beside it) -> {"path"}; the old stays
 //
 // A person only (/api/c/<token>): GET|POST|DELETE push - their devices.
 // Both: GET avatar/<id>?v=N - a picture the asker may see (avatarsFor).
@@ -257,7 +261,22 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 		})
 
 	case len(rest) == 1 && rest[0] == "autodelete":
-		if !method(http.MethodPut) {
+		if !method(http.MethodGet, http.MethodPut) {
+			return
+		}
+		if r.Method != http.MethodPut {
+			// What N days would delete NOW, shown before it is set (J7): a
+			// typo - 1 for 10 - reads "deletes 12 345 messages".
+			days, err := strconv.Atoi(queryValue(r, "days"))
+			if err != nil || days < 0 || days > chatMaxDeleteAfter {
+				sendError(w, r, http.StatusBadRequest, "días no válidos")
+				return
+			}
+			resolve(func(a chatActor) {
+				if ownerOnly(a) {
+					sendJSON(w, r, http.StatusOK, map[string]int{"n": h.countExpiring(a.o, days, time.Now())})
+				}
+			})
 			return
 		}
 		var body struct {
@@ -906,7 +925,21 @@ func (s *Server) chatGroups(w http.ResponseWriter, r *http.Request, rest []strin
 					g.Name = name
 				}
 				if body.Members != nil {
-					g.Members = members(a.o, *body.Members)
+					next := members(a.o, *body.Members)
+					// Who goes out may come back (an Undo, or later): their
+					// history must still be there then - purge counts them (J6).
+					for _, id := range g.Members {
+						if !contains(next, id) && !contains(g.Left, id) {
+							g.Left = append(g.Left, id)
+						}
+					}
+					for _, id := range next {
+						g.Left = without(g.Left, id)
+					}
+					if len(g.Left) == 0 {
+						g.Left = nil
+					}
+					g.Members = next
 				}
 			}
 			h.saveData(a.o)
@@ -1208,6 +1241,24 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 				return
 			}
 			s.chatKeep(w, r, a, c, id, body.Dir)
+		})
+
+	case len(rest) == 3 && rest[0] == "messages" && rest[2] == "edited":
+		if !method(http.MethodPost) {
+			return
+		}
+		var body chatSendReq
+		if err := readJSON(w, r, &body); err != nil {
+			sendBodyError(w, r, err)
+			return
+		}
+		id := msgID(rest[1])
+		in(func(a chatActor, c *chatConv) {
+			if a.guest() {
+				sendError(w, r, http.StatusForbidden, "no permitido")
+				return
+			}
+			s.chatEdited(w, r, a, c, id, body)
 		})
 
 	case len(rest) == 1 && rest[0] == "upload":
@@ -1521,13 +1572,31 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 			m.File.Size = n // a kept photo may have been edited since
 			h.users.AdjustUsage(a.o.user, n)
 		}
+		linked := int64(-1) // a photo from the owner's files: what its media/ copy took (0: a hard link)
 		if linkRel != "" {
+			// The chat's own name for it (J4): binned, renamed or replaced in
+			// the owner's files, the message still shows what was sent.
+			n, err := h.keepBytes(a.o, c, m, linkRel, linkIno)
+			if err != nil {
+				sendError(w, r, http.StatusConflict, "esa foto acaba de cambiar; inténtalo otra vez")
+				return
+			}
+			linked = n
+			if n > 0 {
+				h.users.AdjustUsage(a.o.user, n) // a copy (a disk with no links)
+			}
 			h.setKept(c, m.ID, linkRel, linkIno)
 		}
 		if err := s.chatStore(a, c, m); err != nil {
 			// Not on disk: never answered "sent" (J5). Its copied file goes too.
 			if copyFrom != nil {
 				h.dropMediaFile(a.o, c, m)
+			}
+			if linked >= 0 { // the chat's name only: the owner's file stays
+				os.Remove(filepath.Join(c.dir, "media", mediaName(m)))
+				if linked > 0 {
+					h.users.AdjustUsage(a.o.user, -linked)
+				}
 			}
 			sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
 			return
@@ -1543,9 +1612,9 @@ const chatNotSavedText = "no se pudo guardar el mensaje; inténtalo otra vez"
 // to load (chatOwner.damaged, chatConv.damaged).
 const chatDamagedText = "un archivo de este chat está dañado: no se puede cambiar nada (avisa al administrador)"
 
-// chatLinkPhoto checks the JPEG the owner sends from their own files and
-// describes it; nil + status + message when it cannot be sent that way.
-// Caller holds h.mu.
+// chatLinkPhoto checks the JPEG the owner sends from their own files (or
+// points a message at, chatEdited) and describes it; nil + status + message
+// when it cannot be used that way. Caller holds h.mu.
 func (s *Server) chatLinkPhoto(a chatActor, req chatSendReq) (*ChatFileRef, string, keptID, int, string) {
 	parts := splitPath(req.Ref)
 	low := strings.ToLower(req.Ref)
@@ -2182,10 +2251,10 @@ func copyMedia(src io.Reader, dir, name string) (int64, error) {
 	return n, nil
 }
 
-// chatKeep moves a photo out of the chat into the owner's own files - their
-// Photos folder, `dir` - and makes the message show it from there: deleting
-// the message (by hand, or by age) no longer loses the photo. Kept already:
-// the same answer again. Caller holds h.mu.
+// chatKeep makes a photo of the chat one of the owner's own files too - in
+// their Photos folder, `dir` - as a hard link of the chat's (J4: no move; the
+// chat keeps its own name for it). Deleting the message (by hand, or by age)
+// no longer loses the photo. Kept already: where it is now. Caller holds h.mu.
 func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c *chatConv, id int64, dir string) {
 	h := s.chat
 	m := c.byID[id]
@@ -2193,8 +2262,29 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 		sendError(w, r, http.StatusNotFound, "esa foto ya no existe")
 		return
 	}
-	if kept := c.st.Kept[id]; kept != "" {
-		sendJSON(w, r, http.StatusOK, map[string]any{"path": kept, "msg": c.out(m)})
+	if c.st.Kept[id] != "" {
+		// Where it is NOW, checked by its inode: the editor and "Abrir en
+		// Fotos" open that path, and it must be this photo - never another
+		// file saved at its old path since (J4, J1).
+		if rel, file, _ := h.keptFile(a.o, c, id); file != nil {
+			file.Close()
+			sendJSON(w, r, http.StatusOK, map[string]any{"path": rel, "msg": c.out(m)})
+			return
+		}
+		if _, err := os.Lstat(filepath.Join(c.dir, "media", mediaName(m))); err != nil {
+			// Neither in their files nor in the chat (kept by an older
+			// server, then binned): the link stays - a restore from the bin
+			// brings the photo back.
+			sendError(w, r, http.StatusGone, "esa foto ya no está")
+			return
+		}
+		// In none of their files any more (binned, deleted, replaced), but
+		// the chat has its own: no longer "kept" - the page offers Copiar
+		// again (and asks for the folder).
+		h.forgetKept(c, id)
+		a.o.bump(c, m)
+		h.saveMonth(c, m)
+		sendJSON(w, r, http.StatusGone, map[string]any{"error": "esa foto ya no está en tus archivos", "msg": c.out(m)})
 		return
 	}
 	parts := splitPath(dir)
@@ -2219,11 +2309,11 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 	}
 	// Its own name, "(2)" and on when the folder has one already. Never over
 	// a file: one saved there between a "free?" look and a plain rename was
-	// replaced (D10) - renameNoReplace refuses a taken name, and the next
-	// one is tried.
+	// replaced (D10) - a link refuses a taken name, and the next one is tried.
 	name := keptName(m.File.Name)
 	base, ext := strings.TrimSuffix(name, filepath.Ext(name)), filepath.Ext(name)
 	var dst Resolved
+	var copied int64
 	for i := 1; ; i++ {
 		if i > 999 {
 			sendError(w, r, http.StatusConflict, "demasiadas fotos con ese nombre")
@@ -2233,8 +2323,9 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 			name = base + " (" + strconv.Itoa(i) + ")" + ext
 		}
 		dst = folder.at(filepath.Join(folder.Rel, name))
-		err := renameResolvedNoReplace(src, dst)
+		n, err := linkNoReplace(src, dst, keptID{})
 		if err == nil {
+			copied = n
 			break
 		}
 		if !errors.Is(err, fs.ErrExist) {
@@ -2242,8 +2333,11 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 			return
 		}
 	}
-	// Its new name durable before the message points there (K1). The move is
-	// done either way, so the message must follow it: a failure is only logged.
+	if copied > 0 {
+		h.users.AdjustUsage(a.o.user, copied) // a copy (a disk with no links)
+	}
+	// Its new name durable before the message points there (K1). The file is
+	// there either way, so the message must know it: a failure is only logged.
 	if err := syncDir(filepath.Dir(dst.Abs)); err != nil {
 		h.log.Error("chat: a kept photo's folder could not be synced", "file", dst.Abs, "err", err)
 	}
@@ -2255,6 +2349,64 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 	a.o.bump(c, m)
 	h.saveMonth(c, m)
 	sendJSON(w, r, http.StatusOK, map[string]any{"path": c.st.Kept[id], "msg": c.out(m)})
+}
+
+// chatEdited points a kept photo's message at the owner's edit of it - a NEW
+// file of theirs, `req.Ref`, that the page saved beside the photo, never over
+// a name (J1: "Editar" never writes over the photo, which may be the camera
+// original in their library). From now on the message shows the edit, to
+// everybody; the photo it showed stays in the owner's files, untouched.
+// Caller holds h.mu.
+func (s *Server) chatEdited(w http.ResponseWriter, r *http.Request, a chatActor, c *chatConv, id int64, req chatSendReq) {
+	h := s.chat
+	m := c.byID[id]
+	if m == nil || m.Deleted || m.Kind != "photo" || m.File == nil {
+		sendError(w, r, http.StatusNotFound, "esa foto ya no existe")
+		return
+	}
+	// The photo shown now must be safe in the owner's files before media/
+	// takes the edit - else the edit would replace its only copy.
+	was, file, _ := h.keptFile(a.o, c, id)
+	if file == nil {
+		sendError(w, r, http.StatusConflict, "copia antes la foto a tus archivos")
+		return
+	}
+	file.Close()
+	ref, rel, ino, status, msg := s.chatLinkPhoto(a, req)
+	if ref == nil {
+		sendError(w, r, status, msg)
+		return
+	}
+	if rel != was || ino != c.st.KeptID[id] {
+		wasID, wasFile := c.st.KeptID[id], *m.File
+		n, err := h.keepBytes(a.o, c, m, rel, ino)
+		if err != nil {
+			sendError(w, r, http.StatusConflict, "esa foto acaba de cambiar; inténtalo otra vez")
+			return
+		}
+		if n > 0 {
+			h.users.AdjustUsage(a.o.user, n) // a copy (a disk with no links)
+		}
+		h.setKept(c, id, rel, ino)
+		m.File.Name, m.File.Size, m.File.W, m.File.H, m.File.Pos = ref.Name, ref.Size, ref.W, ref.H, ref.Pos
+		a.o.bump(c, m) // a new rev: every page asks for the photo again
+		if err := h.saveMonth(c, m); err != nil {
+			// Not on disk: never answered "done" (J5). The message goes back
+			// to the photo it showed - safe in their files, checked above -
+			// as a restart would bring it back; the edit stays a file of theirs.
+			h.log.Error("chat: an edited photo's message could not be saved - not changed", "user", a.o.user, "conv", c.id, "id", id, "err", err)
+			*m.File = wasFile
+			h.setKept(c, id, was, wasID)
+			if _, err := h.keepBytes(a.o, c, m, was, wasID); err != nil {
+				h.log.Error("chat: the photo a message showed could not be put back under media/", "user", a.o.user, "conv", c.id, "id", id, "err", err)
+			}
+			a.o.bump(c, m)
+			h.saveState(c) // its kept link as it was, should the state have landed
+			sendError(w, r, http.StatusInternalServerError, chatNotSavedText)
+			return
+		}
+	}
+	sendJSON(w, r, http.StatusOK, map[string]any{"path": rel, "msg": c.out(m)})
 }
 
 // keptName is the name a kept photo gets in the owner's files: the one it was

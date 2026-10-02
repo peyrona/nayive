@@ -58,11 +58,14 @@ func TestChatKeep(t *testing.T) {
 	if kept.Path != "files/Fotos/IMG_1.jpg" || !kept.Msg.Kept {
 		t.Fatalf("keep = %+v", kept)
 	}
-	if _, err := os.Stat(filepath.Join(home, "files", "Fotos", "IMG_1.jpg")); err != nil {
+	inFiles, err := os.Stat(filepath.Join(home, "files", "Fotos", "IMG_1.jpg"))
+	if err != nil {
 		t.Fatal("the photo is not in the owner's folder")
 	}
-	if entries, _ := os.ReadDir(filepath.Join(home, "data", "chat", "conv", conv, "media")); len(entries) != 0 {
-		t.Fatalf("the photo is still under media/: %d entries", len(entries))
+	// The chat keeps its own name for it (J4): the same file, a hard link.
+	inChat, err := os.Stat(filepath.Join(home, "data", "chat", "conv", conv, "media", fmt.Sprintf("%d.jpg", photo.ID)))
+	if err != nil || !os.SameFile(inFiles, inChat) {
+		t.Fatalf("media/ does not hold the kept photo itself: %v", err)
 	}
 	f.call(t, f.owner, "POST", keepPath, `{"dir":"files"}`, 200, &kept)
 	if kept.Path != "files/Fotos/IMG_1.jpg" {

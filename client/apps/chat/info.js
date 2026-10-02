@@ -258,34 +258,84 @@
         C.refreshInfo();       // and Info's line
     }
 
+    function fmtCount( k )
+    {
+        try { return Number( k ).toLocaleString( document.documentElement.lang || undefined ); }
+        catch( _ ) { return String( k ); }
+    }
+    // What the auto-delete dialog says a number of days would delete now.
+    function countText( k )
+    {
+        return ! k ? T( "chat.autoDeleteNone" ) : k === 1 ? T( "chat.autoDeleteCountOne" ) : C.TF( "chat.autoDeleteCount", { count: fmtCount( k ) } );
+    }
+
     C.openAutoDelete = function ()
     {
         var input = h( "input", { attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
                                   value: String( S.deleteAfter || 0 ) } );
         var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.save" ) } } );
         var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
+        var countEl = h( "p", { class: "days-count", attrs: { "aria-live": "polite" } } );
         var d = NayiveUI.modal( { cls: "sheet--pack", title: T( "chat.autoDelete" ), escape: done,
                                   top: function () { return document.body.lastElementChild === d.back; } } );
         [ h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
           // the number, then what it counts - one row
           h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
+          countEl,
           h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ),
           h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { d.sheet.appendChild( n ); } );
         d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
-        function done() { d.close(); }
+        var closed = false, saving = false;
+        function done() { closed = true; d.close(); }
+
+        // How many messages the number typed would delete NOW, in every chat,
+        // asked as it is typed (J7): a typo - 1 for 10 - reads "deletes
+        // 12 345 messages" before anything is saved. counts: days -> answer.
+        var counts = {}, timer = 0;
+        function countOf( n )
+        {
+            if( ! counts[ n ] ) counts[ n ] = C.api( "GET", "autodelete?days=" + n ).then( function ( r ) { return r.n; },
+                                                    function () { delete counts[ n ]; return null; } );
+            return counts[ n ];
+        }
+        function days()
+        {
+            var n = Number( input.value );
+            return input.value.trim() !== "" && Number.isInteger( n ) && n > 0 && n <= 3650 ? n : 0;
+        }
+        function showCount()
+        {
+            var n = days();
+            if( ! n ) { countEl.textContent = ""; return; }
+            countOf( n ).then( function ( k )
+            {
+                if( days() !== n ) return;
+                countEl.textContent = k == null ? "" : countText( k );
+                countEl.classList.toggle( "none", k === 0 );
+            } );
+        }
+        input.addEventListener( "input", function () { clearTimeout( timer ); countEl.textContent = ""; timer = setTimeout( showCount, 250 ); } );
+        showCount();
         // The server deletes the old messages (for everyone) the moment it
         // hears: so it hears when the "Undo" is gone (the shared undoToast:
         // 6 s, the next toast, the page closing). Until then the new number
         // shows here only (C.pendingTtl: a summary read meanwhile keeps it).
-        function save()
+        async function save()
         {
             var n = Number( input.value );
             if( input.value.trim() === "" || ! Number.isInteger( n ) || n < 0 || n > 3650 ) { input.focus(); input.select(); return; }
+            if( saving ) return;
+            saving = true;
+            clearTimeout( timer );
+            // The toast with the Undo says it too (the count, when known).
+            var k = n ? await countOf( n ) : null;
+            if( closed ) return;          // cancelled while it was counted
             done();
             var old  = S.deleteAfter || 0;
             var mine = C.pendingTtl = { days: n };
             showTtl( n );
-            NayiveUI.undoToast( n ? C.TF( "chat.autoDeleteOn", { n: n } ) : T( "chat.autoDeleteOff" ), function ()
+            NayiveUI.undoToast( ! n ? T( "chat.autoDeleteOff" ) :
+                                k ? C.TF( "chat.autoDeleteOnCount", { n: n, count: fmtCount( k ) } ) : C.TF( "chat.autoDeleteOn", { n: n } ), function ()
             {
                 if( C.pendingTtl === mine ) C.pendingTtl = null;
                 showTtl( old );
