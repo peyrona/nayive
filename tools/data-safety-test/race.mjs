@@ -13,7 +13,8 @@
 // (the change function applied to that answer's text) is PUT to the server.
 // The app goes on with the copy it read, which is now one version behind: a
 // blind write drops the other device's change; a version-checked one (If-Match)
-// gets 412 and must read again. One shot: the next GET is left alone.
+// gets 412 and must read again. One shot: the next GET is left alone (unless
+// armed `always`: then another device saves after every read).
 
 export const RACE = `( () => {
     if( window.__race ) return true;
@@ -27,7 +28,7 @@ export const RACE = `( () => {
             const url = new URL( String( u && u.url || u ), location.href );
             const get = ! o || ! o.method || String( o.method ).toUpperCase() === 'GET';
             if( a && get && r.ok && url.pathname === '/api/files' && url.searchParams.get( 'file' ) === a.path ) {
-                window.__race.arm = null;
+                if( ! a.always ) window.__race.arm = null;
                 const text = await r.clone().text();
                 const w = await window.__race.put( a.path, a.change( text ) );
                 window.__race.hits++;
@@ -41,8 +42,10 @@ export const RACE = `( () => {
 export const installRace = c => c.evaluate( RACE );
 
 // `change`: the SOURCE of a function text -> text (evaluated in the page).
-export const arm = ( c, path, change ) =>
-    c.evaluate( `( () => { window.__race.arm = { path: ${JSON.stringify( path )}, change: ${change} }; return true; } )()` );
+// `always`: every GET of it, not only the next one, until disarm().
+export const arm = ( c, path, change, always = false ) =>
+    c.evaluate( `( () => { window.__race.arm = { path: ${JSON.stringify( path )}, change: ${change}, always: ${!! always} }; return true; } )()` );
+export const disarm = c => c.evaluate( "( () => { if( window.__race ) window.__race.arm = null; return true; } )()" );
 
 // True once the armed race has happened (its PUT answered 200).
 export const raced = c => c.until( "window.__race && window.__race.hits > 0 && window.__race.status === 200" );

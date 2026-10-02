@@ -26,11 +26,13 @@
  * and 401s an anonymous visitor. The apps use that to decide "open the app" vs
  * "bounce to /nayive/login.html".
  *
- * WHOSE PAGE (L5). Every PUT carries X-Nayive-User: the account this page
- * belongs to (the "nayive_who" cookie as it was when the page loaded - the
- * name shared/store.js tags its saves with, NayiveStore.me). A tab left open
- * after another account signed in on this browser gets 423 instead of writing
- * into that other person's home (server/go/store_owner.go).
+ * WHOSE PAGE (L5). Every request that changes files - a PUT, and every
+ * DELETE / POST (delete, move, bin restore, new folder, zip...) - carries
+ * X-Nayive-User: the account this page belongs to (the "nayive_who" cookie
+ * as it was when the page loaded - the name shared/store.js tags its saves
+ * with, NayiveStore.me). A tab left open after another account signed in on
+ * this browser gets 423 instead of writing into that other person's home
+ * (server/go/store_owner.go).
  *
  * VERSIONS (data-safety A, C). The server tags every file with a strong ETag
  * that every write changes (server/go/etag.go). readVersion() hands it back
@@ -69,13 +71,30 @@
         return typeof me === "string" && me ? me : ME_AT_LOAD;
     }
 
-    // The headers of one PUT: `extra` plus the owner's name.
-    function putHeaders( extra )
+    // The headers of a request that changes files: `extra` plus the owner's name.
+    function ownerHeaders( extra )
     {
         var h = {};
         for( var k in ( extra || {} ) ) h[ k ] = extra[ k ];
         if( owner() ) h[ "X-Nayive-User" ] = owner();
         return h;
+    }
+
+    // fetch() options for `url`: a request that changes something (any method
+    // but GET / HEAD - a delete, a move, a bin restore, a new folder, a zip)
+    // names the page's owner as a PUT does (WHOSE PAGE). Our own server only:
+    // a header of ours on another site's request would cost a CORS preflight.
+    function ownedOptions( url, options )
+    {
+        options = options || {};
+        var m = String( options.method || "GET" ).toUpperCase();
+        if( m === "GET" || m === "HEAD" || ! owner() ) return options;
+        try { if( new URL( url, window.location.href ).origin !== window.location.origin ) return options; }
+        catch ( e ) { return options; }
+        var o = {};
+        for( var k in options ) o[ k ] = options[ k ];
+        o.headers = ownerHeaders( options.headers );
+        return o;
     }
 
     //------------------------------------------------------------------------//
@@ -158,18 +177,20 @@
     // GET (or any method via `options`) -> response body as text.
     function fetchText( url, options )
     {
+        var sent = ownedOptions( url, options );
         return withRetry( function ()
         {
-            return fetch( url, options || {} ).then( assertOk ).then( function ( r ) { return r.text(); } );
+            return fetch( url, sent ).then( assertOk ).then( function ( r ) { return r.text(); } );
         }, 0, ! mayRetry( options ) );
     }
 
     // GET -> response body as a Uint8Array.
     function fetchBinary( url, options )
     {
+        var sent = ownedOptions( url, options );
         return withRetry( function ()
         {
-            return fetch( url, options || {} ).then( assertOk )
+            return fetch( url, sent ).then( assertOk )
                    .then( function ( r ) { return r.arrayBuffer(); } )
                    .then( function ( buf ) { return new Uint8Array( buf ); } );
         }, 0, ! mayRetry( options ) );
@@ -202,7 +223,7 @@
     function putBinary( url, bytes, headers )
     {
         var size = ( bytes && ( bytes.size !== undefined ? bytes.size : bytes.byteLength ) ) || 0;
-        var sent = putHeaders( headers );
+        var sent = ownerHeaders( headers );
 
         return withRetry( function ()
         {
@@ -551,7 +572,7 @@
     function makeDir( parent, name )
     {
         var q = new URLSearchParams( { type: "dir", name: name, parent: parent } ).toString();
-        return fetchText( API_FILES + "?" + q, { method: "PUT", headers: putHeaders() } )
+        return fetchText( API_FILES + "?" + q, { method: "PUT" } )
                .then( changed( [ parent ? parent + "/" + name : name ], true ) );
     }
 
@@ -721,6 +742,7 @@
         setTrashDays:    setTrashDays,
 
         // access
+        owner:           owner,            // whose page this is ("" = unknown)
         probeAccess:     probeAccess,
         loginRedirect:   loginRedirect
     };

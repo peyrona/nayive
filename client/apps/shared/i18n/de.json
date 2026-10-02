@@ -1237,6 +1237,7 @@
   "media.folderGone": "Der Ordner wurde nicht gefunden.",
   "media.noAccess": "Du hast keinen Zugriff mehr auf diesen Ordner.",
   "media.offlineRetry": "Ohne Verbindung. Versuch es noch einmal.",
+  "media.notesMoveFailed": "Die Notizen der Fotos konnten ihnen noch nicht folgen. Das wird auf diesem Gerät gemerkt und nachgeholt, sobald es geht.",
   "media.sharedBy": "Geteilt · {what}",
   "media.clearFilter": "Filter entfernen",
   "media.pause": "Pause",

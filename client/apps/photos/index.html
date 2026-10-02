@@ -1620,6 +1620,9 @@ async function reverseGeocode( lat, lon )
 async function loadComments()
 {
     if( DEMO ) return;                           // handled in buildDemo()
+    // A move whose notes could not follow (media.js remapComments) is made
+    // first, so the notes read are where their photos are now.
+    await NayiveMedia.settleNoteMoves();
     try { COMMENTS = await NayiveMedia.readComments(); }      // no file yet (404): none
     catch( err )
     {
@@ -1686,6 +1689,7 @@ async function sweepComments()
     for( const key of Object.keys( COMMENTS ) )
     {
         if( key === NayiveMedia.NOTES_ASIDE ) continue;       // the parked notes (media.js), not a photo
+        if( NayiveMedia.noteMoveWaits( key ) ) continue;      // its photo moved; the note's move still waits (media.js)
         if( prefix && key.indexOf( prefix ) !== 0 ) continue;
         const rest = key.slice( prefix.length );
         if( rest.indexOf( "/" ) !== -1 ) continue;             // inside a sub-folder
@@ -1717,7 +1721,7 @@ async function sweepComments()
     {
         let removed = false;
         for( const key of dead )
-            if( Object.prototype.hasOwnProperty.call( map, key ) ) { delete map[ key ]; removed = true; }
+            if( Object.prototype.hasOwnProperty.call( map, key ) && ! NayiveMedia.noteMoveWaits( key ) ) { delete map[ key ]; removed = true; }
         return removed;
     } ).catch( () => {} );
 }

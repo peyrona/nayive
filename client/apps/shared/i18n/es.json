@@ -1237,6 +1237,7 @@
   "media.folderGone": "No se encontró la carpeta.",
   "media.noAccess": "Ya no tienes acceso a esta carpeta.",
   "media.offlineRetry": "Sin conexión. Vuelve a intentarlo.",
+  "media.notesMoveFailed": "Las notas de las fotos no han podido seguirlas todavía. Se guardan en este dispositivo y se moverán en cuanto se pueda.",
   "media.sharedBy": "Compartido · {what}",
   "media.clearFilter": "Quitar filtro",
   "media.pause": "Pausar",

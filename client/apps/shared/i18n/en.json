@@ -1237,6 +1237,7 @@
   "media.folderGone": "The folder was not found.",
   "media.noAccess": "You no longer have access to this folder.",
   "media.offlineRetry": "Offline. Try again.",
+  "media.notesMoveFailed": "The photos' notes could not follow them yet. The move is kept on this device and made as soon as possible.",
   "media.sharedBy": "Shared · {what}",
   "media.clearFilter": "Clear filter",
   "media.pause": "Pause",

@@ -1237,6 +1237,7 @@
   "media.folderGone": "A pasta não foi encontrada.",
   "media.noAccess": "Já não tens acesso a esta pasta.",
   "media.offlineRetry": "Sem ligação. Tenta outra vez.",
+  "media.notesMoveFailed": "As notas das fotos ainda não as puderam acompanhar. A mudança fica guardada neste dispositivo e faz-se assim que for possível.",
   "media.sharedBy": "Partilhado · {what}",
   "media.clearFilter": "Retirar filtro",
   "media.pause": "Pausa",

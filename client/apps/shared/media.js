@@ -533,10 +533,67 @@
     // other device. Only this operation's keys move, and the write is
     // version-checked (updateComments): a note saved elsewhere meanwhile
     // makes the move be worked out again on the fresh copy.
+    //
+    // A move whose notes could NOT follow (no connection, the file busy round
+    // after round) is not dropped: the notes would stay at the old path, and
+    // Photos' sweep would delete them there - its photo is gone from that
+    // folder. The move waits on this device (localStorage, per account) and
+    // is made again before the next one, and before Photos sweeps (which
+    // leaves alone what still waits); the user is told.
     async function remapComments( pairs, keep )
     {
-        try { await updateComments( function ( map ) { return moveNotes( map, pairs, keep ); } ); }
+        var waiting = waitingMoves();
+        waiting.push( { pairs: pairs, keep: !! keep } );
+        storeMoves( waiting );
+        if( ! await settleNoteMoves() && window.NayiveUI ) NayiveUI.toast( NayiveUI.t( 'media.notesMoveFailed' ), { ms: 8000 } );
+    }
+
+    // The note moves still to be made on this device, oldest first.
+    function movesKey() { return "nayive-notes-moves:" + ( ( window.GumApi && GumApi.owner && GumApi.owner() ) || "" ); }
+    function waitingMoves()
+    {
+        try { var l = JSON.parse( localStorage.getItem( movesKey() ) || "[]" ); return Array.isArray( l ) ? l : []; }
+        catch( e ) { return []; }
+    }
+    function storeMoves( list )
+    {
+        try { if( list.length ) localStorage.setItem( movesKey(), JSON.stringify( list ) ); else localStorage.removeItem( movesKey() ); }
         catch( e ) {}
+    }
+
+    // Makes the waiting note moves, in order, each one version-checked; one
+    // that fails stops the rest (they must not overtake it). True when none
+    // waits any more.
+    var settling = null;     // the run in progress: a second caller waits for it
+    function settleNoteMoves()
+    {
+        if( ! settling ) settling = makeMoves().finally( function () { settling = null; } );
+        return settling;
+    }
+
+    async function makeMoves()
+    {
+        var list = waitingMoves();
+        while( list.length )
+        {
+            var m = list[ 0 ];
+            try { await updateComments( function ( map ) { return moveNotes( map, m.pairs, m.keep ); } ); }
+            catch( e ) { return false; }
+            list = waitingMoves();
+            if( list.length && JSON.stringify( list[ 0 ] ) === JSON.stringify( m ) ) list.shift();
+            storeMoves( list );
+        }
+        return true;
+    }
+
+    // True when the note at `key` belongs to a move still waiting (its old
+    // path, or inside it): Photos' sweep must leave it alone.
+    function noteMoveWaits( key )
+    {
+        return waitingMoves().some( function ( m )
+        {
+            return ( m.pairs || [] ).some( function ( p ) { return under( key, p[ 0 ] ); } );
+        } );
     }
 
     // A move / rename: both sidecars follow the file. os.rename keeps the size
@@ -736,6 +793,7 @@
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
+        settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState
     };

@@ -139,6 +139,30 @@ section( "OUR OWN FIRST TRY: a re-send that meets its own file is a success" );
 }
 
 //------------------------------------------------------------------------//
+section( "L5 · EVERY CALL THAT CHANGES FILES NAMES THE PAGE'S OWNER" );
+{
+    // (The server checks it on PUT today; the other routes follow in a later batch.)
+    await seed( "files/h/a.txt", "a" );
+    await seed( "data/photos/thumbs/1_1.jpg", "a thumbnail" );   // purge-for-good is for derived files only
+    await c.evaluate( `( () => { const f = window.fetch; window.__who = []; window.fetch = function ( u, o ) {
+        const m = String( o && o.method || 'GET' ).toUpperCase();
+        if( m !== 'GET' && m !== 'HEAD' ) window.__who.push( m + ' ' + ( ( o && o.headers && o.headers[ 'X-Nayive-User' ] ) || '-' ) );
+        return f.apply( this, arguments ); }; return true; } )()` );
+    const me = await c.evaluate( "( document.cookie.match( /(?:^|;\\s*)nayive_who=([^;]*)/ ) || [] )[ 1 ] || ''" );
+    const r = await run( `await GumApi.makeDir( 'files', 'nueva' );
+        await GumApi.rename( 'files/h/a.txt', 'files/h/b.txt' );
+        const ids = await GumApi.binPaths( [ 'files/h/b.txt' ] );
+        await GumApi.trashRestore( ids );
+        await GumApi.deletePaths( [ 'files/nueva' ] );
+        await GumApi.purgePaths( [ 'data/photos/thumbs/1_1.jpg' ] );
+        await GumApi.trashDelete( ( await GumApi.trashList() ).map( i => i.id ) );
+        await GumApi.fetchText( GumApi.API_FILES + '?trash=empty', { method: 'POST' } );
+        return window.__who;` );
+    ok( me && Array.isArray( r ) && r.length === 8 && r.every( x => x.endsWith( " " + me ) ),
+        "new folder, move, bin, restore, delete, purge, bin delete, a POST of the app's own: each says whose page it is", { me, r } );
+}
+
+//------------------------------------------------------------------------//
 section( "L5 · A PAGE OF ANA'S, LEFT OPEN WHILE BETO SIGNS IN ON THIS BROWSER" );
 {
     const st = await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },

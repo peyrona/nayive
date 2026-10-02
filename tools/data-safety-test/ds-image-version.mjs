@@ -105,6 +105,37 @@ section( "C4 · OPENED FROM THE OFFLINE COPY: ✓ NEVER WRITES OVER IT" );
     const o = bytesOnDisk( s, "files/o.png" );
     ok( o && o.equals( GREY ), "o.png is untouched" );
     ok( ! ( await binList() ).some( it => it.orig === "files/o.png" ), "...and not in the bin" );
+
+    // Saved as a copy, the editor is on the copy - a file it wrote itself, not
+    // the offline copy: ✓ saves it (review C4b #2).
+    await c.evaluate( "document.getElementById('editorSaveAsBtn').click(), true" );
+    ok( await c.until( "document.getElementById('saveCopyBackdrop').classList.contains('open')" ), "\"Save a copy\" asks the name" );
+    await c.evaluate( "document.getElementById('saveCopyName').value = 'o-copy.png', document.getElementById('saveCopyConfirmBtn').click(), true" );
+    const copy1 = await untilBytes( "files/o-copy.png", b => b.length > 0 );
+    ok( copy1 && ! copy1.equals( GREY ), "the edit is saved as o-copy.png" );
+    await settled();
+    // (A plain grey picture flips into the same bytes: the save is told by its toast.)
+    await c.evaluate( "window.__toasts = []; true" );
+    await flip();
+    await check();
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'drive.imageSaved' ) ) !== -1 )", 15000 ), "✓ on the copy saves it", await c.toasts() );
+    const offlineWords = await c.evaluate( "NayiveUI.t( 'image.offlineCopy' )" );
+    ok( ! ( await c.toasts() ).some( t => t.indexOf( offlineWords ) !== -1 ), "...with no word of the offline copy" );
+}
+
+//----------------------------------------------------------------------------//
+section( "A NOTE-ONLY ✓ WHOSE NOTE CANNOT BE SAVED SAYS SO" );
+{
+    ok( await imagePage( "files/r.png" ), "r.png is open in the editor" );
+    // The notes cannot be read now (a 5xx): the note cannot be saved.
+    await c.evaluate( `( () => { const f = window.fetch; window.fetch = function ( u, o ) {
+        if( String( u ).indexOf( encodeURIComponent( 'data/photos/comments.json' ) ) !== -1 && ( ! o || ! o.method || o.method === 'GET' ) )
+            return Promise.resolve( new Response( 'busy', { status: 503 } ) );
+        return f.apply( this, arguments ); }; window.__toasts = []; return true; } )()` );
+    await c.evaluate( "document.getElementById('editorComment').value = 'a note'; document.getElementById('editorComment').dispatchEvent( new Event( 'input' ) ); true" );
+    await check();
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'photos.commentSaveFailed' ) ) !== -1 )", 15000 ), "it says the note was not saved", await c.toasts() );
+    ok( ! ( await c.toasts() ).some( t => t.indexOf( "Image saved" ) !== -1 ), "...and never \"saved\"", await c.toasts() );
 }
 
 await done( c, s );

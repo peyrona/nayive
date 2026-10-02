@@ -1237,6 +1237,7 @@
   "media.folderGone": "Le dossier est introuvable.",
   "media.noAccess": "Tu n'as plus accès à ce dossier.",
   "media.offlineRetry": "Hors connexion. Réessaie.",
+  "media.notesMoveFailed": "Les notes des photos n'ont pas encore pu les suivre. Le déplacement est gardé sur cet appareil et sera fait dès que possible.",
   "media.sharedBy": "Partagé · {what}",
   "media.clearFilter": "Retirer le filtre",
   "media.pause": "Pause",

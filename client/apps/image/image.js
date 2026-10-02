@@ -73,7 +73,8 @@ async function loadNote( path )
 // this picture's: it is the note of the file the copy replaced (in the bin
 // now) or of a photo binned earlier under that name - parked (media.js), not
 // written over, so a restore or the Undo can bring it back. True when a note
-// was parked and saved so. Version-checked (updateComments): a note saved
+// was parked and saved so, false when saved with none parked, null when the
+// note could NOT be saved. Version-checked (updateComments): a note saved
 // elsewhere meanwhile is kept, this change made again over it.
 async function saveNote( path, copy )
 {
@@ -88,7 +89,7 @@ async function saveNote( path, copy )
         } );
         commentBase = text;
     }
-    catch( _ ) { return false; /* non-fatal: the image itself was saved */ }
+    catch( _ ) { return null; }
     return parked;
 }
 
@@ -200,7 +201,8 @@ async function saveTo( dest, replaced )
     // encoding it again would only lose quality.
     if( ! editorDirty && dest === editorPath )
     {
-        await saveNote( dest );
+        // The note IS the save here: one that failed must not say "Saved".
+        if( await saveNote( dest ) === null ) { NayiveUI.toast( T( 'photos.commentSaveFailed' ) ); return false; }
         NayiveUI.toast( T( 'drive.imageSaved' ) );
         return true;
     }
@@ -253,7 +255,8 @@ async function saveTo( dest, replaced )
         // A new file (a copy, or the name this ✓ just cleared) only where
         // there is none; else only over the version held.
         const w = await GumApi.writeFileBytes( dest, bytes, copy || cleared ? { createOnly: true } : { ifMatch: heldTag } );
-        heldTag = w.tag;
+        heldTag  = w.tag;
+        fromCopy = false;                      // what is held now is this write, not the offline copy
         NayivePhoto.dropThumb( oldThumb );
         editorDirty = false;
         savedOnce   = true;
@@ -263,6 +266,7 @@ async function saveTo( dest, replaced )
         editorPath = dest;
         showName( dest );
 
+        // A note that failed here is not fatal: the picture itself was saved.
         if( await saveNote( dest, copy ) && replaced ) replaced.parked = true;   // its Undo takes it back
 
         const back = replaced || kept;
@@ -361,7 +365,7 @@ async function confirmSaveCopy()
         await NayiveMedia.purgePaths( [ dest ] );   // its thumbnail + scan entry, as Drive's own delete does
 
         // An old server does not say the bin ids: no Undo then.
-        if( ids ) replaced = { ids: ids, note: note, from: editorPath, tag: heldTag };
+        if( ids ) replaced = { ids: ids, note: note, from: editorPath, tag: heldTag, offline: fromCopy };
     }
 
     // Not written - it failed, or a ✓ pressed meanwhile was still saving:
@@ -386,6 +390,7 @@ async function undoSaveCopy( dest, r )
         editorPath  = r.from;
         editorDirty = true;
         heldTag     = r.tag || null;   // the version it held there (the original's, back from the bin as it was)
+        fromCopy    = !! r.offline;    // ...and whether that was the offline copy
         showName( r.from );
     }
 

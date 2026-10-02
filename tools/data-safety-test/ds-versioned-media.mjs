@@ -7,14 +7,17 @@
 // code re-read right before writing but wrote blind - it dropped that save.
 //
 // C7 (drive-files #13): media.js upkeep of Drive's move/copy/bin - photo notes,
-//     Movies' resume points, the scan caches.
+//     Movies' resume points, the scan caches. A move whose notes cannot follow
+//     now (another device saving round after round, no connection) is said,
+//     kept on the device and made later - Photos' sweep never deletes those
+//     notes at their old path (review C4b #3).
 // A4 (list-apps #5): Music's "Save list".
 // A7 (list-apps #30, #31, #32): Movies' posters.json and progress.json,
 //     Photos' places.json; and Photos' own note save.
 import fs from "node:fs";
 import path from "node:path";
 import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
-import { installRace, arm, raced } from "./race.mjs";
+import { installRace, arm, disarm, raced } from "./race.mjs";
 
 const s = await server();
 const PNG = fs.readFileSync( path.join( REPO, "client/apps/icons/icon-192.png" ) );
@@ -158,6 +161,35 @@ section( "C7 · Drive's move upkeep (media.js): notes, resume points, scan cache
     ok( await raced( c ), "the phone saved a scan entry in between" );
     const sc = json( MSCAN );
     ok( sc && sc[ "files/Music/mine.mp3" ] && sc[ "files/Music/phone.mp3" ] && sc[ "files/Elsewhere/old.mp3" ], "scan cache: this page's entry and the phone's both kept", sc );
+}
+
+//----------------------------------------------------------------------------
+section( "C7 · A MOVE WHOSE NOTES CANNOT FOLLOW NOW: SAID, KEPT, MADE LATER - NEVER SWEPT" );
+{
+    const phone = await s.client();
+    const put = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "phone " + rel + ": " + r.status ); };
+    await put( "files/M/m.png", PNG );
+    await put( "files/M/other.png", PNG );
+    await put( NOTES, JSON.stringify( Object.assign( json( NOTES ), { "files/M/m.png": "note m" } ) ) );
+    // Drive moved the photo; its notes' move is what follows.
+    const mv = await phone.post( "/api/files?old=" + encodeURIComponent( "files/M/m.png" ) + "&new=" + encodeURIComponent( "files/N/m.png" ) );
+    ok( mv.status === 200 && onDisk( s, "files/N/m.png" ) !== null, "the photo moved M -> N", mv.status );
+
+    // Another device saves the notes after EVERY read: each version-checked
+    // write meets a newer file, round after round.
+    await arm( c, NOTES, "t => { const d = JSON.parse( t ); d[ 'files/Z/busy.png' ] = String( Math.random() ); return JSON.stringify( d ); }", true );
+    await c.evaluate( "window.__toasts = []; NayiveMedia.remapPaths( [ [ 'files/M/m.png', 'files/N/m.png' ] ] ).then( () => true )" );
+    await disarm( c );
+    ok( await c.until( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'media.notesMoveFailed' ) ) !== -1 )", 10000 ), "the user is told the notes could not follow", await c.toasts() );
+    ok( json( NOTES )[ "files/M/m.png" ] === "note m", "(the note is still at the old path)", json( NOTES ) );
+
+    // Photos opens the folder the photo left: it makes the waiting move first,
+    // and its sweep of M never deletes that note.
+    ok( await c.open( "/nayive/photos/index.html?dir=files/M" ), "Photos opens on M" );
+    ok( await c.until( "typeof PHOTOS !== 'undefined' && PHOTOS.length === 1" ), "M lists one photo (the other one)" );
+    ok( await disk( () => json( NOTES )[ "files/N/m.png" ] === "note m" ), "the waiting move was made: the note followed its photo to N", json( NOTES ) );
+    ok( ! ( "files/M/m.png" in json( NOTES ) ), "...and is not left at M", json( NOTES ) );
+    ok( await c.until( "! NayiveMedia.noteMoveWaits( 'files/M/m.png' )" ), "nothing waits any more" );
 }
 
 await done( c, s );
