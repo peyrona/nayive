@@ -138,12 +138,14 @@ func (o *Office) Close() {
 	}
 }
 
-// Convert writes src's twin at dst, replacing a file already there, and
-// returns its size. `name` is the document's name as the user sees it: its
+// Convert writes src's twin at dst and returns its size. `replace` lets it
+// replace a file already there (an upload's new twin); without it a file
+// that took the name while LibreOffice ran is kept and fs.ErrExist answered.
+// `name` is the document's name as the user sees it: its
 // extension says what it is (src may be reached through a link with another
 // name). `budget` is how many bytes the twin may take (-1: no quota). `ctx`
 // is the request's: a browser that gives up stops the run.
-func (o *Office) Convert(ctx context.Context, name string, src, dst Resolved, budget int64) (int64, error) {
+func (o *Office) Convert(ctx context.Context, name string, src, dst Resolved, budget int64, replace bool) (int64, error) {
 	if !o.Available() {
 		return 0, errors.New("LibreOffice is not installed")
 	}
@@ -187,7 +189,7 @@ func (o *Office) Convert(ctx context.Context, name string, src, dst Resolved, bu
 	if budget >= 0 && info.Size() > budget {
 		return 0, errOfficeQuota
 	}
-	if err := placeFile(out, dst); err != nil {
+	if err := placeFile(out, dst, replace); err != nil {
 		return 0, err
 	}
 	return info.Size(), nil
@@ -376,7 +378,10 @@ func copyResolvedTo(src Resolved, to string, max int64) error {
 
 // placeFile copies a finished file to dst through dst's root: a ".convert-"
 // temp beside it, 0644, then one rename - a reader never sees half a file.
-func placeFile(from string, dst Resolved) error {
+// Without `replace` the temp never takes a name that is taken (fs.ErrExist):
+// the twin was free when the run began, but a "Save as x.docx" or an upload
+// in the seconds LibreOffice runs is the user's file, not ours to replace (D10).
+func placeFile(from string, dst Resolved, replace bool) error {
 	in, err := os.Open(from)
 	if err != nil {
 		return err
@@ -407,7 +412,12 @@ func placeFile(from string, dst Resolved) error {
 	if err != nil {
 		return err
 	}
-	if err := root.Rename(tmpRel, dst.Rel); err != nil {
+	if replace {
+		err = root.Rename(tmpRel, dst.Rel)
+	} else {
+		err = renameNoReplace(root, tmpRel, dst.Rel)
+	}
+	if err != nil {
 		return err
 	}
 	return syncRootDir(root, filepath.Dir(dst.Rel)) // the name durable too (K1)

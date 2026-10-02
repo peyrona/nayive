@@ -429,33 +429,57 @@ func (t *Trash) Size(role, user string) int64 {
 // restore
 // -----------------------------------------------------------------------------
 
-// freeTarget is where an entry should be restored to, the new name when the
-// original path was taken, and false when it cannot go back at all.
-func (t *Trash) freeTarget(role, user, origRel string) (Resolved, string, bool) {
+// restoreTarget is where an entry goes back to, or false when it cannot go
+// back at all.
+func (t *Trash) restoreTarget(role, user, origRel string) (Resolved, bool) {
 	if origRel == "" {
 		// A corrupted index row: no way to know where it came from - never fall
 		// back to a root.
-		return Resolved{}, "", false
+		return Resolved{}, false
 	}
 	target, ok := t.users.Resolve(role, user, origRel)
 	if !ok || !target.Writable {
-		return Resolved{}, "", false
+		return Resolved{}, false
 	}
-	info, err := target.Lstat()
-	if err != nil {
-		return target, "", true // the original slot is free - restore in place
-	}
+	return target, true
+}
 
-	stamp := time.Now().Format("2006-01-02-150405")
-	base := filepath.Base(target.Abs)
+// restoredName is the n-th name tried for an item whose original name is
+// taken: "a (restaurado <stamp>).txt", then "a (restaurado <stamp> 2).txt"
+// and on (a folder, or a name with no extension, keeps its whole name first).
+func restoredName(base string, isDir bool, stamp string, n int) string {
 	ext := filepath.Ext(base)
-	var newName string
-	if info.IsDir() || ext == "" {
-		newName = base + " (restaurado " + stamp + ")"
-	} else {
-		newName = strings.TrimSuffix(base, ext) + " (restaurado " + stamp + ")" + ext
+	if isDir {
+		ext = ""
 	}
-	return target.at(filepath.Join(filepath.Dir(target.Rel), newName)), newName, true
+	tag := " (restaurado " + stamp + ")"
+	if n > 1 {
+		tag = " (restaurado " + stamp + " " + strconv.Itoa(n) + ")"
+	}
+	return strings.TrimSuffix(base, ext) + tag + ext
+}
+
+// placeRestored moves `from` (the item in the can) back to `target` or, that
+// name taken, to the first free restoredName, and answers the new name (""
+// when it went back in place). NEVER over anything: two items of one name
+// restored in the same second both got the same "(restaurado <second>)" name
+// and the second rename replaced the first, already out of the index - gone
+// for good (D8). A name taken in the very instant of the move is caught by
+// renameNoReplace and the next name is tried.
+func placeRestored(from, target Resolved, isDir bool) (string, error) {
+	err := moveResolved(from, target)
+	if !errors.Is(err, fs.ErrExist) {
+		return "", err
+	}
+	stamp := time.Now().Format("2006-01-02-150405")
+	for n := 1; n < 1000; n++ {
+		name := restoredName(filepath.Base(target.Rel), isDir, stamp, n)
+		err := moveResolved(from, target.at(filepath.Join(filepath.Dir(target.Rel), name)))
+		if !errors.Is(err, fs.ErrExist) {
+			return name, err
+		}
+	}
+	return "", fs.ErrExist
 }
 
 // Restore moves the given entryIds back to where they came from. It returns the
@@ -481,14 +505,15 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 			continue
 		}
 		src := filepath.Join(tdir, id)
-		if _, err := os.Lstat(src); err != nil {
+		info, err := os.Lstat(src)
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) { // only a row whose item is really gone
 				index.remove(id)
 			}
 			continue
 		}
 
-		dest, newName, ok := t.freeTarget(role, user, entry.Orig)
+		dest, ok := t.restoreTarget(role, user, entry.Orig)
 		if !ok {
 			t.log.Warn("trash: cannot restore (bad orig)", "id", id)
 			continue
@@ -501,7 +526,8 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 			continue
 		}
 		dest.MkdirParent()
-		if err := moveResolved(dest.at(filepath.Join(trashRel, id)), dest); err != nil {
+		newName, err := placeRestored(dest.at(filepath.Join(trashRel, id)), dest, info.IsDir())
+		if err != nil {
 			t.log.Warn("trash: restore failed", "id", id, "err", err)
 			continue
 		}
@@ -509,7 +535,7 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 		if newName != "" {
 			renamed = append(renamed, newName)
 		}
-		t.log.Info("trash: restored", "id", id, "to", dest.Abs)
+		t.log.Info("trash: restored", "id", id, "to", dest.Abs, "as", newName)
 	}
 	saveIndex(tdir, index)
 	return renamed, nil
@@ -689,9 +715,11 @@ func (t *Trash) SweepExpired(defaultDays int) {
 
 // moveResolved is moveOrCopy through the sandbox: a rename inside one root,
 // and the copy fallback - by path, see sandbox.go - only when that rename has
-// to cross two filesystems.
+// to cross two filesystems. It never replaces what is at dst (fs.ErrExist):
+// the bin's own new entry is always free, and a restore must never land on a
+// file of that name (D8).
 func moveResolved(src, dst Resolved) error {
-	err := renameResolved(src, dst)
+	err := renameResolvedNoReplace(src, dst)
 	if err == nil || !isCrossDevice(err) {
 		return err
 	}
@@ -708,17 +736,20 @@ func moveResolved(src, dst Resolved) error {
 // could sit on its own mount, and the external-storage setting in the admin
 // panel is heading exactly there. A rename within one filesystem stays what it
 // always was - instant, and never a copy.
+//
+// Never over anything at dst (D8): the copy starts with a Mkdir / an O_EXCL
+// create, which fail on a taken name - and then nothing of it is removed,
+// since it is not ours. (moveResolved has already tried the no-replace
+// rename; only an EXDEV gets here.)
 func moveOrCopy(src, dst string) error {
-	err := os.Rename(src, dst)
-	if err == nil || !isCrossDevice(err) {
-		return err
-	}
-
 	info, err := os.Lstat(src)
 	if err != nil {
 		return err
 	}
 	if info.IsDir() {
+		if err := os.Mkdir(dst, info.Mode().Perm()); err != nil {
+			return err
+		}
 		if err := copyTree(src, dst); err != nil {
 			// A half-copied tree is worse than none: bin it and report the
 			// failure, leaving the original exactly where it was.
@@ -728,8 +759,7 @@ func moveOrCopy(src, dst string) error {
 		return os.RemoveAll(src)
 	}
 	if err := copyFile(src, dst, info.Mode()); err != nil {
-		os.Remove(dst)
-		return err
+		return err // copyFile removed what it made, and only that
 	}
 	return os.Remove(src)
 }
@@ -778,6 +808,8 @@ func copyTree(src, dst string) error {
 	return nil
 }
 
+// copyFile makes dst - O_EXCL: a name already taken is refused, never
+// written over (D8) - and on a failure removes the half copy it made.
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -785,15 +817,18 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+	_, err = io.Copy(out, in)
+	if cerr := out.Close(); err == nil {
+		err = cerr
 	}
-	return out.Close()
+	if err != nil {
+		os.Remove(dst)
+	}
+	return err
 }
 
 func whoever(user string) string {

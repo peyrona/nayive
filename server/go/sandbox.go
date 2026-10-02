@@ -33,9 +33,11 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // errCrossRoot is a rename whose two ends sit under different roots. os.Root
@@ -157,7 +159,9 @@ func (p Resolved) Remove() error {
 	return root.Remove(p.Rel)
 }
 
-// renameResolved is os.Rename, inside one root.
+// renameResolved is os.Rename, inside one root. It REPLACES what is at dst:
+// only for a case-only rename of one file (sameResolved). Every other move
+// goes through renameResolvedNoReplace.
 func renameResolved(src, dst Resolved) error {
 	if src.Root != dst.Root {
 		return errCrossRoot
@@ -168,6 +172,67 @@ func renameResolved(src, dst Resolved) error {
 	}
 	defer root.Close()
 	return root.Rename(src.Rel, dst.Rel)
+}
+
+// renameResolvedNoReplace is renameNoReplace through the sandbox.
+func renameResolvedNoReplace(src, dst Resolved) error {
+	if src.Root != dst.Root {
+		return errCrossRoot
+	}
+	root, err := src.open()
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return renameNoReplace(root, src.Rel, dst.Rel)
+}
+
+// testBeforePlace is for tests only (nil in the server): it runs inside
+// renameNoReplace just before the name is taken, so a test can put a file
+// there in the one instant no earlier check can see - and prove it survives.
+var testBeforePlace atomic.Pointer[func(root *os.Root, to string)]
+
+// renameNoReplace moves `from` to `to` and NEVER replaces what is at `to`: a
+// taken name answers fs.ErrExist and nothing moves. A plain rename destroys
+// the file at `to` with no trip through the papelera, and a "free?" check
+// before it leaves a window in which a save, an upload or a phone's photo
+// lands there and is lost (data-safety D10).
+//
+// A file (or a link) goes by hard link + unlink: link fails on a taken name,
+// in the kernel, with no window; the inode stays the same, as with a rename
+// (a kept Chat photo still finds it). Should the unlink fail, both names
+// stay: a duplicate, never a loss.
+//
+// The rest goes the old way, a check and then the rename: a folder (no hard
+// links to folders), and a disk that refuses hard links (FAT external
+// storage, a cross-disk pair - the caller still sees EXDEV). For a folder the
+// rename itself fails onto a folder with something in it (ENOTEMPTY, which
+// errors.Is counts as fs.ErrExist) or onto a file; the one case left in the
+// window is an EMPTY folder made there meanwhile, which nothing is lost with.
+func renameNoReplace(root *os.Root, from, to string) error {
+	info, err := root.Lstat(from)
+	if err != nil {
+		return err
+	}
+	if hook := testBeforePlace.Load(); hook != nil {
+		(*hook)(root, to)
+	}
+	if !info.IsDir() {
+		err := root.Link(from, to)
+		if err == nil {
+			return root.Remove(from)
+		}
+		if errors.Is(err, fs.ErrExist) {
+			return err
+		}
+		// No hard links here: the check-then-rename below.
+	}
+	if _, err := root.Lstat(to); err == nil {
+		return fs.ErrExist
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return root.Rename(from, to)
 }
 
 // sameResolved is sameFile through the sandbox: a pure case-change on a

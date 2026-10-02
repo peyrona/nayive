@@ -74,6 +74,7 @@ import (
 	"errors"
 	"html"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"net/url"
@@ -2216,21 +2217,30 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 		sendError(w, r, http.StatusGone, "esa foto ya no está")
 		return
 	}
-	// Its own name, "(2)" and on when the folder has one already.
+	// Its own name, "(2)" and on when the folder has one already. Never over
+	// a file: one saved there between a "free?" look and a plain rename was
+	// replaced (D10) - renameNoReplace refuses a taken name, and the next
+	// one is tried.
 	name := keptName(m.File.Name)
 	base, ext := strings.TrimSuffix(name, filepath.Ext(name)), filepath.Ext(name)
-	dst := folder.at(filepath.Join(folder.Rel, name))
-	for i := 2; dst.Exists(); i++ {
+	var dst Resolved
+	for i := 1; ; i++ {
 		if i > 999 {
 			sendError(w, r, http.StatusConflict, "demasiadas fotos con ese nombre")
 			return
 		}
-		name = base + " (" + strconv.Itoa(i) + ")" + ext
+		if i > 1 {
+			name = base + " (" + strconv.Itoa(i) + ")" + ext
+		}
 		dst = folder.at(filepath.Join(folder.Rel, name))
-	}
-	if err := renameResolved(src, dst); err != nil {
-		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
-		return
+		err := renameResolvedNoReplace(src, dst)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+			return
+		}
 	}
 	// Its new name durable before the message points there (K1). The move is
 	// done either way, so the message must follow it: a failure is only logged.
