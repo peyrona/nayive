@@ -1638,7 +1638,10 @@ async function saveComment( id, text )
  * news is very often a move to the bin, its Undo still on the screen. */
 async function sweepComments()
 {
-    if( DEMO || ! PHOTOS.length ) return;
+    // Not in an album someone shared with us: its photos go to the OWNER's
+    // bin, which our bin listing cannot see - our note on a photo they binned
+    // would be dropped though their Restore brings the photo back.
+    if( DEMO || RO || ! PHOTOS.length ) return;
     const alive  = new Set( PHOTOS.concat( UNSHOWN ).map( p => p.name.toLowerCase() ) );
     const prefix = DIR ? ( DIR + "/" ) : "";
     let   dead   = [];
@@ -1652,14 +1655,18 @@ async function sweepComments()
     }
     if( ! dead.length ) return;
 
-    // What is in the bin keeps its note. A bin that cannot be listed sweeps
-    // nothing: the sweep runs again on the next load.
-    let bin;
-    try { bin = await GumApi.trashList(); }
+    // What is in the bin keeps its note. And the folder is listed again AFTER
+    // the bin: a photo restored since the listing above (Drive's Undo) is in
+    // neither the bin nor that listing, but it is in this one. A bin or a
+    // folder that cannot be listed sweeps nothing: the sweep runs again on
+    // the next load.
+    let bin, now;
+    try { bin = await GumApi.trashList(); now = await GumApi.listDir( DIR ); }
     catch( _ ) { return; }
     const binned = key => bin.some( it => it && typeof it.orig === "string" &&
                                           ( it.orig === key || ( it.dir && key.indexOf( it.orig + "/" ) === 0 ) ) );
-    dead = dead.filter( key => ! binned( key ) );
+    const here = new Set( ( ( now && now.nodes ) || [] ).map( n => baseName( n.path ).toLowerCase() ) );
+    dead = dead.filter( key => ! binned( key ) && ! here.has( key.slice( prefix.length ).toLowerCase() ) );
     if( ! dead.length ) return;
     for( const key of dead ) delete COMMENTS[ key ];
 

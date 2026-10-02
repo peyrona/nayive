@@ -379,7 +379,9 @@
     // moment that path is left again (moveNotes): Drive's Undo moves the
     // newcomer away BEFORE it restores the binned item, so both notes come
     // back. "#" can never start a path, and every reader looks notes up by
-    // path (Photos' sweep skips this key on purpose).
+    // path (Photos' sweep skips this key on purpose). The image editor's
+    // "Save a copy" writes a NEW file at a path, so it parks too
+    // (parkNotes / unparkNotes, synchronous, on a map it has just read).
     var ASIDE = "#aside";
 
     // Re-key `map` in place: the entry at oldPath, and everything under
@@ -426,39 +428,68 @@
     // source where it was) the notes parked for the path just left come back.
     function moveNotes( map, pairs, keep )
     {
-        var a = map[ ASIDE ];
-        var aside = a && typeof a === "object" && ! Array.isArray( a ) ? a : {};
         var changed = false;
         pairs.forEach( function ( pair )
         {
             var oldPath = pair[ 0 ], newPath = pair[ 1 ];
             if( oldPath === newPath ) return;
-            var oldPre = oldPath + "/", newPre = newPath + "/";
-            Object.keys( map ).forEach( function ( key )
-            {
-                if( key === ASIDE ) return;
-                if( key !== newPath && key.indexOf( newPre ) !== 0 ) return;
-                if( key === oldPath || key.indexOf( oldPre ) === 0 ) return;   // what is moving now
-                if( ! Array.isArray( aside[ key ] ) ) aside[ key ] = [];
-                aside[ key ].push( map[ key ] );
-                delete map[ key ];
-                changed = true;
-            } );
+            if( park( map, newPath, oldPath ) ) changed = true;
             if( rekey( map, [ pair ], keep ) ) changed = true;
-            if( keep ) return;
-            Object.keys( aside ).forEach( function ( key )
-            {
-                if( key !== oldPath && key.indexOf( oldPre ) !== 0 ) return;
-                var list = aside[ key ];
-                if( ! Array.isArray( list ) || ! list.length ) { delete aside[ key ]; changed = true; return; }
-                if( key in map ) return;               // taken after all: it stays parked
-                map[ key ] = list.pop();
-                if( ! list.length ) delete aside[ key ];
-                changed = true;
-            } );
+            if( ! keep && unpark( map, oldPath, false ) ) changed = true;
         } );
+        return changed;
+    }
+
+    // `map`'s parked notes ({} when none), and storing them back (the key goes
+    // when nothing is parked any more).
+    function asideOf( map )
+    {
+        var a = map[ ASIDE ];
+        return a && typeof a === "object" && ! Array.isArray( a ) ? a : {};
+    }
+    function setAside( map, aside )
+    {
         if( Object.keys( aside ).length ) map[ ASIDE ] = aside;
         else delete map[ ASIDE ];
+    }
+    function under( key, path ) { return key === path || key.indexOf( path + "/" ) === 0; }
+
+    // Park the notes at `path` and inside it - except those under `except`
+    // (what is moving there right now). True if anything was parked.
+    function park( map, path, except )
+    {
+        var aside = asideOf( map ), changed = false;
+        Object.keys( map ).forEach( function ( key )
+        {
+            if( key === ASIDE || ! under( key, path ) ) return;
+            if( except != null && under( key, except ) ) return;
+            if( ! Array.isArray( aside[ key ] ) ) aside[ key ] = [];
+            aside[ key ].push( map[ key ] );
+            delete map[ key ];
+            changed = true;
+        } );
+        setAside( map, aside );
+        return changed;
+    }
+
+    // The newest note parked for `path` and for everything inside it goes back
+    // to its key. A key that holds a note stays as it is (the note stays
+    // parked) unless `over`: the caller has just put the parked item itself
+    // back at its path. True if anything changed.
+    function unpark( map, path, over )
+    {
+        var aside = asideOf( map ), changed = false;
+        Object.keys( aside ).forEach( function ( key )
+        {
+            if( ! under( key, path ) ) return;
+            var list = aside[ key ];
+            if( ! Array.isArray( list ) || ! list.length ) { delete aside[ key ]; changed = true; return; }
+            if( key in map && ! over ) return;      // taken after all: it stays parked
+            map[ key ] = list.pop();
+            if( ! list.length ) delete aside[ key ];
+            changed = true;
+        } );
+        setAside( map, aside );
         return changed;
     }
 
@@ -669,6 +700,8 @@
         dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
         readComments: readComments, writeComments: writeComments, NOTES_ASIDE: ASIDE,
+        parkNotes:   function ( map, path ) { return park( map, path, null ); },
+        unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState

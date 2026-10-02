@@ -1502,30 +1502,43 @@ function openSaveSheet()
     if( ! st.queue.length ) return;
     $( "#saveHint" ).textContent = NayiveUI.tf( "music.saveHint", { n: st.queue.length } );
     $( "#playlistName" ).value = "";
+    saveListId = "pl" + Date.now().toString( 36 );
     NayiveUI.open( "saveBackdrop" );
     $( "#playlistName" ).focus();
 }
+
+// The new list's id is fixed when the sheet opens: a ✓ pressed again after a
+// failed save replaces its own list (if that write did land after all)
+// rather than adding a second one.
+var saveListId = "";
+var savingList = false;
 
 async function confirmSave()
 {
     var name = $( "#playlistName" ).value.trim();
     if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
     if( savingList ) return;                             // a second press while the first one saves
-    var pl = { id: "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) };
+    var pl = { id: saveListId || "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) };
     savingList = true;
-    try { await changePlaylists( function ( list ) { list.push( pl ); } ); }
+    try
+    {
+        await changePlaylists( function ( list )
+        {
+            for( var i = 0; i < list.length; i++ ) if( list[ i ] && list[ i ].id === pl.id ) { list[ i ] = pl; return; }
+            list.push( pl );
+        } );
+    }
     catch( e )
     {
-        if( e && e.read ) return;                        // not read (the toast said why): sheet stays open, name kept
-        NayiveUI.setOpen( "saveBackdrop", false );
-        NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
+        // Not saved: the sheet stays open with the name typed, and ✓ tries
+        // again. A read that failed has said why already.
+        if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
         return;
     }
     finally { savingList = false; }
     NayiveUI.setOpen( "saveBackdrop", false );
     NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
 }
-var savingList = false;
 
 function renderLoadList()
 {

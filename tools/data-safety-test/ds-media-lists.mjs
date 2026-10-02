@@ -65,6 +65,23 @@ ok( await disk( () => ids().includes( "plA" ) ), "Undo: A is back" );
 ok( ids().includes( "plB" ) && ids().includes( "plD" ) && ( json( LISTS ) || [] ).some( p => p.name === "C" ),
     "Undo: the phone's D (saved after the delete) stays", json( LISTS ) );
 
+// "Save list" whose write is reported failed (it did land: the answer was
+// lost on the way back - GumApi PUTs with XMLHttpRequest): the sheet stays
+// open with the name typed, and ✓ again saves ONE list, not two.
+await c.evaluate( `( () => { window.__lie = true; const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function ( m, u ) { this.__lie = m === 'PUT' && String( u ).indexOf( 'playlists.json' ) !== -1; return open.apply( this, arguments ); };
+    XMLHttpRequest.prototype.send = function () { const x = this;
+        if( x.__lie && window.__lie ) x.onload = function () { if( x.onerror ) x.onerror(); };
+        return send.apply( this, arguments ); };
+    openSaveSheet(); document.getElementById( 'playlistName' ).value = 'E'; return true; } )()` );
+await c.evaluate( "window.__toasts = []; confirmSave().then( () => true )" );
+ok( await c.evaluate( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'music.listSaveFailed' ) ) !== -1 )" ), "the failed save is said", await c.toasts() );
+ok( await c.evaluate( "document.getElementById( 'saveBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'playlistName' ).value === 'E'" ),
+    "the sheet stays open, the name kept" );
+await c.evaluate( "window.__lie = false; confirmSave().then( () => true )" );
+ok( await c.evaluate( "! document.getElementById( 'saveBackdrop' ).classList.contains( 'open' )" ), "✓ again: saved, the sheet closes" );
+ok( ( json( LISTS ) || [] ).filter( p => p.name === "E" ).length === 1, "one list E, not two", json( LISTS ) );
+
 //----------------------------------------------------------------------------
 section( "A7 - Movies: posters.json keeps the other device's posters and key" );
 

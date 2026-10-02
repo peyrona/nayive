@@ -23,18 +23,22 @@ const phone = await s.client();
 
 ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
 ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveI18n !== 'undefined'" ), "ready" );
-// The lockers' scripts, as the desktop's ⋮ menu loads them; and a switch that
-// makes the server's answer to one settings file a 503 (window.__failRead).
+// The lockers' scripts, as the desktop's ⋮ menu loads them; a switch that
+// makes the server's answer to one settings file a 503 (window.__failRead);
+// and a count of the page's PUTs (window.__puts), so the disk is read only
+// once every write a press started has landed.
 ok( await c.evaluate( `( async () => {
     const load = src => new Promise( ( ok, no ) => { const sc = document.createElement( 'script' ); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild( sc ); } );
     await load( '../shared/lockers/culture.js' ); await load( '../shared/lockers/science.js' ); await load( '../shared/lockers/culture-settings.js' );
-    window.__failRead = ''; const f = window.fetch;
+    window.__failRead = ''; window.__puts = { on: 0, off: 0 }; const f = window.fetch;
     window.fetch = function ( u, o ) {
         const get = ! o || ! o.method || o.method === 'GET';
         if( get && window.__failRead && String( u ).indexOf( encodeURIComponent( 'data/' + window.__failRead ) ) !== -1 )
             return Promise.resolve( new Response( 'busy', { status: 503 } ) );
+        if( o && o.method === 'PUT' ) { window.__puts.on++; return f.apply( this, arguments ).finally( () => { window.__puts.off++; } ); }
         return f.apply( this, arguments ); };
     return !! window.NayiveSalonSettings; } )()` ), "locker scripts loaded" );
+const SETTLED = "window.__puts.on === window.__puts.off";
 
 const SAVE  = "document.querySelector( '#salonSettings .sheet-actions .btn-primary' )";
 const OPEN  = "!! document.querySelector( '#salonSettings.open' )";
@@ -55,6 +59,7 @@ ok( await c.evaluate( readFailShown ), "it says the settings could not be read" 
 ok( await c.evaluate( "[ ...document.querySelectorAll( '#salonSettings .salon-pane select, #salonSettings .salon-pane input' ) ].every( x => x.disabled )" ),
     "every control is read-only" );
 await c.evaluate( SAVE + ".click(); true" );
+ok( await c.until( SETTLED ), "every write that press started has landed" );
 ok( await c.evaluate( OPEN ), "✓ pressed anyway: nothing happens" );
 ok( onDisk( s, SALON ) === before, "the real settings are untouched" );
 await close();
@@ -66,6 +71,7 @@ await c.evaluate( "window.__failRead = 'salon.json'; NayiveSalonSettings.open( '
 ok( await c.until( DRAWN ), "Science dialog drawn" );
 ok( await c.evaluate( SAVE + ".disabled" ) === true && await c.evaluate( readFailShown ), "Science: read-only too (its 404 falls back on a FAILED salon read)" );
 await c.evaluate( SAVE + ".click(); true" );
+ok( await c.until( SETTLED ), "every write that press started has landed" );
 ok( json( SCI ) === null, "Science: nothing written" );
 await close();
 ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
@@ -95,6 +101,7 @@ const kept = onDisk( s, SALON );
 await c.evaluate( "window.__failRead = 'salon.json'; window.__toasts = []; " + SAVE + ".click(); true" );
 ok( await c.until( "( window.__toasts || [] ).some( x => x.indexOf( NayiveI18n.t( 'salon.readFail' ) ) !== -1 ) || ! document.querySelector( '#salonSettings' )" ),
     "✓ answered" );
+ok( await c.until( SETTLED ), "every write that press started has landed" );
 ok( await c.evaluate( OPEN ) && await c.evaluate( SAVE + ".disabled" ) === false, "the dialog stays open, ✓ on again" );
 ok( onDisk( s, SALON ) === kept, "nothing was written" );
 await c.evaluate( "window.__failRead = ''; " + SAVE + ".click(); true" );
