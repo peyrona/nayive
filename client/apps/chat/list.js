@@ -96,6 +96,7 @@
         var all = S.list.slice();
         Object.keys( S.vias ).forEach( function ( u ) { all = all.concat( S.vias[ u ].list ); } );
         S.convs = all;
+        C.pruneOutbox();     // compose.js: waiting messages of a chat that is gone
         C.renderList();
         if( S.open )
         {

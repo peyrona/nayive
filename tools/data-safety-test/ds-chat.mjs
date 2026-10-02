@@ -9,7 +9,8 @@ const phone = await s.client();       // the owner on another device: the server
 const person = async name => JSON.parse( ( await phone.post( "/api/chat/contacts", JSON.stringify( { name } ),
                                                              { "Content-Type": "application/json" } ) ).text );
 const CA = "d-" + ( await person( "Carmen" ) ).id;
-const JA = "d-" + ( await person( "Javi" ) ).id;
+const javi = await person( "Javi" );
+const JA = "d-" + javi.id;
 const onServer = async conv => ( JSON.parse( ( await phone.call( "GET", "/api/chat/conv/" + conv + "/messages" ) ).text ).msgs || [] )
                                    .filter( m => ! m.deleted ).map( m => m.text );
 
@@ -137,5 +138,19 @@ for( let i = 0; i < 100 && ! edited; i++ ) { edited = ( await onServer( CA ) ).i
 ok( edited, "Send: the message is edited on the server", await onServer( CA ) );
 ok( await box() === "", "the box is empty" );
 ok( await load() && await openChat( CA ) && ( await box() ) === "", "sent: after a reload nothing comes back", await box() );
+
+section( "J2 - A CHAT THAT IS GONE TAKES ITS WAITING MESSAGES WITH IT (review 7)" );
+await c.evaluate( "localStorage.setItem( 'ds-fail-send', '1' ); true" );
+ok( await openChat( JA ), "Javi's chat" );
+await write( "para nadie" );
+await send();
+ok( await c.until( bubble( "para nadie" ) + "?.classList.contains( 'failed' )" ) && ( await c.evaluate( OUTBOX ) ).includes( "para nadie" ),
+    "a message waits in the outbox" );
+const gone = await phone.del( "/api/chat/contacts/" + javi.id );
+ok( gone.status < 300, "Javi is deleted on another device", gone.status );
+await c.evaluate( "localStorage.removeItem( 'ds-fail-send' ); true" );
+ok( await load(), "the page loads again" );
+ok( await settles( OUTBOX + ".then( l => ! l.includes( 'para nadie' ) )" ), "it leaves the outbox: it can never go (sign-out counts what can)",
+    await c.evaluate( OUTBOX ) );
 
 await done( c, s );

@@ -601,10 +601,33 @@
         if( ! who ) return;
         var all = await outTx( "readonly", function ( os ) { return os.getAll( IDBKeyRange.bound( "chat:", "chat:\uffff" ) ); } ) || [];
         all.forEach( function ( r ) { if( r.who === who && r.cid && ! outbox.has( r.cid ) ) outbox.set( r.cid, r ); } );
+        if( S.v >= 0 ) C.pruneOutbox();    // the list is in: what is left of a chat that is gone goes
         if( ! outbox.size ) return;
         C.renderList();
         if( S.open ) C.showUnsent( S.open );
         C.flushOutbox();
+    };
+
+    // A waiting message of a chat that is gone - deleted, or I am no longer
+    // in it (its world's list no longer has it; a home that dropped me is no
+    // world any more): it can never go, nor be shown. It leaves the outbox
+    // (sign-out counts what can still be sent). Run once a list has come in
+    // (list.js afterLoad).
+    C.pruneOutbox = function ()
+    {
+        var worlds = {};
+        worlds[ S.api ] = S.list;
+        Object.keys( S.vias ).forEach( function ( u ) { worlds[ S.vias[ u ].api ] = S.vias[ u ].list; } );
+        var gone = false;
+        outbox.forEach( function ( r )
+        {
+            var list = worlds[ r.api ];
+            if( list ? list.some( function ( c ) { return c.id === r.conv; } ) : ! /\/via\//.test( r.api ) ) return;
+            outbox.delete( r.cid );
+            outDel( r.cid );
+            gone = true;
+        } );
+        if( gone ) C.renderList();
     };
 
     // Every chat's waiting messages on their way again (conv: that chat's only).
