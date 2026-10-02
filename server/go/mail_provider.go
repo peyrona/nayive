@@ -163,11 +163,12 @@ type MailMessage struct {
 	Cc      []MailAddr `json:"cc,omitempty"`
 	Bcc     []MailAddr `json:"bcc,omitempty"` // only a draft has it
 	ReplyTo []MailAddr `json:"replyTo,omitempty"`
-	// a draft's To, Cc and Bcc as typed, when some of it was not an address
-	// yet ("juan"): the writer shows these instead (mail_compose.go draftAddrs)
-	ToText  string `json:"toText,omitempty"`
-	CcText  string `json:"ccText,omitempty"`
-	BccText string `json:"bccText,omitempty"`
+	// what a draft's To, Cc and Bcc held that was no address yet ("juan"),
+	// as typed: the writer shows it after the addresses (mail_compose.go
+	// draftAddrs)
+	ToRest  string `json:"toRest,omitempty"`
+	CcRest  string `json:"ccRest,omitempty"`
+	BccRest string `json:"bccRest,omitempty"`
 	// the thread so far (its References header), for a reply to carry on
 	References []string   `json:"references,omitempty"`
 	Text       string     `json:"text,omitempty"`

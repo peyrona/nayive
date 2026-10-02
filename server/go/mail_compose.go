@@ -25,6 +25,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime"
@@ -129,85 +130,76 @@ func splitAddrs(s string) []string {
 	return out
 }
 
-// The headers that keep a draft's To, Cc and Bcc AS TYPED when some of it is
-// not an address yet ("juan", "ana@", a name half written): see draftAddrs.
-// Only a draft ever has them.
+// The headers that keep what a draft's To, Cc and Bcc hold that is not an
+// address yet ("juan", "ana@", a name half written): see draftAddrs. Only a
+// draft ever has them, and only those pieces - the addresses go in the real
+// headers (a mail program that sends a draft as it is, X- headers and all,
+// must not show the Bcc's addresses in one).
 const (
 	mailTypedTo  = "X-Nayive-To"
 	mailTypedCc  = "X-Nayive-Cc"
 	mailTypedBcc = "X-Nayive-Bcc"
 )
 
-// draftAddrs reads a draft's typed list: the addresses in it, and - when a
-// piece of it is not one - the whole field as typed, to keep beside them
-// (typedAddrs gives it back). A draft is never refused for an address: a To
-// like "juan" (to look up later) made EVERY save fail, and the whole mail
-// lived only in the open page (data-safety I1, mail-chat #1). Only Send
-// refuses one (parseAddrs).
+// draftAddrs reads a draft's typed list: the addresses in it, and the pieces
+// that are none, as typed (", " between them; "" = none) - the draft keeps
+// them in its X-Nayive-... header, and reopened it shows them after its
+// addresses (MailMessage.ToRest...). A draft is never refused for an
+// address: a To like "juan" (to look up later) made EVERY save fail, and the
+// whole mail lived only in the open page (data-safety I1, mail-chat #1). Only
+// Send refuses one (parseAddrs).
 func draftAddrs(s string) ([]*netmail.Address, string) {
 	var out []*netmail.Address
-	odd := false
+	var odd []string
 	for _, one := range splitAddrs(s) {
 		if a, err := netmail.ParseAddress(one); err == nil {
 			out = append(out, a)
 		} else {
-			odd = true
+			odd = append(odd, one)
 		}
 	}
-	if !odd {
-		return out, ""
-	}
 	// one header line: no line breaks or control characters, not endless
-	typed := strings.Map(func(r rune) rune {
+	rest := strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return ' '
 		}
 		return r
-	}, s)
-	return out, clipRunes(strings.TrimSpace(typed), 2000)
+	}, strings.Join(odd, ", "))
+	return out, clipRunes(strings.TrimSpace(rest), 2000)
 }
 
-// typedAddrs is a draft's field as it was typed (from its X-Nayive-... header),
-// when the addresses in it are still the ones the draft's real header holds -
-// another mail program that changed the draft's To since leaves our note
-// stale, and the real header wins then. "" = show the addresses.
-func typedAddrs(typed string, have []MailAddr) string {
-	typed = strings.TrimSpace(typed)
-	if typed == "" {
-		return ""
-	}
-	var a, b []string
-	for _, one := range splitAddrs(typed) {
-		if x, err := netmail.ParseAddress(one); err == nil {
-			a = append(a, strings.ToLower(x.Address))
+// mailHeaderWords writes a header's text as RFC 2047 words of at most 45
+// bytes each (whole letters), space between them: a long value is then folded
+// only at those spaces, which reading it drops - folding a long run with no
+// space in it would put one there.
+func mailHeaderWords(s string) string {
+	var words []string
+	for s != "" {
+		n := min(len(s), 45)
+		for n < len(s) && n > 0 && !utf8.RuneStart(s[n]) {
+			n--
 		}
+		words = append(words, "=?utf-8?b?"+base64.StdEncoding.EncodeToString([]byte(s[:n]))+"?=")
+		s = s[n:]
 	}
-	for _, x := range have {
-		b = append(b, strings.ToLower(x.Addr))
-	}
-	sort.Strings(a)
-	sort.Strings(b)
-	if strings.Join(a, ",") != strings.Join(b, ",") {
-		return ""
-	}
-	return typed
+	return strings.Join(words, " ")
 }
 
-// keepTyped fills a draft's typed fields (MailMessage.ToText...) from its
-// X-Nayive-... headers, where they still hold (typedAddrs).
-func (m *MailMessage) keepTyped(to, cc, bcc string) {
-	m.ToText, m.CcText, m.BccText = typedAddrs(to, m.To), typedAddrs(cc, m.Cc), typedAddrs(bcc, m.Bcc)
+// keepRest fills a draft's pieces that are no address yet (MailMessage.ToRest
+// ...) from its X-Nayive-... headers.
+func (m *MailMessage) keepRest(to, cc, bcc string) {
+	m.ToRest, m.CcRest, m.BccRest = strings.TrimSpace(to), strings.TrimSpace(cc), strings.TrimSpace(bcc)
 }
 
 // buildMail writes the message. draft: keep Bcc in it, and the fields as
-// typed where an address does not parse yet (draftAddrs).
+// typed where they are no address yet (draftAddrs).
 func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string, draft bool) ([]byte, []*netmail.Address, error) {
 	var to, cc, bcc []*netmail.Address
-	var typed [3]string
+	var rest [3]string
 	if draft {
-		to, typed[0] = draftAddrs(m.To)
-		cc, typed[1] = draftAddrs(m.Cc)
-		bcc, typed[2] = draftAddrs(m.Bcc)
+		to, rest[0] = draftAddrs(m.To)
+		cc, rest[1] = draftAddrs(m.Cc)
+		bcc, rest[2] = draftAddrs(m.Bcc)
 	} else {
 		var err error
 		if to, err = parseAddrs(m.To); err != nil {
@@ -235,8 +227,8 @@ func buildMail(from *netmail.Address, m MailOut, files []mailOutFile, mid string
 		h.SetAddressList("Bcc", bcc)
 	}
 	for i, k := range []string{mailTypedTo, mailTypedCc, mailTypedBcc} {
-		if typed[i] != "" {
-			h.SetText(k, typed[i]) // RFC 2047 words for what is not ASCII
+		if rest[i] != "" {
+			h.Set(k, mailHeaderWords(rest[i]))
 		}
 	}
 	h.SetSubject(strings.TrimSpace(m.Subject))

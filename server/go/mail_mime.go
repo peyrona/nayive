@@ -243,9 +243,14 @@ var (
 	reMailCSSExpr   = regexp.MustCompile(`(?i)expression\s*\(|-moz-binding|behavior\s*:`)
 	reMailCID       = regexp.MustCompile(`(?i)(["'(\s=])cid:([^"')\s>]+)`)
 	reMailCtl       = regexp.MustCompile(`[\x00-\x20]+`)
-	// a <style> element and its CSS - to its end, or to the end of the
-	// whole when left open (the browser reads the rest as CSS then)
-	reMailStyleBlock = regexp.MustCompile(`(?is)<style\b[^>]*>.*?(</style\s*>|$)`)
+	// The cleaning pass's tags, read with their quotes - a ">" inside a
+	// quoted value (title=">") does not end one, so what follows it is still
+	// cleaned - and a <style> element whole, its CSS to its end (or to the end
+	// of everything when left open: the browser reads the rest as CSS). A
+	// "<style>" inside an attribute's quotes is no element: the tag around it
+	// is matched first. reMailTagQOne: one such tag, at the start.
+	reMailTagQ    = regexp.MustCompile(`(?is)<style\b(?:[^>"']|"[^"]*"|'[^']*')*>.*?(?:</style\s*>|$)|<(?:[^>"']|"[^"]*"|'[^']*')*>`)
+	reMailTagQOne = regexp.MustCompile(`(?s)^<(?:[^>"']|"[^"]*"|'[^']*')*>`)
 )
 
 // cleanMailTag cleans the inside of one tag: its on* handlers (repeated:
@@ -303,6 +308,15 @@ func sanitizeMailHTML(src string, cidURL func(cid string) string) string {
 			return sub[1] + u
 		})
 	}
-	s = reMailTag.ReplaceAllStringFunc(s, func(tag string) string { return neuter(cleanMailTag(tag)) })
-	return reMailStyleBlock.ReplaceAllStringFunc(s, neuter) // its tags were done above: done twice is the same
+	inTag := func(tag string) string { return neuter(cleanMailTag(tag)) }
+	s = reMailTagQ.ReplaceAllStringFunc(s, func(m string) string {
+		if open := reMailTagQOne.FindString(m); len(open) < len(m) { // a <style> element: its tag, then its CSS
+			return inTag(open) + neuter(m[len(open):])
+		}
+		return inTag(m)
+	})
+	// ...and once more as plain "<" to ">": a tag whose quote never closes
+	// is no match above, but a browser still reads it as one. Done twice is
+	// the same; words between tags are still never touched.
+	return reMailTag.ReplaceAllStringFunc(s, inTag)
 }

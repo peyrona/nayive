@@ -5,6 +5,7 @@ package main
 // ds_mailwrite_test.go these do not build on the code before it).
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,14 +15,26 @@ import (
 	"time"
 )
 
-// TestDS_I1_TypedFieldsStaleAfterEditElsewhere: another mail program changed
-// the draft's To since (our note stayed behind): the real header wins.
-func TestDS_I1_TypedFieldsStaleAfterEditElsewhere(t *testing.T) {
-	if got := typedAddrs("juan, bob@example.com", []MailAddr{{Addr: "carla@example.com"}}); got != "" {
-		t.Errorf("stale note kept: %q", got)
+// TestDS_I1_TypedRestHeader: a draft's X-Nayive-... headers hold only what is
+// no address yet - never the Bcc's addresses (a program that sends the draft
+// as it is would show them) - and a long value comes back exactly, with no
+// blank put in where the header was folded.
+func TestDS_I1_TypedRestHeader(t *testing.T) {
+	long := strings.Repeat("x", 150) + "ñ" + strings.Repeat("y", 150)
+	raw, _, err := buildMail(&netmail.Address{Address: "ana@example.com"}, MailOut{To: long,
+		Bcc: "Pérez, carol@example.com", Subject: "x", Text: "y"}, nil, "d1@example.com", true)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := typedAddrs("juan, bob@example.com", []MailAddr{{Addr: "BOB@example.com"}}); got != "juan, bob@example.com" {
-		t.Errorf("note dropped: %q", got)
+	head := raw[:bytes.Index(raw, []byte("\r\n\r\n"))+2]
+	if got := headerText(head, mailTypedBcc); got != "Pérez" {
+		t.Errorf("X-Nayive-Bcc = %q; header:\n%s", got, head)
+	}
+	if strings.Count(string(head), "carol@example.com") != 1 {
+		t.Errorf("carol is in the draft's header %d times, want once (its real Bcc):\n%s", strings.Count(string(head), "carol@example.com"), head)
+	}
+	if got := headerText(head, mailTypedTo); got != long {
+		t.Errorf("a long To came back as %q", got)
 	}
 }
 
@@ -43,8 +56,8 @@ func TestDS_I1_JMAPDraftKeepsAddressAsTyped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.ToText != "juan, bob@fast.test" {
-		t.Errorf("JMAP draft toText = %q", msg.ToText)
+	if msg.ToRest != "juan" || len(msg.To) != 1 || msg.To[0].Addr != "bob@fast.test" {
+		t.Errorf("JMAP draft toRest = %q, to = %+v", msg.ToRest, msg.To)
 	}
 }
 
@@ -174,6 +187,30 @@ func TestDS_I7_PurgeKeepsToFirstTrash(t *testing.T) {
 	defer c.Close()
 	if d, err := c.Select("Bin", nil).Wait(); err != nil || d.NumMessages != 1 {
 		t.Errorf("the user's Bin lost its mail (%v)", err)
+	}
+}
+
+// TestDS_L1_FirstUseNotNotedForGoneAccount: an automatic purge holding an
+// account that is no longer the user's (she was deleted and made again: her
+// new "a1" is another mailbox) notes no Trash folder for the new one.
+func TestDS_L1_FirstUseNotNotedForGoneAccount(t *testing.T) {
+	f := newMailFixture(t)
+	f.addAccount(t, mailTestPass, 200)
+	stale := f.srv.mail.account("ana", "a1")
+	f.srv.mail.mu.Lock()
+	delete(f.srv.mail.owners, "ana") // read again: other accounts, one also "a1"
+	f.srv.mail.mu.Unlock()
+	if f.srv.mail.account("ana", "a1") == nil {
+		t.Fatal("no a1 after the reload")
+	}
+	if _, err := f.srv.mail.purgeAccount(t.Context(), "ana", stale, false); !errors.Is(err, errMailGone) {
+		t.Errorf("purge with the old account = %v, want it stopped", err)
+	}
+	f.srv.mail.mu.Lock()
+	noted := f.srv.mail.owners["ana"].state.Trash["a1"]
+	f.srv.mail.mu.Unlock()
+	if noted != "" {
+		t.Errorf("the new a1's Trash noted as %q by the old account's purge", noted)
 	}
 }
 

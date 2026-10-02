@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -64,8 +65,8 @@ func TestDS_I1_DraftKeepsAddressAsTyped(t *testing.T) {
 	d := f.postMail(t, "/api/mail/a1/draft", map[string]any{"to": "juan, Bob <bob@example.com>", "cc": "ana@", "bcc": "Pérez",
 		"subject": "Presupuesto", "text": "Un texto largo que he escrito durante media hora"}, nil, 200)
 	dm := f.mailMsg(t, d["ref"].(string))
-	if dm["toText"] != "juan, Bob <bob@example.com>" || dm["ccText"] != "ana@" || dm["bccText"] != "Pérez" {
-		t.Errorf("draft fields = to %v cc %v bcc %v, want them as typed", dm["toText"], dm["ccText"], dm["bccText"])
+	if dm["toRest"] != "juan" || dm["ccRest"] != "ana@" || dm["bccRest"] != "Pérez" {
+		t.Errorf("draft fields = to %v cc %v bcc %v, want what is no address as typed", dm["toRest"], dm["ccRest"], dm["bccRest"])
 	}
 	if to, _ := json.Marshal(dm["to"]); !strings.Contains(string(to), "bob@example.com") {
 		t.Errorf("the draft's real To = %s, want bob@example.com", to)
@@ -75,8 +76,8 @@ func TestDS_I1_DraftKeepsAddressAsTyped(t *testing.T) {
 	}
 	// a draft whose addresses all parse carries no note
 	ok := f.postMail(t, "/api/mail/a1/draft", map[string]any{"to": "bob@example.com", "subject": "Bien", "text": "x"}, nil, 200)
-	if om := f.mailMsg(t, ok["ref"].(string)); om["toText"] != nil {
-		t.Errorf("a plain draft has toText %v", om["toText"])
+	if om := f.mailMsg(t, ok["ref"].(string)); om["toRest"] != nil {
+		t.Errorf("a plain draft has toRest %v", om["toRest"])
 	}
 	// Send still refuses it, and nothing goes
 	if out := f.postMail(t, "/api/mail/a1/send", map[string]any{"to": "juan", "subject": "Presupuesto", "text": "y"}, nil, 400); out["code"] != "addr" {
@@ -498,6 +499,128 @@ func TestDS_L1_PurgeStopsWhenAccountGone(t *testing.T) {
 	defer c.Close()
 	if d, err := c.Select("Trash", nil).Wait(); err != nil || d.NumMessages != 1 {
 		t.Errorf("the Trash lost its mail (%v)", err)
+	}
+}
+
+// TestDS_I1_StaleKeepSizeFromOpenedDraft: the PC opened the draft (after a
+// reload), so the size it holds for its file is the one the server LISTS -
+// for IMAP an estimate from the encoded length, not the file's bytes. The
+// phone re-saves the draft; the PC's next save still finds the file.
+func TestDS_I1_StaleKeepSizeFromOpenedDraft(t *testing.T) {
+	f, _ := newWriteFixture(t)
+	f.addAccount(t, mailTestPass, 200)
+	file := strings.Repeat("0123456789", 100) // 1000 bytes
+	d1 := f.postMail(t, "/api/mail/a1/draft", map[string]any{"to": "bob@example.com", "subject": "Informe", "text": "v1"},
+		map[string]string{"informe.pdf": file}, 200)
+	ref1, mid := d1["ref"].(string), d1["mid"].(string)
+	parts, _ := f.mailMsg(t, ref1)["parts"].([]any)
+	if len(parts) != 1 {
+		t.Fatalf("parts = %v", parts)
+	}
+	p := parts[0].(map[string]any)
+	if p["size"] == float64(len(file)) {
+		t.Logf("(the listed size is the real one here: %v)", p["size"])
+	}
+	keep := []map[string]any{{"acct": "a1", "ref": ref1, "part": p["id"], "name": "informe.pdf", "size": p["size"]}}
+	f.postMail(t, "/api/mail/a1/draft", map[string]any{"to": "bob@example.com", "subject": "Informe", "text": "v2 from the phone",
+		"mid": mid, "draftRef": ref1, "keep": keep}, nil, 200)
+	pc := f.postMail(t, "/api/mail/a1/draft", map[string]any{"to": "bob@example.com", "subject": "Informe", "text": "v2 from the PC",
+		"mid": mid, "draftRef": ref1, "keep": keep}, nil, 200)
+	resp := do(t, f.owner, "GET", f.base+"/api/mail/a1/att/"+pc["ref"].(string)+"/2", nil, nil)
+	if got := readBody(t, resp); string(got) != file {
+		t.Errorf("PC's draft file = %d bytes, want the 1000 of informe.pdf", len(got))
+	}
+}
+
+// TestDS_I2_SanitizerQuotedTags: a ">" inside a quoted value (title=">")
+// ended the tag for the cleaner, so what came after it in the tag - a
+// javascript: link, an on* handler, a CSS expression, a cid: - was left as
+// it was; a tag whose quote never closes is still cleaned; and a "<style>"
+// inside an attribute's quotes is no <style>: the words after it stay.
+func TestDS_I2_SanitizerQuotedTags(t *testing.T) {
+	attacks := []string{
+		`<a href="javascript:alert(1)">x</a>`,
+		`<a href="&#106;avascript:alert(1)">x</a>`,
+		`<a title=">" href="javascript:alert(1)">x</a>`,
+		`<a title='>' href='javascript:alert(1)'>x</a>`,
+		`<img title=">" src=x onerror="alert(1)">`,
+		`<img src=x onerror=alert(1)>`,
+		`<div style="background:url(javascript:alert(1))">x</div>`,
+		`<div title=">" style="width:expression(alert(1))">x</div>`,
+		`<style>body{behavior:url(x.htc)}</style>`,
+		`<style>@import "javascript:alert(1)";</style>`,
+		`<style title=">">body{background:url(javascript:alert(1))}</style>`,
+		`<style>p{-moz-binding:url(y)}`,
+		`<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">x</a>`,
+		`<a title=">" href="data:text/html,<script>alert(1)</script>">x</a>`,
+		`<!--><a href="javascript:alert(1)">x</a>-->`,
+		`<!-- <a title="--><a href='javascript:alert(1)'>x</a>">`,
+		`<a href="vbscript:msgbox(1)">x</a>`,
+		`<img alt=">" src="cid:logo">`,
+		`<a href=javascript:alert(1)>x</a>`,
+		`<a href="java&#x09;script:alert(1)">x</a>`,
+		`<a href="javascript:alert(1)>x</a><b title="y">z</b>`, // its quote never closes
+		`<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>`,
+	}
+	for _, in := range attacks {
+		out := strings.ToLower(sanitizeMailHTML(in, func(string) string { return "/att/x" }))
+		for _, bad := range []string{"javascript:", "vbscript:", "expression(", "behavior:", "-moz-binding", "data:text/html", "onerror=", "cid:"} {
+			if strings.Contains(out, bad) {
+				t.Errorf("%s\n  -> %s\n  still has %q", in, out, bad)
+			}
+		}
+	}
+	for _, in := range []string{
+		`<style>a{x:y}</style ><p>behavior: ok</p>`,
+		`<p>Expected behavior: it saves. JavaScript: the good parts. expression (a+b)</p>`,
+		`<div title="<style>">Expected behavior: ok</div>`,
+	} {
+		if out := sanitizeMailHTML(in, nil); out != in {
+			t.Errorf("the words changed:\n  %s\n  -> %s", in, out)
+		}
+	}
+}
+
+// TestDS_I6_SendLetGoAfterPanic: a send that broke half way (a panic in the
+// mail code) must not leave its draft held as "being sent" - every Send of
+// it after would be refused until a restart.
+func TestDS_I6_SendLetGoAfterPanic(t *testing.T) {
+	f, _ := newWriteFixture(t)
+	boom := true
+	var sent []string
+	f.srv.mail.newProvider = func(a MailAccount) MailProvider {
+		p := newIMAPProvider(a)
+		p.dial = dialMemIMAP(f.addr)
+		p.smtpCheck = noSMTPCheck
+		p.smtp = func(_ context.Context, _ MailAccount, _ string, _ []string, raw []byte) error {
+			if boom {
+				boom = false
+				panic("broken half way")
+			}
+			sent = append(sent, string(raw))
+			return nil
+		}
+		return p
+	}
+	f.addAccount(t, mailTestPass, 200)
+	mid := "nayive.dspanic@example.com"
+	msg := map[string]any{"to": "bob@example.com", "subject": "Otra vez", "text": "x", "mid": mid}
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	raw, _ := json.Marshal(msg)
+	mw.WriteField("json", string(raw))
+	mw.Close()
+	req, _ := http.NewRequest("POST", f.base+"/api/mail/a1/send", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if resp, err := f.owner.Do(req); err == nil {
+		resp.Body.Close()
+		if resp.StatusCode == 200 {
+			t.Fatal("the broken send answered 200")
+		}
+	}
+	f.postMail(t, "/api/mail/a1/send", msg, nil, 200)
+	if len(sent) != 1 {
+		t.Errorf("sent %d, want 1", len(sent))
 	}
 }
 

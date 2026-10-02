@@ -774,7 +774,7 @@ func (p *imapProvider) Message(ctx context.Context, ref MailRef) (MailMessage, e
 			}
 		}
 		if ref.Role == RoleDrafts {
-			msg.keepTyped(headerText(head, mailTypedTo), headerText(head, mailTypedCc), headerText(head, mailTypedBcc))
+			msg.keepRest(headerText(head, mailTypedTo), headerText(head, mailTypedCc), headerText(head, mailTypedBcc))
 		}
 
 		body, parts, _ := splitMailParts(m.BodyStructure)
@@ -1572,10 +1572,12 @@ func withSection(msgs []*imapclient.FetchMessageBuffer, sec *imap.FetchItemBodyS
 	return nil
 }
 
-// headerText reads one plain-text header out of a header block: unfolded,
-// its RFC 2047 words decoded ("" when it is not there).
+// headerText reads one plain-text header out of a header block: unfolded
+// (the line break goes, the blank after it stays - RFC 5322 2.2.3), its RFC
+// 2047 words decoded - the blanks between two of them go ("" when it is not
+// there).
 func headerText(raw []byte, name string) string {
-	text := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n ", " "), "\r\n\t", " ")
+	text := strings.NewReplacer("\r\n ", " ", "\r\n\t", "\t", "\n ", " ", "\n\t", "\t").Replace(string(raw))
 	for _, line := range strings.Split(text, "\n") {
 		k, v, ok := strings.Cut(line, ":")
 		if !ok || !strings.EqualFold(strings.TrimSpace(k), name) {

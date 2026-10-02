@@ -37,7 +37,7 @@ package main
 //	                                    stays. One draft (its "mid") goes once: 409 "sent" within
 //	                                    mailSentHold; 502 "unsure": no answer once it was handed over
 //	POST   <a>/draft                    the same, into Drafts -> {"ref","mid","parts"} - never refused
-//	                                    for an address that is not one yet: kept as typed (toText...)
+//	                                    for an address that is not one yet: kept as typed (toRest...)
 //	POST   <a>/draft/delete             {"ref"}: a draft, gone for good
 //	GET    contacts                     {"contacts": [{name,email}]}: the "To" field's suggestions
 //
@@ -1025,29 +1025,34 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 		code(http.StatusConflict, "sent", "ese correo ya se envió hace un momento")
 		return
 	}
+	held := guard // let go on every way out (a panic too) unless noted as sent
+	defer func() {
+		if held {
+			s.mail.sendUndo(user, acct, draftMID)
+		}
+	}()
+	sent := func() {
+		if held {
+			s.mail.sendDone(user, acct, draftMID)
+			held = false
+		}
+	}
 	noCopy := false
 	if err := prov.Send(ctx, raw, copy, a.Email, to); err != nil {
 		switch {
 		case errors.Is(err, errMailNoCopy):
 			noCopy = true
 		case errors.Is(err, errMailUnsure): // it may have gone: held as sent, and its draft stays
-			if guard {
-				s.mail.sendDone(user, acct, draftMID)
-			}
+			sent()
 			s.log.Warn("mail: sent or not - no answer once it was handed over; its draft stays", "user", user, "account", acct, "err", err)
 			s.mailFail(w, r, user, acct, err)
 			return
-		default:
-			if guard {
-				s.mail.sendUndo(user, acct, draftMID)
-			}
+		default: // not sent: let go (above)
 			s.mailFail(w, r, user, acct, err)
 			return
 		}
 	}
-	if guard {
-		s.mail.sendDone(user, acct, draftMID)
-	}
+	sent()
 	if noCopy {
 		// The copy in Sent failed (a full mailbox, no Sent folder): its
 		// draft is then the ONLY copy of what was written - it stays, and
@@ -1075,11 +1080,15 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 // Another device saved this draft again meanwhile, so the draft these files
 // were kept from was replaced: every save and Send of this writer answered
 // "gone" for good - its words could never reach the server again (data-safety
-// I1, mail-chat #2). A file comes back only when that draft holds it under
-// the same name and with exactly the same number of bytes, as many of them as
-// this writer misses - never another file of the same name (the other device
-// may have put its own "image.png" in place of ours); otherwise still "gone"
-// (and the app mends it by itself, saying which file to add again).
+// I1, mail-chat #2). A file comes back only when that draft holds one under
+// the same name and of the same size - its length in bytes, or the size the
+// server lists for it (IMAP's is an estimate from the encoded length: what a
+// writer holds after opening a draft) - exactly as many of them as this
+// writer misses, each fitting one of its files only. Never another file of
+// the same name of another size (the other device may have put its own
+// "image.png" in place of ours); otherwise still "gone" (and the app mends it
+// by itself, saying which file to add again). Only names and sizes are
+// compared: two different files of one name and one size would pass.
 func (s *Server) mailKeptAgain(ctx context.Context, user, acct, mid string, keep []mailKeepRef, lost []int, kept []*mailOutFile) error {
 	byAcct := map[string][]int{}
 	for _, i := range lost {
@@ -1106,16 +1115,17 @@ func (s *Server) mailKeptAgain(ctx context.Context, user, acct, mid string, keep
 		if err != nil {
 			return err
 		}
-		key := func(name string, size int64) string { return name + "\x00" + strconv.FormatInt(size, 10) }
-		want := map[string]int{}
-		for _, i := range idx {
-			want[key(keep[i].Name, keep[i].Size)]++
-		}
 		names := map[string]bool{}
 		for _, i := range idx {
 			names[keep[i].Name] = true
 		}
-		have := map[string][]*mailOutFile{}
+		type cand struct {
+			file     *mailOutFile
+			bytes    int64 // its real length
+			listed   int64 // the size the server lists for it
+			assigned bool
+		}
+		var cands []*cand
 		for _, p := range msg.Parts {
 			if p.Inline || !names[p.Name] {
 				continue
@@ -1124,17 +1134,36 @@ func (s *Server) mailKeptAgain(ctx context.Context, user, acct, mid string, keep
 			if err != nil {
 				return err
 			}
-			k := key(part.Name, int64(len(data)))
-			have[k] = append(have[k], &mailOutFile{Name: part.Name, Type: part.Type, Data: data})
+			cands = append(cands, &cand{file: &mailOutFile{Name: p.Name, Type: part.Type, Data: data},
+				bytes: int64(len(data)), listed: p.Size})
 		}
-		for k, n := range want {
-			if len(have[k]) != n { // none, or not one for one: never a guess
+		// the writer's missing files by name and size, in their order
+		groups, order := map[string][]int{}, []string{}
+		for _, i := range idx {
+			k := keep[i].Name + "\x00" + strconv.FormatInt(keep[i].Size, 10)
+			if groups[k] == nil {
+				order = append(order, k)
+			}
+			groups[k] = append(groups[k], i)
+		}
+		for _, k := range order {
+			want := keep[groups[k][0]]
+			var fit []*cand
+			for _, c := range cands {
+				if c.file.Name == want.Name && (c.bytes == want.Size || c.listed == want.Size) {
+					fit = append(fit, c)
+				}
+			}
+			if len(fit) != len(groups[k]) { // none, or not one for one: never a guess
 				return errMailGone
 			}
-		}
-		for _, i := range idx {
-			k := key(keep[i].Name, keep[i].Size)
-			kept[i], have[k] = have[k][0], have[k][1:]
+			for j, c := range fit {
+				if c.assigned { // it fits two of the writer's files: no guess either
+					return errMailGone
+				}
+				c.assigned = true
+				kept[groups[k][j]] = c.file
+			}
 		}
 	}
 	return nil

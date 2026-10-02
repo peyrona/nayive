@@ -845,7 +845,7 @@ func (h *MailHub) purgeAccount(ctx context.Context, user string, a *mailAcct, al
 				return 0, err
 			}
 			if folder != "" && !marked {
-				if err := h.trashFirstUse(user, a.ID, folder); err != nil {
+				if err := h.trashFirstUse(user, a, folder); err != nil {
 					return 0, err
 				}
 			}
@@ -972,13 +972,14 @@ func clockSteady(since, now time.Time) bool {
 // for the Trash the first time - kept in state.json. Another one since (a
 // folder named "Bin" made later, listed before the real one): no purge, and
 // the log says so (data-safety I7, mail-chat #6).
-func (h *MailHub) trashFirstUse(user, acct, folder string) error {
+func (h *MailHub) trashFirstUse(user string, a *mailAcct, folder string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	u := h.userLocked(user)
-	if !slices.ContainsFunc(u.accts, func(x *mailAcct) bool { return x.ID == acct }) {
+	if !slices.Contains(u.accts, a) {
 		return errMailGone // not this user's any more (L1): nothing noted for it
 	}
+	acct := a.ID
 	switch first := u.state.Trash[acct]; {
 	case first == "":
 		u.state.Trash[acct] = folder
@@ -1064,7 +1065,9 @@ func (h *MailHub) RunPurge(ctx context.Context) {
 			n, err := h.purgeAccount(c, j.user, j.a, false)
 			cancel()
 			if err != nil {
-				h.log.Debug("mail: purge failed", "user", j.user, "account", j.a.ID, "err", err)
+				// Warn: a purge that keeps failing (a damaged state.json, a
+				// Trash guess that moved) must be seen in the log
+				h.log.Warn("mail: purge failed", "user", j.user, "account", j.a.ID, "err", err)
 			} else if n > 0 {
 				h.log.Info("mail: trash purged", "user", j.user, "account", j.a.ID, "deleted", n)
 			}

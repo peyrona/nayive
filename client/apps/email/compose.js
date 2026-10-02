@@ -44,7 +44,7 @@
  * ADDRESSES: typed freely ("Ana <ana@x.es>, bob@y.com"); the Contacts app's
  * addresses that fit the word being typed show under the field (arrows +
  * Enter, or a tap). The server checks them all before sending; a draft
- * keeps them as typed, also "juan" (msg.toText - data-safety I1).
+ * keeps them as typed, also "juan" (msg.toRest - data-safety I1).
  *
  * NEVER LOST (data-safety I1, I4): what the writer holds is also kept on
  * this device as it is typed (THE COPY ON THIS DEVICE, below) until the
@@ -186,9 +186,10 @@
                 C.files.push( { kind: "keep", acct: acct, ref: msg.ref, part: p.id, name: p.name, size: p.size } );
             } );
             // its HTML (ours, or one made elsewhere - cleaned down to what
-            // the editor keeps), else its plain text. Its fields as typed when
-            // some of it was no address yet ("juan": a draft keeps it, I1)
-            show( { to: msg.toText || addrs( msg.to ), cc: msg.ccText || addrs( msg.cc ), bcc: msg.bccText || addrs( msg.bcc ),
+            // the editor keeps), else its plain text. What its fields held that
+            // was no address yet ("juan": a draft keeps it, I1) comes after them
+            var field = function ( list, rest ) { return [ addrs( list ), rest || "" ].filter( Boolean ).join( ", " ); };
+            show( { to: field( msg.to, msg.toRest ), cc: field( msg.cc, msg.ccRest ), bcc: field( msg.bcc, msg.bccRest ),
                     subject: msg.subject || "",
                     html: msg.html ? bodyOf( msg.html ) : null, text: msg.text || "" } );
             C.typed = true;
@@ -784,11 +785,13 @@
 
     // Out of the writer: every way here leaves its words safe elsewhere (in
     // Drafts, sent, or binned by the user with an Undo that brings them back
-    // through reopen) - the copy on this device goes.
-    function leave( fromCode )
+    // through reopen) - the copy on this device goes. Except keepLocal: its
+    // words are nowhere else (sent, with no copy in Sent nor in Drafts - I5):
+    // the copy here stays, its lock let go so the next opening offers it.
+    function leave( fromCode, keepLocal )
     {
         closeAttach();
-        if( C ) { clearTimeout( C.timer ); localDrop( C ); dropLid( C ); }
+        if( C ) { clearTimeout( C.timer ); if( ! keepLocal ) localDrop( C ); dropLid( C ); }
         C = null;
         hideSuggest();
         setWriting( false );
@@ -873,12 +876,29 @@
         try
         {
             var r = await post( mine.acct, "send", form( mine.acct, mine ) );
+            E.plug( "synced" );
+            if( r && r.noCopy )
+            {
+                // Sent, but no copy in Sent: no draft of it is deleted. Its
+                // words not in Drafts as they went (a save refused - a full
+                // mailbox -, or typed during it): the copy on this device is
+                // now their ONLY copy - it stays, and comes back the next
+                // time eMail opens (restoreLocal) (data-safety I5).
+                if( ! mine.dirty && mine.draftRef && mine.draftAcct === mine.acct )
+                {
+                    NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
+                    leave( true );
+                    return;
+                }
+                mine.dirty = true;
+                localNow( mine );
+                NayiveUI.toast( E.T( "mail.sentNoCopyHere" ), { ms: 10000 } );
+                leave( true, true );
+                return;
+            }
             if( mine.draftAcct && mine.draftAcct !== mine.acct ) dropDraft( mine.draftAcct, mine.draftRef );   // written in the other account
             if( mine.staleDraft ) dropDraft( mine.staleDraft.acct, mine.staleDraft.ref );
-            E.plug( "synced" );
-            // no copy in Sent: its draft stayed, the only copy of the words (I5)
-            if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
-            else NayiveUI.toast( E.T( "mail.sent" ) );
+            NayiveUI.toast( E.T( "mail.sent" ) );
             leave( true );
         }
         catch( err )

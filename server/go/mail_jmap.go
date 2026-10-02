@@ -1071,7 +1071,7 @@ func (p *jmapProvider) Message(ctx context.Context, ref MailRef) (MailMessage, e
 			}
 			return *p
 		}
-		msg.keepTyped(text(e.TypedTo), text(e.TypedCc), text(e.TypedBcc))
+		msg.keepRest(text(e.TypedTo), text(e.TypedCc), text(e.TypedBcc))
 	}
 	if !msg.Seen {
 		if done, _, err := p.update(ctx, map[string]map[string]any{e.ID: {"keywords/$seen": true}}); err == nil && len(done) == 1 {
