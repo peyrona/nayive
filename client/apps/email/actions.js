@@ -365,7 +365,12 @@
         notSpam: function () { moveTo( targets(), "inbox", function () { NayiveUI.toast( E.T( "mail.movedInbox" ) ); } ); },
         label:   function () { E.openLabelPicker( targets() ); },
 
-        // to the Trash, with Undo: back to where each came from, by Message-ID
+        // to the Trash, with Undo: back to where each came from, by Message-ID.
+        // The server says how many it found and moved back ("restored"): one
+        // it could not find (no Message-ID, two copies under one, gone from
+        // the Trash meanwhile) stays in the Trash, and the purge deletes it
+        // after N days - so the Undo says so instead of seeming to work
+        // (data-safety I9, mail-chat #12).
         del: function ()
         {
             moveTo( targets(), "trash", function ( list )
@@ -374,7 +379,7 @@
                 {
                     run( async function ()
                     {
-                        var groups = {};
+                        var groups = {}, back = 0;
                         list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m.mid ); } );
                         var job = E.job( list.length ), sent = 0;
                         try
@@ -383,12 +388,14 @@
                                 for( var piece of E.chunks( groups[ acct ] ) )
                                 {
                                     job.step( sent );
-                                    await E.api( "POST", encodeURIComponent( acct ) + "/restore", { mids: piece } );
+                                    var r = await E.api( "POST", encodeURIComponent( acct ) + "/restore", { mids: piece } );
+                                    back += ( r && r.restored ) || 0;
                                     sent += piece.length;
                                 }
                         }
                         finally { job.end(); }
                         E.loadList( false );
+                        if( back < list.length ) NayiveUI.toast( E.TF( "mail.notRestoredN", { n: list.length - back } ), { ms: 6000 } );
                     } );
                 } );
             } );

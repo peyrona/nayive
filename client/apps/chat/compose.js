@@ -48,7 +48,7 @@
         composer = h( "div", { class: "composer", attrs: { id: "composer" } }, cbox, sendBtn );
         wireSendHold();
 
-        ta.addEventListener( "input", function ( e ) { smiley( e ); grow(); typing(); } );
+        ta.addEventListener( "input", function ( e ) { smiley( e ); grow(); typing(); C.keepDraft(); } );
         ta.addEventListener( "keydown", function ( e )
         {
             if( e.key === "Backspace" && unSmiley() ) { e.preventDefault(); grow(); return; }
@@ -130,17 +130,95 @@
 
     C.focusComposer = function () { try { ta.focus(); } catch( _ ) {} };
 
-    // A shared link, ready to send (chat.js ?text=).
-    C.fillComposer = function ( text ) { ta.value = text; grow(); };
+    // A shared link, ready to send (chat.js ?text=). After the words already
+    // written in that chat, never over them (J3).
+    C.fillComposer = function ( text )
+    {
+        ta.value = ta.value.trim() ? ta.value.replace( /\s+$/, "" ) + " " + text : text;
+        grow();
+        C.keepDraft();
+    };
 
-    C.resetComposer = function ()
+    // keep: the box only (another chat opening) - that chat's kept words
+    // stay. Otherwise they go too: sent, scheduled, the edit or the reply
+    // given up.
+    C.resetComposer = function ( keep )
     {
         S.replyTo = null;
         S.editing = null;
         if( quoteSlot ) quoteSlot.textContent = "";
         if( ta ) { ta.value = ""; grow(); }
         closePanel();
+        if( ! keep ) C.keepDraft();
     };
+
+    // ---------------------------------------------------------------------
+    // WHAT IS BEING WRITTEN, per chat (data-safety J3, mail-chat #26)
+    //
+    // The box's words - and the message they edit, while it is an edit -
+    // are kept per chat as they are typed: in memory, and in localStorage
+    // ("nayive-chat-draft:<whose>|<world>|<chat>", one item per chat, so two
+    // windows never write over each other's). Opening another chat - a click
+    // in the list, a notification tapped while writing, a shared link -
+    // leaves them there; they come back when that chat opens again, also
+    // after a reload. Sent, scheduled, or the box emptied: they go.
+    // ---------------------------------------------------------------------
+
+    var drafts = {};          // key -> { text, edit }: this page's own copy (localStorage may refuse)
+
+    function draftKey( conv ) { return "nayive-chat-draft:" + ( C.scope() || "?" ) + "|" + C.W( conv ).api + "|" + conv; }
+
+    C.keepDraft = function ()
+    {
+        if( ! S.open || ! ta ) return;
+        var k = draftKey( S.open );
+        var d = ta.value.trim() || S.editing ? { text: ta.value, edit: S.editing ? S.editing.id : 0 } : null;
+        if( d ) drafts[ k ] = d;
+        else delete drafts[ k ];
+        if( ! C.scope() ) return;          // whose is not known yet: this page only
+        try { if( d ) localStorage.setItem( k, JSON.stringify( d ) ); else localStorage.removeItem( k ); } catch( _ ) {}
+    };
+
+    function draftOf( conv )
+    {
+        var k = draftKey( conv );
+        if( drafts[ k ] ) return drafts[ k ];
+        try { return JSON.parse( localStorage.getItem( k ) || "null" ); } catch( _ ) { return null; }
+    }
+
+    // A chat's kept words, back in the box (conv.js openConv). Its edit, if
+    // it was one, once the messages are in: C.restoreEdit.
+    C.restoreDraft = function ( conv )
+    {
+        var d = draftOf( conv );
+        if( ! d || ! ta ) return null;
+        ta.value = d.text || "";
+        grow();
+        return d;
+    };
+
+    C.restoreEdit = function ( conv, d )
+    {
+        if( ! d || ! d.edit || S.open !== conv || S.editing ) return;
+        var m = S.msgs.get( d.edit );
+        if( ! m || m.deleted || m.from !== C.me() ) return;     // gone (or not loaded): the words stay, as a new message
+        var text = ta.value;
+        C.editMsg( m );
+        ta.value = text;
+        grow();
+        C.keepDraft();
+    };
+
+    // A text scheduled from a chat no longer on screen: its kept copy goes
+    // (or it would come back, ready to go a second time).
+    function dropDraftIf( conv, text )
+    {
+        var d = draftOf( conv );
+        if( ! d || String( d.text || "" ).trim() !== text ) return;
+        var k = draftKey( conv );
+        delete drafts[ k ];
+        try { localStorage.removeItem( k ); } catch( _ ) {}
+    }
 
     function quoteBar( title, text, color )
     {
@@ -165,6 +243,7 @@
         quoteBar( T( "chat.editing" ), C.preview( m )[ 1 ], 0 );
         ta.value = m.text || "";
         grow();
+        C.keepDraft();
         C.focusComposer();
     };
 
@@ -197,6 +276,7 @@
                     C.editMsg( m );
                     ta.value = text;
                     grow();
+                    C.keepDraft();
                 }
             }
             return;
@@ -295,6 +375,7 @@
                 var l = await C.api( "POST", "conv/" + conv + "/later", { text: text, at: at, replyTo: reply, cid: cid } );
                 sh.close();
                 if( S.open === conv && ta.value.trim() === text ) C.resetComposer();
+                else dropDraftIf( conv, text );
                 NayiveUI.toast( C.TF( "chat.scheduledFor", { when: whenLabel( l.at ) } ), { ms: 3000 } );
                 var c = C.convOf( conv );
                 if( c && ! ( c.later || [] ).some( function ( x ) { return x.id === l.id; } ) )
@@ -383,10 +464,26 @@
     // Send any JSON message (text, place, contact, poll, a forward) to `conv`
     // (the open one by default), shown at once as "on its way".
     // extra: what only the waiting bubble shows (a photo's local preview).
+    // It goes through THE OUTBOX (below) - but a forward (nothing typed in
+    // it, its original stays), or a page that cannot keep it (no IndexedDB,
+    // whose not known yet), sends it straight, as before.
     C.sendMsg = async function ( body, conv, extra )
     {
         conv = conv || S.open;
         body.cid = body.cid || C.rid();
+        if( body.fwdConv || ! C.scope() || ! window.indexedDB ) return sendNow( body, conv, extra );
+        var r = { app: "chat:" + body.cid, cid: body.cid, who: C.scope(), api: C.W( conv ).api, conv: conv, body: body,
+                  extra: extra && extra.file ? { file: extra.file } : null, at: Date.now(), dead: false };
+        outbox.set( r.cid, r );
+        outPut( r );
+        if( conv === S.open ) unsentTemp( r, extra );
+        C.renderList();
+        await flow( r.api + "|" + conv, true );
+        return null;
+    };
+
+    async function sendNow( body, conv, extra )
+    {
         var temp = null;
         if( conv === S.open && ! body.fwdConv )
             temp = C.addTemp( Object.assign( {}, body, extra || {}, { cid: body.cid } ) );
@@ -402,21 +499,259 @@
             if( temp )
             {
                 temp._body = body;
-                if( extra ) temp._retry = function () { C.sendMsg( body, conv, extra ); };
+                if( extra ) temp._retry = function () { sendNow( body, conv, extra ); };
                 C.failTemp( temp );
             }
             C.fail( e );
             return null;
         }
-    };
+    }
 
     C.retry = function ( m )
     {
         if( m._retry ) { C.dropTemp( m ); m._retry(); return; }
+        var r = outbox.get( m.cid );
+        if( r )
+        {
+            if( r.dead ) { r.dead = false; outPut( r ); }
+            flow( r.api + "|" + r.conv, true );
+            return;
+        }
         if( ! m._body ) return;
         C.dropTemp( m );
         C.sendMsg( m._body );
     };
+
+    // ---------------------------------------------------------------------
+    // THE OUTBOX (data-safety J2, mail-chat #18)
+    //
+    // A message is kept on this device from the moment Send is pressed until
+    // the server has it: IndexedDB "nayive-drafts" (shared/office.js's
+    // database of device drafts - sign-out counts what still waits there,
+    // asks, and empties it), one record per message, "chat:<cid>". With no
+    // network (a lift, a tunnel) or a failing server it waits there, shown
+    // in its chat (the clock; the red mark once a try failed - a tap tries
+    // again) and in the list, and goes again by itself: when the network is
+    // back ("online"), when its chat opens, when the page is seen again, and
+    // on the next load. Leaving the chat or reloading never loses it, and it
+    // never arrives twice: the server answers a cid it already has with
+    // that same message (api_chat.go chatSend). In each chat they go one
+    // after the other, in the order written. One the server refuses for good
+    // (a 4xx: the chat is gone, I am no longer in it) is "dead": it stops
+    // going by itself and no longer holds the others back; its menu (hold
+    // it, or right-click) copies or deletes it. Records are this account's
+    // (or this link's) only: { app, cid, who, api, conv, body, extra, at,
+    // dead }. Not here: a photo or file from this device (media.js upload,
+    // its bytes).
+    // ---------------------------------------------------------------------
+
+    var outbox = new Map();     // cid -> record: mine, not on the server yet
+    var flows  = {};            // "<world api>|<chat>" -> the run sending that chat's, while one is on
+
+    var odb = null;
+    function outDb()
+    {
+        if( odb ) return odb;
+        odb = new Promise( function ( resolve )
+        {
+            var rq;
+            try { rq = indexedDB.open( "nayive-drafts", 1 ); }
+            catch( _ ) { resolve( null ); return; }
+            // the same upgrade as shared/office.js: whoever opens it first makes it
+            rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
+            rq.onsuccess = function () { resolve( rq.result ); };
+            rq.onerror = rq.onblocked = function () { resolve( null ); };
+        } );
+        return odb;
+    }
+
+    // fn( objectStore ) -> request: its result once the transaction is done (null on any failure).
+    function outTx( mode, fn )
+    {
+        return outDb().then( function ( db )
+        {
+            if( ! db ) return null;
+            return new Promise( function ( resolve )
+            {
+                try
+                {
+                    var tx = db.transaction( "drafts", mode );
+                    var rq = fn( tx.objectStore( "drafts" ) );
+                    tx.oncomplete = function () { resolve( rq && rq.result !== undefined ? rq.result : null ); };
+                    tx.onerror = tx.onabort = function () { resolve( null ); };
+                }
+                catch( _ ) { resolve( null ); }
+            } );
+        } );
+    }
+
+    function outPut( r )
+    {
+        var rec = { app: r.app, cid: r.cid, who: r.who, api: r.api, conv: r.conv, body: r.body, extra: r.extra, at: r.at, dead: r.dead };
+        return outTx( "readwrite", function ( os ) { return os.put( rec ); } );
+    }
+    function outDel( cid ) { return outTx( "readwrite", function ( os ) { return os.delete( "chat:" + cid ); } ); }
+
+    // What an earlier page left waiting (chat.js, once the list is in).
+    C.loadOutbox = async function ()
+    {
+        if( ! window.indexedDB ) return;
+        await C.whoami();
+        var who = C.scope();
+        if( ! who ) return;
+        var all = await outTx( "readonly", function ( os ) { return os.getAll( IDBKeyRange.bound( "chat:", "chat:\uffff" ) ); } ) || [];
+        all.forEach( function ( r ) { if( r.who === who && r.cid && ! outbox.has( r.cid ) ) outbox.set( r.cid, r ); } );
+        if( ! outbox.size ) return;
+        C.renderList();
+        if( S.open ) C.showUnsent( S.open );
+        C.flushOutbox();
+    };
+
+    // Every chat's waiting messages on their way again (conv: that chat's only).
+    C.flushOutbox = function ( conv )
+    {
+        var keys = {};
+        outbox.forEach( function ( r ) { if( ! r.dead && ( ! conv || r.conv === conv ) ) keys[ r.api + "|" + r.conv ] = true; } );
+        return Promise.all( Object.keys( keys ).map( function ( k ) { return flow( k, false ); } ) );
+    };
+
+    // One chat's, in the order written. loud: a send just made (or a tap on
+    // "try again") - its failure is told; the quiet ones (a reconnect, a
+    // load) only change the marks.
+    function flow( key, loud )
+    {
+        var f = flows[ key ];
+        if( f ) { f.again = true; f.loud = f.loud || !! loud; return f.done; }
+        f = flows[ key ] = { again: true, loud: !! loud };
+        f.done = ( async function ()
+        {
+            try
+            {
+                while( f.again )
+                {
+                    f.again = false;
+                    var list = waitingIn( key );
+                    for( var i = 0; i < list.length; i++ )
+                    {
+                        if( ! outbox.has( list[ i ].cid ) ) continue;            // deleted meanwhile
+                        if( await sendOne( list[ i ], f ) ) continue;
+                        list.slice( i + 1 ).forEach( function ( r ) { mark( r, "failed" ); } );   // behind it: they wait too
+                        break;
+                    }
+                }
+            }
+            finally { delete flows[ key ]; }
+        } )();
+        return f.done;
+    }
+
+    function waitingIn( key )
+    {
+        return Array.from( outbox.values() ).filter( function ( r ) { return ! r.dead && r.api + "|" + r.conv === key; } )
+                    .sort( function ( a, b ) { return a.at - b.at; } );
+    }
+
+    // True: sent - or refused for good (the next may go).
+    async function sendOne( r, f )
+    {
+        mark( r, "pending" );
+        try
+        {
+            var m = await C.api( "POST", "conv/" + r.conv + "/messages", r.body, { base: r.api } );
+            outbox.delete( r.cid );
+            outDel( r.cid );
+            var t = tempOf( r );
+            if( t ) C.settleTemp( t, m );
+            else if( openHere( r ) ) C.loadSince();
+            C.renderList();
+            return true;
+        }
+        catch( e )
+        {
+            var st = e && e.status;
+            if( st >= 400 && st < 500 && st !== 401 && st !== 408 && st !== 429 ) { r.dead = true; outPut( r ); }
+            mark( r, "failed" );
+            if( f.loud ) { f.loud = false; C.fail( e ); }
+            return r.dead;
+        }
+    }
+
+    function openHere( r ) { return S.open === r.conv && C.W( S.open ).api === r.api; }
+
+    // Its bubble in the open chat, if it is that one's.
+    function tempOf( r )
+    {
+        if( ! openHere( r ) ) return null;
+        var found = null;
+        S.msgs.forEach( function ( m, id ) { if( id < 0 && m.cid === r.cid ) found = m; } );
+        return found;
+    }
+
+    function mark( r, state )
+    {
+        var was = r.state;
+        r.state = state;
+        var t = tempOf( r );
+        if( t && ( t.pending !== ( state === "pending" ) || t.failed !== ( state === "failed" ) ) )
+        {
+            t.pending = state === "pending";
+            t.failed  = state === "failed";
+            C.redraw( t.id );
+        }
+        if( was !== state ) C.renderList();
+    }
+
+    function unsentTemp( r, extra )
+    {
+        var look = extra || r.extra || {};
+        // a photo from the owner's files ("ref"): its picture, from there
+        if( r.body.ref && ! look.localUrl ) look = Object.assign( {}, look, { localUrl: "/api/files?file=" + encodeURIComponent( r.body.ref ) } );
+        var t = C.addTemp( Object.assign( {}, r.body, look, { cid: r.cid, at: r.at } ) );
+        if( r.state === "failed" || r.dead ) { t.pending = false; t.failed = true; C.redraw( t.id ); }
+        return t;
+    }
+
+    // The open chat's waiting messages, as bubbles (conv.js openConv).
+    C.showUnsent = function ( conv )
+    {
+        Array.from( outbox.values() ).filter( function ( r ) { return openHere( r ) && r.conv === conv && ! tempOf( r ); } )
+             .sort( function ( a, b ) { return a.at - b.at; } )
+             .forEach( function ( r ) { unsentTemp( r, null ); } );
+    };
+
+    // A chat's newest waiting message, for its row in the list (list.js),
+    // and whether one of them failed.
+    C.unsentOf = function ( c )
+    {
+        var api = C.W( c ).api, last = null, failed = false;
+        outbox.forEach( function ( r )
+        {
+            if( r.conv !== c.id || r.api !== api ) return;
+            if( ! last || r.at > last.at ) last = r;
+            if( r.dead || r.state === "failed" ) failed = true;
+        } );
+        return last ? { r: last, failed: failed } : null;
+    };
+
+    C.isUnsent = function ( m ) { return !! m && m.id < 0 && outbox.has( m.cid ); };
+
+    // Delete one still here (its menu), with "Undo".
+    C.dropUnsent = function ( m )
+    {
+        var r = outbox.get( m.cid );
+        C.dropTemp( m );
+        if( ! r ) return;               // a failed upload's bubble (media.js): just that
+        outbox.delete( r.cid );
+        C.renderList();
+        NayiveUI.undoToast( T( "chat.deletedToast" ), function ()
+        {
+            outbox.set( r.cid, r );
+            if( S.open === r.conv ) C.showUnsent( r.conv );
+            C.renderList();
+        }, { onExpire: function () { outDel( r.cid ); } } );
+    };
+
+    window.addEventListener( "online", function () { C.flushOutbox(); } );
 
     // ---------------------------------------------------------------------
     // the emoji and clip panels
@@ -444,6 +779,7 @@
         ta.value = ta.value.slice( 0, a ) + text + ta.value.slice( b );
         ta.selectionStart = ta.selectionEnd = a + text.length;
         grow();
+        C.keepDraft();
         ta.focus();
     }
 
@@ -527,6 +863,31 @@
         el.addEventListener( "dblclick", function ( e ) { if( ! e.target.closest( "a, img, .quote" ) && matchMedia( "(pointer: fine)" ).matches ) C.replyTo( m ); } );
     };
 
+    // A bubble not on the server yet (THE OUTBOX, or a failed upload): a tap
+    // on a failed one tries again; held (or right-clicked) - its menu: try
+    // again, copy, delete. One still going up (its percent) has neither.
+    C.wireUnsent = function ( el, m )
+    {
+        var timer = null, held = false;
+        function menu() { return C.isUnsent( m ) || m.failed; }
+        el.addEventListener( "click", function ()
+        {
+            if( held ) { held = false; return; }      // the end of a hold
+            if( m.failed ) C.retry( m );
+        } );
+        el.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); if( menu() ) C.openCtx( m ); } );
+        el.addEventListener( "pointerdown", function ( e )
+        {
+            held = false;
+            if( e.pointerType === "mouse" || ! menu() ) return;
+            timer = setTimeout( function () { timer = null; held = true; C.openCtx( m ); }, 480 );
+        } );
+        function stop() { clearTimeout( timer ); timer = null; }
+        el.addEventListener( "pointerup", stop );
+        el.addEventListener( "pointercancel", stop );
+        el.addEventListener( "pointerleave", stop );
+    };
+
     // ---------------------------------------------------------------------
     // the menu of one message
     // ---------------------------------------------------------------------
@@ -535,6 +896,7 @@
     {
         if( document.querySelector( ".ctx" ) ) return;
         var mine = m.from === C.me();
+        var unsent = m.id < 0;     // still on this device (THE OUTBOX, a failed upload): no reactions, its own three
         var layer = h( "div", { class: "ctx " + ( mine ? "out" : "in" ) } );
         var box = h( "div", { class: "ctx-box" } );
         layer.appendChild( box );
@@ -558,7 +920,7 @@
                                    } } } );
         moreB.appendChild( C.ic( "plus" ) );
         reacts.appendChild( moreB );
-        box.appendChild( reacts );
+        if( ! unsent ) box.appendChild( reacts );
 
         var copy = C.bubble( m, null );
         copy.querySelectorAll( ".caret" ).forEach( function ( x ) { x.remove(); } );
@@ -575,22 +937,33 @@
                                                  if( opensLayer ) { C.popNav( "ctx", fn ); close(); } else { done(); fn(); }
                                              } } }, C.ic( icon ), T( key ) ) );
         }
-        item( "reply", "chat.reply", function () { C.replyTo( m ); } );
-        item( "forward", "chat.forward", function () { C.openForward( m ); } );
-        if( m.text || ( m.card && m.card.name ) )
-            item( "copy", "chat.copy", function () { C.copyText( m.text || m.card.name ); } );
-        if( mine && ( m.kind === "text" || m.kind === "file" ) )
-            item( "edit", "chat.edit", function () { C.editMsg( m ); } );
-        // A photo has two: its caption, and (the owner) the picture itself.
-        if( m.kind === "photo" && mine ) item( "edit", "chat.editMsg", function () { C.editMsg( m ); } );
-        if( m.kind === "photo" && m.id > 0 && C.canEditPhotos() ) item( "image", "chat.editPhoto", function () { C.editPhoto( m ); } );
-        // Where it was taken: the server reads it from the photo's GPS.
-        if( m.kind === "photo" && m.file && m.file.pos ) item( "pin-map", "photos.seeOnMap", function () { C.openMap( m.file.pos ); }, false, true );
-        if( mine ) item( "info", "chat.info", function () { C.msgInfo( m ); } );
-        if( mine )
+        if( unsent )
         {
+            if( m.failed ) item( "refresh", "chat.retry", function () { C.retry( m ); } );
+            if( m.text || ( m.card && m.card.name ) )
+                item( "copy", "chat.copy", function () { C.copyText( m.text || m.card.name ); } );
             menu.appendChild( h( "div", { class: "menu-sep" } ) );
-            item( "trash", "chat.delete", function () { C.deleteMsg( m ); }, true );
+            item( "trash", "chat.delete", function () { C.dropUnsent( m ); }, true );
+        }
+        else
+        {
+            item( "reply", "chat.reply", function () { C.replyTo( m ); } );
+            item( "forward", "chat.forward", function () { C.openForward( m ); } );
+            if( m.text || ( m.card && m.card.name ) )
+                item( "copy", "chat.copy", function () { C.copyText( m.text || m.card.name ); } );
+            if( mine && ( m.kind === "text" || m.kind === "file" ) )
+                item( "edit", "chat.edit", function () { C.editMsg( m ); } );
+            // A photo has two: its caption, and (the owner) the picture itself.
+            if( m.kind === "photo" && mine ) item( "edit", "chat.editMsg", function () { C.editMsg( m ); } );
+            if( m.kind === "photo" && m.id > 0 && C.canEditPhotos() ) item( "image", "chat.editPhoto", function () { C.editPhoto( m ); } );
+            // Where it was taken: the server reads it from the photo's GPS.
+            if( m.kind === "photo" && m.file && m.file.pos ) item( "pin-map", "photos.seeOnMap", function () { C.openMap( m.file.pos ); }, false, true );
+            if( mine ) item( "info", "chat.info", function () { C.msgInfo( m ); } );
+            if( mine )
+            {
+                menu.appendChild( h( "div", { class: "menu-sep" } ) );
+                item( "trash", "chat.delete", function () { C.deleteMsg( m ); }, true );
+            }
         }
         box.appendChild( menu );
 

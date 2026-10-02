@@ -41,6 +41,11 @@
  * ADDRESSES: typed freely ("Ana <ana@x.es>, bob@y.com"); the Contacts app's
  * addresses that fit the word being typed show under the field (arrows +
  * Enter, or a tap). The server checks them all before sending.
+ *
+ * NEVER LOST (data-safety I1, I4): what the writer holds is also kept on
+ * this device as it is typed (THE COPY ON THIS DEVICE, below) until the
+ * server has it; it comes back the next time eMail opens. Closing with
+ * something not in Drafts yet asks first (THE CLOSE GUARD).
  */
 ( function ()
 {
@@ -58,10 +63,25 @@
 
     function blank()
     {
-        return { acct: S.acct, mid: "", draftRef: "", draftAcct: "", staleDraft: null,
+        return { acct: S.acct, mid: newMid( S.acct ), draftRef: "", draftAcct: "", staleDraft: null,
                  inReplyTo: "", references: [], sig: "",
-                 files: [],     // { kind: "keep"|"drive"|"up", name, size, acct?, ref?, part?, path?, file? }
-                 dirty: false, typed: false, saving: null, timer: 0, again: false, sending: false };
+                 files: [],     // { kind: "keep"|"drive"|"up", name, size, acct?, ref?, part?, path?, file?, fid? }
+                 dirty: false, typed: false, saving: null, timer: 0, again: false, sending: false,
+                 lid: newLid(), // its copy on this device ("email:<lid>"), and its Web Lock
+                 failed: null, warned: "" };
+    }
+
+    function newLid() { return Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 8 ); }
+
+    // A new writer's Message-ID, made here: every save carries it (the
+    // server keeps a draft's own across saves), so a copy left on this
+    // device finds its draft on the server even when the first save's
+    // answer never came (serverDraft). The mail SENT gets a fresh one from
+    // the server (api_mail.go).
+    function newMid( acct )
+    {
+        var a = E.account( acct ), host = a && /@([^@\s<>]+)$/.exec( a.email || "" );
+        return "nayive." + newLid() + newLid() + "@" + ( host ? host[ 1 ] : "nayive.local" );
     }
 
     // ---------------------------------------------------------------------
@@ -147,6 +167,9 @@
         {
             var msg = await E.api( "GET", encodeURIComponent( acct ) + "/msg/" + encodeURIComponent( m.ref ) + "?mid=" + encodeURIComponent( m.mid || "" ) );
             E.plug( "synced" );
+            // words of it that never reached the server (a closed page, saves
+            // refused): those are newer than the draft - they come back instead
+            if( await reopenLocal( acct, msg ) ) return;
             C = blank();
             C.acct = acct;
             C.mid = msg.mid || "";
@@ -410,6 +433,7 @@
         E.$( "cStatus" ).textContent = "";
         renderFiles();
         setWriting( true );
+        holdLid( C );
         try
         {
             if( replaceHistory ) history.replaceState( { mailWrite: 1 }, "" );
@@ -501,6 +525,7 @@
         {
             if( totalSize() + ( f.size || 0 ) > MAX ) { NayiveUI.toast( E.T( "mail.err.big" ), { ms: 3500 } ); return; }
             C.files.push( f );
+            if( f.kind === "up" ) localFile( C, f );     // its bytes, once (not on every keystroke)
             added++;
         } );
         if( added ) { renderFiles(); changed(); }
@@ -516,6 +541,7 @@
         C.dirty = true;
         C.typed = true;
         schedule();
+        localSoon( C );
     }
 
     // The next save: a few seconds after the last change - a minute with
@@ -567,8 +593,14 @@
         var json = JSON.stringify( out );
         fd.append( "json", json );
         fd.sent = keep.concat( drive, up );
-        // small, no files: it may outlive the page (a save on leaving)
-        fd.small = ! up.length && json.length < 60000;
+        // small, no files: it may outlive the page (a save on leaving). The
+        // browser refuses a keepalive body over 64 KiB of BYTES (and counts
+        // every keepalive request on its way together): the JSON's UTF-8
+        // size, with room for the form's own envelope - a string's length
+        // counts UTF-16 units, and Cyrillic or Chinese text takes two or
+        // three bytes each, so `json.length` let such a draft fail every
+        // save as "offline" (mail-chat #11)
+        fd.small = ! up.length && new Blob( [ json ] ).size < 60000;
         return fd;
     }
 
@@ -667,12 +699,28 @@
                 else mine.dirty = true;     // cannot tell which is which: send them all again
                 if( C === mine ) { renderFiles(); stamp( "mail.draftSaved" ); }
                 if( ! S.label && S.tray === "drafts" && ! S.open ) E.loadList( false );
+                mine.warned = "";
+                // the server has the newest words: the copy here goes; typed
+                // during the save: it stays, now pointing at the new draft
+                if( mine.dirty ) localSoon( mine );
+                else localDrop( mine );
             }
             catch( err )
             {
                 mine.dirty = true;
                 mine.failed = err;
                 if( C === mine ) E.$( "cStatus" ).textContent = E.errText( err );
+                localNow( mine );
+                // Said out loud, not only in the small line under the fields
+                // (a To like "juan" refused, a kept file "gone": every save
+                // fails the same way) - once per reason, and not when ← or
+                // Send is about to say it. Any toast ends a pending Undo, so
+                // never one every 4 s.
+                if( C === mine && ! mine.closing && ! mine.sending && mine.warned !== err.code )
+                {
+                    mine.warned = err.code;
+                    NayiveUI.toast( E.TF( "mail.draftNotSaved", { why: E.errText( err ) } ), { ms: 6000 } );
+                }
                 return;
             }
             finally
@@ -721,10 +769,13 @@
         leave( fromCode );
     };
 
+    // Out of the writer: every way here leaves its words safe elsewhere (in
+    // Drafts, sent, or binned by the user with an Undo that brings them back
+    // through reopen) - the copy on this device goes.
     function leave( fromCode )
     {
         closeAttach();
-        if( C ) clearTimeout( C.timer );
+        if( C ) { clearTimeout( C.timer ); localDrop( C ); dropLid( C ); }
         C = null;
         hideSuggest();
         setWriting( false );
@@ -746,6 +797,7 @@
         C.sending = false;
         show( fields, fromRead );
         if( C.dirty ) schedule();
+        localSoon( C );
     }
 
     // The bin: out of the writer at once, with Undo; the draft is deleted
@@ -884,6 +936,333 @@
     }
 
     // ---------------------------------------------------------------------
+    // THE COPY ON THIS DEVICE (data-safety I1, I4 - mail-chat #1 #2 #10 #11
+    // #15 #16)
+    //
+    // A save to Drafts can fail for a long time - a To like "juan" refused,
+    // a file kept from a draft another device re-saved now "gone", no
+    // network, the session over - and a tab closed, a desktop window's ×, a
+    // phone killing the page or the session bar's "Sign in" would then lose
+    // everything since the last good save. So the writer is also kept HERE,
+    // a moment after each change: IndexedDB "nayive-drafts" (shared/
+    // office.js's database of device drafts - sign-out counts it, asks, and
+    // empties it: nothing outlives the session), one record per writer,
+    // "email:<lid>", and each file from this device once, in a record of its
+    // own ("email:<lid>#<fid>": a Blob is never re-written per keystroke).
+    // The copy goes when the server has the newest words (a save, the
+    // writer closed, sent or binned) and comes back the next time eMail
+    // opens (restoreLocal), or that draft is opened (reopenLocal). Each
+    // writer on screen holds the Web Lock "nayive-mail-writer:<lid>": a
+    // copy whose lock is held is being written in another tab or window -
+    // left alone. Every step here may fail quietly (private mode, no
+    // IndexedDB): the writer then works as before.
+    // ---------------------------------------------------------------------
+
+    var KEEP_AFTER = 300;   // ms after the last change: the copy here
+
+    var ldb = null;
+    function openLocal()
+    {
+        if( ldb ) return ldb;
+        ldb = new Promise( function ( resolve )
+        {
+            var rq;
+            try { rq = indexedDB.open( "nayive-drafts", 1 ); }
+            catch( e ) { resolve( null ); return; }
+            // the same upgrade as shared/office.js: whoever opens it first makes it
+            rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
+            rq.onsuccess = function () { resolve( rq.result ); };
+            rq.onerror = rq.onblocked = function () { resolve( null ); };
+        } );
+        return ldb;
+    }
+
+    // fn( objectStore ) -> request: its result once the transaction is done (null on any failure).
+    function localTx( mode, fn )
+    {
+        return openLocal().then( function ( db )
+        {
+            if( ! db ) return null;
+            return new Promise( function ( resolve )
+            {
+                try
+                {
+                    var tx = db.transaction( "drafts", mode );
+                    var rq = fn( tx.objectStore( "drafts" ) );
+                    tx.oncomplete = function () { resolve( rq && rq.result !== undefined ? rq.result : null ); };
+                    tx.onerror = tx.onabort = function () { resolve( null ); };
+                }
+                catch( e ) { resolve( null ); }
+            } );
+        } );
+    }
+
+    function localKey( lid ) { return "email:" + lid; }
+    function filesOf( lid ) { return IDBKeyRange.bound( localKey( lid ) + "#", localKey( lid ) + "#￿" ); }
+
+    // Something of this writer is not in Drafts yet.
+    function pending( mine ) { return !! mine && mine.typed && ( mine.dirty || !! mine.saving || !! mine.failed ); }
+
+    function localSoon( mine )
+    {
+        if( ! mine ) return;
+        clearTimeout( mine.ltimer );
+        mine.ltimer = setTimeout( function () { localNow( mine ); }, KEEP_AFTER );
+    }
+
+    // The writer on screen, as it is now (only that one: its words are read
+    // from the fields).
+    function localNow( mine )
+    {
+        if( ! mine ) return;
+        clearTimeout( mine.ltimer );
+        if( mine !== C || ! pending( mine ) || empty() ) return;
+        var f = fieldsNow();
+        var rec = {
+            app: localKey( mine.lid ), who: S.user || "", at: Date.now(), lid: mine.lid,
+            acct: mine.acct, mid: mine.mid, draftRef: mine.draftRef, draftAcct: mine.draftAcct, staleDraft: mine.staleDraft,
+            inReplyTo: mine.inReplyTo, references: mine.references, sig: mine.sig,
+            fields: { to: f.to, cc: f.cc, bcc: f.bcc, subject: f.subject, html: f.html },
+            files: mine.files.map( function ( x )
+            {
+                return { kind: x.kind, name: x.name, size: x.size, acct: x.acct, ref: x.ref, part: x.part, path: x.path, fid: x.fid };
+            } )
+        };
+        localTx( "readwrite", function ( os ) { return os.put( rec ); } );
+    }
+
+    // A file from this device: its bytes, once.
+    function localFile( mine, f )
+    {
+        f.fid = newLid();
+        localTx( "readwrite", function ( os ) { return os.put( { app: localKey( mine.lid ) + "#" + f.fid, who: S.user || "", at: Date.now(), blob: f.file } ); } );
+    }
+
+    function localDrop( mine )
+    {
+        if( ! mine ) return;
+        clearTimeout( mine.ltimer );
+        localTx( "readwrite", function ( os ) { os.delete( filesOf( mine.lid ) ); return os.delete( localKey( mine.lid ) ); } );
+    }
+
+    // This account's copies (no file records), newest first.
+    async function localAll()
+    {
+        var all = await localTx( "readonly", function ( os ) { return os.getAll( IDBKeyRange.bound( "email:", "email:￿" ) ); } ) || [];
+        return all.filter( function ( r ) { return r.lid && r.app === localKey( r.lid ) && r.who && r.who === S.user; } )
+                  .sort( function ( a, b ) { return b.at - a.at; } );
+    }
+
+    // The Web Lock of a writer on screen: taken when it shows, let go when it
+    // leaves. claim: only if nobody holds it (a copy another tab may be
+    // restoring at the same moment) - false then.
+    function holdLid( mine, claim )
+    {
+        if( mine.lock ) return Promise.resolve( true );
+        if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.resolve( true );   // no locks here: never known taken
+        var lock = new Promise( function ( resolve )
+        {
+            navigator.locks.request( "nayive-mail-writer:" + mine.lid, { ifAvailable: !! claim }, function ( l )
+            {
+                if( ! l ) { resolve( null ); return null; }
+                return new Promise( function ( release ) { resolve( release ); } );
+            } ).catch( function () { resolve( null ); } );
+        } );
+        mine.lock = lock;
+        return lock.then( function ( release )
+        {
+            if( ! release && mine.lock === lock ) mine.lock = null;
+            return !! release;
+        } );
+    }
+
+    function dropLid( mine )
+    {
+        var l = mine.lock;
+        mine.lock = null;
+        if( l ) l.then( function ( release ) { if( release ) release(); } );
+    }
+
+    // A record back into a writer (not shown yet: its words are d.fields, for
+    // reopen); the files from this device come with their bytes (one whose
+    // bytes are not here is left out).
+    async function fromLocal( d )
+    {
+        var mine = blank();
+        [ "acct", "mid", "draftRef", "draftAcct", "staleDraft", "inReplyTo", "references", "sig" ].forEach( function ( k )
+        {
+            if( d[ k ] !== undefined ) mine[ k ] = d[ k ];
+        } );
+        mine.lid = d.lid;
+        if( ! E.account( mine.acct ) ) { mine.acct = S.acct; mine.draftRef = ""; mine.draftAcct = ""; }   // its account was removed
+        var blobs = {};
+        ( await localTx( "readonly", function ( os ) { return os.getAll( filesOf( d.lid ) ); } ) || [] ).forEach( function ( r )
+        {
+            blobs[ r.app.slice( localKey( d.lid ).length + 1 ) ] = r.blob;
+        } );
+        mine.files = ( d.files || [] ).filter( function ( f ) { return f.kind !== "up" || blobs[ f.fid ]; } ).map( function ( f )
+        {
+            var x = Object.assign( {}, f );
+            if( x.kind === "up" ) x.file = blobs[ x.fid ];
+            return x;
+        } );
+        mine.typed = true;
+        mine.dirty = true;          // not in Drafts as it is: saved again
+        return mine;
+    }
+
+    // The server's draft of a copy: the one with its Message-ID in the
+    // Drafts tray (its first page), read whole - null when none is there
+    // (or no answer: the copy then comes back, the safe way).
+    async function serverDraft( d )
+    {
+        if( ! d.mid || ! E.account( d.acct ) ) return null;
+        try
+        {
+            var l = await E.api( "GET", encodeURIComponent( d.acct ) + "/list?tray=drafts" );
+            var row = ( l.items || [] ).filter( function ( m ) { return m.mid && m.mid === d.mid; } )[ 0 ];
+            return row ? await E.api( "GET", encodeURIComponent( d.acct ) + "/msg/" + encodeURIComponent( row.ref ) ) : null;
+        }
+        catch( e ) { return null; }
+    }
+
+    // That draft already holds the copy's words - the save sent as the page
+    // went did arrive: the same subject, addresses, text and number of
+    // files. Anything that differs (or cannot be told) brings the copy back.
+    function sameWords( d, msg )
+    {
+        var f = d.fields || {};
+        var words = function ( t ) { return String( t || "" ).replace( /\s+/g, " " ).trim(); };
+        var who = function ( t ) { return ( String( t || "" ).toLowerCase().match( /[^\s<>,;"]+@[^\s<>,;"]+/g ) || [] ).sort().join( "," ); };
+        var addrs = function ( l ) { return ( l || [] ).map( function ( a ) { return a.addr; } ).join( "," ); };
+        var doc = new DOMParser().parseFromString( f.html || "", "text/html" );       // inert: loads nothing
+        return words( msg.subject ) === words( f.subject ) &&
+               who( f.to ) === who( addrs( msg.to ) ) && who( f.cc ) === who( addrs( msg.cc ) ) && who( f.bcc ) === who( addrs( msg.bcc ) ) &&
+               ( d.files || [] ).length === ( msg.parts || [] ).filter( function ( p ) { return ! p.inline; } ).length &&
+               !! doc.body && words( msg.text ) === words( plainText( doc.body ) );
+    }
+
+    // A copy back in the writer. `msg`: its draft on the server - the saves
+    // from now on replace that one (not an older ref it may point at: the
+    // phone, or the save as the page went, re-saved it since); the files
+    // then as the server has them, with those from this device or Drive.
+    async function resume( d, msg )
+    {
+        var mine = await fromLocal( d );
+        if( C || ! await holdLid( mine, true ) ) return false;     // another tab has it on screen
+        if( C ) { dropLid( mine ); return false; }
+        if( msg && E.account( d.acct ) && d.draftRef !== msg.ref )
+        {
+            mine.acct = mine.draftAcct = d.acct;
+            mine.draftRef = msg.ref;
+            mine.files = ( msg.parts || [] ).filter( function ( p ) { return ! p.inline; } ).map( function ( p )
+            {
+                return { kind: "keep", acct: d.acct, ref: msg.ref, part: p.id, name: p.name, size: p.size };
+            } ).concat( mine.files.filter( function ( f ) { return f.kind !== "keep"; } ) );
+        }
+        reopen( mine, d.fields );
+        NayiveUI.toast( E.T( "mail.restoredLocal" ), { ms: 5000 } );
+        return true;
+    }
+
+    // eMail opening: the newest copy left by a writer that is gone (a tab
+    // closed, a window's ×, a page the phone killed, a sign-in) comes back
+    // in the writer, and goes to Drafts with the next save. One per opening.
+    // A copy whose words reached Drafts after all is only dropped.
+    var restoring = false;
+    E.restoreLocal = async function ()
+    {
+        if( C || restoring || ! S.accounts.length ) return;
+        restoring = true;
+        try
+        {
+            if( ! S.user ) await E.whoami();
+            if( ! S.user ) return;
+            var all = await localAll();
+            for( var i = 0; i < all.length && ! C; i++ )
+            {
+                var d = all[ i ], msg = await serverDraft( d );
+                if( C ) return;
+                if( msg && sameWords( d, msg ) ) { localDrop( { lid: d.lid } ); continue; }
+                await resume( d, msg );
+            }
+        }
+        finally { restoring = false; }
+    };
+
+    // A draft opened from the tray that has a copy here: the copy's words
+    // come back instead - unless the draft already holds them.
+    async function reopenLocal( acct, msg )
+    {
+        if( ! S.user ) return false;
+        var all = await localAll();
+        var d = all.filter( function ( r ) { return r.draftAcct === acct && ( r.draftRef === msg.ref || ( msg.mid && r.mid === msg.mid ) ); } )[ 0 ];
+        if( ! d ) return false;
+        if( sameWords( d, msg ) ) { localDrop( { lid: d.lid } ); return false; }
+        return resume( d, msg );
+    }
+
+    // ---------------------------------------------------------------------
+    // THE CLOSE GUARD (data-safety I1, I4)
+    //
+    // The desktop asks window.nayiveBeforeClose before its × closes this
+    // window (desktop/index.html close): what is not in Drafts goes now, and
+    // when it cannot, the user is asked - the copy on this device stays
+    // either way. A tab closed or reloaded: beforeunload, while something is
+    // not in Drafts. The page going (pagehide): the copy here now, and the
+    // newest words to the server - when a save is still on its way, they
+    // go in a keepalive request of their own (that save's `again` would run
+    // after the page is gone, mail-chat #10).
+    // ---------------------------------------------------------------------
+
+    window.nayiveBeforeClose = async function ()
+    {
+        var mine = C;
+        if( ! mine || mine.sending || mine.closing || ! mine.typed || empty() ) return true;
+        mine.closing = true;
+        try
+        {
+            mine.dirty = mine.dirty || ! mine.draftRef;
+            if( mine.dirty || mine.saving )
+            {
+                await saveDraft();
+                while( mine.saving ) await mine.saving;
+            }
+            if( C !== mine || ! pending( mine ) ) return true;
+            localNow( mine );
+            return await NayiveUI.confirm( { title: E.T( "mail.unsavedTitle" ),
+                                             body: E.TF( "mail.unsavedBody", { why: E.errText( mine.failed ) } ),
+                                             confirm: E.T( "mail.closeAnyway" ) } );
+        }
+        finally { mine.closing = false; }
+    };
+
+    function leavingSave( mine )
+    {
+        var acct = mine.acct, fd = form( acct, mine );
+        if( ! fd.small ) return;            // the copy here keeps it
+        try
+        {
+            fetch( "/api/mail/" + encodeURIComponent( acct ) + "/draft",
+                   { method: "POST", credentials: "same-origin", body: fd, keepalive: true } ).catch( function () {} );
+        }
+        catch( e ) {}
+    }
+
+    // gone: the page itself is going (pagehide), not only out of sight -
+    // only then does a save on its way get a second, keepalive one (out of
+    // sight the page lives on, and its own `again` follows; two saves from
+    // the same draft would leave two drafts).
+    function goingAway( gone )
+    {
+        if( ! C || C.sending ) return;
+        if( pending( C ) ) localNow( C );
+        if( ! C.dirty ) return;
+        if( ! C.saving ) saveDraft();
+        else if( gone === true ) leavingSave( C );
+    }
+
+    // ---------------------------------------------------------------------
     // address suggestions
     // ---------------------------------------------------------------------
 
@@ -995,7 +1374,14 @@
         window.addEventListener( "popstate", function () { if( C ) E.closeCompose( false ); } );
         // the page going to the background (another app, the phone locked) or
         // closing: whatever is pending goes out now - timers stop back there
-        document.addEventListener( "visibilitychange", function () { if( document.hidden && C && C.dirty && ! C.sending ) saveDraft(); } );
-        window.addEventListener( "pagehide", function () { if( C && C.dirty && ! C.sending ) saveDraft(); } );
+        // (THE CLOSE GUARD)
+        document.addEventListener( "visibilitychange", function () { if( document.hidden ) goingAway( false ); } );
+        window.addEventListener( "pagehide", function () { goingAway( true ); } );
+        window.addEventListener( "beforeunload", function ( e )
+        {
+            if( ! C || C.sending || ! pending( C ) || empty() ) return;
+            e.preventDefault();
+            e.returnValue = "";
+        } );
     } );
 } )();

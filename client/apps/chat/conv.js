@@ -77,7 +77,10 @@
         S.editing = null;
         S.searching = null;
         newBelow = 0;
-        C.resetComposer();
+        // the box only: what was being written in the chat left stays kept
+        // there, and this chat's own comes back (compose.js, J3)
+        C.resetComposer( true );
+        var kept = C.restoreDraft( id );
 
         C.$( "#vEmpty" ).hidden = true;
         C.$( "#vConv" ).hidden = false;
@@ -87,6 +90,7 @@
         C.renderList();
         wallIn.textContent = "";
         if( S.shared ) { C.fillComposer( S.shared ); S.shared = null; }
+        C.showUnsent( id );       // mine still on this device (compose.js, THE OUTBOX)
 
         try
         {
@@ -107,8 +111,10 @@
             if( band ) band.scrollIntoView( { block: "center" } );
             else C.toBottom( false );
             C.markRead();
+            C.restoreEdit( id, kept );
         }
         catch( e ) { C.fail( e ); }
+        C.flushOutbox( id );
         if( ! matchMedia( "(pointer: coarse)" ).matches ) C.focusComposer();
     };
 
@@ -498,7 +504,7 @@
         m.id = tempSeq--;
         m.pending = true;
         m.from = C.me();
-        m.at = Date.now();
+        m.at = m.at || Date.now();      // one kept from before (THE OUTBOX): when it was written
         S.msgs.set( m.id, m );
         reorder();
         appendOne( m );
@@ -709,9 +715,8 @@
                                order.slice( 0, 3 ).join( "" ) + ( total > 1 ? " " + total : "" ) ) );
         }
 
-        if( m.failed )
-            el.addEventListener( "click", function () { C.retry( m ); } );
-        else if( m.id > 0 ) C.wireBubble( el, m );
+        if( m.id < 0 ) C.wireUnsent( el, m );     // not on the server yet (compose.js)
+        else C.wireBubble( el, m );
         return el;
     };
 } )();

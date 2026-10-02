@@ -26,6 +26,7 @@
     var S;
 
     S = E.S = {
+        user:     "",      // the account signed in here (email.js)
         accounts: [],      // [{ id, email, name, unread, error }]
         acct:     "",      // the account on screen
         tray:     "inbox",
