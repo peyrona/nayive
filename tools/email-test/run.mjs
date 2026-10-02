@@ -306,11 +306,11 @@ try
     hits = await get( "/e2e/hits" ) || [];
     ok( hits.every( h => ! h.cookie ), "shown: whatever loads carries NO session cookie", hits );
     ok( await c.evaluate( "fetch('/api/whoami').then( r => r.status )" ) === 200, "…and the reader is still signed in" );
-    ok( await c.evaluate( "( b => !b.hidden && b.classList.contains('is-active') && b.title === 'Ocultar imágenes' )( document.getElementById('imagesBtn') )" ),
-        "the picture button stays, now to hide them", await c.evaluate( "document.getElementById('imagesBtn').title" ) );
+    ok( await c.evaluate( "( b => !b.hidden && b.classList.contains('is-active') && b.textContent === 'Ocultar imágenes' )( document.getElementById('imagesBtn') )" ),
+        "the picture button stays, now to hide them", await c.evaluate( "document.getElementById('imagesBtn').textContent" ) );
     await shot( c, "04-pictures" );
     await c.evaluate( "document.getElementById('imagesBtn').click(); true" );
-    ok( await waitFor( c, "/img-src data:;/.test( document.querySelector('#readBody iframe').srcdoc ) && document.getElementById('imagesBtn').title === 'Mostrar imágenes'", 5000 ),
+    ok( await waitFor( c, "/img-src data:;/.test( document.querySelector('#readBody iframe').srcdoc ) && document.getElementById('imagesBtn').textContent === 'Mostrar imágenes'", 5000 ),
         "pressed again: hidden again" );
     // a link opens a new tab: the frame is another origin (its own target):
     // the link's box from inside it, the click on the page, where it is drawn
@@ -396,16 +396,9 @@ try
     await c.evaluate( "document.querySelector('.mail-newpass input').value = 'abcdefghijklmnop'; document.querySelector('.mail-newpass .text-btn').click(); true" );
     ok( await waitFor( c, "window.__toasts.some( t => /Contraseña cambiada/.test( t ) )", 8000 ), "the right one is kept", await lastToast( c ) );
     await shot( c, "05-settings" );
-    const pick = v => c.evaluate( `( () => { const s = document.getElementById('imagesDefault'); s.value = '${v}'; s.dispatchEvent( new Event('change') ); return true; } )()` );
+    // The "pictures by default" setting is gone (his order, 2026-10-01): only the button in a message.
     await c.evaluate( "document.querySelector('#setSheet [data-tab=general]').click(); true" );
-    ok( await c.evaluate( "document.getElementById('imagesDefault').value === 'hide' && /no sabe/.test( document.getElementById('imagesHint').textContent )" ),
-        "pictures: Hidden, and why", await c.evaluate( "document.getElementById('imagesHint').textContent" ) );
-    await pick( "show" );
-    await sleep( 600 );
-    ok( ( await c.evaluate( "fetch('/api/mail/settings').then( r => r.json() )" ) ).showImages === true, "'Shown' is saved" );
-    ok( await c.evaluate( "/puede saber/.test( document.getElementById('imagesHint').textContent )" ), "…and its hint says what it means" );
-    await pick( "hide" );
-    await sleep( 400 );
+    ok( await c.evaluate( "!document.getElementById('imagesDefault')" ), "no pictures setting (the message's own button does it)" );
     await c.evaluate( "var x = document.getElementById('signature'); x.value = 'Ana  \\nTel 1\\n'; x.dispatchEvent( new Event('input') ); true" );
     await shot( c, "05a-general" );
     await sleep( 1400 );

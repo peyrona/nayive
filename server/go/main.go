@@ -84,6 +84,7 @@ package main
 //	positions.go, journey.go  where a trip's owner has been; the Journey map
 //	location.go             the location apps (Overland, GPSLogger)
 //	devices.go              the Android app's phones: find, ring, report
+//	api_device_media.go     the Android app's new photos and videos, uploaded daily
 //	reminders.go, reminders_location.go
 //	                        the background loop: events, trips, location alerts, sweeps
 //	ics.go                  a tiny read-only iCalendar reader
@@ -94,6 +95,7 @@ package main
 //	vcard_photo.go          a Contacts picture set from Chat
 //	mail*.go, api_mail.go   eMail: IMAP, JMAP, SMTP, labels, pushes
 //	api_bookmarks.go        Bookmarks: a page's title and icon, fetched here
+//	api_culture.go          the Salon / Science screen lockers' live sources, cached
 //	convert.go, api_convert.go  videos browsers cannot play, turned into .mp4
 //	office.go, api_office.go    LibreOffice documents, given an Office twin
 //	fileid_unix.go, fileid_other.go  a file's identity (inode) where there is one
