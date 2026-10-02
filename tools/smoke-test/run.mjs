@@ -16,7 +16,7 @@ import { browser, attach } from "../cdp.mjs";
 
 const HERE = path.dirname( new URL( import.meta.url ).pathname );
 const REPO = path.resolve( HERE, "../.." );
-const GO   = process.env.GO || "go";
+const GO   = process.env.GO || ( fs.existsSync( os.homedir() + "/sdk/go1.27.1/bin/go" ) ? os.homedir() + "/sdk/go1.27.1/bin/go" : "go" );
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 
 const APPS = process.argv.slice( 2 ).length ? process.argv.slice( 2 )
