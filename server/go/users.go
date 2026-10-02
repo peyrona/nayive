@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -194,6 +195,16 @@ type Users struct {
 	usageMu sync.Mutex
 	usage   map[string]usageEntry
 	walking map[string]int // AdjustUsage calls that land while a home is being measured
+
+	// renames: the names the admin renamed accounts from, for the saves a
+	// browser still holds under them (store_owner.go, L3).
+	renames *accountRenames
+
+	// epochs: one counter per account name, moved on each time the name's
+	// home changes hands (EndRequests). One small number per name ever
+	// asked for; never dropped, so a stamp always compares with its own.
+	epochMu sync.Mutex
+	epochs  map[string]*atomic.Uint64
 }
 
 type usageEntry struct {
@@ -203,8 +214,27 @@ type usageEntry struct {
 
 func NewUsers(cfg *Config, shares *Shares, log Logger) *Users {
 	return &Users{cfg: cfg, shares: shares, log: log,
-		usage: make(map[string]usageEntry), walking: make(map[string]int)}
+		usage: make(map[string]usageEntry), walking: make(map[string]int),
+		renames: newAccountRenames(cfg.ConfigDir, log), epochs: make(map[string]*atomic.Uint64)}
 }
+
+// stamp is `name`'s counter as it is now, for a path approved in its home.
+func (u *Users) stamp(name string) accountEpoch {
+	u.epochMu.Lock()
+	n := u.epochs[name]
+	if n == nil {
+		n = new(atomic.Uint64)
+		u.epochs[name] = n
+	}
+	u.epochMu.Unlock()
+	return accountEpoch{n: n, at: n.Load()}
+}
+
+// EndRequests: every path approved in `name`'s home until now stops opening
+// (sandbox.go). Called BEFORE the admin creates, renames or deletes that
+// home: a request let in just before - its session was still alive - must not
+// re-create the old home nor reach a new person's (L2, server-writes #5).
+func (u *Users) EndRequests(name string) { u.stamp(name).n.Add(1) }
 
 func (u *Users) homeDir(user string) string { return filepath.Join(u.cfg.HomesDir, user) }
 func (u *Users) cfgPath(user string) string {
@@ -574,6 +604,11 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 		}
 	}
 
+	if !existed {
+		// Before the home is made: a request still under way for a deleted
+		// person of this name must not open the new one's (L2).
+		u.EndRequests(name)
+	}
 	os.MkdirAll(filepath.Join(home, "data"), 0o755)
 	os.MkdirAll(filepath.Join(home, "files"), 0o755)
 	if err := writeUserConfig(path, cfg); err != nil {
@@ -586,6 +621,9 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	if existed {
 		return "updated"
 	}
+	// A new person with this name: if it was somebody's old name, the saves
+	// held under it are not theirs - nor this newcomer's (L3).
+	u.renames.forget(name)
 	return "created"
 }
 
@@ -619,6 +657,11 @@ func (u *Users) RenameAccount(old, name string) string {
 	if _, err := os.Lstat(dst); err == nil {
 		return "exists"
 	}
+	// Before the move: a request let in under either name stops at its next
+	// open, rather than re-create homes/<old> (L2, sandbox.go). One that has
+	// its folder open already follows it to the new name.
+	u.EndRequests(old)
+	u.EndRequests(name)
 	if err := os.Rename(src, dst); err != nil {
 		return "rename-failed"
 	}
@@ -628,8 +671,30 @@ func (u *Users) RenameAccount(old, name string) string {
 	if err := syncDir(u.cfg.HomesDir); err != nil {
 		u.log.Error("account renamed, but homes/ could not be synced", "from", old, "to", name, "err", err)
 	}
+	// Under cfgMu with the move: the saves a browser holds as "user:<old>"
+	// are this account's from now on (L3, store_owner.go).
+	u.renames.renamed(old, name, time.Now())
 	return "renamed"
 }
+
+// RenamedFrom is the names the admin renamed `user` from, oldest first: the
+// saves still queued in a browser under one of them are this account's (L3).
+// A name that is an account again is left out, however it came back (the
+// panel forgets it then; one made by hand is caught here): its saves are the
+// new person's.
+func (u *Users) RenamedFrom(user string) []string {
+	var out []string
+	for _, old := range u.renames.from(user) {
+		if !isAccount(u.cfg.HomesDir, old) {
+			out = append(out, old)
+		}
+	}
+	return out
+}
+
+// ForgetRenames drops the old names of a deleted account: a new account given
+// its name later must not inherit them (L3).
+func (u *Users) ForgetRenames(name string) { u.renames.forget(name) }
 
 // NormaliseUsername is what every entry point runs a typed name through before
 // anything else looks at it.
@@ -1417,7 +1482,9 @@ func IsSharedPath(reqPath string) bool {
 // for a traversal attempt.
 //
 // The answer also carries the ROOT the containment check was made against, so
-// every operation on the path can go through os.Root - see sandbox.go.
+// every operation on the path can go through os.Root - see sandbox.go - and,
+// for a root in a user's home, that account's counter taken BEFORE the path
+// is looked at: an admin rename or delete after this stops it (L2).
 func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 	parts := splitPath(reqPath)
 	if hasDotDot(parts) {
@@ -1428,6 +1495,7 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 	}
 
 	var root, target string
+	var epoch accountEpoch // stays empty for the admin's base and apps/
 	writable := false
 
 	if role == "admin" {
@@ -1440,6 +1508,7 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 		}
 		switch top := parts[0]; {
 		case top == "data" || top == "files":
+			epoch = u.stamp(user)
 			home, err := resolveExisting(u.homeDir(user))
 			if err != nil {
 				return Resolved{}, false
@@ -1466,6 +1535,9 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 				return Resolved{}, false
 			}
 			grant := u.shares.Find(user, parts[1])
+			if grant != nil {
+				epoch = u.stamp(grant.Owner) // the lent folder is in the owner's home
+			}
 			base := u.shares.RootPath(grant)
 			if base == "" {
 				return Resolved{}, false // no such grant, or it moved away
@@ -1523,7 +1595,9 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 	if !isInside(resolvedRoot, resolvedTarget) {
 		return Resolved{}, false
 	}
-	return newResolved(resolvedRoot, resolvedTarget, writable)
+	out, ok := newResolved(resolvedRoot, resolvedTarget, writable)
+	out.epoch = epoch
+	return out, ok
 }
 
 // ResolvePath is Resolve for the callers that need only the absolute path: the
