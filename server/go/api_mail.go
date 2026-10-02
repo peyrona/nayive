@@ -916,7 +916,7 @@ func (s *Server) mailWrite(w http.ResponseWriter, r *http.Request, user, acct st
 		}
 		f, err := res.Open()
 		if err != nil {
-			sendError(w, r, http.StatusNotFound, "no such file")
+			sendMissing(w, r, err, "no such file") // 503 when the home moved under the request
 			return
 		}
 		data, err := io.ReadAll(io.LimitReader(f, mailMaxAttach+1))

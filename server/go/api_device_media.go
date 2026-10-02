@@ -443,7 +443,10 @@ func (s *Server) mediaChunk(w http.ResponseWriter, r *http.Request, dev *deviceR
 	}
 	root, err := home.open()
 	if err != nil {
-		sendError(w, r, http.StatusNotFound, "esa subida no existe")
+		// The owner's home moved under the request (an admin rename): 503,
+		// "try again" - a 404 sends the phone back to `start`, which would
+		// begin the upload again in the renamed home (sendMissing).
+		sendMissing(w, r, err, "esa subida no existe")
 		return
 	}
 	defer root.Close()
@@ -542,7 +545,7 @@ func (s *Server) mediaEnd(w http.ResponseWriter, r *http.Request, dev *deviceRow
 	}
 	root, err := home.open()
 	if err != nil {
-		sendError(w, r, http.StatusNotFound, "esa subida no existe")
+		sendMissing(w, r, err, "esa subida no existe") // 503 when the home moved, as in mediaChunk
 		return
 	}
 	defer root.Close()

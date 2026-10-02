@@ -54,6 +54,16 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	role, user := sess.Role, sess.User
 	q := cleanQuery(r)
 
+	// Every request here that changes something - a save, a move, a delete,
+	// a purge, a bin restore or empty, a new folder, a copy, a setting - from
+	// a page of another account: 423, nothing done (L5, store_owner.go). A tab
+	// left open after someone else signed in on this browser would otherwise
+	// move, bin or overwrite THEIR files with this session's cookie. Reads are
+	// the session's own, whoever's page asks.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !s.saveOwnerOK(w, r, role, user) {
+		return
+	}
+
 	// ---- the trash can (papelera) -----------------------------------------
 	if q.Has("trash") {
 		s.filesTrash(w, r, role, user, q)
@@ -185,10 +195,7 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		s.filesRead(w, r, target, q)
-	case http.MethodPut:
-		if !s.saveOwnerOK(w, r, role, user) { // queued under another account: store_owner.go
-			return
-		}
+	case http.MethodPut: // its owner was checked at the top (saveOwnerOK)
 		s.filesWrite(w, r, role, user, fileRel, target)
 	default:
 		sendError(w, r, http.StatusMethodNotAllowed, r.Method+" not allowed")

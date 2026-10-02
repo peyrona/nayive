@@ -27,7 +27,7 @@ package main
 // convertida" / "No se pudo convertir") through the same deliverPush the
 // reminders use.
 //
-// java: mu guards the queue - Enqueue and Status run on request goroutines, the
+// java: mu guards the queue - EnqueueAt and Status run on request goroutines, the
 // worker on its own. The phrasebook is the worker's alone.
 
 import (
@@ -163,21 +163,14 @@ func NewConverter(cfg *Config, users *Users, trash *Trash, push *VapidStore, log
 // Available says whether ffmpeg and ffprobe are installed.
 func (c *Converter) Available() bool { return c.ffmpeg != "" }
 
-// Enqueue adds one uploaded file. The same path twice is one job. False when
-// the feature is off.
-//
-// It takes the name as it is, never asking whether it is still the same
-// person's: a caller holding the file's Resolved should use EnqueueAt.
-func (c *Converter) Enqueue(user, rel string) bool {
-	return c.EnqueueAt(user, rel, accountEpoch{})
-}
-
-// EnqueueAt is Enqueue for a file approved in `user`'s home at `at` (its
-// Resolved's epoch). False, and nothing queued, once the admin renamed,
-// deleted or re-created that account since: an upload whose body was still
-// streaming then lands in the renamed home, but `user` is the OLD name - a
-// job under it would never find the film, and a new person given the name
-// would inherit it (L1). The film stays as uploaded, unconverted.
+// EnqueueAt adds one uploaded file, approved in `user`'s home at `at` (its
+// Resolved's epoch). The same path twice is one job. False when the feature
+// is off - and, with nothing queued, once the admin renamed, deleted or
+// re-created that account since: an upload whose body was still streaming
+// then lands in the renamed home, but `user` is the OLD name - a job under it
+// would never find the film, and a new person given the name would inherit
+// it (L1). The film stays as uploaded, unconverted. The only way in: every
+// caller holds the file's Resolved, so none can queue a bare name.
 //
 // Checked under mu: the admin moves the counter BEFORE RenameUser or DropUser
 // take mu (Users.RenameAccount; adminDeleteUser), so a job is either refused

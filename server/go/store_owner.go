@@ -21,6 +21,15 @@ package main
 // not 403/409 (the store drops those), not 412 (a conflict: offers a copy),
 // not 421 (Chrome re-sends a 421 on a new connection by itself).
 //
+// NOT ONLY SAVES (L5). The page's other changes go up with the cookie held
+// NOW too: an editor's "Restore the previous copy" or "Clean copy", Drive's
+// delete or move in a tab left open. shared/gum-api.js sends the header on
+// every request that changes files, and every route that changes them asks
+// saveOwnerOK: all of /api/files but its reads (a save, a move or rename, a
+// delete or purge, the bin's restore / delete / empty, a new folder, a copy,
+// the settings), /api/zip's Extract and Compress, /api/office's twin, and
+// Chat's "Copiar" / "Editar" (which write into the owner's files).
+//
 // The cookie is NOT HttpOnly on purpose: it holds only "role:name", which the
 // page shows anyway. It never authenticates anything.
 //

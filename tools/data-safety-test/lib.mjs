@@ -55,11 +55,14 @@ export async function done( ...things )
 
 let built = null;      // one build per process
 
+// A port nobody listens on right now. Only a guess: it is free again the
+// moment this returns, and anything on the machine may take it before our
+// server binds it - see server() below.
+export const freePort = () => new Promise( res => { const s = net.createServer(); s.listen( 0, "127.0.0.1", () => { const p = s.address().port; s.close( () => res( p ) ); } ); } );
+
 export async function server( users = { test: "test" } )
 {
     const RUN  = fs.mkdtempSync( path.join( os.tmpdir(), "ds-test-" ) );
-    const PORT = await new Promise( res => { const s = net.createServer(); s.listen( 0, "127.0.0.1", () => { const p = s.address().port; s.close( () => res( p ) ); } ); } );
-    const BASE = `http://127.0.0.1:${PORT}`;
 
     if( ! built )
     {
@@ -68,7 +71,6 @@ export async function server( users = { test: "test" } )
         if( b.status !== 0 ) { console.log( "server build failed (set GO=/path/to/go?)" ); process.exit( 1 ); }
     }
     fs.mkdirSync( `${RUN}/config` );
-    fs.writeFileSync( `${RUN}/config/server.json`, JSON.stringify( { host: "127.0.0.1", port: PORT, base_dir: ".", admin: { name: "jefe", password: "secreto" } } ) );
     for( const [ u, pw ] of Object.entries( users ) )
     {
         fs.mkdirSync( `${RUN}/homes/${u}/data`, { recursive: true } );
@@ -78,8 +80,43 @@ export async function server( users = { test: "test" } )
     // cp -a keeps the mtimes, so a stale .gz sidecar stays older than its source.
     spawnSync( "cp", [ "-a", path.join( REPO, "client/apps" ), path.join( RUN, "apps" ) ], { stdio: "inherit" } );
 
-    const proc = spawn( path.join( built, "nayive" ), [ "-config", `${RUN}/config/server.json` ], { stdio: "ignore" } );
-    for( let i = 0; i < 100; i++ ) { try { await fetch( BASE + "/api/whoami" ); break; } catch { await sleep( 100 ); } }
+    // THIS run's server, told apart from any other by a token only it serves
+    // (icons/ is public: no sign-in needed). The port is picked free, closed,
+    // then handed to the server - and in that gap a busy machine (another
+    // suite's scratch server, `go test`'s httptest servers) may take it. Our
+    // server then cannot bind and stops, and "the port answers" alone would
+    // have the whole test talk to that other server: its sign-in answered
+    // 401 for our user (ds-drive-bin, under load). So: ready = OUR token
+    // comes back; our server gone first = the port was taken: a new one.
+    const TOKEN = `ds-run-${process.pid}-${Date.now()}-${Math.random().toString( 36 ).slice( 2 )}`;
+    fs.writeFileSync( `${RUN}/apps/icons/ds-run.txt`, TOKEN );
+    let proc = null, BASE = "", tail = "";
+    for( let attempt = 1; ! BASE; attempt++ )
+    {
+        const port = await freePort();
+        fs.writeFileSync( `${RUN}/config/server.json`, JSON.stringify( { host: "127.0.0.1", port, base_dir: ".", admin: { name: "jefe", password: "secreto" } } ) );
+        tail = "";
+        proc = spawn( path.join( built, "nayive" ), [ "-config", `${RUN}/config/server.json` ], { stdio: [ "ignore", "ignore", "pipe" ] } );
+        proc.stderr.on( "data", d => { tail = ( tail + d ).slice( -4000 ); } );    // read always: a full pipe would stall the server
+        let exited = false;
+        proc.once( "exit", () => { exited = true; } );
+        const url = `http://127.0.0.1:${port}`;
+        const end = Date.now() + 90000;     // a loaded machine starts it slowly
+        while( ! exited && Date.now() < end )
+        {
+            try
+            {
+                const r = await fetch( url + "/nayive/icons/ds-run.txt" );
+                if( r.status === 200 && ( await r.text() ) === TOKEN ) { BASE = url; break; }
+            }
+            catch {}
+            await sleep( 100 );
+        }
+        if( BASE ) break;
+        try { proc.kill(); } catch {}
+        if( attempt >= 5 ) throw new Error( `the scratch server did not start (${attempt} ports tried): ${tail}` );
+        console.log( `  (port ${port} was not ours - ${exited ? "the server stopped: " + tail.trim().split( "\n" ).pop() : "no answer"} - another port)` );
+    }
 
     const s = {
         base: BASE, run: RUN, users,

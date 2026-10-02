@@ -33,6 +33,11 @@ func (s *Server) apiOffice(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{"available": s.office.Available()})
 		return
 	case http.MethodPost:
+		// The twin is written (or replaced, &replace=1) in the session's
+		// home: never from a page of another account (L5, store_owner.go).
+		if !s.saveOwnerOK(w, r, role, user) {
+			return
+		}
 	default:
 		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
 		return

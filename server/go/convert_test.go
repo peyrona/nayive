@@ -214,7 +214,7 @@ func TestConvertQueueFollowsRename(t *testing.T) {
 		os.WriteFile(filepath.Join(pelis, "prueba.avi"), makeAVI(t), 0o644)
 	}
 
-	// Straight into the queue: Enqueue needs ffmpeg, the rename does not.
+	// Straight into the queue: EnqueueAt needs ffmpeg, the rename does not.
 	job := ConvertJob{User: "ana", Path: "files/Pelis/prueba.avi", Added: time.Now().Unix()}
 	srv.convert.mu.Lock()
 	srv.convert.queue = append(srv.convert.queue, job)
