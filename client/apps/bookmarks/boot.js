@@ -16,6 +16,7 @@ store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true } 
 
 wireAll();
 store.onState( NayiveUI.syncIndicator() );
+store.onState( watchBase );
 store.onConflict( function( path ) { if( path === FILE ) resolveConflict(); } );
 
 // The plug's click and the focus / visibility re-reads. Not while a sheet

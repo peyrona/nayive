@@ -54,6 +54,11 @@ async function reopen( p, want )
 }
 const TMP = fs.mkdtempSync( path.join( os.tmpdir(), "ds-undo-" ) );
 const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+// The page's PUT answers from now on (window.__puts): proof that a save really
+// met another device's (412) - a re-read in between would make it a plain 200.
+const PUTLOG = `( () => { window.__puts = []; const f = window.fetch;
+    window.fetch = async function( u, i ) { const r = await f.apply( this, arguments ); if( i && i.method === 'PUT' ) window.__puts.push( r.status ); return r; };
+    return true; } )()`;
 
 //------------------------------------------------------------------------//
 section( "H3 · SPLIT: delete an expense, a re-read brings the phone's, Undo" );
@@ -181,6 +186,30 @@ section( "H5 · BOOKMARKS: the merge starts from this file's own last save" );
         const tx = r.result.transaction( 'outbox', 'readwrite' ); tx.objectStore( 'outbox' ).delete( 'files/held.docx' ); tx.oncomplete = () => res( true ); }; } )` );
 }
 
+section( "H5 · BOOKMARKS: ...and from a save made offline, sent later by the store" );
+{
+    await write( BF, tree( bm( "x", "A" ) ) );
+    await reopen( "/nayive/bookmarks/" );
+    ok( await c.until( "loaded && node( 'x' ) && node( 'x' ).title === 'A'" ), "the bookmarks are read" );
+
+    await c.send( "Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
+    await c.until( "! navigator.onLine" );
+    // The save's own try must be over (it says "saving", then "offline") before
+    // the network comes back, or that try itself sends it.
+    await c.evaluate( "window.__st = []; store.onState( s => window.__st.push( s ) ); node( 'x' ).title = 'B'; save(); true" );
+    ok( await c.until( "window.__st.indexOf( 'saving' ) !== -1 && window.__st.lastIndexOf( 'offline' ) > window.__st.indexOf( 'saving' )" ) && json( BF ).nodes.x.title === "A",
+        "renamed A -> B offline: queued, not sent" );
+    await c.send( "Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
+    ok( await disk( () => json( BF ).nodes.x.title === "B" ), "back online: the store sent it" );
+    await c.until( "store.state === 'synced'" );
+
+    const st = await phoneEdit( BF, t => { const d = JSON.parse( t ); d.nodes.x.title = "C"; return JSON.stringify( d, null, 2 ); } );
+    ok( st === 200, "the phone renames it B -> C", st );
+    await c.evaluate( "makeBookmark( { title: 'N', url: 'https://n.example/' }, ROOT ); save(); true" );
+    ok( await disk( () => { const d = json( BF ); return d && Object.values( d.nodes ).some( n => n.title === "N" ); } ), "a bookmark added here goes up (merged)" );
+    ok( json( BF ).nodes.x.title === "C", "the phone's later rename stays (C)", json( BF ).nodes.x.title );
+}
+
 //------------------------------------------------------------------------//
 section( "H4 · CALENDAR: delete on a stale copy (412 -> merge), the Undo stays and works" );
 {
@@ -193,18 +222,75 @@ section( "H4 · CALENDAR: delete on a stale copy (412 -> merge), the Undo stays 
 
     await reopen( "/nayive/calendar/?date=2026-10-05", "/nayive/calendar/" );
     ok( await c.until( "[...document.querySelectorAll('.fc-event')].some( e => e.textContent.includes( 'Bravo' ) )" ), "the day shows Bravo" );
-    const st = await phoneEdit( F, t => t.replace( "END:VCALENDAR", ev( "c", "Charlie", "15" ).join( "\r\n" ) + "\r\nEND:VCALENDAR" ) );
-    ok( st === 200, "the phone adds Charlie", st );
 
+    // The sheet is opened first (the click's own focus re-read is over), THEN
+    // the phone saves: the delete's save is made on a stale copy and must 412.
     await c.evaluate( "( () => { const e = [...document.querySelectorAll('.fc-event')].find( e => e.textContent.includes( 'Bravo' ) ); e.setAttribute( 'data-ds', 'b' ); e.scrollIntoView( { block: 'center' } ); return true; } )()" );
     await click( c, "[data-ds=b]" );
     ok( await c.until( "getComputedStyle( document.getElementById('deleteBtn') ).display !== 'none'" ), "Bravo's sheet is open" );
+    await c.evaluate( PUTLOG );
+    const st = await phoneEdit( F, t => t.replace( "END:VCALENDAR", ev( "c", "Charlie", "15" ).join( "\r\n" ) + "\r\nEND:VCALENDAR" ) );
+    ok( st === 200, "the phone adds Charlie while the sheet is open", st );
+
     await c.evaluate( "document.getElementById('deleteBtn').click(); true" );
     ok( await disk( () => sums() === "Alpha,Charlie" ), "deleted; the save met the phone's and kept Charlie", sums() );
+    ok( await c.evaluate( "window.__puts.includes( 412 )" ), "...through a 412 and a merge", await c.evaluate( "window.__puts" ) );
     ok( await c.evaluate( "document.getElementById('toast').classList.contains('actionable') && document.getElementById('toast').classList.contains('show')" ),
         "the Undo is still on show after the merge" );
     await undo();
     ok( await disk( () => sums() === "Alpha,Bravo,Charlie" ), "Undo: Bravo back, Charlie kept", sums() );
+}
+
+section( "H4 · CALENDAR: a move's Undo after a merge - back only if no one else moved it" );
+{
+    const F = "data/calendar.ics";
+    const ev = ( uid, sum, h, stamp = "20260901T100000Z" ) => [ "BEGIN:VEVENT", "UID:" + uid, "DTSTAMP:" + stamp, "DTSTART:20261005T" + h + "0000",
+                                    "DTEND:20261005T" + String( +h + 1 ).padStart( 2, "0" ) + "0000", "SUMMARY:" + sum, "END:VEVENT" ];
+    const cal = ( ...evs ) => [ "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:x", ...evs.flat(), "END:VCALENDAR", "" ].join( "\r\n" );
+    const startOf = uid => ( new RegExp( "UID:" + uid + "[\\s\\S]*?DTSTART[^:]*:\\d{8}T(\\d{4})" ).exec( onDisk( s, F ) || "" ) || [] )[ 1 ];
+
+    // Drags Bravo one hour down with a real mouse; `midway` runs while it is held.
+    async function dragBravo( midway )
+    {
+        const r = await c.evaluate( `( () => { const e = [...document.querySelectorAll('.fc-event')].find( e => e.textContent.includes( 'Bravo' ) );
+            e.scrollIntoView( { block: 'center' } ); const b = e.getBoundingClientRect();
+            const slot = document.querySelector( '.fc-timegrid-slot' ).getBoundingClientRect().height;
+            return { x: b.left + b.width / 2, y: b.top + 8, dy: slot * 2 }; } )()` );
+        const mouse = ( type, y, buttons ) => c.send( "Input.dispatchMouseEvent", { type, x: r.x, y, button: "left", buttons, clickCount: 1 } );
+        await c.send( "Page.bringToFront" );
+        await mouse( "mouseMoved", r.y, 0 );
+        await mouse( "mousePressed", r.y, 1 );
+        for( let i = 1; i <= 5; i++ ) await mouse( "mouseMoved", r.y + r.dy * i / 10, 1 );
+        await midway();
+        for( let i = 6; i <= 10; i++ ) await mouse( "mouseMoved", r.y + r.dy * i / 10, 1 );
+        await mouse( "mouseReleased", r.y + r.dy, 0 );
+    }
+
+    // a) The phone changed something else: the Undo puts Bravo back.
+    await write( F, cal( ev( "a", "Alpha", "10" ), ev( "b", "Bravo", "12" ) ) );
+    await reopen( "/nayive/calendar/?date=2026-10-05", "/nayive/calendar/" );
+    ok( await c.until( "[...document.querySelectorAll('.fc-event')].some( e => e.textContent.includes( 'Bravo' ) )" ), "the day shows Bravo" );
+    await c.evaluate( PUTLOG );
+    await dragBravo( async () => ok( await phoneEdit( F, t => t.replace( "END:VCALENDAR", ev( "c", "Charlie", "15" ).join( "\r\n" ) + "\r\nEND:VCALENDAR" ) ) === 200,
+                                     "the phone adds Charlie mid-drag" ) );
+    ok( await disk( () => startOf( "b" ) === "1300" && /Charlie/.test( onDisk( s, F ) ) ), "moved to 13:00 through a merge", startOf( "b" ) );
+    ok( await c.evaluate( "window.__puts.includes( 412 )" ), "...a 412 and a merge", await c.evaluate( "window.__puts" ) );
+    await undo();
+    ok( await disk( () => startOf( "b" ) === "1200" && /Charlie/.test( onDisk( s, F ) ) ), "Undo: back at 12:00, Charlie kept", startOf( "b" ) );
+
+    // b) The phone moved Bravo itself (its save is the newer): the Undo leaves it there.
+    await write( F, cal( ev( "a", "Alpha", "10" ), ev( "b", "Bravo", "12" ) ) );
+    await reopen( "/nayive/calendar/?date=2026-10-05", "/nayive/calendar/" );
+    ok( await c.until( "[...document.querySelectorAll('.fc-event')].some( e => e.textContent.includes( 'Bravo' ) )" ), "the day shows Bravo" );
+    await c.evaluate( PUTLOG );
+    await dragBravo( async () => ok( await phoneEdit( F, t => t.replace( ev( "b", "Bravo", "12" ).join( "\r\n" ), ev( "b", "Bravo", "16", "20991231T000000Z" ).join( "\r\n" ) ) ) === 200,
+                                     "the phone moves Bravo to 16:00 mid-drag" ) );
+    ok( await c.until( "window.__puts.includes( 412 ) && window.__puts[ window.__puts.length - 1 ] === 200" ), "the drag's save met the phone's (412, merged)", await c.evaluate( "window.__puts" ) );
+    ok( startOf( "b" ) === "1600", "the merge kept the phone's newer move (16:00)", startOf( "b" ) );
+    await undo();
+    ok( await c.until( "( window.__toasts || [] ).some( t => /another device/.test( t ) )" ), "Undo says it was changed on another device" );
+    // Something that must NOT happen: a save of the old time (given 3 s to show up).
+    ok( ! await disk( () => startOf( "b" ) !== "1600", 3000 ), "...and does not write the old time over the phone's move", startOf( "b" ) );
 }
 
 fs.rmSync( TMP, { recursive: true, force: true } );

@@ -25,6 +25,7 @@ let data    = emptyData();
 let loaded  = false;    // false = we do not know what is in the file: never write it
 let store   = null;     // NayiveStore, set by boot.js
 let base    = null;     // the file as the server last had it (text): the common ancestor of a merge
+let sent    = null;     // the body of our newest write; it becomes `base` once the server has it
 let merging = false;    // a conflict is being merged: reads and writes wait for it
 
 function T( k )     { return NayiveUI.t( k ); }
@@ -222,13 +223,23 @@ function save()
     // and keeps the edit safe if the merge fails; the merge's own write
     // replaces it.
     // `base` becomes this body once THIS file's PUT has gone through (H5,
-    // list-apps #19). It used to wait for the store's "synced" - the whole
-    // outbox empty - which any other waiting save (an office document held
-    // back, another app's) put off: the next merge then started from an older
-    // copy and undid another device's newer change to the same bookmark.
+    // list-apps #19): from the write's own answer, here, and - for a save
+    // queued offline and sent later by the store - from "synced" (watchBase).
+    // "synced" alone waited for the whole outbox to be empty, which any other
+    // waiting save (an office document held back, another app's) put off: the
+    // next merge then started from an older copy and undid another device's
+    // newer change to the same bookmark. Both are needed.
     const body = serialize();
+    sent = body;
     store.write( FILE, body ).then( function( r ) { if( r && r.ok && ! merging ) base = body; } );
     return true;
+}
+
+// The store says "synced" when the outbox is empty: our last write is the
+// server's file now (a save that waited offline included; see save()).
+function watchBase( s )
+{
+    if( s === 'synced' && sent !== null && ! merging ) base = sent;
 }
 
 // A deep copy of the whole file, for Replace all's Undo.

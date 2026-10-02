@@ -511,14 +511,18 @@
             try { list = JSON.parse( body ); } catch( _ ) { return; }
             if( ! Array.isArray( list ) ) return;
 
-            const typing = editingSubtask && ( ( findTask( editingSubtask.taskId ) || {} ).subtasks || [] )
-                               .find( function( s ) { return s.id === editingSubtask.subtaskId && ! s.text; } );
+            const host0  = editingSubtask && findTask( editingSubtask.taskId );
+            const typing = host0 && ( host0.subtasks || [] ).find( function( s ) { return s.id === editingSubtask.subtaskId && ! s.text; } );
+            const at0    = host0 ? tasks.indexOf( host0 ) : -1;
 
             tasks       = uniqueIds( sanitizePlan( list.filter( isTaskShape ) ) );
             loadedTasks = JSON.stringify( tasks );
 
-            const host = typing && findTask( editingSubtask.taskId );
-            if( host && ! ( host.subtasks || [] ).some( function( s ) { return s.id === typing.id; } ) )
+            // Its task deleted on the other device: kept aside, to come back
+            // with the sub-task if Enter saves one (an edit beats a delete).
+            const host = host0 && findTask( host0.id );
+            if( host0 && ! host ) orphanTask = { task: JSON.parse( JSON.stringify( host0 ) ), at: at0 };
+            if( typing && host && ! ( host.subtasks || [] ).some( function( s ) { return s.id === typing.id; } ) )
                 host.subtasks = ( host.subtasks || [] ).concat( [ { ...typing } ] );
 
             if( ! editBusy() ) render();
@@ -544,6 +548,7 @@
         let filter         = 'active';
         let editingId      = null;   // id of the task whose text is being edited
         let editingSubtask = null;   // { taskId, subtaskId } of the sub-task being edited
+        let orphanTask     = null;   // { task, at }: that sub-task's task, deleted by a merge meanwhile (see onMerged)
         let dragCtx        = null;   // in-progress sub-task drag (pointer-based, works on touch too)
         let adding         = false;  // true while the header compose field is open
         // Inside Planner (html.is-embedded, stamped by shared/ui.js) the field never
@@ -1700,16 +1705,25 @@
 
         function commitEditSubtask( taskId, subtaskId, sNewText )
         {
-            const task  = findTask( taskId );
+            let   task  = findTask( taskId );
             const sText = sNewText.trim();
+
+            if( sText && refuseEdit() )
+                return;   // read-only: the field stays open with what was typed
+
+            // Its task was deleted on another device while this was typed: it
+            // comes back, with what was typed - never dropped without a word.
+            if( ! task && sText && orphanTask && orphanTask.task.id === taskId )
+            {
+                task = orphanTask.task;
+                tasks.splice( Math.max( 0, Math.min( orphanTask.at, tasks.length ) ), 0, task );
+            }
+            orphanTask = null;
 
             if( task )
             {
                 const subs = task.subtasks || [];
                 const sub  = subs.find( function( s ) { return s.id === subtaskId; } );
-
-                if( sText && refuseEdit() )
-                    return;   // read-only: the field stays open with what was typed
 
                 if( sText )
                 {
@@ -1735,6 +1749,7 @@
             discardBlankSubtask();
 
             editingSubtask = null;
+            orphanTask     = null;
             render();
         }
 

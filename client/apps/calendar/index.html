@@ -1238,10 +1238,21 @@
 
             saveCalendar();
 
+            // The Undo outlives a merge (it finds the event by key), so it puts the
+            // old time back only while the event is still where THIS drag put it:
+            // when the merge kept another device's newer move of it, writing the
+            // old time over that would lose the other move.
+            const moved = JSON.stringify( { start: def.start, end: def.end, allDay: def.allDay } );
+
             undoable( msg, function()
             {
                 const d = findDef( key );
                 if( ! d ) return false;
+                if( JSON.stringify( { start: d.start, end: d.end, allDay: d.allDay } ) !== moved )
+                {
+                    flashToast( T( 'ui.conflictTitle' ) );   // "Changed on another device"
+                    return false;
+                }
 
                 const old = JSON.parse( was );
                 d.start  = old.start;
