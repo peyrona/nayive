@@ -80,17 +80,14 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// CHANGED SINCE YOU OPENED IT. The office editors (Write, Calc, Text) send
-	// If-Unmodified-Since = the Last-Modified their copy came with; a file saved
-	// from another device since then answers 412 and is NOT overwritten - the
-	// editor then offers "save yours as a copy". HTTP dates are whole seconds, so
-	// the file's time is cut to the second too. No header (every other client)
-	// or an unreadable one = no check, exactly as before.
-	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
-		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
-			sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
-			return
-		}
+	// CHANGED SINCE YOU OPENED IT. A page that saves from a version it read
+	// sends If-Match = the ETag that version came with (etag.go); a file
+	// changed since - by another device, a restore, a move, a server write -
+	// answers 412 and is NOT overwritten: the page merges, or offers "save
+	// yours as a copy". See staleBase.
+	if staleBase(r, target) {
+		sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
+		return
 	}
 
 	var already int64
@@ -129,13 +126,10 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		return // streamToFile already answered
 	}
 
-	// Keep the cached usage figure current without a re-walk. The new time also
-	// goes back as Last-Modified: it is what the editor's NEXT save sends as
-	// If-Unmodified-Since (see above).
+	// Keep the cached usage figure current without a re-walk. (The new file's
+	// ETag and Last-Modified are already on the answer: streamToFile took them
+	// under the path's lock.)
 	info, statErr := target.Stat()
-	if statErr == nil {
-		w.Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
-	}
 	if owner := s.users.HomeOwner(target.Abs); owner != "" {
 		if statErr == nil {
 			s.users.AdjustUsage(owner, info.Size()-already)
@@ -168,10 +162,32 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 // createOnly: the PUT says "If-None-Match: *" - make the file only if the name
 // is free (RFC 9110 13.1.2). An upload the user never confirmed as "Replace"
 // sends it, so a file another device put there since the client last looked
-// is never written over (data-safety D1-D7, drive-files G1). There are no
-// ETags here, so any other If-None-Match value is not a condition.
+// is never written over (data-safety D1-D7, drive-files G1). "*" is the only
+// If-None-Match a PUT is judged by: no app sends a tag list there.
 func createOnly(r *http.Request) bool {
 	return strings.TrimSpace(r.Header.Get("If-None-Match")) == "*"
+}
+
+// staleBase reports a PUT made from a version that is no longer the file at
+// the path. If-Match decides when the page sent one (etag.go): the tag sees
+// every change, a restore or a move of an older file included (B1-B3).
+// Otherwise If-Unmodified-Since, exactly as before, for a page loaded before
+// the tag: HTTP dates are whole seconds, so the file's time is cut to the
+// second too; no header (every other client) or an unreadable one = no check.
+func staleBase(r *http.Request, target Resolved) bool {
+	if header, sent := ifMatchHeader(r); sent {
+		var now os.FileInfo // nil: no file there
+		if info, err := target.Stat(); err == nil {
+			now = info
+		}
+		return !ifMatchPasses(header, now)
+	}
+	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
+		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
+			return true
+		}
+	}
+	return false
 }
 
 // clashText is the answer to a PUT whose name is taken (see filesWrite).
@@ -324,24 +340,27 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
 		return 0, err
 	}
+	// This save's own file, to know it again at its new name (below).
+	mine, err := tmp.Stat()
+	if err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
+		return 0, err
+	}
 	if err := tmp.Close(); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo escribir")
 		return 0, err
 	}
 
-	// CHANGED WHILE THE BODY STREAMED? filesWrite checked If-Unmodified-Since
-	// before the body, so a second save sent at the same moment passed it too.
-	// The same check again, and the rename, under this path's lock: of two
-	// saves from the same base, the later one now gets 412 instead of silently
-	// winning (S2-#8). (HTTP dates are whole seconds: a save and a re-open
-	// inside the same second still cannot be told apart.)
+	// CHANGED WHILE THE BODY STREAMED? filesWrite checked If-Match (or
+	// If-Unmodified-Since) before the body, so a second save sent at the same
+	// moment passed it too. The same check again, and the rename, under this
+	// path's lock: of two saves from the same base, the later one now gets 412
+	// instead of silently winning (S2-#8).
 	unlock := lockPath(target.Abs)
 	defer unlock()
-	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
-		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
-			sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
-			return 0, errors.New("changed while the body streamed")
-		}
+	if staleBase(r, target) {
+		sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
+		return 0, errors.New("changed while the body streamed")
 	}
 	// The time the file had, for the whole-second rule below.
 	var prev time.Time
@@ -378,6 +397,16 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		return 0, err
 	}
 	nextSecond(root, target.Rel, prev)
+	// THE VERSION THIS SAVE MADE, for the page's next save (If-Match, or
+	// If-Unmodified-Since). Taken here, under the lock: read after it, a save
+	// landing in between would be answered as ours, and the page's next save
+	// would pass over it. Should the path already hold another file (a writer
+	// that takes no lock, in this instant), the tag stays OUR file's: it
+	// matches nothing there, so that next save gets 412 instead.
+	placed := mine
+	if info, err := root.Stat(target.Rel); err == nil && os.SameFile(info, mine) {
+		placed = info // with the time nextSecond gave it
+	}
 	// The new name is durable only once its folder is synced (K1). Until then
 	// a power cut brings the old file back - after a 200, when the browser has
 	// already dropped its copy. A failure is answered: the browser keeps it.
@@ -388,6 +417,8 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 		return 0, err
 	}
+	w.Header().Set("ETag", fileETag(placed))
+	w.Header().Set("Last-Modified", placed.ModTime().UTC().Format(http.TimeFormat))
 	return written, nil
 }
 

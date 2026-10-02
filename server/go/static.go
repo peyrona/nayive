@@ -407,8 +407,19 @@ func serveGzipTier(w http.ResponseWriter, r *http.Request, content io.ReadSeeker
 
 	// Conditional GET still has to work, and ServeContent is not doing it for
 	// us on this path - so answer 304 by hand when the client's copy is current.
+	// The file API's answer carries an ETag (etag.go): when the client sends
+	// If-None-Match, that alone decides, by the exact tag, as ServeContent
+	// does (RFC 9110 13.1.3). The date is whole seconds: a change inside the
+	// second of the cached copy would read back as that old copy (store-core
+	// G4). If-Modified-Since alone - a copy cached before the tag, or a static
+	// asset, which has none - is judged as before.
 	w.Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
-	if notModified(r, info.ModTime()) {
+	if inm := r.Header.Get("If-None-Match"); inm != "" {
+		if noneMatchHit(inm, w.Header().Get("Etag")) {
+			w.WriteHeader(http.StatusNotModified)
+			return true
+		}
+	} else if notModified(r, info.ModTime()) {
 		w.WriteHeader(http.StatusNotModified)
 		return true
 	}

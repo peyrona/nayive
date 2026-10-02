@@ -23,7 +23,8 @@ package main
 //	       ?from=&new=                 copy (copy.go)
 //	       ?trash=restore|empty        undelete / empty (&ids=a;b: only those)
 //	PUT    ?type=dir&name=&parent=     mkdir
-//	       ?file=<path>                upload (If-None-Match: * = only a new file)
+//	       ?file=<path>                upload (If-None-Match: * = only a new file;
+//	                                   If-Match: <ETag> = only over that version, etag.go)
 //	DELETE ?paths=a&paths=b            move to the trash
 //	       &purge=1                    really delete (a user's data/ only)
 //	       ?trash=&ids=a;b             purge from the trash
@@ -231,6 +232,10 @@ func (s *Server) filesRead(w http.ResponseWriter, r *http.Request, target Resolv
 	if scriptable(ctype) {
 		w.Header().Set("Content-Security-Policy", "sandbox")
 	}
+	// The version tag of what was opened (etag.go): the page's next save sends
+	// it back as If-Match. Set before serving, so a conditional GET is judged
+	// by it in both tiers (ServeContent, serveGzipTier).
+	w.Header().Set("ETag", fileETag(info))
 	// NO .gz SIDECAR here: a user's own "foo.txt.gz" must stay a file. Only the
 	// static apps use sidecars.
 	serveFileFrom(w, r, file, ctype, info)
