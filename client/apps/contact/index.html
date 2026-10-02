@@ -599,7 +599,7 @@
         let query      = '';
         let editingUid = null;    // uid of the contact open in the edit form, or null when adding
         let dismissed  = new Set();   // dismissKey() strings for pairs the user marked "not a duplicate"
-        let undoState  = null;    // { contacts: [...], label } snapshot for the "Deshacer" toast
+        let undoState  = null;    // { was, made, added } of the last duplicates merge, for its "Deshacer" (undoCards)
 
         //------------------------------------------------------------------------//
         // INITIALIZATION
@@ -729,10 +729,11 @@
         // the same copy: both changes are kept, card by card, by UID. A card is
         // compared as the text it is in the file - a card nobody touched is
         // written back line for line, so only real edits differ - and one
-        // changed on both keeps the later REV (mine when there is none). Cards
-        // with no UID (a card the parser could not read) are told apart by their
-        // text. The "not duplicates" pairs merge as a set. null = a side that
-        // is not an address book: nothing is merged over it.
+        // changed on both is merged field by field against its base copy
+        // (mergeCard); with no base copy of it, the later REV wins (mine when
+        // there is none). Cards with no UID (a card the parser could not read)
+        // are told apart by their text. The "not duplicates" pairs merge as a
+        // set. null = a side that is not an address book: nothing is merged over it.
         function mergeBook( path, base, mine, theirs )
         {
             const S = NayiveStore;
@@ -749,9 +750,115 @@
 
             const m = vcfCards( mine ), t = vcfCards( theirs );
             if( ! m || ! t ) return null;
+            const newer = ( x, y, tie ) => x.rev && y.rev && x.rev !== y.rev ? ( y.rev > x.rev ? y : x ) : tie;
             const merged = S.mergeLists( base == null ? null : vcfCards( base ), m, t,
-                                         { id: c => c.uid, stamp: c => c.rev || null } );
+                                         { id: c => c.uid,
+                                           both: ( b, x, y ) => b === undefined ? newer( x, y, y ) : mergeCard( b, x, y ) } );
             return merged.length ? merged.map( c => c.text ).join( '\r\n' ) + '\r\n' : '';
+        }
+
+        // ONE CARD CHANGED ON BOTH SIDES (H2, list-apps #14). Kept whole from the
+        // newer REV, the other side's edit of a DIFFERENT field was dropped: an
+        // e-mail added on the PC lost the picture Chat had put on the phone's
+        // card. Now the card is merged line by line against its base copy (`b`):
+        //   - a line (a property) only one side changed takes that side's;
+        //     both changed it: the newer REV's (a tie: mine);
+        //   - phones, e-mails, addresses, webs... are one item per VALUE: one
+        //     either side added stays, one either side removed goes, one whose
+        //     type changed on one side takes that change;
+        //   - an "item1." group (an iPhone's line + its label) is one item, and
+        //     is renumbered when the other side's lines use that name;
+        //   - REV ends as the newer of the two.
+        // Lines are compared unfolded, so a fold or a QUOTED-PRINTABLE soft
+        // break written another way is no change. b, m, t: { text, uid, rev }
+        // as vcfCards gives them.
+        function mergeCard( b, m, t )
+        {
+            const S      = NayiveStore;
+            const B      = cardItems( b.text ), M = cardItems( m.text ), T = cardItems( t.text );
+            const newerT = revKey( t.rev ) > revKey( m.rev );
+            const out    = S.mergeLists( B.items, M.items, T.items,
+                                         { id: i => i.k, both: ( bi, mi, ti ) => newerT ? ti : mi } );
+
+            // Raw lines back; a group of theirs whose name one of mine took is renamed.
+            const used = new Set( out.filter( i => M.raw.has( i ) && M.raw.get( i ).group ).map( i => M.raw.get( i ).group.toLowerCase() ) );
+            const lines = [];
+
+            for( const i of out )
+            {
+                const r = M.raw.get( i ) || T.raw.get( i );
+                let   g = r.group;
+
+                if( g && T.raw.has( i ) && ! M.raw.has( i ) && used.has( g.toLowerCase() ) )
+                {
+                    let n = 1;
+                    while( used.has( 'item' + n ) ) n++;
+                    g = 'item' + n;
+                }
+                if( g ) used.add( g.toLowerCase() );
+
+                for( const p of r.lines )
+                    lines.push( ...( g === r.group ? p : [ g + p[ 0 ].slice( r.group.length ) ].concat( p.slice( 1 ) ) ) );
+            }
+
+            return { text: [ M.begin ].concat( lines, [ M.end ] ).join( '\r\n' ), uid: m.uid, rev: newerT ? t.rev : m.rev };
+        }
+
+        // The lines of one card as merge items { k, t } - a key (null: none) and
+        // the text it is compared by - with each item's raw lines beside it
+        // (raw: item -> { group, lines: [ physical lines of each content line ] }).
+        function cardItems( text )
+        {
+            const MULTI_PROPS = [ 'TEL', 'EMAIL', 'ADR', 'URL', 'IMPP', 'X-SOCIALPROFILE', 'RELATED', 'X-ABRELATEDNAMES', 'X-ABDATE' ];
+            const items = [], raw = new Map(), groups = {};
+            let   begin = 'BEGIN:VCARD', end = 'END:VCARD';
+
+            for( const cl of contentLines( text ) )
+            {
+                const tag = cl.text.trim().toUpperCase();
+                if( tag === 'BEGIN:VCARD' ) { begin = cl.phys.join( '\r\n' ); continue; }
+                if( tag === 'END:VCARD' )   { end   = cl.phys.join( '\r\n' ); continue; }
+                if( ! cl.text.trim() ) continue;
+
+                const [ left, value ] = splitOnce( cl.text, ':' );
+                const segs  = left === null ? [ '' ] : splitOutsideQuotes( left, ';' );
+                const dot   = segs[ 0 ].lastIndexOf( '.' );
+                const group = dot === -1 ? '' : segs[ 0 ].slice( 0, dot );
+                const name  = segs[ 0 ].slice( dot + 1 ).trim().toUpperCase();
+                const flat  = group ? cl.text.slice( group.length + 1 ) : cl.text;
+
+                // The key: the property, and for a many-valued one its value too
+                // (a phone by its digits, an e-mail in lower case).
+                let k = null;
+                if( left !== null && name )
+                {
+                    k = name;
+                    if( MULTI_PROPS.indexOf( name ) !== -1 )
+                    {
+                        let v = unescapeText( decodeValue( value, parseParams( segs.slice( 1 ) ) ) ).trim();
+                        if( name === 'TEL' )   v = v.replace( /^tel:/i, '' ).replace( /[^\d+]/g, '' );
+                        if( name === 'EMAIL' ) v = v.toLowerCase();
+                        k = name + ':' + v;
+                    }
+                }
+
+                if( group )
+                {
+                    const gk = group.toLowerCase();
+                    let   it = groups[ gk ];
+                    if( ! it ) { it = groups[ gk ] = { k: k, t: '' }; items.push( it ); raw.set( it, { group: group, lines: [] } ); }
+                    else if( /^X-AB/.test( it.k || '' ) && k && ! /^X-AB/.test( k ) ) it.k = k;   // keyed by its line, not its label
+                    it.t += ( it.t ? '\n' : '' ) + flat;
+                    raw.get( it ).lines.push( cl.phys );
+                    continue;
+                }
+
+                const it = { k: k, t: flat };
+                items.push( it );
+                raw.set( it, { group: '', lines: [ cl.phys ] } );
+            }
+
+            return { items, raw, begin, end };
         }
 
         // The store merged another device's save in: the book (or the "not
@@ -2999,7 +3106,9 @@
 
             const hadDismissals = dismissed.size > 0;
 
-            undoState = { contacts: contacts.slice() };
+            // The Undo puts the members back by uid (see undoCards), over the
+            // merged card (it carries the first member's uid) as written here.
+            undoState = { was: m.members.slice(), made: new Map( [ [ merged.uid, contactToVCard( merged ) ] ] ), added: [] };
 
             contacts = contacts.filter( c => ! groupUids.has( c.uid ) );
             contacts.push( merged );
@@ -3063,8 +3172,47 @@
         {
             if( ! undoState || ! canSave() ) return;
 
-            contacts  = undoState.contacts;
+            const u = undoState;
             undoState = null;
+            undoCards( u.was, u.made, u.added );
+        }
+
+        // UNDO BY CARD (H3, list-apps #15 / #16). The "Merged" and "Imported"
+        // Undos used to put back a copy of the WHOLE book taken before: a save
+        // that met another device's in those six seconds had merged its cards in
+        // (store.js MERGE), and the Undo's save dropped them. Now only what the
+        // action did is undone, on the book as it is NOW, by uid:
+        //   was    the cards as they were before (removed or replaced). Each goes
+        //          back: in place of the card the action wrote while that one is
+        //          still as written; field by field (mergeCard) when the other
+        //          device has changed it since; added again when it is gone. One
+        //          the action removed that is back already (the other device
+        //          edited it: an edit beats a delete) stays as it is.
+        //   made   uid -> the text the action wrote for that card;
+        //   added  the uids the action added: they leave.
+        function undoCards( was, made, added )
+        {
+            const gone = new Set( added );
+            contacts = contacts.filter( c => ! gone.has( c.uid ) );
+
+            for( const old of was )
+            {
+                const i = contacts.findIndex( c => c.uid === old.uid );
+
+                if( i === -1 ) { contacts.push( old ); continue; }
+                if( ! made.has( old.uid ) ) continue;
+
+                const now = contactToVCard( contacts[ i ] );
+                if( now === made.get( old.uid ) ) { contacts[ i ] = old; continue; }
+
+                // Changed since: undo only the action's own change of it.
+                const one = text => vcfCards( text )[ 0 ];
+                const mix = mergeCard( one( made.get( old.uid ) ), one( contactToVCard( old ) ), one( now ) );
+                const c   = vcfToContacts( mix.text )[ 0 ];
+                if( ! c ) continue;
+                c.pos = contacts[ i ].pos;
+                contacts[ i ] = c;
+            }
 
             render();
             saveContacts();
@@ -3109,8 +3257,9 @@
                 return;
             }
 
-            const before  = structuredClone( contacts );   // for the Undo
-            const posWas  = nextPos;
+            // For the Undo, by uid (undoCards): each replaced card as it was, and
+            // the uids added. Not a copy of the whole book.
+            const replaced = [], addedUids = [], seen = new Set();
             const byUid   = new Map( contacts.map( c => [ c.uid, c ] ) );
             let   added = 0, updated = 0;
 
@@ -3124,6 +3273,8 @@
                 {
                     const old = byUid.get( inc.uid );
                     if( revKey( revOf( inc ) ) < revKey( revOf( old ) ) ) continue;
+                    if( ! seen.has( inc.uid ) ) replaced.push( structuredClone( old ) );   // before it changes in place
+                    seen.add( inc.uid );
                     Object.assign( old, inc, { pos: old.pos } );
                     updated++;
                 }
@@ -3132,9 +3283,13 @@
                     inc.pos = nextPos++;
                     contacts.push( inc );
                     byUid.set( inc.uid, inc );
+                    addedUids.push( inc.uid );
+                    seen.add( inc.uid );
                     added++;
                 }
             }
+
+            const made = new Map( replaced.map( c => [ c.uid, contactToVCard( byUid.get( c.uid ) ) ] ) );
 
             render();
             await saveContacts();
@@ -3142,11 +3297,7 @@
             flashUndo( TF( 'contact.imported', { added: added, updated: updated } ), function()
             {
                 if( ! canSave() ) return;
-                contacts = before;
-                nextPos  = posWas;
-                render();
-                saveContacts();
-                refreshDedupIfOpen();
+                undoCards( replaced, made, addedUids );
             } );
 
             // Imports are where duplicates are actually created — surface them right away.

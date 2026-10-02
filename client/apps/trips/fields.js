@@ -215,10 +215,11 @@ function buildDocsField( aRows, aExtras, bCollapsed, fnSetCollapsed )
 // attachment sits where the name field used to be: when set it's a pill showing the
 // path (click it to open the file in a new tab); when unset it's the link / upload
 // buttons. To point a document at a different file you remove it and add a new one.
-//   fnDirName  - resolver for the trip folder name (a new trip's shifts while typing)
+//   fnFolder   - resolver for the trip's folder path (tripBase; a new trip's shifts while typing)
 //   fnRerender - redraw the whole sheet after the attachment changes
-//   fnSiblings - the sibling document list (for unique upload file names)
-function buildDocRow( d, fnSetType, fnRemove, fnDirName, fnRerender, fnSiblings )
+//   fnSiblings - EVERY document of the trip, this list included (for unique upload
+//                file names: all of them share one folder, D2)
+function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
 {
     const wrap = document.createElement( 'div' );
 
@@ -241,11 +242,11 @@ function buildDocRow( d, fnSetType, fnRemove, fnDirName, fnRerender, fnSiblings 
 
     if( docIsLink( d ) )
     {
-        attach.appendChild( docAttachSet( ICON_LINK, d.path, null, function() { docOpenInTab( d, fnDirName() ); } ) );
+        attach.appendChild( docAttachSet( ICON_LINK, d.path, null, function() { docOpenInTab( d, fnFolder() ); } ) );
     }
     else if( d.file || d._pending )
     {
-        attach.appendChild( docAttachSet( ICON_UPLOAD, d.file, d._pending ? T( 'trips.pending' ) : null, function() { docOpenInTab( d, fnDirName() ); } ) );
+        attach.appendChild( docAttachSet( ICON_UPLOAD, d.file, d._pending ? T( 'trips.pending' ) : null, function() { docOpenInTab( d, fnFolder() ); } ) );
     }
     else
     {
@@ -288,7 +289,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnDirName, fnRerender, fnSiblings 
         const path = document.createElement( 'div' );
         path.className = 'doc-row-path';
         path.dataset.docId = d.id;
-        path.textContent = docPath( 'data/trips/' + fnDirName(), d );
+        path.textContent = docPath( fnFolder(), d );
         wrap.appendChild( path );
     }
 
@@ -326,10 +327,10 @@ function docAttachSet( sIconPaths, sLabel, sTag, fnPick )
 
 // Open an attached document in a new browser tab. A not-yet-saved upload only
 // exists in memory, so it's served from a temporary blob URL.
-function docOpenInTab( d, sDirName )
+function docOpenInTab( d, sFolder )
 {
     const url = d._pending ? URL.createObjectURL( d._pending )
-                           : GumApi.fileUrl( docPath( 'data/trips/' + sDirName, d ) );
+                           : GumApi.fileUrl( docPath( sFolder, d ) );
 
     if( url )
         window.open( url, '_blank', 'noopener' );

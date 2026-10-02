@@ -74,9 +74,15 @@ function renderTripSheet()
     // A plain "Documentos" heading: the "+" and the info dot live beside the one
     // on the trip detail screen, which is also where this sheet is opened from.
     // The rows stay - this is where a document gets its name and its type.
+    // Upload names are unique across the whole trip: this list and every stage's.
+    const tripDocsAll = function()
+    {
+        const t = tripDraft.id !== null ? findTrip( tripDraft.id ) : null;
+        return tripDraft.documents.concat( allTripDocs( { stages: t ? t.stages : [] } ) );
+    };
     const tripDocRows = tripDraft.documents.map( function( d )
     {
-        return buildDocRow( d, function( v ) { d.type = v; }, function() { removeTripDoc( d.id ); }, tripDraftDirNamePreview, renderTripSheet, function() { return tripDraft.documents; } );
+        return buildDocRow( d, function( v ) { d.type = v; }, function() { removeTripDoc( d.id ); }, tripDraftFolderPreview, renderTripSheet, tripDocsAll );
     });
 
     const tripDocsField = buildDocsField( tripDocRows, [], tripDocsCollapsed, function( b ) { tripDocsCollapsed = b; } );
@@ -124,12 +130,12 @@ function renderTripSheet()
 // between two uploads doesn't throw off the matching.
 function refreshTripDocPaths()
 {
-    const dirName = tripDraftDirNamePreview();
+    const folder = tripDraftFolderPreview();
 
     tripDraft.documents.forEach( function( d )
     {
         const el = document.querySelector( '#tripSheet .doc-row-path[data-doc-id="' + d.id + '"]' );
-        if( el ) el.textContent = docPath( 'data/trips/' + dirName, d );
+        if( el ) el.textContent = docPath( folder, d );
     });
 }
 
@@ -304,12 +310,20 @@ function renderStageSheet()
     // In the stage sheet the dot comes BEFORE the "+": "Documentos (i) [+]".
     const docsInfo = docsLabelInfoDot();
 
-    const trip = findTrip( selectedTripId );
-    const dirName = trip ? trip.dirName : 'trip';   // stages only ever belong to an already-saved trip
+    const trip   = findTrip( selectedTripId );
+    const folder = tripBase( trip );   // stages only ever belong to an already-saved trip
 
+    // Upload names are unique across the whole trip: this list, the trip's own
+    // and every other stage's (one folder for all, D2).
+    const stageDocsAll = function()
+    {
+        const t = findTrip( selectedTripId );
+        return stageDraft.documents.concat( t ? t.documents || [] : [],
+            ...( t ? t.stages : [] ).filter( function( s ) { return s.id !== stageDraft.id; } ).map( function( s ) { return s.documents || []; } ) );
+    };
     const docRows = stageDraft.documents.map( function( d )
     {
-        return buildDocRow( d, function( v ) { d.type = v; }, function() { removeStageDoc( d.id ); }, function() { return dirName; }, renderStageSheet, function() { return stageDraft.documents; } );
+        return buildDocRow( d, function( v ) { d.type = v; }, function() { removeStageDoc( d.id ); }, function() { return folder; }, renderStageSheet, stageDocsAll );
     });
 
     sheet.appendChild( buildDocsField( docRows, [ docsInfo, addDocBtn ], stageDocsCollapsed, function( b ) { stageDocsCollapsed = b; } ) );

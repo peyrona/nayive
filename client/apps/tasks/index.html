@@ -500,6 +500,9 @@
 
         // The store merged another device's save in: this list from now on. Not
         // drawn while a row is being typed or dragged (the next render shows it).
+        // A sub-task being typed after "+" lives only here until it is named (a
+        // save strips a blank one): it goes into the merged list too, or Enter
+        // found no such row and what was typed was lost (E7, list-apps #26).
         store.onMerged( function( path, body )
         {
             if( path === REMINDED_FILE ) { remindedP = null; return; }
@@ -507,8 +510,17 @@
             let list;
             try { list = JSON.parse( body ); } catch( _ ) { return; }
             if( ! Array.isArray( list ) ) return;
-            tasks       = sanitizePlan( list.filter( isTaskShape ) );
+
+            const typing = editingSubtask && ( ( findTask( editingSubtask.taskId ) || {} ).subtasks || [] )
+                               .find( function( s ) { return s.id === editingSubtask.subtaskId && ! s.text; } );
+
+            tasks       = uniqueIds( sanitizePlan( list.filter( isTaskShape ) ) );
             loadedTasks = JSON.stringify( tasks );
+
+            const host = typing && findTask( editingSubtask.taskId );
+            if( host && ! ( host.subtasks || [] ).some( function( s ) { return s.id === typing.id; } ) )
+                host.subtasks = ( host.subtasks || [] ).concat( [ { ...typing } ] );
+
             if( ! editBusy() ) render();
         } );
 
@@ -668,7 +680,7 @@
                 // Sanitised here, not only on save: a file written by hand, by
                 // an older build or by a newer one must not be able to hand the
                 // renderer a 100000-day duration or a dangling dependency.
-                tasks = sanitizePlan( good );
+                tasks = uniqueIds( sanitizePlan( good ) );
             }
             // else: the server was unreachable AND nothing is cached (res.source
             // === 'unknown'). Leave `tasks` untouched — treating that as an empty
@@ -677,6 +689,54 @@
 
             loadedTasks = JSON.stringify( tasks );
             render();
+        }
+
+        // ONE ID PER TASK / SUB-TASK (H8, list-apps #25). Ids were Date.now(): the
+        // birthday and the trip-reminder syncs run side by side at boot, and once
+        // they made their tasks in the same millisecond - one id for two tasks,
+        // so ticking one ticked both and deleting one deleted both (the Undo put
+        // back one). newId() never gives this page an id twice, nor one already
+        // in the list. Still a number: rows carry it in data-* and read it back
+        // with Number().
+        let lastId = 0;
+
+        function newId()
+        {
+            const used = new Set();
+            tasks.forEach( function( t ) { used.add( t.id ); ( t.subtasks || [] ).forEach( function( s ) { used.add( s.id ); } ); } );
+
+            let id = Math.max( Date.now(), lastId + 1 );
+            while( used.has( id ) ) id++;
+            lastId = id;
+            return id;
+        }
+
+        // Ids a list already repeats (made by an older build) are made unique,
+        // the second one on: the smallest number above it that is free - the
+        // same on every device, so two devices doing it agree. Tasks among
+        // tasks, sub-tasks among every sub-task (one can be dragged to another
+        // task). In memory; the next save writes it.
+        function uniqueIds( list )
+        {
+            const used = new Set();
+            list.forEach( function( t ) { used.add( t.id ); ( t.subtasks || [] ).forEach( function( s ) { used.add( s.id ); } ); } );
+
+            const free = function( id ) { let n = Number( id ) + 1; while( used.has( n ) ) n++; used.add( n ); return n; };
+            const seenT = new Set(), seenS = new Set();
+
+            list.forEach( function( t )
+            {
+                if( seenT.has( t.id ) && Number.isFinite( Number( t.id ) ) ) t.id = free( t.id );
+                seenT.add( t.id );
+
+                ( t.subtasks || [] ).forEach( function( s )
+                {
+                    if( seenS.has( s.id ) && Number.isFinite( Number( s.id ) ) ) s.id = free( s.id );
+                    seenS.add( s.id );
+                } );
+            } );
+
+            return list;
         }
 
         // A task as this app writes it: an object, its sub-tasks (if any) a list of objects.
@@ -786,15 +846,15 @@
 
             if( people.length === 1 )
             {
-                task = { id: Date.now(), text: birthdayText( people[ 0 ] ),
+                task = { id: newId(), text: birthdayText( people[ 0 ] ),
                          done: false, subtasks: [], birthdayDate: today };
             }
             else
             {
-                task = { id: Date.now(), text: BIRTHDAY_TASK_TITLE, done: false, birthdayDate: today,
-                         subtasks: people.map( function( p, i )
+                task = { id: newId(), text: BIRTHDAY_TASK_TITLE, done: false, birthdayDate: today,
+                         subtasks: people.map( function( p )
                          {
-                             return { id: Date.now() + i + 1, text: p.name, done: false };
+                             return { id: newId(), text: p.name, done: false };
                          }) };
             }
 
@@ -857,12 +917,12 @@
             const have  = new Set( tasks.map( function( t ) { return t.tripReminder; } ).concat( done.trips ) );
             let   added = false;
 
-            due.forEach( function( trip, i )
+            due.forEach( function( trip )
             {
                 if( have.has( trip.id ) )
                     return;
 
-                tasks.push( { id: Date.now() + i, text: TF( 'tasks.tripReminder', { dest: trip.destination, date: trip.startDate } ),
+                tasks.push( { id: newId(), text: TF( 'tasks.tripReminder', { dest: trip.destination, date: trip.startDate } ),
                               done: false, subtasks: [], tripReminder: trip.id } );
                 added = true;
             });
@@ -1124,7 +1184,7 @@
 
         function addTask( sText )
         {
-            tasks.push( { id: Date.now(), text: sText, done: false, subtasks: [] } );
+            tasks.push( { id: newId(), text: sText, done: false, subtasks: [] } );
             render();
             saveTasks();
         }
@@ -1301,7 +1361,7 @@
 
             expandedTasks.add( taskId );   // make sure the new row is visible
 
-            const sub = { id: Date.now(), text: '', done: false };
+            const sub = { id: newId(), text: '', done: false };
             task.subtasks.push( sub );
 
             editingSubtask = { taskId: taskId, subtaskId: sub.id };
@@ -1616,9 +1676,14 @@
                 }
             }
 
-            task.subtasks = task.subtasks.map( function( s )
+            // Found again: a merge or re-read during the question swapped the list,
+            // and the tick landed on the old object, never saved (list-apps #26).
+            const cur = findTask( taskId );
+            if( ! cur || ! cur.subtasks ) return;
+
+            cur.subtasks = cur.subtasks.map( function( s )
             {
-                if( s.id === subtaskId )                 return { ...s, done: ! s.done };
+                if( s.id === subtaskId )                 return { ...s, done: ! sub.done };   // the opposite of what was tapped
                 if( alsoIds.indexOf( s.id ) !== -1 )     return { ...s, done: true };
                 return s;
             });
@@ -1640,14 +1705,18 @@
 
             if( task )
             {
-                const sub = task.subtasks.find( function( s ) { return s.id === subtaskId; } );
+                const subs = task.subtasks || [];
+                const sub  = subs.find( function( s ) { return s.id === subtaskId; } );
 
                 if( sText && refuseEdit() )
                     return;   // read-only: the field stays open with what was typed
 
                 if( sText )
                 {
-                    task.subtasks = task.subtasks.map( function( s ) { return s.id === subtaskId ? { ...s, text: sText } : s; } );
+                    // Not in the list any more (a merge or re-read swapped it under
+                    // the field): what was typed goes in as it is, never lost (E7).
+                    task.subtasks = sub ? subs.map( function( s ) { return s.id === subtaskId ? { ...s, text: sText } : s; } )
+                                        : subs.concat( [ { id: subtaskId, text: sText, done: false } ] );
                     saveTasks();
                 }
                 else if( sub && ! sub.text )

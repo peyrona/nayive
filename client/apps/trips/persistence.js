@@ -70,7 +70,9 @@ async function loadTrips()
         }
     }
 
+    const reIded = repairTrips( loaded );
     trips = loaded;
+    reIded.forEach( persistTrip );   // a new id must stay: saved at once (see repairTrips)
     applyOpenParam();
 
     if( paths.length === 0 )                 // nothing to read -> the store never emitted
@@ -78,6 +80,54 @@ async function loadTrips()
 
     renderAll();
     syncActiveTripDocs();   // background: keep only the current/next trip's PDFs on the device
+}
+
+// THE FOLDER A trip.json WAS READ FROM IS THE TRUTH (H7, list-apps #23). A trip
+// folder restored from the bin onto a taken name comes back as
+// "<dir> (restaurado …)" while its trip.json still names the old folder, and
+// every write went by that name - into the OTHER trip's folder ("Delete trip"
+// binned the other trip). Every write now goes to tripBase(); dirName is
+// repaired here from the folder (Journey asks the server by it). Two of our own
+// trips with one id (a trip re-made, then its old copy restored) were saved as
+// one (mutateTrip maps by id): one of them - the one whose folder had to be
+// repaired, else the later folder - gets the smallest free id above it. The
+// same pick on every device, so two devices that do it agree; returned to be
+// saved at once, or the next load would pick again.
+function repairTrips( list )
+{
+    const own   = list.filter( function( t ) { return ! t._ro; } );
+    const moved = new Set();
+
+    own.forEach( function( t )
+    {
+        const dir = t._base.slice( t._base.lastIndexOf( '/' ) + 1 );
+        if( t.dirName !== dir ) { t.dirName = dir; moved.add( t ); }
+    } );
+
+    const ids   = new Set( list.map( function( t ) { return t.id; } ) );
+    const byId  = new Map();
+    const reIded = [];
+    own.forEach( function( t ) { if( ! byId.has( t.id ) ) byId.set( t.id, [] ); byId.get( t.id ).push( t ); } );
+
+    byId.forEach( function( group )
+    {
+        if( group.length < 2 ) return;
+        group.sort( function( a, b ) { return a._base < b._base ? -1 : 1; } );
+        const keep = group.find( function( t ) { return ! moved.has( t ); } ) || group[ 0 ];
+
+        group.forEach( function( t )
+        {
+            if( t === keep ) return;
+            let id = Number( keep.id );
+            if( ! Number.isFinite( id ) ) id = newId();
+            while( ids.has( id ) ) id++;
+            ids.add( id );
+            t.id = id;
+            reIded.push( t );
+        } );
+    } );
+
+    return reIded;
 }
 
 // Every screen reads a trip's stages and documents as lists, each stage's
@@ -154,8 +204,8 @@ function mergeTrip( path, base, mine, theirs )
 }
 
 // The store merged another device's save of a trip in: that trip from now on.
-// An open trip sheet keeps what it has edited and takes the rest (a stage the
-// other device added) from the merged trip, or saving it would drop that.
+// An open trip or stage sheet keeps what it has edited and takes the rest from
+// the merged trip (patchDraft), or saving it would drop that.
 function onTripMerged( path, body )
 {
     let t;
@@ -167,15 +217,54 @@ function onTripMerged( path, body )
 
     const old = trips.find( function( x ) { return tripBase( x ) === t._base; } );
     if( ! old ) return;
+    t.dirName = old.dirName;   // the folder's own name (repairTrips), not what the file says
 
-    if( tripDraft && tripDraft.id === old.id )
-        Object.keys( t ).forEach( function( k )
-        {
-            if( JSON.stringify( tripDraft[ k ] ) === JSON.stringify( old[ k ] ) ) tripDraft[ k ] = t[ k ];
-        } );
+    const redrawTrip = !! ( tripDraft && tripOpen && tripDraft.id === old.id && patchDraft( tripDraft, tripOpen, t ) );
+    let   redrawStage = false;
+
+    if( stageDraft && stageOpen && editingStageId && old.id === selectedTripId )
+    {
+        const st = t.stages.find( function( s ) { return s.id === stageDraft.id; } );
+        if( st ) redrawStage = patchDraft( stageDraft, stageOpen, st );
+    }
 
     trips = trips.map( function( x ) { return x === old ? t : x; } );
     if( ! anySheetOpen() ) renderAll();
+    if( redrawTrip  && tripDraft )  renderTripSheet();
+    if( redrawStage && stageDraft ) renderStageSheet();
+}
+
+// A MERGE LANDED UNDER AN OPEN SHEET (H6, list-apps #22). The sheet's `draft`
+// takes the merged value of every field it has not changed (draft equal to
+// `open`, the copy the sheet opened with), and its document list is merged
+// with the merged one against `open` (a row the other device added or re-typed
+// comes in; one this sheet removed stays out). `open` then becomes the merged
+// copy. Saving the stale draft used to drop the other device's edits, and its
+// new document counted as "removed here" - its file went to the bin. True when
+// the draft changed (the sheet is drawn again from it).
+function patchDraft( draft, open, merged )
+{
+    const S      = NayiveStore;
+    const before = JSON.stringify( draft );
+
+    Object.keys( merged ).forEach( function( k )
+    {
+        if( k.charAt( 0 ) === '_' ) return;
+
+        if( k === 'documents' )
+        {
+            const mine = new Set( draft.documents || [] );
+            draft.documents = S.mergeLists( open.documents || [], draft.documents || [], merged.documents || [],
+                                            { id: function( d ) { return d && d.id; }, both: S.mergeFields } )
+                               .map( function( d ) { return mine.has( d ) ? d : Object.assign( {}, d ); } );   // never the trip's own objects
+        }
+        else if( JSON.stringify( draft[ k ] ) === JSON.stringify( open[ k ] ) )
+            draft[ k ] = merged[ k ];
+
+        open[ k ] = JSON.parse( JSON.stringify( merged[ k ] === undefined ? null : merged[ k ] ) );
+    } );
+
+    return JSON.stringify( draft ) !== before;
 }
 
 // Writes ONE trip's full current state back to its own trip/{dirName}/trip.json.
@@ -219,30 +308,65 @@ function docFilesDirty( newDocs, oldDocs )
 }
 
 // Uploads freshly-picked files and deletes the files of documents removed since the
-// sheet opened. `dirName`'s folder must already exist. Online only - guarded by callers.
-async function syncDocFiles( dirName, newDocs, oldDocs )
+// sheet opened. `folder` is the trip's own (tripBase) and must already exist; online
+// only - guarded by callers. `otherDocs`: every document of the trip outside this
+// list (allTripDocs). Returns { <doc id>: the file name it was stored under }, for
+// the caller to lay on its draft as it is after the awaits (a merge may have
+// swapped the row objects meanwhile, onTripMerged).
+async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
 {
-    const kept = new Set( newDocs.map( docStoredFile ).filter( Boolean ) );
+    const kept   = new Set( newDocs.map( docStoredFile ).filter( Boolean ) );
+    const others = new Set( ( otherDocs || [] ).map( docStoredFile ).filter( Boolean ) );
+    const stored = {};
 
     for( const d of ( oldDocs || [] ) )
     {
         const f = docStoredFile( d );
 
-        if( f && ! kept.has( f ) )
+        // A name another document of the trip still uses is not this row's file
+        // alone (two lists once shared one, D2): it stays.
+        if( f && ! kept.has( f ) && ! others.has( f ) )
         {
-            try { await GumApi.deletePaths( 'data/trips/' + dirName + '/' + f ); }
+            try { await GumApi.deletePaths( folder + '/' + f ); }
             catch( _ ) { /* never uploaded / already gone - not fatal */ }
         }
     }
 
-    for( const d of newDocs )
+    const pending = newDocs.filter( function( d ) { return d._pending; } );
+    if( ! pending.length ) return stored;
+
+    // D2 (list-apps #4): a PUT replaces a file for good, so an upload never takes
+    // a name in use - by any document of the trip, or by any file in its folder
+    // as the server has it NOW (another device's upload, trip.json itself).
+    const listing = await GumApi.listDir( folder );
+    const taken   = new Set( others );
+    for( const n of listing.nodes || [] ) taken.add( n.name || String( n.path || '' ).split( '/' ).pop() );
+    for( const d of newDocs ) if( ! d._pending && docStoredFile( d ) ) taken.add( docStoredFile( d ) );
+
+    for( const d of pending )
     {
-        if( ! d._pending ) continue;
+        if( taken.has( d.file ) ) d.file = uniqueFileName( d.file, [], taken );
+        taken.add( d.file );
 
         const bytes = new Uint8Array( await d._pending.arrayBuffer() );
-        await GumApi.writeFileBytes( 'data/trips/' + dirName + '/' + d.file, bytes );
+        await GumApi.writeFileBytes( folder + '/' + d.file, bytes );
         delete d._pending;
+        stored[ d.id ] = d.file;
     }
+
+    return stored;
+}
+
+// syncDocFiles' answer laid on a document list: each uploaded row gets its file
+// name and is no longer pending (the list may hold copies of the rows it saw).
+function storedNames( docs, stored )
+{
+    ( docs || [] ).forEach( function( d )
+    {
+        if( ! Object.prototype.hasOwnProperty.call( stored, d.id ) ) return;
+        d.file = stored[ d.id ];
+        delete d._pending;
+    } );
 }
 
 //------------------------------------------------------------------------//
@@ -389,10 +513,10 @@ function resolveNewTripDirName( sDestination, sStartDate )
 }
 
 // What folder the trip currently open in the Add/Edit Trip sheet will be saved under -
-// the already-assigned, stable name when editing, or a live preview of what a brand new
-// trip would get right now (which can shift while typing, since it depends on what other
-// trips exist - that's fine, it's only ever committed for real at actual save time).
-function tripDraftDirNamePreview()
+// the trip's own folder when editing (tripBase, H7), or a live preview of what a brand
+// new trip would get right now (which can shift while typing, since it depends on what
+// other trips exist - that's fine, it's only ever committed for real at actual save time).
+function tripDraftFolderPreview()
 {
-    return isEditingTrip ? tripDraft.dirName : resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
+    return isEditingTrip ? tripBase( tripDraft ) : 'data/trips/' + resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
 }

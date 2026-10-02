@@ -786,6 +786,7 @@
         let editingKey   = null;   // key (uid + recurrence-id) of the event being edited in the sheet, or null when adding
         let editingOcc   = null;   // ...and the occurrence it was opened from (occKey), for "delete only this one"
         let undoHold     = false;  // an Undo is on show: no re-read until it goes (see undoable)
+        let undoKeep     = false;  // ...and it still works after a merge (it re-finds by key)
         let calendar     = null;
 
         //------------------------------------------------------------------------//
@@ -799,13 +800,16 @@
             // The store's state machine drives the header plug for every read and write.
             store.onState( NayiveUI.syncIndicator() );
 
-            // A save met the other device's: the merged file is the calendar now. An
-            // Undo on show would put back events of the old read - it is final now.
-            // Mid-drag, the repaint waits for the drop (see `read` below).
+            // A save met the other device's: the merged file is the calendar now.
+            // An Undo that re-finds its events by key (a delete, a move) stays: it
+            // works on the merged list as well (H4, list-apps #13) - a delete made
+            // on a stale copy used to lose its Undo at once, with no way back. One
+            // that lives on a def of the old read (an EXDATE, "this and all
+            // after") is final now. Mid-drag, the repaint waits for the drop.
             store.onMerged( function( path, body )
             {
                 if( path !== CAL_FILE ) return;
-                if( undoHold ) NayiveUI.undoSettle();
+                if( undoHold && ! undoKeep ) NayiveUI.undoSettle();
                 if( ! applyCalendar( { body: body, source: 'cache' } ) ) return;
                 if( dragBusy ) refetchHeld = true;
                 else if( calendar ) refetchAll();
@@ -1243,7 +1247,7 @@
                 d.start  = old.start;
                 d.end    = old.end;
                 d.allDay = old.allDay;
-            } );
+            }, true );
         }
 
         //------------------------------------------------------------------------//
@@ -2566,6 +2570,9 @@
 
             if( ! removed.length ) return;
 
+            // A plain delete's Undo re-inserts by key, so it outlives a merge (each
+            // def goes back as its own lines, calendarToIcs); a moved occurrence's
+            // EXDATE lives only on the series' def of this read, so that one does not.
             undoable( T( 'ui.toast.deleted' ), function()
             {
                 // That EXDATE lives only on the series' def until the next read.
@@ -2573,7 +2580,7 @@
 
                 for( const r of removed )
                     if( ! findDef( r.d.key ) ) eventDefs.splice( Math.min( r.i, eventDefs.length ), 0, r.d );
-            } );
+            }, ! master );
         }
 
         // "Deleted [Undo]" / "Moved [Undo]": `undo` puts the change back (false: there
@@ -2583,18 +2590,21 @@
         // def - a re-read would swap them for fresh ones. The flag is set AFTER
         // undoToast(): that call settles the Undo before this one, whose onExpire
         // clears it.
-        function undoable( msg, undo )
+        // `byKey`: the Undo finds what it puts back by key on the list as it is
+        // then, so a merge does not make it final (see onMerged).
+        function undoable( msg, undo, byKey )
         {
             NayiveUI.undoToast( msg, function()
             {
-                undoHold = false;
+                undoHold = undoKeep = false;
                 if( refuseEdit() )     return;
                 if( undo() === false ) return;
                 refetchAll();
                 saveCalendar();
-            }, { onExpire: function() { undoHold = false; } } );
+            }, { onExpire: function() { undoHold = undoKeep = false; } } );
 
             undoHold = true;
+            undoKeep = !! byKey;
         }
 
         function flashToast( msg ) { NayiveUI.toast( msg ); }   // <div id="toast"> below; styling in shared/theme.css

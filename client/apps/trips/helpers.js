@@ -19,19 +19,29 @@ function round2( n ) { return Math.round( n * 100 ) / 100; }
 function legacySlug( s ) { return (s || '').toLowerCase().trim().replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'item'; }
 
 // A safe, in-folder file name for an UPLOADED document: the original base name
-// slugified, its real extension kept, and a "-2", "-3"... suffix if another doc in
-// the same list already claims it (so two uploads never overwrite each other).
-function uniqueFileName( sOriginalName, aSiblingDocs )
+// slugified, its real extension kept, and a "-2", "-3"... suffix if another doc
+// already claims it, or a file of that name is in the folder (aTakenNames), so
+// two uploads never overwrite each other. aSiblingDocs must be EVERY document of
+// the trip (allTripDocs): the trip's list and every stage's share ONE folder -
+// two stages' "ticket.pdf" once became one file (D2, list-apps #4).
+function uniqueFileName( sOriginalName, aSiblingDocs, aTakenNames )
 {
     const dot  = sOriginalName.lastIndexOf( '.' );
     const ext  = (dot > 0 ? sOriginalName.slice( dot + 1 ) : '').toLowerCase().replace( /[^a-z0-9]/g, '' );
     const base = NayiveUI.slugify( dot > 0 ? sOriginalName.slice( 0, dot ) : sOriginalName, 'item' );
     const make = function( n ) { return base + (n > 1 ? '-' + n : '') + (ext ? '.' + ext : ''); };
-    const taken = new Set( (aSiblingDocs || []).map( function( d ) { return d.file; } ).filter( Boolean ) );
+    const taken = new Set( (aSiblingDocs || []).map( function( d ) { return d.file; } ).filter( Boolean ).concat( Array.from( aTakenNames || [] ) ) );
 
     let n = 1;
     while( taken.has( make( n ) ) ) n++;
     return make( n );
+}
+
+// Every document of a trip: its own list and every stage's (one folder for all).
+function allTripDocs( trip )
+{
+    if( ! trip ) return [];
+    return ( trip.documents || [] ).concat( ...( trip.stages || [] ).map( function( st ) { return st.documents || []; } ) );
 }
 
 // Base name only ("destination-year") - resolveNewTripDirName() adds a "-2", "-3"...

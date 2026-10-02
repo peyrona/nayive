@@ -215,6 +215,7 @@ async function applyImport( text, name )
     const dest = mode === 'replace' ? ROOT
                : makeFolder( TF( 'bookmarks.importedFolder', { date: NayiveUI.todayIso() } ), ROOT ).id;
     addTree( tree.items, dest );
+    const after = snapshot();                   // what Replace all made, for its Undo
 
     if( ! save() ) { data = before; return; }
     NayiveUI.close( 'importBackdrop' );
@@ -228,9 +229,17 @@ async function applyImport( text, name )
     if( counts.folders ) what.push( counts.folders === 1 ? T( 'bookmarks.oneFolder' ) : TF( 'bookmarks.nFolders', { n: counts.folders } ) );
     const msg = TF( 'bookmarks.importDone', { what: what.join( ', ' ) } ) +
                 ( tree.skipped ? ' · ' + TF( 'bookmarks.importSkipped', { n: tree.skipped } ) : '' );
-    // Undo: Replace all puts the old file back; Add takes the new folder away.
+    // Undo: Replace all puts the old bookmarks back; Add takes the new folder away.
+    // Replace all's Undo undoes only what it did (H3, list-apps #21): the old
+    // copy is merged as "ours" onto the file as it is NOW, against what Replace
+    // all made (merge3) - a merge with another device's save in those six
+    // seconds brought its bookmarks in, and putting `before` back whole
+    // dropped them with the next save.
+    // The three as the file has them (repair, no "_" fields), as resolveConflict
+    // merges them: a node is "untouched" only when it reads the same.
+    const asFile = function( d ) { return repair( JSON.parse( JSON.stringify( d, function( k, v ) { return k.charAt( 0 ) === '_' ? undefined : v; } ) ) ); };
     NayiveUI.undoToast( msg, mode === 'replace'
-        ? function() { data = before; save(); pruneState(); render(); }
+        ? function() { if( ! canEdit() ) return; data = merge3( asFile( after ), asFile( before ), asFile( data ) ); save(); pruneState(); render(); }
         : function() { removeNodes( [ dest ] ); save(); pruneState(); render(); } );
 
     // Contacts does the same after a .vcf import: show the copies at once.

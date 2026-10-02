@@ -25,7 +25,6 @@ let data    = emptyData();
 let loaded  = false;    // false = we do not know what is in the file: never write it
 let store   = null;     // NayiveStore, set by boot.js
 let base    = null;     // the file as the server last had it (text): the common ancestor of a merge
-let sent    = null;     // the body of our newest write; it becomes `base` once the server has it
 let merging = false;    // a conflict is being merged: reads and writes wait for it
 
 function T( k )     { return NayiveUI.t( k ); }
@@ -222,8 +221,13 @@ function save()
     // During a merge too: the write only joins the held-back one (not sent),
     // and keeps the edit safe if the merge fails; the merge's own write
     // replaces it.
-    sent = serialize();
-    store.write( FILE, sent );
+    // `base` becomes this body once THIS file's PUT has gone through (H5,
+    // list-apps #19). It used to wait for the store's "synced" - the whole
+    // outbox empty - which any other waiting save (an office document held
+    // back, another app's) put off: the next merge then started from an older
+    // copy and undid another device's newer change to the same bookmark.
+    const body = serialize();
+    store.write( FILE, body ).then( function( r ) { if( r && r.ok && ! merging ) base = body; } );
     return true;
 }
 
@@ -239,13 +243,6 @@ function snapshot() { return JSON.parse( JSON.stringify( data ) ); }
 // goes. Without a base (the page was opened with the write already held back)
 // nothing counts as deleted: both sides' nodes stay. repair() then makes one
 // clean tree of it. Checked by tools/bookmarks-test.
-
-// The store says "synced" when the outbox is empty: our last write is the
-// server's file now.
-function watchBase( s )
-{
-    if( s === 'synced' && sent !== null && ! merging ) base = sent;
-}
 
 async function resolveConflict()
 {
