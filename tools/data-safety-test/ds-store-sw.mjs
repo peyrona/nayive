@@ -44,16 +44,18 @@ ok( st304 === 304, "If-None-Match goes through untouched (304 for the same versi
 const sw = ( await ( await fetch( `http://127.0.0.1:${c.port}/json` ) ).json() ).find( t => t.type === "service_worker" );
 const ws = new WebSocket( sw.webSocketDebuggerUrl );
 await new Promise( ( r, j ) => { ws.onopen = r; ws.onerror = j; } );
-let mode = "hang", n = 0;
+let mode = "hang", n = 0, enabled = null;
+const ready = new Promise( r => { enabled = r; } );
 ws.onmessage = e =>
 {
     const m = JSON.parse( e.data );
+    if( m.id === 1 ) enabled();
     if( m.method !== "Fetch.requestPaused" ) return;
     if( mode === "502" ) ws.send( JSON.stringify( { id: ++n + 1000, method: "Fetch.fulfillRequest",
         params: { requestId: m.params.requestId, responseCode: 502, body: Buffer.from( "Bad Gateway" ).toString( "base64" ) } } ) );
 };
 ws.send( JSON.stringify( { id: 1, method: "Fetch.enable", params: { patterns: [ { urlPattern: "*pass.txt*" } ] } } ) );
-await new Promise( r => setTimeout( r, 300 ) );   // the enable answered (no reply hook here)
+await ready;   // Fetch.enable answered
 const t0 = Date.now();
 const slow = await c.evaluate( `Promise.race( [ fetch( ${JSON.stringify( URL )} ).then( async r => ( { body: await r.text(), copy: r.headers.get( 'X-Nayive-Copy' ) } ) ),
                                          new Promise( r => setTimeout( () => r( { stillWaiting: true } ), 12000 ) ) ] )` );

@@ -330,9 +330,16 @@
     function wasSent( doc, id ) { return !! doc && ours( doc ) && ( doc.sent || [] ).indexOf( id ) !== -1; }
     function lastSent( doc, id ) { return !! doc && ours( doc ) && ! doc.dirty && ( doc.last || [] ).indexOf( id ) !== -1; }
 
-    // The cached copy is clean and holds exactly `body`: it went up (sent by
-    // a page that keeps no `sent` - an older store.js, open across a deploy).
-    function upAsIs( doc, body ) { return !! doc && ours( doc ) && doc.dirty === false && body != null && sameBody( doc.body, body ); }
+    // The cached copy is clean and what the server got last is exactly
+    // `body`: it went up (sent by a page that keeps no `sent` - an older
+    // store.js, open across a deploy). Its `base`, not its body: an older
+    // store.js that sends a save moves the copy's time and base, and leaves a
+    // body its own read may have put there - an older one.
+    function upAsIs( doc, body )
+    {
+        return !! doc && ours( doc ) && doc.dirty === false && body != null &&
+               sameBody( typeof doc.base === "string" ? doc.base : doc.body, body );
+    }
 
     //------------------------------------------------------------------------//
     // TINY INDEXEDDB PROMISE WRAPPER
@@ -570,6 +577,19 @@
             e.preventDefault();
             e.returnValue = "";
         } );
+
+        // A desktop window's (x) removes its frame with no beforeunload: the
+        // desktop asks window.nayiveBeforeClose instead (desktop/index.html,
+        // close). This one answers for every app that has none of its own -
+        // the office editors, Image and eMail set theirs later, over it.
+        if( typeof window.nayiveBeforeClose !== "function" )
+            window.nayiveBeforeClose = function ()
+            {
+                if( ! Object.keys( pageOnly ).length ) return true;
+                if( ! window.NayiveUI || ! NayiveUI.confirm || ! NayiveUI.t ) return false;
+                return NayiveUI.confirm( { title: NayiveUI.t( "drive.unsavedTitle" ), body: NayiveUI.t( "ui.store.pageOnly" ),
+                                           confirm: NayiveUI.t( "drive.closeWithout" ), danger: true } );
+            };
     }
     catch ( e ) {}
 
@@ -956,8 +976,16 @@
             return res;
         }
 
-        // A save that waits to go up is this page's model from now on.
-        function adopt( path, e ) { setHeld( path, heldOf( e ) ); }
+        // A save that waits to go up is this page's model from now on - and the
+        // version it was made from is this page's: one queued by an older
+        // store.js carries none of its own, so the cached copy's, as that
+        // store.js would send it (a page holding no version saves unchecked).
+        function adopt( path, e, doc )
+        {
+            var h = heldOf( e );
+            if( ! e.ver ) Object.assign( h, entryVer( e, doc ) );
+            setHeld( path, h );
+        }
 
         // A cached copy is this page's model: its version, no queued save held.
         function fromCache( path, d ) { setHeld( path, Object.assign( docVer( d ), { id: null, inc: [], anc: [] } ) ); }
@@ -1022,7 +1050,7 @@
             if( queued )
             {
                 scheduleFlush();
-                adopt( path, queued );
+                adopt( path, queued, cached );
                 emit( navigator.onLine ? "pending" : "offline" );
                 return { body: queued.body, source: "cache",
                          mtime: cached && cached.body === queued.body ? cached.mtime : queued.queuedAt };
@@ -1053,7 +1081,7 @@
                     var put = await pathTx( db, path, "readwrite", function ( c )
                     {
                         if( ( writeSeq[ path ] || 0 ) !== seq ) return { ret: {} };
-                        if( c.out ) return { ret: { queued: c.out } };
+                        if( c.out ) return { ret: { queued: c.out, doc: c.doc && ours( c.doc ) ? c.doc : null } };
                         if( c.slot || ( c.doc && c.doc.dirty ) ) return { ret: {} };
 
                         // `base` for every text file, merging store or not: a
@@ -1082,7 +1110,7 @@
                     if( put.ok && put.ret.queued )
                     {
                         var q = put.ret.queued;
-                        adopt( path, q );
+                        adopt( path, q, put.ret.doc );
                         scheduleFlush();
                         emit( navigator.onLine ? "pending" : "offline" );
                         return { body: q.body, source: "cache", mtime: q.queuedAt };
@@ -1297,7 +1325,10 @@
                 var bk    = vkey( basis ), qk = vkey( ov );
                 var mine  = !! basis && ( bk === qk || ( !! bk && ( old.anc || [] ).indexOf( bk ) !== -1 ) );   // the queued body descends from this page's base
                 var later = ! mine && !! basis && !! qk && ( basis.anc || [] ).indexOf( qk ) !== -1;          // this page's descends from the queued one's
-                try { merged = mergeFn( path, mine ? verOf( basis ).base : later ? ov.base : null, body, old.body ); }
+                // The queued one took this page's last save in: that body is
+                // the base - what this page deleted or undid since stays so.
+                var tookMe = !! basis && !! basis.id && typeof basis.body === "string" && ( old.inc || [] ).indexOf( basis.id ) !== -1;
+                try { merged = mergeFn( path, tookMe ? basis.body : mine ? verOf( basis ).base : later ? ov.base : null, body, old.body ); }
                 catch ( e ) { merged = null; }
                 if( typeof merged !== "string" ) return { entry: freshEntry(), direct: true, merged: null, tx: {} };
                 body = merged;
@@ -1335,6 +1366,10 @@
             {
                 var up = basis && basis.id && ( lastSent( docMine, basis.id ) || upAsIs( docMine, basis.body ) );
                 var fv = up ? docVer( docMine ) : verOf( basis );
+                // This page's last save went up inside another one (a merge): the
+                // check stays its old version, but the merge that follows starts
+                // from that body - what this page deleted or undid since stays so.
+                if( ! up && basis && basis.id && typeof basis.body === "string" && wasSent( docMine, basis.id ) ) fv.base = basis.body;
                 return setVer( { path: path, body: body, queuedAt: now, conflict: false,
                                  bin: binary || body instanceof Uint8Array, ius: conflicts, who: ME, mrg: !! mergeFn,
                                  ver: 1, id: id, inc: basis && basis.id ? [ basis.id ].concat( basis.inc || [] ).slice( -KEEP_IDS ) : [],

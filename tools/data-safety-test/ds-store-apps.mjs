@@ -92,6 +92,10 @@ section( "A2 · HABITS IN ITS PAGE AND IN PLANNER'S PANE" );
     const OFF = "Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } ), true";
     const ON  = "( delete navigator.onLine, window.dispatchEvent( new Event( 'online' ) ), true )";
     const PW  = "document.getElementById('habitsPane').contentWindow";
+    // The page first re-reads (the plug's refresh): both pages start from the
+    // file as it is now, so the pane's save is merged into the page's waiting
+    // one and goes up as it is.
+    await H.evaluate( "window.nayiveRefresh().then( () => true )" );
     await H.evaluate( OFF );
     await P.evaluate( `${PW}.eval( ${JSON.stringify( OFF )} )` );
     await H.evaluate( "document.getElementById('addBtn').click(), true" );

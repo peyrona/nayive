@@ -233,15 +233,18 @@ section( "K2 · THE BROWSER'S STORAGE FAILS" );
         netDown = true;
         return SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'saved-while-idb-is-broken' }, { id: 'kept-in-the-page' } ] ) )
                .then( r => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev );
-                             r.guard = ev.defaultPrevented; IDBDatabase.prototype.transaction = real; netDown = false; return JSON.stringify( r ); } ); } )()` ) );
+                             r.guard = ev.defaultPrevented; r.close = window.nayiveBeforeClose ? window.nayiveBeforeClose() : 'none';
+                             IDBDatabase.prototype.transaction = real; netDown = false; return JSON.stringify( r ); } ); } )()` ) );
     ok( ! r3.ok && r3.pageOnly && ! r3.offline && ! r3.needsAuth,
         "storage AND network down: NOT saved (pageOnly, none of offline / needsAuth - the apps' \"safe here\")", r3 );
     ok( r3.guard === true, "and leaving that page asks first (the edit is only there)", r3 );
+    ok( r3.close === false, "...and so does closing its desktop window (nayiveBeforeClose)", r3 );
     ok( await A.evaluate( `SM.read( '${F}' ).then( r => r.body.indexOf( 'kept-in-the-page' ) !== -1 )` ), "a read in that page still shows the edit" );
     await A.evaluate( "SM.flush().then( () => true )" );   // (a flush already running answers at once: the disk is waited for)
     ok( await untilNode( () => ( ids( F ) || [] ).includes( "kept-in-the-page" ) ), "and it goes up once the network is back", disk( F ) );
     ok( await A.until( "( () => { const ev = new Event( 'beforeunload', { cancelable: true } ); window.dispatchEvent( ev ); return ! ev.defaultPrevented; } )()" ),
         "...after which leaving asks nothing" );
+    ok( await A.evaluate( "window.nayiveBeforeClose() === true" ), "...nor closing its window" );
 }
 
 //----------------------------------------------------------------------------//

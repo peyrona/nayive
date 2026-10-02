@@ -7,7 +7,9 @@
 //     never sent by an old tab as a file name, nor dropped.
 // Deploy transition (review of C4a): an old tab that sent a new tab's save
 //     made the new tab's next save - or that very save's own answer - a
-//     false "changed on another device".
+//     false "changed on another device"; an old tab's read and send left an
+//     older body in the cache that a third tab took for its own; a new tab
+//     that read an old tab's waiting save (no version on it) saved unchecked.
 import fs from "node:fs";
 import path from "node:path";
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
@@ -94,6 +96,57 @@ section( "AN OLD TAB SENDS IT WHILE THE NEW TAB'S OWN PUT IS ON ITS WAY" );
     await N.evaluate( "release(), true" );
     const r1 = JSON.parse( await N.evaluate( "w1" ) );
     ok( r1.ok && ! await N.evaluate( "EV.some( e => e.conflict )" ), "the new tab's save answers \"saved\" (it is), no conflict", r1 );
+}
+
+//----------------------------------------------------------------------------//
+section( "AN OLD TAB'S READ AND SEND LEAVE AN OLD BODY IN THE CACHE" );
+{
+    // The old tab's GET races a new tab's waiting save (its K3 bug: the
+    // cached copy gets the older body); then it sends that save, moving the
+    // copy's time and base, not its body. A third tab whose own last save
+    // equals that stale body must not take the copy's version for its own.
+    const F = "data/t/k3old.json";
+    const ids = () => { try { return JSON.parse( onDisk( s, F, "ana" ) ).map( x => x.id ); } catch { return []; } };
+    await seed( ana, F, '[{"id":"a"}]' );
+    const Z = await A.tab();  await Z.open( "/nayive/st.html" );
+    const Y = await A.tab();  await Y.open( "/nayive/st.html" );
+    const O = await A.tab();  await O.open( "/nayive/old.html" );
+    await Z.evaluate( `SM.read( '${F}' ).then( () => true )` );
+    const z0 = JSON.parse( await Z.evaluate( `J( SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'Z0' } ] ) ) )` ) );
+    ok( z0.ok && ids().join() === "a,Z0", "a new tab's save is up", onDisk( s, F, "ana" ) );
+    await Y.evaluate( `SM.read( '${F}' ).then( () => true )` );
+    await O.evaluate( `held = 0, hold( 'GET', 'k3old.json' ), window.rd = SM.read( '${F}' ).then( r => r.body ), true` );
+    ok( await O.until( "held === 1" ), "the old tab's read is out (held)" );
+    const y1 = JSON.parse( await Y.evaluate( `( offline( true ), J( SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'Z0' }, { id: 'Y1' } ] ) ) ) )` ) );
+    ok( y1.offline, "another new tab's save waits", y1 );
+    await O.evaluate( "release(), rd.then( () => true )" );
+    await O.evaluate( "SM.flush().then( () => true )" );
+    ok( await untilNode( () => ids().includes( "Y1" ) ), "the old tab sends it", onDisk( s, F, "ana" ) );
+    await O.send( "Page.navigate", { url: "about:blank" } );
+    await Y.evaluate( "offline( false )" );
+    const z1 = JSON.parse( await Z.evaluate( `J( SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'Z0' }, { id: 'Z1' } ] ) ) )` ) );
+    ok( await untilNode( () => ids().includes( "Z1" ) ) && ids().includes( "Y1" ), "the first tab saves again: the other tab's item stays", { z1, disk: onDisk( s, F, "ana" ) } );
+}
+
+//----------------------------------------------------------------------------//
+section( "A NEW TAB READS AN OLD TAB'S WAITING SAVE (NO VERSION OF ITS OWN)" );
+{
+    const F = "data/t/adopt.json";
+    const ids = () => { try { return JSON.parse( onDisk( s, F, "ana" ) ).map( x => x.id ); } catch { return []; } };
+    await seed( ana, F, '[{"id":"a"}]' );
+    const O = await A.tab();  await O.open( "/nayive/old.html" );
+    const N = await A.tab();  await N.open( "/nayive/st.html" );
+    const R = await A.tab();  await R.open( "/nayive/st.html" );
+    await O.evaluate( `SM.read( '${F}' ).then( () => true )` );
+    await O.evaluate( `( offline( true ), SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'O1' } ] ) ).then( () => true ) )` );
+    ok( String( await N.evaluate( `SM.read( '${F}' ).then( r => r.body )` ) ).indexOf( "O1" ) !== -1, "the new tab reads the old tab's waiting save" );
+    await O.evaluate( "offline( false ), SM.flush().then( () => true )" );
+    ok( await untilNode( () => ids().includes( "O1" ) ), "it goes up", onDisk( s, F, "ana" ) );
+    await seed( ana, F, '[{"id":"a"},{"id":"O1"},{"id":"P"}]' );
+    await R.evaluate( `SM.read( '${F}' ).then( () => true )` );   // any page's read: the cache is the phone's version now
+    const w = JSON.parse( await N.evaluate( `J( SM.write( '${F}', JSON.stringify( [ { id: 'a' }, { id: 'O1' }, { id: 'N1' } ] ) ) )` ) );
+    ok( await untilNode( () => ids().includes( "N1" ) ) && ids().includes( "P" ), "the new tab's save is checked: the phone's item stays", { w, disk: onDisk( s, F, "ana" ) } );
+    ok( await N.evaluate( `LOG.some( l => l.put === '${F}' && ( l.im || l.ius ) )` ), "(it went up with a version check)", await N.evaluate( "LOG" ) );
 }
 
 await done( A, s );
