@@ -24,7 +24,9 @@ package main
 // directory) is opened by its plain path. The server makes those and the file
 // API never moves a home or the base (isStructuralDir refuses), and nothing in
 // the API can create a symlink - so the part that needs the kernel's help is
-// the part INSIDE the root, the part a user names.
+// the part INSIDE the root, the part a user names. Only the admin panel moves
+// a home (rename, delete): open() then refuses a root that is no longer the
+// folder the path was approved in.
 //
 // NOT covered, by choice: the directory listings (filetree.go) still walk by
 // path - they are read-only and would need os.Root threaded through every
@@ -56,7 +58,36 @@ type Resolved struct {
 	Rel      string // the path inside Root; "." is Root itself
 	Abs      string // Root joined with Rel
 	Writable bool
+
+	// rootID is the folder that WAS at Root when the path was approved (nil:
+	// there was none), and epoch the account's counter then (Users.Resolve).
+	// open() refuses any other folder, and any after the counter moved - see
+	// errRootGone.
+	rootID os.FileInfo
+	epoch  accountEpoch
 }
+
+// accountEpoch is an account's counter (Users.EndRequests) as it was when a
+// path in its home was approved. The admin panel moves it on BEFORE it
+// creates, renames or deletes a home, so a path approved before never opens
+// after - even when a new person's home has the old one's name, and even
+// when the disk gave it the old folder's inode number back.
+type accountEpoch struct {
+	n  *atomic.Uint64 // nil: the root is no account's home (the admin's base, apps/)
+	at uint64
+}
+
+// moved: the account's home changed hands since the path was approved.
+func (e accountEpoch) moved() bool { return e.n != nil && e.n.Load() != e.at }
+
+// errRootGone: the folder a path was approved in is not there any more, or
+// another one now has its name - an account the admin renamed or deleted
+// while one of its requests was under way, maybe already given to a new
+// person. Opening it by name would re-create the old home (a ghost nobody
+// sees: the save is lost from view) or write into the new person's (L2), so
+// the request fails instead; a save then stays queued in the browser. It
+// counts as "not there", as a vanished folder always did.
+var errRootGone = fmt.Errorf("the folder this path was approved in moved or went: %w", fs.ErrNotExist)
 
 // newResolved splits an approved target into its root and the part inside.
 //
@@ -64,21 +95,28 @@ type Resolved struct {
 // root moves up to its parent. Nothing widens: Rel comes from a target that
 // already passed the containment check, so it can only name that one file.
 func newResolved(root, target string, writable bool) (Resolved, bool) {
-	if info, err := os.Stat(root); err == nil && !info.IsDir() {
+	info, err := os.Stat(root)
+	if err == nil && !info.IsDir() {
 		root = filepath.Dir(root)
+		info, err = os.Stat(root)
+	}
+	var id os.FileInfo
+	if err == nil {
+		id = info
 	}
 	rel, err := filepath.Rel(root, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return Resolved{}, false
 	}
-	return Resolved{Root: root, Rel: rel, Abs: target, Writable: writable}, true
+	return Resolved{Root: root, Rel: rel, Abs: target, Writable: writable, rootID: id}, true
 }
 
 // at is another path under the SAME root - the trash can next to a file, the
 // restored name beside the original.
 func (p Resolved) at(rel string) Resolved {
 	rel = filepath.Clean(rel)
-	return Resolved{Root: p.Root, Rel: rel, Abs: filepath.Join(p.Root, rel), Writable: p.Writable}
+	return Resolved{Root: p.Root, Rel: rel, Abs: filepath.Join(p.Root, rel), Writable: p.Writable,
+		rootID: p.rootID, epoch: p.epoch}
 }
 
 // relTo is where an absolute path sits inside p's root, or false when it does
@@ -97,14 +135,37 @@ func (p Resolved) relTo(abs string) (string, bool) {
 
 // open opens the root. The caller closes it; a file opened through it stays
 // valid after that.
-func (p Resolved) open() (*os.Root, error) { return os.OpenRoot(p.Root) }
-
-// openCreating is open() for a write: a home that is somehow missing is made
-// first, as the plain os.MkdirAll this replaces used to do on its way down.
-func (p Resolved) openCreating() (*os.Root, error) {
-	if err := os.MkdirAll(p.Root, 0o755); err != nil {
+//
+// Only the very folder the path was approved in: one missing then, missing
+// now, or another folder under its name, is errRootGone (L2) - and so is any
+// folder once the account's counter moved. The counter is read AFTER the
+// open: unmoved then, the handle is the old folder. Once open, the handle
+// follows the folder - a write under way when the admin renames the account
+// lands in the renamed home, where it belongs.
+func (p Resolved) open() (*os.Root, error) {
+	if p.rootID == nil {
+		return nil, errRootGone
+	}
+	root, err := os.OpenRoot(p.Root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, errRootGone
+	}
+	if err != nil {
 		return nil, err
 	}
+	if now, err := root.Stat("."); err != nil || !os.SameFile(p.rootID, now) || p.epoch.moved() {
+		root.Close()
+		return nil, errRootGone
+	}
+	return root, nil
+}
+
+// openCreating is open() for a write. It NEVER makes the root itself: a home
+// that is missing was renamed or deleted by the admin since this request was
+// let in, and making it again would put the save in a ghost homes/<old name>/
+// (L2, server-writes #5). What a write needs below the root, it makes inside
+// it (root.MkdirAll).
+func (p Resolved) openCreating() (*os.Root, error) {
 	return p.open()
 }
 

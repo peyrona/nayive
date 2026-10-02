@@ -402,6 +402,11 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 	case "write-failed":
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar el usuario: el disco no lo aceptó (el registro del servidor dice por qué)")
 	default:
+		if status == "created" {
+			// A deleted or renamed-away person may have had this name: the
+			// newcomer's eMail starts from their own empty home (L1).
+			s.mail.NameReused(name)
+		}
 		s.log.Info("user saved", "status", status, "name", name)
 		sendJSON(w, r, http.StatusOK,
 			map[string]string{"message": "usuario guardado", "name": name})
@@ -447,8 +452,16 @@ func (s *Server) adminRenameUser(w http.ResponseWriter, r *http.Request, body *a
 	// Sign them out BEFORE the move: a session left alive would keep pointing
 	// at a folder that no longer exists.
 	s.sessions.DropUser(oldName)
+	// eMail holds the old name until the folder has moved: nothing of the hub
+	// may write a ghost homes/<old>/data/mail meanwhile (L1, admin_mail.go).
+	finishMail := s.mail.BeginRename(oldName)
 	status := s.users.RenameAccount(oldName, newName)
 	s.users.ForgetUsage(oldName)
+	if status == "renamed" {
+		finishMail(newName) // their mail answers under the new name
+	} else {
+		finishMail("")
+	}
 
 	switch status {
 	case "missing":
@@ -489,10 +502,19 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request, body *a
 	}
 	// Signed out first: no request of theirs may write into a half-removed home.
 	s.sessions.DropUser(name)
+	// Their eMail stops before the home goes: the hub must never write a ghost
+	// homes/<name>/data/mail, nor a new person with this name get their
+	// mailboxes (L1, admin_mail.go).
+	s.mail.DropUser(name)
+	// A request let in just before (its session was alive) stops at its next
+	// open: it must not re-create the home, nor reach a new person's (L2).
+	s.users.EndRequests(name)
 	removed := os.RemoveAll(home)
 	// The rest goes even when the home did not go whole: its config.json may be
 	// gone already, and the account with it from the admin's list.
 	s.users.ForgetUsage(name)
+	// A new person given this name inherits none of its old names (L3).
+	s.users.ForgetRenames(name)
 	s.shares.DropUser(name)   // anything they shared, or was shared with them
 	s.trackers.DropUser(name) // their location URL
 	s.chat.DeleteUser(name)   // their chat links; others' chats with them end

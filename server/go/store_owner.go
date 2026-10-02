@@ -23,16 +23,43 @@ package main
 //
 // The cookie is NOT HttpOnly on purpose: it holds only "role:name", which the
 // page shows anyway. It never authenticates anything.
+//
+// AN ADMIN RENAME (L3). Saves queued before the admin renamed ana to ana2
+// carry "user:ana", which is nobody's any more: never sent, never shown, and
+// the launcher's sign-out deletes them. So the server keeps the names each
+// account had (config/renames.json, accountRenames below) and hands them to
+// the account's pages, for shared/store.js to re-tag those saves once:
+//
+//   - GET /api/whoami, as ana2: "renamed": {"who": "user:ana2", "from":
+//     ["user:ana"]} - absent when there are none. "who" is the nayive_who
+//     value of the account they now belong to: a page re-tags only when it is
+//     its own ME. Every value is escaped exactly as whoValue escapes it.
+//   - the readable cookie "nayive_was", set beside nayive_who (sign-in,
+//     whoami) and with its lifetime: the same values, the account's first,
+//     joined by "/" (a valid cookie byte that whoValue always escapes inside
+//     a value): "user:ana2/user:ana". Cleared at sign-out, and by a whoami
+//     that has none to give.
+//   - a save tagged "user:ana" from ana2's session is ana2's: taken, not 423
+//     (Server.saveOwnerOK) - a page loaded before the rename tags that way.
+//
+// A name given to a NEW account (create-user, or another rename into it)
+// stops being an old name of anyone - its saves must never reach the renamed
+// person, nor theirs the newcomer - and a deleted account's names go with it.
 
 import (
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	WhoCookieName = "nayive_who"
+	WasCookieName = "nayive_was"
 	whoHeader     = "X-Nayive-User"
 )
 
@@ -67,4 +94,170 @@ func saveOwnerOK(w http.ResponseWriter, r *http.Request, role, user string) bool
 	}
 	sendError(w, r, http.StatusLocked, "this save belongs to another account")
 	return false
+}
+
+// saveOwnerOK is the check with the account's old names: a save queued under
+// a name the admin renamed to this account is this account's (L3).
+func (s *Server) saveOwnerOK(w http.ResponseWriter, r *http.Request, role, user string) bool {
+	if h := r.Header.Get(whoHeader); h != "" && role == "user" {
+		for _, old := range s.users.RenamedFrom(user) {
+			if h == whoValue("user", old) {
+				return true
+			}
+		}
+	}
+	return saveOwnerOK(w, r, role, user)
+}
+
+// wasValue is the nayive_was cookie's value: the account's who value, then
+// one per old name. "" = no old names.
+func wasValue(user string, from []string) string {
+	if len(from) == 0 {
+		return ""
+	}
+	out := []string{whoValue("user", user)}
+	for _, old := range from {
+		out = append(out, whoValue("user", old))
+	}
+	return strings.Join(out, "/")
+}
+
+// wasCookieHeader lives exactly as long as the nayive_who cookie beside it.
+func wasCookieHeader(value string, ttl time.Duration, remember, secure bool) string {
+	out := WasCookieName + "=" + value + "; SameSite=Lax; Path=/"
+	if remember {
+		out += "; Max-Age=" + strconv.Itoa(int(ttl.Seconds()))
+	}
+	if secure {
+		out += "; Secure"
+	}
+	return out
+}
+
+func clearWasCookieHeader() string {
+	return WasCookieName + "=; SameSite=Lax; Path=/; Max-Age=0"
+}
+
+// -----------------------------------------------------------------------------
+// the old names: config/renames.json
+// -----------------------------------------------------------------------------
+
+// accountRename is one row of config/renames.json: the account now called To
+// was called From until At.
+type accountRename struct {
+	From string    `json:"from"`
+	To   string    `json:"to"`
+	At   time.Time `json:"at"`
+}
+
+type renamesFile struct {
+	Renames []accountRename `json:"renames"`
+}
+
+// accountRenames is config/renames.json, held in memory. Its own lock: whoami
+// and the save check ask it, and must not wait on a config.json write.
+type accountRenames struct {
+	path string
+	log  Logger
+
+	mu     sync.Mutex
+	loaded bool
+	broken bool // the file could not be read: moved aside before the next save
+	rows   []accountRename
+}
+
+func newAccountRenames(configDir string, log Logger) *accountRenames {
+	return &accountRenames{path: filepath.Join(configDir, "renames.json"), log: log}
+}
+
+// loadLocked reads the file the first time anything asks. mu held.
+func (a *accountRenames) loadLocked() {
+	if a.loaded {
+		return
+	}
+	a.loaded = true
+	var f renamesFile
+	if ok, broken := loadTable(a.path, &f, a.log, "starting with no old names"); ok {
+		a.rows = f.Renames
+	} else {
+		a.broken = broken
+	}
+}
+
+// saveLocked writes the table back. A failed write is only logged: the rename
+// itself is done, and memory still answers until a restart. mu held.
+func (a *accountRenames) saveLocked() {
+	rows := a.rows
+	if rows == nil {
+		rows = []accountRename{}
+	}
+	saveTable(a.path, &a.broken, renamesFile{Renames: rows}, a.log)
+}
+
+// dropLocked removes every row that names `name`, either way round, and says
+// whether there was one. mu held.
+func (a *accountRenames) dropLocked(name string) bool {
+	var kept []accountRename
+	for _, r := range a.rows {
+		if r.From != name && r.To != name {
+			kept = append(kept, r)
+		}
+	}
+	changed := len(kept) != len(a.rows)
+	a.rows = kept
+	return changed
+}
+
+// renamed notes old -> name. Rows that named `name` go first (it is a new
+// account's name now, see the top), the names `old` had follow it to `name`
+// (ana -> ana2 -> ana3: both are ana3's), and a name renamed back to what it
+// was is no old name of itself.
+func (a *accountRenames) renamed(old, name string, at time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.loadLocked()
+	a.dropLocked(name)
+	var kept []accountRename
+	for _, r := range a.rows {
+		if r.To == old {
+			r.To = name
+		}
+		if r.From != r.To {
+			kept = append(kept, r)
+		}
+	}
+	a.rows = append(kept, accountRename{From: old, To: name, At: at.UTC().Truncate(time.Second)})
+	a.saveLocked()
+}
+
+// forget drops every row naming `name`: a new account took it, or it was
+// deleted.
+func (a *accountRenames) forget(name string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.loadLocked()
+	if a.dropLocked(name) {
+		a.saveLocked()
+	}
+}
+
+// from is the names the account `name` had, oldest first.
+func (a *accountRenames) from(name string) []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.loadLocked()
+	var out []string
+	for _, r := range a.rows {
+		if r.To == name {
+			out = append(out, r.From)
+		}
+	}
+	return out
+}
+
+// isAccount: homes/<name>/data/config.json is there - the test ListUserNames
+// makes.
+func isAccount(homesDir, name string) bool {
+	info, err := os.Stat(filepath.Join(homesDir, name, "data", "config.json"))
+	return err == nil && !info.IsDir()
 }

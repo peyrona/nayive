@@ -10,6 +10,8 @@ package main
 import (
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -97,6 +99,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	// test, and it decides whether the cookie gets "; Secure".
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, creds.Remember, r.TLS != nil))
 	w.Header().Add("Set-Cookie", whoCookieHeader(role, user, ttl, creds.Remember, r.TLS != nil))
+	s.setWasCookie(w, r, role, user, ttl, creds.Remember)
 
 	s.log.Info("login ok", "user", user, "role", role, "remember", creds.Remember)
 
@@ -129,6 +132,7 @@ func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 	s.sessions.Drop(tokenFrom(r))
 	w.Header().Set("Set-Cookie", clearCookieHeader())
 	w.Header().Add("Set-Cookie", clearWhoCookieHeader())
+	w.Header().Add("Set-Cookie", clearWasCookieHeader())
 	redirect(w, http.StatusFound, URLPrefix+"/login.html")
 }
 
@@ -169,8 +173,36 @@ func (s *Server) apiWhoami(w http.ResponseWriter, r *http.Request) {
 	// here too so a session from before that cookie existed gets it, and an
 	// admin rename puts the new name in it.
 	w.Header().Add("Set-Cookie", whoCookieHeader(sess.Role, sess.User, ttl, remembered, r.TLS != nil))
+	// ...and the names an admin rename took from it, whose saves a browser may
+	// still hold (L3, store_owner.go).
+	if from := s.setWasCookie(w, r, sess.Role, sess.User, ttl, remembered); len(from) > 0 {
+		was := []string{}
+		for _, old := range from {
+			was = append(was, whoValue("user", old))
+		}
+		me["renamed"] = map[string]any{"who": whoValue(sess.Role, sess.User), "from": was}
+	}
 
 	sendJSON(w, r, http.StatusOK, me)
+}
+
+// setWasCookie sets the nayive_was cookie (store_owner.go) beside nayive_who,
+// or clears one the browser holds when the account has no old names - an
+// admin's, or one whose old name went to a new person since. It answers the
+// old names.
+func (s *Server) setWasCookie(w http.ResponseWriter, r *http.Request, role, user string,
+	ttl time.Duration, remember bool) []string {
+
+	var from []string
+	if role == "user" {
+		from = s.users.RenamedFrom(user)
+	}
+	if len(from) > 0 {
+		w.Header().Add("Set-Cookie", wasCookieHeader(wasValue(user, from), ttl, remember, r.TLS != nil))
+	} else if _, err := r.Cookie(WasCookieName); err == nil {
+		w.Header().Add("Set-Cookie", clearWasCookieHeader())
+	}
+	return from
 }
 
 // passwordFreeAPI are the only API routes an account with NO password yet may
@@ -396,10 +428,14 @@ func (s *Server) apiUsers(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, r, http.StatusOK, map[string][]string{"users": others})
 }
 
-// ensureHome creates data/ and files/ for a user signing in.
+// ensureHome creates data/ and files/ for a user signing in - inside the home,
+// never the home itself: a sign-in whose password check ran just before the
+// admin renamed or deleted the account would bring homes/<old name>/ back as
+// a ghost, and its session would then save there (L2). os.Mkdir, not
+// MkdirAll, is that rule; "already there" is the usual answer.
 func (s *Server) ensureHome(user string) {
 	for _, sub := range []string{"data", "files"} {
-		mkdirAll(s.users.homeDir(user), sub)
+		os.Mkdir(filepath.Join(s.users.homeDir(user), sub), 0o755)
 	}
 }
 
