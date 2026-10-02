@@ -741,24 +741,29 @@ async function postersReady()
 // at start-up (it would drop the posters another device found since, and put
 // back a TMDB key changed there). It reads the file again and lays over it
 // only what THIS page found (st.postersMine) and the key, when it was typed
-// here (st.postersKeyMine); what the others found is kept, here too. A file
-// that cannot be read now is not written: the marks stay for the next save.
-// Never throws.
+// here (st.postersKeyMine); what the others found is kept, here too - and
+// version-checked (GumApi.updateJson): posters saved between that read and
+// this write make it read again. A file that cannot be read now is not
+// written: the marks stay for the next save. Never throws.
 async function savePosters()
 {
     if( st.postersBlocked ) return;
     var mine = Object.keys( st.postersMine ), keyMine = st.postersKeyMine;
     if( ! mine.length && ! keyMine ) return;
     var disk;
-    try { disk = await GumApi.readJson( POSTERS_PATH ); }
-    catch( e ) { return; }
-    if( disk === null ) disk = {};
-    if( typeof disk !== "object" || Array.isArray( disk ) ) return;
-    if( typeof disk.key !== "string" ) disk.key = "";
-    if( ! disk.items || typeof disk.items !== "object" || Array.isArray( disk.items ) ) disk.items = {};
-    mine.forEach( function ( k ) { disk.items[ k ] = st.posters.items[ k ]; } );
-    if( keyMine ) disk.key = st.posters.key;
-    try { await GumApi.writeJson( POSTERS_PATH, disk ); }
+    try
+    {
+        disk = await GumApi.updateJson( POSTERS_PATH, function ( d )
+        {
+            if( d === null ) d = {};
+            if( typeof d !== "object" || Array.isArray( d ) ) throw new SyntaxError( "posters.json is not a map" );
+            if( typeof d.key !== "string" ) d.key = "";
+            if( ! d.items || typeof d.items !== "object" || Array.isArray( d.items ) ) d.items = {};
+            mine.forEach( function ( k ) { d.items[ k ] = st.posters.items[ k ]; } );
+            if( keyMine ) d.key = st.posters.key;
+            return d;
+        } );
+    }
     catch( e ) { return; }
     // Saved: unmark what went (unless it changed again meanwhile), take theirs.
     mine.forEach( function ( k ) { if( st.posters.items[ k ] === disk.items[ k ] ) delete st.postersMine[ k ]; } );
@@ -902,22 +907,29 @@ async function writeProgress()
     st.progDirty = {};
     try
     {
-        var disk = parseProgress( await GumApi.readJson( PROGRESS_PATH ) );
+        // Version-checked (GumApi.updateJson): another device's save between
+        // the read and the write (a pagehide save racing this one) makes it
+        // read again and lay these films again - never written over. Worked
+        // out afresh on each read, `theirs` too.
         var theirs = [];
-        paths.forEach( function ( p )
+        var disk = await GumApi.updateJson( PROGRESS_PATH, function ( raw )
         {
-            // The newer one wins, per film: a resume point another device
-            // saved AFTER this page's change (a late save from a tab left
-            // open, a pagehide) is not put back to this page's older state.
-            // Only a resume point says when it was made ("at", seconds); a
-            // "watched" mark does not, so against one this page's change wins.
-            var r = disk.resume[ p ];
-            if( r && Number( r.at ) > dirty[ p ] ) { theirs.push( p ); return; }
-            if( st.prog.watched[ p ] ) disk.watched[ p ] = true;            else delete disk.watched[ p ];
-            if( st.prog.resume[ p ] )  disk.resume[ p ]  = st.prog.resume[ p ]; else delete disk.resume[ p ];
+            var d = parseProgress( raw );
+            theirs = [];
+            paths.forEach( function ( p )
+            {
+                // The newer one wins, per film: a resume point another device
+                // saved AFTER this page's change (a late save from a tab left
+                // open, a pagehide) is not put back to this page's older state.
+                // Only a resume point says when it was made ("at", seconds); a
+                // "watched" mark does not, so against one this page's change wins.
+                var r = d.resume[ p ];
+                if( r && Number( r.at ) > dirty[ p ] ) { theirs.push( p ); return; }
+                if( st.prog.watched[ p ] ) d.watched[ p ] = true;            else delete d.watched[ p ];
+                if( st.prog.resume[ p ] )  d.resume[ p ]  = st.prog.resume[ p ]; else delete d.resume[ p ];
+            } );
+            return d;
         } );
-        await GumApi.writeFileBytes( PROGRESS_PATH,
-            new TextEncoder().encode( JSON.stringify( disk, null, 1 ) ) );
         // Show theirs here too - unless the film changed here again meanwhile.
         theirs.forEach( function ( p )
         {

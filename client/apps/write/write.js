@@ -806,24 +806,26 @@ async function removePersonalWord( word )
 // Write windows are normal on a PC, and writing this page's boot-time list
 // dropped every word another window had added since. The list is a set, so
 // the change is made to what is up there now, and that becomes this page's
-// list too. A list that cannot be read is never written (it would keep only
+// list too. Version-checked (GumApi.updateJson): a word added in another
+// window between the read and the write makes it read again and change
+// again. A list that cannot be read is never written (it would keep only
 // one word): false, as for a write that failed.
 async function changeDict( change )
 {
-    let words;
+    let saved;
     try
     {
-        const j = await GumApi.readJson( PERSONAL_DICT );
-        if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
-        words = j ? j.words.slice() : [];
+        saved = await GumApi.updateJson( PERSONAL_DICT, function( j )
+        {
+            if( j !== null && ! Array.isArray( j && j.words ) ) throw new Error( PERSONAL_DICT + ' has no word list' );
+            const words = j ? j.words.slice() : [];
+            change( words );
+            return { words: words };
+        } );
     }
     catch( _ ) { return false; }
 
-    change( words );
-    try { await GumApi.writeJson( PERSONAL_DICT, { words: words } ); }
-    catch( _ ) { return false; }
-
-    personalWords = words;
+    personalWords = saved.words;
     setPersonalWords( personalWords );
     return true;
 }

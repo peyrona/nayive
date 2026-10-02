@@ -25,6 +25,22 @@
  * server answers it from its in-memory session table (no disk access at all)
  * and 401s an anonymous visitor. The apps use that to decide "open the app" vs
  * "bounce to /nayive/login.html".
+ *
+ * WHOSE PAGE (L5). Every request that changes files - a PUT, and every
+ * DELETE / POST (delete, move, bin restore, new folder, zip...) - carries
+ * X-Nayive-User: the account this page belongs to (the "nayive_who" cookie
+ * as it was when the page loaded - the name shared/store.js tags its saves
+ * with, NayiveStore.me). A tab left open after another account signed in on
+ * this browser gets 423 instead of writing into that other person's home
+ * (server/go/store_owner.go).
+ *
+ * VERSIONS (data-safety A, C). The server tags every file with a strong ETag
+ * that every write changes (server/go/etag.go). readVersion() hands it back
+ * with the body; writeFileBytes( p, b, { ifMatch: tag } ) writes only over
+ * THAT version, { createOnly: true } only where there is no file - else 412
+ * and nothing is written. updateJson() is the read -> change -> write of a
+ * small JSON file that never drops what another device saved in between: on
+ * a 412 it reads again and makes its change again.
  */
 ( function ()
 {
@@ -36,6 +52,51 @@
     var MAX_RETRIES = 2;
     var BASE_DELAY  = 500;   // ms; doubles each retry (500, 1000)
 
+    // Who this page belongs to (WHOSE PAGE above): read ONCE, as the page
+    // loads - never again, so a tab left open across another account's
+    // sign-in still names its own. "" = unknown: no header, taken as before.
+    var ME_AT_LOAD = ( function ()
+    {
+        try
+        {
+            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
+            return m ? m[ 1 ] : "";
+        }
+        catch ( e ) { return ""; }
+    } )();
+
+    function owner()
+    {
+        var me = window.NayiveStore && NayiveStore.me;
+        return typeof me === "string" && me ? me : ME_AT_LOAD;
+    }
+
+    // The headers of a request that changes files: `extra` plus the owner's name.
+    function ownerHeaders( extra )
+    {
+        var h = {};
+        for( var k in ( extra || {} ) ) h[ k ] = extra[ k ];
+        if( owner() ) h[ "X-Nayive-User" ] = owner();
+        return h;
+    }
+
+    // fetch() options for `url`: a request that changes something (any method
+    // but GET / HEAD - a delete, a move, a bin restore, a new folder, a zip)
+    // names the page's owner as a PUT does (WHOSE PAGE). Our own server only:
+    // a header of ours on another site's request would cost a CORS preflight.
+    function ownedOptions( url, options )
+    {
+        options = options || {};
+        var m = String( options.method || "GET" ).toUpperCase();
+        if( m === "GET" || m === "HEAD" || ! owner() ) return options;
+        try { if( new URL( url, window.location.href ).origin !== window.location.origin ) return options; }
+        catch ( e ) { return options; }
+        var o = {};
+        for( var k in options ) o[ k ] = options[ k ];
+        o.headers = ownerHeaders( options.headers );
+        return o;
+    }
+
     //------------------------------------------------------------------------//
     // FETCH WITH RETRY
     //
@@ -46,6 +107,12 @@
     // retried. And only a GET or a PUT: sending one twice changes nothing, while
     // a POST or DELETE that did land (a rename, a trip to the papelera) would
     // come back from its retry as a false error.
+    //
+    // A PUT whose answer came back is never sent again, whatever the answer:
+    // a conditional one (If-Match, If-None-Match) answered 412 means "not over
+    // that file", and only the user or the caller's merge may decide what next.
+    // An error thrown after a re-send says so (err.retried): the first try may
+    // have landed before the connection dropped (ownFirstTry below).
 
     function sleep( ms )
     {
@@ -74,6 +141,7 @@
                 return withRetry( attempt, tries + 1 );
             }
 
+            if( tries > 0 && err && typeof err === "object" ) err.retried = true;
             throw err;
         }
     }
@@ -109,25 +177,29 @@
     // GET (or any method via `options`) -> response body as text.
     function fetchText( url, options )
     {
+        var sent = ownedOptions( url, options );
         return withRetry( function ()
         {
-            return fetch( url, options || {} ).then( assertOk ).then( function ( r ) { return r.text(); } );
+            return fetch( url, sent ).then( assertOk ).then( function ( r ) { return r.text(); } );
         }, 0, ! mayRetry( options ) );
     }
 
     // GET -> response body as a Uint8Array.
     function fetchBinary( url, options )
     {
+        var sent = ownedOptions( url, options );
         return withRetry( function ()
         {
-            return fetch( url, options || {} ).then( assertOk )
+            return fetch( url, sent ).then( assertOk )
                    .then( function ( r ) { return r.arrayBuffer(); } )
                    .then( function ( buf ) { return new Uint8Array( buf ); } );
         }, 0, ! mayRetry( options ) );
     }
 
-    // PUT raw bytes (a Uint8Array or a Blob). Resolves with nothing; rejects
-    // on a non-2xx or a drop that outlasts the retries.
+    // PUT raw bytes (a Uint8Array or a Blob). Resolves { tag }: the new file's
+    // version (its ETag; null from a server that sends none). Rejects on a
+    // non-2xx or a drop that outlasts the retries. Sent with the page's owner
+    // (X-Nayive-User, WHOSE PAGE above).
     //
     // XMLHttpRequest rather than fetch(), because only XHR reports UPLOAD
     // progress. Every attempt is announced as "nayive:upload" events on the
@@ -151,6 +223,7 @@
     function putBinary( url, bytes, headers )
     {
         var size = ( bytes && ( bytes.size !== undefined ? bytes.size : bytes.byteLength ) ) || 0;
+        var sent = ownerHeaders( headers );
 
         return withRetry( function ()
         {
@@ -162,7 +235,7 @@
                 function end() { announceUpload( { id: id, done: true } ); }
 
                 xhr.open( "PUT", url );
-                for( var h in ( headers || {} ) ) xhr.setRequestHeader( h, headers[ h ] );
+                for( var h in sent ) xhr.setRequestHeader( h, sent[ h ] );
                 xhr.upload.onprogress = function ( e )
                 {
                     announceUpload( { id: id, loaded: e.loaded,
@@ -173,7 +246,8 @@
                     end();
                     // The shape assertOk (and authLost) read off a fetch Response.
                     resolve( { ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status,
-                               statusText: xhr.statusText, url: xhr.responseURL || url } );
+                               statusText: xhr.statusText, url: xhr.responseURL || url,
+                               tag: strongTag( xhr.getResponseHeader( "ETag" ) ) } );
                 };
                 xhr.onerror = xhr.onabort = xhr.ontimeout = function ()
                 {
@@ -183,9 +257,13 @@
 
                 announceUpload( { id: id, loaded: 0, total: size } );
                 xhr.send( bytes );
-            } ).then( assertOk ).then( function () {} );
+            } ).then( assertOk ).then( function ( r ) { return { tag: r.tag }; } );
         } );
     }
+
+    // Only a strong tag ("...") goes back as If-Match: the server refuses a
+    // write whose If-Match it cannot match exactly, a weak W/"..." included.
+    function strongTag( t ) { return typeof t === "string" && /^"[^"]*"$/.test( t ) ? t : null; }
 
     //------------------------------------------------------------------------//
     // CHANGE NEWS
@@ -229,45 +307,194 @@
 
     function readFile( path )               { return fetchText( fileUrl( path ) ); }
     function readFileBytes( path )           { return fetchBinary( fileUrl( path ) ); }
-    // opts.convert = "mp4": the server also queues the file for conversion
-    // (Drive's "Subir y convertir" - server/go/convert.go). Anything else, or
-    // no opts, is a plain upload.
-    function writeFileBytes( path, bytes, opts )
+
+    function isMissing( e ) { return !! e && ( e.status === 404 || String( e.message ).indexOf( "HTTP 404" ) !== -1 ); }
+
+    // A file WITH its version: { body, tag, offline } - body as text, or a
+    // Uint8Array with opts.bytes; tag = its strong ETag (null when none came);
+    // offline = the service worker answered from its offline copy (a trip's
+    // document with no network, "X-Nayive-Copy: offline"): an OLD copy, never
+    // the file's current version - nothing may be written from it as if it
+    // were. Throws like readFile (err.status 404: no file). The browser checks
+    // its cached copy with the server first (no-cache): the tag is the bytes'.
+    function readVersion( path, opts )
     {
-        var url = fileUrl( path );
-        if( opts && opts.convert ) url += "&convert=" + encodeURIComponent( opts.convert );
-        return putBinary( url, bytes ).then( changed( [ path ], false ) );
+        var bytes = !! ( opts && opts.bytes );
+        return withRetry( function ()
+        {
+            return fetch( fileUrl( path ), { cache: "no-cache" } ).then( assertOk ).then( function ( r )
+            {
+                var tag     = strongTag( r.headers.get( "ETag" ) );
+                var offline = !! r.headers.get( "X-Nayive-Copy" );
+                return ( bytes ? r.arrayBuffer().then( function ( b ) { return new Uint8Array( b ); } ) : r.text() )
+                       .then( function ( body ) { return { body: body, tag: tag, offline: offline }; } );
+            } );
+        } );
     }
 
-    // writeFileBytes for a NEW file only: it never replaces one. When the name
-    // is taken - even by a file another device put there a moment ago - the
-    // server writes nothing and answers 412 (If-None-Match: *, server/go/
-    // upload.go): the error has err.status === 412, and the caller asks the
-    // user (replace / keep both) instead of overwriting blind.
-    // NOTE: like every PUT it is re-sent after a dropped connection; if the
-    // first try had in fact landed, the re-send meets that very file: 412.
-    function createFileBytes( path, bytes )
+    // The version a file has NOW, without its bytes (HEAD - never an offline
+    // copy: the service worker answers only GETs): { tag, exists }.
+    function versionOf( path )
     {
-        return putBinary( fileUrl( path ), bytes, { "If-None-Match": "*" } ).then( changed( [ path ], false ) );
+        return withRetry( function ()
+        {
+            return fetch( fileUrl( path ), { method: "HEAD", cache: "no-store" } ).then( function ( r )
+            {
+                if( r.status === 404 ) return { tag: null, exists: false };
+                assertOk( r );
+                return { tag: strongTag( r.headers.get( "ETag" ) ), exists: true };
+            } );
+        } );
+    }
+
+    // PUT one file. Resolves { tag } (its new version). `opts`, all optional:
+    //   convert: "mp4"   the server also queues it for conversion (Drive's
+    //                    "Subir y convertir" - server/go/convert.go)
+    //   ifMatch: tag     only over THAT version of the file (readVersion's
+    //                    tag, or a previous write's): a file changed since -
+    //                    or gone - answers 412 and nothing is written
+    //   createOnly: true only where there is no file (If-None-Match: *): a
+    //                    name taken - even a moment ago, by another device -
+    //                    answers 412 (409 in a folder shared with us, which
+    //                    only ever gains files) and nothing is written
+    // No opts: a plain upload that replaces whatever is there.
+    function writeFileBytes( path, bytes, opts )
+    {
+        opts = opts || {};
+        var url = fileUrl( path ), headers = {};
+        if( opts.convert ) url += "&convert=" + encodeURIComponent( opts.convert );
+        if( opts.createOnly )    headers[ "If-None-Match" ] = "*";
+        else if( opts.ifMatch )  headers[ "If-Match" ] = opts.ifMatch;
+        else if( "ifMatch" in opts ) return Promise.reject( noTag() );   // conditional, but no tag held
+
+        var put = putBinary( url, bytes, headers );
+        if( opts.createOnly || opts.ifMatch )
+            put = put.catch( function ( err ) { return ownFirstTry( err, path, bytes, !! opts.createOnly ); } );
+        return put.then( changed( [ path ], false ) );
+    }
+
+    // An If-Match with no tag would be refused by the server anyway (etag.go):
+    // the same 412, without the round trip.
+    function noTag()
+    {
+        var err = new Error( "HTTP 412: no version to write over" );
+        err.status = 412;
+        return err;
+    }
+
+    // OUR OWN FIRST TRY. A conditional PUT re-sent after a dropped connection
+    // (err.retried) may meet the file its own first try made - that try landed,
+    // only its answer was lost - and get 412 (409 for a create in a folder
+    // shared with us). The same bytes there ARE that: saved, with the version
+    // read back. Only a file small enough to read back is judged so; a bigger
+    // one may still be another file of the same size - the 412 stands, and
+    // the caller asks. An offline copy proves nothing.
+    var SAME_CHECK_MAX = 8 * 1024 * 1024;
+
+    async function ownFirstTry( err, path, bytes, create )
+    {
+        if( ! err || ! err.retried ) throw err;
+        if( err.status !== 412 && ! ( create && err.status === 409 ) ) throw err;
+        var size = bytes && ( bytes.size !== undefined ? bytes.size : bytes.byteLength );
+        if( ! ( size <= SAME_CHECK_MAX ) ) throw err;
+        try
+        {
+            var have = await readVersion( path, { bytes: true } );
+            var mine = bytes instanceof Uint8Array ? bytes
+                     : new Uint8Array( bytes.arrayBuffer ? await bytes.arrayBuffer() : bytes );
+            if( sameBytes( have.body, mine ) && ! have.offline ) return { tag: have.tag };
+        }
+        catch ( e ) {}
+        throw err;
+    }
+
+    function sameBytes( a, b )
+    {
+        if( a.length !== b.length ) return false;
+        for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
+        return true;
+    }
+
+    // writeFileBytes for a NEW file only: it never replaces one (createOnly
+    // above). The caller asks the user (replace / keep both) on err.status
+    // 412, instead of overwriting blind. opts.convert as writeFileBytes.
+    function createFileBytes( path, bytes, opts )
+    {
+        return writeFileBytes( path, bytes, { createOnly: true, convert: opts && opts.convert } );
     }
 
     // Small JSON sidecar helpers (data/<app>/config.json and friends). readJson
     // resolves null when the file isn't there yet (a fresh account); any other
     // failure - including a 401 - is thrown so the caller can react. writeJson
-    // creates missing parent folders, same as a plain PUT.
+    // creates missing parent folders, same as a plain PUT; `opts` as
+    // writeFileBytes (ifMatch / createOnly).
     async function readJson( path )
     {
         try { return JSON.parse( await readFile( path ) ); }
         catch ( e )
         {
-            if( e && ( e.status === 404 || String( e.message ).indexOf( "HTTP 404" ) !== -1 ) ) return null;
+            if( isMissing( e ) ) return null;
             throw e;
         }
     }
 
-    function writeJson( path, obj )
+    function writeJson( path, obj, opts )
     {
-        return writeFileBytes( path, new TextEncoder().encode( JSON.stringify( obj, null, 1 ) ) );
+        return writeFileBytes( path, new TextEncoder().encode( JSON.stringify( obj, null, 1 ) ), opts );
+    }
+
+    // READ -> CHANGE -> WRITE of a small JSON file shared with other devices
+    // and windows (playlists, notes, a dictionary...), with nothing lost in
+    // between: `fn( value )` gets the file as it is NOW (null: no file yet) and
+    // returns what to write - or false: nothing to write. That goes up only
+    // over the version just read (If-Match; create-only when there was no
+    // file): a save made elsewhere in between answers 412, and the file is
+    // read again and `fn` runs again on it - so `fn` must make ONLY its own
+    // change, on whatever it is given, and keep its side effects for after.
+    // Resolves what was written (or read, when nothing was). A `fn` that
+    // returns nothing (undefined, null) throws, writing nothing: written, it
+    // would have emptied the file.
+    //
+    // A file that cannot be read - a network error, a 5xx, a 401, JSON that
+    // does not parse, an offline copy - is never written over: thrown with
+    // err.notRead = true (a JSON error stays a SyntaxError). What `fn` throws
+    // passes through untouched; so does a write's failure, a 412 too after
+    // UPDATE_TRIES rounds (another device saving that often is not a race).
+    var UPDATE_TRIES = 4;
+
+    async function updateJson( path, fn )
+    {
+        for( var round = 1; ; round++ )
+        {
+            var got;
+            try
+            {
+                try { got = await readVersion( path ); }
+                catch ( e ) { if( ! isMissing( e ) ) throw e; got = null; }
+                if( got && got.offline )
+                {
+                    var off = new Error( path + ": only an offline copy could be read" );
+                    off.offline = true;
+                    throw off;
+                }
+                var value = got ? JSON.parse( got.body ) : null;
+            }
+            catch ( e ) { if( e && typeof e === "object" ) e.notRead = true; throw e; }
+
+            var out = fn( value );
+            if( out === false ) return value;
+            if( out === undefined || out === null ) throw new TypeError( path + ": updateJson's change returned nothing to write" );
+
+            try
+            {
+                await writeJson( path, out, got ? { ifMatch: got.tag } : { createOnly: true } );
+                return out;
+            }
+            catch ( e )
+            {
+                if( ! e || e.status !== 412 || round >= UPDATE_TRIES ) throw e;
+            }
+        }
     }
 
     // ONE level of the tree: the files AND sub-folders directly inside `path`
@@ -485,10 +712,13 @@
         fileUrl:         fileUrl,
         readFile:        readFile,
         readFileBytes:   readFileBytes,
+        readVersion:     readVersion,
+        versionOf:       versionOf,
         writeFileBytes:  writeFileBytes,
         createFileBytes: createFileBytes,
         readJson:        readJson,
         writeJson:       writeJson,
+        updateJson:      updateJson,
         listDir:         listDir,
         listDirRecursive: listDirRecursive,
         dirTree:         dirTree,
@@ -512,6 +742,7 @@
         setTrashDays:    setTrashDays,
 
         // access
+        owner:           owner,            // whose page this is ("" = unknown)
         probeAccess:     probeAccess,
         loginRedirect:   loginRedirect
     };

@@ -44,16 +44,28 @@ async function setFile( selector, file )
     const q   = await c.send( "DOM.querySelector", { nodeId: doc.result.root.nodeId, selector } );
     await c.send( "DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [ file ] } );
 }
+// An Undo toast lasts 6 s (shared/ui.js undoToast): on a loaded machine the
+// steps between an action and its Undo can take longer, and the Undo is gone
+// before the test presses it. The app's own timer, so it is made long here
+// (the test is about what the Undo does, not how long it waits).
+const LONG_UNDO = `( () => { if( ! window.NayiveUI || NayiveUI.__longUndo ) return true; const u = NayiveUI.undoToast;
+    NayiveUI.undoToast = function ( m, f, o ) { return u.call( this, m, f, Object.assign( {}, o, { ms: 120000 } ) ); };
+    NayiveUI.__longUndo = true; return true; } )()`;
 // A fresh page of the app: by way of a blank page, as the same address would
 // answer "loaded" from the old document before the new one starts.
 async function reopen( p, want )
 {
     await c.send( "Page.navigate", { url: "about:blank" } );
     await c.until( "location.href === 'about:blank'" );
-    return c.open( p, want );
+    const opened = await c.open( p, want );
+    await c.until( "window.NayiveUI && typeof NayiveUI.undoToast === 'function'" );
+    await c.evaluate( LONG_UNDO );
+    return opened;
 }
 const TMP = fs.mkdtempSync( path.join( os.tmpdir(), "ds-undo-" ) );
-const undo = () => c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+// Presses the Undo once it is on show (false when none comes).
+const undo = async () => ( await c.until( "document.querySelector( '#toast .toast-undo' )", 15000 ) ) &&
+    c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
 // The page's PUT answers from now on (window.__puts): proof that a save really
 // met another device's (412) - a re-read in between would make it a plain 200.
 const PUTLOG = `( () => { window.__puts = []; const f = window.fetch;

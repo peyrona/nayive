@@ -174,10 +174,12 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
 }
 {
     // A 412 against this very upload's first try (a re-sent PUT after a drop):
-    // the same bytes are there - no question, nothing doubled.
-    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let once = true;
-        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/again.jpg', new TextEncoder().encode( 'SAME BYTES' ) ); }
-                                                       NayivePhoto.prepare = real; return real( f, m ); }; return true; } )()` );
+    // the same bytes are there - no question, nothing doubled. The first PUT
+    // lands, but its answer is lost (as a dropped connection would): GumApi
+    // sends it again (C4b: the check lives in GumApi, after a re-send only).
+    await c.evaluate( `( () => { const X = XMLHttpRequest.prototype, send = X.send; let once = true;
+        X.send = function( b ) { if( once ) { once = false; X.send = send; const x = this; x.onload = function() { x.onerror(); }; }
+                                 return send.apply( this, arguments ); }; return true; } )()` );
     await upload( [ [ "again.jpg", "SAME BYTES" ] ] );
     ok( await ended(), "the upload ends with no question" );
     ok( onDisk( s, "files/again.jpg" ) === "SAME BYTES", "the file is there once" );

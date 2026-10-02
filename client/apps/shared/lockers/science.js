@@ -226,17 +226,22 @@ function readStrict()
         } );
 }
 
-function write( s )
+// ✓ of the settings dialog, version-checked (culture.js updateFile): never
+// saved yet, `fn` gets Bellas artes' part (read as strictly) and the file is
+// made create-only.
+function update( fn )
 {
-    s = normalise( s );
-    keepLocal( s );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify( s, null, 2 ) } )
-        .then( function ( r ) { if( ! r.ok ) throw new Error( "status " + r.status ); return s; } );
+    return S().updateFile( FILE, function ()
+    {
+        return S().fetchTagged( FILE, 10000 ).then( function ( v )
+        {
+            if( v.s ) return { s: normalise( v.s ), tag: v.tag };
+            return S().readStrict().then( shared ).then( function ( s ) { return { s: s, tag: null }; } );
+        } );
+    }, fn, normalise, keepLocal );
 }
 
-window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, readStrict: readStrict, write: write };
+window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, readStrict: readStrict, update: update };
 
 // Bellas artes carries the engine: loaded first, when not there yet.
 function need()

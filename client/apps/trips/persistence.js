@@ -338,6 +338,8 @@ async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
     // D2 (list-apps #4): a PUT replaces a file for good, so an upload never takes
     // a name in use - by any document of the trip, or by any file in its folder
     // as the server has it NOW (another device's upload, trip.json itself).
+    // And it goes up create-only: a name another device took after that
+    // listing answers 412 and the next free one is used, never written over.
     const listing = await GumApi.listDir( folder );
     const taken   = new Set( others );
     for( const n of listing.nodes || [] ) taken.add( n.name || String( n.path || '' ).split( '/' ).pop() );
@@ -345,11 +347,14 @@ async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
 
     for( const d of pending )
     {
-        if( taken.has( d.file ) ) d.file = uniqueFileName( d.file, [], taken );
-        taken.add( d.file );
-
         const bytes = new Uint8Array( await d._pending.arrayBuffer() );
-        await GumApi.writeFileBytes( folder + '/' + d.file, bytes );
+        for( let tries = 0; ; tries++ )
+        {
+            if( taken.has( d.file ) ) d.file = uniqueFileName( d.file, [], taken );
+            taken.add( d.file );
+            try { await GumApi.createFileBytes( folder + '/' + d.file, bytes ); break; }
+            catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
+        }
         delete d._pending;
         stored[ d.id ] = d.file;
     }
@@ -518,9 +523,10 @@ function resolveNewTripDirName( sDestination, sStartDate, alsoTaken )
 // "japan-2026" since this page loaded, and the new trip's trip.json then went
 // over that trip's own. So the name is picked against the folders data/trips
 // has NOW too, and trip.json is made create-only: a name taken in between
-// answers 412 and the next one is tried. A 412 can also be this very claim's
-// first try, landed before a dropped connection made the PUT go again (the
-// same bytes there). `bodyFor( dirName )` is what goes in trip.json; the store
+// answers 412 and the next one is tried. (A 412 that is this very claim's
+// first try, landed before a dropped connection made the PUT go again, is a
+// success already: GumApi's "our own first try" finds the same bytes there.)
+// `bodyFor( dirName )` is what goes in trip.json; the store
 // then takes the file over as usual. Throws when data/trips cannot be read
 // (a 404 is a fresh account: no folder yet) - the trip is then not created.
 async function claimNewTripDir( sDestination, sStartDate, bodyFor )
@@ -546,21 +552,8 @@ async function claimNewTripDir( sDestination, sStartDate, bodyFor )
         // empty folder behind.
         try { await GumApi.createFileBytes( path, bytes ); return dirName; }
         catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
-        if( await sameBytes( path, bytes ) ) return dirName;
         onServer.push( dirName );
     }
-}
-
-async function sameBytes( path, bytes )
-{
-    try
-    {
-        const have = await GumApi.readFileBytes( path );
-        if( have.length !== bytes.length ) return false;
-        for( let i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
-        return true;
-    }
-    catch( _ ) { return false; }
 }
 
 // What folder the trip currently open in the Add/Edit Trip sheet will be saved under -

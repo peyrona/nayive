@@ -1477,21 +1477,40 @@ async function loadPlaylists()
 // lists too, so a change never writes the list this page read at start-up:
 // it reads the file again, `apply` makes just its own change to that fresh
 // list (by id), and that is written - a list saved elsewhere meanwhile stays.
+// Version-checked (GumApi.updateJson): a list saved between that read and
+// this write makes it read again and `apply` again, never written over.
 // One change at a time (a delete and its Undo must not cross). A file that
-// cannot be read now is not written (readPlaylists throws, e.read). `apply`
-// returning false: nothing to write. Done, the fresh list is the one shown.
+// cannot be read now is not written (thrown with e.read, after a toast that
+// says why, as readPlaylists does). `apply` returning false: nothing to
+// write. Done, the fresh list is the one shown.
 var playlistsChain = Promise.resolve();
 
 function changePlaylists( apply )
 {
     var run = playlistsChain.then( async function ()
     {
-        var list = await readPlaylists();
+        var list;
+        try
+        {
+            list = await GumApi.updateJson( PLAYLISTS_PATH, function ( raw )
+            {
+                if( raw !== null && ! Array.isArray( raw ) ) { var bad = new Error( "playlists not a list" ); bad.read = "bad"; throw bad; }
+                var fresh = raw || [];
+                return apply( fresh ) === false ? false : fresh;
+            } );
+        }
+        catch( e )
+        {
+            var why = e && e.read ? e.read : e && e.notRead ? ( e instanceof SyntaxError ? "bad" : "unread" ) : "";
+            if( why )
+            {
+                NayiveUI.toast( NayiveUI.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+                e.read = why;
+            }
+            throw e;
+        }
         st.playlistsBlocked = "";
-        if( apply( list ) !== false )
-            await GumApi.writeFileBytes( PLAYLISTS_PATH,
-                new TextEncoder().encode( JSON.stringify( list, null, 1 ) ) );
-        st.playlists = list;
+        st.playlists = list || [];
     } );
     playlistsChain = run.catch( function () {} );
     return run;
