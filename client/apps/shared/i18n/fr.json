@@ -142,6 +142,7 @@
   "salon.needLang": "Gardez au moins une langue.",
   "salon.saved": "Enregistré. Visible au prochain verrouillage.",
   "salon.saveFail": "Impossible d’enregistrer sur le serveur ; gardé sur cet ordinateur.",
+  "salon.readFail": "Impossible de lire vos réglages sur le serveur : ils ne peuvent pas être modifiés pour l’instant. Réessayez plus tard.",
   "sci.settings": "Réglages « Sciences »",
   "sci.tabNews": "Actualités",
   "sci.card.clock": "L’heure",

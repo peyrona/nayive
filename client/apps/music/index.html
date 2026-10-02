@@ -453,7 +453,7 @@ var st = {
     played: new Set(),      // shuffle: queue entries already played this round (none repeats before all have)
     history: [],            // shuffle: entries played before the current one, for "previous"
     playlists: [],          // [{id, name, paths:[...]}]
-    playlistsBlocked: "",   // "unread" / "bad": the file could not be read, so it is never written
+    playlistsBlocked: "",   // "unread" / "bad": not read at start-up (every change reads the file again)
     dragPayload: null       // { type:'library', song } | { type:'queue', index }
 };
 
@@ -1447,35 +1447,54 @@ function updateMediaSession( song )
  * Paths are real file paths - a real file's path is already a stable id.
  * -------------------------------------------------------------------------*/
 // Only a missing file (404) is "no lists yet". Any other failure - offline, a
-// 5xx, a file that is not a list - shows no lists but blocks every write: the
-// next "Guardar lista" would otherwise put one list over all of them.
-async function loadPlaylists()
+// 5xx, a file that is not a list - is thrown (e.read = "unread" / "bad"), after
+// a toast that says why: the caller must not write - one list would otherwise
+// go over all of them.
+async function readPlaylists()
 {
-    var list;
+    var list, why = "";
     try { list = await GumApi.readJson( PLAYLISTS_PATH ); }
-    catch( e )
+    catch( e ) { why = e instanceof SyntaxError ? "bad" : "unread"; }
+    if( ! why && list !== null && ! Array.isArray( list ) ) why = "bad";
+    if( why )
     {
-        st.playlists = [];
-        st.playlistsBlocked = e instanceof SyntaxError ? "bad" : "unread";
-        NayiveUI.toast( NayiveUI.t( st.playlistsBlocked === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
-        return;
+        NayiveUI.toast( NayiveUI.t( why === "bad" ? 'ui.store.badFile' : 'ui.store.notRead' ) );
+        var err = new Error( "playlists not read" );
+        err.read = why;
+        throw err;
     }
-    if( list !== null && ! Array.isArray( list ) )
-    {
-        st.playlists = [];
-        st.playlistsBlocked = "bad";
-        NayiveUI.toast( NayiveUI.t( 'ui.store.badFile' ) );
-        return;
-    }
-    st.playlists = list || [];
-    st.playlistsBlocked = "";
+    return list || [];
 }
 
-async function writePlaylists()
+// At start-up: a file that cannot be read shows no lists.
+async function loadPlaylists()
 {
-    if( st.playlistsBlocked ) throw new Error( "playlists not read" );
-    await GumApi.writeFileBytes( PLAYLISTS_PATH,
-        new TextEncoder().encode( JSON.stringify( st.playlists, null, 1 ) ) );
+    try { st.playlists = await readPlaylists(); st.playlistsBlocked = ""; }
+    catch( e ) { st.playlists = []; st.playlistsBlocked = e.read; }
+}
+
+// One change to the lists. The phone, another tab or a desktop window save
+// lists too, so a change never writes the list this page read at start-up:
+// it reads the file again, `apply` makes just its own change to that fresh
+// list (by id), and that is written - a list saved elsewhere meanwhile stays.
+// One change at a time (a delete and its Undo must not cross). A file that
+// cannot be read now is not written (readPlaylists throws, e.read). `apply`
+// returning false: nothing to write. Done, the fresh list is the one shown.
+var playlistsChain = Promise.resolve();
+
+function changePlaylists( apply )
+{
+    var run = playlistsChain.then( async function ()
+    {
+        var list = await readPlaylists();
+        st.playlistsBlocked = "";
+        if( apply( list ) !== false )
+            await GumApi.writeFileBytes( PLAYLISTS_PATH,
+                new TextEncoder().encode( JSON.stringify( list, null, 1 ) ) );
+        st.playlists = list;
+    } );
+    playlistsChain = run.catch( function () {} );
+    return run;
 }
 
 function openSaveSheet()
@@ -1491,13 +1510,22 @@ async function confirmSave()
 {
     var name = $( "#playlistName" ).value.trim();
     if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
-    if( st.playlistsBlocked ) await loadPlaylists();     // try again; it says why if it still fails
-    if( st.playlistsBlocked ) return;                    // sheet stays open, name kept
-    st.playlists.push( { id: "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) } );
+    if( savingList ) return;                             // a second press while the first one saves
+    var pl = { id: "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) };
+    savingList = true;
+    try { await changePlaylists( function ( list ) { list.push( pl ); } ); }
+    catch( e )
+    {
+        if( e && e.read ) return;                        // not read (the toast said why): sheet stays open, name kept
+        NayiveUI.setOpen( "saveBackdrop", false );
+        NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
+        return;
+    }
+    finally { savingList = false; }
     NayiveUI.setOpen( "saveBackdrop", false );
-    try { await writePlaylists(); NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); }
-    catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) ); }
+    NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
 }
+var savingList = false;
 
 function renderLoadList()
 {
@@ -1566,18 +1594,30 @@ async function deletePlaylist( id )
     st.playlists = st.playlists.filter( function ( p ) { return p.id !== id; } );
     renderLoadList();
 
-    var saving = writePlaylists();
+    // Out of the file as it is now, by id: what the phone saved meanwhile stays.
+    var saving = changePlaylists( function ( list )
+    {
+        var n = list.length;
+        for( var i = list.length - 1; i >= 0; i-- ) if( list[ i ] && list[ i ].id === id ) list.splice( i, 1 );
+        return list.length !== n;               // gone there already: nothing to write
+    } );
     NayiveUI.undoToast( NayiveUI.t( 'ui.toast.deleted' ), async function ()
     {
         try { await saving; } catch( e ) {}     // the delete's write lands first, or it could land last
-        if( st.playlists.some( function ( p ) { return p.id === id; } ) ) return;
-        st.playlists.splice( Math.min( at, st.playlists.length ), 0, pl );
+        try
+        {
+            await changePlaylists( function ( list )
+            {
+                if( list.some( function ( p ) { return p && p.id === id; } ) ) return false;   // back already
+                list.splice( Math.min( at, list.length ), 0, pl );
+            } );
+        }
+        catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
         renderLoadList();
-        try { await writePlaylists(); }
-        catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
     } );
     try { await saving; }
-    catch( e ) { NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+    catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); return; }
+    if( $( "#loadBackdrop" ).classList.contains( "open" ) ) renderLoadList();   // with the lists saved elsewhere
 }
 
 /* ---------------------------------------------------------------------------

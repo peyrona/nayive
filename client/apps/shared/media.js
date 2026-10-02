@@ -369,6 +369,19 @@
 
     function writeComments( map ) { return GumApi.writeJson( COMMENTS_PATH, map ); }
 
+    // PARKED NOTES. A binned photo keeps its note at its old path (purgePaths
+    // below), so a restore brings it back. But when another item then takes
+    // that path - a move or rename with "Replace", or onto the name of
+    // something binned earlier - the note there belongs to the binned item,
+    // not to the newcomer: written over, it was lost for good; left alone, it
+    // showed on the wrong photo. So it is parked under this one reserved key,
+    // { "<path>": [ note, ..., newest last ] }, and goes back to its path the
+    // moment that path is left again (moveNotes): Drive's Undo moves the
+    // newcomer away BEFORE it restores the binned item, so both notes come
+    // back. "#" can never start a path, and every reader looks notes up by
+    // path (Photos' sweep skips this key on purpose).
+    var ASIDE = "#aside";
+
     // Re-key `map` in place: the entry at oldPath, and everything under
     // "oldPath/", moves to the new location - so a whole folder follows in one
     // pass. `keep` leaves the originals behind (a copy). True if anything moved.
@@ -394,7 +407,9 @@
     }
 
     // Read one sidecar, hand the map to `mutate`, write it back if that returns
-    // true. A missing or unreadable file is simply left alone.
+    // true. A missing or unreadable file is simply left alone. `mutate` runs
+    // synchronously on the copy just read (C7, see remapComments): Movies'
+    // resume points share this file with other devices.
     async function editSidecar( path, mutate )
     {
         var map;
@@ -404,12 +419,61 @@
         if( mutate( map ) ) try { await GumApi.writeJson( path, map ); } catch( e ) {}
     }
 
+    // rekey() for the notes, one pair at a time and in order: first whatever
+    // sits at the destination (or inside it) is parked - the server never
+    // moves or copies over an existing item (409), so a note there is a binned
+    // item's - then the notes move, then (a move only: a copy leaves the
+    // source where it was) the notes parked for the path just left come back.
+    function moveNotes( map, pairs, keep )
+    {
+        var a = map[ ASIDE ];
+        var aside = a && typeof a === "object" && ! Array.isArray( a ) ? a : {};
+        var changed = false;
+        pairs.forEach( function ( pair )
+        {
+            var oldPath = pair[ 0 ], newPath = pair[ 1 ];
+            if( oldPath === newPath ) return;
+            var oldPre = oldPath + "/", newPre = newPath + "/";
+            Object.keys( map ).forEach( function ( key )
+            {
+                if( key === ASIDE ) return;
+                if( key !== newPath && key.indexOf( newPre ) !== 0 ) return;
+                if( key === oldPath || key.indexOf( oldPre ) === 0 ) return;   // what is moving now
+                if( ! Array.isArray( aside[ key ] ) ) aside[ key ] = [];
+                aside[ key ].push( map[ key ] );
+                delete map[ key ];
+                changed = true;
+            } );
+            if( rekey( map, [ pair ], keep ) ) changed = true;
+            if( keep ) return;
+            Object.keys( aside ).forEach( function ( key )
+            {
+                if( key !== oldPath && key.indexOf( oldPre ) !== 0 ) return;
+                var list = aside[ key ];
+                if( ! Array.isArray( list ) || ! list.length ) { delete aside[ key ]; changed = true; return; }
+                if( key in map ) return;               // taken after all: it stays parked
+                map[ key ] = list.pop();
+                if( ! list.length ) delete aside[ key ];
+                changed = true;
+            } );
+        } );
+        if( Object.keys( aside ).length ) map[ ASIDE ] = aside;
+        else delete map[ ASIDE ];
+        return changed;
+    }
+
+    // C7: the notes file is shared with Photos, the image editor and every
+    // other device, and this write is not version-checked yet. So the window
+    // a note saved elsewhere could fall into is kept to the bare GET -> PUT:
+    // the change is worked out on the copy JUST read, synchronously - nothing
+    // may be awaited between readComments() and writeComments() - and only
+    // this operation's keys move.
     async function remapComments( pairs, keep )
     {
         var map;
         try { map = await readComments(); }
         catch( e ) { return; }
-        if( rekey( map, pairs, keep ) )
+        if( moveNotes( map, pairs, keep ) )
             try { await writeComments( map ); } catch( e ) {}
     }
 
@@ -604,7 +668,7 @@
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
         dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
-        readComments: readComments, writeComments: writeComments,
+        readComments: readComments, writeComments: writeComments, NOTES_ASIDE: ASIDE,
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState

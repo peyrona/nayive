@@ -142,6 +142,7 @@
   "salon.needLang": "Mindestens eine Sprache behalten.",
   "salon.saved": "Gespeichert. Beim nächsten Sperren sichtbar.",
   "salon.saveFail": "Auf dem Server nicht gespeichert; auf diesem Computer behalten.",
+  "salon.readFail": "Ihre Einstellungen konnten nicht vom Server gelesen werden und lassen sich jetzt nicht ändern. Versuchen Sie es später noch einmal.",
   "sci.settings": "Einstellungen „Wissenschaft“",
   "sci.tabNews": "Nachrichten",
   "sci.card.clock": "Die Uhrzeit",

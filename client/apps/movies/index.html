@@ -502,12 +502,14 @@ var st = {
     stageOpen: false,
     subsOn: false,
     prog: { version: 1, watched: {}, resume: {} },
-    progDirty: {},                             // path -> true: changed here since the last good save
+    progDirty: {},                             // path -> when (s) it changed here, since the last good save
     progBlocked: false,                        // the boot read failed: this page never writes the file
     progSaving: Promise.resolve(),             // saves run one at a time (each re-reads the file)
     lastRec: null,                             // "path|second" last recorded: a paused film adds nothing
     posters: { key: "", items: {} },           // data/movies/posters.json, see fetchPosters()
     postersBlocked: false,                     // posters.json could not be read: it is never written
+    postersMine: {},                           // poster key -> true: found here, not saved yet
+    postersKeyMine: false,                     // the TMDB key was typed here, not saved yet
     saveTimer: null,
     trackUrl: null                             // active blob: URL for the subtitle <track>
 };
@@ -735,10 +737,34 @@ async function postersReady()
     return ! st.postersBlocked;
 }
 
-function savePosters()
+// posters.json is shared by every device: a save never writes the copy read
+// at start-up (it would drop the posters another device found since, and put
+// back a TMDB key changed there). It reads the file again and lays over it
+// only what THIS page found (st.postersMine) and the key, when it was typed
+// here (st.postersKeyMine); what the others found is kept, here too. A file
+// that cannot be read now is not written: the marks stay for the next save.
+// Never throws.
+async function savePosters()
 {
-    if( st.postersBlocked ) return Promise.resolve();
-    return GumApi.writeJson( POSTERS_PATH, st.posters ).catch( function () {} );
+    if( st.postersBlocked ) return;
+    var mine = Object.keys( st.postersMine ), keyMine = st.postersKeyMine;
+    if( ! mine.length && ! keyMine ) return;
+    var disk;
+    try { disk = await GumApi.readJson( POSTERS_PATH ); }
+    catch( e ) { return; }
+    if( disk === null ) disk = {};
+    if( typeof disk !== "object" || Array.isArray( disk ) ) return;
+    if( typeof disk.key !== "string" ) disk.key = "";
+    if( ! disk.items || typeof disk.items !== "object" || Array.isArray( disk.items ) ) disk.items = {};
+    mine.forEach( function ( k ) { disk.items[ k ] = st.posters.items[ k ]; } );
+    if( keyMine ) disk.key = st.posters.key;
+    try { await GumApi.writeJson( POSTERS_PATH, disk ); }
+    catch( e ) { return; }
+    // Saved: unmark what went (unless it changed again meanwhile), take theirs.
+    mine.forEach( function ( k ) { if( st.posters.items[ k ] === disk.items[ k ] ) delete st.postersMine[ k ]; } );
+    if( keyMine && st.posters.key === disk.key ) st.postersKeyMine = false;
+    Object.keys( disk.items ).forEach( function ( k ) { if( ! st.postersMine[ k ] ) st.posters.items[ k ] = disk.items[ k ]; } );
+    if( ! st.postersKeyMine ) st.posters.key = disk.key;
 }
 
 function openTmdbKeySheet()
@@ -782,12 +808,13 @@ async function fetchPosters()
             if( ! res.ok ) throw new Error( "HTTP " + res.status );
             var j    = await res.json();
             var hit  = ( j.results || [] ).filter( function ( r ) { return r.poster_path; } )[ 0 ];
-            if( ! hit ) { st.posters.items[ key ] = { tmdb: null }; miss++; }
+            if( ! hit ) { st.posters.items[ key ] = { tmdb: null }; st.postersMine[ key ] = true; miss++; }
             else
             {
                 var stored = await downloadPoster( mv, TMDB_IMG_BASE + hit.poster_path );
                 st.posters.items[ key ] = { tmdb: hit.id, poster: stored,
                                             title: hit.title || mv.title, year: mv.year || null };
+                st.postersMine[ key ] = true;
                 mv.poster = stored;
                 ok++;
             }
@@ -871,24 +898,45 @@ async function writeProgress()
     // longer stops every save for the rest of the visit. A file that still
     // cannot be read or parsed is never written (the catch below).
     if( ! paths.length ) return;
+    var dirty = st.progDirty;
     st.progDirty = {};
     try
     {
         var disk = parseProgress( await GumApi.readJson( PROGRESS_PATH ) );
+        var theirs = [];
         paths.forEach( function ( p )
         {
+            // The newer one wins, per film: a resume point another device
+            // saved AFTER this page's change (a late save from a tab left
+            // open, a pagehide) is not put back to this page's older state.
+            // Only a resume point says when it was made ("at", seconds); a
+            // "watched" mark does not, so against one this page's change wins.
+            var r = disk.resume[ p ];
+            if( r && Number( r.at ) > dirty[ p ] ) { theirs.push( p ); return; }
             if( st.prog.watched[ p ] ) disk.watched[ p ] = true;            else delete disk.watched[ p ];
             if( st.prog.resume[ p ] )  disk.resume[ p ]  = st.prog.resume[ p ]; else delete disk.resume[ p ];
         } );
         await GumApi.writeFileBytes( PROGRESS_PATH,
             new TextEncoder().encode( JSON.stringify( disk, null, 1 ) ) );
+        // Show theirs here too - unless the film changed here again meanwhile.
+        theirs.forEach( function ( p )
+        {
+            if( p in st.progDirty ) return;
+            st.prog.resume[ p ] = disk.resume[ p ];
+            if( disk.watched[ p ] ) st.prog.watched[ p ] = true; else delete st.prog.watched[ p ];
+        } );
+        if( theirs.length ) renderLibrary();
     }
     catch( e )
     {
         // a lost resume point is not worth a toast; the next save tries again
-        paths.forEach( function ( p ) { st.progDirty[ p ] = true; } );
+        // (keeping the newer change time when the film changed again meanwhile)
+        paths.forEach( function ( p ) { st.progDirty[ p ] = Math.max( st.progDirty[ p ] || 0, dirty[ p ] ); } );
     }
 }
+
+// When a film's progress changed here, in the "at" units of a resume point.
+function progNow() { return Math.floor( Date.now() / 1000 ); }
 
 function isWatched( mv )  { return !! st.prog.watched[ mv.path ]; }
 function resumeOf( mv )   { return st.prog.resume[ mv.path ] || null; }
@@ -923,7 +971,7 @@ function recordProgress()
         st.prog.resume[ mv.path ] = { t: Math.floor( t ), d: Math.floor( d ), at: Math.floor( Date.now() / 1000 ) };
     }
     else return;                                  // the first seconds are no resume point
-    st.progDirty[ mv.path ] = true;
+    st.progDirty[ mv.path ] = progNow();
     scheduleSaveProgress();
 }
 
@@ -932,7 +980,7 @@ function toggleWatched( mv )
     var resume = null;                  // the resume point "Watched" throws away
     if( st.prog.watched[ mv.path ] ) delete st.prog.watched[ mv.path ];
     else { st.prog.watched[ mv.path ] = true; resume = st.prog.resume[ mv.path ] || null; delete st.prog.resume[ mv.path ]; }
-    st.progDirty[ mv.path ] = true;
+    st.progDirty[ mv.path ] = progNow();
     saveProgressNow();
     renderLibrary();
 
@@ -942,7 +990,7 @@ function toggleWatched( mv )
     {
         delete st.prog.watched[ mv.path ];
         if( ! st.prog.resume[ mv.path ] ) st.prog.resume[ mv.path ] = resume;   // a newer point wins
-        st.progDirty[ mv.path ] = true;
+        st.progDirty[ mv.path ] = progNow();
         saveProgressNow();
         renderLibrary();
     } );
@@ -1471,6 +1519,7 @@ function wireStaticUI()
         if( ! k ) return;
         if( ! await postersReady() ) return;          // the sheet stays open, the key kept
         st.posters.key = k;
+        st.postersKeyMine = true;
         NayiveUI.setOpen( "tmdbBackdrop", false );
         await savePosters();
         fetchPosters();
@@ -1547,7 +1596,7 @@ function wireStaticUI()
         {
             st.prog.watched[ st.current.path ] = true;
             delete st.prog.resume[ st.current.path ];
-            st.progDirty[ st.current.path ] = true;
+            st.progDirty[ st.current.path ] = progNow();
         }
         saveProgressNow();
         renderLibrary();
