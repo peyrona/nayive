@@ -61,6 +61,9 @@ section( "THE DISK BAR (NEARLY FULL)" );
         "the disk bar offers to empty the bin" );
     await c.evaluate( "document.getElementById('diskBar').onclick(); true" );
     ok( await sheetUp(), "it asks" );
+    // f.txt (left by the bin view above) and big.bin: the question counts what it will delete.
+    const body = await c.evaluate( "document.querySelector( '.sheet-backdrop.open:not([id]) .dialog-text' ).textContent" );
+    ok( body.includes( await c.evaluate( "NayiveUI.tf( 'drive.emptyTrashBody', { n: 2 } )" ) ), "...counting what it will delete (2 items)", body );
     await seed( "files/g.txt", "g" );
     await bin( "files/g.txt" );                   // the phone, while the question is up
     await confirm();

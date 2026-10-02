@@ -100,11 +100,21 @@ section( "D7 · A NEW TRIP NAMED LIKE ONE ANOTHER DEVICE MADE" );
     await c.until( "document.readyState !== 'complete'", 3000 );
     ok( await c.until( "typeof trips !== 'undefined' && trips.length === 4 && typeof saveTrip === 'function'" ), "Trips reloaded (4 trips)" );
     const failOnce = "const realSync = syncDocFiles; window.syncDocFiles = async function() { window.syncDocFiles = realSync; throw new Error( 'upload failed' ); };";
-    ok( await create( "Cuba", failOnce ) === await c.evaluate( "T( 'trips.createFailed' )" ), "the first save fails (an upload)" );
+    const err1 = await create( "Cuba", failOnce );
+    ok( err1 === await c.evaluate( "T( 'trips.uploadFailed' )" ), "the first save fails: its FILES could not go up (the trip itself is there)", err1 );
+    ok( await c.evaluate( "tripDraftFolderPreview()" ) === "data/trips/cuba-2026", "the sheet shows the folder it claimed" );
     ok( await c.evaluate( "( async () => { await saveTrip(); return tripSaveError; } )()" ) === "", "the retry saves" );
     ok( await disk( () => json( "data/trips/cuba-2026/trip.json" )?.destination === "Cuba" ), "in the folder the first try claimed" );
     ok( onDisk( s, "data/trips/cuba-2026-2/trip.json" ) === null, "no second Cuba trip" );
     ok( await c.evaluate( "trips.filter( function( t ) { return t.destination === 'Cuba'; } ).length" ) === 1, "one Cuba in the list" );
+
+    // The same failure, then the sheet is closed: the trip is in the list at
+    // once (as the server has it), not only after a reload.
+    await create( "Bolivia", failOnce );
+    await c.evaluate( "closeTripSheet(); true" );
+    ok( await c.evaluate( "trips.filter( function( t ) { return t.destination === 'Bolivia' && t.dirName === 'bolivia-2026'; } ).length" ) === 1,
+        "closed after a failed upload: the claimed trip is listed" );
+    ok( json( "data/trips/bolivia-2026/trip.json" )?.destination === "Bolivia", "...as the server has it" );
 }
 
 await done( c, s );

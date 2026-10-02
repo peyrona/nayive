@@ -541,7 +541,9 @@ async function claimNewTripDir( sDestination, sStartDate, bodyFor )
         const path    = 'data/trips/' + dirName + '/trip.json';
         const bytes   = new TextEncoder().encode( bodyFor( dirName ) );
 
-        await GumApi.makeDir( 'data/trips', dirName );
+        // No makeDir first: the PUT makes the folder itself, once its name
+        // is found free - a name taken (412) or no connection leaves no
+        // empty folder behind.
         try { await GumApi.createFileBytes( path, bytes ); return dirName; }
         catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
         if( await sameBytes( path, bytes ) ) return dirName;
@@ -567,5 +569,7 @@ async function sameBytes( path, bytes )
 // other trips exist - that's fine, it's only ever committed for real at actual save time).
 function tripDraftFolderPreview()
 {
-    return isEditingTrip ? tripBase( tripDraft ) : 'data/trips/' + resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
+    if( isEditingTrip ) return tripBase( tripDraft );
+    if( newTripClaim && newTripClaim.draft === tripDraft ) return 'data/trips/' + newTripClaim.dirName;   // already claimed (saveTrip)
+    return 'data/trips/' + resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
 }

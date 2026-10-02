@@ -105,6 +105,8 @@ function officeFailText( err, name )
     if( st === 503 ) return T( 'drive.officeOff' );
     if( st === 507 ) return TF( 'drive.officeQuota',    { name: name } );
     if( st === 403 ) return TF( 'drive.officeReadOnly', { name: name } );
+    // openOffice asks twice on a 409: a second one is a FOLDER of the twin's name.
+    if( st === 409 ) return TF( 'drive.officeTwinFolder', { name: officeTwinRel( name ) || name } );
     return TF( 'drive.officeFailed', { name: name } );
 }
 

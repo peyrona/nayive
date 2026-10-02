@@ -3,9 +3,14 @@
 //
 // D1 (drive-files #1): a folder dropped again replaced every same-named file
 //     inside it with no question, and rebuilt the Office twins over them.
+//     Review: an Office twin that is there is listed on its own, and only a
+//     listed one is rebuilt; the user moving to another folder mid-upload
+//     never sends anything there.
 // D3 (drive-files #2): the clash check read the listing on screen - a file
 //     another device put there since was replaced; and a name taken after
-//     the check went up blind.
+//     the check went up blind. Review: a big file of the same size is never
+//     taken for this upload's own; Cancel on the question names what was
+//     not sent.
 // A1 part (office #1): Drive's Office-twin open made a blank desktop window
 //     first, a second editor beside the one already showing that document.
 // open.js: a 409 from /api/office (the twin's name taken during the
@@ -21,6 +26,11 @@ await seed( "files/Trabajo/foto.jpg", "EDITED PHOTO" );
 await seed( "files/Trabajo/Informe.odt", "odt v1" );
 await seed( "files/Trabajo/Informe.docx", "TWIN EDITED IN WRITE" );
 await seed( "files/Trabajo2/a.txt", "old a" );
+await seed( "files/Trabajo4/Plan.odt", "plan v1" );
+await seed( "files/Trabajo4/Plan.docx", "PLAN EDITED IN WRITE" );
+await seed( "files/Trabajo5/Nota.odt", "nota v1" );
+await seed( "files/A/IMG_1.jpg", "A OLD" );
+await seed( "files/B/IMG_1.jpg", "B PRECIOUS" );
 
 const c = await browser( s, { width: 1280, height: 800 } );
 await c.evaluate( "localStorage.setItem( 'balata-intro-dismiss:drive', '1' ); true" );
@@ -54,6 +64,7 @@ section( "D1 · A FOLDER DROPPED AGAIN" );
     const names = asked ? await listed() : [];
     ok( names.includes( "Trabajo/foto.jpg" ) && names.includes( "Trabajo/Informe.odt" ) && ! names.includes( "Trabajo/nueva.txt" ),
         "it lists the same-named files in the folder, not the new one", names );
+    ok( names.includes( "Trabajo/Informe.docx" ), "...and the Office twin that is there, on a line of its own", names );
     if( asked )     // "Replace the ones that exist" off -> skip them
         await c.evaluate( "document.getElementById('replaceOverwrite').checked = false; document.getElementById('replaceConfirmBtn').click(); true" );
     ok( await ended(), "the upload ends" );
@@ -77,6 +88,60 @@ section( "D1 · A FOLDER DROPPED AGAIN" );
     const tw = await c.evaluate( "window.__twins" );
     ok( tw.length === 1 && tw[ 0 ][ 0 ] === "files/Trabajo2/b.odt" && tw[ 0 ][ 1 ] === false,
         "the twin nobody was asked about is made without replace (an existing one is kept)", tw );
+}
+
+{
+    // Both Plan.odt and its twin Plan.docx (edited in Write) are there: the
+    // question lists both, and "Replace" then rebuilds the twin it listed.
+    await c.evaluate( "window.__twins = []; true" );
+    await upload( [ [ "Trabajo4/Plan.odt", "plan v2" ] ] );
+    const asked = await replaceAsked();
+    const names = asked ? await listed() : [];
+    ok( names.includes( "Trabajo4/Plan.odt" ) && names.includes( "Trabajo4/Plan.docx" ), "the .odt AND its .docx are listed", names );
+    if( asked ) await c.evaluate( "document.getElementById('replaceConfirmBtn').click(); true" );     // all collide: Replace
+    ok( await ended(), "the upload ends" );
+    const tw = await c.evaluate( "window.__twins" );
+    ok( tw.length === 1 && tw[ 0 ][ 0 ] === "files/Trabajo4/Plan.odt" && tw[ 0 ][ 1 ] === true, "the listed twin is rebuilt (said Replace to it)", tw );
+}
+{
+    // Only Nota.odt is there when asked; its twin Nota.docx appears while the
+    // upload runs. Not listed -> asked for without replace -> left as it is
+    // (the real server: an existing twin is the answer, no LibreOffice needed).
+    await c.evaluate( `( () => { window.__twins = []; window.__toasts = []; window.__stubTwin = window.officeTwin;
+        window.officeTwin = async function( p, r )
+        { window.__twins.push( [ p, !! r ] ); const q = new URLSearchParams( { file: p } ); if( r ) q.set( 'replace', '1' );
+          return JSON.parse( await GumApi.fetchText( '/api/office?' + q.toString(), { method: 'POST' } ) ); };
+        const prep = NayivePhoto.prepare; let once = true;
+        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/Trabajo5/Nota.docx', new TextEncoder().encode( 'APPEARED' ) ); }
+                                                       NayivePhoto.prepare = prep; return prep( f, m ); }; return true; } )()` );
+    await upload( [ [ "Trabajo5/Nota.odt", "nota v2" ] ] );
+    const asked = await replaceAsked();
+    const names = asked ? await listed() : [];
+    ok( names.length === 1 && names[ 0 ] === "Trabajo5/Nota.odt", "only Nota.odt is listed", names );
+    if( asked ) await c.evaluate( "document.getElementById('replaceConfirmBtn').click(); true" );
+    ok( await ended(), "the upload ends" );
+    const tw = await c.evaluate( "window.__twins" );
+    ok( tw.length === 1 && tw[ 0 ][ 1 ] === false, "the twin that was not listed is asked for without replace", tw );
+    ok( onDisk( s, "files/Trabajo5/Nota.docx" ) === "APPEARED", "...and stays as it is", onDisk( s, "files/Trabajo5/Nota.docx" ) );
+    ok( await c.until( "window.__toasts.some( function( t ) { return /Nota\\.docx/.test( t ); } )" ), "the last message says it was left as it was",
+        await c.evaluate( "window.__toasts" ) );
+    await c.evaluate( "window.officeTwin = window.__stubTwin; true" );
+}
+{
+    // The user opens folder B while an upload into A runs: "Replace" was said
+    // for A/IMG_1.jpg - B/IMG_1.jpg is never touched.
+    await c.evaluate( "navigateTo( 'files/A' ); true" );
+    ok( await c.until( "currentFolder === 'files/A' && ! listingLoading && curListing.path === 'files/A'" ), "(in folder A)" );
+    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let n = 0;
+        NayivePhoto.prepare = async function( f, m ) { if( ++n === 2 ) { navigateTo( 'files/B' ); NayivePhoto.prepare = real; } return real( f, m ); }; return true; } )()` );
+    await upload( [ [ "x0.txt", "zero" ], [ "IMG_1.jpg", "PC NEW" ] ] );
+    ok( await replaceAsked(), "A/IMG_1.jpg gets the question" );
+    await c.evaluate( "document.getElementById('replaceOverwrite').checked = true; document.getElementById('replaceConfirmBtn').click(); true" );
+    ok( await ended(), "the upload ends" );
+    ok( onDisk( s, "files/B/IMG_1.jpg" ) === "B PRECIOUS", "B/IMG_1.jpg, never asked about, is untouched", onDisk( s, "files/B/IMG_1.jpg" ) );
+    ok( onDisk( s, "files/A/IMG_1.jpg" ) === "PC NEW" && onDisk( s, "files/A/x0.txt" ) === "zero", "everything went to A, where it was dropped" );
+    await c.evaluate( "navigateTo( 'files' ); true" );
+    ok( await c.until( READY ), "(back at the root)" );
 }
 
 //------------------------------------------------------------------------//
@@ -118,6 +183,35 @@ section( "D3 · A FILE ANOTHER DEVICE PUT THERE AFTER DRIVE LOOKED" );
     ok( onDisk( s, "files/again.jpg" ) === "SAME BYTES", "the file is there once" );
     ok( onDisk( s, "files/again (" + await T( "drive.copyWord" ) + ").jpg" ) === null, "no copy of it" );
 }
+{
+    // A DIFFERENT file of the same size (too big to read back) takes the name:
+    // it is not taken for this upload's own - the user is asked.
+    const N = 9 * 1024 * 1024 + 7;
+    await c.evaluate( `( () => { const real = NayivePhoto.prepare; let once = true;
+        NayivePhoto.prepare = async function( f, m ) { if( once ) { once = false; await GumApi.writeFileBytes( 'files/big.bin', new Blob( [ 'B'.repeat( ${N} ) ] ) ); }
+                                                       NayivePhoto.prepare = real; return real( f, m ); }; return true; } )()` );
+    await c.evaluate( `( () => { window.__up = null; uploadItems( [ { relPath: 'big.bin', file: new File( [ 'A'.repeat( ${N} ) ], 'big.bin' ) } ] )
+        .then( function() { window.__up = 'done'; }, function( e ) { window.__up = 'error ' + e; } ); return true; } )()` );
+    const asked = await sheetUp( 20000 );
+    ok( asked, "a big file of the same size gets the question too" );
+    if( asked ) await press( await T( "drive.keepBoth" ) );
+    ok( await ended(), "the upload ends" );
+    ok( ( onDisk( s, "files/big.bin" ) || "" )[ 0 ] === "B", "the other file is untouched" );
+    ok( ( onDisk( s, "files/big (" + await T( "drive.copyWord" ) + ").bin" ) || "" )[ 0 ] === "A", "...and this one went up beside it" );
+}
+{
+    // Cancel on that question stops the rest: the last message names what was not sent.
+    await c.evaluate( `( () => { window.__toasts = []; const real = NayivePhoto.prepare; let n = 0;
+        NayivePhoto.prepare = async function( f, m ) { if( ++n === 2 ) { await GumApi.writeFileBytes( 'files/r2.txt', new TextEncoder().encode( 'OTHER' ) ); NayivePhoto.prepare = real; }
+                                                       return real( f, m ); }; return true; } )()` );
+    await upload( [ [ "r1.txt", "one" ], [ "r2.txt", "two" ], [ "r3.txt", "three" ] ] );
+    ok( await sheetUp(), "r2.txt gets the question" );
+    await c.evaluate( "document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) ); true" );   // = Cancel
+    ok( await ended(), "the upload ends" );
+    ok( onDisk( s, "files/r1.txt" ) === "one" && onDisk( s, "files/r2.txt" ) === "OTHER" && onDisk( s, "files/r3.txt" ) === null, "r1 went, r2 is untouched, r3 was not sent" );
+    ok( await c.until( "window.__toasts.some( function( t ) { return /r2\\.txt/.test( t ) && /r3\\.txt/.test( t ); } )" ),
+        "the message names what was not sent", await c.evaluate( "window.__toasts" ) );
+}
 
 //------------------------------------------------------------------------//
 section( "OPEN · THE TWIN'S NAME TAKEN DURING THE CONVERSION (409)" );
@@ -132,6 +226,13 @@ section( "OPEN · THE TWIN'S NAME TAKEN DURING THE CONVERSION (409)" );
         "the twin that took the name is opened", await c.evaluate( "window.__opened.map( function( w ) { return w.location.href || ''; } )" ) );
     ok( await c.evaluate( `window.__toasts.some( function( t ) { return t === NayiveUI.tf( 'drive.officeTwinExists', { name: 'z.docx' } ); } )` ),
         "...saying it already exists", await c.evaluate( "window.__toasts" ) );
+
+    // A FOLDER of the twin's name: a 409 every time - said plainly.
+    await c.evaluate( `( () => { window.__opened = []; window.__toasts = [];
+        window.officeTwin = async function() { const e = new Error( 'HTTP 409: Conflict' ); e.status = 409; throw e; };
+        openOffice( { path: 'files/y.odt', nodes: null }, 'write' ); return true; } )()` );
+    ok( await c.until( "window.__toasts.some( function( t ) { return t === NayiveUI.tf( 'drive.officeTwinFolder', { name: 'y.docx' } ); } )" ),
+        "a folder named like the twin: said so", await c.evaluate( "window.__toasts" ) );
 }
 await c.stop();
 

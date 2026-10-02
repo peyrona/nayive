@@ -118,37 +118,36 @@ function walkEntry( entry, prefix )
 let replaceResolver = null;
 
 // Show the "Ya existen" dialog and resolve to 'cancel' | 'skip' | 'overwrite'.
-//   collisions - the upload items whose target file already exists
-//   total      - how many items are in the whole upload
-function askReplace( collisions, total )
+//   names      - every file the upload would replace: each clashing file,
+//                and each Office twin that is there, on a line of its own
+//                (markClash) - "Replace" replaces exactly these
+//   allCollide - every item of the upload clashes: nothing to skip to
+function askReplace( names, allCollide )
 {
-    const allCollide = collisions.length === total;
-
     // One clash gets the singular title; data-i18n keeps it right on a language switch.
-    const titleKey = collisions.length === 1 ? 'drive.alreadyExistOne' : 'drive.alreadyExist';
+    const titleKey = names.length === 1 ? 'drive.alreadyExistOne' : 'drive.alreadyExist';
     const titleEl  = document.getElementById( 'replaceTitle' );
     titleEl.setAttribute( 'data-i18n', titleKey );
     titleEl.textContent = T( titleKey );
 
-    document.getElementById( 'replaceMsg' ).textContent = collisions.length === 1
+    document.getElementById( 'replaceMsg' ).textContent = names.length === 1
         ? T( 'drive.oneClash' )
-        : TF( 'drive.nClashes', { n: collisions.length } );
+        : TF( 'drive.nClashes', { n: names.length } );
 
     const ul = document.getElementById( 'replaceList' );
     ul.innerHTML = '';
     const SHOWN = 12;
-    collisions.slice( 0, SHOWN ).forEach( function( it )
+    names.slice( 0, SHOWN ).forEach( function( shown )
     {
-        const li    = document.createElement( 'li' );
-        const shown = it.clash || it.relPath;   // a twin's name, when it is the twin that clashes
+        const li = document.createElement( 'li' );
         li.textContent = shown;
         li.title = shown;
         ul.appendChild( li );
     });
-    if( collisions.length > SHOWN )
+    if( names.length > SHOWN )
     {
         const li = document.createElement( 'li' );
-        li.textContent = TF( 'drive.andNMore', { n: collisions.length - SHOWN } );
+        li.textContent = TF( 'drive.andNMore', { n: names.length - SHOWN } );
         ul.appendChild( li );
     }
 
@@ -572,17 +571,17 @@ function renameTo( relPath, name, used, there )
 }
 
 // THE FILES AT THE DESTINATION, AS THE SERVER HAS THEM NOW (D1, D3 -
-// drive-files #1, #2): the open folder's own files, and every file inside
+// drive-files #1, #2): the folder `dest`'s own files, and every file inside
 // each dropped top folder, at any depth. A Map relPath -> size. Read fresh,
 // never from the listing on screen: that one knew only the open folder's
 // top level - so a folder dropped again replaced every same-named file in
 // it with no question - and it misses what another device put there since.
 // null when a folder cannot be read: then nothing is sent (a 404 is a top
 // folder that is not there yet, so it holds nothing).
-async function filesThere( items )
+async function filesThere( items, dest )
 {
     const there  = new Map();
-    const prefix = currentFolder ? currentFolder + '/' : '';
+    const prefix = dest ? dest + '/' : '';
     const add = function( nodes )
     {
         ( nodes || [] ).forEach( function( n )
@@ -597,10 +596,10 @@ async function filesThere( items )
 
     try
     {
-        add( ( await withBusy( GumApi.listDir( currentFolder ) ) ).nodes );     // one level: its sub-folders come back empty
+        add( ( await withBusy( GumApi.listDir( dest ) ) ).nodes );     // one level: its sub-folders come back empty
         for( const top of tops )
         {
-            try { add( ( await withBusy( GumApi.listDirRecursive( joinPath( currentFolder, top ) ) ) ).nodes ); }
+            try { add( ( await withBusy( GumApi.listDirRecursive( joinPath( dest, top ) ) ) ).nodes ); }
             catch( err ) { if( ! err || err.status !== 404 ) throw err; }
         }
     }
@@ -609,16 +608,19 @@ async function filesThere( items )
 }
 
 // What an upload item would land on at the destination: the file itself,
-// and - for a LibreOffice document - its twin. Kept on the item, for the
-// question (askReplace shows it.clash) and for what "Replace" may replace.
-// Returns the name to show, '' when nothing clashes.
+// and - for a LibreOffice document - its twin. Each is a clash of its own:
+// the question lists both (a .docx edited in Write since must be seen to be
+// replaced), and "Replace" replaces only what it listed. Returns the names
+// to list, [] when nothing clashes.
 function markClash( it, there )
 {
     const twin = officeTwinRel( it.relPath );
     it.fileThere = there.has( it.relPath );
     it.twinThere = !! twin && there.has( twin );
-    it.clash     = it.fileThere ? it.relPath : ( it.twinThere ? twin : '' );
-    return it.clash;
+    const names = [];
+    if( it.fileThere ) names.push( it.relPath );
+    if( it.twinThere ) names.push( twin );
+    return names;
 }
 
 // createFileBytes with Drive's "&convert=mp4": the same create-only PUT
@@ -631,20 +633,21 @@ function createUpload( path, blob, conv )
 }
 
 // A 412 can be this upload's own first try: putBinary sends again after a
-// dropped connection, and the first one may have landed. The same size there
-// - and the same bytes, when small enough to read back - is that, not a file
-// someone else put there.
+// dropped connection, and the first one may have landed. The same bytes
+// there are that, not a file someone else put there. Only a file small
+// enough to read back is judged so: a bigger one of the same size may still
+// be another file - it gets the question.
 const SAME_CHECK_MAX = 8 * 1024 * 1024;
 
 async function sameAsSent( path, blob )
 {
+    if( blob.size > SAME_CHECK_MAX ) return false;
     try
     {
         const i = path.lastIndexOf( '/' );
         const r = await withBusy( GumApi.listDir( i < 0 ? '' : path.slice( 0, i ) ) );
         const n = ( r.nodes || [] ).find( function( x ) { return x.path === path; } );
         if( ! n || isDir( n ) || n.size !== blob.size ) return false;
-        if( blob.size > SAME_CHECK_MAX ) return true;
         const have = await withBusy( GumApi.readFileBytes( path ) );
         const mine = new Uint8Array( await blob.arrayBuffer() );
         if( have.length !== mine.length ) return false;
@@ -654,47 +657,59 @@ async function sameAsSent( path, blob )
     catch( _ ) { return false; }
 }
 
-// A name free in relPath's folder NOW (a fresh listing) and not written by
-// this batch: "x (copia).jpg", "x (copia 2).jpg"...
-async function freeRel( relPath, used )
+// A name free in relPath's folder (under `dest`) NOW - a fresh listing - and
+// not written by this batch: "x (copia).jpg", "x (copia 2).jpg"...
+async function freeRel( dest, relPath, used )
 {
     const i      = relPath.lastIndexOf( '/' );
     const dir    = i < 0 ? '' : relPath.slice( 0, i + 1 );
-    const parent = dir ? joinPath( currentFolder, dir.slice( 0, -1 ) ) : currentFolder;
+    const parent = dir ? joinPath( dest, dir.slice( 0, -1 ) ) : dest;
     const r      = await withBusy( GumApi.listDir( parent ) );
     const names  = new Set( ( r.nodes || [] ).map( function( n ) { return n.path.split( '/' ).pop(); } ) );
     return dir + uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) } );
 }
 
-// Sends a file the user did NOT say "Replace" to: it may only make a new
-// file. A 412 is a name taken since filesThere looked (another device or
-// window), or this very upload's first try (sameAsSent). The user then
-// picks: replace it, or keep both - this one goes up as "x (copia).jpg".
-// Resolves the relPath it was saved under; null when the user cancels (the
-// rest of the upload stops too).
-async function sendNew( relPath, blob, conv, used )
+function inShared( path ) { return path === 'shared' || path.indexOf( 'shared/' ) === 0; }
+
+// Sends a file the user did NOT say "Replace" to, into `dest`: it may only
+// make a new file. A 412 is a name taken since filesThere looked (another
+// device or window), or this very upload's first try (sameAsSent). The user
+// then picks: replace it, or keep both - this one goes up as "x (copia).jpg".
+// In a folder shared with us the name taken is a 409 and there is nothing to
+// pick (it only ever gains files): this one goes up beside it. Resolves the
+// relPath it was saved under; null when the user cancels (the rest of the
+// upload stops too). 20 names in a row taken is not a race: an error.
+async function sendNew( dest, relPath, blob, conv, used )
 {
-    for( ;; )
+    for( let tries = 0; ; tries++ )
     {
-        const path = joinPath( currentFolder, relPath );
+        const path = joinPath( dest, relPath );
+        let   status;
         try { await withBusy( createUpload( path, blob, conv ) ); return relPath; }
-        catch( err ) { if( ! err || err.status !== 412 ) throw err; }
+        catch( err )
+        {
+            status = err && err.status;
+            if( ( status !== 412 && ! ( status === 409 && inShared( path ) ) ) || tries >= 20 ) throw err;
+        }
 
         if( await sameAsSent( path, blob ) ) return relPath;
 
-        const choice = await NayiveUI.confirm( {
-            title:     T( 'drive.alreadyExistOne' ),
-            body:      TF( 'drive.appearedBody', { name: relPath } ),
-            confirm:   T( 'drive.replace' ), danger: true,
-            other:     T( 'drive.keepBoth' ),
-            otherIcon: 'copy' } );
-        if( choice === false ) return null;
-        if( choice === true )
+        if( status === 412 )
         {
-            await withBusy( GumApi.writeFileBytes( path, blob, conv ? { convert: 'mp4' } : null ) );
-            return relPath;
+            const choice = await NayiveUI.confirm( {
+                title:     T( 'drive.alreadyExistOne' ),
+                body:      TF( 'drive.appearedBody', { name: relPath } ),
+                confirm:   T( 'drive.replace' ), danger: true,
+                other:     T( 'drive.keepBoth' ),
+                otherIcon: 'copy' } );
+            if( choice === false ) return null;
+            if( choice === true )
+            {
+                await withBusy( GumApi.writeFileBytes( path, blob, conv ? { convert: 'mp4' } : null ) );
+                return relPath;
+            }
         }
-        relPath = await freeRel( relPath, used );
+        relPath = await freeRel( dest, relPath, used );
         used.add( relPath );
     }
 }
@@ -702,6 +717,11 @@ async function sendNew( relPath, blob, conv, used )
 async function uploadItems( items )
 {
     if( ! items.length ) return;
+
+    // THE FOLDER IT GOES TO, fixed now: the user may open another folder while
+    // it runs, and a "Replace" said for this one must never land on a
+    // same-named file there (nor anything else of this upload).
+    const dest = currentFolder;
 
     // `notes` are said again in the last message, so a long upload cannot
     // bury them. LibreOffice kinds with no app here (Impress, Draw, Math,
@@ -727,14 +747,20 @@ async function uploadItems( items )
 
     // Warn before overwriting anything that already exists at the destination.
     // A LibreOffice document also lands its twin ("x.odt" -> "x.docx"), so
-    // a twin already here is a clash too - see markClash.
-    const there = await filesThere( items );
+    // a twin already here is a clash too, listed on its own - see markClash.
+    const there = await filesThere( items, dest );
     if( ! there ) { setStatus( '' ); NayiveUI.toast( T( 'drive.checkDestFailed' ), { ms: 6000 } ); return; }
-    const collisions = items.filter( function( it ) { return !! markClash( it, there ); } );
+    const clashNames = [];
+    const collisions = items.filter( function( it )
+    {
+        const names = markClash( it, there );
+        clashNames.push.apply( clashNames, names );
+        return names.length > 0;
+    } );
 
     if( collisions.length )
     {
-        const choice = await askReplace( collisions, items.length );
+        const choice = await askReplace( clashNames, collisions.length === items.length );
 
         if( choice === 'cancel' ) { setStatus( '' ); return; }
 
@@ -745,7 +771,8 @@ async function uploadItems( items )
             if( ! items.length ) { setStatus( '' ); return; }
         }
         // "Replace" replaces exactly what the question listed - the file, and
-        // the twin that was there. Everything else goes up create-only (sendNew).
+        // the twin, each listed on its own. Everything else goes up
+        // create-only (sendNew), and a twin not listed is left as it is.
         else collisions.forEach( function( it ) { it.replaceFile = it.fileThere; it.replaceTwin = it.twinThere; } );
     }
 
@@ -753,7 +780,7 @@ async function uploadItems( items )
     // into an .mp4 on the server, BEFORE anything is sent. Never inside a
     // shared folder: the job ends by moving the original to the papelera.
     let toConvert = new Set();
-    const inSharedDir = currentFolder === 'shared' || currentFolder.indexOf( 'shared/' ) === 0;
+    const inSharedDir = inShared( dest );
     const videos      = inSharedDir ? [] : items.filter( function( it ) { return isConvertible( it.relPath ); } );
     if( videos.length )
     {
@@ -802,7 +829,7 @@ async function uploadItems( items )
     {
         const segs   = d.split( '/' );
         const name   = segs.pop();
-        const parent = joinPath( currentFolder, segs.join( '/' ) );
+        const parent = joinPath( dest, segs.join( '/' ) );
         setStatus( T( 'drive.creatingFolders' ) );
         try { await withBusy( GumApi.makeDir( parent, name ) ); }
         catch( _ ) { /* already exists — fine */ }
@@ -830,17 +857,23 @@ async function uploadItems( items )
             const conv    = toConvert.has( it );
             const replace = it.replaceFile && relPath === it.relPath;
             if( replace )
-                await withBusy( GumApi.writeFileBytes( joinPath( currentFolder, relPath ), ready.blob, conv ? { convert: 'mp4' } : null ) );
+                await withBusy( GumApi.writeFileBytes( joinPath( dest, relPath ), ready.blob, conv ? { convert: 'mp4' } : null ) );
             else
             {
-                const got = await sendNew( relPath, ready.blob, conv, used );
-                if( got === null ) break;               // cancelled: nothing more is sent
+                const got = await sendNew( dest, relPath, ready.blob, conv, used );
+                if( got === null )                      // cancelled: nothing more is sent - and the message says what
+                {
+                    const left = items.slice( i ).map( function( x ) { return x.relPath; } );
+                    notes.push( TF( 'drive.notSentN', { n: left.length,
+                                    names: left.slice( 0, 3 ).join( ', ' ) + ( left.length > 3 ? '…' : '' ) } ) );
+                    break;
+                }
                 relPath = got;
             }
             if( conv ) converting++;
             // Its twin replaces one only when "Replace" was said to it too.
             if( officeTwinRel( relPath ) )
-                toOffice.push( { path: joinPath( currentFolder, relPath ), name: relPath.split( '/' ).pop(),
+                toOffice.push( { path: joinPath( dest, relPath ), name: relPath.split( '/' ).pop(),
                                  replace: !! it.replaceTwin && relPath === it.relPath } );
         }
         catch( err )

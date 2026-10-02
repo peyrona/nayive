@@ -139,14 +139,17 @@ function offerEmptyTrash( on, held )
     bar.classList.toggle( 'disk-bar--offer', !! on );
     bar.onclick = ! on ? null : async function ()
     {
-        // The bin as it is when asked: only those go (purgeBinIds, G4).
-        let ids;
-        try { ids = ( await withBusy( GumApi.trashList() ) ).map( function( it ) { return it.id; } ); }
+        // The bin as it is when asked: only those go (purgeBinIds, G4), and
+        // the question counts them - not the gauge's older figure.
+        let items;
+        try { items = await withBusy( GumApi.trashList() ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
-        if( ! ids.length ) { reload(); return; }
+        if( ! items.length ) { reload(); return; }
+        const ids  = items.map( function( it ) { return it.id; } );
+        const size = items.reduce( function( sum, it ) { return sum + ( it.size || 0 ); }, 0 );
         if( ! await NayiveUI.confirm( {
                 title:   T( 'drive.emptyTrashTitle' ),
-                body:    TF( 'drive.diskFullBody', { held: fmtSize( held ) } ),
+                body:    TF( 'drive.diskFullBody', { held: fmtSize( size ) } ) + '\n\n' + TF( 'drive.emptyTrashBody', { n: ids.length } ),
                 confirm: T( 'drive.emptyTrash' ), danger: true } ) ) return;
         try { await purgeBinIds( ids ); }
         catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
