@@ -288,7 +288,7 @@ section( "H4 · CALENDAR: a move's Undo after a merge - back only if no one else
     ok( await c.until( "window.__puts.includes( 412 ) && window.__puts[ window.__puts.length - 1 ] === 200" ), "the drag's save met the phone's (412, merged)", await c.evaluate( "window.__puts" ) );
     ok( startOf( "b" ) === "1600", "the merge kept the phone's newer move (16:00)", startOf( "b" ) );
     await undo();
-    ok( await c.until( "( window.__toasts || [] ).some( t => /another device/.test( t ) )" ), "Undo says it was changed on another device" );
+    ok( await c.until( "( window.__toasts || [] ).some( t => /another window or device/.test( t ) )" ), "Undo says it was changed on another device" );
     // Something that must NOT happen: a save of the old time (given 3 s to show up).
     ok( ! await disk( () => startOf( "b" ) !== "1600", 3000 ), "...and does not write the old time over the phone's move", startOf( "b" ) );
 }
