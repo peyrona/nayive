@@ -986,7 +986,7 @@ func (s *Server) chatPhoto(w http.ResponseWriter, r *http.Request, kind, id stri
 		if dir == "" {
 			return
 		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := mkdirInHome(s.cfg.HomesDir, dir); err != nil { // never the home itself (L2)
 			sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 			return
 		}
@@ -1564,7 +1564,7 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 		}
 		m.ID, m.At = c.st.Next, nowMs()
 		if copyFrom != nil {
-			n, err := copyMedia(copyFrom, filepath.Join(c.dir, "media"), mediaName(m))
+			n, err := copyMedia(s.cfg.HomesDir, copyFrom, filepath.Join(c.dir, "media"), mediaName(m))
 			if err != nil {
 				sendError(w, r, http.StatusGone, "ese fichero ya no está")
 				return
@@ -2070,7 +2070,7 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 		sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
 		return
 	}
-	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
+	if err := mkdirInHome(s.cfg.HomesDir, mediaDir); err != nil { // never the home itself (L2)
 		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 		return
 	}
@@ -2220,9 +2220,10 @@ func photoPos(path string) *ChatLoc {
 }
 
 // copyMedia copies a forwarded attachment into another conversation, and
-// says how many bytes it wrote.
-func copyMedia(src io.Reader, dir, name string) (int64, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+// says how many bytes it wrote. `dir` is inside a home under `homesDir`, and
+// the home itself is never made (mkdirInHome, L2).
+func copyMedia(homesDir string, src io.Reader, dir, name string) (int64, error) {
+	if err := mkdirInHome(homesDir, dir); err != nil {
 		return 0, err
 	}
 	tmp, err := os.CreateTemp(dir, ".fw-*")

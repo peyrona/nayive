@@ -186,7 +186,7 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead:
 		s.filesRead(w, r, target, q)
 	case http.MethodPut:
-		if !saveOwnerOK(w, r, role, user) { // queued under another account: store_owner.go
+		if !s.saveOwnerOK(w, r, role, user) { // queued under another account: store_owner.go
 			return
 		}
 		s.filesWrite(w, r, role, user, fileRel, target)
@@ -201,14 +201,20 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) filesRead(w http.ResponseWriter, r *http.Request, target Resolved, q Query) {
 	// Stat BEFORE opening: opening a FIFO or a device could block, or worse.
+	// A home the admin moved under this read is 503, never 404 "empty"
+	// (sendMissing).
 	info, err := target.Stat()
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil {
+		sendMissing(w, r, err, "not found")
+		return
+	}
+	if !info.Mode().IsRegular() {
 		sendError(w, r, http.StatusNotFound, "not found")
 		return
 	}
 	file, err := target.Open()
 	if err != nil {
-		sendError(w, r, http.StatusNotFound, "not found")
+		sendMissing(w, r, err, "not found")
 		return
 	}
 	defer file.Close()
@@ -298,20 +304,26 @@ func (s *Server) filesListDir(w http.ResponseWriter, r *http.Request, role, user
 		}
 
 	default:
-		target, _ := s.users.ResolvePath(role, user, rel)
-		if target == "" {
+		target, ok := s.users.Resolve(role, user, rel)
+		if !ok {
 			sendError(w, r, http.StatusForbidden, "forbidden")
 			return
 		}
-		info, err := os.Stat(target)
-		if err != nil || !info.IsDir() {
+		// Through the sandbox, not by path: a home the admin moved under
+		// this request is 503 (sendMissing), never an empty-looking 404.
+		info, err := target.Stat()
+		if err != nil {
+			sendMissing(w, r, err, "no such folder")
+			return
+		}
+		if !info.IsDir() {
 			sendError(w, r, http.StatusNotFound, "no such folder")
 			return
 		}
 		if recursive {
-			nodes = BuildTree(target, rel, false).Nodes
+			nodes = BuildTree(target.Abs, rel, false).Nodes
 		} else {
-			nodes = ListChildren(target, rel)
+			nodes = ListChildren(target.Abs, rel)
 		}
 	}
 
@@ -452,8 +464,8 @@ func (s *Server) filesMove(w http.ResponseWriter, r *http.Request, role, user st
 		sendError(w, r, http.StatusForbidden, "forbidden")
 		return
 	}
-	if !src.Exists() {
-		sendError(w, r, http.StatusNotFound, "source not found")
+	if _, err := src.Lstat(); err != nil {
+		sendMissing(w, r, err, "source not found") // 503 when the home moved under it
 		return
 	}
 	// Never let a move land on top of something already there: rename would
@@ -591,6 +603,12 @@ func (s *Server) filesDelete(w http.ResponseWriter, r *http.Request, role, user 
 	damaged := false     // ...because the bin's index cannot be read
 	for _, j := range resolved {
 		info, err := j.p.Lstat()
+		if errors.Is(err, errRootGone) {
+			// The home moved under the request: not "already gone" - it
+			// is still there, in the renamed home, and stays unbinned.
+			failed = append(failed, j.rel)
+			continue
+		}
 		if err != nil {
 			continue
 		}
@@ -944,7 +962,3 @@ func pathExists(path string) bool {
 
 // isTrue is the "1" / "true" query flag the apps send.
 func isTrue(v string) bool { return v == "1" || v == "true" }
-
-func mkdirAll(parts ...string) {
-	os.MkdirAll(filepath.Join(parts...), 0o755)
-}

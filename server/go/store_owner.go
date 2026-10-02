@@ -87,26 +87,24 @@ func clearWhoCookieHeader() string {
 }
 
 // saveOwnerOK refuses a save queued under another account. True = go on.
-func saveOwnerOK(w http.ResponseWriter, r *http.Request, role, user string) bool {
+//
+// A save queued under a name the admin renamed to this account is this
+// account's (L3). One method, not a plain check beside it: a caller that
+// skipped the old names would hold the renamed person's saves at 423 for good.
+func (s *Server) saveOwnerOK(w http.ResponseWriter, r *http.Request, role, user string) bool {
 	h := r.Header.Get(whoHeader)
 	if h == "" || h == whoValue(role, user) {
 		return true
 	}
-	sendError(w, r, http.StatusLocked, "this save belongs to another account")
-	return false
-}
-
-// saveOwnerOK is the check with the account's old names: a save queued under
-// a name the admin renamed to this account is this account's (L3).
-func (s *Server) saveOwnerOK(w http.ResponseWriter, r *http.Request, role, user string) bool {
-	if h := r.Header.Get(whoHeader); h != "" && role == "user" {
+	if role == "user" {
 		for _, old := range s.users.RenamedFrom(user) {
 			if h == whoValue("user", old) {
 				return true
 			}
 		}
 	}
-	return saveOwnerOK(w, r, role, user)
+	sendError(w, r, http.StatusLocked, "this save belongs to another account")
+	return false
 }
 
 // wasValue is the nayive_was cookie's value: the account's who value, then

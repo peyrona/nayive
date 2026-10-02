@@ -37,6 +37,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,8 +87,47 @@ func (e accountEpoch) moved() bool { return e.n != nil && e.n.Load() != e.at }
 // person. Opening it by name would re-create the old home (a ghost nobody
 // sees: the save is lost from view) or write into the new person's (L2), so
 // the request fails instead; a save then stays queued in the browser. It
-// counts as "not there", as a vanished folder always did.
+// counts as "not there", as a vanished folder always did - but a handler
+// answers it 503, never 404 (sendMissing).
 var errRootGone = fmt.Errorf("the folder this path was approved in moved or went: %w", fs.ErrNotExist)
+
+// sendMissing answers a path that is not there: 404 - unless its account's
+// home moved or went under the request (errRootGone). That is 503, "try
+// again": the browser's store reads a 404 as "no file yet, first run" and
+// could then save an empty start over the renamed person's real file. By the
+// retry the session is gone (the admin signs the account out first): 401.
+func sendMissing(w http.ResponseWriter, r *http.Request, err error, msg string) {
+	if errors.Is(err, errRootGone) {
+		sendError(w, r, http.StatusServiceUnavailable, "la cuenta acaba de cambiar: vuelve a intentarlo")
+		return
+	}
+	sendError(w, r, http.StatusNotFound, msg)
+}
+
+// mkdirInHome makes `dir`, a folder inside homes/<user>/ named by its path,
+// through a handle on that home - and NEVER the home itself. A home that is
+// missing was renamed or deleted by the admin while this write was under
+// way; a plain os.MkdirAll would bring it back as a ghost homes/<old name>/
+// that nobody signs in to, and what is saved there is lost from view (L2).
+// errRootGone then. A home renamed after the handle opened gets the folder in
+// its new place, which is harmless: the caller's write, by the old path,
+// then fails.
+func mkdirInHome(homesDir, dir string) error {
+	rel, err := filepath.Rel(homesDir, dir)
+	user, inside, _ := strings.Cut(filepath.ToSlash(rel), "/")
+	if err != nil || user == "" || user == "." || user == ".." || inside == "" {
+		return fmt.Errorf("%s is not a folder inside a home", dir)
+	}
+	root, err := os.OpenRoot(filepath.Join(homesDir, user))
+	if errors.Is(err, fs.ErrNotExist) {
+		return errRootGone
+	}
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.MkdirAll(filepath.FromSlash(inside), 0o755)
+}
 
 // newResolved splits an approved target into its root and the part inside.
 //

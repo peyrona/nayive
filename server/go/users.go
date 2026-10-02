@@ -1601,7 +1601,7 @@ func (u *Users) Resolve(role, user, reqPath string) (Resolved, bool) {
 }
 
 // ResolvePath is Resolve for the callers that need only the absolute path: the
-// share API's "is this mine?" check, the folder listings, and the tests.
+// share API's "is this mine?" check and the tests.
 func (u *Users) ResolvePath(role, user, reqPath string) (string, bool) {
 	p, ok := u.Resolve(role, user, reqPath)
 	if !ok {

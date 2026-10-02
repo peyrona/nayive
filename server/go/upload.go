@@ -61,6 +61,14 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 		sendError(w, r, http.StatusForbidden, "no se puede cambiar ese archivo")
 		return
 	}
+	// A home the admin renamed or deleted under this request: "try again"
+	// (503, sendMissing). The checks below would see no file there and
+	// answer an If-Match save 412 - a conflict the page offers to keep as a
+	// copy - for a file nobody changed.
+	if _, err := target.Lstat(); errors.Is(err, errRootGone) {
+		sendMissing(w, r, err, "")
+		return
+	}
 
 	// ADD, NEVER REPLACE. An "add" grant is writable so someone can drop their
 	// own photos into a shared album; letting a PUT land on a name that already
@@ -85,7 +93,7 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// changed since - by another device, a restore, a move, a server write -
 	// answers 412 and is NOT overwritten: the page merges, or offers "save
 	// yours as a copy". See staleBase.
-	if staleBase(r, target) {
+	if staleBase(r, target.Stat) {
 		sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
 		return
 	}
@@ -174,16 +182,20 @@ func createOnly(r *http.Request) bool {
 // Otherwise If-Unmodified-Since, exactly as before, for a page loaded before
 // the tag: HTTP dates are whole seconds, so the file's time is cut to the
 // second too; no header (every other client) or an unreadable one = no check.
-func staleBase(r *http.Request, target Resolved) bool {
+//
+// `stat` is how the file at the path is looked at: before the body, by the
+// path (Resolved.Stat); under the path's lock, through the folder the write
+// itself goes into (streamToFile).
+func staleBase(r *http.Request, stat func() (os.FileInfo, error)) bool {
 	if header, sent := ifMatchHeader(r); sent {
 		var now os.FileInfo // nil: no file there
-		if info, err := target.Stat(); err == nil {
+		if info, err := stat(); err == nil {
 			now = info
 		}
 		return !ifMatchPasses(header, now)
 	}
 	if since, err := http.ParseTime(r.Header.Get("If-Unmodified-Since")); err == nil {
-		if info, err := target.Stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
+		if info, err := stat(); err == nil && info.ModTime().Truncate(time.Second).After(since) {
 			return true
 		}
 	}
@@ -222,6 +234,14 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	// Every step from here - the folder, the temp file, the final rename - goes
 	// through the sandbox (see sandbox.go). The handle stays open for the whole
 	// upload: one descriptor, however long the body takes to arrive.
+	//
+	// THE OPEN FOLDER. Every look at the file from here on - the empty-body
+	// guard, the version check, the clash, the old time - goes through this
+	// same `root`, never through `target` (which opens the folder again by its
+	// name). An admin rename while the body streams moves the home: the write
+	// follows the handle into the renamed home, while a look by name finds
+	// nothing there and passes - an If-Unmodified-Since save, or an empty
+	// body, then replaced a newer file or a whole document (L2).
 	root, err := target.openCreating()
 	if err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo crear la carpeta")
@@ -323,7 +343,8 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	// a 409 for good instead of re-sending it forever. Plain text may still be
 	// emptied on purpose, and a new or already-empty document may start empty.
 	if written == 0 && emptyRefused[strings.ToLower(filepath.Ext(target.Rel))] {
-		if info, err := target.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+		// Through `root`, like every look from here on: see "THE OPEN FOLDER".
+		if info, err := root.Stat(target.Rel); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
 			s.log.Warn("0-byte PUT over a document refused", "path", target.Abs, "size", info.Size())
 			sendError(w, r, http.StatusConflict, "cuerpo vacío: el documento no se cambia")
 			return 0, errors.New("empty body over a document")
@@ -358,13 +379,13 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	// instead of silently winning (S2-#8).
 	unlock := lockPath(target.Abs)
 	defer unlock()
-	if staleBase(r, target) {
+	if staleBase(r, func() (os.FileInfo, error) { return root.Stat(target.Rel) }) {
 		sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
 		return 0, errors.New("changed while the body streamed")
 	}
 	// The time the file had, for the whole-second rule below.
 	var prev time.Time
-	if info, err := target.Stat(); err == nil {
+	if info, err := root.Stat(target.Rel); err == nil {
 		prev = info.ModTime()
 	}
 	if clash != 0 {
@@ -372,7 +393,7 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		// body is minutes old for a video. The lock keeps other uploads out;
 		// renameNoReplace keeps out everything else (a move, a restore, the
 		// converter), which take no lock.
-		if target.Exists() {
+		if _, err := root.Lstat(target.Rel); err == nil {
 			sendError(w, r, clash, clashText(clash))
 			return 0, errors.New("name taken while the body streamed")
 		}
