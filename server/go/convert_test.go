@@ -140,7 +140,8 @@ func TestConvertOnUpload(t *testing.T) {
 		t.Fatal("the AVI is still in its folder")
 	}
 	inTrash := false
-	for _, it := range srv.trash.List("user", "ana") {
+	items, _ := srv.trash.List("user", "ana")
+	for _, it := range items {
 		if it.Name == "prueba.avi" {
 			inTrash = true
 		}

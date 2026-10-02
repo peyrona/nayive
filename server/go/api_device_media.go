@@ -637,6 +637,10 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 		if err := root.Rename(partRel, filepath.FromSlash(rel)); err != nil {
 			return "", err
 		}
+		// Durable before the phone is told "filed" and may let it go (K1).
+		if err := syncRootDir(root, filepath.FromSlash(folder)); err != nil {
+			return "", err
+		}
 		return rel, nil
 	}
 	return "", errors.New("no free name")

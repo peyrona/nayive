@@ -34,7 +34,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -211,18 +213,23 @@ func (t *Trash) Dir(role, user string) string {
 
 func indexPath(tdir string) string { return filepath.Join(tdir, "index.json") }
 
-// loadIndex reads one can's index. A missing or corrupt index reads as "empty
-// trash".
-func loadIndex(tdir string) *trashIndex {
+// errTrashDamaged: the can's index.json is there but cannot be read or parsed.
+var errTrashDamaged = errors.New("trash: index.json cannot be read")
+
+// loadIndex reads one can's index. A missing index is an empty trash. One that
+// is there but cannot be read (EIO, EACCES, EMFILE on a busy server) or does
+// not parse is an ERROR, never "empty": every operation saves what it loaded,
+// so an empty reading written back would drop every row - the items stay in
+// .trash/ but nothing lists or restores them, and the sweep purges them later
+// (F2). The caller refuses the operation and the file is left as it is, for
+// the admin to repair (the log names it).
+func (t *Trash) loadIndex(tdir string) (*trashIndex, error) {
 	index := newTrashIndex()
-	raw, err := os.ReadFile(indexPath(tdir))
-	if err != nil {
-		return index // a missing index is an empty trash
+	if _, err := readJSONStrict(indexPath(tdir), index); err != nil {
+		t.log.Error("trash: index.json cannot be read - the bin is left as it is", "file", indexPath(tdir), "err", err)
+		return nil, fmt.Errorf("%w: %v", errTrashDamaged, err)
 	}
-	if err := json.Unmarshal(raw, index); err != nil {
-		return newTrashIndex() // a corrupt one is too
-	}
-	return index
+	return index, nil
 }
 
 func saveIndex(tdir string, index *trashIndex) error {
@@ -282,7 +289,10 @@ func (t *Trash) MoveIn(role, user string, p Resolved, origRel string) (string, e
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	index := loadIndex(tdir)
+	index, err := t.loadIndex(tdir)
+	if err != nil {
+		return "", err // the item stays where it is: nothing is lost
+	}
 	index.set(entryID, TrashEntry{
 		Orig:    origRel,
 		Name:    filepath.Base(p.Abs),
@@ -310,8 +320,10 @@ func (t *Trash) MoveIn(role, user string, p Resolved, origRel string) (string, e
 // -----------------------------------------------------------------------------
 
 // List is every trashed item, newest first. Rows whose file has vanished are
-// dropped from the index on the way out.
-func (t *Trash) List(role, user string) []TrashItem {
+// dropped from the index on the way out - only those whose file is really not
+// there (fs.ErrNotExist): any other error keeps the row. An index that cannot
+// be read is an error (loadIndex), never an empty bin.
+func (t *Trash) List(role, user string) ([]TrashItem, error) {
 	tdir := t.Dir(role, user)
 
 	type alive struct {
@@ -322,7 +334,11 @@ func (t *Trash) List(role, user string) []TrashItem {
 	var live []alive
 
 	t.mu.Lock()
-	index := loadIndex(tdir)
+	index, err := t.loadIndex(tdir)
+	if err != nil {
+		t.mu.Unlock()
+		return nil, err
+	}
 	changed := false
 	for _, id := range index.keys() { // file order, so ties stay chronological
 		entry, _ := index.get(id)
@@ -332,7 +348,7 @@ func (t *Trash) List(role, user string) []TrashItem {
 			changed = true
 			continue
 		}
-		if _, err := os.Lstat(p); err != nil {
+		if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
 			index.remove(id)
 			changed = true
 			continue
@@ -380,26 +396,30 @@ func (t *Trash) List(role, user string) []TrashItem {
 
 	if len(learned) > 0 {
 		t.mu.Lock()
-		index := loadIndex(tdir) // re-read: it may have changed meanwhile
-		for id, size := range learned {
-			if entry, found := index.get(id); found {
-				entry.Size = ptrInt64(size)
-				index.set(id, entry)
+		// re-read: it may have changed meanwhile (and a failed read writes nothing)
+		if index, err := t.loadIndex(tdir); err == nil {
+			for id, size := range learned {
+				if entry, found := index.get(id); found {
+					entry.Size = ptrInt64(size)
+					index.set(id, entry)
+				}
 			}
+			saveIndex(tdir, index)
 		}
-		saveIndex(tdir, index)
 		t.mu.Unlock()
 	}
 
 	sort.SliceStable(items, func(i, j int) bool { return items[i].Deleted > items[j].Deleted })
-	return items
+	return items, nil
 }
 
 // Size is the total bytes sitting in this caller's trash. It reuses List, so the
-// per-item sizes already cached in index.json are not re-measured.
+// per-item sizes already cached in index.json are not re-measured. A can whose
+// index cannot be read counts 0: Drive's disk figure must still answer.
 func (t *Trash) Size(role, user string) int64 {
 	var total int64
-	for _, it := range t.List(role, user) {
+	items, _ := t.List(role, user)
+	for _, it := range items {
 		total += it.Size
 	}
 	return total
@@ -439,15 +459,19 @@ func (t *Trash) freeTarget(role, user, origRel string) (Resolved, string, bool) 
 }
 
 // Restore moves the given entryIds back to where they came from. It returns the
-// names that had to be renamed because their original path was occupied.
-func (t *Trash) Restore(role, user string, ids []string) []string {
+// names that had to be renamed because their original path was occupied, or
+// an error when the index cannot be read (nothing moves then).
+func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 	tdir := t.Dir(role, user)
 	renamed := []string{}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	index := loadIndex(tdir)
+	index, err := t.loadIndex(tdir)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		if !entryRE.MatchString(id) {
 			continue
@@ -458,7 +482,9 @@ func (t *Trash) Restore(role, user string, ids []string) []string {
 		}
 		src := filepath.Join(tdir, id)
 		if _, err := os.Lstat(src); err != nil {
-			index.remove(id)
+			if errors.Is(err, fs.ErrNotExist) { // only a row whose item is really gone
+				index.remove(id)
+			}
 			continue
 		}
 
@@ -486,22 +512,27 @@ func (t *Trash) Restore(role, user string, ids []string) []string {
 		t.log.Info("trash: restored", "id", id, "to", dest.Abs)
 	}
 	saveIndex(tdir, index)
-	return renamed
+	return renamed, nil
 }
 
 // -----------------------------------------------------------------------------
 // permanent delete
 // -----------------------------------------------------------------------------
 
-// Purge really deletes. A nil `ids` empties the whole can.
-func (t *Trash) Purge(role, user string, ids []string) int {
+// Purge really deletes. A nil `ids` empties the whole can. An index that
+// cannot be read is an error, and nothing is deleted.
+func (t *Trash) Purge(role, user string, ids []string) (int, error) {
 	tdir := t.Dir(role, user)
 	if info, err := os.Stat(tdir); err != nil || !info.IsDir() {
-		return 0
+		return 0, nil
 	}
 
 	t.mu.Lock()
-	index := loadIndex(tdir)
+	index, err := t.loadIndex(tdir)
+	if err != nil {
+		t.mu.Unlock()
+		return 0, err
+	}
 	wanted := ids
 	if wanted == nil {
 		wanted = index.keys()
@@ -528,7 +559,7 @@ func (t *Trash) Purge(role, user string, ids []string) int {
 		t.users.ForgetUsage(user)
 	}
 	t.log.Info("trash: purged", "count", n, "who", whoever(user))
-	return n
+	return n, nil
 }
 
 // -----------------------------------------------------------------------------
@@ -557,6 +588,13 @@ func (t *Trash) SweepExpired(defaultDays int) {
 			if !e.IsDir() {
 				continue
 			}
+			// A config.json that cannot be read says nothing about this
+			// person's days - not even "keep for ever" (-1): skip the can
+			// rather than purge it by the default.
+			if t.users.ConfigDamaged(e.Name()) {
+				t.log.Error("trash: config.json cannot be read - the bin is not swept", "user", e.Name())
+				continue
+			}
 			days := defaultDays
 			if d := t.users.UserTrashDays(e.Name()); d != nil {
 				days = *d
@@ -579,7 +617,13 @@ func (t *Trash) SweepExpired(defaultDays int) {
 		cutoff := now.Add(-time.Duration(c.days) * 24 * time.Hour).Unix()
 
 		t.mu.Lock()
-		index := loadIndex(c.dir)
+		index, err := t.loadIndex(c.dir)
+		if err != nil {
+			// Nothing is swept from a can whose index cannot be read: the
+			// orphan pass below would take every item it lists (F2).
+			t.mu.Unlock()
+			continue
+		}
 		gone := 0
 		for _, id := range index.keys() {
 			entry, _ := index.get(id)
@@ -590,9 +634,9 @@ func (t *Trash) SweepExpired(defaultDays int) {
 				gone++
 			}
 		}
-		// Also drop entries whose file is already gone.
+		// Also drop entries whose file is already gone (and only those).
 		for _, id := range index.keys() {
-			if _, err := os.Lstat(filepath.Join(c.dir, id)); err != nil {
+			if _, err := os.Lstat(filepath.Join(c.dir, id)); errors.Is(err, fs.ErrNotExist) {
 				index.remove(id)
 			}
 		}

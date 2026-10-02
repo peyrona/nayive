@@ -188,8 +188,15 @@ func mailHashID(s MailSummary) string {
 // the files
 // -----------------------------------------------------------------------------
 
-// writeMailFile writes one of the user's mail files, 0600, atomically.
+// writeMailFile writes one of the user's mail files, 0600, atomically: synced
+// before the rename (a power cut must never leave a cut accounts.json) and its
+// folder after it (K1). Never over a file that failed to load (F4): that one
+// is refused, and the log names it. h.mu held.
 func (h *MailHub) writeMailFile(user, name string, v any) error {
+	if u := h.owners[user]; u != nil && u.damaged[name] != nil {
+		h.log.Error("mail: not saving over a file that cannot be read", "user", user, "file", name, "err", u.damaged[name])
+		return fmt.Errorf("mail: %s: %w", name, errDamaged)
+	}
 	dir := h.dir(user)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -199,7 +206,18 @@ func (h *MailHub) writeMailFile(user, name string, v any) error {
 		return err
 	}
 	tmp := filepath.Join(dir, fmt.Sprintf("%s.%d.%d.tmp", name, os.Getpid(), tmpCounter.Add(1)))
-	if err := os.WriteFile(tmp, append(raw, '\n'), 0o600); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(append(raw, '\n'))
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
 		os.Remove(tmp)
 		return err
 	}
@@ -207,28 +225,75 @@ func (h *MailHub) writeMailFile(user, name string, v any) error {
 		os.Remove(tmp)
 		return err
 	}
-	return nil
+	return syncDir(dir)
 }
 
-// loadExtrasLocked reads labels, trash and settings into a fresh mailUser.
-func (h *MailHub) loadExtrasLocked(name string, u *mailUser) {
-	loadJSONFile(filepath.Join(h.dir(name), "labels.json"), &u.labels)
-	if u.labels.Tags == nil {
-		u.labels.Tags = map[string]*mailTag{}
+// loadMailFile reads one of the user's mail files into `dst`, and says
+// whether it read whole (or is not there yet). A file that is there but cannot
+// be read or parsed is noted in u.damaged - writeMailFile will not write over
+// it - and `dst` keeps what decoded (empty, or the defaults); one that could
+// not be READ is tried again after damagedRetryEvery. h.mu held.
+func (h *MailHub) loadMailFile(user string, u *mailUser, name string, dst any) bool {
+	path := filepath.Join(h.dir(user), name)
+	_, err := readJSONStrict(path, dst)
+	if err != nil {
+		h.log.Error("mail: a file cannot be read - kept as it is, not written over", "file", path, "err", err)
+		if u.damaged == nil {
+			u.damaged = map[string]error{}
+		}
+		u.damaged[name] = err
+	} else {
+		delete(u.damaged, name)
 	}
-	if u.labels.Labels == nil {
-		u.labels.Labels = []MailLabel{}
-	}
-	for i, l := range u.labels.Labels {
-		if c, old := mailLabelColorsOld[l.Color]; old {
-			u.labels.Labels[i].Color = c
+	u.retryAt = time.Time{}
+	for _, e := range u.damaged {
+		if isReadError(e) {
+			u.retryAt = time.Now().Add(damagedRetryEvery)
 		}
 	}
-	u.trash = map[string]mailTrashEntry{}
-	loadJSONFile(filepath.Join(h.dir(name), "trash.json"), &u.trash)
-	u.settings = MailSettings{TrashDays: mailTrashDaysDefault}
-	loadJSONFile(filepath.Join(h.dir(name), "settings.json"), &u.settings)
-	u.settings.TrashDays = clampTrashDays(u.settings.TrashDays)
+	return err == nil
+}
+
+// loadExtraLocked reads labels.json, trash.json or settings.json into u, with
+// that file's defaults and clean-up. first: the account's first read - what
+// loaded is kept even from a damaged file; a retry takes only a whole read.
+// h.mu held.
+func (h *MailHub) loadExtraLocked(name string, u *mailUser, file string, first bool) {
+	switch file {
+	case "labels.json":
+		var labels mailLabelsFile
+		if !h.loadMailFile(name, u, file, &labels) && !first {
+			return
+		}
+		if labels.Tags == nil {
+			labels.Tags = map[string]*mailTag{}
+		}
+		if labels.Labels == nil {
+			labels.Labels = []MailLabel{}
+		}
+		for i, l := range labels.Labels {
+			if c, old := mailLabelColorsOld[l.Color]; old {
+				labels.Labels[i].Color = c
+			}
+		}
+		u.labels = labels
+	case "trash.json":
+		trash := map[string]mailTrashEntry{}
+		if !h.loadMailFile(name, u, file, &trash) && !first {
+			return
+		}
+		if trash == nil { // a file holding null
+			trash = map[string]mailTrashEntry{}
+		}
+		u.trash = trash
+	case "settings.json":
+		settings := MailSettings{TrashDays: mailTrashDaysDefault}
+		if !h.loadMailFile(name, u, file, &settings) && !first {
+			return
+		}
+		settings.TrashDays = clampTrashDays(settings.TrashDays)
+		u.settings = settings
+	}
 }
 
 func clampTrashDays(n int) int {
@@ -677,6 +742,14 @@ func (h *MailHub) purgeAccount(ctx context.Context, user string, a *mailAcct, al
 	}
 	h.mu.Lock()
 	u := h.userLocked(user)
+	// The clocks (trash.json) or the user's days (settings.json) unread: the
+	// days would be the default and the clocks would restart, so the
+	// automatic purge could delete mail kept for longer on purpose. It waits
+	// until the files read again; "Empty Trash" (all) is the user's own ask.
+	if !all && (u.damaged["trash.json"] != nil || u.damaged["settings.json"] != nil) {
+		h.mu.Unlock()
+		return 0, fmt.Errorf("mail: purge skipped: %w", errDamaged)
+	}
 	days := u.settings.TrashDays
 	now := time.Now().UTC().Truncate(time.Second)
 	present := map[string]bool{}

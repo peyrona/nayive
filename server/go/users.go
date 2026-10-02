@@ -27,6 +27,9 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -227,17 +230,37 @@ func (u *Users) pushPath(user string) string {
 // quota is 0 bytes" and every upload they make answers 507. Read field by
 // field, it is "no quota set", which is the only sane reading.
 func readUserConfig(path string) UserConfig {
+	cfg, _ := loadUserConfig(path)
+	return cfg
+}
+
+// loadUserConfig is readUserConfig plus the reason a file read as "no
+// settings": the read error (fs.ErrNotExist when there is no file), or
+// errDamaged for a file that is there but is not a JSON object, or whose
+// "password" is not a string. A READ-MODIFY-WRITE must stop on any error
+// (updateUserConfig, SaveAccount): written back, that empty reading is
+// `"password": ""` - an account anyone signs in to with a blank password - and
+// the quota, the language and every other key are gone (F1).
+func loadUserConfig(path string) (UserConfig, error) {
 	var out UserConfig
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return out
+		return out, err
 	}
 	out.raw = newOrderedJSON()
 	if err := json.Unmarshal(raw, out.raw); err != nil {
-		return UserConfig{raw: newOrderedJSON()} // not an object, or not JSON at all
+		// not an object, or not JSON at all
+		return UserConfig{raw: newOrderedJSON()}, fmt.Errorf("%w (%v)", errDamaged, err)
 	}
 	fields := out.raw.Fields()
+	var damaged error
+	if pw, found := fields["password"]; found && !isJSONNull(pw) {
+		var text string
+		if json.Unmarshal(pw, &text) != nil {
+			damaged = fmt.Errorf("%w (the password is not a string)", errDamaged)
+		}
+	}
 
 	// The two numbers, kept EXACTLY as the file spells them as well as parsed.
 	out.RawQuota = fields["quota"]
@@ -259,7 +282,7 @@ func readUserConfig(path string) UserConfig {
 	if out.PhotoMax == nil {
 		out.RawPhotoMax = nil
 	}
-	return out
+	return out, damaged
 }
 
 // isJSONNull spots a literal `null`.
@@ -396,14 +419,33 @@ func writeUserConfig(path string, cfg UserConfig) error {
 }
 
 // updateUserConfig merges a change into the file and writes it back. Reports
-// false when the account has no config.json. Caller holds cfgMu.
-func updateUserConfig(path string, change func(*UserConfig)) bool {
+// false when the account has no config.json - and when the file is there but
+// cannot be read or parsed: that one is NEVER written over (loadUserConfig
+// says why); the log names it, for the admin to repair by hand. Caller holds
+// cfgMu.
+func (u *Users) updateUserConfig(path string, change func(*UserConfig)) bool {
 	if info, err := os.Stat(path); err != nil || info.IsDir() {
 		return false
 	}
-	cfg := readUserConfig(path)
+	cfg, err := loadUserConfig(path)
+	if err != nil {
+		u.log.Error("account config.json cannot be read - not written over", "file", path, "err", err)
+		return false
+	}
 	change(&cfg)
-	return writeUserConfig(path, cfg) == nil
+	if err := writeUserConfig(path, cfg); err != nil {
+		u.log.Error("cannot save an account's config.json", "file", path, "err", err)
+		return false
+	}
+	return true
+}
+
+// ConfigDamaged reports an account whose config.json is there but cannot be
+// read or parsed: the setters refuse it for a reason that is not the value
+// sent, and the API must not answer "bad value" for it.
+func (u *Users) ConfigDamaged(user string) bool {
+	_, err := loadUserConfig(u.cfgPath(user))
+	return err != nil && !errors.Is(err, fs.ErrNotExist)
 }
 
 // -----------------------------------------------------------------------------
@@ -457,7 +499,9 @@ func numberOrRemove[T ~int | ~float64](raw json.RawMessage) (value *T, remove bo
 // it never races the user's own password write.
 //
 // It returns a status string the API maps to an HTTP response: "created",
-// "updated", "exists", "missing", "bad-quota" or "bad-photo-max".
+// "updated", "exists", "missing", "bad-quota", "bad-photo-max", "damaged" (a
+// config.json that cannot be read or parsed: left exactly as it is) or
+// "write-failed" (it could not be written: nothing changed).
 func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	home := u.homeDir(name)
 	path := u.cfgPath(name)
@@ -466,6 +510,10 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	defer u.cfgMu.Unlock()
 
 	info, err := os.Stat(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		u.log.Error("account config.json cannot be reached - not saved", "file", path, "err", err)
+		return "damaged" // there may be a file there: never "create" over it
+	}
 	existed := err == nil && !info.IsDir()
 	if opts.MustExist != nil {
 		if *opts.MustExist && !existed {
@@ -478,7 +526,13 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 
 	var cfg UserConfig
 	if existed {
-		cfg = readUserConfig(path)
+		// A damaged file is refused, never rewritten: the panel's save would
+		// otherwise turn it into `"password": ""` plus the one field sent (F1).
+		// The admin repairs it by hand (the log names it).
+		if cfg, err = loadUserConfig(path); err != nil {
+			u.log.Error("account config.json cannot be read - not written over", "file", path, "err", err)
+			return "damaged"
+		}
 	}
 
 	if opts.ClearPassword {
@@ -523,7 +577,10 @@ func (u *Users) SaveAccount(name string, opts SaveAccountOptions) string {
 	os.MkdirAll(filepath.Join(home, "data"), 0o755)
 	os.MkdirAll(filepath.Join(home, "files"), 0o755)
 	if err := writeUserConfig(path, cfg); err != nil {
-		u.log.Error("cannot save account", "user", name, "err", err)
+		// Never "usuario guardado" for a password reset or a quota that did
+		// not reach the disk: the admin must know to try again.
+		u.log.Error("cannot save account", "user", name, "file", path, "err", err)
+		return "write-failed"
 	}
 
 	if existed {
@@ -564,6 +621,12 @@ func (u *Users) RenameAccount(old, name string) string {
 	}
 	if err := os.Rename(src, dst); err != nil {
 		return "rename-failed"
+	}
+	// Durable before the caller moves shares, chat and phones to the new name
+	// (K1). The rename itself is done, so a failed sync is only logged: the
+	// caller must still follow it.
+	if err := syncDir(u.cfg.HomesDir); err != nil {
+		u.log.Error("account renamed, but homes/ could not be synced", "from", old, "to", name, "err", err)
 	}
 	return "renamed"
 }
@@ -746,7 +809,7 @@ func (u *Users) Authenticate(user, password string) string {
 		if rehash { // stored before hashing: store it hashed now
 			hashed := hashPassword(password)
 			u.cfgMu.Lock()
-			updateUserConfig(path, func(c *UserConfig) {
+			u.updateUserConfig(path, func(c *UserConfig) {
 				if c.Password == stored { // a password changed meanwhile wins
 					c.Password = hashed
 				}
@@ -822,7 +885,7 @@ func (u *Users) SetPassword(role, user, newPassword string) bool {
 
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	return updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Password = hashed })
+	return u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Password = hashed })
 }
 
 // -----------------------------------------------------------------------------
@@ -887,7 +950,7 @@ func (u *Users) SetUserLang(role, user, code string) (string, bool) {
 	}
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	ok := updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Lang = &code })
+	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Lang = &code })
 	return code, ok
 }
 
@@ -944,7 +1007,7 @@ func (u *Users) SetUserTZ(role, user, name string) (string, bool) {
 	}
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	ok := updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.TZ = &name })
+	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.TZ = &name })
 	return name, ok
 }
 
@@ -1020,7 +1083,7 @@ func (u *Users) SetDaysSetting(role, user, value string, lo, hi int,
 	}
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	ok := updateUserConfig(u.cfgPath(user), func(c *UserConfig) { applyUser(c, days) })
+	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { applyUser(c, days) })
 	return days, ok
 }
 

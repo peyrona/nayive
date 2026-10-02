@@ -118,6 +118,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -178,19 +179,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// The background loops, each stopped by ctx - and WAITED for on the way out
+	// (K6): a loop cut in the middle of a write would leave it half done.
+	var loops backgroundLoops
+
 	reminders := NewReminders(cfg, server.users, server.trash, server.sessions,
 		server.push, server.trackers, log)
 	reminders.devices = server.devices // a phone with the app needs no "turn location on" alert
-	go reminders.Run(ctx)
+	loops.Go(ctx, reminders.Run)
 
 	// Chat's auto-delete: messages older than each owner's "delete after N days".
-	go server.chat.RunExpiry(ctx)
+	loops.Go(ctx, server.chat.RunExpiry)
 	// Chat's scheduled texts ("Schedule message"), sent when their time comes.
-	go server.chat.RunLater(ctx)
+	loops.Go(ctx, server.chat.RunLater)
 	// eMail: every account's unread count, for the launcher's badge.
-	go server.mail.RunPoller(ctx)
+	loops.Go(ctx, server.mail.RunPoller)
 	// eMail: the Trash deletes for good what is older than each user's days.
-	go server.mail.RunPurge(ctx)
+	loops.Go(ctx, server.mail.RunPurge)
 
 	// Converting uploaded videos needs ffmpeg + ffprobe on the machine
 	// (`sudo apt install ffmpeg`). Without them Drive simply never offers it.
@@ -199,7 +204,7 @@ func main() {
 	} else {
 		fmt.Println("[!] video conversion OFF: ffmpeg/ffprobe not installed")
 	}
-	go server.convert.Run(ctx)
+	loops.Go(ctx, server.convert.Run)
 
 	// LibreOffice documents (.odt, .ods) become .docx / .xlsx beside the
 	// original (`sudo apt install --no-install-recommends
@@ -222,10 +227,43 @@ func main() {
 			server.URL(), URLPrefix)
 	}
 
+	// Start returns once the running requests had their grace (K6); then the
+	// loops get theirs, and only then does main return (and Close run).
 	if err := server.Start(ctx); err != nil {
 		fatal("serve: %v", err)
 	}
+	if !loops.Wait(shutdownGrace) {
+		fmt.Println("[!] a background job was still running after the grace period")
+	}
 	fmt.Println("[!] stopped.")
+}
+
+// backgroundLoops are the goroutines main starts beside the HTTP server. Each
+// returns when its context ends; Wait lets them finish what they are writing.
+type backgroundLoops struct{ wg sync.WaitGroup }
+
+// Go runs `run(ctx)` as one of the loops.
+func (l *backgroundLoops) Go(ctx context.Context, run func(context.Context)) {
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		run(ctx)
+	}()
+}
+
+// Wait blocks until every loop has returned, or `grace` has passed (false).
+func (l *backgroundLoops) Wait(grace time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		l.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(grace):
+		return false
+	}
 }
 
 // newLogger builds the structured logger at the level the config asked for.

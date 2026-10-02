@@ -395,6 +395,12 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 		sendError(w, r, http.StatusBadRequest, "cuota no válida")
 	case "bad-photo-max":
 		sendError(w, r, http.StatusBadRequest, "tamaño máximo de foto no válido")
+	case "damaged":
+		// Never "usuario guardado": nothing was written (F1).
+		sendError(w, r, http.StatusConflict, "homes/"+name+"/data/config.json está dañado o no se puede leer: "+
+			"no se ha cambiado nada; arréglalo a mano (el registro del servidor dice por qué)")
+	case "write-failed":
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar el usuario: el disco no lo aceptó (el registro del servidor dice por qué)")
 	default:
 		s.log.Info("user saved", "status", status, "name", name)
 		sendJSON(w, r, http.StatusOK,

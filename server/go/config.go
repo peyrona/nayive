@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -418,7 +420,8 @@ var tmpCounter atomic.Uint64
 // directory, then rename it onto the real name. Rename is atomic on every OS -
 // a reader either sees the whole old file or the whole new file, never a
 // half-written one, and a crash mid-write leaves only a stray .tmp (swept at
-// startup, see sweepStaleTemp).
+// startup, see sweepStaleTemp). The folder is synced after the rename
+// (syncDir), so a nil answer means the new file survives a power cut.
 //
 // The output: the given indent (four spaces for config/), real UTF-8 rather
 // than \uXXXX escapes, and a trailing newline.
@@ -457,7 +460,72 @@ func atomicWriteJSON(path string, obj any, indent int) error {
 		os.Remove(tmp)
 		return err
 	}
-	return nil
+	return syncDir(filepath.Dir(path))
+}
+
+// dirSyncs, when set, is told every folder syncDir flushed: the tests' only
+// window on a durability step that leaves no trace on disk. Nil in the server.
+var dirSyncs atomic.Pointer[func(dir string)]
+
+// syncDir flushes a folder's names to disk. A rename (or link) into place is
+// only durable once its FOLDER is synced: until the next journal commit
+// (seconds on ext4) a power cut brings the old file back - after the save was
+// answered "saved" and the browser dropped its own copy (K1). So every write
+// that renames into place calls this before it answers.
+func syncDir(dir string) error {
+	if seen := dirSyncs.Load(); seen != nil {
+		(*seen)(dir)
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = dirSyncErr(d.Sync())
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// dirSyncErr drops the refusal of a filesystem that cannot sync a folder at
+// all (EINVAL, ENOTSUP: some FUSE and network mounts). There the rename is as
+// durable as that filesystem makes it, and a save must never fail for it.
+func dirSyncErr(err error) error {
+	if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) {
+		return nil
+	}
+	return err
+}
+
+// syncRootDir is syncDir for a folder reached through an os.Root (sandbox.go):
+// `rel` is that folder, relative to the root ("." for the root itself).
+func syncRootDir(root *os.Root, rel string) error {
+	if seen := dirSyncs.Load(); seen != nil {
+		(*seen)(filepath.Join(root.Name(), rel))
+	}
+	d, err := root.Open(rel)
+	if err != nil {
+		return err
+	}
+	err = dirSyncErr(d.Sync())
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// syncFile flushes one file's bytes to disk, for a temp written by code that
+// does not keep it open: it must be whole on disk before it takes its name.
+func syncFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	err = f.Sync()
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // atomicTempName is the temp atomicWriteJSON writes before the rename, beside
@@ -482,6 +550,42 @@ func loadJSONFile(path string, dst any) bool {
 	}
 	return true
 }
+
+// errDamaged marks a refusal to write over a file that failed to load.
+var errDamaged = errors.New("the file on disk cannot be read or parsed; it is kept as it is, not written over")
+
+// readJSONStrict is loadJSONFile for a file that is WRITTEN BACK: it tells
+// apart the two cases that one folds together. (false, nil) is "no file yet",
+// nothing to lose. (false, err) is a file that is there but cannot be read
+// (EIO, EACCES, EMFILE) or does not parse: what memory would write back starts
+// empty, and the file still holds the data - so the caller must never write
+// over it (refuse, or move it aside first, as saveTable does).
+func readJSONStrict(path string, dst any) (bool, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal(raw, dst); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// isReadError tells a readJSONStrict error that came from READING the file
+// (EIO, EACCES, EMFILE on a busy server: it may read on the next try) from one
+// that came from parsing it (it stays damaged until somebody repairs it).
+func isReadError(err error) bool {
+	var pe *fs.PathError
+	return errors.As(err, &pe)
+}
+
+// damagedRetryEvery is how often a file kept read-only because it could not be
+// READ is tried again (Chat, eMail): a passing EMFILE must not leave a chat or
+// a mailbox read-only until the next restart.
+var damagedRetryEvery = 10 * time.Second
 
 // loadTable reads one of the server's own JSON tables (shares.json,
 // location.json, devices.json, sessions.json) into `dst`. ok is false when

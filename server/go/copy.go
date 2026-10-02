@@ -225,6 +225,21 @@ func copyFolder(srcRoot, dstRoot *os.Root, dstRel string, entries []copyEntry, c
 			return 0, err
 		}
 	}
+	// Every name made durable before "copied" (K1): each new folder once -
+	// its files were synced as they were written - and the folder holding
+	// the copy's top. Once per folder, never per file: a copy of a thousand
+	// photos must not wait a thousand syncs.
+	dirs := []string{filepath.Dir(dstRel), dstRel}
+	for _, e := range entries {
+		if e.dir && e.sub != "" {
+			dirs = append(dirs, filepath.Join(dstRel, filepath.FromSlash(e.sub)))
+		}
+	}
+	for _, dir := range dirs {
+		if err := syncRootDir(dstRoot, dir); err != nil {
+			return 0, err
+		}
+	}
 	return files, nil
 }
 
@@ -244,7 +259,10 @@ func copyOneFile(srcRoot, dstRoot *os.Root, srcRel, dstRel string, cw *cappedWri
 	if err := dstRoot.Link(tmpRel, dstRel); err != nil {
 		return err
 	}
-	return dstRoot.Chmod(dstRel, 0o644)
+	if err := dstRoot.Chmod(dstRel, 0o644); err != nil {
+		return err
+	}
+	return syncRootDir(dstRoot, filepath.Dir(dstRel)) // the new name durable (K1)
 }
 
 // copyBytes fills `out` with the bytes of `from`, syncs it and closes it.

@@ -69,6 +69,8 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -299,7 +301,24 @@ type chatConv struct {
 	// id -> when. Not looked for again for a while (chatFindAgain): the walk
 	// runs under h.mu, and anyone with the link can ask for that photo.
 	missed map[int64]time.Time
+	// damaged: the files of this conversation that were there but could not
+	// be read or parsed - a month ("2026-03.json"), "state.json", or "" for
+	// the folder itself (its months could not even be listed). What loaded is
+	// served; NOTHING is written over them (F5): memory holds none of their
+	// messages, read cursors or kept links, and a rewrite from memory would
+	// erase them for good. Until they read whole again, the conversation
+	// takes no change (chatConvRoute's `in`).
+	damaged map[string]bool
+	// retryAt: when a file that could not be READ (EIO, EMFILE - not one
+	// that does not parse) is tried again; zero = nothing to retry.
+	retryAt time.Time
 }
+
+// isDamaged: some file of this conversation failed to load (see damaged).
+func (c *chatConv) isDamaged() bool { return len(c.damaged) > 0 }
+
+// canWrite: `file` ("2026-10.json", "state.json") may be written from memory.
+func (c *chatConv) canWrite(file string) bool { return !c.damaged[file] && !c.damaged[""] }
 
 type chatOwner struct {
 	user    string
@@ -321,6 +340,15 @@ type chatOwner struct {
 	calls *chatCalls // voice and video calls (chat_call.go); nil until a page with a device id waits
 
 	notify func() // the hub's onChange (the Android app's waits)
+
+	// damaged: chat.json was there but could not be read or parsed. What
+	// loaded is served, but it is never written over (F5) - it holds every
+	// person, link, group and scheduled text - and no change is taken
+	// (chatRoute's resolve) until it reads whole again.
+	damaged bool
+	// retryAt: when a chat.json that could not be READ (not one that does
+	// not parse) is tried again; zero = nothing to retry.
+	retryAt time.Time
 }
 
 type chatDayUse struct {
@@ -514,6 +542,9 @@ func (h *ChatHub) chatDir(user string) string {
 // has no home.
 func (h *ChatHub) owner(user string) *chatOwner {
 	if o, ok := h.owners[user]; ok {
+		if !o.retryAt.IsZero() && !time.Now().Before(o.retryAt) {
+			h.loadData(o, false) // a read that failed may work now
+		}
 		return o
 	}
 	if user == "" || !ValidUsername(user) {
@@ -535,26 +566,54 @@ func (h *ChatHub) owner(user string) *chatOwner {
 		sent:    make(map[string][]time.Time),
 		day:     make(map[string]chatDayUse),
 	}
-	loadJSONFile(filepath.Join(o.dir, "chat.json"), &o.data)
+	h.loadData(o, true)
+	h.owners[user] = o
+	return o
+}
+
+// loadData reads the owner's chat.json. One that cannot be read or parsed
+// marks the owner damaged (F5); on the first read what loaded is kept and
+// served. A READ error (EIO, EMFILE...) is tried again after
+// damagedRetryEvery - on a retry only a whole read replaces what memory has,
+// and the links are indexed again. One that does not parse waits for a
+// repair and a restart. Caller holds h.mu.
+func (h *ChatHub) loadData(o *chatOwner, first bool) {
+	path := filepath.Join(o.dir, "chat.json")
+	var data chatData
+	_, err := readJSONStrict(path, &data)
+	o.damaged, o.retryAt = err != nil, time.Time{}
+	if err != nil {
+		h.log.Error("chat: chat.json cannot be read - kept as it is, this chat takes no change", "file", path, "err", err)
+		if isReadError(err) {
+			o.retryAt = time.Now().Add(damagedRetryEvery)
+		}
+		if !first {
+			return
+		}
+	}
 	var live []*ChatContact
-	for _, c := range o.data.Contacts {
+	for _, c := range data.Contacts {
 		if c != nil && c.ID != "" {
 			live = append(live, c)
 		}
 	}
-	o.data.Contacts = live
+	data.Contacts = live
 	var groups []*ChatGroup
-	for _, g := range o.data.Groups {
+	for _, g := range data.Groups {
 		if g != nil && g.ID != "" {
 			groups = append(groups, g)
 		}
 	}
-	o.data.Groups = groups
-	if strings.TrimSpace(o.data.Me.Name) == "" {
-		o.data.Me.Name = titleCase(user)
+	data.Groups = groups
+	if strings.TrimSpace(data.Me.Name) == "" {
+		data.Me.Name = titleCase(o.user)
 	}
-	h.owners[user] = o
-	return o
+	o.data = data
+	if !first { // read whole at last: its links, people and pictures are back
+		h.log.Warn("chat: chat.json reads again", "file", path)
+		h.resetIndex()
+		o.changed(true)
+	}
 }
 
 func titleCase(s string) string {
@@ -565,7 +624,15 @@ func titleCase(s string) string {
 	return string(unicode.ToUpper(r)) + s[n:]
 }
 
+// errChatDamaged: a write refused because the file it would replace failed
+// to load (chatOwner.damaged, chatConv.damaged).
+var errChatDamaged = errors.New("chat: that file cannot be read; it is not written over")
+
+// saveData writes chat.json - never over one that failed to load (F5).
 func (h *ChatHub) saveData(o *chatOwner) error {
+	if o.damaged {
+		return errChatDamaged
+	}
 	if err := os.MkdirAll(o.dir, 0o755); err != nil {
 		return err
 	}
@@ -761,19 +828,56 @@ func (o *chatOwner) visible(pid string) []string {
 // conv is a conversation, read from disk the first time.
 func (h *ChatHub) conv(o *chatOwner, id string) *chatConv {
 	if c, ok := o.convs[id]; ok {
+		if !c.retryAt.IsZero() && !time.Now().Before(c.retryAt) {
+			// A file that could not be read may read now. Read again in
+			// place: nothing was written while it was damaged, so the disk
+			// is all there is to know.
+			rev, next := c.st.Rev, c.st.Next
+			h.loadConv(c)
+			c.st.Rev, c.st.Next = max(c.st.Rev, rev), max(c.st.Next, next) // never backwards for a page
+			if !c.isDamaged() {
+				h.log.Warn("chat: a conversation reads again", "dir", c.dir)
+				o.changed(false)
+			}
+		}
 		return c
 	}
-	c := &chatConv{
-		id:   id,
-		dir:  filepath.Join(o.dir, "conv", id),
-		byID: make(map[int64]*ChatMsg),
-		cids: make(map[string]int64),
+	c := &chatConv{id: id, dir: filepath.Join(o.dir, "conv", id)}
+	h.loadConv(c)
+	o.convs[id] = c
+	return c
+}
+
+// loadConv reads a conversation from disk into c: its state, every month. A
+// file that cannot be read or parsed is marked (c.damaged) and what loaded is
+// kept; one that could not be READ is tried again after damagedRetryEvery.
+// Caller holds h.mu.
+func (h *ChatHub) loadConv(c *chatConv) {
+	c.st, c.msgs, c.missed = chatState{}, nil, nil
+	c.byID, c.cids = make(map[int64]*ChatMsg), make(map[string]int64)
+	c.damaged, c.retryAt = nil, time.Time{}
+	damaged := func(file string, err error) {
+		if c.damaged == nil {
+			c.damaged = map[string]bool{}
+		}
+		c.damaged[file] = true
+		if isReadError(err) {
+			c.retryAt = time.Now().Add(damagedRetryEvery)
+		}
+		h.log.Error("chat: a conversation file cannot be read - kept as it is, the conversation takes no change",
+			"file", filepath.Join(c.dir, file), "err", err)
 	}
-	loadJSONFile(filepath.Join(c.dir, "state.json"), &c.st)
+	if _, err := readJSONStrict(filepath.Join(c.dir, "state.json"), &c.st); err != nil {
+		damaged("state.json", err)
+	}
 	if c.st.Read == nil {
 		c.st.Read = map[string]int64{}
 	}
-	if entries, err := os.ReadDir(c.dir); err == nil {
+	entries, err := os.ReadDir(c.dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		damaged("", err) // its months cannot be listed: none may be written
+	}
+	if err == nil {
 		var months []string
 		for _, e := range entries {
 			n := e.Name()
@@ -784,7 +888,9 @@ func (h *ChatHub) conv(o *chatOwner, id string) *chatConv {
 		sort.Strings(months)
 		for _, n := range months {
 			var m chatMonth
-			loadJSONFile(filepath.Join(c.dir, n), &m)
+			if _, err := readJSONStrict(filepath.Join(c.dir, n), &m); err != nil {
+				damaged(n, err)
+			}
 			for _, msg := range m.Messages {
 				if msg == nil || msg.ID <= 0 || c.byID[msg.ID] != nil {
 					continue
@@ -807,24 +913,29 @@ func (h *ChatHub) conv(o *chatOwner, id string) *chatConv {
 	if c.st.Next < 1 {
 		c.st.Next = 1
 	}
-	o.convs[id] = c
-	return c
 }
 
 func monthOf(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01") }
 
-// saveMonth rewrites the month file that holds `m`, and the state.
-func (h *ChatHub) saveMonth(c *chatConv, m *ChatMsg) {
-	h.writeMonth(c, monthOf(m.At))
-	h.saveState(c)
+// saveMonth rewrites the month file that holds `m`, and the state. The first
+// error is answered.
+func (h *ChatHub) saveMonth(c *chatConv, m *ChatMsg) error {
+	err := h.writeMonth(c, monthOf(m.At))
+	if serr := h.saveState(c); err == nil {
+		err = serr
+	}
+	return err
 }
 
 // writeMonth rewrites one month file from memory - or removes it when that
-// month has no message left.
-func (h *ChatHub) writeMonth(c *chatConv, month string) {
+// month has no message left. Never one that failed to load (F5).
+func (h *ChatHub) writeMonth(c *chatConv, month string) error {
+	if !c.canWrite(month + ".json") {
+		return errChatDamaged
+	}
 	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		h.log.Error("chat: cannot create a conversation folder", "err", err)
-		return
+		return err
 	}
 	out := chatMonth{Messages: []*ChatMsg{}}
 	for _, x := range c.msgs {
@@ -835,11 +946,13 @@ func (h *ChatHub) writeMonth(c *chatConv, month string) {
 	path := filepath.Join(c.dir, month+".json")
 	if len(out.Messages) == 0 {
 		os.Remove(path)
-		return
+		return nil
 	}
 	if err := atomicWriteJSON(path, out, 1); err != nil {
 		h.log.Error("chat: cannot save messages", "err", err)
+		return err
 	}
+	return nil
 }
 
 // purge drops from memory and disk every message that all the current
@@ -1138,6 +1251,11 @@ func (h *ChatHub) sendDue(now time.Time) {
 
 // sendDueIn sends `o`'s texts due by `now` (unix ms), oldest first. Caller holds h.mu.
 func (h *ChatHub) sendDueIn(o *chatOwner, now int64) {
+	// chat.json failed to load: a text sent now could not be taken out of its
+	// "later" list on disk, and would go again after every restart (F5).
+	if o.damaged {
+		return
+	}
 	var due, keep []*ChatLater
 	for _, l := range o.data.Later {
 		if l.At <= now {
@@ -1149,21 +1267,26 @@ func (h *ChatHub) sendDueIn(o *chatOwner, now int64) {
 	if len(due) == 0 {
 		return
 	}
-	o.data.Later = keep
 	sort.SliceStable(due, func(i, j int) bool { return due[i].At < due[j].At })
 	for _, l := range due {
-		h.sendLater(o, l)
+		if _, _, err := h.sendLater(o, l); err != nil {
+			// Not on disk: it stays scheduled and goes at the next tick (J5).
+			h.log.Error("chat: a scheduled text could not be sent", "user", o.user, "conv", l.Conv, "err", err)
+			keep = append(keep, l)
+		}
 	}
+	o.data.Later = keep
 	h.saveData(o)
 	o.changed(true)
 }
 
 // sendLater turns `l` into a message from its sender, now - nothing when they
 // are no longer in that chat (a person deleted, a group gone). The caller has
-// taken it out of o.data.Later and saves. Caller holds h.mu.
-func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg) {
+// taken it out of o.data.Later and saves; on an error the message was not
+// stored, and the caller keeps `l`. Caller holds h.mu.
+func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg, error) {
 	if !o.isMember(l.Conv, l.From) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	c := h.conv(o, l.Conv)
 	m := &ChatMsg{From: l.From, Kind: "text", Text: l.Text, CID: "later-" + l.ID}
@@ -1171,8 +1294,10 @@ func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg) {
 		m.ReplyTo = l.ReplyTo
 	}
 	m.ID, m.At = c.st.Next, nowMs()
-	h.store(o, c, m)
-	return c, m
+	if err := h.store(o, c, m); err != nil {
+		return c, nil, err
+	}
+	return c, m, nil
 }
 
 // laterOf are `pid`'s texts waiting in `conv`, soonest first. Caller holds h.mu.
@@ -1187,13 +1312,20 @@ func (o *chatOwner) laterOf(conv, pid string) []*ChatLater {
 	return out
 }
 
-func (h *ChatHub) saveState(c *chatConv) {
+// saveState writes the conversation's state.json - never over one that
+// failed to load (F5).
+func (h *ChatHub) saveState(c *chatConv) error {
+	if !c.canWrite("state.json") {
+		return errChatDamaged
+	}
 	if err := os.MkdirAll(c.dir, 0o755); err != nil {
-		return
+		return err
 	}
 	if err := atomicWriteJSON(filepath.Join(c.dir, "state.json"), c.st, 1); err != nil {
 		h.log.Error("chat: cannot save a conversation's state", "err", err)
+		return err
 	}
+	return nil
 }
 
 // changed wakes every wait of this owner. meta: chat.json changed too.

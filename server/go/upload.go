@@ -326,6 +326,16 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 		return 0, err
 	}
 	nextSecond(root, target.Rel, prev)
+	// The new name is durable only once its folder is synced (K1). Until then
+	// a power cut brings the old file back - after a 200, when the browser has
+	// already dropped its copy. A failure is answered: the browser keeps it.
+	if err := syncRootDir(root, filepath.Dir(target.Rel)); err != nil {
+		if owner := s.users.HomeOwner(target.Abs); owner != "" {
+			s.users.ForgetUsage(owner) // the file did change size
+		}
+		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+		return 0, err
+	}
 	return written, nil
 }
 
