@@ -203,9 +203,10 @@ func (s *Server) dlStart(w http.ResponseWriter, r *http.Request, role, user stri
 			sendError(w, r, http.StatusForbidden, "forbidden")
 			return
 		}
+		// A home the admin moved under the request: 503, never 404 (sendMissing).
 		info, err := src.Stat()
 		if err != nil || !(info.Mode().IsRegular() || info.IsDir()) {
-			sendError(w, r, http.StatusNotFound, "no existe")
+			sendMissing(w, r, err, "no existe")
 			return
 		}
 		if info.Mode().IsRegular() {
@@ -310,12 +311,15 @@ func (s *Server) dlSendFile(ctx context.Context, w *dlWriter, r *http.Request, j
 		return &dlRefusal{http.StatusForbidden, "forbidden"}
 	}
 	// Stat BEFORE opening, then what is sent is what was OPENED - as filesRead.
+	// A home the admin moved since the POST: 503, never 404 (missingStatus).
 	if info, err := src.Stat(); err != nil || !info.Mode().IsRegular() {
-		return &dlRefusal{http.StatusNotFound, "no existe"}
+		status, msg := missingStatus(err, "no existe")
+		return &dlRefusal{status, msg}
 	}
 	f, err := src.Open()
 	if err != nil {
-		return &dlRefusal{http.StatusNotFound, "no existe"}
+		status, msg := missingStatus(err, "no existe")
+		return &dlRefusal{status, msg}
 	}
 	defer f.Close()
 	info, err := f.Stat()

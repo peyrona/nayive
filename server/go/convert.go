@@ -180,7 +180,7 @@ func (c *Converter) Enqueue(user, rel string) bool {
 // would inherit it (L1). The film stays as uploaded, unconverted.
 //
 // Checked under mu: the admin moves the counter BEFORE RenameUser or DropUser
-// take mu (Users.RenameAccount; DropUser below), so a job is either refused
+// take mu (Users.RenameAccount; adminDeleteUser), so a job is either refused
 // here or already queued when they move or drop the name's jobs.
 func (c *Converter) EnqueueAt(user, rel string, at accountEpoch) bool {
 	if !c.Available() {
@@ -259,12 +259,11 @@ func (c *Converter) RenameUser(oldName, newName string) {
 // more: its paths' folder is gone (sandbox.go: its opens fail), Run pops a
 // finished job only when it is still the very same value at the head, and
 // runOne tells nobody of a job that left the queue (stillQueued).
+//
+// The caller moves the name's counter FIRST (Users.EndRequests): an upload
+// that reaches EnqueueAt after the drop must find it moved, or it would
+// queue its film under the deleted name for whoever is given it next.
 func (c *Converter) DropUser(name string) {
-	// The name's counter moves first (the admin moves it again just after,
-	// which changes nothing): an upload that reaches EnqueueAt after the
-	// drop must find it moved, or it would queue its film under the deleted
-	// name for whoever is given it next.
-	c.users.EndRequests(name)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	kept := make([]ConvertJob, 0, len(c.queue))
