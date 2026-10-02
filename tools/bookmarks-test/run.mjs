@@ -259,11 +259,11 @@ try
     ok( await c.evaluate( "query === '#docs' && document.querySelectorAll('#items .bm-item').length === 1 && window.__opened.length === 1" ), "a tag chip searches that tag (and does not open the link)" );
     await c.evaluate( "setQuery('EXÁMPLE'); true" );
     ok( await c.evaluate( "document.querySelectorAll('#items .bm-item:not(.is-folder)').length === 1 && !!document.querySelector('#items .bm-path')" ), "accent-insensitive search, with folder path" );
-    ok( await c.evaluate( "getComputedStyle( document.getElementById('searchClear') ).display !== 'none' && document.getElementById('searchIcon').style.display === 'none'" ), "while searching: × instead of the magnifier" );
+    ok( await c.evaluate( "document.querySelector('.search-fold').classList.contains('is-open') && !!document.querySelector('.search-fold .search-shut')" ), "while searching: the field is open, with its ×" );
     await c.evaluate( "setQuery('zzzqqq'); true" );
     ok( await c.evaluate( "!document.getElementById('emptyHint').hidden && !document.querySelector('#emptyHint [data-empty]')" ), "no results: no big button" );
-    await c.evaluate( "document.getElementById('searchClear').click(); true" );
-    ok( await c.evaluate( "query === '' && getComputedStyle( document.getElementById('searchClear') ).display === 'none' && document.getElementById('searchIcon').style.display === ''" ), "× clears it and the magnifier is back" );
+    await c.evaluate( "document.querySelector('.search-fold .search-shut').click(); true" );
+    ok( await c.evaluate( "query === '' && !document.querySelector('.search-fold').classList.contains('is-open')" ), "× clears it and folds the field" );
     await c.evaluate( "setQuery('EXÁMPLE'); true" );
     await c.evaluate( "document.getElementById('searchInput').focus(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); document.getElementById('searchInput').dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
     ok( await c.evaluate( "query === ''" ), "Esc clears the search" );
