@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 var faceJPEG = []byte{0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 0x11, 0x22, 0xFF, 0xD9}
@@ -144,9 +146,10 @@ func TestChatPersonFromCard(t *testing.T) {
 	f.putRaw(t, f.owner, "/api/chat/cards/photo?uid=card-1", faceJPEG, 200) // again: replaces
 
 	raw, _ := os.ReadFile(vcf)
-	got := string(raw)
+	// The card's REV is the time the picture was set (B4): any time, here.
+	got := regexp.MustCompile(`REV:[0-9TZ:-]+`).ReplaceAllString(string(raw), "REV:<now>")
 	want := "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:card-1\r\nFN:Lola\r\nTEL;TYPE=CELL:600\r\n" +
-		"PHOTO;ENCODING=b;TYPE=JPEG:" + base64.StdEncoding.EncodeToString(faceJPEG) + "\r\nEND:VCARD\r\n" +
+		"PHOTO;ENCODING=b;TYPE=JPEG:" + base64.StdEncoding.EncodeToString(faceJPEG) + "\r\nREV:<now>\r\nEND:VCARD\r\n" +
 		"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:card-2\r\nFN:Pepe\r\nEND:VCARD\r\n"
 	if got != want {
 		t.Fatalf("contacts.vcf =\n%q\nwant\n%q", got, want)
@@ -163,7 +166,8 @@ func TestWithCardPhoto(t *testing.T) {
 	// its blank line; a QUOTED-PRINTABLE name with a soft break; LF ends.
 	in := "BEGIN:VCARD\nVERSION:2.1\nN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=4C=6F=\n=6C=61;;;;\n" +
 		"UID:a\nPHOTO;ENCODING=BASE64;JPEG:/9j/AAAA\n  BBBB\n\nEND:VCARD\n"
-	out, err := withCardPhoto([]byte(in), "a", "JPEG", img)
+	now := time.Date(2026, 10, 2, 12, 30, 5, 0, time.UTC)
+	out, err := withCardPhoto([]byte(in), "a", "JPEG", img, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +176,7 @@ func TestWithCardPhoto(t *testing.T) {
 		t.Fatalf("2.1 result =\n%s", s)
 	}
 	if !strings.HasPrefix(s, "BEGIN:VCARD\nVERSION:2.1\nN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=4C=6F=\n=6C=61;;;;\nUID:a\nPHOTO;ENCODING=BASE64;TYPE=JPEG:") ||
-		!strings.HasSuffix(s, "\n\nEND:VCARD\n") {
+		!strings.HasSuffix(s, "\n\nREV:2026-10-02T12:30:05Z\nEND:VCARD\n") {
 		t.Fatalf("2.1 result =\n%s", s)
 	}
 	var joined string
@@ -196,14 +200,16 @@ func TestWithCardPhoto(t *testing.T) {
 	}
 
 	// 4.0: a data: URL. A card without that UID, or none at all: not found.
-	out, _ = withCardPhoto([]byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nEND:VCARD\r\n"), "b", "PNG", img)
-	if !strings.Contains(strings.ReplaceAll(string(out), "\r\n ", ""), "PHOTO:data:image/png;base64,"+b64+"\r\nEND:VCARD") {
+	// An old REV goes: the card changed now.
+	out, _ = withCardPhoto([]byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nREV:20200101T000000Z\r\nEND:VCARD\r\n"), "b", "PNG", img, now)
+	if !strings.Contains(strings.ReplaceAll(string(out), "\r\n ", ""), "PHOTO:data:image/png;base64,"+b64+"\r\nREV:2026-10-02T12:30:05Z\r\nEND:VCARD") ||
+		strings.Contains(string(out), "2020") {
 		t.Fatalf("4.0 result = %q", out)
 	}
-	if _, err := withCardPhoto([]byte(in), "zz", "JPEG", img); err != errCardNotFound {
+	if _, err := withCardPhoto([]byte(in), "zz", "JPEG", img, now); err != errCardNotFound {
 		t.Fatalf("missing uid: %v", err)
 	}
-	if _, err := withCardPhoto([]byte(""), "a", "JPEG", img); err != errCardNotFound {
+	if _, err := withCardPhoto([]byte(""), "a", "JPEG", img, now); err != errCardNotFound {
 		t.Fatalf("empty file: %v", err)
 	}
 }

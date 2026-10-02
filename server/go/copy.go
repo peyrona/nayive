@@ -36,6 +36,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // copyEntry is one thing the copy makes, relative to the item's own top.
@@ -197,11 +198,89 @@ func copyWalk(root *os.Root, rel string, dir bool) ([]copyEntry, int64) {
 	return out, total
 }
 
+// madeHere is what ONE job (a folder copy, a zip extract) has made so far, so
+// that a failed job takes back exactly that. Never a RemoveAll of its new
+// folder: it shows in Drive at once, and during a long job the user may move
+// or save a file into it - a RemoveAll deleted that too, for good (G5).
+type madeHere struct {
+	root  *os.Root
+	dirs  []string // in the order made: a folder before what is inside it
+	files []madeFile
+}
+
+type madeFile struct {
+	rel  string
+	info os.FileInfo // what was made, so a file put over its name is not taken
+}
+
+// mkdir makes one folder and notes it.
+func (m *madeHere) mkdir(rel string) error {
+	if err := m.root.Mkdir(rel, 0o755); err != nil {
+		return err
+	}
+	m.dirs = append(m.dirs, rel)
+	return nil
+}
+
+// mkdirAll is MkdirAll from `base` (which exists) down to `rel`, noting each
+// folder it makes - and only those: one that was there already is not ours.
+func (m *madeHere) mkdirAll(base, rel string) error {
+	inner, err := filepath.Rel(base, rel)
+	if err != nil || inner == "." {
+		return err
+	}
+	at := base
+	for _, part := range strings.Split(inner, string(filepath.Separator)) {
+		at = filepath.Join(at, part)
+		err := m.mkdir(at)
+		if errors.Is(err, fs.ErrExist) {
+			if info, lerr := m.root.Lstat(at); lerr == nil && info.IsDir() {
+				continue
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// create makes a NEW file (O_EXCL: never over a name) and notes it at once -
+// a half-written one must go too if the job fails.
+func (m *madeHere) create(rel string) (*os.File, error) {
+	out, err := m.root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if info, err := out.Stat(); err == nil {
+		m.files = append(m.files, madeFile{rel, info})
+	}
+	return out, nil
+}
+
+// undo removes what the job made, newest first: each file only while its
+// name still holds that same file, each folder only once empty (a folder
+// holding something the user put there stays, and so do the folders above
+// it). Best effort: what cannot go stays, which is never a loss.
+func (m *madeHere) undo() {
+	for i := len(m.files) - 1; i >= 0; i-- {
+		f := m.files[i]
+		if now, err := m.root.Lstat(f.rel); err == nil && os.SameFile(f.info, now) {
+			m.root.Remove(f.rel)
+		}
+	}
+	for i := len(m.dirs) - 1; i >= 0; i-- {
+		m.root.Remove(m.dirs[i]) // fails on a folder that is not empty
+	}
+}
+
 // copyFolder makes the folder `dstRel` - it must not exist yet: that is the
-// no-overwrite check, done by the kernel - and fills it. On any error the
-// whole new folder goes, so a failed copy leaves nothing half-made behind.
+// no-overwrite check, done by the kernel - and fills it. On any error what
+// it made goes again (madeHere), so a failed copy leaves nothing half-made
+// behind - and nothing the user put in the new folder meanwhile is touched.
 func copyFolder(srcRoot, dstRoot *os.Root, dstRel string, entries []copyEntry, cw *cappedWriter) (int, error) {
-	if err := dstRoot.Mkdir(dstRel, 0o755); err != nil {
+	made := &madeHere{root: dstRoot}
+	if err := made.mkdir(dstRel); err != nil {
 		return 0, err // fs.ErrExist: something took the name meanwhile - not ours to remove
 	}
 	files := 0
@@ -212,16 +291,16 @@ func copyFolder(srcRoot, dstRoot *os.Root, dstRel string, entries []copyEntry, c
 		to := filepath.Join(dstRel, filepath.FromSlash(e.sub))
 		var err error
 		if e.dir {
-			err = dstRoot.Mkdir(to, 0o755)
+			err = made.mkdir(to)
 		} else {
 			var out *os.File
-			if out, err = dstRoot.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
+			if out, err = made.create(to); err == nil {
 				err = copyBytes(srcRoot, e.rel, out, cw)
 				files++
 			}
 		}
 		if err != nil {
-			dstRoot.RemoveAll(dstRel)
+			made.undo()
 			return 0, err
 		}
 	}

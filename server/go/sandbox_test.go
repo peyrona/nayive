@@ -92,7 +92,7 @@ func TestSandboxRefusesSwappedFolder(t *testing.T) {
 		req := httptest.NewRequest("PUT", "/api/files?file=files/sub/x.txt",
 			strings.NewReader("pisado\n"))
 		rec := httptest.NewRecorder()
-		if _, err := srv.streamToFile(rec, req, p, -1); err == nil {
+		if _, err := srv.streamToFile(rec, req, p, -1, 0); err == nil {
 			t.Errorf("an upload went through the swapped folder")
 		}
 		checkUntouched(t, outside, "x.txt")
@@ -171,7 +171,7 @@ func TestSandboxKeepsInHomeSymlinks(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/files?file=files/enlace/y.txt",
 		strings.NewReader("hola\n"))
 	rec := httptest.NewRecorder()
-	if _, err := srv.streamToFile(rec, req, p, -1); err != nil {
+	if _, err := srv.streamToFile(rec, req, p, -1, 0); err != nil {
 		t.Fatalf("write through an in-home symlink = %d %s", rec.Code, rec.Body)
 	}
 	if b, _ := os.ReadFile(filepath.Join(files, "real", "y.txt")); string(b) != "hola\n" {
