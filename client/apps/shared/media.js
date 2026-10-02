@@ -369,6 +369,21 @@
 
     function writeComments( map ) { return GumApi.writeJson( COMMENTS_PATH, map ); }
 
+    // PARKED NOTES. A binned photo keeps its note at its old path (purgePaths
+    // below), so a restore brings it back. But when another item then takes
+    // that path - a move or rename with "Replace", or onto the name of
+    // something binned earlier - the note there belongs to the binned item,
+    // not to the newcomer: written over, it was lost for good; left alone, it
+    // showed on the wrong photo. So it is parked under this one reserved key,
+    // { "<path>": [ note, ..., newest last ] }, and goes back to its path the
+    // moment that path is left again (moveNotes): Drive's Undo moves the
+    // newcomer away BEFORE it restores the binned item, so both notes come
+    // back. "#" can never start a path, and every reader looks notes up by
+    // path (Photos' sweep skips this key on purpose). The image editor's
+    // "Save a copy" writes a NEW file at a path, so it parks too
+    // (parkNotes / unparkNotes, synchronous, on a map it has just read).
+    var ASIDE = "#aside";
+
     // Re-key `map` in place: the entry at oldPath, and everything under
     // "oldPath/", moves to the new location - so a whole folder follows in one
     // pass. `keep` leaves the originals behind (a copy). True if anything moved.
@@ -394,7 +409,9 @@
     }
 
     // Read one sidecar, hand the map to `mutate`, write it back if that returns
-    // true. A missing or unreadable file is simply left alone.
+    // true. A missing or unreadable file is simply left alone. `mutate` runs
+    // synchronously on the copy just read (C7, see remapComments): Movies'
+    // resume points share this file with other devices.
     async function editSidecar( path, mutate )
     {
         var map;
@@ -404,12 +421,90 @@
         if( mutate( map ) ) try { await GumApi.writeJson( path, map ); } catch( e ) {}
     }
 
+    // rekey() for the notes, one pair at a time and in order: first whatever
+    // sits at the destination (or inside it) is parked - the server never
+    // moves or copies over an existing item (409), so a note there is a binned
+    // item's - then the notes move, then (a move only: a copy leaves the
+    // source where it was) the notes parked for the path just left come back.
+    function moveNotes( map, pairs, keep )
+    {
+        var changed = false;
+        pairs.forEach( function ( pair )
+        {
+            var oldPath = pair[ 0 ], newPath = pair[ 1 ];
+            if( oldPath === newPath ) return;
+            if( park( map, newPath, oldPath ) ) changed = true;
+            if( rekey( map, [ pair ], keep ) ) changed = true;
+            if( ! keep && unpark( map, oldPath, false ) ) changed = true;
+        } );
+        return changed;
+    }
+
+    // `map`'s parked notes ({} when none), and storing them back (the key goes
+    // when nothing is parked any more).
+    function asideOf( map )
+    {
+        var a = map[ ASIDE ];
+        return a && typeof a === "object" && ! Array.isArray( a ) ? a : {};
+    }
+    function setAside( map, aside )
+    {
+        if( Object.keys( aside ).length ) map[ ASIDE ] = aside;
+        else delete map[ ASIDE ];
+    }
+    function under( key, path ) { return key === path || key.indexOf( path + "/" ) === 0; }
+
+    // Park the notes at `path` and inside it - except those under `except`
+    // (what is moving there right now). True if anything was parked.
+    function park( map, path, except )
+    {
+        var aside = asideOf( map ), changed = false;
+        Object.keys( map ).forEach( function ( key )
+        {
+            if( key === ASIDE || ! under( key, path ) ) return;
+            if( except != null && under( key, except ) ) return;
+            if( ! Array.isArray( aside[ key ] ) ) aside[ key ] = [];
+            aside[ key ].push( map[ key ] );
+            delete map[ key ];
+            changed = true;
+        } );
+        setAside( map, aside );
+        return changed;
+    }
+
+    // The newest note parked for `path` and for everything inside it goes back
+    // to its key. A key that holds a note stays as it is (the note stays
+    // parked) unless `over`: the caller has just put the parked item itself
+    // back at its path. True if anything changed.
+    function unpark( map, path, over )
+    {
+        var aside = asideOf( map ), changed = false;
+        Object.keys( aside ).forEach( function ( key )
+        {
+            if( ! under( key, path ) ) return;
+            var list = aside[ key ];
+            if( ! Array.isArray( list ) || ! list.length ) { delete aside[ key ]; changed = true; return; }
+            if( key in map && ! over ) return;      // taken after all: it stays parked
+            map[ key ] = list.pop();
+            if( ! list.length ) delete aside[ key ];
+            changed = true;
+        } );
+        setAside( map, aside );
+        return changed;
+    }
+
+    // C7: the notes file is shared with Photos, the image editor and every
+    // other device, and this write is not version-checked yet. So the window
+    // a note saved elsewhere could fall into is kept to the bare GET -> PUT:
+    // the change is worked out on the copy JUST read, synchronously - nothing
+    // may be awaited between readComments() and writeComments() - and only
+    // this operation's keys move.
     async function remapComments( pairs, keep )
     {
         var map;
         try { map = await readComments(); }
         catch( e ) { return; }
-        if( rekey( map, pairs, keep ) )
+        if( moveNotes( map, pairs, keep ) )
             try { await writeComments( map ); } catch( e ) {}
     }
 
@@ -604,7 +699,9 @@
         flattenFiles: flattenFiles, loadFolderTree: loadFolderTree,
         dirLabel: dirLabel, setCrumb: setCrumb, wireFolderInfo: wireFolderInfo, wireCrumbPicker: wireCrumbPicker, wireSearchToggle: wireSearchToggle, searchCount: searchCount,
         scanCache: scanCache, probeDuration: probeDuration,
-        readComments: readComments, writeComments: writeComments,
+        readComments: readComments, writeComments: writeComments, NOTES_ASIDE: ASIDE,
+        parkNotes:   function ( map, path ) { return park( map, path, null ); },
+        unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState

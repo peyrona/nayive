@@ -1101,7 +1101,9 @@ async function handleAddPhotos( fileList )
     else if( emptied ) await loadFolder();     // restore the "no images" hint
 }
 
-async function loadFolder( folder )
+// fromNews: a reload made by another page's file news (applyNews) - it never
+// sweeps the notes (see sweepComments).
+async function loadFolder( folder, fromNews )
 {
     setGridMsg( NayiveUI.t( 'photos.loadingPhotos' ), true );
     // Upload: our own album, or one we were given permission to add to.
@@ -1164,7 +1166,7 @@ async function loadFolder( folder )
 
     await loadComments();
     await loadOwnerNotes();
-    sweepComments();
+    if( ! fromNews ) sweepComments();
 
     setCrumb();
     renderGrid();
@@ -1510,23 +1512,42 @@ async function geocodeRun( my )
     }
     catch( _ ) { canSave = false; }
 
+    const mine = {};                             // the places this run asked for
     for( const c of CLUSTERS )
     {
         if( knownPlace( c ) != null ) continue;
         if( my !== geoRun ) return;              // a newer run took over
         const name = await reverseGeocode( c.lat, c.lon );
         PLACES[ placeKey( c ) ] = name;          // "" is a valid cached "unknown"
+        mine[ placeKey( c ) ] = name;
         applyPlaces();
         // Saved at once: a page closed half-way keeps every answer it got.
         // Not for an album someone shared with us: places.json is OURS and
         // keeps no trace of whose photo a place came from, so nothing could
         // take the owner's places back out of it when the share ends. Memory
         // only, then.
-        if( canSave )
-            GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( PLACES, null, 1 ) ) ).catch( () => {} );
+        if( canSave ) await savePlaces( mine );
         await sleep( 1100 );                     // Nominatim: <= 1 request / second
     }
     applyPlaces();
+}
+// A run lasts minutes and other devices save places too: each save reads the
+// file again and adds only this run's places to it - never the copy read at
+// the start, which would drop theirs (asked again later, against his
+// Nominatim budget). What they found meanwhile is kept here as well, so this
+// run does not ask for it. A file that cannot be read is not written: the
+// next save carries every place of the run anyway.
+async function savePlaces( mine )
+{
+    let disk;
+    try { disk = await GumApi.readJson( PLACES_PATH ); }
+    catch( _ ) { return; }
+    if( disk === null ) disk = {};
+    if( typeof disk !== "object" || Array.isArray( disk ) ) return;
+    for( const k of Object.keys( disk ) ) if( ! ( k in mine ) ) PLACES[ k ] = disk[ k ];
+    Object.assign( disk, mine );
+    try { await GumApi.writeFileBytes( PLACES_PATH, new TextEncoder().encode( JSON.stringify( disk, null, 1 ) ) ); }
+    catch( _ ) {}
 }
 async function reverseGeocode( lat, lon )
 {
@@ -1609,21 +1630,45 @@ async function saveComment( id, text )
 }
 /* Drop notes for photos that no longer exist in THIS folder (deleted from disk,
  * or a trash-restore that landed under a new name - Drive re-keys move/rename/
- * copy but not those). Only ever touches keys that sit directly in DIR. */
+ * copy but not those). Only ever touches keys that sit directly in DIR.
+ * NOT the note of a photo that is in the bin: Drive keeps it on purpose, so
+ * that its Undo or a Restore brings the photo back WITH its note - a note is
+ * dropped only when its photo is neither listed nor binned. loadFolder() does
+ * not call this on a reload made by another page's file news either: that
+ * news is very often a move to the bin, its Undo still on the screen. */
 async function sweepComments()
 {
-    if( DEMO || ! PHOTOS.length ) return;
+    // Not in an album someone shared with us: its photos go to the OWNER's
+    // bin, which our bin listing cannot see - our note on a photo they binned
+    // would be dropped though their Restore brings the photo back.
+    if( DEMO || RO || ! PHOTOS.length ) return;
     const alive  = new Set( PHOTOS.concat( UNSHOWN ).map( p => p.name.toLowerCase() ) );
     const prefix = DIR ? ( DIR + "/" ) : "";
-    const dead   = [];
+    let   dead   = [];
     for( const key of Object.keys( COMMENTS ) )
     {
+        if( key === NayiveMedia.NOTES_ASIDE ) continue;       // the parked notes (media.js), not a photo
         if( prefix && key.indexOf( prefix ) !== 0 ) continue;
         const rest = key.slice( prefix.length );
         if( rest.indexOf( "/" ) !== -1 ) continue;             // inside a sub-folder
-        if( ! alive.has( rest.toLowerCase() ) ) { delete COMMENTS[ key ]; dead.push( key ); }
+        if( ! alive.has( rest.toLowerCase() ) ) dead.push( key );
     }
     if( ! dead.length ) return;
+
+    // What is in the bin keeps its note. And the folder is listed again AFTER
+    // the bin: a photo restored since the listing above (Drive's Undo) is in
+    // neither the bin nor that listing, but it is in this one. A bin or a
+    // folder that cannot be listed sweeps nothing: the sweep runs again on
+    // the next load.
+    let bin, now;
+    try { bin = await GumApi.trashList(); now = await GumApi.listDir( DIR ); }
+    catch( _ ) { return; }
+    const binned = key => bin.some( it => it && typeof it.orig === "string" &&
+                                          ( it.orig === key || ( it.dir && key.indexOf( it.orig + "/" ) === 0 ) ) );
+    const here = new Set( ( ( now && now.nodes ) || [] ).map( n => baseName( n.path ).toLowerCase() ) );
+    dead = dead.filter( key => ! binned( key ) && ! here.has( key.slice( prefix.length ).toLowerCase() ) );
+    if( ! dead.length ) return;
+    for( const key of dead ) delete COMMENTS[ key ];
 
     // The removals go to a fresh read of the file - this page's copy is never
     // written back, or a note added elsewhere since it was read would go with
@@ -2136,7 +2181,7 @@ async function applyNews()
     const shown = p => IMG_EXT.indexOf( extOf( p ) ) !== -1 || HEIC_EXT.indexOf( extOf( p ) ) !== -1;
     const files = paths.filter( p => p !== COMMENTS_FILE && shown( p ) );
     const known = files.map( f => PHOTOS.find( x => x.path === f ) );
-    if( folders || known.some( p => ! p ) ) { await loadFolder(); return; }
+    if( folders || known.some( p => ! p ) ) { await loadFolder( null, true ); return; }
 
     for( const p of known ) { p.bust = Date.now(); await refreshStat( p ); }
     renderGrid();

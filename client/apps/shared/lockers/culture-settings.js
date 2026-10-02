@@ -113,14 +113,36 @@ function open( kind )
     show( "langs" );
     [].forEach.call( sheet.querySelectorAll( ".salon-pane" ), function ( p ) { el( "p", "salon-note", "…", p ); } );
 
-    A.read().then( function ( s )
+    // `base`: the settings as read, what ✓ compares with (save). A read that
+    // failed - no answer in time, a server error, signed out - shows what this
+    // device has, READ-ONLY, with ✓ off: saved, that stand-in would replace the
+    // real settings on every device (F6). Only a good read can be saved.
+    var base = null, readOnly = false;
+    A.readStrict().then( function ( s )
     {
-        cfg = JSON.parse( JSON.stringify( s ) );
+        base = JSON.parse( JSON.stringify( s ) );
+        cfg  = JSON.parse( JSON.stringify( s ) );
+        drawAll();
+    }, function ( e )
+    {
+        readOnly = true;
+        cfg = JSON.parse( JSON.stringify( e && e.local || A.normalise( null ) ) );
+        drawAll();
+        [].forEach.call( sheet.querySelectorAll( ".salon-pane input, .salon-pane select, .salon-pane button" ),
+                         function ( x ) { x.disabled = true; } );
+        bSave.disabled = true;
+        var msg = el( "p", "salon-note", t( "salon.readFail" ), null );
+        msg.setAttribute( "role", "status" );
+        sheet.insertBefore( msg, tabs );
+    } );
+
+    function drawAll()
+    {
         drawLangs();
         drawContent();
         if( sci ) drawNews(); else drawArt();
         drawLook();
-    } );
+    }
 
     //------------------------------------------------------------------------//
     // Helpers
@@ -482,19 +504,42 @@ function open( kind )
 
     //------------------------------------------------------------------------//
 
+    // ✓ writes only what THIS dialog changed, over the settings read again
+    // now: one changed on another device while the dialog was open (the
+    // phone's units, say) is not put back. Field by field; the boxes ("cards")
+    // box by box. A read that fails now writes nothing: the dialog stays open,
+    // the changes kept, and ✓ can be pressed again.
     function save()
     {
-        if( ! cfg ) return;
+        if( ! cfg || readOnly || ! base ) return;
         bSave.disabled = true;
-        A.write( cfg ).then( function ()
+        var same = function ( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); };
+        A.readStrict().then( function ( now )
         {
-            ui.close();
-            NayiveUI.toast( t( "salon.saved" ) );
+            var out = JSON.parse( JSON.stringify( now ) );
+            Object.keys( cfg ).forEach( function ( k )
+            {
+                if( k !== "cards" ) { if( ! same( cfg[ k ], base[ k ] ) ) out[ k ] = cfg[ k ]; return; }
+                out.cards = out.cards || {};
+                Object.keys( cfg.cards ).forEach( function ( c )
+                {
+                    if( ! same( cfg.cards[ c ], base.cards && base.cards[ c ] ) ) out.cards[ c ] = cfg.cards[ c ];
+                } );
+            } );
+            A.write( out ).then( function ()
+            {
+                ui.close();
+                NayiveUI.toast( t( "salon.saved" ) );
+            }, function ()
+            {
+                // Kept on this device anyway (S.write keeps the local copy first).
+                ui.close();
+                NayiveUI.toast( t( "salon.saveFail" ) );
+            } );
         }, function ()
         {
-            // Kept on this device anyway (S.write keeps the local copy first).
-            ui.close();
-            NayiveUI.toast( t( "salon.saveFail" ) );
+            bSave.disabled = false;
+            NayiveUI.toast( t( "salon.readFail" ) );
         } );
     }
 }

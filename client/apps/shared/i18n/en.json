@@ -142,6 +142,7 @@
   "salon.needLang": "Keep at least one language.",
   "salon.saved": "Saved. You'll see it the next time the screen locks.",
   "salon.saveFail": "Could not save on the server; kept on this computer.",
+  "salon.readFail": "Could not read your settings from the server, so they can't be changed now. Try again later.",
   "sci.settings": "“Science” settings",
   "sci.tabNews": "News",
   "sci.card.clock": "The time",

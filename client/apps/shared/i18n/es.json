@@ -142,6 +142,7 @@
   "salon.needLang": "Deja al menos un idioma.",
   "salon.saved": "Guardado. Se verá la próxima vez que se bloquee.",
   "salon.saveFail": "No se pudo guardar en el servidor; queda en este equipo.",
+  "salon.readFail": "No se pudieron leer tus ajustes del servidor, así que ahora no se pueden cambiar. Prueba más tarde.",
   "sci.settings": "Ajustes de «Ciencia»",
   "sci.tabNews": "Noticias",
   "sci.card.clock": "La hora",

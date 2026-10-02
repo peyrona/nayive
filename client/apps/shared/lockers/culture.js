@@ -233,11 +233,13 @@ function localCopy()
 }
 function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
 
-// The user's settings: the server's copy, else this device's, else the defaults.
-function read()
+// The server's copy, waiting `ms` at most. Never saved (404): the defaults.
+// Anything else that is not a good answer - no answer in time, a 5xx, a 401,
+// a file that is not JSON - rejects.
+function fetchSettings( ms )
 {
     var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, 4000 );
+    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
     return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
                   { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
         .then( function ( r )
@@ -247,7 +249,28 @@ function read()
             return r.json();
         } )
         .then( function ( s ) { clearTimeout( timer ); s = normalise( s ); keepLocal( s ); return s; },
-               function () { clearTimeout( timer ); return normalise( localCopy() ); } );
+               function ( e ) { clearTimeout( timer ); throw e; } );
+}
+
+// The user's settings, for the locker (and the desktop's weather): the
+// server's copy, else this device's, else the defaults - a screen must start.
+function read()
+{
+    return fetchSettings( 4000 ).catch( function () { return normalise( localCopy() ); } );
+}
+
+// For the settings dialog: the server's copy, or a rejection whose `local` is
+// what read() would show instead. Never that stand-in as the settings: the
+// dialog's ✓ would save it over the real ones, on every device (F6). The
+// dialog can wait longer than a lock screen.
+function readStrict()
+{
+    return fetchSettings( 10000 ).catch( function ( e )
+    {
+        var err = new Error( "settings not read: " + ( e && e.message || e ) );
+        err.local = normalise( localCopy() );
+        throw err;
+    } );
 }
 
 function write( s )
@@ -272,6 +295,7 @@ window.NayiveSalon =
                   .replace( /FONTS\//g, FONTS );
     },
     read:      read,
+    readStrict: readStrict,
     write:     write
 };
 

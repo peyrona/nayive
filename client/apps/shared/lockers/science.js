@@ -174,28 +174,55 @@ function localCopy()
 }
 function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
 
-// The server's copy, else this device's; never saved: Bellas artes' languages,
-// place and look.
-function read()
+// The server's copy, waiting `ms` at most; null when it was never saved (404).
+// Anything else that is not a good answer - no answer in time, a 5xx, a 401,
+// a file that is not JSON - rejects.
+function fetchSettings( ms )
 {
     var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, 4000 );
+    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
     return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
                   { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
         .then( function ( r )
         {
             clearTimeout( timer );
-            if( r.status === 404 ) return S().read().then( shared );
+            if( r.status === 404 ) return null;
             if( ! r.ok ) throw new Error( "status " + r.status );
             return r.json().then( function ( s ) { s = normalise( s ); keepLocal( s ); return s; } );
-        } )
-        .catch( function ()
+        }, function ( e ) { clearTimeout( timer ); throw e; } );
+}
+
+// What this device has: its own copy, else Bellas artes' shared part.
+function localSettings()
+{
+    var l = localCopy();
+    if( l ) return normalise( l );
+    try { return shared( JSON.parse( localStorage.getItem( "nayive-salon" ) || "null" ) ); }
+    catch ( e ) { return normalise( null ); }
+}
+
+// The server's copy, else this device's; never saved: Bellas artes' languages,
+// place and look. For the locker - a screen must start.
+function read()
+{
+    return fetchSettings( 4000 )
+        .then( function ( s ) { return s || S().read().then( shared ); } )
+        .catch( localSettings );
+}
+
+// For the settings dialog: the server's copy (never saved: Bellas artes'
+// part, read as strictly), or a rejection whose `local` is what read() would
+// show instead - never that stand-in as the settings, which ✓ would save over
+// the real ones (F6). See culture.js readStrict().
+function readStrict()
+{
+    return fetchSettings( 10000 )
+        .then( function ( s ) { return s || S().readStrict().then( shared ); } )
+        .catch( function ( e )
         {
-            clearTimeout( timer );
-            var l = localCopy();
-            if( l ) return normalise( l );
-            try { return shared( JSON.parse( localStorage.getItem( "nayive-salon" ) || "null" ) ); }
-            catch ( e ) { return normalise( null ); }
+            var err = new Error( "settings not read: " + ( e && e.message || e ) );
+            err.local = localSettings();
+            throw err;
         } );
 }
 
@@ -209,7 +236,7 @@ function write( s )
         .then( function ( r ) { if( ! r.ok ) throw new Error( "status " + r.status ); return s; } );
 }
 
-window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, write: write };
+window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, readStrict: readStrict, write: write };
 
 // Bellas artes carries the engine: loaded first, when not there yet.
 function need()

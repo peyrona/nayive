@@ -63,14 +63,21 @@ async function loadNote( path )
     commentBase = commentValue();
 }
 
-async function saveNote( path )
+// `copy`: `path` holds a NEW file ("Save a copy"). A note found there is not
+// this picture's: it is the note of the file the copy replaced (in the bin
+// now) or of a photo binned earlier under that name - parked (media.js), not
+// written over, so a restore or the Undo can bring it back. True when a note
+// was parked and saved so.
+async function saveNote( path, copy )
 {
     let map;
-    try { map = await NayiveMedia.readComments(); } catch( _ ) { return; }
+    try { map = await NayiveMedia.readComments(); } catch( _ ) { return false; }
     const text = commentValue();
+    const parked = !! copy && NayiveMedia.parkNotes( map, path );
     if( text ) map[ path ] = text; else delete map[ path ];
     try { await NayiveMedia.writeComments( map ); commentBase = text; }
-    catch( _ ) { /* non-fatal: the image itself was saved */ }
+    catch( _ ) { return false; /* non-fatal: the image itself was saved */ }
+    return parked;
 }
 
 // The note `path` has now: '' for none, null when the notes could not be read
@@ -158,6 +165,8 @@ async function saveTo( dest, replaced )
     catch( _ ) { NayiveUI.toast( T( 'drive.renderFailed' ) ); return false; }
     const size = imageEditor.getCanvasSize();
 
+    const copy = dest !== editorPath;      // "Save a copy" to another name: a new file there
+
     saving = true;
     setBusy( true );
     let kept = null;      // the original, binned by this ✓: put back if the write fails
@@ -187,7 +196,7 @@ async function saveTo( dest, replaced )
         editorPath = dest;
         showName( dest );
 
-        await saveNote( dest );
+        if( await saveNote( dest, copy ) && replaced ) replaced.parked = true;   // its Undo takes it back
 
         const back = replaced || kept;
         if( back ) NayiveUI.undoToast( T( 'drive.imageSaved' ), function() { undoSaveCopy( dest, back ); } );
@@ -310,15 +319,17 @@ async function undoSaveCopy( dest, r )
     GumApi.announce( [ dest ], false );             // a restore says nothing by itself
     if( r.from === dest ) keptOnce.delete( dest );  // the original is back: the next ✓ keeps it again
 
-    // Its note, unless it had to land under another name.
+    // Its note, unless it had to land under another name: the one the copy's
+    // save parked (saveNote), else the one read before it went to the bin.
     const renamed = res && res.renamed && res.renamed.length ? res.renamed[ 0 ] : '';
-    if( ! renamed && r.note !== null )
+    if( ! renamed )
     {
         try
         {
             const map = await NayiveMedia.readComments();
-            if( r.note ) map[ dest ] = r.note; else delete map[ dest ];
-            await NayiveMedia.writeComments( map );
+            const back = !! r.parked && NayiveMedia.unparkNotes( map, dest );
+            if( ! back && r.note !== null ) { if( r.note ) map[ dest ] = r.note; else delete map[ dest ]; }
+            if( back || r.note !== null ) await NayiveMedia.writeComments( map );
         }
         catch( _ ) { /* non-fatal: the file itself is back */ }
     }
