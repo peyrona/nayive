@@ -217,13 +217,16 @@
     }
 
     // A name Drive can take, and one not already in that folder: "f.pdf",
-    // then "f (2).pdf"...
+    // then "f (2).pdf"... A listing that fails stops the save (D5, mail-chat
+    // #9): read as "folder empty", it sent "factura.pdf" over last month's.
+    // A 404 is a folder that is not there (any more): it holds no names.
+    // `also`: names found taken since (a 412 in saveToDrive).
     function fileName( name )
     {
         name = String( name || "" ).replace( /[\\/\u0000-\u001f]/g, "_" ).trim().replace( /^\.+/, "" );
         return name || "file";
     }
-    async function freeName( dir, name )
+    async function freeName( dir, name, also )
     {
         var taken = {};
         try
@@ -233,7 +236,8 @@
                 taken[ String( n.name || String( n.path || "" ).split( "/" ).pop() ).toLowerCase() ] = true;
             } );
         }
-        catch( e ) {}
+        catch( e ) { if( ! e || e.status !== 404 ) throw e; }
+        ( also || [] ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } );
         if( ! taken[ name.toLowerCase() ] ) return name;
         var dot = name.lastIndexOf( "." ), stem = dot > 0 ? name.slice( 0, dot ) : name, ext = dot > 0 ? name.slice( dot ) : "";
         for( var i = 2; ; i++ )
@@ -241,6 +245,36 @@
             var n = stem + " (" + i + ")" + ext;
             if( ! taken[ n.toLowerCase() ] ) return n;
         }
+    }
+
+    // The attachment goes up as a NEW file only (create-only PUT): a name
+    // another device took after the listing answers 412 and the next free one
+    // is used, never written over. A 412 can also be this very save's first
+    // try, landed before a dropped connection made the PUT go again: the same
+    // bytes there mean it is saved. 50 names in a row taken: an error.
+    async function saveNew( dir, want, bytes )
+    {
+        var also = [];
+        for( var tries = 0; ; tries++ )
+        {
+            var name = await freeName( dir, want, also );
+            try { await GumApi.createFileBytes( dir + "/" + name, bytes ); return name; }
+            catch( e ) { if( ! e || e.status !== 412 || tries >= 50 ) throw e; }
+            if( await sameBytes( dir + "/" + name, bytes ) ) return name;
+            also.push( name );
+        }
+    }
+
+    async function sameBytes( path, bytes )
+    {
+        try
+        {
+            var have = await GumApi.readFileBytes( path );
+            if( have.length !== bytes.length ) return false;
+            for( var i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
+            return true;
+        }
+        catch( e ) { return false; }
     }
 
     async function saveToDrive( p, url, btn )
@@ -254,8 +288,7 @@
             var res = await fetch( url, { credentials: "same-origin" } );
             if( ! res.ok ) { var e = new Error( "HTTP " + res.status ); e.status = res.status; throw e; }
             var bytes = new Uint8Array( await res.arrayBuffer() );
-            var name = await freeName( dir, fileName( p.name ) );
-            await GumApi.writeFileBytes( dir + "/" + name, bytes );
+            await saveNew( dir, fileName( p.name ), bytes );
             E.plug( "synced" );
             NayiveUI.toast( E.TF( "mail.savedToDrive", { folder: dir.replace( /^files\/?/, "" ) || E.T( "ui.filesFolder" ) } ), { ms: 3500 } );
         }

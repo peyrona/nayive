@@ -235,6 +235,36 @@ function setDest( folder )
     $( "#goBtn" ).disabled = ! folder || ! ITEMS.length;
 }
 
+// A photo goes up as a NEW file only (create-only PUT): a name another device
+// took after the listing answers 412 (409 in an album shared with us), and
+// the next free one is used - "IMG_1 (2).jpg" - never written over. A 412 can
+// also be this very photo's first try, landed before a dropped connection
+// made the PUT go again: the same bytes there mean it is saved. `taken` gains
+// every name tried; 50 names in a row taken is not a race any more: an error.
+async function sendNew( want, bytes, taken )
+{
+    for( let tries = 0; ; tries++ )
+    {
+        const name = NayiveUI.uniqueName( want, taken );
+        taken.add( name );
+        try { await GumApi.createFileBytes( DEST + "/" + name, bytes ); return name; }
+        catch ( err ) { if( ! err || ( err.status !== 412 && err.status !== 409 ) || tries >= 50 ) throw err; }
+        if( await sameBytes( DEST + "/" + name, bytes ) ) return name;
+    }
+}
+
+async function sameBytes( path, bytes )
+{
+    try
+    {
+        const have = await GumApi.readFileBytes( path );
+        if( have.length !== bytes.length ) return false;
+        for( let i = 0; i < have.length; i++ ) if( have[ i ] !== bytes[ i ] ) return false;
+        return true;
+    }
+    catch ( _ ) { return false; }
+}
+
 async function upload()
 {
     if( ! DEST || ! ITEMS.length ) return;
@@ -252,14 +282,23 @@ async function upload()
     // If this user has a max photo size, shrink + convert to JPEG right here.
     const maxPx = await NayivePhoto.limit();
 
-    // names already in the destination, so a share never clobbers a file
+    // Names already in the destination, so a share never clobbers a file. A
+    // listing that fails sends NOTHING (D4, drive-files #12): taken as "no
+    // names taken", every photo went up under its own name over the album's
+    // same-named ones. The photos stay in the inbox, to try again. A 404 is
+    // an album that is not there (any more): it holds no names.
     let taken = new Set();
+    let unread = false;
     try
     {
         const r = await GumApi.listDir( DEST );
         taken = new Set( ( ( r && r.nodes ) || [] ).map( n => baseName( n.path ) ) );
     }
-    catch ( _ ) {}
+    catch ( err )
+    {
+        if( err && err.status === 401 ) { GumApi.loginRedirect(); return; }
+        if( ! err || err.status !== 404 ) unread = true;
+    }
 
     let done  = 0;
     let quota = false;       // a 507: nothing after it fits either
@@ -267,21 +306,19 @@ async function upload()
     for( let i = 0; i < ITEMS.length; i++ )
     {
         const it    = ITEMS[ i ];
-        if( quota ) { failed.push( { it: it, why: "" } ); continue; }
+        if( quota || unread ) { failed.push( { it: it, why: "" } ); continue; }
 
         const ready = await NayivePhoto.prepare(
                           it.blob && ! it.blob.name ? new File( [ it.blob ], it.name || "foto.jpg",
                                                                 { type: it.blob.type } )
                                                     : it.blob,
                           maxPx );
-        const name  = NayiveUI.uniqueName( ready.name || it.name ||
-                                  ( "foto-" + Date.now() + "-" + i + ".jpg" ), taken );
-        taken.add( name );
+        const want  = ready.name || it.name || ( "foto-" + Date.now() + "-" + i + ".jpg" );
 
         try
         {
             const bytes = new Uint8Array( await ready.blob.arrayBuffer() );
-            await GumApi.writeFileBytes( DEST + "/" + name, bytes );
+            await sendNew( want, bytes, taken );
             done++;
             await dropFromInbox( it );
         }
@@ -313,6 +350,7 @@ async function upload()
         NayiveUI.alert( {
             title: NayiveUI.tf( 'st.notUploaded', { n: failed.length } ),
             body:  ( quota ? NayiveUI.t( 'ui.quotaExceeded' ) + "\n\n" : "" ) +
+                   ( unread ? NayiveUI.t( 'st.albumUnread' ) + "\n\n" : "" ) +
                    failed.map( f => f.it.name + ( f.why ? " (" + f.why + ")" : "" ) ).join( "\n" ) +
                    "\n\n" + NayiveUI.t( 'st.keptToRetry' )
         } );

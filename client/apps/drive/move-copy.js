@@ -267,6 +267,11 @@ async function undoMoves( steps, failKey )
         if( s.bin ) ids.push.apply( ids, s.bin );
     }
 
+    // Keep this BEFORE trashRestore below: the note of a photo a "Replace"
+    // sent to the bin was parked aside by media.js, and remapPaths puts it
+    // back on that path as the moved item leaves it. The restore must then
+    // find the path free and land there, under its note - restored first, it
+    // would come back as "(restaurado …)" and its note stay on the old name.
     await NayiveMedia.remapPaths( back );
     currentFolder = followPath( currentFolder, back );
 

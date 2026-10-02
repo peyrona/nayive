@@ -52,15 +52,6 @@ function displayName( node )
     return ( node && node.shared && node.shared.title ) || nameOf( node );
 }
 
-// An existing direct child of the open folder with this name, or null.
-// Nested upload paths ("sub/x") aren't in the one-level listing — those
-// fall through to the server's own overwrite guard.
-function currentChild( relPath )
-{
-    if( relPath.indexOf( '/' ) !== -1 ) return null;
-    return ( curListing.nodes || [] ).find( function( n ) { return nameOf( n ) === relPath; } ) || null;
-}
-
 //------------------------------------------------------------------------//
 // PANE RESIZER — drag the divider to set the tree-pane width (desktop only).
 // Width is stored in localStorage and applied as the --tree-w custom

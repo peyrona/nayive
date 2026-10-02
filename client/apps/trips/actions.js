@@ -51,7 +51,20 @@ function openEditTrip()
     openSheet( 'tripSheetBackdrop' );
 }
 
-function closeTripSheet() { closeSheet( 'tripSheetBackdrop' ); tripDraft = null; tripOpen = null; tripSaveError = ''; tripSheetBusy = false; }
+function closeTripSheet() { keepClaimedTrip(); closeSheet( 'tripSheetBackdrop' ); tripDraft = null; tripOpen = null; tripSaveError = ''; tripSheetBusy = false; }
+
+// A new trip whose folder was claimed - its trip.json is on the server - but
+// whose save failed after that (a document upload) IS a trip: the sheet closed
+// on it puts it in the list as the server has it, instead of it turning up on
+// the next load while a fresh sheet made the same trip again as "-2".
+function keepClaimedTrip()
+{
+    const claim = newTripClaim;
+    newTripClaim = null;
+    if( ! claim || claim.draft !== tripDraft || trips.some( function( t ) { return t.id === claim.trip.id; } ) ) return;
+    trips = [ ...trips, claim.trip ];
+    renderAll();
+}
 
 function addTripDoc()      { tripDraft.documents.push( { id: newId(), name: '', type: 'passport' } ); tripDocsCollapsed = false; renderTripSheet(); }
 
@@ -66,10 +79,11 @@ function addTripDocFromDetail()
 function removeTripDoc(id) { tripDraft.documents = tripDraft.documents.filter( function( d ) { return d.id !== id; } ); renderTripSheet(); }
 
 let tripSaveError = '';
+let newTripClaim  = null;     // { draft, id, dirName, trip }: a new trip's folder its failed save already claimed (saveTrip)
 
 // Editing an already-saved trip goes through the store, so it works offline.
-// Creating one makes its directory server-side first (GumApi.makeDir), so a
-// brand-new trip needs a live connection.
+// Creating one claims its directory server-side first (claimNewTripDir), so
+// a brand-new trip needs a live connection.
 async function saveTrip()
 {
     if( ! tripDraft.destination.trim() || ! tripDraft.startDate || ! tripDraft.endDate )
@@ -159,12 +173,30 @@ async function saveTrip()
 
     try
     {
-        const dirName = resolveNewTripDirName( tripDraft.destination, tripDraft.startDate );
-        const created = { ...tripDraft, id: newId(), stages: [], dirName: dirName, _base: 'data/trips/' + dirName };
+        // The folder is claimed on the server first (claimNewTripDir, D7) -
+        // its trip.json made create-only, never over another device's trip -
+        // and only then do the documents go in. A retry after a failed upload
+        // keeps this sheet's claim: picked again, the folder it already made
+        // would read as taken, and the trip would be made twice.
+        const draft = tripDraft;
+        const claim = newTripClaim && newTripClaim.draft === draft ? newTripClaim : null;
+        const id    = claim ? claim.id : newId();
+        const make  = function( dirName ) { return { ...draft, id: id, stages: [], dirName: dirName, _base: 'data/trips/' + dirName }; };
+        let   body  = '';
+        const dirName = claim ? claim.dirName
+                      : await claimNewTripDir( draft.destination, draft.startDate, function( d )
+                        {
+                            // Never a document whose file is not up yet: a failed upload
+                            // must not leave the trip pointing at a missing file.
+                            const t = make( d );
+                            return ( body = JSON.stringify( { ...t, documents: t.documents.filter( function( x ) { return ! x._pending; } ) }, null, 2 ) );
+                        } );
+        newTripClaim = claim || { draft: draft, id: id, dirName: dirName, trip: tripShape( JSON.parse( body ) ) };
+        const created = make( dirName );
 
-        await GumApi.makeDir( 'data/trips', dirName );
         await syncDocFiles( tripBase( created ), created.documents, [], [] );
         await persistTrip( created );
+        newTripClaim = null;
 
         trips = [ ...trips, created ];
         if( created.documents.length ) expandSection( 'docs' );
@@ -174,10 +206,12 @@ async function saveTrip()
     }
     catch( _ )
     {
+        // Once the folder is claimed the trip exists (keepClaimedTrip): what
+        // failed is its files.
         setSyncStatus( 'error' );
-        tripSaveError = navigator.onLine
-            ? T( 'trips.createFailed' )
-            : T( 'trips.createNeedsNet' );
+        tripSaveError = newTripClaim && newTripClaim.draft === tripDraft ? T( 'trips.uploadFailed' )
+                      : navigator.onLine                                 ? T( 'trips.createFailed' )
+                      :                                                    T( 'trips.createNeedsNet' );
         setTripSheetBusy( false );
     }
 }

@@ -105,6 +105,8 @@ function officeFailText( err, name )
     if( st === 503 ) return T( 'drive.officeOff' );
     if( st === 507 ) return TF( 'drive.officeQuota',    { name: name } );
     if( st === 403 ) return TF( 'drive.officeReadOnly', { name: name } );
+    // openOffice asks twice on a 409: a second one is a FOLDER of the twin's name.
+    if( st === 409 ) return TF( 'drive.officeTwinFolder', { name: officeTwinRel( name ) || name } );
     return TF( 'drive.officeFailed', { name: name } );
 }
 
@@ -116,14 +118,33 @@ async function openOffice( node, kind )
     if( node.shared )       { NayiveUI.toast( TF( 'drive.officeReadOnly',    { name: name } ), { ms: 6000 } ); return; }
 
     // The tab opens NOW, while the double-click still counts: opened
-    // after the wait, the browser would block it as a pop-up.
+    // after the wait, the browser would block it as a pop-up. Not in a
+    // desktop window: there window.open is the desktop's own, which never
+    // blocks and, given the twin's address, brings forward the window that
+    // already shows it (sameDoc). A blank window pointed at it later was
+    // always a second editor on the same file, each saving over the other (A1).
     const busyText = TF( 'drive.officeConverting', { name: name } );
-    const win = isPhone() ? null : window.open( '', '_blank' );
+    const early    = ! isPhone() && ! NayiveUI.windowed;
+    const win      = early ? window.open( '', '_blank' ) : null;
     if( win ) try { win.document.title = name; win.document.body.textContent = busyText; } catch( _ ) {}
     setStatus( busyText );
     try
     {
-        const r   = await officeTwin( node.path, false );
+        let r;
+        try { r = await officeTwin( node.path, false ); }
+        catch( err )
+        {
+            // 409: a file took the twin's name while LibreOffice ran, and the
+            // server kept it. Asked again, that twin is the answer (a FOLDER of
+            // that name is a 409 again: the failure below).
+            if( ! err || err.status !== 409 ) throw err;
+            r = await officeTwin( node.path, false );
+            if( ! r.converted )
+            {
+                NayiveUI.toast( TF( 'drive.officeTwinExists', { name: r.path.split( '/' ).pop() } ), { ms: 5000 } );
+                reload();
+            }
+        }
         const url = new URL( '../' + kind + '/index.html?file=' + encodeURIComponent( r.path ), location.href ).href;
         setStatus( '' );
         if( r.converted )
@@ -131,8 +152,9 @@ async function openOffice( node, kind )
             NayiveUI.toast( TF( 'drive.officeConverted', { name: r.path.split( '/' ).pop() } ), { ms: 5000 } );
             reload();     // the twin shows up beside the original
         }
-        if( win ) win.location.href = url;
-        else      location.href = url;
+        if( win )        win.location.href = url;
+        else if( early ) location.href = url;     // the pop-up was blocked
+        else             openDoc( url );
     }
     catch( err )
     {
