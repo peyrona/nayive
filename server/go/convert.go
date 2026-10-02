@@ -401,11 +401,12 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 	// And only if it IS the original (D11): the run can take hours, and the
 	// name may hold another file by now - the film renamed away and a new one
 	// saved as x.avi, or x.avi replaced by an upload. That one is not what
-	// was converted: it stays where it is.
-	if now, err := src.Stat(); err != nil || !os.SameFile(info, now) {
+	// was converted: it stays where it is. The look is made under the path's
+	// stripe, inside MoveInIfSame, so no save lands between it and the move.
+	if _, err := c.trash.MoveInIfSame("user", job.User, src, job.Path, info); errors.Is(err, errNotSameFile) {
 		c.log.Warn("convert: the mp4 is ready; the original's name holds another file now, left in place",
 			"path", job.Path)
-	} else if _, err := c.trash.MoveIn("user", job.User, src, job.Path); err != nil {
+	} else if err != nil {
 		c.log.Warn("convert: the mp4 is ready but the original could not go to the papelera",
 			"path", job.Path, "err", err)
 	}
@@ -427,6 +428,9 @@ func placeMP4(root *os.Root, tmpRel, srcRel string) (string, error) {
 		}
 		rel := filepath.Join(dir, name)
 		err := renameNoReplace(root, tmpRel, rel)
+		if errors.Is(err, errSourceLeft) {
+			return rel, nil // in place; the temp's name goes with the caller's deferred remove
+		}
 		if !errors.Is(err, fs.ErrExist) {
 			return rel, err
 		}

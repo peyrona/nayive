@@ -717,9 +717,26 @@ func TestDS_G5_FailedFolderCopyKeepsFilesPutIn(t *testing.T) {
 	}
 }
 
-// TestDS_G5_FailedExtractKeepsFilesMovedIn: "Extract here" of a big zip
-// whose last entry is damaged; while it runs the user moves a document into
-// the new folder. The extract fails: what it made goes, the document stays.
+// dsOnMade runs `drop` once, right after a job notes a file named `name` as
+// made (testMadeHook): the instant to put the user's own file into the job's
+// new folder, while the job runs.
+func dsOnMade(t *testing.T, name string, drop func()) *atomic.Int32 {
+	t.Helper()
+	var fired atomic.Int32
+	hook := func(path string) {
+		if filepath.Base(path) == name && fired.Add(1) == 1 {
+			drop()
+		}
+	}
+	testMadeHook.Store(&hook)
+	t.Cleanup(func() { testMadeHook.Store(nil) })
+	return &fired
+}
+
+// TestDS_G5_FailedExtractKeepsFilesMovedIn: "Extract here" of a zip whose
+// last entry is damaged; after its first file the user moves a document into
+// the new folder. The extract fails: what it made goes (its file, its
+// subfolder, the half entry), the document stays.
 func TestDS_G5_FailedExtractKeepsFilesMovedIn(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "ana", "abc")
@@ -728,49 +745,177 @@ func TestDS_G5_FailedExtractKeepsFilesMovedIn(t *testing.T) {
 	// Declares 5 bytes, inflates to 100 000: the reader stops it (a damaged entry).
 	var packed bytes.Buffer
 	packed.Write(deflated(t, strings.Repeat("A", 100000)))
+	liar := zip.FileHeader{Name: "Fotos/miente.txt", Method: zip.Deflate,
+		CompressedSize64: uint64(packed.Len()), UncompressedSize64: 5}
+	upload(t, client, ts.URL+"/api/files?file=files/Fotos.zip",
+		makeZip(t, file("Fotos/sub/a.txt", "a"), zipPart{h: liar, raw: packed.Bytes()}))
 
-	for attempt, n := 1, 3000; attempt <= 3; attempt, n = attempt+1, n*2 {
-		top := fmt.Sprintf("Fotos%d", attempt)
-		parts := make([]zipPart, 0, n+1)
-		for i := 0; i < n; i++ {
-			parts = append(parts, file(fmt.Sprintf("%s/f%05d.txt", top, i), "x"))
+	mine := filepath.Join(files, "Fotos", "mio.docx")
+	fired := dsOnMade(t, "a.txt", func() { os.WriteFile(mine, []byte("the user's"), 0o644) })
+
+	if code, a := callZip(t, client, "POST", ts.URL+"/api/zip?file=files/Fotos.zip"); code != http.StatusUnprocessableEntity {
+		t.Fatalf("extract = %d %v, want 422", code, a)
+	}
+	if fired.Load() == 0 {
+		t.Fatal("the extract did not note its files (madeHere)")
+	}
+	if got := dsRead(mine); got != "the user's" {
+		t.Fatalf("mio.docx = %q: deleted with the failed extract", got)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(files, "Fotos")); len(entries) != 1 {
+		t.Errorf("the failed extract left %d entries beside mio.docx", len(entries)-1)
+	}
+}
+
+// TestDS_G5_FailedCrossDiskCopyKeepsFilesPutIn: the bin's copy across two
+// disks (a restore of a folder) fails half way; a file the user put into the
+// folder meanwhile stays, what the copy made goes, the original stays whole.
+func TestDS_G5_FailedCrossDiskCopyKeepsFilesPutIn(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 000 file")
+	}
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "bin-item"), filepath.Join(base, "Album")
+	os.MkdirAll(src, 0o755)
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(src, "b.txt"), []byte("b"), 0o644)
+	os.Chmod(filepath.Join(src, "b.txt"), 0o000) // the copy fails on it
+	t.Cleanup(func() { os.Chmod(filepath.Join(src, "b.txt"), 0o644) })
+	mine := filepath.Join(dst, "mio.txt")
+	dsOnMade(t, "a.txt", func() { os.WriteFile(mine, []byte("the user's"), 0o644) })
+
+	if err := moveOrCopy(src, dst); err == nil {
+		t.Fatal("the copy did not fail")
+	}
+	if got := dsRead(mine); got != "the user's" {
+		t.Errorf("mio.txt = %q: deleted with the failed copy", got)
+	}
+	if pathExists(filepath.Join(dst, "a.txt")) {
+		t.Error("the failed copy left its own a.txt")
+	}
+	if dsRead(filepath.Join(src, "a.txt")) != "a" {
+		t.Error("the original lost a file")
+	}
+}
+
+// TestDS_D11_BinIfSameLooksUnderTheStripe: the converter's "is it still the
+// file I converted?" is answered under the path's stripe: a file saved over
+// the original while an upload holds the stripe is seen, and stays.
+func TestDS_D11_BinIfSameLooksUnderTheStripe(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
+	x := filepath.Join(files, "x.avi")
+	os.WriteFile(x, []byte("the film converted"), 0o644)
+	src, _ := srv.users.Resolve("user", "ana", "files/x.avi")
+	was, _ := src.Stat()
+
+	unlock := lockPath(src.Abs) // an upload of x.avi, in its final rename
+	done := make(chan error, 1)
+	go func() { _, err := srv.trash.MoveInIfSame("user", "ana", src, "files/x.avi", was); done <- err }()
+	// Proving something does NOT happen needs a bounded wait (see dsWaitsForStripe).
+	select {
+	case err := <-done:
+		unlock()
+		t.Fatalf("binned (%v) while an upload held the file's stripe", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	os.WriteFile(x+".new", []byte("a NEW x.avi"), 0o644) // the upload's rename
+	os.Rename(x+".new", x)
+	unlock()
+	if err := <-done; !errors.Is(err, errNotSameFile) {
+		t.Errorf("MoveInIfSame = %v, want errNotSameFile", err)
+	}
+	if got := dsRead(x); got != "a NEW x.avi" {
+		t.Errorf("x.avi = %q: the new file went to the bin", got)
+	}
+}
+
+// TestDS_D10_PositionsWriteTakesStripe: a trip's positions.json (seen and
+// moved in Drive) is written under its upload stripe, like a PUT of it.
+func TestDS_D10_PositionsWriteTakesStripe(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	trip, raw := dsTripRoute(t, srv)
+	os.WriteFile(filepath.Join(trip, tripPositionsFile), raw, 0o644)
+	abs, _ := srv.users.ResolvePath("user", "ana", "data/trips/t1/"+tripPositionsFile)
+
+	dsWaitsForStripe(t, abs, "the position write", func() int {
+		if srv.recordPositions("ana", dsNewPoint()) != 1 {
+			return 0
 		}
-		liar := zip.FileHeader{Name: top + "/miente.txt", Method: zip.Deflate,
-			CompressedSize64: uint64(packed.Len()), UncompressedSize64: 5}
-		parts = append(parts, zipPart{h: liar, raw: packed.Bytes()})
-		upload(t, client, ts.URL+"/api/files?file=files/"+top+".zip", makeZip(t, parts...))
+		return 200
+	})
+	if after, _ := os.ReadFile(filepath.Join(trip, tripPositionsFile)); string(after) == string(raw) {
+		t.Error("positions.json was not written")
+	}
+}
 
-		answered := make(chan int, 1)
-		go func() {
-			code, _ := callZip(t, client, "POST", ts.URL+"/api/zip?file=files/"+top+".zip")
-			answered <- code
-		}()
-		// The user's document goes into the new folder as soon as it shows.
-		mine := filepath.Join(files, top, "mio.docx")
-		code, moved := 0, false
-		for code == 0 && !moved {
-			select {
-			case code = <-answered:
-			default:
-				moved = pathExists(filepath.Join(files, top)) &&
-					os.WriteFile(mine, []byte("the user's"), 0o644) == nil
+// TestDS_D10_UploadSavedWhenTempNameStays: the upload's file took its name
+// but its temp's name could not be removed: the answer is "saved" (a 500
+// would make a create-only retry meet its own file), and the startup sweep
+// takes the leftover name - never the file.
+func TestDS_D10_UploadSavedWhenTempNameStays(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores a read-only folder")
+	}
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	dir := filepath.Join(srv.cfg.HomesDir, "ana", "files", "Fotos")
+	os.MkdirAll(dir, 0o755)
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	hook := func(root *os.Root, from, to string, linked bool) {
+		if linked && filepath.Base(to) == "IMG_1.jpg" {
+			os.Chmod(dir, 0o555) // the temp's name can no longer be removed
+		}
+	}
+	testPlaceHook.Store(&hook)
+	t.Cleanup(func() { testPlaceHook.Store(nil) })
+
+	resp := do(t, client, "PUT", ts.URL+"/api/files?file=files/Fotos/IMG_1.jpg", strings.NewReader("photo"),
+		map[string]string{"If-None-Match": "*"})
+	resp.Body.Close()
+	os.Chmod(dir, 0o755)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("answer = %d for a file that is saved, want 200", resp.StatusCode)
+	}
+	if got := dsRead(filepath.Join(dir, "IMG_1.jpg")); got != "photo" {
+		t.Fatalf("IMG_1.jpg = %q", got)
+	}
+	temps := func() (n int) {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if isTempName(e.Name()) {
+				n++
 			}
 		}
-		if !moved {
-			continue // the job ended before the document got in: a bigger zip
-		}
-		if code = <-answered; code != http.StatusUnprocessableEntity {
-			t.Fatalf("extract = %d, want 422", code)
-		}
-		// The document WAS in the folder (the write succeeded): it must be still.
-		if got := dsRead(mine); got != "the user's" {
-			t.Fatalf("mio.docx = %q: deleted with the failed extract", got)
-		}
-		entries, _ := os.ReadDir(filepath.Join(files, top))
-		if len(entries) != 1 {
-			t.Errorf("the failed extract left %d entries beside mio.docx", len(entries)-1)
-		}
-		return
+		return n
 	}
-	t.Skip("the document never landed inside the running extract")
+	if temps() != 1 {
+		t.Fatalf("%d temps left, want the one whose name stayed", temps())
+	}
+	srv.tree.SweepStaleTemp()
+	if temps() != 0 || dsRead(filepath.Join(dir, "IMG_1.jpg")) != "photo" {
+		t.Errorf("after the sweep: %d temps, IMG_1.jpg = %q", temps(), dsRead(filepath.Join(dir, "IMG_1.jpg")))
+	}
+}
+
+// TestDS_D10_FolderMoveOntoFileMadeMeanwhile: a folder moved onto a name
+// that was free at the look and is a FILE by the rename: 409, both stay.
+func TestDS_D10_FolderMoveOntoFileMadeMeanwhile(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	files := filepath.Join(srv.cfg.HomesDir, "ana", "files")
+	os.MkdirAll(filepath.Join(files, "A"), 0o755)
+	os.WriteFile(filepath.Join(files, "A", "x.txt"), []byte("x"), 0o644)
+	fired := dsTakeAtPlacement(t, "B", "a file saved as B")
+
+	code, body := callJSON(t, client, "POST", ts.URL+"/api/files?old=files/A&new=files/B", "")
+	if fired.Load() == 0 {
+		t.Fatal("the folder move did not go through renameNoReplace")
+	}
+	if code != http.StatusConflict {
+		t.Errorf("move = %d %s, want 409", code, body)
+	}
+	if dsRead(filepath.Join(files, "B")) != "a file saved as B" || dsRead(filepath.Join(files, "A", "x.txt")) != "x" {
+		t.Error("a file was lost or replaced")
+	}
 }

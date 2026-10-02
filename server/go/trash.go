@@ -260,6 +260,21 @@ func newEntryID() string {
 // order - move first, index second - could leave a file in .trash that no row
 // referenced: invisible forever and still eating disk.)
 func (t *Trash) MoveIn(role, user string, p Resolved, origRel string) (string, error) {
+	return t.moveIn(role, user, p, origRel, nil)
+}
+
+// errNotSameFile: MoveInIfSame found another file at the path.
+var errNotSameFile = errors.New("the path holds another file now")
+
+// MoveInIfSame is MoveIn of the file `was` only: when the path holds another
+// file by now, nothing moves and errNotSameFile is answered. The look is made
+// under the path's stripe, right before the move, so no save can land in
+// between and be binned in its place (D11: the converter's original).
+func (t *Trash) MoveInIfSame(role, user string, p Resolved, origRel string, was os.FileInfo) (string, error) {
+	return t.moveIn(role, user, p, origRel, was)
+}
+
+func (t *Trash) moveIn(role, user string, p Resolved, origRel string, was os.FileInfo) (string, error) {
 	tdir := t.Dir(role, user)
 	if err := os.MkdirAll(tdir, 0o755); err != nil {
 		return "", err
@@ -308,7 +323,15 @@ func (t *Trash) MoveIn(role, user string, p Resolved, origRel string) (string, e
 	// land between the link and the unlink of the move and go with it. Order:
 	// t.mu, then the stripe - nothing holding a stripe calls into the bin.
 	unlock := lockPath(p.Abs)
-	err = moveResolved(p, dest)
+	err = nil
+	if was != nil {
+		if now, serr := p.Stat(); serr != nil || !os.SameFile(was, now) {
+			err = errNotSameFile
+		}
+	}
+	if err == nil {
+		err = moveResolved(p, dest)
+	}
 	unlock()
 	if err != nil {
 		// A failed move must never leave a dangling row: roll it back.
@@ -753,13 +776,13 @@ func moveOrCopy(src, dst string) error {
 		return err
 	}
 	if info.IsDir() {
-		if err := os.Mkdir(dst, info.Mode().Perm()); err != nil {
-			return err
-		}
-		if err := copyTree(src, dst); err != nil {
-			// A half-copied tree is worse than none: bin it and report the
-			// failure, leaving the original exactly where it was.
-			os.RemoveAll(dst)
+		var made madePaths
+		if err := copyTree(src, dst, &made); err != nil {
+			// A half-copied tree is worse than none: what this copy made goes
+			// again and the failure is reported, the original left exactly
+			// where it was. ONLY what it made: a restored folder shows in
+			// Drive while it copies, and a file put in it meanwhile stays (G5).
+			made.undo()
 			return err
 		}
 		return os.RemoveAll(src)
@@ -770,16 +793,46 @@ func moveOrCopy(src, dst string) error {
 	return os.Remove(src)
 }
 
-// copyTree copies a directory recursively. Symlinks are copied AS LINKS, never
-// followed - the same rule every listing in this server follows.
-func copyTree(src, dst string) error {
+// madePaths is madeHere (copy.go) by absolute path, for the bin's cross-disk
+// copy: everything one copy made, with what it was, to take back on failure.
+type madePaths []madeFile
+
+// note records one path the copy has just made (a nil list notes nothing).
+func (m *madePaths) note(p string) {
+	if m == nil {
+		return
+	}
+	if info, err := os.Lstat(p); err == nil {
+		*m = append(*m, madeFile{p, info})
+	}
+	if hook := testMadeHook.Load(); hook != nil {
+		(*hook)(p)
+	}
+}
+
+// undo removes what was noted, newest first: each only while its path still
+// holds that same thing, a folder only once empty.
+func (m madePaths) undo() {
+	for i := len(m) - 1; i >= 0; i-- {
+		if now, err := os.Lstat(m[i].rel); err == nil && os.SameFile(m[i].info, now) {
+			os.Remove(m[i].rel) // fails on a folder that is not empty
+		}
+	}
+}
+
+// copyTree copies a directory recursively into dst, which it MAKES (Mkdir: a
+// taken name is refused, never merged into). Symlinks are copied AS LINKS,
+// never followed - the same rule every listing in this server follows.
+// `made` (nil: not kept) notes everything it makes.
+func copyTree(src, dst string, made *madePaths) error {
 	info, err := os.Lstat(src)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+	if err := os.Mkdir(dst, info.Mode().Perm()); err != nil {
 		return err
 	}
+	made.note(dst)
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
@@ -799,14 +852,16 @@ func copyTree(src, dst string) error {
 			if err := os.Symlink(target, to); err != nil {
 				return err
 			}
+			made.note(to)
 		case entryInfo.IsDir():
-			if err := copyTree(from, to); err != nil {
+			if err := copyTree(from, to, made); err != nil {
 				return err
 			}
 		case entryInfo.Mode().IsRegular():
 			if err := copyFile(from, to, entryInfo.Mode()); err != nil {
-				return err
+				return err // copyFile removed its own half copy
 			}
+			made.note(to)
 		}
 		// Anything else - a socket, a device - is not a user's document and is
 		// simply not carried across.

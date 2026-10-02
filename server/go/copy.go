@@ -37,6 +37,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // copyEntry is one thing the copy makes, relative to the item's own top.
@@ -255,8 +256,18 @@ func (m *madeHere) create(rel string) (*os.File, error) {
 	if info, err := out.Stat(); err == nil {
 		m.files = append(m.files, madeFile{rel, info})
 	}
+	if hook := testMadeHook.Load(); hook != nil {
+		(*hook)(rel)
+	}
 	return out, nil
 }
+
+// testMadeHook is for tests only (nil in the server): it runs each time a
+// job notes a file it made (madeHere.create: the path inside its root;
+// madePaths.note: the absolute path), so a test can put the user's own file
+// into the job's new folder while the job runs - and prove a failed job
+// leaves it there.
+var testMadeHook atomic.Pointer[func(path string)]
 
 // undo removes what the job made, newest first: each file only while its
 // name still holds that same file, each folder only once empty (a folder

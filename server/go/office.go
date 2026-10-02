@@ -421,6 +421,9 @@ func placeFile(from string, dst Resolved, replace bool) error {
 		unlock()
 	} else {
 		err = renameNoReplace(root, tmpRel, dst.Rel)
+		if errors.Is(err, errSourceLeft) {
+			err = nil // in place; the temp's name goes with the deferred remove
+		}
 	}
 	if err != nil {
 		return err

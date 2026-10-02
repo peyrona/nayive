@@ -357,7 +357,15 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 			sendError(w, r, clash, clashText(clash))
 			return 0, errors.New("name taken while the body streamed")
 		}
-		if err := renameNoReplace(root, tmpName, target.Rel); err != nil {
+		err := renameNoReplace(root, tmpName, target.Rel)
+		if errors.Is(err, errSourceLeft) {
+			// Saved: only the temp's own name stayed. An error here would make
+			// a retry meet its own file (412). The deferred remove tries
+			// again; the startup sweep takes what is left.
+			s.log.Warn("upload saved; its temp name stayed", "path", target.Abs, "err", err)
+			err = nil
+		}
+		if err != nil {
 			if errors.Is(err, fs.ErrExist) {
 				sendError(w, r, clash, clashText(clash))
 			} else {

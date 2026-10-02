@@ -33,11 +33,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 )
 
 // errCrossRoot is a rename whose two ends sit under different roots. os.Root
@@ -202,14 +204,20 @@ var testPlaceHook atomic.Pointer[func(root *os.Root, from, to string, linked boo
 // A file (or a link) goes by hard link + unlink: link fails on a taken name,
 // in the kernel, with no window; the inode stays the same, as with a rename
 // (a kept Chat photo still finds it). Should the unlink fail, both names
-// stay: a duplicate, never a loss.
+// stay - a duplicate, never a loss - and errSourceLeft says so: the file IS
+// in place.
 //
 // The two steps are not one, as a rename is: a save that lands at `from`
 // between them (an upload's rename, a server write) is a NEW file there, and
 // unlinking it would lose it. So `from` goes only while it is still the file
-// that was linked - else it stays, as if saved just after a rename. Callers
-// moving a user's own path also hold its lockPath stripe (filesMove,
-// Trash.MoveIn), which uploads take for their rename.
+// that was linked - else it stays, as if saved just after a rename. That
+// check and the unlink are two steps too; what closes the last instant is
+// the path's lockPath stripe, held by the callers that move a user's own
+// path (filesMove, Trash.MoveIn) and by every writer that renames over one:
+// uploads, the Office twin, setCardPhoto, a trip's positions.json. The
+// server's other own files (a device's last position, the reminders' sent
+// keys, Bookmarks' icons) take no stripe: Drive does not move or bin them
+// while they are written, short of a user doing so by hand that instant.
 //
 // The rest goes the old way, a check and then the rename: a folder (no hard
 // links to folders), and a disk that refuses hard links (FAT external
@@ -223,19 +231,23 @@ func renameNoReplace(root *os.Root, from, to string) error {
 		return err
 	}
 	hook := testPlaceHook.Load()
-	if hook != nil {
-		(*hook)(root, from, to, false)
+	test := func(linked bool) {
+		if hook != nil {
+			(*hook)(root, from, to, linked)
+		}
 	}
 	if !info.IsDir() {
+		test(false)
 		err := root.Link(from, to)
 		if err == nil {
-			if hook != nil {
-				(*hook)(root, from, to, true)
-			}
+			test(true)
 			if now, err := root.Lstat(from); err != nil || !os.SameFile(info, now) {
 				return nil // moved; what is at `from` now is a newer file
 			}
-			return root.Remove(from)
+			if err := root.Remove(from); err != nil {
+				return fmt.Errorf("%w: %v", errSourceLeft, err)
+			}
+			return nil
 		}
 		if errors.Is(err, fs.ErrExist) {
 			return err
@@ -247,8 +259,27 @@ func renameNoReplace(root *os.Root, from, to string) error {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return root.Rename(from, to)
+	if info.IsDir() {
+		test(false) // a folder's window: after the look, before the rename
+	}
+	err = root.Rename(from, to)
+	if errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EISDIR) {
+		// A folder onto a FILE made there since the look (or the reverse):
+		// the name is taken, as the caller is told for any other clash.
+		if _, lerr := root.Lstat(to); lerr == nil {
+			return fs.ErrExist
+		}
+	}
+	return err
 }
+
+// errSourceLeft: renameNoReplace put the file at its new name, but its old
+// name could not be removed - both hold it. For a temp or a part (an upload,
+// the mp4, the Office twin, a phone's photo) that is a success: the file is
+// saved, and the temp's name goes later (the deferred remove, or the startup
+// sweep: a temp with a second name is only that). For a user's own path it
+// stays an error: the file shows in both places.
+var errSourceLeft = errors.New("placed, but the old name could not be removed")
 
 // sameResolved is sameFile through the sandbox: a pure case-change on a
 // case-insensitive filesystem, where a "move" would delete the source.
