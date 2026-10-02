@@ -15,6 +15,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
 	"path"
 	"strings"
@@ -110,10 +111,14 @@ func (s *Server) apiOffice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	size, err := s.office.Convert(r.Context(), path.Base(virt), src, dst, budget)
+	size, err := s.office.Convert(r.Context(), path.Base(virt), src, dst, budget, already >= 0)
 	switch {
 	case r.Context().Err() != nil:
 		return // the browser gave up; nobody to answer
+	case errors.Is(err, fs.ErrExist):
+		// A file took the twin's name while LibreOffice ran: it is kept (D10).
+		sendError(w, r, http.StatusConflict, "ya existe un archivo con ese nombre")
+		return
 	case errors.Is(err, errOfficeQuota):
 		sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
 		return

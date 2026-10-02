@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+	"time"
 )
 
 // THE CONTACTS APP'S PICTURE, SET FROM CHAT. Chat's "new person" picks a card
@@ -22,22 +22,36 @@ import (
 
 var errCardNotFound = errors.New("no such card")
 
-// cardPhotoMu keeps two pictures set at once from writing over each other.
-var cardPhotoMu sync.Mutex
-
 // cardPhotoMax caps the picture: the page sends one of 300 x 300 px at most.
 const cardPhotoMax = 1 << 20
 
 // setCardPhoto makes `img` (a JPEG or a PNG) the PHOTO of the card whose UID
 // is `uid` in the vCard file at `path`: its old PHOTO lines go, the new one
-// goes just before its END.
+// goes just before its END, and the card's REV becomes now.
+//
+// The Contacts app saves this same file, from this or another device, with
+// If-Unmodified-Since (B4). Three guards keep the picture and its edits:
+//   - the path's upload lock (lockPath, upload.go) from the read to the
+//     rename: a Contacts save cannot land in between and be replaced by a
+//     book built from the older file;
+//   - the file's time moves past the second it had (nextSecond): a Contacts
+//     page holding that second as its Last-Modified gets 412 and merges,
+//     instead of saving its older book over the picture;
+//   - REV = now: the merge keeps the newer card's fields, and a card edited
+//     offline before the picture must not count as the newer one.
 func setCardPhoto(path, uid string, img []byte) error {
 	typ := imageKind(img)
 	if typ == "" {
 		return errors.New("not a JPEG or a PNG")
 	}
-	cardPhotoMu.Lock()
-	defer cardPhotoMu.Unlock()
+	// The SAME stripe a PUT of this file takes: uploads lock the resolved
+	// path (Resolved.Abs, symlinks followed), so this one is resolved too.
+	key, err := resolveExisting(path)
+	if err != nil {
+		return err
+	}
+	unlock := lockPath(key)
+	defer unlock()
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -46,7 +60,11 @@ func setCardPhoto(path, uid string, img []byte) error {
 		}
 		return err
 	}
-	out, err := withCardPhoto(raw, uid, typ, img)
+	var prev time.Time // the time it had, for nextSecond
+	if info, err := os.Stat(path); err == nil {
+		prev = info.ModTime()
+	}
+	out, err := withCardPhoto(raw, uid, typ, img, time.Now())
 	if err != nil {
 		return err
 	}
@@ -65,6 +83,10 @@ func setCardPhoto(path, uid string, img []byte) error {
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
 		return err
+	}
+	if root, err := os.OpenRoot(filepath.Dir(path)); err == nil {
+		nextSecond(root, filepath.Base(path), prev)
+		root.Close()
 	}
 	return syncDir(filepath.Dir(path))
 }
@@ -89,8 +111,8 @@ type vcfLine struct {
 	value string
 }
 
-// withCardPhoto is setCardPhoto on the file's bytes.
-func withCardPhoto(raw []byte, uid, typ string, img []byte) ([]byte, error) {
+// withCardPhoto is setCardPhoto on the file's bytes; `now` is the card's new REV.
+func withCardPhoto(raw []byte, uid, typ string, img []byte, now time.Time) ([]byte, error) {
 	text := string(raw)
 	nl := "\n"
 	if strings.Contains(text, "\r\n") {
@@ -169,13 +191,18 @@ func withCardPhoto(raw []byte, uid, typ string, img []byte) ([]byte, error) {
 		photo = foldVcf("PHOTO;ENCODING=b;TYPE=" + typ + ":" + b64)
 	}
 
+	// The card's REV is when it last changed: now (B4). Written as the
+	// Contacts app writes it (revStamp), at the card's end as it puts it.
+	rev := "REV:" + now.UTC().Format("2006-01-02T15:04:05Z")
+
 	var out []string
 	for i, l := range lines {
-		if i > begin && i < end && l.name == "PHOTO" {
+		if i > begin && i < end && (l.name == "PHOTO" || l.name == "REV") {
 			continue
 		}
 		if i == end {
 			out = append(out, photo...)
+			out = append(out, rev)
 		}
 		out = append(out, l.phys...)
 	}
