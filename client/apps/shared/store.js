@@ -127,6 +127,24 @@
  * Signing out clears what was counted (localCount / clearLocal / leaveDevice,
  * used by the launcher).
  *
+ * AN ADMIN RENAME  (2026-10-02, data-safety L3)
+ * Saves queued here before the admin renamed ana to ana2 carry "user:ana":
+ * nobody's any more, so a page of ana2 never sent or showed them, and the
+ * sign-out deleted them. The server hands the account's old names in the
+ * readable "nayive_was" cookie ("user:ana2/user:ana", server/go/
+ * store_owner.go). When its first name is THIS page's owner (ME), the
+ * records of those old names - queued saves, cached copies, device drafts -
+ * are re-tagged to ME once, before this page touches any of them. Never for
+ * another account: a cookie that does not start with ME changes nothing.
+ *
+ * CREATE-ONLY AND REPLACE  (2026-10-02, data-safety D6)
+ * write( path, body, { createOnly: true } ) is made from "no file there"
+ * (If-None-Match: *) whatever this page held: a new name the page could not
+ * check (offline, the listing failed) is never written over a file another
+ * device put there - the server answers 412 and it is held back as a
+ * conflict, for the app to ask. { replace: true } is the user's answer
+ * "replace it": no check, and a held-back save goes again.
+ *
  * Auth: /api/files is authenticated by the nayive_session cookie only
  * (same-origin fetch sends it). A 401 while flushing surfaces as the "needs-auth"
  * state and the outbox entry is kept, so nothing is lost across a re-login. It
@@ -191,6 +209,7 @@
     var seen     = {};   // path -> count of changes to this page's model (a read, a write, a merge taken in)
     var pageOnly = {};   // path -> a save kept only in this page: the browser's storage failed (K2)
     var savedFns = [];   // onSaved listeners of every store on the page
+    var needsApp = {};   // path -> a merging save this page could not merge (412, no merger): its app must (L6)
     var toastAt  = 0;
     var lastQ    = 0;
 
@@ -222,6 +241,20 @@
     // A record this page may use: untagged, or this page's own account. Only a
     // record KNOWN to be another account's is skipped.
     function ours( rec ) { return ! rec || ! rec.who || ! ME || rec.who === ME; }
+
+    // The names an admin rename took from THIS page's owner (AN ADMIN RENAME):
+    // the "nayive_was" cookie's names after its first, only when that first
+    // one is ME. [] = none (no cookie, or another account's).
+    var WAS = ( function ()
+    {
+        try
+        {
+            var m = document.cookie.match( /(?:^|;\s*)nayive_was=([^;]*)/ );
+            var l = m && m[ 1 ] ? m[ 1 ].split( "/" ) : [];
+            return ME && l.length > 1 && l[ 0 ] === ME ? l.slice( 1 ).filter( function ( w ) { return w && w !== ME; } ) : [];
+        }
+        catch ( e ) { return []; }
+    } )();
 
     //------------------------------------------------------------------------//
     // VERSIONS AND ENTRIES  (see VERSIONS above)
@@ -543,6 +576,97 @@
     }
 
     //------------------------------------------------------------------------//
+    // AN ADMIN RENAME  (see the top): the old names' records become ME's -
+    // once per page, before this page reads any of them (createStore's
+    // database and the sign-out's count wait for it). Re-run on every load
+    // that has the cookie: it finds nothing left to change.
+
+    var retagged = WAS.length ? retag() : Promise.resolve();
+
+    // "user:ana" -> "ana": the account's name itself, which Chat ("u:ana")
+    // and eMail ("ana") tag their device drafts with.
+    function rawName( who )
+    {
+        try { return decodeURIComponent( who ).replace( /^user:/, "" ); }
+        catch ( e ) { return ""; }
+    }
+
+    async function retag()
+    {
+        try
+        {
+            var db = await openDb();
+            if( db )
+            {
+                await new Promise( function ( resolve )
+                {
+                    try
+                    {
+                        var tx = db.transaction( [ DOCS, OUTBOX ], "readwrite" );
+                        var os = tx.objectStore( OUTBOX ), ds = tx.objectStore( DOCS );
+                        var oq = os.getAll(), dq = ds.getAll();
+                        oq.onsuccess = function ()
+                        {
+                            var all = oq.result || [], keys = {}, mine = {};
+                            all.forEach( function ( r ) { keys[ r.path ] = true; if( r.who === ME ) mine[ r.file || r.path ] = true; } );
+                            all.forEach( function ( r )
+                            {
+                                if( WAS.indexOf( r.who ) === -1 ) return;
+                                var real = r.file || r.path;
+                                // ME's own save of that file waits already: one
+                                // account keeps one save per file, and the two
+                                // cannot be merged here - the old one stays as it
+                                // is (the sign-out still counts it).
+                                if( mine[ real ] ) return;
+                                mine[ real ] = true;
+                                var e = norm( r );
+                                e.who = ME;
+                                if( r.path === real ) { os.put( denorm( e, real ) ); return; }
+                                // It waited beside another account's save (L4):
+                                // ME's own place now - the path's slot once that is free.
+                                os.delete( r.path );
+                                os.put( denorm( e, keys[ real ] ? altKey( real ) : real ) );
+                            } );
+                        };
+                        dq.onsuccess = function ()
+                        {
+                            ( dq.result || [] ).forEach( function ( d ) { if( WAS.indexOf( d.who ) !== -1 ) { d.who = ME; ds.put( d ); } } );
+                        };
+                        tx.oncomplete = tx.onerror = tx.onabort = function () { resolve(); };
+                    }
+                    catch ( e ) { resolve(); }
+                } );
+                db.close();
+            }
+
+            // The device drafts: the office editors' (tagged like the saves),
+            // Chat's outbox ("u:<name>") and eMail's ("<name>").
+            var olds = WAS.map( rawName ), me = rawName( ME );
+            var drafts = await openDraftsDb();
+            await oneTx( drafts, "drafts", "readwrite", function ( os )
+            {
+                var rq = os.getAll();
+                rq.onsuccess = function ()
+                {
+                    ( rq.result || [] ).forEach( function ( r )
+                    {
+                        var app = String( r.app || "" ), who = r.who;
+                        if( WAS.indexOf( who ) !== -1 )                                                  r.who = ME;
+                        else if( app.indexOf( "chat:" ) === 0 && olds.indexOf( String( who ).slice( 2 ) ) !== -1 &&
+                                 String( who ).indexOf( "u:" ) === 0 )                                    r.who = "u:" + me;
+                        else if( app.indexOf( "email:" ) === 0 && olds.indexOf( who ) !== -1 )           r.who = me;
+                        else return;
+                        os.put( r );
+                    } );
+                };
+                return rq;
+            } );
+            if( drafts ) drafts.close();
+        }
+        catch ( e ) {}
+    }
+
+    //------------------------------------------------------------------------//
     // "SAVED" FROM ANY PAGE  (onSaved, and the version of the page that holds it)
     //
     // A save sent OK by any page of this browser is told to every page: the
@@ -682,7 +806,9 @@
         var flushTimer = null;
         var flushing   = false;
 
-        var dbPromise = openDb();
+        // After the re-tag of an admin rename (AN ADMIN RENAME): this page's
+        // saves of the old name are its own before it reads anything.
+        var dbPromise = retagged.then( openDb );
 
         conflictHub.push( function ( p ) { conflictFns.forEach( function ( fn ) { try { fn( p ); } catch ( e ) {} } ); } );
 
@@ -1185,8 +1311,11 @@
         // The version check and a conflict flag survive the rewrite: a
         // conflicted file keeps collecting the user's edits locally, and none of
         // them goes up until the app has resolved it.
-        async function write( path, body )
+        //
+        // opts.createOnly / opts.replace: see CREATE-ONLY AND REPLACE above.
+        async function write( path, body, opts )
         {
+            var how     = opts && opts.createOnly ? "create" : opts && opts.replace ? "replace" : "";
             var refused = isBlocked( path );
 
             if( refused )
@@ -1223,11 +1352,11 @@
                 var made = null;
                 var r    = await pathTx( db, path, "readwrite", function ( c )
                 {
-                    made = queueIn( c, path, body, basis, id, now );
+                    made = queueIn( c, path, body, basis, id, now, how );
                     return made.tx;
                 } );
                 // The browser's storage failed (K2): the save is kept in this page.
-                if( ! r.ok ) made = queueIn( {}, path, body, basis, id, now );
+                if( ! r.ok ) made = queueIn( {}, path, body, basis, id, now, how );
                 return { made: made, stored: r.ok };
             } )();
 
@@ -1290,8 +1419,24 @@
         // The outbox entry (and cached copy) a write() makes, inside its
         // transaction - see VERSIONS. Returns { tx, entry, merged, direct }:
         // `direct` = not queued (tx changes nothing), sent from this page.
-        function queueIn( c, path, body, basis, id, now )
+        // how: "create" / "replace" (CREATE-ONLY AND REPLACE) - the version is
+        // that, whatever this page held, and a held-back save goes again.
+        function queueIn( c, path, body, basis, id, now, how )
         {
+            if( how )
+            {
+                // Another page's save waiting there is never merged into or
+                // replaced by it: this one goes on its own (`direct`).
+                var other = !! c.out && ! holds( basis, c.out ) && conflicts;
+                var made  = queueIn( other ? { doc: c.doc, slot: c.slot } : c, path, body, basis, id, now, "" );
+                if( other ) made = { entry: made.entry, direct: true, merged: null, tx: {} };
+                setVer( made.entry, how === "create" ? { none: true } : {} );   // tx.out is this same entry
+                made.entry.conflict = false;
+                made.entry.ius      = true;
+                if( made.tx.doc ) setVer( made.tx.doc, verOf( made.entry ) );
+                return made;
+            }
+
             var old     = c.out;
             var docMine = c.doc && ours( c.doc ) ? c.doc : null;
             var v, inc, anc, merged = null;
@@ -1452,6 +1597,7 @@
                 emit( "offline" );
                 return { ok: false, offline: true };
             }
+            delete needsApp[ path ];               // tried again now: said again below if it still needs its app
 
             // Sent the way the store that queued it would send it, checked against
             // ITS version (VERSIONS). Entries from before `bin`/`ius` existed:
@@ -1473,7 +1619,9 @@
                     if( ! merger )
                     {
                         // Not this page's app: it stays queued, as it was, for the
-                        // page that can merge it.
+                        // page that can merge it - and the sign-out names that
+                        // app (L6: "go online" was wrong advice, it IS online).
+                        needsApp[ path ] = true;
                         emit( "pending" );
                         return { ok: false, deferred: true };
                     }
@@ -1495,6 +1643,14 @@
                     if( since === "sent" ) { await settle(); return { ok: true }; }
                     if( since === "again" && again < 3 ) return flushPathNow( path, mine, again + 1 );
                     if( head === 404 ) res = await netPut( path, entry.body, { none: true }, bin, who );   // made again - never over a file put there since
+                    else if( entryVer( entry, doc ).none )
+                    {
+                        // A create-only save (D6) whose answer was lost and that
+                        // netFetch sent again: the file there may be its own
+                        // first try. Exactly its bytes there = saved, not "taken".
+                        var there = await netGet( path );
+                        if( there.ok && sameBody( there.body, entry.body ) ) res = { ok: true, status: 200, srv: there.srv, tag: there.tag };
+                    }
                 }
             }
 
@@ -1568,6 +1724,7 @@
         // new version, and every page hears it (onSaved).
         async function saved( db, path, entry, res )
         {
+            delete needsApp[ path ];
             var ver = { tag: res.tag, srv: res.srv, base: typeof entry.body === "string" ? entry.body : null, none: false };
             var eid = idOf( entry );
             var sentKey = vkey( entryVer( entry ) );
@@ -1867,6 +2024,22 @@
             } );
         }
 
+        // The file at `from` was moved to `to` on the server (a rename, C6):
+        // this page's model of it is `to`'s now, made from the SAME version -
+        // the server keeps a file's version tag across a move - so the first
+        // save to the new name is checked against it, never sent blind (a
+        // save another device made there meanwhile gets the conflict
+        // question). `from` is dropped as forget() drops it. The caller moves
+        // it only with nothing of this page waiting for `from` (pending()).
+        async function renamed( from, to )
+        {
+            var h = held[ from ];
+            await forget( from );
+            if( h )
+                setHeld( to, { id: null, inc: [], anc: h.anc || [], tag: h.tag || null, srv: h.srv || null,
+                               base: typeof h.base === "string" ? h.base : null, none: !! h.none } );
+        }
+
         // THIS page's write to `path` is held back as a conflict (see
         // CONFLICTS above) - not another window's.
         async function conflicted( path )
@@ -1935,13 +2108,15 @@
 
         // The save could not be sent and is only in this page (the browser's
         // storage failed: K2, or another page's save holds the outbox and the
-        // server was not reached). Said once in a while, not per keystroke.
+        // server was not reached). Said once in a while, not per keystroke -
+        // and after an Undo on show, never over it (the save of a delete
+        // would make the delete's Undo final: keepUndo, shared/ui.js).
         function pageOnlyToast()
         {
             var now = Date.now();
             if( now - toastAt < 4000 || ! window.NayiveUI || ! NayiveUI.toast || ! NayiveUI.t ) return;
             toastAt = now;
-            NayiveUI.toast( NayiveUI.t( "ui.store.pageOnly" ), { ms: 8000 } );
+            NayiveUI.toast( NayiveUI.t( "ui.store.pageOnly" ), { ms: 8000, keepUndo: true } );
         }
 
         //--------------------------------------------------------------------//
@@ -1954,6 +2129,7 @@
             hasCache:     hasCache,
             listCached:   listCached,
             forget:       forget,
+            renamed:      renamed,
             conflicted:   conflicted,
             pending:      pending,
             onConflict:   onConflict,
@@ -2024,9 +2200,11 @@
     function draftName( r ) { return r.app + "\u0000" + ( r.at || "" ); }
 
     // How many saves and drafts are only here. What could not be read counts
-    // as nothing - and is then never deleted either.
+    // as nothing - and is then never deleted either. `counted.apps`: the apps
+    // whose saves only that app can finish (a merge it must make: L6).
     async function localCount()
     {
+        await retagged;   // an admin rename's saves are counted as the account's own
         var store  = await openDb();
         var drafts = await openDraftsDb();
         var outs   = ( await oneTx( store,  OUTBOX,   "readonly", function ( os ) { return os.getAll(); } ) ) || [];
@@ -2034,8 +2212,35 @@
         if( store )  store.close();
         if( drafts ) drafts.close();
         var chat = chatDrafts();
-        counted = { out: outs.map( outName ), drafts: drs.map( draftName ), chat: chat };
+        var apps = [];
+        outs.forEach( function ( r )
+        {
+            // Met a 412 here that only its own app can merge, or its app's
+            // merge said "no" before (flagged; `xc` beside another account's).
+            var p = r.file || r.path;
+            if( ! r.mrg || ! ( needsApp[ p ] || ( r.file ? r.xc : r.conflict ) ) ) return;
+            var a = appOf( p );
+            if( apps.indexOf( a ) === -1 ) apps.push( a );
+        } );
+        counted = { out: outs.map( outName ), drafts: drs.map( draftName ), chat: chat, apps: apps };
         return outs.length + drs.length + chat.length;
+    }
+
+    // The app that merges a list file's saves, by name, for the sign-out's
+    // advice ("open Planner › Tasks to finish saving": Tasks, Calendar and
+    // Habits live in Planner). Anything else: its file name.
+    var MERGING_APPS = [ [ "data/tasks.json", "Planner \u203a Tasks" ], [ "data/calendar.ics", "Planner \u203a Calendar" ], [ "data/contacts.vcf", "Contacts" ],
+                         [ "data/habits/", "Planner \u203a Habits" ], [ "data/split/", "Split" ], [ "data/trips/", "Trips" ],
+                         [ "data/games/", "Games" ], [ "data/bookmarks/", "Bookmarks" ] ];
+
+    function appOf( p )
+    {
+        for( var i = 0; i < MERGING_APPS.length; i++ )
+        {
+            var k = MERGING_APPS[ i ][ 0 ];
+            if( p === k || ( k.slice( -1 ) === "/" && p.indexOf( k ) === 0 ) ) return MERGING_APPS[ i ][ 1 ];
+        }
+        return String( p ).split( "/" ).pop();
     }
 
     // Chat's typed, unsent text (chat/compose.js: localStorage
@@ -2073,6 +2278,7 @@
     // now). Resolves how many saves and drafts came in since and were kept.
     async function clearLocal()
     {
+        await retagged;
         var seen = counted;
         if( ! seen ) { await localCount(); seen = counted; }
         counted = null;
@@ -2157,18 +2363,19 @@
         return left;
     }
 
-    // The sign-out, in one call: send, count, ask( n ) (resolves true = sign
-    // out) when anything is left, clear what was counted. What came in while
-    // asking is counted and asked about again - twice at most; after that it
-    // stays here, kept for its owner's next sign-in. Resolves false when the
-    // user chose to stay.
+    // The sign-out, in one call: send, count, ask( n, { apps } ) (resolves
+    // true = sign out) when anything is left, clear what was counted. apps:
+    // the apps that must be opened to finish saving (L6) - going online is
+    // not enough for those. What came in while asking is counted and asked
+    // about again - twice at most; after that it stays here, kept for its
+    // owner's next sign-in. Resolves false when the user chose to stay.
     async function leaveDevice( ask )
     {
         for( var round = 0; round < 3; round++ )
         {
             try { await sendWaiting( round ? 3000 : 10000 ); } catch ( e ) {}
             var n = await localCount();
-            if( n > 0 && ! await ask( n ) ) { counted = null; return false; }
+            if( n > 0 && ! await ask( n, { apps: ( counted && counted.apps ) || [] } ) ) { counted = null; return false; }
             if( ! await clearLocal() ) return true;
         }
         return true;

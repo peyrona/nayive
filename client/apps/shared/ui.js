@@ -407,12 +407,23 @@
     }
 
     // Bottom-centre transient toast. Needs a <div id="toast" class="toast"> in
-    // the page (styled by shared/theme.css). opts: { id, ms }.
+    // the page (styled by shared/theme.css). opts: { id, ms, keepUndo }.
+    //
+    // keepUndo: news the user did not ask for (a background merge, a sync):
+    // with an Undo on show it waits until that one is gone - shown over it,
+    // it made the Undo final and the user lost the way back (Bookmarks'
+    // "Merged" over Replace all's Undo).
     function toast( msg, opts )
     {
         opts = opts || {};
         var t = byId( opts.id || "toast" );
         if( ! t ) return;
+
+        if( opts.keepUndo && undoPending && undoPending.tt === t )
+        {
+            undoPending.after = [ msg, opts ];
+            return;
+        }
 
         settleUndo();                           // it takes an Undo's place: that one is final now
         clearTimeout( t._nayiveToastTimer );
@@ -4237,13 +4248,38 @@
     // the sign-in form would open inside the frame. A cross-origin
     // `top.location` throws; then we fall back to ourselves. GumApi.loginRedirect
     // is this same function (admin.html and the launcher have no GumApi).
-    function loginRedirect()
+    //
+    // Leaving drops whatever the page has not kept yet - a save only in this
+    // page, an office document still being written, an Image edit. A page of
+    // its own is guarded by its beforeunload (the browser asks). A FRAMED
+    // page - a desktop window, a Planner pane - goes with the TOP window,
+    // every other window with it, and its beforeunload may show nothing (no
+    // click in that frame yet): so it is asked first, as the desktop's (x)
+    // asks it - window.nayiveBeforeClose (shared/store.js, office.js, eMail,
+    // Image). "Stay" stays; the bar's button can be pressed again.
+    var redirecting = false;
+
+    async function loginRedirect()
     {
-        var win = window;
-        try { if( window.top !== window && window.top.location.pathname ) win = window.top; }
-        catch ( e ) {}
-        win.location.href = "/nayive/login.html?return=" +
-            encodeURIComponent( win.location.pathname + win.location.search );
+        if( redirecting ) return;
+        redirecting = true;
+        try
+        {
+            if( window.top !== window && typeof window.nayiveBeforeClose === "function" )
+            {
+                var go = true;
+                try { go = await Promise.resolve( window.nayiveBeforeClose() ); }
+                catch ( e ) { go = true; }        // as the desktop's (x): a throw closes
+                if( ! go ) return;
+            }
+
+            var win = window;
+            try { if( window.top !== window && window.top.location.pathname ) win = window.top; }
+            catch ( e ) {}
+            win.location.href = "/nayive/login.html?return=" +
+                encodeURIComponent( win.location.pathname + win.location.search );
+        }
+        finally { redirecting = false; }
     }
 
     function sessionExpired()
@@ -4886,6 +4922,7 @@
             undoPending = null;
             clearTimeout( tt._nayiveToastTimer );
             tt.classList.remove( "show", "actionable" );
+            showAfter( mine );          // before the undo: a toast of its own goes over it
             fn();
         } );
         tt.appendChild( b );
@@ -4906,14 +4943,25 @@
         var p = undoPending;
         if( ! p ) return;
         undoPending = null;
-        if( ! p.onExpire || ( leaving && p.keepOnLeave ) ) return;
-
-        try
+        if( p.onExpire && ! ( leaving && p.keepOnLeave ) )
         {
-            if( leaving ) withKeepalive( p.onExpire );
-            else          p.onExpire();
+            try
+            {
+                if( leaving ) withKeepalive( p.onExpire );
+                else          p.onExpire();
+            }
+            catch ( e ) { console.error( e ); }
         }
-        catch ( e ) { console.error( e ); }
+        if( ! leaving ) showAfter( p );
+    }
+
+    // The keepUndo toast that waited for this Undo (see toast), now.
+    function showAfter( p )
+    {
+        var a = p && p.after;
+        if( ! a ) return;
+        p.after = null;
+        toast( a[ 0 ], Object.assign( {}, a[ 1 ], { keepUndo: false } ) );
     }
 
     // B5: an editor or a game closes the Undo on the next key or move, or the

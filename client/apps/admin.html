@@ -491,10 +491,13 @@
                 var go = true;
                 try
                 {
-                    go = await NayiveStore.leaveDevice( function ( n )
+                    go = await NayiveStore.leaveDevice( function ( n, why )
                     {
+                        // A list save that only its app can merge (L6): name it.
+                        var apps = ( why && why.apps ) || [];
                         return NayiveUI.confirm( { title: NayiveUI.t( 'launcher.unsavedTitle' ),
-                                                   body: NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
+                                                   body: apps.length ? NayiveUI.tf( 'launcher.unsavedBodyApps', { n: n, apps: apps.join( ', ' ) } )
+                                                                     : NayiveUI.tf( 'launcher.unsavedBody', { n: n } ),
                                                    confirm: NayiveUI.t( 'launcher.unsavedOk' ), danger: true } );
                     } );
                 }

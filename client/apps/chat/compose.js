@@ -666,10 +666,31 @@
                         break;
                     }
                 }
+                if( waitingIn( key ).length ) retryLater();
+                else if( ! Array.from( outbox.values() ).some( function ( r ) { return ! r.dead; } ) ) retryMs = 0;   // all sent: soon again next time
             }
             finally { delete flows[ key ]; }
         } )();
         return f.done;
+    }
+
+    // A try that failed while the network is up (the server restarting, a
+    // dropped connection right after "online") left them waiting: "online"
+    // will not come again, so they go again by themselves - soon, then less
+    // and less often - until sent. The other triggers stay as they were.
+    var retryTimer = null;
+    var retryMs    = 0;
+    var RETRY_MIN  = 5000, RETRY_MAX = 5 * 60 * 1000;
+
+    function retryLater()
+    {
+        if( retryTimer || ! navigator.onLine ) return;      // offline: "online" sends them
+        retryMs = retryMs ? Math.min( retryMs * 2, RETRY_MAX ) : RETRY_MIN;
+        retryTimer = setTimeout( function ()
+        {
+            retryTimer = null;
+            if( navigator.onLine ) C.flushOutbox();
+        }, retryMs );
     }
 
     function waitingIn( key )

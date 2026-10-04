@@ -293,6 +293,16 @@ function fetchTagged( file, ms )
                function ( e ) { clearTimeout( timer ); throw e; } );
 }
 
+// Whose page this is: the "nayive_who" cookie as the page loaded, as GumApi
+// and shared/store.js send it (X-Nayive-User). A dialog left open while
+// another account signed in on this browser gets 423 - never writes these
+// settings into that other person's home (L5).
+var OWNER = ( function ()
+{
+    try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
+    catch ( e ) { return ""; }
+} )();
+
 // ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
 // server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes
 // up only over the version just read (If-Match; create-only when there was
@@ -311,6 +321,7 @@ function updateFile( file, readNow, fn, norm, keep )
             var out = norm( fn( now.s ) );
             keep( out );
             var h = { "Content-Type": "application/json" };
+            if( OWNER ) h[ "X-Nayive-User" ] = OWNER;
             if( now.tag ) h[ "If-Match" ] = now.tag; else h[ "If-None-Match" ] = "*";
             return fetch( "/api/files?file=" + encodeURIComponent( file ),
                           { method: "PUT", credentials: "same-origin", headers: h, body: JSON.stringify( out, null, 2 ) } )

@@ -235,7 +235,7 @@ async function applyImport( text, name )
     // all made (merge3) - a merge with another device's save in those six
     // seconds brought its bookmarks in, and putting `before` back whole
     // dropped them with the next save.
-    // The three as the file has them (repair, no "_" fields), as resolveConflict
+    // The three as the file has them (repair, no "_" fields), as mergeFile
     // merges them: a node is "untouched" only when it reads the same.
     const asFile = function( d ) { return repair( JSON.parse( JSON.stringify( d, function( k, v ) { return k.charAt( 0 ) === '_' ? undefined : v; } ) ) ); };
     NayiveUI.undoToast( msg, mode === 'replace'
@@ -343,6 +343,11 @@ async function deliver( text, name, type )
 }
 
 // Into a folder the user picks; a name already there gets " (2)", " (3)"…
+// The folder's listing gives the first name to try; it is saved CREATE-ONLY
+// all the same (If-None-Match: *): a listing that failed told nothing - it
+// used to count as "no name taken", and the export replaced a file of that
+// name - and a file put there since is never written over either. A name
+// taken answers 412: the next one is tried.
 async function saveInNayive( text, name )
 {
     const dir = await NayiveUI.pickFolder( { title: T( 'bookmarks.export' ), allowRoot: true } );
@@ -351,10 +356,15 @@ async function saveInNayive( text, name )
     try { taken = ( ( await GumApi.listDir( dir ) ).nodes || [] ).map( function( n ) { return String( n.path ).split( '/' ).pop(); } ); }
     catch( e ) {}
     const dot = name.lastIndexOf( '.' );
-    let free = name;
-    for( let i = 2; taken.indexOf( free ) >= 0; i++ ) free = name.slice( 0, dot ) + ' (' + i + ')' + name.slice( dot );
-    try { await GumApi.writeFileBytes( dir + '/' + free, new TextEncoder().encode( text ) ); }
-    catch( e ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; }
+    const nth = function( i ) { return i < 2 ? name : name.slice( 0, dot ) + ' (' + i + ')' + name.slice( dot ); };
+    let i = 1;
+    while( taken.indexOf( nth( i ) ) >= 0 ) i++;
+    for( let tries = 0; ; tries++, i++ )
+    {
+        try { await GumApi.createFileBytes( dir + '/' + nth( i ), new TextEncoder().encode( text ) ); break; }
+        catch( e ) { if( ! e || e.status !== 412 || tries >= 50 ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; } }
+    }
+    const free = nth( i );
     const rel = dir.replace( /^files\/?/, '' );
     NayiveUI.toast( TF( 'bookmarks.savedIn', { path: ( rel ? rel + '/' : '' ) + free } ) );
     return true;

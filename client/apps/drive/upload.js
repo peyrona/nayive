@@ -304,34 +304,81 @@ function isAppImport( it )
     return n.endsWith( '.ics' ) || n.endsWith( '.vcf' );
 }
 
-// calendar.ics / contacts.vcf are read and written through the same store
-// Calendar and Contacts use. Its read sees an edit an open Calendar has queued
-// but not sent yet, and the merged file then takes that queued write's place
-// in the shared outbox (one per path). A direct PUT raced it instead: the
-// queued write went up after the merge and took the imported events away.
+// calendar.ics / contacts.vcf are read and written through the store Calendar
+// and Contacts use (one outbox: a direct PUT raced a save an open Calendar
+// had queued, and took the imported events away). Since 2026-10-02 (C1, A3,
+// list-apps #2 #10, store-core #9) an import is made from the SERVER's copy,
+// read fresh - never from the copy this device cached, nor the service
+// worker's offline one: an old copy, sent later, dropped everything the
+// phone added since. Offline, or with a Calendar save still waiting here, it
+// is refused and says why (the file can still be kept as a plain file).
+// It goes up checked against the version it was made from (If-Match). A
+// save another device made in between answers 412: the store reads the file
+// again and calls this page's merge, which makes the import again on that
+// newer copy - an import is the same change made twice. Any other merge
+// this page is asked for (a Calendar save it flushed for another page) is
+// not Drive's to make: null - held back for its own app, which merges it
+// when it next reads the file.
 let appFileStore = null;
+let importing    = null;    // the change being written: { path, bodies: Set of what it wrote, apply( text ) -> text }
 
 function appStore()
 {
-    return appFileStore || ( appFileStore = NayiveStore.createStore( { apiBase: GumApi.API_FILES } ) );
+    return appFileStore || ( appFileStore = NayiveStore.createStore( {
+        apiBase: GumApi.API_FILES, conflicts: true,
+        merge: function( path, base, mine, theirs )
+        {
+            if( ! importing || importing.path !== path || ! importing.bodies.has( mine ) ) return null;
+            return importing.apply( theirs );
+        } } ) );
 }
 
-async function readTextOrEmpty( path )
+// One change to an app's file. fn( text ) -> { text, changed, ... } is
+// pure: it runs on the server's copy as read now ('' = no file yet), and
+// again on a newer one after a 412. Resolves fn's answer that went up (or
+// waits in the outbox, checked: the network dropped after the read); throws,
+// writing nothing, when the server's copy cannot be read now or the change
+// could not be kept. `app`: its name, for "open Calendar first".
+async function updateAppFile( path, app, fn )
 {
-    const res = await appStore().read( path );
-    if( res.source === 'empty' ) return '';                            // no such file yet
-    if( res.body === null ) throw new Error( T( 'ui.store.notRead' ) );  // never merge into nothing
-    return res.body;
-}
+    const st = appStore();
+    if( ! navigator.onLine ) throw new Error( T( 'drive.importOffline' ) );
+    try { await st.flush(); } catch( e ) {}                     // what waits here goes first
 
-// Written as text, the way Calendar and Contacts write it. Offline, or any
-// answer the store keeps the write for, is queued and goes up later: only a
-// write it refuses or drops is a failure.
-async function writeAppFile( path, text )
-{
-    const res = await appStore().write( path, text );
-    if( res.blocked )   throw new Error( T( 'ui.store.notRead' ) );
-    if( res.forbidden ) throw new Error( 'HTTP 403' );
+    const res = await st.read( path );
+    if( res.source !== 'network' && res.source !== 'empty' )
+    {
+        // A save of the app's still waiting here (its own merge to make), or
+        // the server not reached: never an import onto that copy.
+        let wait = null;
+        try { wait = await st.pending( path ); } catch( e ) {}
+        throw new Error( wait ? TF( 'drive.importWaiting', { app: app } ) : T( 'drive.importOffline' ) );
+    }
+
+    let job = fn( res.source === 'empty' ? '' : res.body );
+    if( ! job.changed ) return job;
+
+    const bodies = new Set( [ job.text ] );
+    importing = { path: path, bodies: bodies, apply: function( theirs ) { job = fn( theirs ); bodies.add( job.text ); return job.text; } };
+    let w;
+    try { w = ( await st.write( path, job.text ) ) || {}; }
+    finally { importing = null; }
+
+    if( w.blocked )   throw new Error( T( 'ui.store.notRead' ) );
+    if( w.forbidden ) throw new Error( 'HTTP 403' );
+    // Kept only in this page (the browser's storage failed), or gone before
+    // it was sent: NOT saved, never "imported". The page-only one is
+    // withdrawn - it was made from the file the user still has - so a
+    // second try starts clean.
+    if( w.pageOnly || w.unknown )
+    {
+        if( w.pageOnly ) try { await st.forget( path ); } catch( e ) {}
+        throw new Error( T( 'drive.importNotSaved' ) );
+    }
+    // Held back for the app's own merge (it went up beside a save of the
+    // app's): kept in the outbox, merged when the app next reads the file.
+    if( w.conflict ) throw new Error( TF( 'drive.importWaiting', { app: app } ) );
+    return job;          // up - or queued with its check (offline since the read, a 5xx)
 }
 
 // Unfold RFC 5545 / RFC 6350 continuation lines; normalise EOLs to \n.
@@ -397,48 +444,128 @@ function eventKey( block )
     return blockProp( block, 'UID' ) + '\n' + blockProp( block, 'RECURRENCE-ID' );
 }
 
+// Two blocks the same, whatever their line ends.
+function sameBlock( a, b )
+{
+    return String( a ).replace( /\r\n?/g, '\n' ).replace( /\n+$/, '' ) === String( b ).replace( /\r\n?/g, '\n' ).replace( /\n+$/, '' );
+}
+
+// "2026-09-28T10:15:00Z" / "20260928T101500Z" -> 14 digits that compare as
+// text; none = the oldest.
+function stampKey( v )
+{
+    return String( v || '' ).replace( /\D/g, '' ).slice( 0, 14 ).padEnd( 14, '0' );
+}
+
+// The dropped copy of an event is NEWER than the one in the calendar: a
+// higher SEQUENCE (an organiser's new version of an invitation), else at the
+// same SEQUENCE a later LAST-MODIFIED - or DTSTAMP, which Calendar moves on
+// at each edit (shared/ical.js stampOf: the rule its merge uses). The same
+// or unknown is not newer: the calendar's stays (C2).
+function eventNewer( dropped, have )
+{
+    const seq = function( b ) { return parseInt( blockProp( b, 'SEQUENCE' ), 10 ) || 0; };
+    if( seq( dropped ) !== seq( have ) ) return seq( dropped ) > seq( have );
+    const st = function( b ) { return stampKey( blockProp( b, 'LAST-MODIFIED' ) || blockProp( b, 'DTSTAMP' ) ); };
+    return st( dropped ) > st( have );
+}
+
+// A card's REV, as Contacts reads it (contact/index.html revOf / revKey).
+function cardRev( c ) { return stampKey( c.rev ); }
+
 // The cards are told apart as Contacts tells them (shared/vcard.js): each is
-// kept as the text it is in the file, and a card dropped again (same UID)
-// takes its old one's place.
+// kept as the text it is in the file. A card dropped again (same UID) takes
+// its old one's place only when it is NEWER - a later REV, as Contacts' own
+// import: an old export dropped again never takes back the edits made since
+// (C2). Pure (see updateAppFile): `book` is the file's text now.
+// -> { text, changed, added: [ { uid, text } ], replaced: [ { uid, was, now } ], kept }
+function addCards( book, incoming )
+{
+    const have = String( book || '' ).trim() ? NayiveVCard.cards( book ) : [];
+    if( ! have ) throw new Error( T( 'ui.store.badFile' ) );       // text with no card in it: never written over
+
+    const blocks = have.map( function( c ) { return c.text; } );
+    const revs   = have.map( cardRev );
+    const byUid  = new Map();
+    have.forEach( function( c, i ) { if( c.uid ) byUid.set( c.uid, i ); } );
+    const orig   = new Map();    // uid -> the block it had before this import (null: it is new)
+    const named  = new Set();    // uids of the book's own cards the drop has
+    const loose  = [];           // cards with no UID: always new
+
+    for( const c of incoming )
+    {
+        const u = c.uid;
+        if( u && byUid.has( u ) )
+        {
+            const i = byUid.get( u );
+            if( i < have.length ) named.add( u );
+            if( sameBlock( blocks[ i ], c.text ) || cardRev( c ) <= revs[ i ] ) continue;    // the same, or not newer: stays
+            if( ! orig.has( u ) ) orig.set( u, blocks[ i ] );
+            blocks[ i ] = c.text;
+            revs[ i ]   = cardRev( c );
+        }
+        else
+        {
+            blocks.push( c.text );
+            revs.push( cardRev( c ) );
+            if( u ) { byUid.set( u, blocks.length - 1 ); orig.set( u, null ); }
+            else    loose.push( c.text );
+        }
+    }
+
+    const added = loose.map( function( t ) { return { uid: '', text: t }; } ), replaced = [];
+    orig.forEach( function( was, u )
+    {
+        const now = blocks[ byUid.get( u ) ];
+        if( was === null ) added.push( { uid: u, text: now } );
+        else if( ! sameBlock( was, now ) ) replaced.push( { uid: u, was: was, now: now } );
+    } );
+    const kept = Array.from( named ).filter( function( u ) { return ! orig.has( u ); } ).length;
+    if( ! added.length && ! replaced.length ) return { text: book, changed: false, added: [], replaced: [], kept: kept };
+    return { text: blocks.join( '\r\n' ) + '\r\n', changed: true, added: added, replaced: replaced, kept: kept };
+}
+
+// Its Undo, on the file as it is NOW: a card it added goes, a card it
+// replaced gets its old text back - each only while it is still exactly
+// what the import wrote (edited since in Contacts: left as it is).
+function revertCards( book, job )
+{
+    const have = String( book || '' ).trim() ? NayiveVCard.cards( book ) : [];
+    if( ! have ) throw new Error( T( 'ui.store.badFile' ) );
+    let blocks = have.map( function( c ) { return c.text; } );
+    const uids = have.map( function( c ) { return c.uid; } );
+    let changed = false;
+
+    job.replaced.forEach( function( r )
+    {
+        const i = uids.indexOf( r.uid );
+        if( i !== -1 && sameBlock( blocks[ i ], r.now ) ) { blocks[ i ] = r.was; changed = true; }
+    } );
+    job.added.forEach( function( a )
+    {
+        const i = blocks.findIndex( function( b, k ) { return blocks[ k ] !== null && ( ! a.uid || uids[ k ] === a.uid ) && sameBlock( b, a.text ); } );
+        if( i !== -1 ) { blocks[ i ] = null; changed = true; }
+    } );
+    blocks = blocks.filter( function( b ) { return b !== null; } );
+    return { text: blocks.length ? blocks.join( '\r\n' ) + '\r\n' : '', changed: changed };
+}
+
 async function mergeIntoContacts( incomingText )
 {
     const incoming = NayiveVCard.cards( incomingText ) || [];
     if( ! incoming.length ) throw new Error( T( 'drive.noContactsInFile' ) );
 
-    const book   = NayiveVCard.cards( await readTextOrEmpty( 'data/contacts.vcf' ) ) || [];
-    const blocks = book.map( function( c ) { return c.text; } );
-    const byUid  = new Map();
-    book.forEach( function( c, i ) { if( c.uid ) byUid.set( c.uid, i ); } );
-
-    for( const c of incoming )
-    {
-        const u = c.uid;
-        if( u && byUid.has( u ) ) blocks[ byUid.get( u ) ] = c.text;
-        else { blocks.push( c.text ); if( u ) byUid.set( u, blocks.length - 1 ); }
-    }
-
-    await writeAppFile( 'data/contacts.vcf', blocks.join( '\r\n' ) + '\r\n' );
-    return incoming.length;
+    const path = 'data/contacts.vcf';
+    const job  = await updateAppFile( path, 'Contacts', function( book ) { return addCards( book, incoming ); } );
+    return { n: job.added.length + job.replaced.length, kept: job.kept,
+             undo: job.changed ? { path: path, app: 'Contacts', fn: function( book ) { return revertCards( book, job ); } } : null };
 }
 
-async function mergeIntoCalendar( incomingText )
+// The calendar's top-level blocks (inside its VCALENDAR): [ { s, e, kind,
+// text } ] by line, plus where the first event and the VCALENDAR's END are.
+function calBlocks( lines )
 {
-    const events = extractBlocks( incomingText, 'VEVENT' );
-    const zones  = extractBlocks( incomingText, 'VTIMEZONE' );
-    if( ! events.length ) throw new Error( T( 'drive.noEventsInFile' ) );
-
-    let existing = await readTextOrEmpty( 'data/calendar.ics' );
-    if( ! /BEGIN:VCALENDAR/i.test( existing ) )
-        existing = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nayive//Personal Calendar//EN\r\nEND:VCALENDAR\r\n';
-
-    // The existing file stays as it is, line for line - its header, a VTODO,
-    // anything else Drive does not know: an event dropped again (same UID and
-    // RECURRENCE-ID) takes its old one's place, a new one goes in before the
-    // last END:VCALENDAR, a new VTIMEZONE before the first event.
-    const eol   = /\r\n/.test( existing ) ? '\r\n' : '\n';
-    const lines = existing.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' );
-    const at    = new Map();          // eventKey -> [ first, last ] line of an existing top-level VEVENT
-    const haveTz = new Set();
+    const out = [];
     let   depth = 0, start = -1, kind = '', firstEvent = -1, calEnd = -1;
 
     for( let i = 0; i < lines.length; i++ )
@@ -455,25 +582,58 @@ async function mergeIntoCalendar( incomingText )
 
         if( depth === 2 && start >= 0 )
         {
-            const block = lines.slice( start, i + 1 ).join( '\n' );
-            if( kind === 'VEVENT' && blockProp( block, 'UID' ) && ! at.has( eventKey( block ) ) ) at.set( eventKey( block ), [ start, i ] );
-            if( kind === 'VTIMEZONE' ) haveTz.add( blockProp( block, 'TZID' ) );
+            out.push( { s: start, e: i, kind: kind, text: lines.slice( start, i + 1 ).join( '\n' ) } );
             start = -1;
         }
         if( depth === 1 && tag === 'VCALENDAR' ) calEnd = i;
         depth--;
     }
+    return { blocks: out, firstEvent: firstEvent, calEnd: calEnd };
+}
 
-    const replace = new Map();        // first line of an existing event -> { last, text }
+// Every event of a dropped .ics into the calendar's text `existing` ('' =
+// no file yet). The existing file stays as it is, line for line - its
+// header, a VTODO, anything else Drive does not know. An event dropped again
+// (same UID and RECURRENCE-ID) takes its old one's place only when the
+// dropped copy is NEWER (eventNewer): an old export, or an invitation sent
+// again, never takes back the edits made since (C2). A new one goes in
+// before the last END:VCALENDAR, a new VTIMEZONE before the first event.
+// Pure (see updateAppFile).
+// -> { text, changed, added: [ { key, text } ], replaced: [ { key, was, now } ], kept }
+function addEvents( existing, events, zones )
+{
+    if( ! /BEGIN:VCALENDAR/i.test( existing ) )
+        existing = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nayive//Personal Calendar//EN\r\nEND:VCALENDAR\r\n';
+
+    const eol   = /\r\n/.test( existing ) ? '\r\n' : '\n';
+    const lines = existing.replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' );
+    const cal   = calBlocks( lines );
+    const at    = new Map();          // eventKey -> the first top-level VEVENT with it
+    const haveTz = new Set();
+    cal.blocks.forEach( function( b )
+    {
+        if( b.kind === 'VEVENT' && blockProp( b.text, 'UID' ) && ! at.has( eventKey( b.text ) ) ) at.set( eventKey( b.text ), b );
+        if( b.kind === 'VTIMEZONE' ) haveTz.add( blockProp( b.text, 'TZID' ) );
+    } );
+
+    const replace = new Map();        // first line of an existing event -> { last, text, was, key }
     const added   = [];
     const addedAt = new Map();        // eventKey -> index in `added` (the same event twice in one file: the last wins)
+    const keptKeys = new Set();
     for( const b of events )
     {
         const k = eventKey( b ), has = !! blockProp( b, 'UID' );
-        if( has && at.has( k ) )           replace.set( at.get( k )[ 0 ], { last: at.get( k )[ 1 ], text: b } );
+        if( has && at.has( k ) )
+        {
+            const old = at.get( k ), now = replace.has( old.s ) ? replace.get( old.s ).text : old.text;
+            if( sameBlock( now, b ) || ! eventNewer( b, now ) ) { if( ! replace.has( old.s ) ) keptKeys.add( k ); continue; }
+            keptKeys.delete( k );
+            replace.set( old.s, { last: old.e, text: b, was: old.text, key: k } );
+        }
         else if( has && addedAt.has( k ) ) added[ addedAt.get( k ) ] = b;
         else { if( has ) addedAt.set( k, added.length ); added.push( b ); }
     }
+    if( ! added.length && ! replace.size ) return { text: existing, changed: false, added: [], replaced: [], kept: keptKeys.size };
 
     const newZones = zones.filter( function( b )
     {
@@ -484,25 +644,72 @@ async function mergeIntoCalendar( incomingText )
     } );
 
     const out     = [];
-    const zonesAt = firstEvent >= 0 ? firstEvent : calEnd;
+    const zonesAt = cal.firstEvent >= 0 ? cal.firstEvent : cal.calEnd;
     for( let i = 0; i < lines.length; i++ )
     {
         if( i === zonesAt ) out.push( ...newZones );
-        if( i === calEnd )  out.push( ...added );
+        if( i === cal.calEnd ) out.push( ...added );
 
         const r = replace.get( i );
         if( r ) { out.push( r.text ); i = r.last; continue; }
         out.push( lines[ i ] );
     }
-    if( calEnd < 0 )                  // a file that never closed its VCALENDAR
+    if( cal.calEnd < 0 )              // a file that never closed its VCALENDAR
     {
         while( out.length && out[ out.length - 1 ] === '' ) out.pop();
         out.push( ...( zonesAt < 0 ? newZones : [] ), ...added, 'END:VCALENDAR', '' );
     }
 
     const text = out.join( '\n' ).replace( /\r\n/g, '\n' ).replace( /\n/g, eol );
-    await writeAppFile( 'data/calendar.ics', /\n$/.test( text ) ? text : text + eol );
-    return events.length;
+    return { text: /\n$/.test( text ) ? text : text + eol, changed: true,
+             added: added.map( function( b ) { return { key: blockProp( b, 'UID' ) ? eventKey( b ) : '', text: b }; } ),
+             replaced: Array.from( replace.values() ).map( function( r ) { return { key: r.key, was: r.was, now: r.text }; } ),
+             kept: keptKeys.size };
+}
+
+// Its Undo, on the calendar as it is NOW: an event it added goes, one it
+// replaced gets its old text back - each only while it is still exactly
+// what the import wrote (moved or edited since in Calendar: left as it is).
+// A time zone it added stays: harmless, and another event may use it.
+function revertEvents( existing, job )
+{
+    const eol   = /\r\n/.test( existing ) ? '\r\n' : '\n';
+    const lines = String( existing || '' ).replace( /\r\n/g, '\n' ).replace( /\r/g, '\n' ).split( '\n' );
+    const evs   = calBlocks( lines ).blocks.filter( function( b ) { return b.kind === 'VEVENT'; } );
+    const put   = new Map();          // first line -> { last, text: null (drop) | the old text }
+
+    job.replaced.forEach( function( r )
+    {
+        const b = evs.find( function( x ) { return ! put.has( x.s ) && eventKey( x.text ) === r.key && sameBlock( x.text, r.now ); } );
+        if( b ) put.set( b.s, { last: b.e, text: r.was } );
+    } );
+    job.added.forEach( function( a )
+    {
+        const b = evs.find( function( x ) { return ! put.has( x.s ) && ( ! a.key || eventKey( x.text ) === a.key ) && sameBlock( x.text, a.text ); } );
+        if( b ) put.set( b.s, { last: b.e, text: null } );
+    } );
+    if( ! put.size ) return { text: existing, changed: false };
+
+    const out = [];
+    for( let i = 0; i < lines.length; i++ )
+    {
+        const r = put.get( i );
+        if( r ) { if( r.text !== null ) out.push( r.text ); i = r.last; continue; }
+        out.push( lines[ i ] );
+    }
+    return { text: out.join( '\n' ).replace( /\r\n/g, '\n' ).replace( /\n/g, eol ), changed: true };
+}
+
+async function mergeIntoCalendar( incomingText )
+{
+    const events = extractBlocks( incomingText, 'VEVENT' );
+    const zones  = extractBlocks( incomingText, 'VTIMEZONE' );
+    if( ! events.length ) throw new Error( T( 'drive.noEventsInFile' ) );
+
+    const path = 'data/calendar.ics';
+    const job  = await updateAppFile( path, 'Calendar', function( text ) { return addEvents( text, events, zones ); } );
+    return { n: job.added.length + job.replaced.length, kept: job.kept,
+             undo: job.changed ? { path: path, app: 'Calendar', fn: function( text ) { return revertEvents( text, job ); } } : null };
 }
 
 // Add to Calendar / Contacts, or keep as a file? One question for every
@@ -526,10 +733,13 @@ function askAppImport( imports )
         otherIcon: 'doc' } );
 }
 
+// The toast counts what went in (added or replaced by a newer copy) and
+// what was already there, the same or newer, and kept (C2); its Undo takes
+// out what went in (undoAppImports).
 async function runAppImports( imports )
 {
-    let calEvents = 0, calFiles = 0, conCards = 0, conFiles = 0;
-    const failed = [];
+    let calEvents = 0, calFiles = 0, conCards = 0, conFiles = 0, kept = 0;
+    const failed = [], undos = [];
 
     for( const it of imports )
     {
@@ -538,8 +748,11 @@ async function runAppImports( imports )
         try
         {
             const text = await it.file.text();
-            if( isIcs ) { calEvents += await mergeIntoCalendar( text ); calFiles++; }
-            else        { conCards  += await mergeIntoContacts( text ); conFiles++; }
+            const r    = isIcs ? await mergeIntoCalendar( text ) : await mergeIntoContacts( text );
+            if( isIcs ) { calEvents += r.n; calFiles++; }
+            else        { conCards  += r.n; conFiles++; }
+            kept += r.kept;
+            if( r.undo ) undos.push( r.undo );
         }
         catch( err )
         {
@@ -548,10 +761,28 @@ async function runAppImports( imports )
     }
 
     const done = [];
-    if( calFiles ) done.push( TF( calEvents === 1 ? 'drive.oneEventTo' : 'drive.nEventsTo', { n: calEvents } ) );
-    if( conFiles ) done.push( TF( conCards  === 1 ? 'drive.oneContactTo' : 'drive.nContactsTo', { n: conCards } ) );
-    if( done.length ) NayiveUI.toast( TF( 'drive.imported', { what: done.join( T( 'drive.and' ) ) } ) );
+    if( calFiles && calEvents ) done.push( TF( calEvents === 1 ? 'drive.oneEventTo' : 'drive.nEventsTo', { n: calEvents } ) );
+    if( conFiles && conCards )  done.push( TF( conCards  === 1 ? 'drive.oneContactTo' : 'drive.nContactsTo', { n: conCards } ) );
+    const msg = ( done.length ? TF( 'drive.imported', { what: done.join( T( 'drive.and' ) ) } ) : '' ) +
+                ( kept ? ( done.length ? ' · ' : '' ) + TF( 'drive.importKept', { n: kept } ) : '' );
+    if( msg && undos.length ) NayiveUI.undoToast( msg, function() { undoAppImports( undos ); }, { ms: 8000 } );
+    else if( msg )            NayiveUI.toast( msg, { ms: 5000 } );
     if( failed.length ) NayiveUI.alert( { title: T( 'drive.importFailedTitle' ), body: failed.join( '\n' ) } );
+}
+
+// The Undo of an import, newest first: each file read fresh from the server
+// and written back checked, as the import was (updateAppFile) - only what
+// the import put in, and only where it is still as the import left it.
+async function undoAppImports( undos )
+{
+    const failed = [];
+    for( const u of undos.slice().reverse() )
+    {
+        try { await updateAppFile( u.path, u.app, u.fn ); }
+        catch( err ) { failed.push( u.app + ( err && err.message ? ' (' + err.message + ')' : '' ) ); }
+    }
+    if( failed.length ) NayiveUI.alert( { title: T( 'drive.importUndoFailed' ), body: failed.join( '\n' ) } );
+    else NayiveUI.toast( T( 'drive.importUndone' ) );
 }
 
 // "album/foto.HEIC" + "foto.jpg" -> "album/foto.jpg", and never onto a

@@ -10,20 +10,20 @@ await NayiveI18n.ready;
 loadUi();
 applyTreeWidth();
 
-// conflicts: a save over a file changed on another device since is held back
-// and merged (model.js, TWO DEVICES) instead of overwriting it.
-store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true } );
+// merge: a save over a file changed on another device since is merged by the
+// store, with mergeFile, against the version it was made from (model.js, TWO
+// DEVICES) instead of overwriting it.
+store = NayiveStore.createStore( { apiBase: GumApi.API_FILES, conflicts: true, merge: mergeFile } );
 
 wireAll();
 store.onState( NayiveUI.syncIndicator() );
-store.onState( watchBase );
-store.onConflict( function( path ) { if( path === FILE ) resolveConflict(); } );
+store.onMerged( onFileMerged );
 
 // The plug's click and the focus / visibility re-reads. Not while a sheet
 // is open or something is being dragged: the re-read repaints the list.
 NayiveUI.wireRefresh( { store: store, read: loadData, guard: function()
 {
-    return !! document.querySelector( '.sheet-backdrop.open' ) || !! dragIds || merging;
+    return !! document.querySelector( '.sheet-backdrop.open' ) || !! dragIds;
 } } );
 
 NayiveUI.firstRun( {

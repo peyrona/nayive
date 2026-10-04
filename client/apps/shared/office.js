@@ -764,6 +764,22 @@
     // The account this page belongs to, as store.js read it at load ("" = unknown).
     function draftWho() { return ( window.NayiveStore && NayiveStore.me ) || ""; }
 
+    // THE PAGE'S OWNER IS STILL THE ONE SIGNED IN (L5, office #14). The
+    // editor's side calls - the .bak's read and write, rename, the clean
+    // copy's delete and purge - go through GumApi with whatever session the
+    // browser holds NOW. A tab left open after another account signed in on
+    // this browser would read THAT account's .bak, write into its home and
+    // delete its file. So they run only while the "nayive_who" cookie still
+    // names this page's owner. Unknown either way (no cookie): as before.
+    function ownerHere()
+    {
+        var me = draftWho();
+        if( ! me ) return true;
+        var m = null;
+        try { m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); } catch ( e ) {}
+        return ! m || m[ 1 ] === me;
+    }
+
     // ---- ONE DRAFT PER TAB ----------------------------------------------------
     //
     // Each tab keeps its own draft, keyed "<app>:<tab id>" - until 2026-09-28
@@ -889,6 +905,8 @@
         var draftOk  = true;        // the last device draft of THIS document was written
         var waiters  = [];          // idle(): resolved when nothing is running any more
         var slotQ    = Promise.resolve();   // one device-draft write at a time (keepDraft / dropDraft)
+        var fresh    = new Set();   // names saved create-only (D6) whose file the server has not confirmed yet
+        var onlyHere = false;       // the last save is kept only in this page (the store's pageOnly)
 
         draftKey( o.app );          // this tab's draft key and its lock, from the start: the tab counts as open
 
@@ -1027,12 +1045,15 @@
         // Take it off. The .bak is sealed and we are about to throw the only key
         // away, so it is put back in the clear first - with no key it would be a
         // "previous copy" nobody could ever restore.
+        // False = refused, nothing changed: another account is signed in on
+        // this browser now (L5) - the .bak it would put back is not ours to read.
         async function unlockDoc()
         {
             var p   = path();
             var old = lock;
+            if( p && old && ! ownerHere() ) return false;
             lock = null;
-            if( ! p || ! old ) return;
+            if( ! p || ! old ) return true;
 
             try
             {
@@ -1049,9 +1070,15 @@
             // Either way, never take a NEW one from the server this session: the
             // copy up there is still sealed until the save that follows.
             backedUp.add( p );
+            return true;
         }
 
-        async function writeTo( p )
+        // how: "create" - a name this page did not mean to write over (Save
+        // as / the first save onto a name that was free or could not be
+        // checked: D6): written only where there is no file; "replace" - the
+        // user said "Replace" to a file that is there. See store.js
+        // CREATE-ONLY AND REPLACE.
+        async function writeTo( p, how )
         {
             // Not written now (the app's gate). The open document's edits go
             // to the device draft instead (see edited) - Ctrl+S included.
@@ -1082,12 +1109,17 @@
                 }
                 if( mine !== seq ) return null;        // a newer save started meanwhile - it wins
 
-                await backup( p );
+                await backup( p, how );
                 if( mine !== seq ) return null;
 
-                var res = ( await o.store.write( p, body ) ) || {};
+                if( how === "create" ) fresh.add( p );
+                if( how === "replace" ) fresh.delete( p );
+                var res = ( await o.store.write( p, body, how === "create" ? { createOnly: true }
+                                                         : how === "replace" ? { replace: true } : undefined ) ) || {};
+                if( res.ok === true ) fresh.delete( p );     // the file there is ours now
                 if( mine !== seq ) return res;
 
+                onlyHere = false;
                 if( res.conflict )
                 {
                     failed = true;
@@ -1097,9 +1129,23 @@
 
                 // Offline / queued / needs-auth all keep the body safe on this
                 // device (the store's cache + outbox): saved, from the user's side.
-                // Only a hard refusal is a failure.
+                // Only a hard refusal is a failure - and so is a save kept only
+                // in this page (the browser's storage failed) or one that
+                // vanished before it was sent: neither is "Saved" (K2, K5).
                 failed = res.ok === false && ! res.offline && ! res.needsAuth && ! res.otherAccount;
                 if( res.forbidden ) NayiveUI.toast( t( "ui.saveFailed" ) );
+                if( res.pageOnly )
+                {
+                    // The store goes on trying (and says so in a toast): the
+                    // screen says it here too, until it is up (onSaved below).
+                    onlyHere = true;
+                    stamp( "write.pageOnlyAt", Date.now(), t( "ui.store.pageOnly" ) );
+                }
+                else if( res.unknown )
+                {
+                    stamp( null );
+                    NayiveUI.toast( t( "write.notSaved" ), { ms: 6000 } );
+                }
                 if( ! failed )
                 {
                     if( ! timer ) dirty = false;       // an edit made meanwhile is still waiting
@@ -1160,9 +1206,15 @@
         // the live document and be worthless as "the previous version". Best
         // effort: skipped offline; when there is no server copy yet (the first
         // save of an import) the imported original is used.
-        async function backup( p )
+        // how: writeTo's. A create-only save (D6) that finds a file there will
+        // not write over it - nor over the .bak beside it, which is THAT
+        // file's previous copy: no .bak now (taken if the user says Replace).
+        async function backup( p, how )
         {
-            if( backedUp.has( p ) || ! navigator.onLine ) return;
+            // Another account signed in on this browser now (L5): its .bak is
+            // not ours to read or write. Not taken now; the save itself goes
+            // to the store, which keeps it for this page's owner (423).
+            if( backedUp.has( p ) || ! navigator.onLine || ! ownerHere() ) return;
 
             try
             {
@@ -1176,6 +1228,7 @@
                     if( ! e || e.status !== 404 ) throw e;
                     prev = pristine;
                 }
+                if( how === "create" && prev !== pristine ) return;     // another's file is there
 
                 // The server copy of a locked document is already sealed;
                 // imported bytes never are. Either way what lands in .bak/ is
@@ -1206,6 +1259,10 @@
             if( savingAs || askedFor === p ) return;
             askedFor = p;
 
+            // Not "changed since": a name saved create-only (D6) was taken
+            // on the server meanwhile - Replace it, or keep both (o.taken).
+            if( fresh.has( p ) && o.taken ) { o.taken( p ); return; }
+
             var copy = await NayiveUI.confirm( {
                 title:   t( "ui.conflictTitle" ),
                 body:    tf( "ui.conflictBody", { name: baseName( p ) } ),
@@ -1227,7 +1284,8 @@
             return writeTo( path() );
         }
 
-        async function saveTo( p )
+        // how: as writeTo's ("create" for a name nobody said "Replace" to).
+        async function saveTo( p, how )
         {
             savingAs = true;
             try
@@ -1240,7 +1298,7 @@
                 // that name was already saved to earlier in this session.
                 if( from !== p ) backedUp.delete( p );
 
-                var res  = await writeTo( p );
+                var res  = await writeTo( p, how );
 
                 if( ! res || failed ) return res;
 
@@ -1281,6 +1339,19 @@
         }
 
         function moved( from, to ) { if( backedUp.has( from ) ) backedUp.add( to ); }
+
+        // "Replace" to a name saved create-only and found taken (o.taken): the
+        // file there gets its own .bak first, then this document goes over it.
+        function replaceAt( p )
+        {
+            backedUp.delete( p );
+            askedFor = null;
+            failed   = false;
+            clearTimeout( timer );
+            timer = null;
+            since = 0;
+            return writeTo( p, "replace" );
+        }
 
         // ---- the device draft -----------------------------------------------
 
@@ -1389,6 +1460,20 @@
         // A background flush (reconnect, tab focus) can meet the conflict too.
         o.store.onConflict( function ( p ) { if( p === path() ) offerCopy( p ); } );
 
+        // A save of this page went up later, sent by the store on its own (a
+        // reconnect, its retry of a save kept only in this page): a
+        // create-only name's file is ours now, and "only in this page" is
+        // over - the screen says "Saved".
+        if( o.store.onSaved ) o.store.onSaved( function ( p, body, tag, mine )
+        {
+            if( ! mine ) return;
+            fresh.delete( p );
+            if( p !== path() || ! onlyHere || busy ) return;
+            onlyHere = false;
+            failed   = false;
+            stamp( "write.savedAt", Date.now() );
+        } );
+
         return {
             edited:    edited,
             flush:     flush,
@@ -1397,6 +1482,8 @@
             kept:      kept,
             saveNow:   saveNow,
             saveTo:    saveTo,
+            replaceAt: replaceAt,
+            offerCopy: offerCopy,
             opened:    opened,
             moved:     moved,
             bakTaken:  function ( p ) { backedUp.add( p ); },
@@ -1507,7 +1594,8 @@
             blocked:  o.blocked,
             failKey:  "ui.saveFailed",
             setSync:  sync,
-            saveAs:   openSaveAs
+            saveAs:   openSaveAs,
+            taken:    askTaken
         } );
 
         // The store drives the plug for every read and write - from the first one.
@@ -1539,6 +1627,15 @@
         function openDialog() { browser.open( o.appDir ); }
 
         function toast( k ) { NayiveUI.toast( t( k ) ); }
+
+        // Another account is signed in on this browser now (ownerHere, L5):
+        // a side action on the server is refused, and says so.
+        function notOwner()
+        {
+            if( ownerHere() ) return false;
+            NayiveUI.toast( t( "ui.otherAccountHere" ), { ms: 7000 } );
+            return true;
+        }
 
         function showLabel()
         {
@@ -2041,17 +2138,24 @@
 
             // Another file of that name is written over only when the user says
             // so - once. A "no" leaves the sheet open: another name, or ✗.
+            // Any other new name - free when the folder was listed, or not
+            // known (offline, the listing failed) - is saved CREATE-ONLY
+            // (D6): a file of that name there on the server, now or by the
+            // time it goes up, is never written over - the save is held back
+            // and askTaken asks.
+            var how = "";
             if( p !== path )
             {
                 if( checkingName ) return;             // Enter held down: one question, not two
                 checkingName = true;
                 try
                 {
-                    if( await nameTaken( p ) &&
-                        ! await NayiveUI.confirm( { title:   t( "drive.nameExistsTitle" ),
-                                                    body:    tf( "ui.saveAsExists", { name: name } ),
-                                                    confirm: t( "drive.replace" ),
-                                                    danger:  true } ) ) return;
+                    var taken = await nameTaken( p );
+                    if( taken === true && ! await NayiveUI.confirm( { title:   t( "drive.nameExistsTitle" ),
+                                                                      body:    tf( "ui.saveAsExists", { name: name } ),
+                                                                      confirm: t( "drive.replace" ),
+                                                                      danger:  true } ) ) return;
+                    how = taken === true ? "" : "create";
                 }
                 finally { checkingName = false; }
             }
@@ -2065,7 +2169,7 @@
 
             // saveTo lands any waiting autosave under the OLD name first, then
             // writes here - and a new destination gets its own .bak copy.
-            var res = await saver.saveTo( p );
+            var res = await saver.saveTo( p, how );
 
             // Refused - nothing went there (the app's gate, a store that will
             // not write it, the server saying no): the document stays what
@@ -2081,6 +2185,10 @@
             pending  = null;
             showLabel();
 
+            // The name was taken on the server after all (create-only: held
+            // back, nothing written over): Replace, or keep both.
+            if( res.conflict ) saver.offerCopy( p );
+
             // "Copia limpia": the plain original goes only once the protected
             // copy is REALLY on the server. Offline, queued or refused, it
             // stays - and so does the only readable version of the document.
@@ -2093,8 +2201,10 @@
 
         var checkingName = false;    // confirmSaveAs is asking whether the name is taken
 
-        // Is there a file at p already? The folder's listing says; with no
-        // network, the copy this device keeps of it is all there is to go by.
+        // Is there a file at p already? true / false as the folder's listing
+        // says; null = not known (offline, the listing failed) - unless the
+        // copy this device keeps of it says it is there. Only `true` asks
+        // "Replace?"; false and null are saved create-only (confirmSaveAs).
         async function nameTaken( p )
         {
             try
@@ -2105,7 +2215,50 @@
             catch ( e )
             {
                 if( e && e.status === 404 ) return false;          // no such folder yet: no such file
-                try { return await o.store.hasCache( p ); } catch ( e2 ) { return false; }
+                try { return await o.store.hasCache( p ) ? true : null; } catch ( e2 ) { return null; }
+            }
+        }
+
+        // A name saved create-only was taken on the server (another device
+        // or window put a file there - before the save, or before it went up
+        // from offline): nothing was written over it, the save is held back.
+        // Replace it (its file gets a .bak first), or keep both - this
+        // document goes to the next free name. ✗ leaves it held back (the
+        // plug says so); Ctrl+S asks again.
+        async function askTaken( p )
+        {
+            var r = await NayiveUI.confirm( { title:     t( "drive.nameExistsTitle" ),
+                                              body:      tf( "ui.saveAsAppeared", { name: baseName( p ) } ),
+                                              confirm:   t( "drive.replace" ),
+                                              danger:    true,
+                                              other:     t( "drive.keepBoth" ),
+                                              otherIcon: "copy" } );
+            if( p !== path ) return;                   // another document now
+            if( r === true ) { await saver.replaceAt( p ); return; }
+            if( r !== "other" ) return;
+
+            var free = await freeName( p );
+            var res  = await saver.saveTo( free, "create" );    // drops p's held-back save once this one is kept
+            if( ! res || res.blocked || res.forbidden || path !== p ) return;
+            path = free;
+            showLabel();
+            if( res.conflict ) saver.offerCopy( free );
+        }
+
+        // "carta.docx" -> "carta (2).docx", "carta (3).docx"... the first one
+        // the folder's listing does not have; the listing failing, " (2)" -
+        // it is saved create-only, so a taken one is asked about again.
+        async function freeName( p )
+        {
+            var dir = dirName( p ), base = baseName( p ), dot = base.lastIndexOf( "." );
+            var stem = dot > 0 ? base.slice( 0, dot ) : base, ext = dot > 0 ? base.slice( dot ) : "";
+            var names = {};
+            try { ( ( await GumApi.listDir( dir ) ).nodes || [] ).forEach( function ( n ) { names[ n.path ] = true; } ); }
+            catch ( e ) {}
+            for( var i = 2; ; i++ )
+            {
+                var c = dir + "/" + stem + " (" + i + ")" + ext;
+                if( ! names[ c ] ) return c;
             }
         }
 
@@ -2130,6 +2283,7 @@
             // reaches anywhere in Drive).
             var to = ( dirName( path ) || o.appDir ) + "/" + ( o.renameName ? o.renameName( name, path ) : name );
             if( to === path ) return;
+            if( notOwner() ) { showLabel(); return; }
 
             sync( "saving" );
             try
@@ -2139,8 +2293,28 @@
                 await saver.flush();
                 try { await o.store.flush(); } catch ( e ) {}
 
+                // Still waiting for the old name: the rename would leave it
+                // behind - a save held back as "changed on another device" (C3:
+                // the move took THEIR file, and ours was dropped or later
+                // went up blind), or one the server did not take yet (E5:
+                // quota full, a 5xx - forgetting it dropped the only copy).
+                // Refused, saying why; nothing moves.
+                var wait = null;
+                try { wait = await o.store.pending( path ); } catch ( e ) { wait = { unknown: true }; }
+                if( wait )
+                {
+                    sync( wait.conflict ? "conflict" : "error" );
+                    showLabel();
+                    NayiveUI.toast( t( wait.conflict ? "text.renameHeld" : "text.renameUnsent" ), { ms: 7000 } );
+                    if( wait.conflict && wait.mine ) saver.offerCopy( path );
+                    return;
+                }
+
                 await GumApi.rename( path, to );
-                try { await o.store.forget( path ); } catch ( e ) {}   // only now is the old cache entry stale
+                // The new name is this page's file from the same version (the
+                // server keeps it across a move): its first save is checked,
+                // never blind (C6). Only now is the old cache entry stale.
+                try { await o.store.renamed( path, to ); } catch ( e ) {}
 
                 saver.moved( path, to );
 
@@ -2182,6 +2356,7 @@
             if( notReady() ) return;
             if( ! path )   { toast( "write.noBackupYet" ); return; }
             if( readOnly ) { toast( "text.notYours" );     return; }
+            if( notOwner() ) return;                   // that account's .bak, read and written (L5)
 
             var p    = path;
             var bak  = bakPath( path );
@@ -2267,7 +2442,7 @@
             // to be saved over the document again.
             offerUndo( t( "write.restored" ), async function ()
             {
-                if( path !== p ) return;               // another document now
+                if( path !== p || notOwner() ) return; // another document now / another account
                 try
                 {
                     await GumApi.writeFileBytes( bak, bakWas );
@@ -2294,7 +2469,13 @@
         {
             await saver.settle( CLOSE_WAIT_MS );
             try { await o.store.flush(); await o.store.resting(); } catch ( e ) {}
-            if( ! saver.kept() || o.store.state !== "synced" || path !== p ) { toast( "write.actionFailed" ); return; }
+            // THIS file must have nothing waiting to go up (the swap reads it
+            // from the server) - another document's or another window's save
+            // waiting for another file does not matter (the plug's state did:
+            // any save anywhere refused the restore).
+            var wait = null;
+            try { wait = await o.store.pending( p ); } catch ( e ) { wait = { unknown: true }; }
+            if( ! saver.kept() || wait || path !== p ) { toast( "write.actionFailed" ); return; }
 
             // Edits the file never got (Calc's gate held them back): neither
             // copy has them, and a swap would take them off the screen with
@@ -2313,9 +2494,13 @@
             catch ( e ) { toast( "write.actionFailed" ); return; }
             saver.bakTaken( p );               // never a first-save copy over it: it is the way back
 
-            if( ! await putFile( p, back ) )
+            var put = await putFile( p, back );
+            if( put !== "kept" )
             {
-                try { await GumApi.writeFileBytes( bak, raw ); } catch ( e ) {}
+                // Refused: the file still has `cur` - the .bak gets its own
+                // bytes back. Only in this page ("later"): the file may still
+                // become the copy, so the .bak keeps `cur`, the way back.
+                if( ! put ) try { await GumApi.writeFileBytes( bak, raw ); } catch ( e ) {}
                 toast( "write.actionFailed" );
                 return;
             }
@@ -2326,7 +2511,7 @@
                 // The file is the copy now, the screen still what was: both
                 // back - the .bak only once the file has `cur` again, or `cur`
                 // would be nowhere.
-                if( await putFile( p, cur ) )
+                if( await putFile( p, cur ) === "kept" )
                     try { await GumApi.writeFileBytes( bak, raw ); } catch ( e2 ) {}
                 toast( "write.actionFailed" );
                 return;
@@ -2337,13 +2522,13 @@
 
             offerUndo( t( doneKey ), async function ()
             {
-                if( path !== p ) return;               // another document now
+                if( path !== p || notOwner() ) return; // another document now / another account
                 try
                 {
                     if( NayiveCrypt.looksLocked( cur ) ) throw new Error( "sealed" );   // undoable said no key is on either side
                     await GumApi.writeFileBytes( bak, raw );
                     saver.bakTaken( p );
-                    if( ! await putFile( p, cur ) )
+                    if( await putFile( p, cur ) !== "kept" )
                     {
                         // `cur` is only in memory now: back into the .bak it came from.
                         try { await GumApi.writeFileBytes( bak, cur ); } catch ( e2 ) {}
@@ -2359,7 +2544,11 @@
         // The file's own bytes through the store. Not refused for what the
         // SCREEN cannot write (a block: Calc's unread sheet) - these are not the
         // screen's; load() blocks the path again when what it shows needs it.
-        // False = not kept anywhere (refused for good).
+        // "kept" = on the server or safe in the store's outbox; "" = refused
+        // for good, or gone before it was sent (unknown): the file still has
+        // what it had. "later" = kept only in this page (the store's
+        // pageOnly): NOT kept - the swap must not go on as if the file had
+        // it - yet it may still go up, so the .bak keeps what it holds.
         async function putFile( p, bytes )
         {
             var why = o.store.isBlocked ? o.store.isBlocked( p ) : "";
@@ -2368,7 +2557,8 @@
             try { res = ( await o.store.write( p, bytes ) ) || {}; }
             catch ( e ) { res = { ok: false, forbidden: true }; }
             finally { if( why && why !== "loading" ) o.store.block( p, why ); }
-            return ! res.blocked && ! res.forbidden;
+            if( res.pageOnly ) return "later";
+            return res.blocked || res.forbidden || res.unknown ? "" : "kept";
         }
 
         // ---- the padlock: put a password on, or take it off ---------------------
@@ -2446,6 +2636,10 @@
         {
             var paths = [ old, bakPath( old ) ];
 
+            // Another account signed in now (L5): its file of that name and
+            // its bin items would go. The plain copy stays; the toast says why.
+            if( notOwner() ) return;
+
             try
             {
                 try { await o.store.forget( old ); } catch ( e ) {}
@@ -2479,7 +2673,7 @@
                                                danger:  true } );
             if( ! ok ) return;
 
-            await saver.unlockDoc();
+            if( ! await saver.unlockDoc() ) { notOwner(); return; }   // another account now (L5): nothing changed
             showLock();
             await writeLockState();
             toast( "lock.off" );
