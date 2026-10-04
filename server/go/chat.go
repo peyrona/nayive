@@ -1141,6 +1141,36 @@ func (h *ChatHub) keptFile(o *chatOwner, c *chatConv, id int64) (string, *os.Fil
 	return "", nil, nil
 }
 
+// keptWalk is the home that must be walked before openMedia (media true) or
+// keptFile can answer for message m - a kept photo moved in the owner's files
+// and not in the index yet - or "" when they need no walk. The walk is made
+// with h.mu let go (inKept, OL2). Caller holds h.mu.
+func (h *ChatHub) keptWalk(o *chatOwner, c *chatConv, m *ChatMsg, media bool) string {
+	if m == nil || m.Deleted || m.File == nil {
+		return ""
+	}
+	kept, want := c.st.Kept[m.ID], c.st.KeptID[m.ID]
+	if kept == "" || want.Ino == 0 || time.Since(c.missed[m.ID]) <= chatFindAgain {
+		return ""
+	}
+	if media {
+		if _, err := os.Lstat(filepath.Join(c.dir, "media", mediaName(m))); err == nil {
+			return "" // the chat's own name for it
+		}
+	}
+	if file, info, err := h.openKept(o.user, kept); err == nil {
+		file.Close()
+		if keptIDOf(info) == want {
+			return "" // still where it was kept
+		}
+	}
+	home := filepath.Join(h.cfg.HomesDir, o.user)
+	if _, walk := keptIndexLookup(home, want); !walk {
+		return ""
+	}
+	return home
+}
+
 // keepBytes puts the owner's file `rel` (known by `want`; zero: by its path)
 // under media/ as message m's photo: a hard link - the same bytes, no room
 // taken - or a copy where no link can be made (another disk). A file already

@@ -1241,7 +1241,12 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			return
 		}
 		id := msgID(rest[1])
-		in(func(a chatActor, c *chatConv) {
+		s.chat.inKept(in, func(a chatActor, c *chatConv) string {
+			if a.guest() {
+				return ""
+			}
+			return s.chat.keptWalk(a.o, c, c.byID[id], false)
+		}, func(a chatActor, c *chatConv) {
 			if a.guest() {
 				sendError(w, r, http.StatusForbidden, "no permitido")
 				return
@@ -1264,7 +1269,12 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			return
 		}
 		id := msgID(rest[1])
-		in(func(a chatActor, c *chatConv) {
+		s.chat.inKept(in, func(a chatActor, c *chatConv) string {
+			if a.guest() {
+				return ""
+			}
+			return s.chat.keptWalk(a.o, c, c.byID[id], false)
+		}, func(a chatActor, c *chatConv) {
 			if a.guest() {
 				sendError(w, r, http.StatusForbidden, "no permitido")
 				return
@@ -1488,6 +1498,16 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 	if len(req.CID) > 40 {
 		req.CID = ""
 	}
+	var fwd *chatFwdFile // a forwarded file, copied before the lock (OL1)
+	if req.FwdConv != "" {
+		var ok bool
+		if fwd, ok = s.chatFwdCopy(w, r, in, req); !ok {
+			return
+		}
+		if fwd != nil {
+			defer os.Remove(fwd.tmp) // gone already once it took its name
+		}
+	}
 	in(func(a chatActor, c *chatConv) {
 		h := s.chat
 		if id, dup := c.cids[a.pid+"|"+req.CID]; dup && req.CID != "" {
@@ -1501,7 +1521,7 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 			return
 		}
 		m := &ChatMsg{From: a.pid, Kind: req.Kind, CID: req.CID, Silent: req.Silent}
-		var copyFrom *os.File            // a forwarded attachment's file, to copy
+		copied := false                  // a forwarded attachment's copy took its name
 		linkRel, linkIno := "", keptID{} // a photo sent from the owner's files
 		if req.FwdConv != "" {
 			if !a.o.isMember(req.FwdConv, a.pid) {
@@ -1531,24 +1551,14 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 				m.Poll = &ChatPoll{Q: orig.Poll.Q, Opts: append([]string(nil), orig.Poll.Opts...), Multi: orig.Poll.Multi}
 			}
 			if orig.File != nil {
-				f := *orig.File
-				m.File = &f
-				file, info, err := h.openMedia(a.o, src, orig)
-				if err != nil {
+				// Its copy, made before the lock - for this home still (an
+				// owner renamed meanwhile has another folder).
+				if fwd == nil || fwd.owner != a.o.user || fwd.dir != a.o.dir {
 					sendError(w, r, http.StatusGone, "ese fichero ya no está")
 					return
 				}
-				defer file.Close()
-				// A copy is an upload: the same daily allowance and quota.
-				if !a.o.allowBytes(a.pid, info.Size()) {
-					sendError(w, r, http.StatusTooManyRequests, "demasiados envíos seguidos")
-					return
-				}
-				if q := h.users.UserQuotaBytes(a.o.user); q != nil && h.users.UserUsageBytes(a.o.user)+info.Size() > *q {
-					sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
-					return
-				}
-				copyFrom = file
+				f := *orig.File
+				m.File = &f
 			}
 		} else if req.Ref != "" {
 			if a.guest() {
@@ -1577,14 +1587,25 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 			m.ReplyTo = req.ReplyTo
 		}
 		m.ID, m.At = c.st.Next, nowMs()
-		if copyFrom != nil {
-			n, err := copyMedia(s.cfg.HomesDir, copyFrom, filepath.Join(c.dir, "media"), mediaName(m))
-			if err != nil {
-				sendError(w, r, http.StatusGone, "ese fichero ya no está")
+		if m.File != nil && m.Fwd {
+			media := filepath.Join(c.dir, "media")
+			final := filepath.Join(media, mediaName(m))
+			if err := mkdirInHome(s.cfg.HomesDir, media); err != nil { // never the home itself (L2)
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 				return
 			}
-			m.File.Size = n // a kept photo may have been edited since
-			h.users.AdjustUsage(a.o.user, n)
+			if err := os.Rename(fwd.tmp, final); err != nil {
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
+			if err := syncDir(media); err != nil { // its name durable too (K1)
+				os.Remove(final)
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
+			copied = true
+			m.File.Size = fwd.n // a kept photo may have been edited since
+			h.users.AdjustUsage(a.o.user, fwd.n)
 		}
 		linked := int64(-1) // a photo from the owner's files: what its media/ copy took (0: a hard link)
 		if linkRel != "" {
@@ -1603,7 +1624,7 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 		}
 		if err := s.chatStore(a, c, m); err != nil {
 			// Not on disk: never answered "sent" (J5). Its copied file goes too.
-			if copyFrom != nil {
+			if copied {
 				h.dropMediaFile(a.o, c, m)
 			}
 			if linked >= 0 { // the chat's name only: the owner's file stays
@@ -2233,18 +2254,85 @@ func photoPos(path string) *ChatLoc {
 	return &ChatLoc{Lat: meta.Lat, Lon: meta.Lon, Acc: meta.Acc}
 }
 
-// copyMedia copies a forwarded attachment into another conversation, and
-// says how many bytes it wrote. `dir` is inside a home under `homesDir`, and
-// the home itself is never made (mkdirInHome, L2).
-func copyMedia(homesDir string, src io.Reader, dir, name string) (int64, error) {
-	if err := mkdirInHome(homesDir, dir); err != nil {
-		return 0, err
+// chatFwdFile is a forwarded attachment copied before the lock (OL1): a temp
+// in the owner's chat folder, which takes its name under media/ once the
+// message is made.
+type chatFwdFile struct {
+	tmp   string // the copy, in `dir`
+	dir   string // the owner's chat folder (chatOwner.dir)
+	owner string
+	n     int64
+}
+
+// chatFwdCopy copies the file of the message `req` forwards, with no lock
+// held: past its cache the quota is a walk of the whole home, and the copy is
+// up to 25 MB - every chat would wait on both (OL1). nil, true: there is no
+// file to copy (or a refusal chatSend gives under the lock); false: answered.
+// The caller removes the temp.
+func (s *Server) chatFwdCopy(w http.ResponseWriter, r *http.Request, in func(func(chatActor, *chatConv)), req chatSendReq) (*chatFwdFile, bool) {
+	h := s.chat
+	var file *os.File
+	var fwd chatFwdFile
+	reached, answered := false, false
+	// 1. The file to copy (under the lock; a kept photo moved in the owner's
+	// files is looked for outside it, inKept).
+	h.inKept(in, func(a chatActor, c *chatConv) string {
+		if !a.o.isMember(req.FwdConv, a.pid) {
+			return ""
+		}
+		src := h.conv(a.o, req.FwdConv)
+		return h.keptWalk(a.o, src, src.byID[req.FwdID], true)
+	}, func(a chatActor, c *chatConv) {
+		reached = true
+		if _, dup := c.cids[a.pid+"|"+req.CID]; dup && req.CID != "" {
+			return // sent already: chatSend answers it
+		}
+		if !a.o.isMember(req.FwdConv, a.pid) {
+			return
+		}
+		src := h.conv(a.o, req.FwdConv)
+		orig := src.byID[req.FwdID]
+		if orig == nil || orig.Deleted || orig.Kind == "call" || orig.File == nil {
+			return
+		}
+		f, info, err := h.openMedia(a.o, src, orig)
+		if err != nil {
+			answered = true
+			sendError(w, r, http.StatusGone, "ese fichero ya no está")
+			return
+		}
+		// A copy is an upload: the same daily allowance and quota.
+		if !a.o.allowBytes(a.pid, info.Size()) {
+			f.Close()
+			answered = true
+			sendError(w, r, http.StatusTooManyRequests, "demasiados envíos seguidos")
+			return
+		}
+		file, fwd.dir, fwd.owner, fwd.n = f, a.o.dir, a.o.user, info.Size()
+	})
+	if !reached || answered {
+		return nil, false
 	}
-	tmp, err := os.CreateTemp(dir, ".fw-*")
+	if file == nil {
+		return nil, true
+	}
+	defer file.Close()
+	traced(h, "fwd-copy", int(fwd.n)) // tests: h.mu is free from here
+
+	// 2. The quota and the copy (no lock). The temp goes in the owner's chat
+	// folder, there already: no folder is made here for a chat or an owner
+	// deleted meanwhile (L2) - chatSend makes media/ under the lock.
+	if q := h.users.UserQuotaBytes(fwd.owner); q != nil && h.users.UserUsageBytes(fwd.owner)+fwd.n > *q {
+		sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
+		return nil, false
+	}
+	tmp, err := os.CreateTemp(fwd.dir, ".fw-*")
 	if err != nil {
-		return 0, err
+		sendError(w, r, http.StatusGone, "ese fichero ya no está")
+		return nil, false
 	}
-	n, err := io.Copy(tmp, src)
+	fwd.tmp = tmp.Name()
+	n, err := io.Copy(tmp, file)
 	if err == nil {
 		err = tmp.Sync() // on disk before it takes its name (J5)
 	}
@@ -2252,18 +2340,12 @@ func copyMedia(homesDir string, src io.Reader, dir, name string) (int64, error) 
 		err = cerr
 	}
 	if err != nil {
-		os.Remove(tmp.Name())
-		return 0, err
+		os.Remove(fwd.tmp)
+		sendError(w, r, http.StatusGone, "ese fichero ya no está")
+		return nil, false
 	}
-	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
-		os.Remove(tmp.Name())
-		return 0, err
-	}
-	if err := syncDir(dir); err != nil { // and its name (K1)
-		os.Remove(filepath.Join(dir, name))
-		return 0, err
-	}
-	return n, nil
+	fwd.n = n
+	return &fwd, true
 }
 
 // chatKeep makes a photo of the chat one of the owner's own files too - in
@@ -2441,6 +2523,24 @@ func keptName(name string) string {
 	return name
 }
 
+// inKept runs `fn` like `in`. When a kept photo was moved in the owner's files
+// and must be looked for - `walk` (under h.mu) names the home - the walk is
+// made with the lock let go (OL2), and `fn` runs under it again on what is
+// there then: the person, the chat and the message are all looked up anew.
+func (h *ChatHub) inKept(in func(func(chatActor, *chatConv)), walk func(chatActor, *chatConv) string, fn func(chatActor, *chatConv)) {
+	home := ""
+	in(func(a chatActor, c *chatConv) {
+		if home = walk(a, c); home == "" {
+			fn(a, c)
+		}
+	})
+	if home != "" {
+		traced(h, "kept-walk", 0) // tests: h.mu is free here
+		refreshKeptIndex(home)
+		in(fn)
+	}
+}
+
 // chatMedia sends a message's photo (shown in the page) or file (always a
 // download: a file sent by a stranger never RUNS on this origin).
 func (s *Server) chatMedia(w http.ResponseWriter, r *http.Request, id int64, in func(func(chatActor, *chatConv))) {
@@ -2449,7 +2549,9 @@ func (s *Server) chatMedia(w http.ResponseWriter, r *http.Request, id int64, in 
 	var ref ChatFileRef
 	var kind, owner string
 	kept := false
-	in(func(a chatActor, c *chatConv) {
+	s.chat.inKept(in, func(a chatActor, c *chatConv) string {
+		return s.chat.keptWalk(a.o, c, c.byID[id], true)
+	}, func(a chatActor, c *chatConv) {
 		m := c.byID[id]
 		if m == nil || m.Deleted || m.File == nil {
 			sendError(w, r, http.StatusNotFound, "no existe")
