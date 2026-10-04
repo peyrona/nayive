@@ -434,11 +434,8 @@ function openDeleteConfirm()
 
 let deleteBusy = false;   // a move to the bin is on its way: a held Del key must not send it twice
 
-// A big pick goes to the bin in batches: every path rides in the address
-// (?paths=), and Ctrl+A in a folder of 1,300 photos made one the server
-// refuses (431, AB1). The bin ids of all the batches make ONE Undo.
-const BIN_BATCH = 200;
-
+// A big pick goes to the bin in batches (NayiveMedia.binInBatches: every
+// path rides in the address, AB1); the bin ids of all of them make ONE Undo.
 async function confirmDelete()
 {
     if( ! deleteTargets.length || deleteBusy ) return;
@@ -451,32 +448,7 @@ async function confirmDelete()
 
     // `sent`: the paths asked so far that (may) have gone - counted the
     // moment a batch answers, so what went is shown and undone whatever fails next.
-    let ids = [], sent = 0, failed = false;
-    try
-    {
-        while( sent < targets.length )
-        {
-            const batch = targets.slice( sent, sent + BIN_BATCH );
-            let got;
-            try { got = await withBusy( GumApi.binPaths( batch ) ); }
-            catch( err )
-            {
-                // Half done: some of this batch went (err.ids), the rest stayed (err.failed).
-                if( err && err.ids && err.ids.length )
-                {
-                    sent += batch.length;
-                    if( ids ) ids = ids.concat( err.ids );
-                    const stayed = err.failed || [];
-                    await NayiveMedia.purgePaths( batch.filter( function( p ) { return stayed.indexOf( p ) === -1; } ) );
-                }
-                throw err;
-            }
-            sent += batch.length;
-            ids = ids && got ? ids.concat( got ) : null;     // an old server does not say them
-            await NayiveMedia.purgePaths( batch );
-        }
-    }
-    catch( _ ) { failed = true; }
+    const { ids, sent, failed } = await NayiveMedia.binInBatches( targets, withBusy );
 
     deleteBusy = false;
     if( ! sent )
@@ -512,15 +484,8 @@ async function undoBin( ids )
     setStatus( T( 'drive.restoring' ) );
 
     // In batches too: the ids ride in the address as well (AB1).
-    const res = { renamed: [] };
-    try
-    {
-        for( let i = 0; i < ids.length; i += BIN_BATCH )
-        {
-            const r = await withBusy( GumApi.trashRestore( ids.slice( i, i + BIN_BATCH ) ) );
-            if( r && r.renamed ) res.renamed = res.renamed.concat( r.renamed );
-        }
-    }
+    let res;
+    try { res = await NayiveMedia.restoreInBatches( ids, withBusy ); }
     catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); await refreshView(); return; }
 
     await refreshView();
@@ -568,31 +533,8 @@ const DL_NET_TRIES = 20;     // polls in a row that may fail before Drive stops 
 let dlJob = null;            // the download under way: { id, name, files, row, timer, fails, stopped }
 
 // The POST of a Download or a Compress (zip.js) of `paths`: in the address
-// while they fit - any server takes that - and in a JSON body past that:
-// Ctrl+A in a folder of 1,300 photos made an address the server refuses
-// (431, AB1). Resolves to the answer's text, as GumApi.fetchText.
-const PATHS_IN_URL  = 8000;
-const PATHS_IN_BODY = 1 << 20;    // server/go/response.go, maxBody
-
-function postPaths( url, paths )
-{
-    const q = new URLSearchParams();
-    paths.forEach( function( p ) { q.append( 'paths', p ); } );
-    const query = q.toString();
-
-    if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + '?' + query, { method: 'POST' } );
-
-    // The server reads a body of 1 MiB at most (413 past it): a pick that
-    // big is refused here, as "too many items at once" (err.tooMany).
-    const body = JSON.stringify( { paths: paths } );
-    if( new TextEncoder().encode( body ).length > PATHS_IN_BODY )
-    {
-        const err = new Error( 'too many items at once' );
-        err.tooMany = true;
-        return Promise.reject( err );
-    }
-    return GumApi.fetchText( url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body } );
-}
+// while they fit, in a JSON body past that (AB1); err.tooMany past 1 MiB.
+const postPaths = NayiveMedia.postPaths;
 
 async function downloadSelection()
 {

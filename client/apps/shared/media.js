@@ -675,6 +675,97 @@
     }
 
     //------------------------------------------------------------------------//
+    // BIG PICKS (Drive and Photos)
+    //
+    // The paths of a move to the bin and the ids of its Undo ride in the
+    // address, and Ctrl+A in a folder of 1,300 photos made one the server
+    // refuses (431, AB1). So both go in batches - the bin ids of all of them
+    // make ONE Undo - and Download / Compress send the list in a body.
+    var BIN_BATCH = 200;
+
+    // To the bin in batches, each batch's scan entries and thumbnails purged
+    // as it lands (the notes stay, for a restore). `wrap( promise )`
+    // (optional) wraps each call: Drive's busy mark. Never throws; resolves
+    //   { ids, sent, went, failed }
+    // `ids`: the bin ids of what went, for the Undo (null when an old server
+    // does not say them); `sent`: how many paths were asked before a batch
+    // failed (a half-done batch counts whole); `went`: the paths that did go;
+    // `failed`: a batch failed, so what came after it was never asked.
+    async function binInBatches( paths, wrap )
+    {
+        var ids = [], sent = 0, went = [], failed = false;
+        try
+        {
+            while( sent < paths.length )
+            {
+                var batch = paths.slice( sent, sent + BIN_BATCH ), got;
+                try { got = await ( wrap ? wrap( GumApi.binPaths( batch ) ) : GumApi.binPaths( batch ) ); }
+                catch( err )
+                {
+                    // Half done: some of this batch went (err.ids), the rest stayed (err.failed).
+                    if( err && err.ids && err.ids.length )
+                    {
+                        sent += batch.length;
+                        if( ids ) ids = ids.concat( err.ids );
+                        var stayed = err.failed || [];
+                        var gone = batch.filter( function ( p ) { return stayed.indexOf( p ) === -1; } );
+                        went = went.concat( gone );
+                        await purgePaths( gone );
+                    }
+                    throw err;
+                }
+                sent += batch.length;
+                ids = ids && got ? ids.concat( got ) : null;     // an old server does not say them
+                went = went.concat( batch );
+                await purgePaths( batch );
+            }
+        }
+        catch( e ) { failed = true; }
+        return { ids: ids, sent: sent, went: went, failed: failed };
+    }
+
+    // The Undo: those bin ids back, in batches too. Resolves { renamed: [the
+    // names one landed under, its old one taken meanwhile] }; throws when a
+    // batch fails (the ones before it are back).
+    async function restoreInBatches( ids, wrap )
+    {
+        var res = { renamed: [] };
+        for( var i = 0; i < ids.length; i += BIN_BATCH )
+        {
+            var call = GumApi.trashRestore( ids.slice( i, i + BIN_BATCH ) );
+            var r = await ( wrap ? wrap( call ) : call );
+            if( r && r.renamed ) res.renamed = res.renamed.concat( r.renamed );
+        }
+        return res;
+    }
+
+    // The POST of a Download or a Compress of `paths`: in the address while
+    // they fit - any server takes that - and in a JSON body past that.
+    // Resolves to the answer's text, as GumApi.fetchText. The server reads a
+    // body of 1 MiB at most (413 past it): a pick that big is refused here,
+    // as "too many items at once" (err.tooMany).
+    var PATHS_IN_URL  = 8000;
+    var PATHS_IN_BODY = 1 << 20;    // server/go/response.go, maxBody
+
+    function postPaths( url, paths )
+    {
+        var q = new URLSearchParams();
+        paths.forEach( function ( p ) { q.append( "paths", p ); } );
+        var query = q.toString();
+
+        if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + "?" + query, { method: "POST" } );
+
+        var body = JSON.stringify( { paths: paths } );
+        if( new TextEncoder().encode( body ).length > PATHS_IN_BODY )
+        {
+            var err = new Error( "too many items at once" );
+            err.tooMany = true;
+            return Promise.reject( err );
+        }
+        return GumApi.fetchText( url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body } );
+    }
+
+    //------------------------------------------------------------------------//
     // DURATION PROBE - a throwaway <audio> / <video> with preload=metadata.
     // Cheap: the server supports Range, so the browser only pulls the header.
     // Resolves with the length in seconds, or null - after PROBE_MS at most: a
@@ -785,6 +876,7 @@
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
+        binInBatches: binInBatches, restoreInBatches: restoreInBatches, postPaths: postPaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState

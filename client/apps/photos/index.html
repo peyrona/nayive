@@ -2585,17 +2585,16 @@ function showOnMap( ids )
 }
 
 // Download: the server sends it, one photo as it is, several as one .zip
-// (server/go/api_download.go) - the same call Drive's Download makes.
+// (server/go/api_download.go) - the same call Drive's Download makes, the
+// list in a body when a big pick does not fit the address (postPaths).
 let dlBusy = false;
 async function downloadPaths( paths )
 {
     if( dlBusy || ! paths.length ) return;
     dlBusy = true;
-    const q = new URLSearchParams();
-    paths.forEach( p => q.append( "paths", p ) );
     try
     {
-        const r = JSON.parse( await GumApi.fetchText( "/api/download?" + q.toString(), { method: "POST" } ) );
+        const r = JSON.parse( await NayiveMedia.postPaths( "/api/download", paths ) );
         const a = document.createElement( "a" );
         a.href     = "/api/download?id=" + encodeURIComponent( r.id );
         a.download = r.name || "";
@@ -2603,7 +2602,11 @@ async function downloadPaths( paths )
         a.click();
         a.remove();
     }
-    catch( err ) { NayiveUI.toast( NayiveUI.t( err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) ); }
+    catch( err )
+    {
+        NayiveUI.toast( NayiveUI.t( err && err.tooMany ? "drive.pickTooMany" :
+                                    err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) );
+    }
     finally { dlBusy = false; }
 }
 
@@ -2831,32 +2834,24 @@ async function copyPaths( paths, dest )
 }
 
 // To the bin, at once (no question: the toast's Undo brings it back) -
-// Drive's confirmDelete: GumApi.binPaths, then NayiveMedia.purgePaths drops
-// the scan entries and thumbnails (the notes stay for a restore).
+// Drive's confirmDelete: in batches (NayiveMedia.binInBatches: Ctrl+A in a
+// big album passed the server's address cap), each batch's scan entries and
+// thumbnails purged (the notes stay for a restore). A batch that fails stops
+// there: what went before it is shown gone, with its Undo.
 let binBusy = false;
 async function binPaths( paths )
 {
     if( binBusy || ! paths.length || RO || DEMO ) return;
     binBusy = true;
     setSync( "saving" );
-    let ids;
-    try
-    {
-        ids = await GumApi.binPaths( paths );
-        await NayiveMedia.purgePaths( paths );
-    }
-    catch( _ )
-    {
-        binBusy = false;
-        setSync( "synced" );
-        NayiveUI.toast( NayiveUI.t( "drive.trashFailed" ) );
-        return;
-    }
+    const { ids, went, failed } = await NayiveMedia.binInBatches( paths );
     binBusy = false;
     setSync( "synced" );
+    if( ! went.length ) { NayiveUI.toast( NayiveUI.t( "drive.trashFailed" ) ); return; }
     // The open album (or one it is in) went: the album above it opens.
-    const gone = paths.find( p => under( DIR, p ) );
-    settle( paths, gone ? NayiveMedia.dirOf( gone ) : DIR, NayiveUI.t( "ui.toast.binned" ), ids ? { kind: "bin", ids: ids } : null );
+    const gone = went.find( p => under( DIR, p ) );
+    settle( went, gone ? NayiveMedia.dirOf( gone ) : DIR, NayiveUI.t( failed ? "drive.trashFailed" : "ui.toast.binned" ),
+            ids && ids.length ? { kind: "bin", ids: ids } : null );
 }
 
 // After a move or the bin: show the truth. `next` is where the open album is
@@ -2913,7 +2908,7 @@ async function runUndo( undo )
     let err = null, res = null;
     if( undo.kind === "bin" )
     {
-        try { res = await GumApi.trashRestore( undo.ids ); } catch( e ) { err = e; }
+        try { res = await NayiveMedia.restoreInBatches( undo.ids ); } catch( e ) { err = e; }
     }
     else
     {
@@ -2931,7 +2926,7 @@ async function runUndo( undo )
         await NayiveMedia.remapPaths( back );
         if( ids.length )
         {
-            try { res = await GumApi.trashRestore( ids ); } catch( e ) { err = err || e; }
+            try { res = await NayiveMedia.restoreInBatches( ids ); } catch( e ) { err = err || e; }
         }
     }
     setSync( "synced" );
