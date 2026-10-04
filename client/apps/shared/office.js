@@ -808,13 +808,13 @@
     // this browser would read THAT account's .bak, write into its home and
     // delete its file. So they run only while the "nayive_who" cookie still
     // names this page's owner. Unknown either way (no cookie): as before.
+    // (NayiveI18n.whoNow: shared/i18n.js WHOSE PAGE, loaded first.)
     function ownerHere()
     {
         var me = draftWho();
         if( ! me ) return true;
-        var m = null;
-        try { m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); } catch ( e ) {}
-        return ! m || m[ 1 ] === me;
+        var now = NayiveI18n.whoNow();
+        return ! now || now === me;
     }
 
     // ---- ONE DRAFT PER TAB ----------------------------------------------------
