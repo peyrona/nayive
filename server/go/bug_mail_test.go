@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -158,10 +159,10 @@ func TestBug_SF6_UnknownCopyIsInbox(t *testing.T) {
 	from := MailRef{Role: RoleSent, UIDValidity: 1, UID: 5}
 	to := MailRef{Role: RoleTrash, UIDValidity: 1, UID: 9}
 	h.noteTrashed("ana", "a1", []MailSummary{{Ref: from.String(), MessageID: mid}}, map[string]MailRef{from.String(): to})
-	if got := h.trashFrom("ana", "a1", mid, to.String()); got != RoleSent {
+	if got, _ := h.trashFrom("ana", "a1", mid, to.String(), 0); got != RoleSent {
 		t.Errorf("the copy from Sent: %q, want sent", got)
 	}
-	if got := h.trashFrom("ana", "a1", mid, "trash.1.8"); got != RoleInbox {
+	if got, _ := h.trashFrom("ana", "a1", mid, "trash.1.8", 0); got != RoleInbox {
 		t.Errorf("the unknown copy: %q, want inbox", got)
 	}
 }
@@ -180,10 +181,102 @@ func TestBug_SF6_OldTrashFileLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 	h2 := NewMailHub(f.srv.cfg, f.srv.users, nil, f.srv.log)
-	if got := h2.trashFrom("ana", "a1", "<m1@example.com>", "trash.1.3"); got != RoleSent {
+	if got, _ := h2.trashFrom("ana", "a1", "<m1@example.com>", "trash.1.3", 0); got != RoleSent {
 		t.Errorf("old entry: from %q, want sent", got)
 	}
-	if got := h2.trashFrom("ana", "a1", "<m2@example.com>", "trash.1.4"); got != RoleInbox {
+	if got, _ := h2.trashFrom("ana", "a1", "<m2@example.com>", "trash.1.4", 0); got != RoleInbox {
 		t.Errorf("old entry with no from: %q, want inbox", got)
+	}
+}
+
+// sf6Entry changes the Trash entry of `mid` (as a test only can).
+func (f *mailFixture) sf6Entry(mid string, change func(e *mailTrashEntry)) {
+	h := f.srv.mail
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	u := h.userLocked("ana")
+	e := u.trash[mailKey("a1", mid)]
+	change(&e)
+	u.trash[mailKey("a1", mid)] = e
+}
+
+// sf6Purge runs the automatic purge once; how many went.
+func (f *mailFixture) sf6Purge(t *testing.T) int {
+	t.Helper()
+	n, err := f.srv.mail.purgeAccount(t.Context(), "ana", f.srv.mail.account("ana", "a1"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestBug_SF6_PartialForgetRestartsClock: one copy restored while the other's
+// noted ref is stale (it left the Trash unseen and came back, or the server
+// renumbered): the copy still there kept the old clock and was purged days
+// early.
+func TestBug_SF6_PartialForgetRestartsClock(t *testing.T) {
+	f, mid := sf6Fixture(t)
+	f.sf6Entry(mid, func(e *mailTrashEntry) {
+		e.At = time.Now().Add(-40 * 24 * time.Hour)
+		for i := range e.Copies {
+			if e.Copies[i].From == RoleSent {
+				e.Copies[i].Ref = "trash.1.999" // stale
+			}
+		}
+	})
+	for _, r := range f.tray(t, "trash") {
+		if !r.Seen { // the Inbox's copy, by its ref
+			f.call(t, f.owner, "POST", "/api/mail/a1/restore", `{"refs":["`+r.Ref+`"]}`, 200, nil)
+		}
+	}
+	if n := f.sf6Purge(t); n != 0 || len(f.tray(t, "trash")) != 1 {
+		t.Errorf("purged %d, %d left in the Trash - want none purged", n, len(f.tray(t, "trash")))
+	}
+}
+
+// TestBug_SF6_PurgeDropsStaleCopies: every copy noted for a Message-ID left
+// the Trash unseen, and the mail is there again (moved back by a phone): the
+// purge used the old clock and expunged it early.
+func TestBug_SF6_PurgeDropsStaleCopies(t *testing.T) {
+	f, mid := sf6Fixture(t)
+	f.sf6Entry(mid, func(e *mailTrashEntry) {
+		e.At = time.Now().Add(-40 * 24 * time.Hour)
+		for i := range e.Copies {
+			e.Copies[i].Ref = "trash.1." + strconv.Itoa(900+i) // stale
+		}
+	})
+	if n := f.sf6Purge(t); n != 0 || len(f.tray(t, "trash")) != 2 {
+		t.Errorf("purged %d, %d left in the Trash - want none purged", n, len(f.tray(t, "trash")))
+	}
+}
+
+// TestBug_SF6_NoUIDPlusBothCopies: a server that does not tell the refs in
+// the Trash (no UIDPLUS): restoring both copies at once sent both to the
+// first copy's tray.
+func TestBug_SF6_NoUIDPlusBothCopies(t *testing.T) {
+	f, mid := sf6Fixture(t)
+	f.sf6Entry(mid, func(e *mailTrashEntry) {
+		for i := range e.Copies {
+			e.Copies[i].Ref = ""
+		}
+	})
+	f.call(t, f.owner, "POST", "/api/mail/a1/restore", `{"mids":["`+mid+`","`+mid+`"]}`, 200, nil)
+	if in, sent := f.tray(t, "inbox"), f.tray(t, "sent"); len(in) != 1 || len(sent) != 1 {
+		t.Errorf("inbox %d, sent %d - want one copy in each", len(in), len(sent))
+	}
+}
+
+// TestBug_SF6_EmptySpamLeavesTrash: Empty Spam forgets its rows; one with the
+// Message-ID of a copy in the Trash took that copy's tray record.
+func TestBug_SF6_EmptySpamLeavesTrash(t *testing.T) {
+	f := newMailFixture(t)
+	h := f.srv.mail
+	mid := "<m1@example.com>"
+	from := MailRef{Role: RoleSent, UIDValidity: 1, UID: 5}
+	h.noteTrashed("ana", "a1", []MailSummary{{Ref: from.String(), MessageID: mid}}, nil)
+	spam := MailRef{Role: RoleSpam, UIDValidity: 3, UID: 7}
+	h.forget("ana", "a1", []MailSummary{{Ref: spam.String(), MessageID: mid}}, true)
+	if got, _ := h.trashFrom("ana", "a1", mid, "trash.1.8", 0); got != RoleSent {
+		t.Errorf("the Trash copy after Empty Spam: from %q, want sent", got)
 	}
 }

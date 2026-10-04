@@ -166,14 +166,21 @@ type mailTrashCopy struct {
 // mailTrashMore: the most copies of one Message-ID whose trays are kept.
 const mailTrashMore = 8
 
-// copyAt is the copy at Trash ref `ref`; else the first whose ref is not
-// known; -1 when none.
-func (e mailTrashEntry) copyAt(ref string) int {
-	i := slices.IndexFunc(e.Copies, func(c mailTrashCopy) bool { return ref != "" && c.Ref == ref })
-	if i < 0 {
-		i = slices.IndexFunc(e.Copies, func(c mailTrashCopy) bool { return c.Ref == "" })
+// copyAt is the copy at Trash ref `ref`; else (guess) the first whose ref is
+// not known, past `skip` of them taken already; -1 when none.
+func (e mailTrashEntry) copyAt(ref string, skip int) (i int, guess bool) {
+	if i := slices.IndexFunc(e.Copies, func(c mailTrashCopy) bool { return ref != "" && c.Ref == ref }); i >= 0 {
+		return i, false
 	}
-	return i
+	for i, c := range e.Copies {
+		if c.Ref == "" {
+			if skip == 0 {
+				return i, true
+			}
+			skip--
+		}
+	}
+	return -1, false
 }
 
 type MailSettings struct {
@@ -818,22 +825,25 @@ func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary, moved map[s
 }
 
 // trashFrom is where the copy at Trash ref `ref` came from: that copy's
-// tray, else (its ref not known) the entry's, Inbox when unknown.
-func (h *MailHub) trashFrom(user, acct, mid, ref string) MailRole {
+// tray, else (its ref not known) the next copy's whose ref is not known -
+// `used` of them are taken already - else the entry's, Inbox when unknown.
+// guess: an unknown copy was taken.
+func (h *MailHub) trashFrom(user, acct, mid, ref string, used int) (to MailRole, guess bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	e, ok := h.userLocked(user).trash[mailKey(acct, mid)]
 	if !ok {
-		return RoleInbox
+		return RoleInbox, false
 	}
 	from := e.From
-	if i := e.copyAt(ref); i >= 0 {
+	i, guess := e.copyAt(ref, used)
+	if i >= 0 {
 		from = e.Copies[i].From
 	}
 	if from == "" || from == RoleTrash {
-		return RoleInbox
+		return RoleInbox, guess
 	}
-	return from
+	return from, guess
 }
 
 // forget drops what Nayive knows of messages that left the Trash - restored
@@ -847,13 +857,20 @@ func (h *MailHub) forget(user, acct string, rows []MailSummary, labelsToo bool) 
 	for _, row := range rows {
 		key := mailKey(acct, row.MessageID)
 		// Only this copy goes: another one still in the Trash keeps its
-		// tray and its clock (SF6).
+		// tray (SF6), with a clock started now - it may have left unseen
+		// and come back, and a later clock is always safe. A row from
+		// elsewhere (Empty Spam) leaves the Trash's alone.
 		e := u.trash[key]
-		if i := e.copyAt(row.Ref); i >= 0 && len(e.Copies) > 1 {
+		ref, _ := parseMailRef(row.Ref)
+		i, _ := e.copyAt(row.Ref, 0)
+		switch {
+		case ref.Role != RoleTrash:
+		case i >= 0 && len(e.Copies) > 1:
 			e.Copies = slices.Delete(e.Copies, i, i+1)
 			e.From = e.Copies[0].From
+			e.At = time.Now().UTC().Truncate(time.Second)
 			u.trash[key] = e
-		} else if i >= 0 || len(e.Copies) <= 1 {
+		case i >= 0 || len(e.Copies) <= 1:
 			delete(u.trash, key)
 		}
 		if t := u.labels.Tags[key]; labelsToo && t != nil {
@@ -948,6 +965,27 @@ func (h *MailHub) purgeAccount(ctx context.Context, user string, a *mailAcct, al
 	}
 	days := u.settings.TrashDays
 	now := time.Now().UTC().Truncate(time.Second)
+	// A copy noted with its ref that is not in the Trash now left it some
+	// other way (another device; a server that renumbered): it goes, and
+	// the entry with its last copy. What is still there keeps a clock
+	// started now: a copy that came back unseen never gets the old one.
+	inTrash := map[string]bool{}
+	for _, r := range rows {
+		inTrash[r.Ref] = true
+	}
+	for key, e := range u.trash {
+		if !strings.HasPrefix(key, a.ID+"|") || len(e.Copies) == 0 {
+			continue
+		}
+		kept := slices.DeleteFunc(slices.Clone(e.Copies), func(c mailTrashCopy) bool { return c.Ref != "" && !inTrash[c.Ref] })
+		switch {
+		case len(kept) == 0:
+			delete(u.trash, key)
+		case len(kept) < len(e.Copies):
+			e.Copies, e.From, e.At = kept, kept[0].From, now
+			u.trash[key] = e
+		}
+	}
 	present := map[string]bool{}
 	var doomed []MailRef
 	var doomedRows []MailSummary

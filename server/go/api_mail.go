@@ -618,12 +618,17 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		}
 		groups := map[MailRole][]MailRef{}
 		var back []MailSummary
+		used := map[string]int{}
 		for _, row := range rows {
 			ref, ok := parseMailRef(row.Ref)
 			if !ok || ref.Role != RoleTrash {
 				continue
 			}
-			to := s.mail.trashFrom(user, acct, row.MessageID, row.Ref)
+			// copies whose ref is not known (no UIDPLUS): each its own (SF6)
+			to, guess := s.mail.trashFrom(user, acct, row.MessageID, row.Ref, used[row.MessageID])
+			if guess {
+				used[row.MessageID]++
+			}
 			groups[to] = append(groups[to], ref)
 			back = append(back, row)
 		}
