@@ -64,7 +64,7 @@ section( "A4 · Music: a list saved between the page's read and its write is kep
     await arm( c, LISTS, "t => JSON.stringify( JSON.parse( t ).concat( [ { id: 'plR', name: 'R', paths: [] } ] ) )" );
     await c.evaluate( `( () => { st.queue = [ { song: { path: 'files/Music/song.mp3', title: 'song' } } ]; openSaveSheet();
                                  document.getElementById( 'playlistName' ).value = 'S'; return true; } )()` );
-    await c.evaluate( "confirmSave().then( () => true, () => true )" );
+    await c.evaluate( "confirmName().then( () => true, () => true )" );
     ok( await raced( c ), "the phone saved list R in between" );
     ok( await disk( () => ( json( LISTS ) || [] ).some( p => p.name === "S" ) ), "Save list: S is on the server" );
     const names = ( json( LISTS ) || [] ).map( p => p.name ).sort().join( "," );

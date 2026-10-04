@@ -442,7 +442,7 @@ var POSTER_NAMES = [ "poster", "folder", "cover", "fanart" ];
 var esc = NayiveMedia.esc, cssEsc = NayiveMedia.cssEsc, cssUrl = NayiveMedia.cssUrl,
     extOf = NayiveMedia.extOf, baseName = NayiveMedia.baseName, dirOf = NayiveMedia.dirOf,
     stripExt = NayiveMedia.stripExt, norm = NayiveMedia.norm, colorFor = NayiveMedia.colorFor,
-    fmtClock = NayiveMedia.fmtClock, fmtRuntime = NayiveMedia.fmtRuntime, sleep = NayiveMedia.sleep;
+    fmtRuntime = NayiveMedia.fmtRuntime, sleep = NayiveMedia.sleep;
 
 /* ---------------------------------------------------------------------------
  * TITLE / YEAR / GENRE FROM THE PATH
@@ -1397,8 +1397,6 @@ function updatePlayerBar()
     subsBtn.classList.toggle( "is-active", st.subsOn );
 }
 
-var setPlayIcon = NayiveMedia.setPlayIcon;
-
 /* ---------------------------------------------------------------------------
  * SUBTITLES - one sidecar track. SRT is converted to WebVTT in the browser so
  * a plain <track> can render it (a <track src> must be VTT).
@@ -1508,21 +1506,13 @@ function updatePositionState() { NayiveMedia.positionState( video ); }
 var treeView = null, browse = null;
 var treeOpen = {};                               // the open rows, this visit
 
-// The folders under a scanned folder, as tree rows ("f:<path>").
-function folderNodes( node )
-{
-    return ( node && node.nodes || [] )
-        .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
-        .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: FOLDER_ICON, noMenu: true, kids: folderNodes( n ) }; } );
-}
-
 function treeRoots()
 {
     var T = NayiveUI.t;
     return [
         { id: "v:movies",  name: T( "movies.movies" ),  icon: FILM_ICON,   noMenu: true },
         { id: "v:genres",  name: T( "movies.genres" ),  icon: GENRE_ICON,  noMenu: true },
-        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, kids: folderNodes( st.folderTree ) }
+        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, kids: NayiveMedia.folderNodes( st.folderTree, FOLDER_ICON ) }
     ];
 }
 
@@ -1570,9 +1560,6 @@ function quietly( fn )
 
 function needsPoster( mv ) { return !! mv && ! mv.poster && ! posterEntry( mv ); }
 
-// Drive, at the file (a new window on the desktop, a new tab elsewhere).
-function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
-
 // Built once the dictionary is in (boot).
 function movieActions()
 {
@@ -1592,18 +1579,14 @@ function movieActions()
           when: function ( ids ) { return films( ids ).some( needsPoster ); },
           run: function ( ids ) { fetchPosters( ids ); } },
         { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", group: 2, when: one,
-          run: function ( ids ) { showInDrive( ids[ 0 ] ); } }
+          run: function ( ids ) { NayiveMedia.showInDrive( ids[ 0 ] ); } }
     ];
 }
 
 function wireBrowser()
 {
-    treeView = NayiveUI.tree( {
-        host:    $( "#tree" ),
-        pane:    $( "#treePane" ),
+    treeView = NayiveMedia.libraryTree( treeOpen, {
         roots:   treeRoots,
-        isOpen:  function ( id ) { return !! treeOpen[ id ]; },
-        setOpen: function ( id, v ) { treeOpen[ id ] = v; },
         current: currentNode,
         go:      goNode
     } );
@@ -1618,7 +1601,6 @@ function wireBrowser()
         active:  function () { return ! st.stageOpen; },
         open:    function ( id ) { openMovie( id ); }
     } );
-    $( "#treeBtn" ).addEventListener( "click", function () { treeView.openSheet(); } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1693,45 +1675,24 @@ function wireStaticUI()
     video.addEventListener( "click", function () { if( ! video.controls ) togglePlay(); } );
     video.addEventListener( "dblclick", function () { $( "#stageFullBtn" ).click(); } );
 
-    var seekRange = $( "#seekRange" ), seeking = false;
-    seekRange.addEventListener( "input", function () { seeking = true; $( "#elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
-    seekRange.addEventListener( "change", function () { if( isFinite( video.duration ) ) video.currentTime = Number( seekRange.value ); seeking = false; } );
-
-    var volumeRange = $( "#volumeRange" );
-    video.volume = Number( volumeRange.value ) / 100;
-    volumeRange.addEventListener( "input", function () { video.volume = Number( volumeRange.value ) / 100; } );
-
-    video.addEventListener( "loadedmetadata", function ()
-    {
-        seekRange.max = Math.floor( video.duration ) || 1;
-        $( "#totalLabel" ).textContent = fmtClock( video.duration );
-        if( st._seekOnLoad ) { try { video.currentTime = st._seekOnLoad; } catch( e ) {} st._seekOnLoad = 0; }
-        if( st.current && ! st.current.duration && isFinite( video.duration ) )
-        { st.current.duration = video.duration; renderRuntime( st.current ); }
-        updatePositionState();
-    } );
-
+    // The seek / volume / time / play icon wiring (shared/media.js).
     var lastTick = 0;
-    video.addEventListener( "timeupdate", function ()
-    {
-        if( ! seeking )
+    NayiveMedia.wirePlayer( video, {
+        finiteSeek: true,
+        loaded: function ()
         {
-            seekRange.value = Math.floor( video.currentTime );
-            $( "#elapsedLabel" ).textContent = fmtClock( video.currentTime );
-        }
-        var now = Date.now();
-        if( now - lastTick > 15000 ) { lastTick = now; recordProgress(); updatePositionState(); }
-    } );
-
-    video.addEventListener( "play",  function ()
-    {
-        setPlayIcon( true ); syncStagePaused();
-        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "playing";
-    } );
-    video.addEventListener( "pause", function ()
-    {
-        setPlayIcon( false ); syncStagePaused(); recordProgress(); saveProgressNow();
-        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "paused";
+            if( st._seekOnLoad ) { try { video.currentTime = st._seekOnLoad; } catch( e ) {} st._seekOnLoad = 0; }
+            if( st.current && ! st.current.duration && isFinite( video.duration ) )
+            { st.current.duration = video.duration; renderRuntime( st.current ); }
+            updatePositionState();
+        },
+        tick: function ()
+        {
+            var now = Date.now();
+            if( now - lastTick > 15000 ) { lastTick = now; recordProgress(); updatePositionState(); }
+        },
+        play:  function () { syncStagePaused(); },
+        pause: function () { syncStagePaused(); recordProgress(); saveProgressNow(); }
     } );
     video.addEventListener( "ended", function ()
     {
@@ -1802,24 +1763,8 @@ async function boot()
 {
     wireStaticUI();
 
-    if( ! DIR )
-    {
-        DIR = await NayiveUI.launcherFolder( {
-            app:   "movies",
-            title: NayiveUI.t( 'movies.whereFolder' ),
-            note:  NayiveUI.t( 'movies.whereFolderNote' )
-        } );
-        if( ! DIR )
-        {
-            $( "#noDirHint" ).hidden = false;
-            return;
-        }
-    }
-
-    setCrumb();
-    $( "#mainRow" ).hidden   = false;
-    $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
-    $( "#playerBar" ).hidden = false;
+    DIR = await NayiveMedia.openLibrary( DIR, { app: "movies", title: NayiveUI.t( 'movies.whereFolder' ), note: NayiveUI.t( 'movies.whereFolderNote' ) } );
+    if( ! DIR ) return;
     wireBrowser();
 
     await loadProgress();

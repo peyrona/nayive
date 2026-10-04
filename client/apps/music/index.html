@@ -427,7 +427,8 @@ var SCAN_PATH      = "data/music/scan-cache.json";
 var AUDIO_EXT = [ "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "weba" ];
 
 // The helpers shared with Photos / Movies live in shared/media.js (one copy).
-var esc = NayiveMedia.esc, extOf = NayiveMedia.extOf, colorFor = NayiveMedia.colorFor,
+var esc = NayiveMedia.esc, cssEsc = NayiveMedia.cssEsc, extOf = NayiveMedia.extOf, colorFor = NayiveMedia.colorFor,
+    stripExt = NayiveMedia.stripExt,
     fmtClock = NayiveMedia.fmtClock, FOLDER_SVG = NayiveMedia.ICONS.folder;
 
 /* ---------------------------------------------------------------------------
@@ -490,7 +491,7 @@ function deriveFromPath( fullPath )
     var filename = segs[ segs.length - 1 ];
     var folders  = segs.slice( 0, -1 );
 
-    var title = filename.replace( /\.[a-z0-9]+$/i, "" );
+    var title = stripExt( filename );
     var track = null;
     var mTrack = /^\s*(\d{1,3})[\s._-]+(.*)$/.exec( title );
     if( mTrack ) { track = parseInt( mTrack[ 1 ], 10 ); title = mTrack[ 2 ]; }
@@ -1017,7 +1018,6 @@ function renderLibraryDuration( song )
     { el.textContent = song.duration != null ? fmtClock( song.duration ) : "…"; } );
 }
 
-function cssEsc( s ) { return String( s ).replace( /["\\]/g, "\\$&" ); }
 
 // The song rows themselves are the item browser's (BROWSER below): a click
 // picks, a double-click / tap / Enter plays. Here: the album and artist
@@ -1088,7 +1088,7 @@ function playlistSongs( pl )
     {
         if( seen.has( p ) ) return;
         seen.add( p );
-        out.push( findSong( p ) || { path: p, title: NayiveMedia.baseName( p ).replace( /\.[a-z0-9]+$/i, "" ),
+        out.push( findSong( p ) || { path: p, title: stripExt( NayiveMedia.baseName( p ) ),
                                      color: "", duration: null, missing: true } );
     } );
     return out;
@@ -1544,50 +1544,10 @@ function changePlaylists( apply )
     return run;
 }
 
-function openSaveSheet()
-{
-    if( ! st.queue.length ) return;
-    nameSheet = null;                                   // the sheet saves the queue (confirmSave)
-    $( "#saveTitle" ).textContent = NayiveUI.t( "music.saveList" );
-    $( "#saveHint" ).textContent = NayiveUI.tf( "music.saveHint", { n: st.queue.length } );
-    $( "#playlistName" ).value = "";
-    saveListId = "pl" + Date.now().toString( 36 );
-    NayiveUI.open( "saveBackdrop" );
-    $( "#playlistName" ).focus();
-}
+// "Save list": the queue, as a new list (the name sheet, below).
+function openSaveSheet() { openNameSheet( { kind: "queue" } ); }
 
-// The new list's id is fixed when the sheet opens: a ✓ pressed again after a
-// failed save replaces its own list (if that write did land after all)
-// rather than adding a second one.
-var saveListId = "";
-var savingList = false;
-
-async function confirmSave()
-{
-    var name = $( "#playlistName" ).value.trim();
-    if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
-    if( savingList ) return;                             // a second press while the first one saves
-    var pl = { id: saveListId || "pl" + Date.now().toString( 36 ), name: name, paths: st.queue.map( function ( e ) { return e.song.path; } ) };
-    savingList = true;
-    try
-    {
-        await changePlaylists( function ( list )
-        {
-            for( var i = 0; i < list.length; i++ ) if( list[ i ] && list[ i ].id === pl.id ) { list[ i ] = pl; return; }
-            list.push( pl );
-        } );
-    }
-    catch( e )
-    {
-        // Not saved: the sheet stays open with the name typed, and ✓ tries
-        // again. A read that failed has said why already.
-        if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
-        return;
-    }
-    finally { savingList = false; }
-    NayiveUI.setOpen( "saveBackdrop", false );
-    NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
-}
+var savingList = false;          // a second ✓ while the first one saves does nothing
 
 // The lists changed (a save, a delete, its Undo, a rename): the tree shows
 // them again, and so does the playlist on screen - or, when that one is gone,
@@ -1715,14 +1675,6 @@ var ICON = {
     next:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19 5 5"/><line x1="18" y1="5" x2="18" y2="19"/></svg>'
 };
 
-// The folders under a scanned folder, as tree rows ("f:<path>").
-function folderNodes( node )
-{
-    return ( node && node.nodes || [] )
-        .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
-        .map( function ( n ) { return { id: "f:" + n.path, name: NayiveMedia.baseName( n.path ), icon: FOLDER_SVG, noMenu: true, kids: folderNodes( n ) }; } );
-}
-
 function playlistNodes()
 {
     return st.playlists.filter( function ( p ) { return p && p.id; } ).map( function ( p )
@@ -1739,7 +1691,7 @@ function treeRoots()
             { id: "v:songs",   name: T( "music.songs" ),   icon: MUSIC_NOTE_SVG, noMenu: true },
             { id: "v:albums",  name: T( "music.albums" ),  icon: ICON.albums,    noMenu: true },
             { id: "v:artists", name: T( "music.artists" ), icon: ICON.artists,   noMenu: true },
-            { id: "v:folders", name: T( "music.folders" ), icon: FOLDER_SVG,     noMenu: true, kids: folderNodes( st.folderTree ) }
+            { id: "v:folders", name: T( "music.folders" ), icon: FOLDER_SVG,     noMenu: true, kids: NayiveMedia.folderNodes( st.folderTree, FOLDER_SVG ) }
         ] },
         { id: "pls", name: T( "music.playlists" ), icon: ICON.list, group: true, kids: playlistNodes() }
     ];
@@ -1877,21 +1829,24 @@ async function removeFromPlaylist( ids )
     } );
 }
 
-// The name sheet (#saveBackdrop) also names a new list and renames one.
-// null: it saves the queue (openSaveSheet / confirmSave, as before).
-// { kind: "new", paths, newId } | { kind: "rename", id }
+// The name sheet (#saveBackdrop): saves the queue as a new list, names a
+// new list, renames one.
+// { kind: "queue", newId } | { kind: "new", paths, newId } | { kind: "rename", id }
 var nameSheet = null;
 
 function openNameSheet( o )
 {
     var pl = o.kind === "rename" ? playlistById( o.id ) : null;
     if( o.kind === "rename" && ! pl ) return;
-    // A new list's id is fixed here, as saveListId is: ✓ again after a
-    // failed save replaces its own list rather than adding a second one.
-    if( o.kind === "new" ) o.newId = "pl" + Date.now().toString( 36 );
+    if( o.kind === "queue" && ! st.queue.length ) return;
+    // A new list's id is fixed here: ✓ again after a failed save replaces
+    // its own list (if that write did land after all) rather than adding a
+    // second one.
+    if( o.kind !== "rename" ) o.newId = "pl" + Date.now().toString( 36 );
     nameSheet = o;
-    $( "#saveTitle" ).textContent = NayiveUI.t( o.kind === "rename" ? "music.renameList" : "music.newList" );
-    $( "#saveHint" ).textContent = o.kind === "new" && o.paths.length ? NayiveUI.tf( "music.newListHint", { n: o.paths.length } ) : "";
+    $( "#saveTitle" ).textContent = NayiveUI.t( o.kind === "rename" ? "music.renameList" : o.kind === "queue" ? "music.saveList" : "music.newList" );
+    $( "#saveHint" ).textContent = o.kind === "queue" ? NayiveUI.tf( "music.saveHint", { n: st.queue.length } )
+                                 : o.kind === "new" && o.paths.length ? NayiveUI.tf( "music.newListHint", { n: o.paths.length } ) : "";
     $( "#playlistName" ).value = pl ? pl.name : "";
     NayiveUI.open( "saveBackdrop" );
     $( "#playlistName" ).focus();
@@ -1900,7 +1855,7 @@ function openNameSheet( o )
 
 async function confirmName()
 {
-    if( ! nameSheet ) return confirmSave();
+    if( ! nameSheet ) return;
     var o = nameSheet, name = $( "#playlistName" ).value.trim();
     if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
     if( savingList ) return;
@@ -1908,9 +1863,11 @@ async function confirmName()
     savingList = true;
     try
     {
-        if( o.kind === "new" )
+        if( o.kind !== "rename" )
         {
-            var pl = { id: o.newId, name: name, paths: o.paths.slice() };
+            // The queue as it is at ✓, not as it was when the sheet opened.
+            var paths = o.kind === "queue" ? st.queue.map( function ( e ) { return e.song.path; } ) : o.paths.slice();
+            var pl = { id: o.newId, name: name, paths: paths };
             await changePlaylists( function ( list )
             {
                 for( var i = 0; i < list.length; i++ ) if( list[ i ] && list[ i ].id === pl.id ) { list[ i ] = pl; return; }
@@ -1928,14 +1885,16 @@ async function confirmName()
     }
     catch( e )
     {
-        // Not saved: the sheet stays open with the name typed, ✓ tries again.
+        // Not saved: the sheet stays open with the name typed, ✓ tries
+        // again. A read that failed has said why already.
         if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
         return;
     }
     finally { savingList = false; }
     NayiveUI.setOpen( "saveBackdrop", false );
     nameSheet = null;
-    if( o.kind === "new" )
+    if( o.kind === "queue" ) NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
+    else if( o.kind === "new" )
     {
         if( o.paths.length ) NayiveUI.toast( NayiveUI.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
         else { NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
@@ -2002,10 +1961,6 @@ function goToAlbum( song )
     browse.focus( song.path );
 }
 
-// Drive, at the file (a new window on the desktop, a new tab elsewhere):
-// the music here goes on playing.
-function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
-
 function pickPlaylist( ids )
 {
     var paths = songsOf( ids ).map( function ( s ) { return s.path; } );
@@ -2042,7 +1997,7 @@ function musicActions()
         { id: "album", label: T( "music.goToAlbum" ), icon: ICON.albums, group: 1, when: one,
           run: function ( ids ) { goToAlbum( findSong( ids[ 0 ] ) ); } },
         { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", group: 1, when: one,
-          run: function ( ids ) { showInDrive( ids[ 0 ] ); } },
+          run: function ( ids ) { NayiveMedia.showInDrive( ids[ 0 ] ); } },
         { id: "remove", label: T( "music.removeFromList" ), icon: "x", key: "Del", bar: 9, danger: true, group: 2,
           where: function () { return st.filter === "playlist"; }, run: removeFromPlaylist }
     ];
@@ -2050,12 +2005,8 @@ function musicActions()
 
 function wireBrowser()
 {
-    treeView = NayiveUI.tree( {
-        host:    $( "#tree" ),
-        pane:    $( "#treePane" ),
+    treeView = NayiveMedia.libraryTree( treeOpen, {
         roots:   treeRoots,
-        isOpen:  function ( id ) { return !! treeOpen[ id ]; },
-        setOpen: function ( id, v ) { treeOpen[ id ] = v; },
         current: currentNode,
         go:      goNode,
         menu:    treeMenu,
@@ -2103,8 +2054,6 @@ function wireBrowser()
         if( e.key === "Delete" ) { e.preventDefault(); deletePlaylist( pid ); }
         else if( e.key === "F2" ) { e.preventDefault(); openNameSheet( { kind: "rename", id: pid } ); }
     } );
-
-    $( "#treeBtn" ).addEventListener( "click", function () { treeView.openSheet(); } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -2159,39 +2108,16 @@ function wireStaticUI()
     // (A drop on the list bubbles here too; the first handler used the payload.)
     $( "#queueList" ).addEventListener( "drop", function ( e ) { e.preventDefault(); handleQueueDrop( st.queue.length ); } );
 
-    var seekRange = $( "#seekRange" ), seeking = false;
-    seekRange.addEventListener( "input", function () { seeking = true; $( "#elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
-    seekRange.addEventListener( "change", function () { audio.currentTime = Number( seekRange.value ); seeking = false; } );
-
-    var volumeRange = $( "#volumeRange" );
-    audio.volume = Number( volumeRange.value ) / 100;
-    volumeRange.addEventListener( "input", function () { audio.volume = Number( volumeRange.value ) / 100; } );
-
-    audio.addEventListener( "loadedmetadata", function ()
-    {
-        seekRange.max = Math.floor( audio.duration ) || 1;
-        $( "#totalLabel" ).textContent = fmtClock( audio.duration );
-        if( st.seekOnLoad ) { try { audio.currentTime = st.seekOnLoad; } catch( e ) {} st.seekOnLoad = 0; }
-        NayiveMedia.positionState( audio );
-    } );
-    audio.addEventListener( "timeupdate", function ()
-    {
-        if( seeking ) return;
-        seekRange.value = Math.floor( audio.currentTime );
-        $( "#elapsedLabel" ).textContent = fmtClock( audio.currentTime );
-    } );
-    // The lock screen's play/pause and its progress bar follow the element.
-    audio.addEventListener( "play",  function ()
-    {
-        setPlayIcon( true );
-        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "playing";
-        NayiveMedia.positionState( audio );
-    } );
-    audio.addEventListener( "pause", function ()
-    {
-        setPlayIcon( false );
-        if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = "paused";
-        NayiveMedia.positionState( audio );
+    // The seek / volume / time / play icon wiring (shared/media.js); the lock
+    // screen's progress bar follows the element.
+    NayiveMedia.wirePlayer( audio, {
+        loaded: function ()
+        {
+            if( st.seekOnLoad ) { try { audio.currentTime = st.seekOnLoad; } catch( e ) {} st.seekOnLoad = 0; }
+            NayiveMedia.positionState( audio );
+        },
+        play:  function () { NayiveMedia.positionState( audio ); },
+        pause: function () { NayiveMedia.positionState( audio ); }
     } );
     audio.addEventListener( "seeked", function () { NayiveMedia.positionState( audio ); } );
     audio.addEventListener( "ended", function () { autoNext(); } );
@@ -2213,8 +2139,6 @@ function wireStaticUI()
     wireResizer();
 }
 
-var setPlayIcon = NayiveMedia.setPlayIcon;
-
 /* ---------------------------------------------------------------------------
  * BOOT
  * -------------------------------------------------------------------------*/
@@ -2222,24 +2146,8 @@ async function boot()
 {
     wireStaticUI();
 
-    if( ! DIR )
-    {
-        DIR = await NayiveUI.launcherFolder( {
-            app:   "music",
-            title: NayiveUI.t( "music.whereFolder" ),
-            note:  NayiveUI.t( "music.whereFolderNote" )
-        } );
-        if( ! DIR )
-        {
-            $( "#noDirHint" ).hidden = false;
-            return;
-        }
-    }
-
-    setCrumb();
-    $( "#mainRow"   ).hidden = false;
-    $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
-    $( "#playerBar" ).hidden = false;
+    DIR = await NayiveMedia.openLibrary( DIR, { app: "music", title: NayiveUI.t( "music.whereFolder" ), note: NayiveUI.t( "music.whereFolderNote" ) } );
+    if( ! DIR ) return;
     wireBrowser();
 
     await loadPlaylists();

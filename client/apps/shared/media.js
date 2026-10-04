@@ -5,9 +5,9 @@
  * Each of them used to carry its own copy of the same small helpers (HTML
  * escaping, path / extension utils, the hash-to-colour, time formats), the
  * same "scan cache" (data/<app>/scan-cache.json keyed by path + size + mtime),
- * the same duration probe, the same crumb / scope bar / folder tree markup,
- * the same play icon, MediaSession wrapper, folder-load error handling and
- * phone search toggle. This is the single copy. Plain classic script, one
+ * the same duration probe, the same crumb / scope bar markup, the same
+ * play icon, player-bar wiring, MediaSession wrapper, library start-up and
+ * folder tree, folder-load error handling and phone search toggle. This is the single copy. Plain classic script, one
  * global:
  *
  *     <script src="../shared/media.js"></script>     <- NOT deferred, placed
@@ -876,6 +876,101 @@
         catch( e ) {}
     }
 
+    // The player bar's own wiring, the same in Music and Movies: the seek
+    // slider (#seekRange; #elapsedLabel follows it while dragged), the volume
+    // (#volumeRange), the length (#totalLabel), the time as it plays, the
+    // play icon and the lock screen's playing / paused. `el`: the <audio> or
+    // <video>. Hooks, each optional: loaded() once the length is shown, tick()
+    // on every timeupdate, play() / pause() before the lock screen is told;
+    // finiteSeek: a seek only once the length is known (Movies).
+    function wirePlayer( el, hooks )
+    {
+        var seekRange = document.getElementById( "seekRange" ), seeking = false;
+        seekRange.addEventListener( "input", function () { seeking = true; document.getElementById( "elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
+        seekRange.addEventListener( "change", function () { if( ! hooks.finiteSeek || isFinite( el.duration ) ) el.currentTime = Number( seekRange.value ); seeking = false; } );
+
+        var volumeRange = document.getElementById( "volumeRange" );
+        el.volume = Number( volumeRange.value ) / 100;
+        volumeRange.addEventListener( "input", function () { el.volume = Number( volumeRange.value ) / 100; } );
+
+        el.addEventListener( "loadedmetadata", function ()
+        {
+            seekRange.max = Math.floor( el.duration ) || 1;
+            document.getElementById( "totalLabel" ).textContent = fmtClock( el.duration );
+            if( hooks.loaded ) hooks.loaded();
+        } );
+        el.addEventListener( "timeupdate", function ()
+        {
+            if( ! seeking )
+            {
+                seekRange.value = Math.floor( el.currentTime );
+                document.getElementById( "elapsedLabel" ).textContent = fmtClock( el.currentTime );
+            }
+            if( hooks.tick ) hooks.tick();
+        } );
+        function played( on, hook )
+        {
+            setPlayIcon( on );
+            if( hook ) hook();
+            if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = on ? "playing" : "paused";
+        }
+        el.addEventListener( "play",  function () { played( true,  hooks.play  ); } );
+        el.addEventListener( "pause", function () { played( false, hooks.pause ); } );
+    }
+
+    //------------------------------------------------------------------------//
+    // LIBRARY START-UP AND TREE (Music and Movies)
+
+    // The folder of ?dir= (`dir`), or the one the launcher remembers or asks
+    // for. None: the #noDirHint note, and null. With one, the crumb shows it
+    // and the library's rows, tools and player bar come out. cfg: { app,
+    // title, note } for NayiveUI.launcherFolder.
+    async function openLibrary( dir, cfg )
+    {
+        if( ! dir )
+        {
+            dir = await NayiveUI.launcherFolder( { app: cfg.app, title: cfg.title, note: cfg.note } );
+            if( ! dir )
+            {
+                document.getElementById( "noDirHint" ).hidden = false;
+                return dir;
+            }
+        }
+        setCrumb( dirLabel( dir ) );
+        document.getElementById( "mainRow" ).hidden = false;
+        document.querySelectorAll( "#tools, [data-tools]" ).forEach( function ( el ) { el.hidden = false; } );
+        document.getElementById( "playerBar" ).hidden = false;
+        return dir;
+    }
+
+    // The folders under a scanned folder (a listDirRecursive() result), as
+    // rows of the library tree: ids "f:<path>".
+    function folderNodes( node, icon )
+    {
+        return ( node && node.nodes || [] )
+            .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
+            .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: icon, noMenu: true, kids: folderNodes( n, icon ) }; } );
+    }
+
+    // The library tree (NayiveUI.tree in #tree / #treePane; the header's
+    // #treeBtn slides it in on a phone). `open`: the app's map of open rows,
+    // this visit. cfg: roots, current, go - and Music's menu, drop.
+    function libraryTree( open, cfg )
+    {
+        var tree = NayiveUI.tree( Object.assign( {
+            host:    document.getElementById( "tree" ),
+            pane:    document.getElementById( "treePane" ),
+            isOpen:  function ( id ) { return !! open[ id ]; },
+            setOpen: function ( id, v ) { open[ id ] = v; }
+        }, cfg ) );
+        document.getElementById( "treeBtn" ).addEventListener( "click", function () { tree.openSheet(); } );
+        return tree;
+    }
+
+    // Drive, at the file (a new window on the desktop, a new tab elsewhere):
+    // what plays here goes on playing.
+    function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
+
     //------------------------------------------------------------------------//
 
     window.NayiveMedia =
@@ -895,6 +990,7 @@
         binInBatches: binInBatches, restoreInBatches: restoreInBatches, postPaths: postPaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
         ICONS: ICONS, scopeBarHtml: scopeBarHtml,
-        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState
+        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState, wirePlayer: wirePlayer,
+        openLibrary: openLibrary, folderNodes: folderNodes, libraryTree: libraryTree, showInDrive: showInDrive
     };
 } )();
