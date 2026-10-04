@@ -78,7 +78,9 @@ func setCardPhoto(path, uid string, img []byte) error {
 		nextSecond(root, filepath.Base(path), prev)
 		root.Close()
 	}
-	return nil
+	// The folder synced again AFTER the bump: a power cut must not undo it
+	// (the new time is what turns a stale If-Match away from the picture).
+	return syncDir(filepath.Dir(path))
 }
 
 // imageKind is "JPEG" or "PNG" by the bytes' own signature, or "".
