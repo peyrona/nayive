@@ -1141,6 +1141,36 @@ func (h *ChatHub) keptFile(o *chatOwner, c *chatConv, id int64) (string, *os.Fil
 	return "", nil, nil
 }
 
+// keptWalk is the home that must be walked before openMedia (media true) or
+// keptFile can answer for message m - a kept photo moved in the owner's files
+// and not in the index yet - or "" when they need no walk. The walk is made
+// with h.mu let go (inKept, OL2). Caller holds h.mu.
+func (h *ChatHub) keptWalk(o *chatOwner, c *chatConv, m *ChatMsg, media bool) string {
+	if m == nil || m.Deleted || m.File == nil {
+		return ""
+	}
+	kept, want := c.st.Kept[m.ID], c.st.KeptID[m.ID]
+	if kept == "" || want.Ino == 0 || time.Since(c.missed[m.ID]) <= chatFindAgain {
+		return ""
+	}
+	if media {
+		if _, err := os.Lstat(filepath.Join(c.dir, "media", mediaName(m))); err == nil {
+			return "" // the chat's own name for it
+		}
+	}
+	if file, info, err := h.openKept(o.user, kept); err == nil {
+		file.Close()
+		if keptIDOf(info) == want {
+			return "" // still where it was kept
+		}
+	}
+	home := filepath.Join(h.cfg.HomesDir, o.user)
+	if _, walk := keptIndexLookup(home, want); !walk {
+		return ""
+	}
+	return home
+}
+
 // keepBytes puts the owner's file `rel` (known by `want`; zero: by its path)
 // under media/ as message m's photo: a hard link - the same bytes, no room
 // taken - or a copy where no link can be made (another disk). A file already
@@ -1601,19 +1631,28 @@ func (h *ChatHub) sendDueIn(o *chatOwner, now int64) {
 		}
 	}
 	o.data.Later = keep
-	h.saveData(o)
+	if err := h.saveData(o); err != nil {
+		// chat.json still lists the texts just sent: sendLater knows them
+		// by their cid, and never sends one twice (SF3).
+		h.log.Error("chat: sent scheduled texts not taken out of chat.json", "user", o.user, "err", err)
+	}
 	o.changed(true)
 }
 
 // sendLater turns `l` into a message from its sender, now - nothing when they
 // are no longer in that chat (a person deleted, a group gone). The caller has
 // taken it out of o.data.Later and saves; on an error the message was not
-// stored, and the caller keeps `l`. Caller holds h.mu.
+// stored, and the caller keeps `l`. Sent already (that save failed, then a
+// restart read `l` back): the message it made, not a second one (SF3).
+// Caller holds h.mu.
 func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg, error) {
 	if !o.isMember(l.Conv, l.From) {
 		return nil, nil, nil
 	}
 	c := h.conv(o, l.Conv)
+	if id, sent := c.cids[l.From+"|later-"+l.ID]; sent {
+		return c, c.byID[id], nil
+	}
 	m := &ChatMsg{From: l.From, Kind: "text", Text: l.Text, CID: "later-" + l.ID}
 	if l.ReplyTo > 0 && c.byID[l.ReplyTo] != nil {
 		m.ReplyTo = l.ReplyTo

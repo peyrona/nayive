@@ -78,5 +78,13 @@ for( const [ input, want ] of SHOW ) check( "show " + JSON.stringify( input ), s
 const STRIP = JSON.parse( fs.readFileSync( path.join( here, "strip-cases.json" ), "utf8" ) );
 for( const [ input, want ] of STRIP ) check( "strip " + JSON.stringify( input ), M.strip( input ), want );
 
+// SS1: a long text packed with marks and links is stripped on its first 600
+// characters only (chat_marks.go's marksMax), counted as the server counts:
+// an emoji is one.
+const LONG = "😀" + " *x".repeat( 800 ) + " http://ab".repeat( 160 );
+check( "strip a long text: its first 600", M.strip( LONG ), M.strip( Array.from( LONG ).slice( 0, 600 ).join( "" ) ) );
+check( "strip a long text: at most 600", Array.from( M.strip( LONG ) ).length <= 600, true );
+check( "strip 600 with an emoji: whole", M.strip( "😀" + "a".repeat( 599 ) ), "😀" + "a".repeat( 599 ) );
+
 console.log( ( fails ? "FAILED " : "ok " ) + passes + " passed, " + fails + " failed" );
 process.exit( fails ? 1 : 0 );
