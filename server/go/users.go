@@ -107,8 +107,7 @@ type UserConfig struct {
 }
 
 // pyFloat is a float64 that always marshals with its decimal point: "12.0",
-// the way every config.json has spelled a quota since the first server (a
-// Python one) wrote them.
+// the way every config.json has spelled a quota since the first server.
 //
 // java: Go turns float64(12) into the token "12". Both parse back to the same
 // number, so nothing BREAKS - but config.json is a file a person opens, and a
@@ -116,8 +115,8 @@ type UserConfig struct {
 type pyFloat float64
 
 func (f pyFloat) MarshalJSON() ([]byte, error) {
-	// 'g' with -1 digits is the shortest form that round-trips - the same rule
-	// Python's repr() follows, including the "2e-06" shape for small values.
+	// 'g' with -1 digits is the shortest form that round-trips, "2e-06" for
+	// small values.
 	out := strconv.FormatFloat(float64(f), 'g', -1, 64)
 	if !strings.ContainsAny(out, ".eEnN") { // no point, no exponent, not inf/NaN
 		out += ".0"
@@ -718,7 +717,7 @@ func (u *Users) ForgetRenames(name string) { u.renames.forget(name) }
 // java: golang.org/x/text is a Go-team module living outside the standard
 // library, and it is the ONLY dependency this server has. It is vendored into
 // the repo (see vendor/), so `go build` still needs no network and nothing
-// installed - which was the point of the port. See docs/go-port.md.
+// installed.
 func NormaliseUsername(name string) string {
 	return norm.NFC.String(strings.TrimSpace(name))
 }

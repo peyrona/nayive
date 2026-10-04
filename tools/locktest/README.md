@@ -26,7 +26,7 @@ pre-deploy habit.
   Everything above them — `crypt.js`, `office.js`, `ui.js`, the real sheets — is the shipping code.
   The tests answer the real password dialog by typing into `#askPw1` and clicking the real button.
 
-## What is covered (69 checks)
+## What is covered (68 checks)
 
 | | |
 |---|---|

@@ -5,9 +5,7 @@ package main
 // =============================================================================
 //
 // Fixed keys and a fixed salt, so the whole ECDH -> HKDF -> AES-GCM -> framing
-// chain has exactly one right answer. This is the port of
-// lib/webpush.py's self_test() and tools/check-webpush.py - the ONLY known
-// answer test the project had, and now an ordinary `go test`.
+// chain has exactly one right answer.
 //
 // The RFC prints "Content-Length: 145" above a 144-byte body; the body is the
 // correct part (86-byte header + 41 plaintext + 1 delimiter + 16 tag).

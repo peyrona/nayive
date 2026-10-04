@@ -160,7 +160,7 @@ func TestSandboxRefusesSwappedFolder(t *testing.T) {
 }
 
 // TestSandboxKeepsInHomeSymlinks is the other half: a symlink that stays
-// INSIDE the home still works, exactly as on the Python. os.Root only adds a
+// INSIDE the home still works. os.Root only adds a
 // refusal; it must take nothing away.
 func TestSandboxKeepsInHomeSymlinks(t *testing.T) {
 	srv, _, _ := newTestServer(t)

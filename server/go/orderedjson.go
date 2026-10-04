@@ -53,7 +53,7 @@ func (o *orderedJSON) Get(key string) (json.RawMessage, bool) {
 }
 
 // Set stores an already-encoded value, keeping an existing key in place and
-// appending a new one at the end - exactly what Python's `d[k] = v` does.
+// appending a new one at the end.
 func (o *orderedJSON) Set(key string, raw json.RawMessage) {
 	if o.rows == nil {
 		o.rows = make(map[string]json.RawMessage)

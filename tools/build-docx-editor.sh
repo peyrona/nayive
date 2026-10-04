@@ -8,8 +8,7 @@
 #   tools/build-docx-editor.sh 2.21.0       bump to 2.21.0
 #   tools/build-docx-editor.sh --restore    put the previous build back
 #
-# <app> is client/apps/write/ - one folder since the swap
-# (docs/write-docx-editor-plan.md, Phase 9).
+# <app> is client/apps/write/ - one folder since the swap.
 #
 # WHAT THIS SCRIPT OWNS, so that the next bump is one command:
 #
@@ -62,13 +61,13 @@ ALLOWED_LICENCES="MIT ISC Apache-2.0 BSD-2-Clause BSD-3-Clause 0BSD Zlib OFL-1.1
 say() { printf '%s\n' "$*"; }
 die() { printf 'build-docx-editor: %s\n' "$*" >&2; exit 1; }
 
-# The Go toolchain is not on PATH here (apt's is too old; the real one lives in
-# ~/sdk/).
+# The real Go toolchain lives in ~/sdk/ - tried first, as deploy.sh does: apt's
+# go on PATH is too old (no -C).
 find_go() {
-    command -v go >/dev/null && { echo go; return; }
     local g
     g="$(ls -d "$HOME"/sdk/go*/bin/go 2>/dev/null | sort -V | tail -1)"
     [[ -x "$g" ]] && { echo "$g"; return; }
+    command -v go >/dev/null && { echo go; return; }
     return 1
 }
 

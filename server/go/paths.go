@@ -74,9 +74,8 @@ func hasSegment(parts []string, want string) bool {
 // isInside reports whether `target` is `root` itself or lies underneath it.
 // Both must already be absolute and symlink-resolved.
 //
-// java: this is Python's `target == root or root in target.parents`. Go has no
-// parents chain, so filepath.Rel does the work: a relative path that neither is
-// ".." nor starts with "../" means "inside".
+// java: filepath.Rel does the work: a relative path that neither is ".." nor
+// starts with "../" means "inside".
 func isInside(root, target string) bool {
 	if root == target {
 		return true
@@ -88,13 +87,12 @@ func isInside(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// resolveExisting is Python's Path.resolve(): make it absolute and follow every
-// symlink, collapsing any leftover "..".
+// resolveExisting makes a path absolute and follows every symlink, collapsing
+// any leftover "..".
 //
-// java: THE DIFFERENCE THAT BITES. filepath.EvalSymlinks FAILS when the path
-// does not exist, while Python's resolve() is non-strict and happily resolves
-// as far as it can. A PUT of a NEW file resolves a path whose last component is
-// not there yet, so a naive port refuses every upload of a new file. This walks
+// java: filepath.EvalSymlinks FAILS when the path does not exist, and a PUT of
+// a NEW file resolves a path whose last component is not there yet - plain
+// EvalSymlinks would refuse every upload of a new file. This walks
 // up to the deepest EXISTING ancestor, resolves that, and rejoins the rest -
 // which is what the containment check actually needs, because the symlink that
 // could escape has to exist to be followed.

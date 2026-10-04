@@ -567,7 +567,7 @@ func derefString(p *string) string {
 	return *p
 }
 
-// roundTo rounds to `places` decimals, matching Python's round(x, 3).
+// roundTo rounds to `places` decimals.
 func roundTo(v float64, places int) float64 {
 	s := strconv.FormatFloat(v, 'f', places, 64)
 	out, err := strconv.ParseFloat(s, 64)

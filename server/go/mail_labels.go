@@ -896,10 +896,6 @@ func (h *MailHub) Settings(user string) MailSettings {
 	return h.userLocked(user).settings
 }
 
-func (h *MailHub) SetSettings(user string, s MailSettings) (MailSettings, error) {
-	return h.PatchSettings(user, func(st *MailSettings) { *st = s })
-}
-
 // PatchSettings changes the settings as `change` says, read and written under
 // one hold of the lock: a read here and a write later let two devices saving
 // two settings at once put back each other's old value (data-safety I10,

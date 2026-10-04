@@ -8,7 +8,7 @@
  *
  * The else is for node. A browser always has atob, so that branch is dead - but
  * esbuild bundles it anyway and then cannot resolve "buffer". build.sh aliases
- * it here. Same idea as client/apps/write/lib/superdoc/.peer-stub.js.
+ * it here. Same idea as the old SuperDoc build's .peer-stub.js (deleted).
  */
 export const Buffer = undefined;
 export default { Buffer: undefined };

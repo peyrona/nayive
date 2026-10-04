@@ -44,7 +44,6 @@ import (
 const mailMaxAttach = 25 << 20
 
 var (
-	errMailNoRcpt  = errors.New("mail: nobody to send it to")
 	errMailBadAddr = errors.New("mail: an address is not valid")
 	errMailTooBig  = errors.New("mail: the attachments are too big")
 )

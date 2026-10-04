@@ -4,11 +4,9 @@ package main
 // The sandbox tests.
 // =============================================================================
 //
-// The parity harness proves the two servers ANSWER the same. These tests prove
-// the one thing a black-box comparison cannot: that a symlink planted inside a
-// user's home cannot be followed out of it. Both servers would have to be wrong
-// in the same way for the harness to miss that, and this is the single function
-// (ResolvePath) where being wrong loses the whole box.
+// These tests prove the one thing a black-box test of the answers cannot: that
+// a symlink planted inside a user's home cannot be followed out of it. This is
+// the single function (ResolvePath) where being wrong loses the whole box.
 
 import (
 	"encoding/json"
@@ -326,8 +324,8 @@ func TestSignInWithEitherSpelling(t *testing.T) {
 }
 
 // TestAtomicWriteJSON checks the two properties the whole project leans on: the
-// file is either wholly old or wholly new, and its shape matches what the
-// Python writes (four spaces, real UTF-8, a trailing newline).
+// file is either wholly old or wholly new, and its shape is the house one
+// (four spaces, real UTF-8, a trailing newline).
 func TestAtomicWriteJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.json")
@@ -408,11 +406,9 @@ func TestUploadTempNameShape(t *testing.T) {
 	}
 }
 
-// TestHandEditedConfigIsTolerated is the bug the parity harness could not see,
-// because it never wrote a bad value into a config.json by hand.
-//
-// Python reads each field with its own try/except, so one mistyped value costs
-// exactly that field. A single Unmarshal into the whole struct does not: a
+// TestHandEditedConfigIsTolerated: a bad value written into a config.json by
+// hand must cost exactly that field. A single Unmarshal into the whole struct
+// does not do that: a
 // `"quota": "abc"` left a POINTER TO ZERO behind, which the quota check reads
 // as "this account may store 0 bytes" - and every upload that user made
 // answered 507, for one wrong character in a file they edited themselves.
