@@ -615,6 +615,39 @@
             '<path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path>' + '</g></g></g></svg>'
     };
 
+    /* The DOM builder (Chat's C.h, eMail's E.h):
+     *   h( "div", { class: "x", text: "…", html: "<svg…>", on: { click: fn },
+     *               attrs: {…}, data: {…}, anyProperty: v }, child, … )
+     * A null / false prop or attr is skipped ("" is not: class "" still sets
+     * it). Children: elements, strings and numbers (text nodes), arrays, and
+     * null / false (skipped). `html` is for our own icons only. */
+    function h( tag, props )
+    {
+        var el = document.createElement( tag );
+        props = props || {};
+        for( var k in props )
+        {
+            var v = props[ k ];
+            if( v == null || v === false ) continue;
+            if( k === "class" )      el.className = v;
+            else if( k === "text" )  el.textContent = v;
+            else if( k === "on" )    { for( var e in v ) el.addEventListener( e, v[ e ] ); }
+            else if( k === "attrs" ) { for( var a in v ) if( v[ a ] != null && v[ a ] !== false ) el.setAttribute( a, v[ a ] ); }
+            else if( k === "data" )  { for( var d in v ) el.dataset[ d ] = v[ d ]; }
+            else if( k === "html" )  el.innerHTML = v;
+            else el[ k ] = v;
+        }
+        for( var i = 2; i < arguments.length; i++ ) hKid( el, arguments[ i ] );
+        return el;
+    }
+
+    function hKid( el, kid )
+    {
+        if( kid == null || kid === false ) return;
+        if( Array.isArray( kid ) ) { kid.forEach( function ( k ) { hKid( el, k ); } ); return; }
+        el.appendChild( typeof kid === "string" || typeof kid === "number" ? document.createTextNode( String( kid ) ) : kid );
+    }
+
     function icon( name )
     {
         if( APP_LOGOS[ name ] ) return APP_LOGOS[ name ];
@@ -3269,6 +3302,33 @@
         return /iphone|ipad|ipod/i.test( navigator.userAgent ) ||
                ( navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 );   // iPadOS 13+
     }
+
+    // PUSH KEYS (the launcher, a Chat link). base64url (the server's VAPID key)
+    // -> the bytes pushManager.subscribe() wants: it will not take the string.
+    // (chat/guest-sw.js keeps its own copy: a worker cannot load this file.)
+    function b64ToU8( s )
+    {
+        var pad = "=".repeat( ( 4 - s.length % 4 ) % 4 );
+        var raw = atob( ( s + pad ).replace( /-/g, "+" ).replace( /_/g, "/" ) );
+        var out = new Uint8Array( raw.length );
+        for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
+        return out;
+    }
+
+    // Does this subscription still match the server's VAPID key? If the key
+    // was regenerated, the push service rejects every message for it forever -
+    // and nothing would ever say so. Can't tell -> true (don't nag the user).
+    function samePushKey( sub, b64 )
+    {
+        try
+        {
+            var a = new Uint8Array( sub.options.applicationServerKey ), b = b64ToU8( b64 );
+            if( a.length !== b.length ) return false;
+            for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
+            return true;
+        }
+        catch ( e ) { return true; }
+    }
     // A browser embedded in another app (Instagram, Facebook, WhatsApp...): it can
     // never install anything, the user has to open Nayive in a real browser first.
     function isInAppBrowser()
@@ -5665,6 +5725,7 @@
         transfer:       transfer,         // a row on the shared upload/download bar
         wireMenu:       wireMenu,         // the header "..." popup menu
         icon:              icon,
+        h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         t:         t,
         tf:        tf,
@@ -5699,6 +5760,8 @@
         saveFile:        saveFile,            // to this device as a download (Blob or text)
         printPage:       printPage,           // "Export to PDF" through #printRoot + window.print()
         isIOS:           isIOS,
+        b64ToU8:         b64ToU8,             // a VAPID key -> applicationServerKey bytes
+        samePushKey:     samePushKey,         // a push subscription made with this key?
         inAndroidApp:    inAndroidApp,
         pickFolder:           pickFolder,
         pickFile:             pickFile,

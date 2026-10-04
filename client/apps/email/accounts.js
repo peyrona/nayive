@@ -205,7 +205,7 @@
                                      attrs: { type: "button", title: E.T( "mail.removeAccount" ), "aria-label": E.T( "mail.removeAccount" ) },
                                      on: { click: function () { remove( a ); } } } );
             box.appendChild( h( "div", { class: "card-row" },
-                h( "div", null, h( "b", { text: a.email } ), h( "small", { class: a.error ? "bad" : "", text: sub } ) ),
+                h( "div", null, h( "b", { text: a.email } ), h( "small", { class: a.error ? "bad" : null, text: sub } ) ),
                 key, bin ) );
             box.appendChild( form );
         } );

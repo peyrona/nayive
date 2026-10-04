@@ -90,34 +90,10 @@
 
     C.$ = function ( sel, root ) { return ( root || document ).querySelector( sel ); };
 
-    /* h( "div", { class: "x", text: "…", on: { click: fn }, attrs: {…} }, child, … )
-     * Children: elements, strings (text nodes), null (skipped), arrays. */
-    C.h = function ( tag, props )
-    {
-        var el = document.createElement( tag );
-        props = props || {};
-        for( var k in props )
-        {
-            var v = props[ k ];
-            if( v == null || v === false ) continue;
-            if( k === "class" )      el.className = v;
-            else if( k === "text" )  el.textContent = v;
-            else if( k === "on" )    { for( var e in v ) el.addEventListener( e, v[ e ] ); }
-            else if( k === "attrs" ) { for( var a in v ) if( v[ a ] != null && v[ a ] !== false ) el.setAttribute( a, v[ a ] ); }
-            else if( k === "data" )  { for( var d in v ) el.dataset[ d ] = v[ d ]; }
-            else if( k === "html" )  el.innerHTML = v;          // our own icons only
-            else el[ k ] = v;
-        }
-        for( var i = 2; i < arguments.length; i++ ) add( el, arguments[ i ] );
-        return el;
-    };
-
-    function add( el, kid )
-    {
-        if( kid == null || kid === false ) return;
-        if( Array.isArray( kid ) ) { kid.forEach( function ( k ) { add( el, k ); } ); return; }
-        el.appendChild( typeof kid === "string" || typeof kid === "number" ? document.createTextNode( String( kid ) ) : kid );
-    }
+    // h( "div", { class: "x", text: "…", on: { click: fn }, attrs: {…} }, child, … )
+    // Children: elements, strings (text nodes), null (skipped), arrays. Shared
+    // with eMail (shared/ui.js).
+    C.h = NayiveUI.h;
 
     // Feather-style glyphs, 24x24.
     var ICONS = {
