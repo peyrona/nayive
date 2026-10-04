@@ -46,9 +46,6 @@ const O = NayiveOffice;   // paths, the file label, the Open browser (../shared/
 // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
 const APP_DIR = O.appDirFromUrl();
 
-// Extensions the "Abrir documento" browser shows: the two Calc opens.
-const OPEN_EXTS = [ 'xlsx', 'csv' ];
-
 // The browser never walks above the user's files/ root (the first path
 // segment of APP_DIR — "files" when Calc is opened from the launcher).
 const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
@@ -85,8 +82,12 @@ const session = O.session( {
     appDir     : APP_DIR,
     openRoot   : OPEN_ROOT,
     defaultName: T( 'calc.defaultFile' ),
-    canOpen    : isOpenable,                                    // what the Open dialog lists
-    onPick     : function( p ) { openPickedFile( p ); },        // any other format is turned away
+    nameKey    : 'calc.defaultFile',
+    formatKey  : 'calc.format',
+    formats    : [ { value: 'xlsx', text: 'Excel (.xlsx)' }, { value: 'csv', text: 'CSV (.csv)' } ],
+    pack       : false,                                         // "Guardar como" at the full sheet width
+    openExts   : [ 'xlsx', 'csv' ],                             // what the Open dialog lists; any other format is turned away
+    turnAwayEnd: '.',
     emptyKey   : 'calc.noSheets',
     // A draft is always .xlsx: a .csv would lose the formatting.
     encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
@@ -951,22 +952,6 @@ window.addEventListener( 'balata:themechange', function()
 } );
 
 //------------------------------------------------------------------------//
-// OPEN  (the shared folder browser - shared/office.js - lists the files Calc
-// can open; see OPEN_EXTS)
-
-function isOpenable( path ) { return OPEN_EXTS.indexOf( O.extOf( path ) ) !== -1; }
-
-// Open a file the user picked. The Open dialog lists only xlsx / csv, but
-// "Recientes" hands over any path the session ever opened (a ?file= from
-// Drive included), so anything else is still turned away here.
-async function openPickedFile( path )
-{
-    if( isOpenable( path ) ) { await session.open( path ); return; }
-
-    NayiveUI.toast( T( 'write.formatUnsupported' ) + '.' );
-}
-
-//------------------------------------------------------------------------//
 // PULL-DOWN MENUS
 //
 // Calc has TWO chromes and the user picks one: the icon toolbar it always
@@ -1219,22 +1204,6 @@ function addComment()
     plugin.focusEditor();
 }
 
-// "Recientes": the same ten paths the Open dialog lists (shared/office.js
-// keeps them), so the menu never drifts from it. An empty list still
-// shows one (greyed) row - a menu that silently has no submenu is worse
-// than one that says why.
-function recentItems()
-{
-    const list = session.recent();
-
-    if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
-
-    return list.map( function( p )
-    {
-        return { text: O.baseName( p ), run: function() { openPickedFile( p ); } };
-    } );
-}
-
 //---- the table -----------------------------------------------------//
 //
 // The grouping is the one every spreadsheet has used since Excel 5:
@@ -1250,7 +1219,7 @@ const MENUS =
     [
         { key: 'write.newDoc',    el: 'newBtn'     },
         { key: 'ui.openDoc',      el: 'openBtn'    },
-        { key: 'ui.recent',       sub: recentItems },
+        { key: 'ui.recent',       sub: session.recentItems },   // shared/office.js
         { sep: true },
         { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
         { key: 'ui.saveAs', el:  'saveAsBtn' },

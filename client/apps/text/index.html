@@ -412,87 +412,9 @@
 
     </div>
 
-    <!-- Keyboard shortcuts - Write's and Calc's sheet; openShortcuts() below
-         fills it through NayiveOffice.showShortcuts. -->
-    <div id="scBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.shortcuts"></h2>
-            <div id="scList" class="sc-list"></div>
-            <div class="sheet-actions">
-                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Estadísticas - ditto, through NayiveOffice.showStats. Read on open,
-         not live. -->
-    <div id="statsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.stats"></h2>
-            <div id="stList" class="st-list"></div>
-            <p id="stNote" class="dialog-text st-note" hidden></p>
-            <div class="sheet-actions">
-                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
-         document goes instead of dropping it in the folder Text was opened in;
-         #saveFormat is the extension, restricted to the ones Text can reopen. -->
-    <div id="saveAsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="ui.saveAs"></h2>
-            <div class="field">
-                <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" data-i18n-attr="placeholder:text.defaultFile" autocomplete="off">
-            </div>
-            <div class="field">
-                <label for="saveFormat" data-i18n="text.format"></label>
-                <select id="saveFormat">
-                    <option value="txt">.txt</option>
-                    <option value="html">HTML (.html)</option>
-                    <option value="css">CSS (.css)</option>
-                    <option value="js">JavaScript (.js)</option>
-                    <option value="json">JSON (.json)</option>
-                    <option value="xml">XML (.xml)</option>
-                    <option value="md">Markdown (.md)</option>
-                    <option value="yaml">YAML (.yaml)</option>
-                    <option value="sh">Shell (.sh)</option>
-                    <option value="sql">SQL (.sql)</option>
-                    <option value="py">Python (.py)</option>
-                    <option value="c">C / C++ / Java (.c)</option>
-                    <option value="ini">.ini</option>
-                    <option value="" data-i18n="text.extOther"></option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="saveDirBtn" data-i18n="ui.folder"></label>
-                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
-                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
-                </button>
-            </div>
-            <div class="sheet-actions">
-                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
-                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Open dialog -->
-    <div id="openBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.openDoc"></h2>
-            <!-- The last ten documents opened, above the folder listing. -->
-            <div id="openRecent" hidden></div>
-            <div id="openCrumb" class="open-crumb"></div>
-            <ul id="openList" class="open-list"></ul>
-            <div class="sheet-actions">
-                <button id="openCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
+    <!-- Keyboard shortcuts, Statistics, Save as and Open: the sheets the three
+         editors share, built here by shared/office.js (session, THE SHEETS);
+         the Save-as format list is the extensions Text can reopen. -->
 
     <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
     <div id="toast" class="toast"></div>
@@ -621,6 +543,17 @@
             appDir     : APP_DIR,
             openRoot   : OPEN_ROOT,
             defaultName: T( 'text.defaultFile' ),
+            nameKey    : 'text.defaultFile',
+            formatKey  : 'text.format',
+            formats    : [
+                { value: 'txt',  text: '.txt' },                     { value: 'html', text: 'HTML (.html)' },
+                { value: 'css',  text: 'CSS (.css)' },               { value: 'js',   text: 'JavaScript (.js)' },
+                { value: 'json', text: 'JSON (.json)' },             { value: 'xml',  text: 'XML (.xml)' },
+                { value: 'md',   text: 'Markdown (.md)' },           { value: 'yaml', text: 'YAML (.yaml)' },
+                { value: 'sh',   text: 'Shell (.sh)' },              { value: 'sql',  text: 'SQL (.sql)' },
+                { value: 'py',   text: 'Python (.py)' },             { value: 'c',    text: 'C / C++ / Java (.c)' },
+                { value: 'ini',  text: '.ini' },                     { value: '',     key: 'text.extOther' }
+            ],
             canOpen    : textCanOpen,              // what the Open dialog lists
             emptyKey   : 'text.noTextFiles',
             encode     : function() { return getEditorText(); },

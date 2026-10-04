@@ -1552,9 +1552,15 @@
     //                                             // how: "open" | "import" | "draft" | "restore"
     //                                             // an error with .said = true: the app already said why
     //       blank:       async function () {...},                   // put an empty document on screen
+    //       nameKey:     "calc.defaultFile",      // the "Guardar como" name box's placeholder
     //       // optional:
-    //       canOpen:     function ( path ) {...},       // which files the Open dialog lists (default: all)
-    //       onPick:      function ( path ) {...},       // a file was picked there (default: open it)
+    //       formats:     [ { value: "xlsx", text: "Excel (.xlsx)" }, { value: "", key: "text.extOther" } ],
+    //       formatKey:   "calc.format",                 // with `formats`: the "Guardar como" format row
+    //       pack:        false,                         // "Guardar como" at the full sheet width (Calc)
+    //       openExts:    [ "xlsx", "csv" ],             // the formats it opens: the Open dialog lists
+    //                                                   //   these, and any other picked is turned away
+    //       turnAwayEnd: ".",                           //   ...with this after the toast (Calc)
+    //       canOpen:     function ( path ) {...},       // or: which files the Open dialog lists (default: all)
     //       emptyKey:    "calc.noSheets",               // its "nothing here" line
     //       finishName:  function ( name, fmt ) {...},  // "Guardar como": the final name, null = stay in the dialog
     //       renameName:  function ( typed, path ) {...},// rename in place: the new file name
@@ -1577,7 +1583,9 @@
     //   session.edited()  .flush()  .saveNow()  .openSaveAs()  .dirty()
     //   session.catchUp()                      keys typed while something was awaited: saved now (Write: a template)
     //   session.dropDraft()                    the untitled document was thrown away (Write: a template over it)
-    //   session.openDialog()  .recent()        the "Abrir documento" sheet
+    //   session.openDialog()                   the "Abrir documento" sheet
+    //   session.recentItems()                  "Recientes" as menu entries (shared/menubar.js)
+    //   session.openPicked( path )             open a file the user picked (see openExts)
     //   session.locked()                       it is written encrypted
     //   session.keepUntitled()                 the untitled document about to go, for an Undo (null = none)
     //   session.offerBack( kept, aside )       its "Borrador descartado [Deshacer]" (Write: a template over it);
@@ -1590,11 +1598,12 @@
     // anybody - us included. Everything read back (a file, an import, the
     // device draft, the .bak) is sniffed for the seal and asks by itself.
     //
-    // It wires whatever the page has of: #newBtn, #openBtn, #importBtn +
-    // #importInput, #saveAsBtn, #restoreBtn, the "Abrir documento" sheet
-    // (#openBackdrop, #openRecent, #openCrumb, #openList), the "Guardar como"
-    // sheet (#saveAsBackdrop, #saveName, #saveFormat, #saveDirBtn,
-    // #saveAsConfirmBtn, #saveAsDeleteBtn) and the file label.
+    // It builds the four sheets the three apps share (see THE SHEETS) and wires
+    // whatever the page has of: #newBtn, #openBtn, #importBtn + #importInput,
+    // #saveAsBtn, #restoreBtn, the "Abrir documento" sheet (#openBackdrop,
+    // #openRecent, #openCrumb, #openList), the "Guardar como" sheet
+    // (#saveAsBackdrop, #saveName, #saveFormat, #saveDirBtn, #saveAsConfirmBtn,
+    // #saveAsDeleteBtn) and the file label.
     // The header plug gets the office wording: offline = "safe on this device",
     // an untitled document with edits = "use Guardar como".
     // A new document asks for its name and folder by itself, once (see askName).
@@ -1610,8 +1619,76 @@
         return fmt && ! new RegExp( "\\." + fmt + "$", "i" ).test( name ) ? name + "." + fmt : name;
     }
 
+    // THE SHEETS - the keyboard shortcuts (#scBackdrop, filled by showShortcuts),
+    // the statistics (#statsBackdrop, showStats), "Guardar como" (#saveAsBackdrop)
+    // and "Abrir documento" (#openBackdrop): the same four in the three apps, so
+    // they are written once, here. Built when the session is made - before
+    // anything looks them up - right after #app, in that order. Their buttons
+    // get their look here (applySheetButtons) and their words from
+    // shared/i18n.js as they land, so they come out the same whenever the page
+    // makes its session. A page that wrote its own (tools/locktest) keeps them.
+    function buildSheets( o )
+    {
+        if( byId( "saveAsBackdrop" ) ) return;
+
+        function actions( id ) { return '<div class="sheet-actions">\n<button id="' + id + '" data-act="close" data-i18n-attr="title:ui.close"></button>\n</div>'; }
+        function field( forId, key, control ) { return '<div class="field">\n<label for="' + forId + '" data-i18n="' + key + '"></label>\n' + control + '\n</div>'; }
+
+        var box = document.createElement( "div" );
+        box.innerHTML = [
+            '<div id="scBackdrop" class="sheet-backdrop">', '<div class="sheet sheet--pack">',
+                '<h2 data-i18n="write.shortcuts"></h2>',
+                '<div id="scList" class="sc-list"></div>',
+                actions( "scCloseBtn" ),
+            '</div>', '</div>',
+            '<div id="statsBackdrop" class="sheet-backdrop">', '<div class="sheet sheet--pack">',
+                '<h2 data-i18n="write.stats"></h2>',
+                '<div id="stList" class="st-list"></div>',
+                '<p id="stNote" class="dialog-text st-note" hidden></p>',
+                actions( "statsCloseBtn" ),
+            '</div>', '</div>',
+            '<div id="saveAsBackdrop" class="sheet-backdrop">', '<div class="sheet' + ( o.pack === false ? "" : " sheet--pack" ) + '">',
+                '<h2 data-i18n="ui.saveAs"></h2>',
+                field( "saveName", "ui.fileName", '<input type="text" id="saveName" data-i18n-attr="placeholder:' + o.nameKey + '" autocomplete="off">' ),
+                o.formats ? field( "saveFormat", o.formatKey, '<select id="saveFormat"></select>' ) : "",
+                field( "saveDirBtn", "ui.folder", '<button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">\n' +
+                                                  '<span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>\n</button>' ),
+                '<div class="sheet-actions">',
+                    '<button id="saveAsDeleteBtn" class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>',
+                    '<button id="saveAsCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>',
+                    '<button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>',
+                '</div>',
+            '</div>', '</div>',
+            '<div id="openBackdrop" class="sheet-backdrop">', '<div class="sheet">',
+                '<h2 data-i18n="ui.openDoc"></h2>',
+                '<div id="openRecent" hidden></div>',          // the last ten documents opened, above the folder listing
+                '<div id="openCrumb" class="open-crumb"></div>',
+                '<ul id="openList" class="open-list"></ul>',
+                actions( "openCloseBtn" ),
+            '</div>', '</div>'
+        ].filter( Boolean ).join( "\n" );
+
+        ( o.formats || [] ).forEach( function ( f )
+        {
+            var op = document.createElement( "option" );
+            op.value = f.value;
+            if( f.key ) op.setAttribute( "data-i18n", f.key );
+            else        op.textContent = f.text;
+            box.querySelector( "#saveFormat" ).appendChild( op );
+        } );
+
+        NayiveUI.applySheetButtons( box );
+
+        var app   = byId( "app" );
+        var host  = app ? app.parentNode : document.body;
+        var after = app ? app.nextSibling : null;
+        while( box.firstChild ) host.insertBefore( box.firstChild, after );
+    }
+
     function session( o )
     {
+        buildSheets( o );
+
         var path     = null;     // relative to the file root; null = untitled
         var readOnly = false;    // someone else's file ("shared/..."): read, never written
         var pending  = null;     // the name of a document that has none on the server yet
@@ -1652,11 +1729,12 @@
         // simply opening it (`onPick`: Calc and Write convert a foreign format
         // first). With no network the folder tree cannot be walked, so it lists
         // what this app has in the offline store instead.
+        var canOpen = o.openExts ? function ( p ) { return o.openExts.indexOf( extOf( p ) ) !== -1; } : o.canOpen;
         var recent  = recentFiles( o.app );
         var browser = openBrowser( {
             root:     o.openRoot,
-            canOpen:  o.canOpen || function () { return true; },
-            onOpen:   function ( p ) { if( o.onPick ) o.onPick( p ); else open( p ); },
+            canOpen:  canOpen || function () { return true; },
+            onOpen:   function ( p ) { if( o.openExts ) openPicked( p ); else open( p ); },
             emptyKey: o.emptyKey,
             recent:   recent.list,
             offline:  async function ()
@@ -1664,12 +1742,38 @@
                 var cached = await o.store.listCached( o.openRoot + "/" );
                 return cached.filter( function ( p )
                 {
-                    return p.indexOf( "/.bak/" ) === -1 && ( ! o.canOpen || o.canOpen( p ) );
+                    return p.indexOf( "/.bak/" ) === -1 && ( ! canOpen || canOpen( p ) );
                 } );
             }
         } );
 
         function openDialog() { browser.open( o.appDir ); }
+
+        // A file the user picked. The Open dialog lists only what this app
+        // opens, but "Recientes" hands over any path the session ever opened (a
+        // ?file= from Drive included), so anything else is still turned away here.
+        async function openPicked( p )
+        {
+            if( ! canOpen || canOpen( p ) ) { await open( p ); return; }
+
+            NayiveUI.toast( t( "write.formatUnsupported" ) + ( o.turnAwayEnd || "" ) );
+        }
+
+        // "Recientes" in the pull-down menus: the same ten paths the Open dialog
+        // lists, so the menu never drifts from it. An empty list still shows one
+        // (greyed) row - a menu that silently has no submenu is worse than one
+        // that says why.
+        function recentItems()
+        {
+            var list = recent.list();
+
+            if( ! list.length ) return [ { key: "ui.noRecent", enabled: function () { return false; } } ];
+
+            return list.map( function ( p )
+            {
+                return { text: baseName( p ), run: function () { openPicked( p ); } };
+            } );
+        }
 
         function toast( k ) { NayiveUI.toast( t( k ) ); }
 
@@ -2803,7 +2907,8 @@
             dropDraft:  saver.dropDraft,
             openSaveAs: openSaveAs,
             openDialog: openDialog,
-            recent:     recent.list,
+            recentItems: recentItems,
+            openPicked: openPicked,
             locked:     function () { return !! saver.lock(); },
             keepUntitled: keepUntitled,
             offerBack:    offerBack,

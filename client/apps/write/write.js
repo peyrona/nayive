@@ -185,13 +185,13 @@ const session = NayiveOffice.session( {
     openRoot   : OPEN_ROOT,
     // Read when "Guardar como" opens: at module load the language is not in yet.
     get defaultName() { return NayiveUI.t( 'write.defaultFile' ); },
+    nameKey    : 'write.defaultFile',
     encode     : function() { return exportBytes(); },
     load       : loadBody,
     blank      : loadBlank,
     finishName : docxName,
     renameName : docxName,
-    canOpen    : isOpenable,                                 // what the Open dialog lists
-    onPick     : function( path ) { openPickedFile( path ); },   // any other format is turned away
+    openExts   : [ 'docx' ],                                 // what the Open dialog lists; any other format is turned away
     emptyKey   : 'write.noDocs',
     ready      : function() { return ready; },
     focus      : function() { focusEditor(); }                        // the caret stays where it was
@@ -2039,22 +2039,6 @@ function matIcon( d )
     return '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="' + d + '"></path></svg>';
 }
 
-// "Recientes": the same ten paths the Open dialog lists (shared/office.js keeps
-// them), so the menu never drifts from it. An empty list still shows one
-// (greyed) row - a menu that silently has no submenu is worse than one that
-// says why.
-function recentItems()
-{
-    const list = session.recent();
-
-    if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
-
-    return list.map( function( p )
-    {
-        return { text: NayiveOffice.baseName( p ), run: function() { openPickedFile( p ); } };
-    } );
-}
-
 // Cortar / Copiar / Pegar / Pegar sin formato: the Edicion menu's and the
 // right-click menu's (see EDICION > CORTAR / COPIAR / PEGAR).
 const CLIP_ITEMS =
@@ -2093,7 +2077,7 @@ const MENUS = [
     [
         { key: 'write.newDoc',  el: 'newBtn'  },
         { key: 'ui.openDoc',    el: 'openBtn', sc: 'ui.openDoc' },
-        { key: 'ui.recent',     sub: recentItems },
+        { key: 'ui.recent',     sub: session.recentItems },   // shared/office.js
         { sep: true },
         { key: 'ui.save',       run: saveNow, sc: 'write.sc.save', icon: 'check' },
         { key: 'ui.saveAs',     el: 'saveAsBtn' },
@@ -2952,26 +2936,6 @@ async function exportBytes()
 // Ctrl-S / the menu: save now. An untitled or someone else's document goes to
 // "Guardar como" (shared/office.js).
 function saveNow() { session.saveNow(); }
-
-//----------------------------------------------------------------------------//
-// OPEN  (the dialog itself is the shared one: shared/office.js, openBrowser -
-// recent documents over a folder browser. Write only says which files it lists
-// and what to do with the one picked.)
-
-// Extensions the Open dialog shows: Write opens .docx alone.
-const OPEN_EXTS = [ 'docx' ];
-
-function isOpenable( path ) { return OPEN_EXTS.indexOf( NayiveOffice.extOf( path ) ) !== -1; }
-
-// Open a file the user picked. The Open dialog lists only .docx, but
-// "Recientes" hands over any path the session ever opened (a ?file= from
-// Drive included), so anything else is still turned away here.
-async function openPickedFile( path )
-{
-    if( isOpenable( path ) ) { await session.open( path ); return; }
-
-    NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) );
-}
 
 //----------------------------------------------------------------------------//
 // THE DOCUMENT IN THE ENGINE  (what the session in shared/office.js needs from Write)
