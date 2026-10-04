@@ -1007,7 +1007,7 @@ async function renderTemplates( dir )
         li.innerHTML = '<span class="open-ic"></span>';
         const nm = document.createElement( 'span' );
         nm.className   = 'open-nm';
-        nm.textContent = baseName( n.path ).replace( /\.docx$/i, '' );
+        nm.textContent = NayiveOffice.baseName( n.path ).replace( /\.docx$/i, '' );
         li.appendChild( nm );
         li.addEventListener( 'click', function() { useTemplate( n.path ); } );
         list.appendChild( li );
@@ -1047,7 +1047,7 @@ async function useTemplate( path )
         await loadIntoEditor( bytes );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
-        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: baseName( path ).replace( /\.docx$/i, '' ) } ) ),
+        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
         if( kept )       session.offerBack( kept, aside );
         else if( aside ) NayiveUI.toast( NayiveUI.t( 'write.draftSetAside' ) );
@@ -2099,7 +2099,7 @@ function recentItems()
 
     return list.map( function( p )
     {
-        return { text: baseName( p ), run: function() { openPickedFile( p ); } };
+        return { text: NayiveOffice.baseName( p ), run: function() { openPickedFile( p ); } };
     } );
 }
 
@@ -3066,12 +3066,8 @@ async function toBytes( body )
 //----------------------------------------------------------------------------//
 // HELPERS
 
-// Straight through to shared/office.js — this was an identical copy. A function
-// declaration on purpose: it is hoisted, and code above uses it.
-function baseName( path ) { return NayiveOffice.baseName( path ); }
-
 // Write's file-name rule, for "Guardar como" and a rename: always .docx.
-function docxName( name ) { return /\.docx$/i.test( name ) ? name : name + '.docx'; }
+function docxName( name ) { return NayiveOffice.withExt( name, 'docx' ); }
 
 async function fetchBytes( path )
 {
