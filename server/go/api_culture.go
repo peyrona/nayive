@@ -58,6 +58,7 @@ const (
 // Variables so the tests can change them.
 var (
 	cuGap      = 350 * time.Millisecond // between two outbound requests, all users together
+	cuRunMax   = 50                     // fetches in flight (distinct URLs) at most; past it, 503
 	cuCacheMax = int64(256 << 20)       // the cache folder's size cap
 	cuKeepMax  = 90 * 24 * time.Hour    // a copy nobody asked for in this long goes
 	cuFetch    = cuGet                  // the tests swap it for a fake internet
@@ -96,6 +97,11 @@ type cuCall struct {
 }
 
 var errCuRefused = errors.New("not an address the locker may read")
+
+// errCuBusy: cuRunMax fetches are already in flight. Each waits its turn, and
+// one user hanging up thousands of distinct URLs must not pile up waiters
+// without end - every locker would get nothing meanwhile.
+var errCuBusy = errors.New("too many fetches waiting")
 
 func (s *Server) cuDir() string { return filepath.Join(s.cfg.Here, ".cache", "culture") }
 
@@ -143,6 +149,10 @@ func (s *Server) apiCulture(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, context.Canceled) {
 		return // the page went away; the fetch goes on and is kept for the next one
 	}
+	if errors.Is(err, errCuBusy) { // not logged: a flood would fill the log
+		sendError(w, r, http.StatusServiceUnavailable, "too busy, try again later")
+		return
+	}
 	s.log.Warn("culture fetch failed", "url", key, "err", err)
 	sendError(w, r, http.StatusBadGateway, "the source could not be reached")
 }
@@ -161,6 +171,10 @@ func cuParseURL(raw string) (*url.URL, error) {
 func cuShared(ctx context.Context, key string) (string, []byte, error) {
 	cuMu.Lock()
 	c := cuRunning[key]
+	if c == nil && len(cuRunning) >= cuRunMax {
+		cuMu.Unlock()
+		return "", nil, errCuBusy
+	}
 	if c == nil {
 		c = &cuCall{done: make(chan struct{})}
 		cuRunning[key] = c

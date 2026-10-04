@@ -12,7 +12,8 @@ package main
 // "download" would even hand the answer back. So every mail connection dials
 // through mailDialer, whose Control refuses, AFTER the name is resolved, any
 // address that is not public: loopback, private, link-local, CGNAT,
-// unspecified, multicast. The tests, whose servers live on 127.0.0.1, turn
+// unspecified, multicast - and this machine's own public IP (bmOwnIP, as the
+// Bookmarks fetcher): from the machine itself it gets past the firewall. The tests, whose servers live on 127.0.0.1, turn
 // the guard off (mail_main_test.go).
 
 import (
@@ -47,7 +48,7 @@ func mailDialControl(network, address string, _ syscall.RawConn) error {
 		return errMailPrivateNet
 	}
 	ip := net.ParseIP(host)
-	if ip == nil || !mailPublicIP(ip) {
+	if ip == nil || !mailPublicIP(ip) || bmOwnIP(ip) {
 		return errMailPrivateNet
 	}
 	return nil

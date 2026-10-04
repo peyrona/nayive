@@ -11,7 +11,9 @@ package main
 // alone - isServerData keeps Drive out):
 //
 //	labels.json    {"labels": [{id,name,color}], "tags": {"<acct>|<message-id>": tag}}
-//	trash.json     {"<acct>|<message-id>": {"at", "from"}}
+//	trash.json     {"<acct>|<message-id>": {"at", "from", "more"}}
+//	               "more": the trays of the other copies of that Message-ID
+//	               in the Trash (a mail to yourself), newest first after "from"
 //	settings.json  {"trashDays": 30, "showImages": false, "signature": ""}
 //	state.json     {"sent": {"<acct>|<message-id>": at}, "trash": {"<acct>": folder}, "purgeAt": at}
 //	               what the server notes for itself: the drafts sent lately (a
@@ -147,9 +149,13 @@ type mailLabelsFile struct {
 }
 
 type mailTrashEntry struct {
-	At   time.Time `json:"at"`
-	From MailRole  `json:"from,omitempty"`
+	At   time.Time  `json:"at"`
+	From MailRole   `json:"from,omitempty"` // the copy put in the Trash last
+	More []MailRole `json:"more,omitempty"` // the copies before it, newest first
 }
+
+// mailTrashMore: the most copies of one Message-ID whose trays are kept.
+const mailTrashMore = 8
 
 type MailSettings struct {
 	TrashDays  int    `json:"trashDays"`
@@ -764,21 +770,39 @@ func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary) {
 		if !ok || ref.Role == RoleTrash {
 			continue
 		}
-		u.trash[mailKey(acct, r.MessageID)] = mailTrashEntry{At: now, From: ref.Role}
+		// A second copy (a mail to yourself: Inbox and Sent) keeps the
+		// first one's tray, newest first like FindAll: each goes back to
+		// its own (SF6). Its clock is the later one: never purged early.
+		key := mailKey(acct, r.MessageID)
+		e := mailTrashEntry{At: now, From: ref.Role}
+		if old, ok := u.trash[key]; ok && old.From != "" {
+			e.More = append([]MailRole{old.From}, old.More...)
+			e.More = e.More[:min(len(e.More), mailTrashMore)]
+		}
+		u.trash[key] = e
 	}
 	if err := h.saveTrashLocked(user, u); err != nil {
 		h.log.Warn("mail: saving trash.json", "user", user, "err", err)
 	}
 }
 
-// trashFrom is where a message in the Trash came from (Inbox when unknown).
-func (h *MailHub) trashFrom(user, acct, mid string) MailRole {
+// trashFrom is where the nth copy (0: the newest) of a message in the Trash
+// came from: the first copy's tray when no more are known, Inbox when none.
+func (h *MailHub) trashFrom(user, acct, mid string, nth int) MailRole {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if e, ok := h.userLocked(user).trash[mailKey(acct, mid)]; ok && e.From != "" && e.From != RoleTrash {
-		return e.From
+	e, ok := h.userLocked(user).trash[mailKey(acct, mid)]
+	if !ok {
+		return RoleInbox
 	}
-	return RoleInbox
+	from := e.From
+	if nth > 0 && nth <= len(e.More) {
+		from = e.More[nth-1]
+	}
+	if from == "" || from == RoleTrash {
+		return RoleInbox
+	}
+	return from
 }
 
 // forget drops what Nayive knows of messages that left the Trash - restored

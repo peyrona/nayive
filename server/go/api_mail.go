@@ -618,12 +618,14 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		}
 		groups := map[MailRole][]MailRef{}
 		var back []MailSummary
+		nth := map[string]int{} // copies of one Message-ID: each to its own tray (SF6)
 		for _, row := range rows {
 			ref, ok := parseMailRef(row.Ref)
 			if !ok || ref.Role != RoleTrash {
 				continue
 			}
-			to := s.mail.trashFrom(user, acct, row.MessageID)
+			to := s.mail.trashFrom(user, acct, row.MessageID, nth[row.MessageID])
+			nth[row.MessageID]++
 			groups[to] = append(groups[to], ref)
 			back = append(back, row)
 		}

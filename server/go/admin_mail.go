@@ -22,21 +22,24 @@ package main
 //   - create-user: a new person has the name - the tombstone goes, and their
 //     mail is read from their own (empty) home.
 //
-// THE TOMBSTONE is a mailUser with no accounts whose four files are all
+// THE TOMBSTONE is a mailUser with no accounts whose five files are all
 // marked damaged (errMailUserGone). The hub already never writes a file that
 // is marked so (writeMailFile), and the purge skips a user whose trash or
 // settings are (purgeAccount): a poll, purge or request that was already
 // under way for the old name - it took the name before the admin acted -
 // finds nothing it can write, and nothing it may expunge.
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // errMailUserGone marks every file of a tombstone. A plain error, never an
 // *fs.PathError: a read error is tried again (retryDamagedLocked), this never.
 var errMailUserGone = errors.New("mail: the admin deleted or renamed this user")
 
 // mailUserFiles are the files a tombstone marks: every one writeMailFile writes.
-var mailUserFiles = []string{"accounts.json", "labels.json", "trash.json", "settings.json"}
+var mailUserFiles = []string{"accounts.json", "labels.json", "trash.json", "settings.json", "state.json"}
 
 // mailTombstone is what a deleted or renamed-away name answers with. Its maps
 // are made: a request under way writes into them before it tries to save.
@@ -44,6 +47,7 @@ func mailTombstone() *mailUser {
 	u := &mailUser{
 		labels:  mailLabelsFile{Labels: []MailLabel{}, Tags: map[string]*mailTag{}},
 		trash:   map[string]mailTrashEntry{},
+		state:   mailStateFile{Sent: map[string]time.Time{}, Trash: map[string]string{}},
 		damaged: map[string]error{},
 	}
 	for _, f := range mailUserFiles {
