@@ -13,13 +13,13 @@
 # outside tools/canvas-spike/ is touched - in particular NOT client/apps/write/.
 #
 # WHAT THIS IS FOR
-#   A spike, not a migration. Write rides SuperDoc, whose DOCX engine is
+#   A spike, not a migration. Write rode SuperDoc then (docx-editor.dev since 09-21), whose DOCX engine is
 #   proprietary (so the bundle cannot live in this public repo) and weighs
 #   10.7 MB + a 7.8 MB worker. Canvas-Editor is MIT and its official docx
 #   plugin is MIT too. This builds them so the question can be answered by
 #   opening real files instead of by reading READMEs.
 #
-# TWO THINGS THAT MAKE THIS SIMPLER THAN build-superdoc.sh
+# TWO THINGS THAT MAKE THIS SIMPLER THAN THE OLD build-superdoc.sh (deleted)
 #
 #   * Canvas-Editor inlines its four web workers as `data:` URLs, so there is
 #     no worker file to ship and no __WORKER_URL__ pin to rewrite. (The Go
@@ -32,14 +32,14 @@
 #   The docx plugin pulls in docx.js, which calls require("buffer") in the
 #   `else` branch of `typeof atob == "function"` - dead code in a browser.
 #   esbuild cannot know that, so it is aliased to buffer-stub.js, the same
-#   trick as the SuperDoc build's .peer-stub.js.
+#   trick as the old SuperDoc build's .peer-stub.js.
 set -euo pipefail
 
 HERE="$( cd "$( dirname "$0" )" && pwd )"
 
-EDITOR_VERSION="${1:-1.0.3}"      # exact on purpose, as in build-superdoc.sh
+EDITOR_VERSION="${1:-1.0.3}"      # exact on purpose, as the old build-superdoc.sh did
 DOCX_VERSION="${2:-1.0.0}"        # its peerDependency says >=0.9.42; 1.0.3 installs clean
-ESBUILD_VERSION="0.28.2"    # the version the SuperDoc build already uses
+ESBUILD_VERSION="0.28.2"    # the version build-docx-editor.sh uses
 
 OUT="$HERE/lib/canvas-editor_v${EDITOR_VERSION}.min.js"
 WORK="$( mktemp -d /tmp/canvas-spike-build.XXXXXX )"
@@ -71,7 +71,7 @@ JS
     --log-level=warning
 
 # spike.js importa el bundle por su nombre, que lleva la version dentro - la
-# misma convencion que build-superdoc.sh, y el mismo motivo para reescribirla
+# misma convencion que build-docx-editor.sh, y el mismo motivo para reescribirla
 # aqui en vez de dejarla a mano.
 sed -i -E "s|\./lib/canvas-editor_v[0-9.]+\.min\.js|./lib/canvas-editor_v${EDITOR_VERSION}.min.js|" "$HERE/spike.js"
 ls "$HERE/lib/"canvas-editor_v*.min.js 2>/dev/null | grep -v "_v${EDITOR_VERSION}.min.js" | xargs -r rm -f

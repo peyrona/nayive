@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -41,12 +40,6 @@ type adminRequest struct {
 	// válida" - and the panel shows that message to the person who typed it.
 	Quota    json.RawMessage `json:"quota"`
 	PhotoMax json.RawMessage `json:"photo_max"`
-
-	// set-extstore
-	Mount     string   `json:"mount"`
-	AlwaysExt []string `json:"always_ext"`
-	NeverExt  []string `json:"never_ext"`
-	MinMB     *float64 `json:"min_mb"`
 
 	// set-sites
 	SitesDir string `json:"sites_dir"`
@@ -87,31 +80,17 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var adminName, sitesDir string
-		var ext *ExternalStorage
 		s.cfg.Read(func(c *ServerConfig) {
 			if c.Admin != nil {
 				adminName = c.Admin.Name
 			}
-			ext = c.ExternalStorage
 			sitesDir = c.SitesDir
 		})
-		// An UNSET block answers as {} - not as a fully-populated object with
-		// empty fields. The panel tells the two apart: {} means "never
-		// configured" and leaves its form untouched.
-		//
-		// java: `any` holds either shape, which is the honest way to say that
-		// this field is a struct OR an empty object. A *ExternalStorage would
-		// marshal nil as `null`, which is a third thing again.
-		var extOut any = map[string]any{}
-		if ext != nil {
-			extOut = ext
-		}
 		sendJSON(w, r, http.StatusOK, map[string]any{
-			"configured":       configured,
-			"admin":            map[string]string{"name": adminName},
-			"external_storage": extOut,
-			"sites_dir":        sitesDir,
-			"users":            s.users.ListUsers(),
+			"configured": configured,
+			"admin":      map[string]string{"name": adminName},
+			"sites_dir":  sitesDir,
+			"users":      s.users.ListUsers(),
 		})
 		return
 
@@ -135,10 +114,6 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 	case "set-admin":
 		if s.needAdmin(w, r, isAdmin) {
 			s.adminSetCredentials(w, r, &body)
-		}
-	case "set-extstore":
-		if s.needAdmin(w, r, isAdmin) {
-			s.adminSetExtStore(w, r, &body)
 		}
 	case "set-sites":
 		if s.needAdmin(w, r, isAdmin) {
@@ -281,31 +256,6 @@ func (s *Server) adminSetCredentials(w http.ResponseWriter, r *http.Request, bod
 		map[string]string{"message": "administrador actualizado", "name": name})
 }
 
-// adminSetExtStore stores where big files should be offloaded to.
-//
-// UI + config only for now: this stores the admin's choices; the code that
-// actually moves files onto the mounted volume is not written yet.
-func (s *Server) adminSetExtStore(w http.ResponseWriter, r *http.Request, body *adminRequest) {
-	store := ExternalStorage{
-		Mount:     strings.TrimSpace(body.Mount),
-		AlwaysExt: normaliseExts(body.AlwaysExt),
-		NeverExt:  normaliseExts(body.NeverExt),
-	}
-	if body.MinMB != nil && *body.MinMB > 0 {
-		store.MinMB = roundTo(*body.MinMB, 3)
-	}
-
-	if err := s.cfg.Update(func(c *ServerConfig) { c.ExternalStorage = &store }); err != nil {
-		sendError(w, r, http.StatusInternalServerError, "no se pudo guardar la configuración")
-		return
-	}
-	s.log.Info("external storage set", "mount", store.Mount)
-	sendJSON(w, r, http.StatusOK, map[string]any{
-		"message":          "almacenamiento externo guardado",
-		"external_storage": store,
-	})
-}
-
 // adminSetSites stores the folder of plain web sites (sites.go). It applies at
 // once - SitesPath reads it on every request. "" turns the sites off.
 func (s *Server) adminSetSites(w http.ResponseWriter, r *http.Request, body *adminRequest) {
@@ -331,27 +281,6 @@ func (s *Server) adminSetSites(w http.ResponseWriter, r *http.Request, body *adm
 		"message":   "carpeta de sitios web guardada",
 		"sites_dir": raw,
 	})
-}
-
-// normaliseExts lowercases, de-duplicates and dot-prefixes a list of file
-// extensions, keeping the order the admin typed them in.
-func normaliseExts(list []string) []string {
-	out := []string{}
-	seen := make(map[string]bool)
-	for _, t := range list {
-		t = strings.ToLower(strings.TrimSpace(t))
-		if t == "" {
-			continue
-		}
-		if !strings.HasPrefix(t, ".") {
-			t = "." + t
-		}
-		if !seen[t] {
-			seen[t] = true
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // adminSaveUser creates or updates a regular user.
@@ -565,14 +494,4 @@ func derefString(p *string) string {
 		return ""
 	}
 	return *p
-}
-
-// roundTo rounds to `places` decimals, matching Python's round(x, 3).
-func roundTo(v float64, places int) float64 {
-	s := strconv.FormatFloat(v, 'f', places, 64)
-	out, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return v
-	}
-	return out
 }

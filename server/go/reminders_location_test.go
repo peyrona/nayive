@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ecdh"
-	"crypto/rand"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -164,13 +162,8 @@ func TestLocationAlertsDue(t *testing.T) {
 // message is encrypted for it before it is sent.
 func testSub(t *testing.T, endpoint string) PushSub {
 	t.Helper()
-	priv, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	return PushSub{Endpoint: endpoint, Keys: PushKeys{P256dh: b64u(priv.PublicKey().Bytes()), Auth: b64u(auth)}, Lang: "es"}
+	p256, au := testPushKeys(t)
+	return PushSub{Endpoint: endpoint, Keys: PushKeys{P256dh: p256, Auth: au}, Lang: "es"}
 }
 
 // fakePush is a push service on this machine. It counts what each path gets

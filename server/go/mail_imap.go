@@ -1114,6 +1114,33 @@ func (p *imapProvider) selectGroup(c *imapclient.Client, folder string, role Mai
 	return set, sel.UIDValidity, nil
 }
 
+// eachGroup runs `fn` once per tray the refs are in, with that tray selected
+// and the uids of its refs that match its UIDVALIDITY; a tray with no real
+// folder, or none matching, is skipped.
+func (p *imapProvider) eachGroup(c *imapclient.Client, refs []MailRef,
+	fn func(role MailRole, folder string, set imap.UIDSet, uidv uint32) error) error {
+	folders, err := p.foldersOf(c, refs)
+	if err != nil {
+		return err
+	}
+	for role, folder := range folders {
+		if folder == "" {
+			continue
+		}
+		set, uidv, err := p.selectGroup(c, folder, role, refs)
+		if err != nil {
+			return err
+		}
+		if len(set) == 0 {
+			continue
+		}
+		if err := fn(role, folder, set, uidv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func storeFlag(c *imapclient.Client, set imap.UIDSet, flag imap.Flag, on bool) error {
 	op := imap.StoreFlagsAdd
 	if !on {
@@ -1125,12 +1152,12 @@ func storeFlag(c *imapclient.Client, set imap.UIDSet, flag imap.Flag, on bool) e
 func (p *imapProvider) Set(ctx context.Context, refs []MailRef, ch MailChange) (map[string]MailRef, error) {
 	moved := map[string]MailRef{}
 	err := p.do(ctx, func(c *imapclient.Client) error {
-		folders, err := p.foldersOf(c, refs)
-		if err != nil {
-			return err
-		}
+		// The trays' folders and the destination's come from one LIST
+		// (folderFor caches it), so asking for the destination first sends
+		// the same commands.
 		dest := ""
 		if ch.Move != "" {
+			var err error
 			if dest, err = p.folderFor(c, ch.Move); err != nil {
 				return err
 			}
@@ -1138,17 +1165,7 @@ func (p *imapProvider) Set(ctx context.Context, refs []MailRef, ch MailChange) (
 				return errMailNoTray
 			}
 		}
-		for role, folder := range folders {
-			if folder == "" {
-				continue
-			}
-			set, uidv, err := p.selectGroup(c, folder, role, refs)
-			if err != nil {
-				return err
-			}
-			if len(set) == 0 {
-				continue
-			}
+		return p.eachGroup(c, refs, func(role MailRole, folder string, set imap.UIDSet, uidv uint32) error {
 			if ch.Seen != nil {
 				if err := storeFlag(c, set, imap.FlagSeen, *ch.Seen); err != nil {
 					return err
@@ -1160,7 +1177,7 @@ func (p *imapProvider) Set(ctx context.Context, refs []MailRef, ch MailChange) (
 				}
 			}
 			if dest == "" || dest == folder {
-				continue
+				return nil
 			}
 			destV, src, dst, err := moveUIDs(c, set, dest)
 			p.sel, p.selData = "", nil // counts changed under it
@@ -1175,8 +1192,8 @@ func (p *imapProvider) Set(ctx context.Context, refs []MailRef, ch MailChange) (
 					moved[old.String()] = MailRef{Role: ch.Move, UIDValidity: destV, UID: uint32(b[i])}
 				}
 			}
-		}
-		return nil
+			return nil
+		})
 	})
 	return moved, err
 }
@@ -1247,28 +1264,11 @@ func expungeUIDs(c *imapclient.Client, set imap.UIDSet) error {
 
 func (p *imapProvider) Expunge(ctx context.Context, refs []MailRef) error {
 	return p.do(ctx, func(c *imapclient.Client) error {
-		folders, err := p.foldersOf(c, refs)
-		if err != nil {
-			return err
-		}
-		for role, folder := range folders {
-			if folder == "" {
-				continue
-			}
-			set, _, err := p.selectGroup(c, folder, role, refs)
-			if err != nil {
-				return err
-			}
-			if len(set) == 0 {
-				continue
-			}
-			err = expungeUIDs(c, set)
+		return p.eachGroup(c, refs, func(_ MailRole, _ string, set imap.UIDSet, _ uint32) error {
+			err := expungeUIDs(c, set)
 			p.sel, p.selData = "", nil
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+			return err
+		})
 	})
 }
 
@@ -1278,21 +1278,7 @@ func (p *imapProvider) Summaries(ctx context.Context, refs []MailRef) ([]MailSum
 	out := []MailSummary{}
 	err := p.do(ctx, func(c *imapclient.Client) error {
 		out = out[:0]
-		folders, err := p.foldersOf(c, refs)
-		if err != nil {
-			return err
-		}
-		for role, folder := range folders {
-			if folder == "" {
-				continue
-			}
-			set, uidv, err := p.selectGroup(c, folder, role, refs)
-			if err != nil {
-				return err
-			}
-			if len(set) == 0 {
-				continue
-			}
+		return p.eachGroup(c, refs, func(role MailRole, _ string, set imap.UIDSet, uidv uint32) error {
 			msgs, err := c.Fetch(set, mailRowFetch).Collect()
 			if err != nil {
 				return err
@@ -1300,8 +1286,8 @@ func (p *imapProvider) Summaries(ctx context.Context, refs []MailRef) ([]MailSum
 			for _, m := range withEnvelope(msgs) {
 				out = append(out, imapSummary(m, uidv, role))
 			}
-		}
-		return nil
+			return nil
+		})
 	})
 	return out, err
 }

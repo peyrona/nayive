@@ -5,9 +5,7 @@ package main
 // =============================================================================
 //
 // One test per rule added on 2026-09-11, after a review of every path in the
-// server that deletes or overwrites. Each rule is a deliberate difference from
-// the Python, which does not have it - see docs/go-port.md, "Deliberate
-// differences".
+// server that deletes or overwrites.
 
 import (
 	"io"

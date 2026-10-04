@@ -16,9 +16,8 @@
 // has been wired to shared/store.js - or, like games, once it turns out to need
 // nothing from the server at all.
 //
-// The output is byte-for-byte what the Python version (build-precache.py) wrote,
-// CACHE_VERSION included: a different hash is not cosmetic, it makes every
-// client download the whole precache again.
+// Keep the output byte-stable, CACHE_VERSION included: a different hash is
+// not cosmetic, it makes every client download the whole precache again.
 package main
 
 import (
@@ -181,7 +180,7 @@ func collect(apps string) []string {
 	for r := range rels {
 		out = append(out, r)
 	}
-	sort.Strings(out) // byte order = code-point order for UTF-8, like Python's sorted()
+	sort.Strings(out) // byte order = code-point order for UTF-8
 	return out
 }
 
@@ -229,7 +228,7 @@ func isDocxEditorCore(rel string) bool {
 
 // glob returns the regular files matching pat under apps, as slash paths
 // relative to apps. It understands the two shapes the lists above use, with
-// Python pathlib's rules (a `*` also matches names that start with a dot):
+// pathlib-style rules (a `*` also matches names that start with a dot):
 //
 //	"dir/x*.js"  one folder level, the last part a pattern
 //	"dir/**/*"   every file at any depth under dir

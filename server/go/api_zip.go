@@ -65,7 +65,6 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -110,8 +109,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 	}
 	role, user := sess.Role, sess.User
 
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
+	if !allowMethod(w, r, "use GET or POST", http.MethodGet, http.MethodPost) {
 		return
 	}
 	// Extract and Compress write files: never from a page of another account
@@ -139,12 +137,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A home the admin moved under the request: 503, never 404 (sendMissing).
-	info, err := src.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		sendMissing(w, r, err, "no existe")
-		return
-	}
-	f, err := src.Open()
+	f, info, err := src.OpenRegular()
 	if err != nil {
 		sendMissing(w, r, err, "no existe")
 		return
@@ -244,18 +237,8 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 // the quota of whoever's home it is in (see filesWrite), or - for the admin
 // and a user without a quota - the disk's free space less zipDiskMargin.
 func (s *Server) zipRoom(role, user string, parent Resolved) int64 {
-	payer := s.users.HomeOwner(parent.Abs)
-	if payer == "" {
-		payer = user
-	}
-	var quota *int64
-	if role != "admin" {
-		quota = s.users.UserQuotaBytes(payer)
-	}
-	var room int64
-	if quota != nil {
-		room = *quota - s.users.UserUsageBytes(payer)
-	} else {
+	room, limited := s.quotaLeft(role, user, parent.Abs)
+	if !limited {
 		_, free := diskUsage(parent.Abs)
 		room = free - zipDiskMargin
 	}
@@ -404,7 +387,7 @@ func zipCandidate(base string, i int) string {
 	if i == 1 {
 		return base
 	}
-	return fmt.Sprintf("%s (%d)", base, i)
+	return numberedName(base, "", i)
 }
 
 // freeFolderName is the first candidate nothing in parentRel holds yet - what
@@ -422,16 +405,9 @@ func freeFolderName(root *os.Root, parentRel, base string) string {
 // claimFolder MAKES the first free candidate and returns its name. Mkdir fails
 // on a name that exists, so two extractions at once can never share a folder.
 func claimFolder(root *os.Root, parentRel, base string) (string, error) {
-	for i := 1; ; i++ {
-		name := zipCandidate(base, i)
-		err := root.Mkdir(filepath.Join(parentRel, name), 0o755)
-		if err == nil {
-			return name, nil
-		}
-		if !errors.Is(err, fs.ErrExist) || i >= 1000 {
-			return "", err
-		}
-	}
+	return claimName(base, "", 2, 1000, func(name string) error {
+		return root.Mkdir(filepath.Join(parentRel, name), 0o755)
+	})
 }
 
 // unzipInto makes every item of the plan under destRel, which exists and is

@@ -57,9 +57,8 @@ func main() {
 	os.Exit(run(apps))
 }
 
-// appDir is the app the engine is vendored into. One folder since the swap
-// (docs/write-docx-editor-plan.md, Phase 9); kept as a function so a future
-// second host is one line.
+// appDir is the app the engine is vendored into. One folder since the swap;
+// kept as a function so a future second host is one line.
 func appDir(apps string) string {
 	_ = apps
 	return "write"
@@ -204,9 +203,4 @@ func hashFile(p string) (string, error) {
 		return "", err
 	}
 	return "sha256-" + hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func isDir(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
 }

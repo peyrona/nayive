@@ -72,14 +72,43 @@ type jpegPlan struct {
 	end   int64
 }
 
-// jpegPlans caches the walk per file version: a visitor paging through an album
-// asks for the same photos again, and walking means reading the whole file.
-var jpegPlans = struct {
+// planCache keeps a file's walk per version (path, size, mtime): a visitor
+// paging through an album asks for the same photos again, and walking means
+// reading the whole file.
+type planCache[T any] struct {
 	sync.Mutex
-	m map[string]jpegPlan
-}{m: map[string]jpegPlan{}}
+	m map[string]T
+}
 
-const jpegPlansMax = 4096
+const planCacheMax = 4096
+
+var (
+	jpegPlans   = planCache[jpegPlan]{m: map[string]jpegPlan{}}
+	splicePlans = planCache[[]piece]{m: map[string][]piece{}} // planPNG / planWebP
+)
+
+// get is the plan for `key` (the file's absolute path) at this version,
+// made by `plan` the first time.
+func (c *planCache[T]) get(key string, info os.FileInfo, plan func() (T, error)) (T, error) {
+	key += "|" + itoa64(info.Size()) + "|" + itoa64(info.ModTime().UnixNano())
+	c.Lock()
+	v, found := c.m[key]
+	c.Unlock()
+	if found {
+		return v, nil
+	}
+	v, err := plan()
+	if err != nil {
+		return v, err
+	}
+	c.Lock()
+	if len(c.m) >= planCacheMax {
+		clear(c.m) // crude, and enough: it only saves a re-walk
+	}
+	c.m[key] = v
+	c.Unlock()
+	return v, nil
+}
 
 // cleanJPEG is `file` as a stranger may read it. `key` names the file (its
 // absolute path) for the cache.
@@ -92,23 +121,9 @@ func cleanJPEG(key string, file *os.File, info os.FileInfo) (*cleanReader, error
 func cleanBlanked(key string, file *os.File, info os.FileInfo,
 	planner func(io.ReaderAt, int64) (jpegPlan, error)) (*cleanReader, error) {
 
-	key += "|" + itoa64(info.Size()) + "|" + itoa64(info.ModTime().UnixNano())
-
-	jpegPlans.Lock()
-	plan, found := jpegPlans.m[key]
-	jpegPlans.Unlock()
-
-	if !found {
-		var err error
-		if plan, err = planner(file, info.Size()); err != nil {
-			return nil, err
-		}
-		jpegPlans.Lock()
-		if len(jpegPlans.m) >= jpegPlansMax {
-			clear(jpegPlans.m) // crude, and enough: it only saves a re-walk
-		}
-		jpegPlans.m[key] = plan
-		jpegPlans.Unlock()
+	plan, err := jpegPlans.get(key, info, func() (jpegPlan, error) { return planner(file, info.Size()) })
+	if err != nil {
+		return nil, err
 	}
 	return &cleanReader{src: file, blank: plan.blank, size: plan.end}, nil
 }
@@ -394,19 +409,25 @@ func (c *cleanReader) Read(p []byte) (int, error) {
 }
 
 func (c *cleanReader) Seek(offset int64, whence int) (int64, error) {
+	return seekTo(&c.pos, c.size, offset, whence, "cleanReader")
+}
+
+// seekTo is io.Seeker over a reader at *pos of `size` bytes; `name` is the
+// reader's, for the two errors.
+func seekTo(pos *int64, size, offset int64, whence int, name string) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 	case io.SeekCurrent:
-		offset += c.pos
+		offset += *pos
 	case io.SeekEnd:
-		offset += c.size
+		offset += size
 	default:
-		return 0, errors.New("cleanReader: bad whence")
+		return 0, errors.New(name + ": bad whence")
 	}
 	if offset < 0 {
-		return 0, errors.New("cleanReader: negative position")
+		return 0, errors.New(name + ": negative position")
 	}
-	c.pos = offset
+	*pos = offset
 	return offset, nil
 }
 
@@ -461,31 +482,13 @@ func (p piece) len() int64 {
 	return p.n
 }
 
-// splicePlans caches planPNG / planWebP per file version, as jpegPlans does.
-var splicePlans = struct {
-	sync.Mutex
-	m map[string][]piece
-}{m: map[string][]piece{}}
-
 // cleanSpliced is `file` as `plan` lays it out.
 func cleanSpliced(key string, file *os.File, info os.FileInfo,
 	plan func(io.ReaderAt, int64) ([]piece, error)) (*spliceReader, error) {
 
-	key += "|" + itoa64(info.Size()) + "|" + itoa64(info.ModTime().UnixNano())
-	splicePlans.Lock()
-	pieces, found := splicePlans.m[key]
-	splicePlans.Unlock()
-	if !found {
-		var err error
-		if pieces, err = plan(file, info.Size()); err != nil {
-			return nil, err
-		}
-		splicePlans.Lock()
-		if len(splicePlans.m) >= jpegPlansMax {
-			clear(splicePlans.m)
-		}
-		splicePlans.m[key] = pieces
-		splicePlans.Unlock()
+	pieces, err := splicePlans.get(key, info, func() ([]piece, error) { return plan(file, info.Size()) })
+	if err != nil {
+		return nil, err
 	}
 	return newSpliceReader(file, pieces), nil
 }
@@ -715,18 +718,5 @@ func (s *spliceReader) Read(p []byte) (int, error) {
 }
 
 func (s *spliceReader) Seek(offset int64, whence int) (int64, error) {
-	switch whence {
-	case io.SeekStart:
-	case io.SeekCurrent:
-		offset += s.pos
-	case io.SeekEnd:
-		offset += s.size
-	default:
-		return 0, errors.New("spliceReader: bad whence")
-	}
-	if offset < 0 {
-		return 0, errors.New("spliceReader: negative position")
-	}
-	s.pos = offset
-	return offset, nil
+	return seekTo(&s.pos, s.size, offset, whence, "spliceReader")
 }

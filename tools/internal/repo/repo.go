@@ -1,7 +1,6 @@
 // Package repo finds the Nayive repository root for the build tools.
 //
-// The Python tools found it from their own location (the parent of tools/). A
-// `go run` binary lives in a temp folder, so the Go tools find it from the
+// A `go run` binary lives in a temp folder, so the tools find it from the
 // working directory instead: walk up until a folder holds client/apps. That
 // is why they are run as `go -C tools run ./<tool>` - any folder inside the
 // repo works.

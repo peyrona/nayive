@@ -182,8 +182,7 @@ func (s *Server) publicPage(w http.ResponseWriter, r *http.Request) {
 // answering.
 func (s *Server) publicTarget(w http.ResponseWriter, r *http.Request) (*Grant, string, bool) {
 	publicHeaders(w)
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet, http.MethodHead) {
 		return nil, "", false
 	}
 	g, root := s.liveLink(r.PathValue("token"))
@@ -509,20 +508,8 @@ func openInside(dir, name string) (*os.File, os.FileInfo, error) {
 		return nil, nil, err
 	}
 	defer root.Close()
-	// Stat BEFORE opening: opening a FIFO could block.
-	if info, err := root.Stat(name); err != nil || !info.Mode().IsRegular() {
-		return nil, nil, os.ErrNotExist
-	}
-	file, err := root.Open(name)
-	if err != nil {
-		return nil, nil, err
-	}
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		file.Close()
-		return nil, nil, os.ErrNotExist
-	}
-	return file, info, nil
+	return openRegular(func() (os.FileInfo, error) { return root.Stat(name) },
+		func() (*os.File, error) { return root.Open(name) })
 }
 
 // serveImage sends a picture with Range and 304 support.

@@ -18,7 +18,7 @@ func TestDeviceFollowsRenewedPush(t *testing.T) {
 	const old, fresh = "https://fcm.googleapis.com/fcm/send/viejo", "https://fcm.googleapis.com/fcm/send/nuevo"
 	jsonCall(t, client, "PUT", base+"/api/device/"+id, `{"endpoint":"`+old+`"}`, 200, nil)
 
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	sub := func(endpoint, oldEndpoint string) string {
 		return `{"subscription":{"endpoint":"` + endpoint + `","keys":{"p256dh":"` + p256 + `","auth":"` + au +
 			`"}},"old_endpoint":"` + oldEndpoint + `"}`

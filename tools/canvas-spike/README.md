@@ -4,7 +4,7 @@ Una **prueba**, no una migración. Nada de `client/apps/write/` se toca, y nada 
 esto se despliega: `tools/` no va al VPS.
 
 > **Aparcado el 17-09-2026.** El proyecto saca versión cada dos semanas; se
-> espera a que esté más estable y más completo. Write sigue con SuperDoc.
+> espera a que esté más estable y más completo. Write pasó después (21-09) a docx-editor.dev.
 > Para retomarlo: `tools/canvas-spike/build.sh <versión nueva>` y `smoke.mjs`,
 > y ver si los dos fallos de abajo siguen ahí.
 
@@ -19,7 +19,7 @@ permanentes, sin nada instalado fuera de esta carpeta.
 
 ## Qué se está preguntando
 
-Write va montado sobre SuperDoc, cuyo motor `.docx` es propietario — por eso el
+Write iba entonces montado sobre SuperDoc, cuyo motor `.docx` es propietario — por eso el
 bundle no puede vivir en este repo público — y pesa 10,7 MB más un worker de
 7,8 MB. Canvas-Editor es MIT, y su plugin oficial de `.docx` también. La duda no
 es si funciona, es **qué se pierde**. Así que esto abre tus documentos de verdad

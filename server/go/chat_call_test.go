@@ -54,7 +54,7 @@ func (f *chatFixture) convMsgs(t *testing.T, client *http.Client, path string) [
 
 // TestTurnPassword: coturn's use-auth-secret password, and the ICE list.
 func TestTurnPassword(t *testing.T) {
-	// python3: base64(hmac.new(b"s3cret", b"1700000000:nayive", sha1).digest())
+	// base64(HMAC-SHA1(key "s3cret", "1700000000:nayive")), worked out by hand
 	if got := turnPassword([]byte("s3cret"), "1700000000:nayive"); got != "3IXFNYgDYzhYiXo2hyu24pdoYm8=" {
 		t.Fatalf("turnPassword = %q", got)
 	}

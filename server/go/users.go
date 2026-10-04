@@ -107,8 +107,7 @@ type UserConfig struct {
 }
 
 // pyFloat is a float64 that always marshals with its decimal point: "12.0",
-// the way every config.json has spelled a quota since the first server (a
-// Python one) wrote them.
+// the way every config.json has spelled a quota since the first server.
 //
 // java: Go turns float64(12) into the token "12". Both parse back to the same
 // number, so nothing BREAKS - but config.json is a file a person opens, and a
@@ -116,8 +115,8 @@ type UserConfig struct {
 type pyFloat float64
 
 func (f pyFloat) MarshalJSON() ([]byte, error) {
-	// 'g' with -1 digits is the shortest form that round-trips - the same rule
-	// Python's repr() follows, including the "2e-06" shape for small values.
+	// 'g' with -1 digits is the shortest form that round-trips, "2e-06" for
+	// small values.
 	out := strconv.FormatFloat(float64(f), 'g', -1, 64)
 	if !strings.ContainsAny(out, ".eEnN") { // no point, no exponent, not inf/NaN
 		out += ".0"
@@ -397,13 +396,7 @@ func readNumber[T ~int | ~float64](fields map[string]json.RawMessage, key string
 // field the file carried.
 func writeUserConfig(path string, cfg UserConfig) error {
 	fields := cfg.raw.Clone()
-	put := func(key string, value any) error {
-		fields.Put(key, value)
-		return nil
-	}
-	if err := put("password", cfg.Password); err != nil {
-		return err
-	}
+	fields.Put("password", cfg.Password)
 	// Only the fields that are actually set are written, so removing a quota
 	// really removes the key rather than storing null.
 	// The raw token is written back untouched whenever the value did not
@@ -412,8 +405,8 @@ func writeUserConfig(path string, cfg UserConfig) error {
 	if cfg.Quota != nil {
 		if cfg.RawQuota != nil && sameNumber(cfg.RawQuota, *cfg.Quota) {
 			fields.Set("quota", cfg.RawQuota)
-		} else if err := put("quota", pyFloat(*cfg.Quota)); err != nil {
-			return err
+		} else {
+			fields.Put("quota", pyFloat(*cfg.Quota))
 		}
 	} else {
 		fields.Remove("quota")
@@ -421,31 +414,23 @@ func writeUserConfig(path string, cfg UserConfig) error {
 	if cfg.PhotoMax != nil {
 		if cfg.RawPhotoMax != nil && sameNumber(cfg.RawPhotoMax, float64(*cfg.PhotoMax)) {
 			fields.Set("photo_max", cfg.RawPhotoMax)
-		} else if err := put("photo_max", *cfg.PhotoMax); err != nil {
-			return err
+		} else {
+			fields.Put("photo_max", *cfg.PhotoMax)
 		}
 	} else {
 		fields.Remove("photo_max")
 	}
 	if cfg.Lang != nil {
-		if err := put("lang", *cfg.Lang); err != nil {
-			return err
-		}
+		fields.Put("lang", *cfg.Lang)
 	}
 	if cfg.TZ != nil {
-		if err := put("tz", *cfg.TZ); err != nil {
-			return err
-		}
+		fields.Put("tz", *cfg.TZ)
 	}
 	if cfg.TrashDays != nil {
-		if err := put("trash_days", *cfg.TrashDays); err != nil {
-			return err
-		}
+		fields.Put("trash_days", *cfg.TrashDays)
 	}
 	if cfg.TripReminderDays != nil {
-		if err := put("trip_reminder_days", *cfg.TripReminderDays); err != nil {
-			return err
-		}
+		fields.Put("trip_reminder_days", *cfg.TripReminderDays)
 	}
 	return atomicWriteJSON(path, fields, 4)
 }
@@ -718,7 +703,7 @@ func (u *Users) ForgetRenames(name string) { u.renames.forget(name) }
 // java: golang.org/x/text is a Go-team module living outside the standard
 // library, and it is the ONLY dependency this server has. It is vendored into
 // the repo (see vendor/), so `go build` still needs no network and nothing
-// installed - which was the point of the port. See docs/go-port.md.
+// installed.
 func NormaliseUsername(name string) string {
 	return norm.NFC.String(strings.TrimSpace(name))
 }
@@ -981,12 +966,8 @@ func (u *Users) SetPassword(role, user, newPassword string) bool {
 // explicit "no preference", or nil when the account never chose one. An
 // unreadable or hand-edited value reads as nil - never as a choice.
 func (u *Users) UserLang(role, user string) *string {
-	var raw *string
-	if role == "admin" {
-		u.cfg.Read(func(s *ServerConfig) { raw = s.AdminLang })
-	} else {
-		raw = readUserConfig(u.cfgPath(user)).Lang
-	}
+	raw := u.readSetting(role, user, func(s *ServerConfig) *string { return s.AdminLang },
+		func(c UserConfig) *string { return c.Lang })
 	if raw == nil {
 		return nil
 	}
@@ -1009,16 +990,35 @@ func (u *Users) SetUserLang(role, user, code string) (string, bool) {
 	if code != "" && !contains(UILangs, code) {
 		return "", false
 	}
+	if !u.storeSetting(role, user, func(s *ServerConfig) { s.AdminLang = &code },
+		func(c *UserConfig) { c.Lang = &code }) {
+		return "", false
+	}
+	return code, true
+}
+
+// readSetting is one account setting as stored: the admin's in
+// config/server.json, a user's in their own config.json.
+func (u *Users) readSetting(role, user string, srv func(*ServerConfig) *string,
+	usr func(UserConfig) *string) *string {
+	var raw *string
 	if role == "admin" {
-		if err := u.cfg.Update(func(s *ServerConfig) { s.AdminLang = &code }); err != nil {
-			return "", false
-		}
-		return code, true
+		u.cfg.Read(func(s *ServerConfig) { raw = srv(s) })
+	} else {
+		raw = usr(readUserConfig(u.cfgPath(user)))
+	}
+	return raw
+}
+
+// storeSetting writes one account setting where readSetting reads it. False
+// when it could not be saved.
+func (u *Users) storeSetting(role, user string, srv func(*ServerConfig), usr func(*UserConfig)) bool {
+	if role == "admin" {
+		return u.cfg.Update(srv) == nil
 	}
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
-	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.Lang = &code })
-	return code, ok
+	return u.updateUserConfig(u.cfgPath(user), usr)
 }
 
 // -----------------------------------------------------------------------------
@@ -1034,12 +1034,8 @@ func (u *Users) SetUserLang(role, user, code string) (string, bool) {
 // UserTZ is this account's IANA timezone name ("Europe/Madrid"), or nil when
 // the account never chose one.
 func (u *Users) UserTZ(role, user string) *string {
-	var raw *string
-	if role == "admin" {
-		u.cfg.Read(func(s *ServerConfig) { raw = s.AdminTZ })
-	} else {
-		raw = readUserConfig(u.cfgPath(user)).TZ
-	}
+	raw := u.readSetting(role, user, func(s *ServerConfig) *string { return s.AdminTZ },
+		func(c UserConfig) *string { return c.TZ })
 	if raw == nil {
 		return nil
 	}
@@ -1066,16 +1062,11 @@ func (u *Users) SetUserTZ(role, user, name string) (string, bool) {
 			return "", false
 		}
 	}
-	if role == "admin" {
-		if err := u.cfg.Update(func(s *ServerConfig) { s.AdminTZ = &name }); err != nil {
-			return "", false
-		}
-		return name, true
+	if !u.storeSetting(role, user, func(s *ServerConfig) { s.AdminTZ = &name },
+		func(c *UserConfig) { c.TZ = &name }) {
+		return "", false
 	}
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { c.TZ = &name })
-	return name, ok
+	return name, true
 }
 
 // Location is the tzinfo for an IANA zone name, or nil ("use the server's own
@@ -1142,16 +1133,11 @@ func (u *Users) SetDaysSetting(role, user, value string, lo, hi int,
 	}
 	days = clampInt(days, lo, hi)
 
-	if role == "admin" {
-		if err := u.cfg.Update(func(s *ServerConfig) { applyServer(s, days) }); err != nil {
-			return 0, false
-		}
-		return days, true
+	if !u.storeSetting(role, user, func(s *ServerConfig) { applyServer(s, days) },
+		func(c *UserConfig) { applyUser(c, days) }) {
+		return 0, false
 	}
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	ok := u.updateUserConfig(u.cfgPath(user), func(c *UserConfig) { applyUser(c, days) })
-	return days, ok
+	return days, true
 }
 
 // SetUserTrashDays sets the trash retention period for the signed-in account.
@@ -1268,18 +1254,34 @@ func ClampWindow(raw json.RawMessage) int {
 // SetPushWindow sets "how many minutes before an event", leaving the devices
 // alone. Returns the stored int, or false when the user has no home directory.
 func (u *Users) SetPushWindow(user string, minutes json.RawMessage) (int, bool) {
+	stored := 0
+	home, err := u.editPush(user, func(data *PushConfig) bool {
+		data.WindowMinutes = ClampWindow(minutes)
+		stored = data.WindowMinutes
+		return true
+	})
+	if !home || err != nil {
+		return 0, false
+	}
+	return stored, true
+}
+
+// editPush is every change to push.json: under cfgMu, only in a home that is
+// there (home false: none - the account was renamed or deleted), `change`
+// edits what is stored and says whether there is anything to write. err is
+// the write's.
+func (u *Users) editPush(user string, change func(*PushConfig) bool) (home bool, err error) {
 	path := u.pushPath(user)
 	u.cfgMu.Lock()
 	defer u.cfgMu.Unlock()
 	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
-		return 0, false
+		return false, nil
 	}
 	data := u.UserPush(user)
-	data.WindowMinutes = ClampWindow(minutes)
-	if err := atomicWriteJSON(path, data, 4); err != nil {
-		return 0, false
+	if !change(&data) {
+		return true, nil
 	}
-	return data.WindowMinutes, true
+	return true, atomicWriteJSON(path, data, 4)
 }
 
 // AddPushSub registers (or refreshes) ONE device.
@@ -1317,14 +1319,23 @@ func (u *Users) RenewPushSub(user, old, endpoint, p256dh, auth, lang, label stri
 		return "invalid"
 	}
 
-	path := u.pushPath(user)
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
+	result := "added"
+	home, err := u.editPush(user, func(data *PushConfig) bool {
+		result = renewSub(data, fresh, old, window)
+		return true
+	})
+	if !home {
 		return "no-home"
 	}
+	if err != nil {
+		u.log.Error("cannot save push.json", "user", user, "err", err)
+	}
+	return result
+}
 
-	data := u.UserPush(user)
+// renewSub is RenewPushSub's change to the stored devices: "added" or
+// "updated".
+func renewSub(data *PushConfig, fresh PushSub, old string, window json.RawMessage) string {
 	if old = strings.TrimSpace(old); old != "" && old != fresh.Endpoint {
 		for i, s := range data.Subs {
 			if s.Endpoint == old {
@@ -1369,9 +1380,6 @@ func (u *Users) RenewPushSub(user, old, endpoint, p256dh, auth, lang, label stri
 	if window != nil {
 		data.WindowMinutes = ClampWindow(window)
 	}
-	if err := atomicWriteJSON(path, data, 4); err != nil {
-		u.log.Error("cannot save push.json", "user", user, "err", err)
-	}
 	return result
 }
 
@@ -1388,43 +1396,33 @@ func (u *Users) RemovePushSub(user, endpoint string) bool {
 	if endpoint == "" {
 		return false
 	}
-	path := u.pushPath(user)
-
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
-		return false
-	}
-	data := u.UserPush(user)
-	kept := make([]PushSub, 0, len(data.Subs))
-	for _, s := range data.Subs {
-		if s.Endpoint != endpoint {
-			kept = append(kept, s)
+	removed := false
+	_, err := u.editPush(user, func(data *PushConfig) bool {
+		kept := make([]PushSub, 0, len(data.Subs))
+		for _, s := range data.Subs {
+			if s.Endpoint != endpoint {
+				kept = append(kept, s)
+			}
 		}
-	}
-	if len(kept) == len(data.Subs) {
-		return false
-	}
-	data.Subs = kept
-	return atomicWriteJSON(path, data, 4) == nil
+		removed = len(kept) < len(data.Subs)
+		data.Subs = kept
+		return removed
+	})
+	return removed && err == nil
 }
 
 // DropPushSubs forgets every device of `user` (a password change: an
 // intruder's browser must stop getting chat and mail). The window stays; each
 // page of the owner registers its own device again (index.html healPush).
 func (u *Users) DropPushSubs(user string) {
-	path := u.pushPath(user)
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
-		return
-	}
-	data := u.UserPush(user)
-	if len(data.Subs) == 0 {
-		return
-	}
-	data.Subs = []PushSub{}
-	if err := atomicWriteJSON(path, data, 4); err != nil {
+	_, err := u.editPush(user, func(data *PushConfig) bool {
+		if len(data.Subs) == 0 {
+			return false
+		}
+		data.Subs = []PushSub{}
+		return true
+	})
+	if err != nil {
 		u.log.Error("cannot save push.json", "user", user, "err", err)
 	}
 }
@@ -1448,21 +1446,22 @@ func (u *Users) SetPushSubTZ(user, endpoint, tz string) {
 	if tz == "" {
 		return
 	}
-	path := u.pushPath(user)
-	u.cfgMu.Lock()
-	defer u.cfgMu.Unlock()
-	data := u.UserPush(user)
-	for i, s := range data.Subs {
-		if s.Endpoint == strings.TrimSpace(endpoint) {
-			if s.TZ == tz {
-				return
+	// The home check editPush adds changes nothing here: with no home there
+	// is no push.json, so no device to find.
+	_, err := u.editPush(user, func(data *PushConfig) bool {
+		for i, s := range data.Subs {
+			if s.Endpoint == strings.TrimSpace(endpoint) {
+				if s.TZ == tz {
+					return false
+				}
+				data.Subs[i].TZ = tz
+				return true
 			}
-			data.Subs[i].TZ = tz
-			if err := atomicWriteJSON(path, data, 4); err != nil {
-				u.log.Error("cannot save push.json", "user", user, "err", err)
-			}
-			return
 		}
+		return false
+	})
+	if err != nil {
+		u.log.Error("cannot save push.json", "user", user, "err", err)
 	}
 }
 
@@ -1724,4 +1723,24 @@ func (u *Users) ForgetUsage(user string) {
 // HomeOwner is the user whose home an absolute path lies in, or "".
 func (u *Users) HomeOwner(absPath string) string {
 	return homeOwner(u.cfg.HomesDir, absPath)
+}
+
+// Payer is whose quota bytes written at `absPath` spend: the owner of the home
+// they land in - on a shared folder not the writer - or else `user`.
+func (u *Users) Payer(absPath, user string) string {
+	if payer := u.HomeOwner(absPath); payer != "" {
+		return payer
+	}
+	return user
+}
+
+// QuotaLeft is what `user` may still store (quota - usage; below 0 when over
+// it). limited false = no quota set, and no usage is measured. An admin has no
+// quota: the callers that may write as one check the role first.
+func (u *Users) QuotaLeft(user string) (left int64, limited bool) {
+	q := u.UserQuotaBytes(user)
+	if q == nil {
+		return 0, false
+	}
+	return *q - u.UserUsageBytes(user), true
 }

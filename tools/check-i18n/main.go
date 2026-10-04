@@ -1,4 +1,4 @@
-// check-i18n - the dictionary invariants docs/i18n.md describes, as a tool.
+// check-i18n - the dictionary invariants, as a tool.
 //
 // `es.json` is the reference. Every other dictionary must:
 //
@@ -18,8 +18,7 @@
 // The app-name test matches on WORD BOUNDARIES, or "Calc" would fire on the
 // Spanish "Calcula" and "Text" on "Texto". Go's regexp `\b` and `\w` only know
 // ASCII letters, so an accented neighbour ("Calcá") would count as a boundary;
-// both tests are written by hand with Unicode letters instead, the way the
-// Python version (whose `\b` is Unicode-aware) behaved.
+// both tests are written by hand with Unicode letters instead.
 package main
 
 import (
@@ -41,7 +40,7 @@ const ref = "es"
 
 var langs = []string{"es", "en", "pt", "fr", "de"}
 
-// Never translated - see docs/i18n.md. A value that carries one of these in the
+// Never translated. A value that carries one of these in the
 // reference must carry the same word in every language.
 var appNames = []string{"Nayive", "Drive", "Planner", "Calendar", "Tasks", "Contacts",
 	"Write", "Calc", "Text", "Photos", "Music", "Movies", "Trips",
@@ -152,7 +151,7 @@ func sortedKeys(m map[string]any) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys) // byte order = code-point order for UTF-8, like Python's sorted()
+	sort.Strings(keys) // byte order = code-point order for UTF-8
 	return keys
 }
 
@@ -170,7 +169,7 @@ func placeholders(s string) []string {
 	return out
 }
 
-// pyList prints a list the way the Python version did (['a', 'b']), or "none".
+// pyList prints a list as ['a', 'b'], or "none".
 func pyList(xs []string) string {
 	if len(xs) == 0 {
 		return "none"
@@ -197,7 +196,7 @@ func hasWord(s, name string) bool {
 	}
 }
 
-// isWord is Python's Unicode `\w`: a letter, a digit/number, or '_'.
+// isWord is a Unicode `\w`: a letter, a digit/number, or '_'.
 func isWord(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_'
 }

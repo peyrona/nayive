@@ -1286,19 +1286,7 @@ func (h *ChatHub) openKept(user, rel string) (*os.File, os.FileInfo, error) {
 	if !ok {
 		return nil, nil, os.ErrNotExist
 	}
-	if info, err := target.Stat(); err != nil || !info.Mode().IsRegular() {
-		return nil, nil, os.ErrNotExist
-	}
-	file, err := target.Open()
-	if err != nil {
-		return nil, nil, err
-	}
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		file.Close()
-		return nil, nil, os.ErrNotExist
-	}
-	return file, info, nil
+	return target.OpenRegular()
 }
 
 // chatFindMax caps the walk of findKept: a home is a few thousand files.

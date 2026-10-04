@@ -109,22 +109,13 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// shared folder those differ. The quota check has to agree with the usage
 	// bookkeeping below, or a guest would spend their own quota while filling
 	// somebody else's disk.
-	payer := s.users.HomeOwner(target.Abs)
-	if payer == "" {
-		payer = user
-	}
-	var quota *int64
-	if role != "admin" {
-		quota = s.users.UserQuotaBytes(payer)
-	}
-
 	budget := int64(-1) // -1 = no quota
-	if quota != nil {
+	if left, limited := s.quotaLeft(role, user, target.Abs); limited {
 		// The most this file may grow to and still fit. On a gzipped PUT
 		// Content-Length is the COMPRESSED size, so this pre-check can only
 		// catch the obvious cases - the ceiling below enforces the real,
 		// decompressed byte count as it inflates.
-		budget = *quota - (s.users.UserUsageBytes(payer) - already)
+		budget = left + already
 		if r.ContentLength > budget {
 			sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
 			return
@@ -214,6 +205,15 @@ func clashText(code int) string {
 	return "ya existe un archivo con ese nombre"
 }
 
+// quotaLeft is what a write by `user` at `abs` may still add to the quota it
+// spends (Users.Payer): limited false for an admin or a payer with no quota.
+func (s *Server) quotaLeft(role, user, abs string) (left int64, limited bool) {
+	if role == "admin" {
+		return 0, false
+	}
+	return s.users.QuotaLeft(s.users.Payer(abs, user))
+}
+
 // streamToFile is the write itself. It answers the request on every failure and
 // returns the byte count on success. `clash` 0 lets the file replace one of
 // its name; any other value is the status answered when the name is taken -
@@ -253,7 +253,14 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	}
 	defer root.Close()
 	dir := filepath.Dir(target.Rel)
-	if err := root.MkdirAll(dir, 0o755); err != nil {
+	// An "add" share (the 409 clash, filesWrite) lends its folders to drop
+	// files in, never to make new ones - mkdir refuses them too (B5-17).
+	if clash == http.StatusConflict {
+		if info, err := root.Stat(dir); err != nil || !info.IsDir() {
+			sendError(w, r, http.StatusForbidden, "forbidden")
+			return 0, errors.New("no new folders in a shared folder")
+		}
+	} else if err := root.MkdirAll(dir, 0o755); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo crear la carpeta")
 		return 0, err
 	}

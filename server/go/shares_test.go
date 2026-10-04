@@ -8,10 +8,8 @@ package main
 // ResolvePath (users.go) and Shares.RootPath (shares.go). Get either wrong and
 // one account reads another's home.
 //
-// docs/user-sharing.md has a table of cases that were checked BY HAND with curl
-// against the Python server. None of that carried over to this rewrite: until
-// this file, no test here resolved a LIVE grant at all - only the refusal of
-// grants that do not exist. These are those curl cases, written down.
+// These are the cases that were once checked BY HAND with curl, written down:
+// each resolves a LIVE grant, not only the refusal of grants that do not exist.
 
 import (
 	"encoding/json"

@@ -141,7 +141,7 @@ func TestFloatingEventRingsInEachDeviceZone(t *testing.T) {
 // server cannot load is ignored.
 func TestPushSubscriptionKeepsItsZone(t *testing.T) {
 	srv, ts, client := newTestServer(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const one, two = "https://fcm.googleapis.com/fcm/send/one", "https://fcm.googleapis.com/fcm/send/two"
 	signIn(t, client, ts.URL, "ana", "abc")
 
@@ -186,7 +186,7 @@ func TestRenewalDoesNotRingTwice(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	cfg := srv.cfg
 	sent := zoneRingService(t, srv)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const old, fresh = "https://fcm.googleapis.com/fcm/send/old", "https://fcm.googleapis.com/fcm/send/new"
 	srv.users.AddPushSub("ana", old, p256, au, "es", "Móvil", nil)
 	srv.users.SetPushSubTZ("ana", old, "Asia/Tokyo")

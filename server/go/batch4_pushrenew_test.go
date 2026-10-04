@@ -14,7 +14,8 @@ import (
 	"testing"
 )
 
-func pushRenewKeys(t *testing.T) (string, string) {
+// testPushKeys is a device's real push keys (p256dh, auth), base64url.
+func testPushKeys(t *testing.T) (string, string) {
 	t.Helper()
 	key, _ := ecdh.P256().GenerateKey(rand.Reader)
 	auth := make([]byte, 16)
@@ -36,7 +37,7 @@ func pushRenewFind(subs []PushSub, endpoint string) *PushSub {
 // lose to what the launcher stored; the old endpoint is gone, nothing added.
 func TestPushRenewCarriesLangAndLabel(t *testing.T) {
 	users, _, _ := newTestUsers(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const old, other, fresh = "https://fcm.googleapis.com/fcm/send/old",
 		"https://fcm.googleapis.com/fcm/send/other", "https://fcm.googleapis.com/fcm/send/new"
 
@@ -67,7 +68,7 @@ func TestPushRenewCarriesLangAndLabel(t *testing.T) {
 // another user's) changes nothing but the add itself.
 func TestPushRenewUnknownOldIsPlainAdd(t *testing.T) {
 	users, _, _ := newTestUsers(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const betos, fresh = "https://fcm.googleapis.com/fcm/send/beto", "https://fcm.googleapis.com/fcm/send/new"
 
 	users.AddPushSub("beto", betos, p256, au, "pt", "Beto", nil)
@@ -86,7 +87,7 @@ func TestPushRenewUnknownOldIsPlainAdd(t *testing.T) {
 // replaces its own entry; no other device is pushed out.
 func TestPushRenewAtTheCapEvictsNobody(t *testing.T) {
 	users, _, _ := newTestUsers(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	ep := func(i int) string { return fmt.Sprintf("https://fcm.googleapis.com/fcm/send/d%d", i) }
 	for i := 0; i < MaxPushSubs; i++ {
 		users.AddPushSub("ana", ep(i), p256, au, "es", fmt.Sprint("d", i), nil)
@@ -112,7 +113,7 @@ func TestPushRenewAtTheCapEvictsNobody(t *testing.T) {
 // the renewal still drops the old one and keeps a single entry for the new.
 func TestPushRenewNewAlreadyThere(t *testing.T) {
 	users, _, _ := newTestUsers(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const old, fresh = "https://fcm.googleapis.com/fcm/send/old", "https://fcm.googleapis.com/fcm/send/new"
 
 	users.AddPushSub("ana", old, p256, au, "fr", "Móvil", nil)
@@ -129,7 +130,7 @@ func TestPushRenewNewAlreadyThere(t *testing.T) {
 // TestPushRenewOverHTTP: POST /api/push with "old_endpoint" does the same.
 func TestPushRenewOverHTTP(t *testing.T) {
 	srv, ts, client := newTestServer(t)
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	const old, fresh = "https://fcm.googleapis.com/fcm/send/old", "https://fcm.googleapis.com/fcm/send/new"
 	srv.users.AddPushSub("ana", old, p256, au, "pt", "Tablet", nil)
 

@@ -95,8 +95,7 @@ func (s *Server) apiPush(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pushSave(w http.ResponseWriter, r *http.Request, user string) {
 	var body pushRequest
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 

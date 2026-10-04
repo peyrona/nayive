@@ -307,11 +307,11 @@ func writeMediaPart(root *os.Root, rel string, p mediaPart) error {
 
 // mediaBudget is how many more bytes `owner` may store; -1 = no quota.
 func (s *Server) mediaBudget(owner string) int64 {
-	q := s.users.UserQuotaBytes(owner)
-	if q == nil {
+	left, limited := s.users.QuotaLeft(owner)
+	if !limited {
 		return -1
 	}
-	return max(0, *q-s.users.UserUsageBytes(owner))
+	return max(0, left)
 }
 
 // sweepMediaParts throws away `owner`'s parts nobody touched for mediaPartTTL:
@@ -393,8 +393,7 @@ func (s *Server) mediaStart(w http.ResponseWriter, r *http.Request, dev *deviceR
 		Lat   *float64 `json:"lat"`
 		Lon   *float64 `json:"lon"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if dev.Media == 0 {
@@ -693,27 +692,27 @@ func fileMediaPart(root *os.Root, partRel, folder, name string) (string, error) 
 	// refuses a name taken then, and the next one is tried.
 	mediaFileMu.Lock()
 	defer mediaFileMu.Unlock()
-	for i := 1; i < 10000; i++ {
-		cand := name
-		if i > 1 {
-			cand = base + " (" + strconv.Itoa(i) + ")" + ext
-		}
-		rel := folder + "/" + cand
-		if _, err := root.Lstat(filepath.FromSlash(rel)); err == nil {
-			continue
+	cand, err := claimName(base, ext, 2, 9999, func(cand string) error {
+		rel := filepath.FromSlash(folder + "/" + cand)
+		if _, err := root.Lstat(rel); err == nil {
+			return fs.ErrExist
 		} else if !os.IsNotExist(err) {
-			return "", err
+			return err
 		}
-		if err := renameNoReplace(root, partRel, filepath.FromSlash(rel)); errors.Is(err, fs.ErrExist) {
-			continue
-		} else if err != nil && !errors.Is(err, errSourceLeft) { // errSourceLeft: filed, the part's name stayed
-			return "", err
+		if err := renameNoReplace(root, partRel, rel); err != nil && !errors.Is(err, errSourceLeft) {
+			return err // fs.ErrExist: the next name; errSourceLeft: filed, the part's name stayed
 		}
-		// Durable before the phone is told "filed" and may let it go (K1).
-		if err := syncRootDir(root, filepath.FromSlash(folder)); err != nil {
-			return "", err
-		}
-		return rel, nil
+		return nil
+	})
+	if errors.Is(err, fs.ErrExist) {
+		return "", errors.New("no free name")
 	}
-	return "", errors.New("no free name")
+	if err != nil {
+		return "", err
+	}
+	// Durable before the phone is told "filed" and may let it go (K1).
+	if err := syncRootDir(root, filepath.FromSlash(folder)); err != nil {
+		return "", err
+	}
+	return folder + "/" + cand, nil
 }

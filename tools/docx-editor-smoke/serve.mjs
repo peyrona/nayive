@@ -6,9 +6,8 @@
  * then open the printed URL; ?f=<name> opens one file of the folder.
  *
  *   /                      -> the test page (a redirect, so its relative links work)
- *   /engine/<file>         -> the VENDORED engine, lib/docx-editor/ of write-next/
- *                             until the swap, of write/ after - the same folder
- *                             tools/build-docx-editor.sh writes and Write loads
+ *   /engine/<file>         -> the VENDORED engine, write/lib/docx-editor/ - the
+ *                             folder tools/build-docx-editor.sh writes and Write loads
  *   /corpus                -> the .docx names in CORPUS, as JSON
  *   /corpus/<name>         -> one of them, read-only
  *   anything else          -> the repo
@@ -27,10 +26,7 @@ const APPS   = path.join( ROOT, 'client', 'apps' );
 const CORPUS = process.env.CORPUS ? path.resolve( process.env.CORPUS ) : null;
 const PORT   = process.env.PORT !== undefined ? Number( process.env.PORT ) : 8097;
 
-// The same rule as build-docx-editor.sh: write/ once the swap has happened.
-const APP = fs.existsSync( path.join( APPS, 'write', 'lib', 'docx-editor' ) ) &&
-            ! fs.existsSync( path.join( APPS, 'write-next' ) ) ? 'write' : 'write-next';
-const ENGINE = path.join( APPS, APP, 'lib', 'docx-editor' );
+const ENGINE = path.join( APPS, 'write', 'lib', 'docx-editor' );
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript',
                 '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',

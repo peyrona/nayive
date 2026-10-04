@@ -249,6 +249,37 @@ func (p Resolved) Open() (*os.File, error) {
 	return root.Open(p.Rel)
 }
 
+// errNotRegular: a folder, a FIFO, a device - anything but a plain file. It
+// counts as "not there" (404).
+var errNotRegular = fmt.Errorf("not a regular file: %w", fs.ErrNotExist)
+
+// openRegular opens a plain file safely: Stat BEFORE opening (opening a FIFO
+// or a device could block, or worse), then the info of what was OPENED,
+// whatever the name points at by now. A stat or open error comes back as it
+// is (errRootGone stays 503, missingStatus); anything but a regular file is
+// errNotRegular.
+func openRegular(stat func() (os.FileInfo, error), open func() (*os.File, error)) (*os.File, os.FileInfo, error) {
+	info, err := stat()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, errNotRegular
+	}
+	file, err := open()
+	if err != nil {
+		return nil, nil, err
+	}
+	if info, err = file.Stat(); err != nil || !info.Mode().IsRegular() {
+		file.Close()
+		return nil, nil, errNotRegular
+	}
+	return file, info, nil
+}
+
+// OpenRegular is openRegular on the approved path.
+func (p Resolved) OpenRegular() (*os.File, os.FileInfo, error) { return openRegular(p.Stat, p.Open) }
+
 func (p Resolved) MkdirAll() error {
 	root, err := p.openCreating()
 	if err != nil {

@@ -77,10 +77,15 @@ func build(apps string) error {
 		if err != nil {
 			return err
 		}
+		name := d.Name()
 		if d.IsDir() {
+			// A dot folder (.bak/, write/lib/.docx-editor-prev/) is never
+			// served: no sidecars there. -clean still sweeps it.
+			if src != apps && strings.HasPrefix(name, ".") {
+				return fs.SkipDir
+			}
 			return nil
 		}
-		name := d.Name()
 		ext := suffix(name)
 
 		if ext == ".gz" {
@@ -170,10 +175,10 @@ func cleanAll(apps string) error {
 	return nil
 }
 
-// suffix is the file's final extension the way Python's Path.suffix sees it:
-// a name that starts with its only dot (".bashrc", ".gz") has none, and neither
-// does one that ends with a dot. filepath.Ext would call ".gz" an extension and
-// treat a lone ".gz" file as an orphan sidecar.
+// suffix is the file's final extension, pathlib-style: a name that starts
+// with its only dot (".bashrc", ".gz") has none, and neither does one that
+// ends with a dot. filepath.Ext would call ".gz" an extension and treat a lone
+// ".gz" file as an orphan sidecar.
 func suffix(name string) string {
 	i := strings.LastIndexByte(name, '.')
 	if i <= 0 || i == len(name)-1 {
