@@ -732,7 +732,7 @@
         // as the other two editors mirror their file buttons.
 
         const IS_MAC = NayiveUI.isMac;
-        const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
+        const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 
         // CodeMirror's own keys (its default keymap, the search and
         // jump-to-line add-ons) plus the four bound by hand in extraKeys above.
@@ -754,10 +754,10 @@
                 [ 'text.sc.findNext',   MOD + 'G'        ],
                 [ 'text.sc.findPrev',   SHIFT + MOD + 'G' ],
                 [ 'write.sc.replace',   replace          ],
-                [ 'text.sc.goLine',     'Alt+G'          ],
+                [ 'text.sc.goLine',     T( 'ui.keyAlt' ) + '+G' ],
                 [ 'text.sc.comment',    MOD + '/'        ],
                 // Bound as Ctrl-Q only, so it stays Ctrl even on a Mac.
-                [ 'text.sc.fold',       'Ctrl+Q'         ],
+                [ 'text.sc.fold',       T( 'ui.keyCtrl' ) + '+Q' ],
                 [ 'text.sc.zoomIn',     MOD + '+'        ],
                 [ 'text.sc.zoomOut',    MOD + '-'        ]
             ].map( function( r ) { return { text: T( r[ 0 ] ), keys: r[ 1 ] }; } );

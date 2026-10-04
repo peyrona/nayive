@@ -261,11 +261,12 @@ function wireStaticUI()
     document.addEventListener( 'click',       backToGrid );
     document.addEventListener( 'keydown', function( e )
     {
-        // Ctrl/Cmd+S: save now (an untitled sheet goes to "Guardar como"), as in Text and Write.
-        if( ( e.ctrlKey || e.metaKey ) && e.key.toLowerCase() === 's' )
+        // Ctrl/Cmd+S: save now (an untitled sheet goes to "Guardar como"), as in Text and Write:
+        // that exact combo (Ctrl+Shift+S is not it), and over a dialog it just does nothing.
+        if( e.code === 'KeyS' && ( e.ctrlKey || e.metaKey ) && ! e.altKey && ! e.shiftKey )
         {
             e.preventDefault();
-            saveNow();
+            if( ! document.querySelector( '.sheet-backdrop.open' ) ) saveNow();
             return;
         }
         // Ctrl/Cmd+B, I, U format the selection — unless something is being
@@ -1016,7 +1017,7 @@ const calcCfg = O.appConfig( 'data/calc/config.json', 'ui.settingsNotRead' );
 // handful wired in wireStaticUI() plus the ones Handsontable itself
 // handles (copy / cut / paste, undo / redo).
 const IS_MAC = NayiveUI.isMac;
-const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
+const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 const SC  =
 {
     save: MOD + 'S', bold: MOD + 'B', italic: MOD + 'I', underline: MOD + 'U',
