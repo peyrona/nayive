@@ -217,18 +217,11 @@
     // Who this page belongs to: the "nayive_who" cookie AS IT WAS WHEN THE PAGE
     // LOADED - never read again, so a tab left open across another account's
     // sign-in still tags its saves with its own owner. "" = unknown.
-    var ME = ( function ()
-    {
-        try
-        {
-            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
-            return m ? m[ 1 ] : "";
-        }
-        catch ( e ) { return ""; }
-    } )();
+    var ME = whoNow();
 
     // Who is signed in on this browser NOW (the cookie as it is at this moment,
-    // unlike ME): "" = unknown.
+    // unlike ME): "" = unknown. The same read as NayiveI18n.whoNow (shared/i18n.js
+    // WHOSE PAGE), kept here: the data-safety harness loads this file alone.
     function whoNow()
     {
         try

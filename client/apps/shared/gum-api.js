@@ -56,15 +56,7 @@
     // Who this page belongs to (WHOSE PAGE above): read ONCE, as the page
     // loads - never again, so a tab left open across another account's
     // sign-in still names its own. "" = unknown: no header, taken as before.
-    var ME_AT_LOAD = ( function ()
-    {
-        try
-        {
-            var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ );
-            return m ? m[ 1 ] : "";
-        }
-        catch ( e ) { return ""; }
-    } )();
+    var ME_AT_LOAD = ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";   // shared/i18n.js WHOSE PAGE
 
     function owner()
     {

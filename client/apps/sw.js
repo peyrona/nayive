@@ -148,6 +148,7 @@ var PRECACHE_SHELL = [
     "shared/basemap.js",
     "shared/browser.js",
     "shared/crypt.js",
+    "shared/desk-rule.js",
     "shared/gum-api.js",
     "shared/i18n.js",
     "shared/i18n/de.json",

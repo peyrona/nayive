@@ -30,22 +30,10 @@
          phone, never with a query or hash (?here=, enrolment...: this page acts on it), and
          never for an account that must pick its password first (login.html's
          "nayive-must-set": the desktop's apps would all be refused).
-         nayiveDeskMode / nayiveWantDesk are used again below (My account, MOUSE CHIP);
-         the desktop keeps its own copy of the rule (see its OPEN THE DESKTOP). -->
+         nayiveDeskMode / nayiveWantDesk (shared/desk-rule.js, the one copy of the
+         rule; the desktop loads it too) are used again below (My account, MOUSE CHIP). -->
+    <script src="shared/desk-rule.js"></script>
     <script>
-    function nayiveDeskMode()
-    {
-        try { var m = ( JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {} ).mode; }
-        catch( e ) {}
-        return m === 'always' || m === 'never' ? m : 'auto';
-    }
-    function nayiveWantDesk( mode )
-    {
-        var mq = function ( q ) { return window.matchMedia( q ).matches; };
-        if( mode === 'never' || mq( '(max-width: 640px)' ) ) return false;
-        if( mode === 'always' ) return mq( '(min-width: 1024px) and (min-height: 600px)' ) || mq( '(min-width: 600px) and (min-height: 1024px)' );
-        return mq( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' );
-    }
     try
     {
         if( window.top === window && ! location.search && ! location.hash &&

@@ -302,11 +302,8 @@ function fetchTagged( file, ms )
 // person's home (L5).
 var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
             ( window.GumApi && GumApi.owner && GumApi.owner() ) ||
-            ( window.NayiveLock && NayiveLock.who ) || ( function ()
-{
-    try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
-    catch ( e ) { return ""; }
-} )();
+            ( window.NayiveLock && NayiveLock.who ) ||
+            ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";
 
 // ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
 // server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes

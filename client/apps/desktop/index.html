@@ -40,6 +40,7 @@
             } )
             .catch( function () {} );
     </script>
+    <script src="../shared/desk-rule.js"></script>
     <script src="../shared/i18n.js"></script>
     <script src="tiling.js"></script>
     <title>Nayive</title>
@@ -1682,17 +1683,9 @@
     // with a mouse or touchpad), always (a big screen, mouse or not), never
     // (the simple view). Set ONLY in My account (../index.html, #deskModeSel;
     // one action, one knob), which also opens in a window here: we follow its
-    // change. The launcher reads it before it sends a big screen here; wantDesk
-    // is ITS rule (nayiveWantDesk), copied: this page must not wait for the
-    // launcher's. A choice that no longer wants the desktop leaves for the
-    // simple view at once.
-    function wantDesk( mode )
-    {
-        function mq( q ) { return window.matchMedia( q ).matches; }
-        if( mode === 'never' || mq( '(max-width: 640px)' ) ) return false;
-        if( mode === 'always' ) return mq( '(min-width: 1024px) and (min-height: 600px)' ) || mq( '(min-width: 600px) and (min-height: 1024px)' );
-        return mq( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' );
-    }
+    // change. The launcher reads it before it sends a big screen here; both
+    // pages ask the same rule (nayiveWantDesk, shared/desk-rule.js). A choice
+    // that no longer wants the desktop leaves for the simple view at once.
     function toSimple() { location.replace( '../index.html' ); }
     if( set.mode !== 'always' && set.mode !== 'never' ) set.mode = 'auto';
     window.addEventListener( 'storage', function ( e )
@@ -1702,7 +1695,7 @@
         if( m !== 'always' && m !== 'never' ) m = 'auto';
         if( m === set.mode ) return;
         set.mode = m;
-        if( ! wantDesk( set.mode ) ) toSimple();
+        if( ! nayiveWantDesk( set.mode ) ) toSimple();
     } );
 
     // MOUSE CHIP - on Auto, the mouse or touchpad taken away offers the simple
