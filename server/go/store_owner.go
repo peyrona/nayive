@@ -270,3 +270,22 @@ func isAccount(homesDir, name string) bool {
 	info, err := os.Stat(filepath.Join(homesDir, name, "data", "config.json"))
 	return err == nil && !info.IsDir()
 }
+
+// moveOwner is `rows` after an account rename (`to` the new name) or deletion
+// (`to` ""): the owner's rows renamed or dropped, every other row as it was,
+// in the same order. found says whether the owner had any.
+func moveOwner[T any](rows []T, owner, to string, ownerOf func(*T) *string) (kept []T, found bool) {
+	kept = rows[:0:0]
+	for _, r := range rows {
+		if *ownerOf(&r) != owner {
+			kept = append(kept, r)
+			continue
+		}
+		found = true
+		if to != "" {
+			*ownerOf(&r) = to
+			kept = append(kept, r)
+		}
+	}
+	return kept, found
+}

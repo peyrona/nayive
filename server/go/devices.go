@@ -525,20 +525,7 @@ func (d *Devices) rename(owner, to string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
-	kept := d.rows[:0:0]
-	found := false
-	for _, r := range d.rows {
-		if r.Owner != owner {
-			kept = append(kept, r)
-			continue
-		}
-		found = true
-		if to != "" {
-			r.Owner = to
-			kept = append(kept, r)
-		}
-	}
-	if found {
+	if kept, found := moveOwner(d.rows, owner, to, func(r *deviceRow) *string { return &r.Owner }); found {
 		d.rows = kept
 		d.save()
 		d.kickLocked()

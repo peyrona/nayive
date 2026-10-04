@@ -269,15 +269,10 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	unlock := s.authThrottle(sess.User, r) // the same throttle as login
-	good := s.users.Authenticate(sess.User, body.Current) == sess.Role
-	if !good {
-		time.Sleep(authFailDelay)
-		unlock()
-		sendError(w, r, http.StatusUnauthorized, "la contraseña actual no es correcta")
+	if !s.checkOwnPassword(w, r, sess, body.Current, http.StatusUnauthorized,
+		"la contraseña actual no es correcta") {
 		return
 	}
-	unlock()
 
 	if len([]rune(body.New)) < 4 {
 		sendError(w, r, http.StatusBadRequest,
@@ -307,6 +302,22 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("password changed", "user", sess.User, "role", sess.Role)
 	sendJSON(w, r, http.StatusOK, map[string]string{"message": "contraseña actualizada"})
+}
+
+// checkOwnPassword says whether `pw` is the signed-in account's password,
+// under the same throttle as login. A wrong one is answered here (after
+// authFailDelay) with `status` and `msg`.
+func (s *Server) checkOwnPassword(w http.ResponseWriter, r *http.Request, sess Session,
+	pw string, status int, msg string) bool {
+	unlock := s.authThrottle(sess.User, r) // the same throttle as login
+	if s.users.Authenticate(sess.User, pw) != sess.Role {
+		time.Sleep(authFailDelay)
+		unlock()
+		sendError(w, r, status, msg)
+		return false
+	}
+	unlock()
+	return true
 }
 
 // errAccountDamaged is the answer to a change of a setting kept in a
@@ -340,15 +351,9 @@ func (s *Server) apiUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	unlock := s.authThrottle(sess.User, r) // the same throttle as login
-	good := s.users.Authenticate(sess.User, body.Password) == sess.Role
-	if !good {
-		time.Sleep(authFailDelay)
-		unlock()
-		sendError(w, r, http.StatusForbidden, "contraseña incorrecta")
+	if !s.checkOwnPassword(w, r, sess, body.Password, http.StatusForbidden, "contraseña incorrecta") {
 		return
 	}
-	unlock()
 	sendJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 }
 

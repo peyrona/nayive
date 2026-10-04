@@ -193,19 +193,7 @@ func (t *Trackers) change(owner, to string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.ensureLoaded()
-	kept := t.keys[:0:0]
-	found := false
-	for _, k := range t.keys {
-		if k.Owner != owner {
-			kept = append(kept, k)
-			continue
-		}
-		found = true
-		if to != "" {
-			k.Owner = to
-			kept = append(kept, k)
-		}
-	}
+	kept, found := moveOwner(t.keys, owner, to, func(k *trackerKey) *string { return &k.Owner })
 	if found {
 		t.keys = kept
 		t.save()
