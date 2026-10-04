@@ -92,15 +92,12 @@
 
     /* ---- main row: the tree and the library --------------------------- */
     /* The tree: Films, Genres, Folders (the real folders under it). Its rows
-       are the shared tree (.ntree, app.css); on a phone it slides in from
-       #treeBtn (the shared .tree-sheet). */
+       are the shared tree (.ntree.tree-fit, app.css); on a phone it slides in
+       from #treeBtn (the shared .tree-sheet). */
     .tree-pane  { flex: 0 0 auto; width: 200px; overflow: auto; padding: 14px 6px 16px;
                   border-right: 1px solid var(--line); }
-    #tree.ntree { min-width: 0; }
-    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     #treeBtn    { display: none; }
-    .view-head  { margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
-    .view-head small { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+    .view-head  { margin: 0 0 14px; }    /* the rest: app.css MEDIA VIEWER */
     @media (max-width: 640px)
     {
         #treeBtn { display: inline-flex; }
@@ -169,18 +166,10 @@
     .poster-sub  { font-size: 0.74rem; color: var(--text-dim); margin-top: 1px; }
 
     .genre-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
-    .genre-card  { display: flex; flex-direction: column; gap: 10px; padding: 12px;
-                   background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
-                   cursor: pointer; text-align: left; font: inherit; color: inherit;
-                   transition: border-color var(--tr-fast), background-color var(--tr-fast); }
-    .genre-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-    .genre-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+    /* A genre card is the shared .media-card (app.css); only its art is Movies'. */
     .genre-art   { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-s);
                    display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
     .genre-art svg { width: 26px; height: 26px; }
-    .genre-name  { font-size: 0.86rem; font-weight: 600; color: var(--text);
-                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .genre-meta  { font-size: 0.76rem; color: var(--text-dim); }
 
     /* The folder tree, the scope chip and the empty hint are the shared MEDIA
        VIEWER block in shared/app.css; only the bar's own margin is Movies'. */
@@ -319,7 +308,7 @@
 
     <div class="main-row" id="mainRow" hidden>
         <!-- The tree: Films, Genres, Folders (NayiveUI.tree, see BROWSER below). -->
-        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><div id="tree"></div></nav>
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><div id="tree" class="tree-fit"></div></nav>
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
 
@@ -1223,10 +1212,10 @@ function renderLibrary()
         html += '<div class="genre-grid">' + genres.map( function ( g )
         {
             var active = st.selectedGenre === g.name;
-            return '<button class="genre-card' + ( active ? ' is-active' : '' ) + '" data-genre="' + esc( g.name ) + '">' +
+            return '<button class="genre-card media-card' + ( active ? ' is-active' : '' ) + '" data-genre="' + esc( g.name ) + '">' +
                 '<span class="genre-art" style="background:' + g.color + '">' + GENRE_ICON + '</span>' +
-                '<span class="genre-name">' + esc( g.name ) + '</span>' +
-                '<span class="genre-meta">' + esc( NayiveUI.tf( g.count === 1 ? 'movies.oneMovie' : 'movies.nMovies', { n: g.count } ) ) + '</span></button>';
+                '<span class="genre-name media-card-title">' + esc( g.name ) + '</span>' +
+                '<span class="genre-meta media-card-sub">' + esc( NayiveUI.tf( g.count === 1 ? 'movies.oneMovie' : 'movies.nMovies', { n: g.count } ) ) + '</span></button>';
         } ).join( "" ) + '</div>';
 
         if( st.selectedGenre )

@@ -460,7 +460,7 @@
     body.view-list #grid .tile:not(.is-selected) .pick-tick { background: transparent; border-color: var(--text-faint); }
     body.view-list #grid .tile.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 
-    /* ---------- the albums tree (shared .ntree) ----------
+    /* ---------- the albums tree (shared .ntree.tree-fit) ----------
      * PC + tablet: a pane beside the photos; a phone: it slides in from the
      * folder button (#treeBtn) - the shared .tree-sheet. */
     .body-row { flex: 1 1 auto; min-height: 0; display: flex; }
@@ -468,8 +468,6 @@
     .tree-pane { width: var(--tree-w, 220px); flex: 0 0 auto; overflow: auto; padding: 6px 4px 16px; }
     .tree-head { padding: 4px 6px 6px; }
     .tree-head .section-label { margin: 0; }
-    #tree.ntree { min-width: 0; }
-    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     #treeBtn, #treeBtn[hidden] { display: none; }
 
     /* the comment, read-only, under the Pase caption */
@@ -597,7 +595,7 @@
         <!-- The albums: the photo folder and its sub-folders (albums.* in the script). -->
         <nav id="treePane" class="tree-pane" hidden data-i18n-attr="aria-label:photos.albums">
             <div class="tree-head"><span class="section-label" data-i18n="photos.albums"></span></div>
-            <div id="tree"></div>
+            <div id="tree" class="tree-fit"></div>
         </nav>
         <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" hidden data-i18n-attr="title:ui.dragResize"></div>
 

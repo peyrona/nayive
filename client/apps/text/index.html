@@ -122,22 +122,8 @@
         }
         .tb-btn.active,
         .tb-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-        /* .tb-select is shared - see TOOLBAR SELECT in app.css. Nothing local. */
-
-        /* Right-margin spinner: the same toolbar control as .tb-select (see TOOLBAR
-           SELECT in app.css), but a number box - it has to beat the filled FORM FIELD
-           look every <input> gets by default, so every property is restated here. It
-           keeps the browser's own up / down arrows: that is what makes it a spinner. */
-        .tb-num
-        {
-            width: 4.6em; height: 30px; flex: 0 0 auto;
-            padding: 0 0 0 6px;
-            font: inherit; font-size: 0.82rem;
-            color: var(--text); background: transparent;
-            border: 1px solid var(--line); border-radius: var(--radius-s);
-            outline: none;
-        }
-        .tb-num:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+        /* .tb-select and the right-margin spinner .tb-num are shared - see TOOLBAR
+           SELECT in app.css. Nothing local. */
 
         /* Editor host */
         #editorHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }
@@ -218,7 +204,6 @@
             #toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; padding: 4px 6px; }
             #toolbar .tb-sep { margin: 4px 2px; }
             .tb-btn    { width: 36px; height: 36px; }
-            .tb-num    { height: 36px; }   /* keeps the row one height - see .tb-select in app.css */
         }
 
         .CodeMirror
