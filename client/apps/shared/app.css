@@ -34,7 +34,7 @@
  *
  * THE TOKENS  (defined in theme.css - use the name, never the literal)
  *   colour     --bg --card --card2 --line --text --text-dim --text-faint
- *              --accent --on-accent --danger --link --ok --warn --busy --shadow
+ *              --accent --on-accent --on-solid --danger --link --ok --warn --busy --shadow
  *              (each has a one-line "what it's for" comment in theme.css)
  *   type       --font-sans --font-mono
  *   radius     --radius-s (8) --radius-m (12) --radius-l (16) --radius-pill (999)
@@ -650,9 +650,9 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .icon-btn.lg                { width: 60px; height: 60px; }
 .icon-btn.lg svg            { width: 26px; height: 26px; }
 .icon-btn.solid-ok,
-.icon-btn.solid-ok:hover    { background: var(--ok); color: #fff; }
+.icon-btn.solid-ok:hover    { background: var(--ok); color: var(--on-solid); }
 .icon-btn.solid-danger,
-.icon-btn.solid-danger:hover { background: var(--danger); color: #fff; }
+.icon-btn.solid-danger:hover { background: var(--danger); color: var(--on-solid); }
 .icon-btn.solid-ok:active,
 .icon-btn.solid-danger:active { filter: brightness(0.9); }
 
@@ -875,7 +875,7 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: 0 0 auto; }
 .switch input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
 .switch .track { position: absolute; inset: 0; background: rgba(128,128,128,0.35); background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
-.switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: var(--on-solid); border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .switch input:checked + .track { background: var(--accent); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }

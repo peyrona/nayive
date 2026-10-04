@@ -1595,7 +1595,9 @@
                 lab.htmlFor      = id;
                 inp.type         = "password";
                 inp.id           = id;
-                inp.autocomplete = "new-password";
+                // A new password (verify) or one that already exists: the
+                // browser's password manager offers to make one or to fill it.
+                inp.autocomplete = opts.verify ? "new-password" : "current-password";
 
                 box.appendChild( lab );
                 box.appendChild( inp );

@@ -49,6 +49,7 @@
 
     --accent:      #1F80B1;               /* brand blue: titles, primary buttons, active/selected */
     --on-accent:   #0D0F17;               /* text / icon on an accent fill */
+    --on-solid:    #fff;                  /* icon on a solid --ok / --danger fill, a switch's knob: white in every scheme */
     --danger:      #D9707D;               /* destructive actions, errors (muted rose-red) */
 
     --link:        #5B9DF9;               /* <a> colour (only a few apps use <a>) */
