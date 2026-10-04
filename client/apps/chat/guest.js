@@ -27,15 +27,7 @@
 
     window.addEventListener( "beforeinstallprompt", function ( e ) { e.preventDefault(); installEvt = e; } );
 
-    function isIOS()
-    {
-        return /iphone|ipad|ipod/i.test( navigator.userAgent ) ||
-               ( navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 );
-    }
-    function standalone()
-    {
-        return ( window.matchMedia && matchMedia( "(display-mode: standalone)" ).matches ) || navigator.standalone === true;
-    }
+    var isIOS = NayiveUI.isIOS, standalone = NayiveUI.isStandalone;
     function pushable() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
     function skipped()  { try { return localStorage.getItem( SKIP_KEY ) === "1"; } catch( _ ) { return false; } }
     function skip()     { try { localStorage.setItem( SKIP_KEY, "1" ); } catch( _ ) {} }
@@ -49,28 +41,8 @@
                                                                  function () { return null; } );
     };
 
-    function b64ToU8( s )
-    {
-        var pad = "=".repeat( ( 4 - s.length % 4 ) % 4 );
-        var raw = atob( ( s + pad ).replace( /-/g, "+" ).replace( /_/g, "/" ) );
-        var out = new Uint8Array( raw.length );
-        for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
-        return out;
-    }
+    var b64ToU8 = NayiveUI.b64ToU8, sameKey = NayiveUI.samePushKey;   // shared/ui.js
 
-    function sameKey( sub, key )
-    {
-        try
-        {
-            var a = new Uint8Array( sub.options.applicationServerKey ), b = b64ToU8( key );
-            if( a.length !== b.length ) return false;
-            for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
-            return true;
-        }
-        catch( _ ) { return true; }
-    }
-
-    // Subscribe this device (permission already granted) and tell the server.
     async function subscribe()
     {
         var r = reg || await C.guestWorker();

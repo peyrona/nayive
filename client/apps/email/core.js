@@ -205,24 +205,8 @@
     // building DOM
     // ---------------------------------------------------------------------
 
-    // h( "div", { class, text, attrs, on }, child... )
-    E.h = function ( tag, o )
-    {
-        var el = document.createElement( tag );
-        o = o || {};
-        if( o.class ) el.className = o.class;
-        if( o.text != null ) el.textContent = o.text;
-        if( o.html != null ) el.innerHTML = o.html;          // our own icons only
-        if( o.attrs ) Object.keys( o.attrs ).forEach( function ( k ) { if( o.attrs[ k ] != null ) el.setAttribute( k, o.attrs[ k ] ); } );
-        if( o.on ) Object.keys( o.on ).forEach( function ( k ) { el.addEventListener( k, o.on[ k ] ); } );
-        for( var i = 2; i < arguments.length; i++ )
-        {
-            var c = arguments[ i ];
-            if( c == null || c === false ) continue;
-            el.appendChild( typeof c === "string" ? document.createTextNode( c ) : c );
-        }
-        return el;
-    };
+    // h( "div", { class, text, attrs, on }, child... ) - shared with Chat (shared/ui.js)
+    E.h = NayiveUI.h;
 
     var ICONS = {
         inbox:  '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>',

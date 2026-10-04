@@ -697,10 +697,7 @@
         </div>
     </div>
 
-    <!-- Where a .txt / .ics export lands (a click on this anchor is the download). -->
-    <a id="downloadAnchor" hidden></a>
-
-    <!-- Filled by exportPdf() just before window.print(), cleared on afterprint.
+    <!-- Filled by exportPdf() (NayiveUI.printPage) just before window.print(), cleared on afterprint.
          display:none on screen; the @media print block shows it and hides the app. -->
     <div id="printRoot"></div>
 
@@ -1962,8 +1959,8 @@
 
             const stem = 'calendar_' + from + '_' + to;
 
-            if( format === 'ics' )      downloadBlob( occurrencesToIcs( rows ), 'text/calendar;charset=utf-8', stem + '.ics' );
-            else if( format === 'txt' ) downloadBlob( occurrencesToText( rows, from, to ), 'text/plain;charset=utf-8', stem + '.txt' );
+            if( format === 'ics' )      NayiveUI.saveFile( occurrencesToIcs( rows ), stem + '.ics', 'text/calendar;charset=utf-8' );
+            else if( format === 'txt' ) NayiveUI.saveFile( occurrencesToText( rows, from, to ), stem + '.txt', 'text/plain;charset=utf-8' );
             else                        exportPdf( rows, from, to, stem );
         }
 
@@ -2125,23 +2122,7 @@
 
         function exportPdf( rows, from, to, stem )
         {
-            const root = document.getElementById( 'printRoot' );
-            root.innerHTML = buildPrintHtml( rows, from, to );
-
-            const prevTitle = document.title;
-            document.title  = stem;
-            document.documentElement.classList.add( 'printing' );
-
-            window.addEventListener( 'afterprint', function done()
-            {
-                window.removeEventListener( 'afterprint', done );
-                document.documentElement.classList.remove( 'printing' );
-                document.title = prevTitle;
-                root.innerHTML = '';
-            } );
-
-            NayiveUI.toast( T( 'calendar.pdfHint' ), { ms: 5000 } );
-            setTimeout( function() { window.print(); }, 350 );
+            NayiveUI.printPage( buildPrintHtml( rows, from, to ), stem, 'calendar.pdfHint' );
         }
 
         function buildPrintHtml( rows, from, to )
@@ -2173,20 +2154,6 @@
             if( day !== null ) html += '</table></div>';
 
             return html;
-        }
-
-        //---- download ----------------------------------------------------------//
-
-        function downloadBlob( text, mime, filename )
-        {
-            const url = URL.createObjectURL( new Blob( [ text ], { type: mime } ) );
-            const a   = document.getElementById( 'downloadAnchor' );
-
-            a.href     = url;
-            a.download = filename;
-            a.click();
-
-            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
         }
 
         function openSheetForNew( date, allDay, endDate )

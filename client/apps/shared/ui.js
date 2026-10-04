@@ -615,6 +615,39 @@
             '<path d="m 338.9,186.2 h 16.7 q 11.6,16.7 17.2,33.3 5.7,16.5 5.7,33.5 0,17.1 -5.6,33.5 -5.6,16.4 -17.3,33.3 h -16.7 q 9.7,-17.6 14.4,-34.1 4.7,-16.6 4.7,-32.8 0,-16.4 -4.7,-32.8 -4.7,-16.4 -14.4,-33.9 z"></path>' + '</g></g></g></svg>'
     };
 
+    /* The DOM builder (Chat's C.h, eMail's E.h):
+     *   h( "div", { class: "x", text: "…", html: "<svg…>", on: { click: fn },
+     *               attrs: {…}, data: {…}, anyProperty: v }, child, … )
+     * A null / false prop or attr is skipped ("" is not: class "" still sets
+     * it). Children: elements, strings and numbers (text nodes), arrays, and
+     * null / false (skipped). `html` is for our own icons only. */
+    function h( tag, props )
+    {
+        var el = document.createElement( tag );
+        props = props || {};
+        for( var k in props )
+        {
+            var v = props[ k ];
+            if( v == null || v === false ) continue;
+            if( k === "class" )      el.className = v;
+            else if( k === "text" )  el.textContent = v;
+            else if( k === "on" )    { for( var e in v ) el.addEventListener( e, v[ e ] ); }
+            else if( k === "attrs" ) { for( var a in v ) if( v[ a ] != null && v[ a ] !== false ) el.setAttribute( a, v[ a ] ); }
+            else if( k === "data" )  { for( var d in v ) el.dataset[ d ] = v[ d ]; }
+            else if( k === "html" )  el.innerHTML = v;
+            else el[ k ] = v;
+        }
+        for( var i = 2; i < arguments.length; i++ ) hKid( el, arguments[ i ] );
+        return el;
+    }
+
+    function hKid( el, kid )
+    {
+        if( kid == null || kid === false ) return;
+        if( Array.isArray( kid ) ) { kid.forEach( function ( k ) { hKid( el, k ); } ); return; }
+        el.appendChild( typeof kid === "string" || typeof kid === "number" ? document.createTextNode( String( kid ) ) : kid );
+    }
+
     function icon( name )
     {
         if( APP_LOGOS[ name ] ) return APP_LOGOS[ name ];
@@ -1546,6 +1579,112 @@
 
     function confirmDialog( opts ) { return makeDialog( opts, true ); }
     function alertDialog( opts )   { return makeDialog( opts, false ); }
+
+    //------------------------------------------------------------------------//
+    // ASK FOR ONE NAME  -  a new album (Photos), a group (Chat, Contacts), a rename
+    //
+    //   var name = await NayiveUI.askText( { title: '...', label: '...' } );
+    //   if( ! name ) return;             // cancelled, or Escape: null
+    //
+    //   o.value        the text it starts with (selected)
+    //   o.label        a <label> above the field, or
+    //   o.placeholder  the field's own grey text (and its aria-label)
+    //   o.hint         a line under the field
+    //   o.okTitle      the ✓'s tooltip (default "Accept");  o.okClass  a class on it
+    //   o.max          the field's maxlength
+    //   o.ids          { input, ok, cancel }: ids for the three
+    //   o.wide         a full sheet (default: a packed one, sheet--pack)
+    //   o.topOnly      Escape only while it is the page's last node (asked over
+    //                  another dialog that also hears Escape)
+    //   o.check( v )   the answer for the trimmed text v, or false to keep the
+    //                  dialog open (check says why); the field is then selected
+    //
+    // An empty field is never an answer: the ✓ only puts the focus back in it.
+    function askText( o )
+    {
+        o = o || {};
+        var ids = o.ids || {};
+
+        return new Promise( function ( resolve )
+        {
+            var d = modal( { cls: o.wide ? "" : "sheet--pack", title: o.title, escape: function () { finish( null ); },
+                             top: o.topOnly ? function () { return document.body.lastElementChild === d.back; } : null } );
+
+            var field = document.createElement( "div" );
+            field.className = "field";
+            var input = document.createElement( "input" );
+            input.type = "text";
+            input.autocomplete = "off";
+            if( ids.input ) input.id = ids.input;
+            if( o.max ) input.maxLength = o.max;
+            input.value = o.value || "";
+            if( o.label )
+            {
+                var lbl = document.createElement( "label" );
+                lbl.textContent = o.label;
+                if( ids.input ) lbl.htmlFor = ids.input;
+                field.appendChild( lbl );
+            }
+            if( o.placeholder )
+            {
+                input.placeholder = o.placeholder;
+                input.setAttribute( "aria-label", o.placeholder );
+            }
+            field.appendChild( input );
+            d.sheet.appendChild( field );
+
+            if( o.hint )
+            {
+                var hint = document.createElement( "p" );
+                hint.className = "hint";
+                hint.textContent = o.hint;
+                d.sheet.appendChild( hint );
+            }
+
+            var row = document.createElement( "div" );
+            row.className = "sheet-actions";
+            var no = document.createElement( "button" );
+            no.type = "button";
+            if( ids.cancel ) no.id = ids.cancel;
+            no.setAttribute( "data-act", "close" );
+            no.title = t( "ui.cancel" );
+            var ok = document.createElement( "button" );
+            ok.type = "button";
+            if( ids.ok ) ok.id = ids.ok;
+            if( o.okClass ) ok.className = o.okClass;
+            ok.setAttribute( "data-act", "primary" );
+            ok.title = o.okTitle || t( "ui.accept" );
+            row.appendChild( no );
+            row.appendChild( ok );
+            d.sheet.appendChild( row );
+            applySheetButtons( d.sheet );
+
+            function finish( v ) { if( d.close() ) resolve( v ); }
+
+            function submit()
+            {
+                var v = input.value.trim();
+                if( ! v ) { input.focus(); return; }
+                if( o.check )
+                {
+                    var r = o.check( v );
+                    if( r === false ) { input.select(); return; }
+                    v = r;
+                }
+                finish( v );
+            }
+
+            no.addEventListener( "click", function () { finish( null ); } );
+            ok.addEventListener( "click", submit );
+            input.addEventListener( "keydown", function ( e )
+            {
+                if( e.key === "Enter" && ! e.isComposing ) { e.preventDefault(); submit(); }
+            } );
+
+            d.show();
+            setTimeout( function () { input.focus(); input.select(); }, 30 );
+        } );
+    }
 
     //------------------------------------------------------------------------//
     // ASK FOR A PASSWORD  -  the sheet the office apps lock a document with
@@ -3269,6 +3408,33 @@
         return /iphone|ipad|ipod/i.test( navigator.userAgent ) ||
                ( navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 );   // iPadOS 13+
     }
+
+    // PUSH KEYS (the launcher, a Chat link). base64url (the server's VAPID key)
+    // -> the bytes pushManager.subscribe() wants: it will not take the string.
+    // (chat/guest-sw.js keeps its own copy: a worker cannot load this file.)
+    function b64ToU8( s )
+    {
+        var pad = "=".repeat( ( 4 - s.length % 4 ) % 4 );
+        var raw = atob( ( s + pad ).replace( /-/g, "+" ).replace( /_/g, "/" ) );
+        var out = new Uint8Array( raw.length );
+        for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
+        return out;
+    }
+
+    // Does this subscription still match the server's VAPID key? If the key
+    // was regenerated, the push service rejects every message for it forever -
+    // and nothing would ever say so. Can't tell -> true (don't nag the user).
+    function samePushKey( sub, b64 )
+    {
+        try
+        {
+            var a = new Uint8Array( sub.options.applicationServerKey ), b = b64ToU8( b64 );
+            if( a.length !== b.length ) return false;
+            for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
+            return true;
+        }
+        catch ( e ) { return true; }
+    }
     // A browser embedded in another app (Instagram, Facebook, WhatsApp...): it can
     // never install anything, the user has to open Nayive in a real browser first.
     function isInAppBrowser()
@@ -3832,6 +3998,44 @@
         if( navigator.clipboard && navigator.clipboard.writeText )
             return navigator.clipboard.writeText( value ).catch( legacy );
         return new Promise( function ( resolve ) { legacy(); resolve(); } );
+    }
+
+    // To this device as a file (a download): `data` is a Blob / File as it is,
+    // or text put in one of `type`. A throwaway link, dropped after 1 s.
+    function saveFile( data, name, type )
+    {
+        var blob = data instanceof Blob ? data : new Blob( [ data ], { type: type } );
+        var a = document.createElement( "a" );
+        a.href = URL.createObjectURL( blob );
+        a.download = name;
+        document.body.appendChild( a );
+        a.click();
+        setTimeout( function () { URL.revokeObjectURL( a.href ); a.remove(); }, 1000 );
+    }
+
+    // "Export to PDF" with no PDF library (Calendar, Split): `html` goes into the
+    // page's hidden #printRoot, <html> gets .printing (the page's own @media print
+    // rules show only #printRoot), `title` seeds the suggested file name, and the
+    // browser's print dialog writes the file ("Save as PDF"). All undone on afterprint.
+    function printPage( html, title, hintKey )
+    {
+        var root = document.getElementById( "printRoot" );
+        root.innerHTML = html;
+
+        var prevTitle = document.title;
+        document.title = title;
+        document.documentElement.classList.add( "printing" );
+
+        window.addEventListener( "afterprint", function done()
+        {
+            window.removeEventListener( "afterprint", done );
+            document.documentElement.classList.remove( "printing" );
+            document.title = prevTitle;
+            root.innerHTML = "";
+        } );
+
+        toast( t( hintKey ), { ms: 5000 } );
+        setTimeout( function () { window.print(); }, 350 );
     }
 
     // The public links whose × is still on Undo: a sheet opened again meanwhile
@@ -5627,6 +5831,7 @@
         transfer:       transfer,         // a row on the shared upload/download bar
         wireMenu:       wireMenu,         // the header "..." popup menu
         icon:              icon,
+        h:                 h,             // build DOM: h( "div", { class, text, on, attrs, data }, kids… )
         attachPanel:       attachPanel,   // the clip's round-button panel (Chat, eMail)
         t:         t,
         tf:        tf,
@@ -5642,6 +5847,7 @@
         windowed:          WINDOWED,     // true inside a desktop window
         confirm:  confirmDialog,
         askPassword: askPassword,
+        askText:  askText,        // one name in a small dialog -> the text, or null
         alert:    alertDialog,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,
@@ -5658,7 +5864,11 @@
         rowButton:       rowButton,           // the share sheet's round button (trips/my-location.js too)
         jsonApi:         jsonApi,             // one JSON call to this server
         copyText:        copyText,            // to the clipboard, or a rejected promise
+        saveFile:        saveFile,            // to this device as a download (Blob or text)
+        printPage:       printPage,           // "Export to PDF" through #printRoot + window.print()
         isIOS:           isIOS,
+        b64ToU8:         b64ToU8,             // a VAPID key -> applicationServerKey bytes
+        samePushKey:     samePushKey,         // a push subscription made with this key?
         inAndroidApp:    inAndroidApp,
         pickFolder:           pickFolder,
         pickFile:             pickFile,

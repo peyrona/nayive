@@ -1600,31 +1600,10 @@
                            && ( 'Notification' in window )
             };
 
-            // base64url -> Uint8Array. applicationServerKey will not take the string.
-            function b64ToU8( s )
-            {
-                var pad = '='.repeat( ( 4 - s.length % 4 ) % 4 );
-                var raw = atob( ( s + pad ).replace( /-/g, '+' ).replace( /_/g, '/' ) );
-                var out = new Uint8Array( raw.length );
-                for( var i = 0; i < raw.length; i++ ) out[ i ] = raw.charCodeAt( i );
-                return out;
-            }
-
-            // Does this subscription still match the server's VAPID key? If the
-            // key was regenerated, the push service will reject every message
-            // for it forever - and nothing would ever say so.
-            function sameKey( sub, b64 )
-            {
-                try
-                {
-                    var a = new Uint8Array( sub.options.applicationServerKey );
-                    var b = b64ToU8( b64 );
-                    if( a.length !== b.length ) return false;
-                    for( var i = 0; i < a.length; i++ ) if( a[ i ] !== b[ i ] ) return false;
-                    return true;
-                }
-                catch ( e ) { return true; }        // can't tell -> don't nag the user
-            }
+            // base64url -> Uint8Array, and "made with this key?": shared/ui.js (deferred:
+            // this script runs first, so looked up at call time).
+            function b64ToU8( s )        { return NayiveUI.b64ToU8( s ); }
+            function sameKey( sub, b64 ) { return NayiveUI.samePushKey( sub, b64 ); }
 
             async function pushGet( endpoint )
             {

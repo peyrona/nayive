@@ -592,7 +592,6 @@
     </div>
 
     <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
-    <a id="downloadAnchor" style="display:none;"></a>
     <div id="toast" class="toast"></div>
 
     <script src="../shared/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
@@ -2224,62 +2223,24 @@
             if( g ) addToGroup( uids, g );
         }
 
-        // A group's name, asked in a small dialog: -> Promise( name | null ).
-        // A name another group has is refused (a toast) and asked again.
+        // A group's name, asked in a small dialog (shared/ui.js askText):
+        // -> Promise( name | null ). A name another group has is refused (a
+        // toast) and asked again; the name it already has answers null.
         function askGroupName( title, was )
         {
-            return new Promise( function( resolve )
-            {
-                const d = NayiveUI.modal( { title: title, escape: () => finish( null ) } );
-                let   done = false;
-                const finish = v => { if( done ) return; done = true; d.close(); resolve( v ); };
-
-                const field = document.createElement( 'div' );
-                field.className = 'field';
-                const lbl = document.createElement( 'label' );
-                lbl.textContent = T( 'contact.groupName' );
-                const inp = document.createElement( 'input' );
-                inp.type = 'text';
-                inp.autocomplete = 'off';
-                inp.maxLength = 60;
-                inp.value = was || '';
-                inp.id = lbl.htmlFor = 'groupNameInput';
-                field.append( lbl, inp );
-                d.sheet.appendChild( field );
-
-                const row = document.createElement( 'div' );
-                row.className = 'sheet-actions';
-                const no = document.createElement( 'button' );
-                no.id = 'groupNameCancel';
-                no.setAttribute( 'data-act', 'close' );
-                no.title = T( 'ui.cancel' );
-                const ok = document.createElement( 'button' );
-                ok.id = 'groupNameOk';
-                ok.setAttribute( 'data-act', 'primary' );
-                ok.title = T( 'ui.save' );
-                row.append( no, ok );
-                d.sheet.appendChild( row );
-                NayiveUI.applySheetButtons( d.sheet );
-
-                const submit = () =>
+            return NayiveUI.askText( {
+                title: title, value: was || '', label: T( 'contact.groupName' ), okTitle: T( 'ui.save' ), max: 60, wide: true,
+                ids:   { input: 'groupNameInput', ok: 'groupNameOk', cancel: 'groupNameCancel' },
+                check: function( v )
                 {
-                    const v = inp.value.replace( /[\r\n]+/g, ' ' ).trim();
-                    if( ! v ) { inp.focus(); return; }
-                    if( was && sameCat( v, was ) && v === was ) { finish( null ); return; }
+                    if( was && sameCat( v, was ) && v === was ) return null;
                     if( HIDDEN_CATS.has( v.toLowerCase() ) || ( ! ( was && sameCat( v, was ) ) && groupExists( v ) ) )
                     {
                         flashToast( T( 'contact.groupTaken' ) );
-                        inp.select();
-                        return;
+                        return false;
                     }
-                    finish( v );
-                };
-                no.addEventListener( 'click', () => finish( null ) );
-                ok.addEventListener( 'click', submit );
-                inp.addEventListener( 'keydown', e => { if( e.key === 'Enter' && ! e.isComposing ) { e.preventDefault(); submit(); } } );
-
-                d.show();
-                setTimeout( () => { inp.focus(); inp.select(); }, 0 );
+                    return v;
+                }
             } );
         }
 
@@ -2351,13 +2312,8 @@
         function exportCards( list )
         {
             if( ! list.length ) return;
-            const f   = cardsFile( list );
-            const url = URL.createObjectURL( f );
-            const a   = document.getElementById( 'downloadAnchor' );
-            a.href     = url;
-            a.download = f.name;
-            a.click();
-            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+            const f = cardsFile( list );
+            NayiveUI.saveFile( f, f.name );
         }
 
         // Every picked card goes at once; "Deleted [Undo]" puts them back by
@@ -3610,15 +3566,7 @@
                 return;
             }
 
-            const blob = new Blob( [ contactsToVcf( contacts ) ], { type: 'text/vcard;charset=utf-8' } );
-            const url  = URL.createObjectURL( blob );
-            const a    = document.getElementById( 'downloadAnchor' );
-
-            a.href     = url;
-            a.download = T( 'contact.exportFile' );
-            a.click();
-
-            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+            NayiveUI.saveFile( contactsToVcf( contacts ), T( 'contact.exportFile' ), 'text/vcard;charset=utf-8' );
         }
 
         async function importVcf( file )

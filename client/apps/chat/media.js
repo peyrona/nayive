@@ -148,22 +148,11 @@
         el.appendChild( act );
     };
 
-    // vCard's text escape (shared/vcard.js escapeText): a person's page has
-    // no session, and that file is not public (server/go/static.go).
-    function vEsc( s ) { return String( s ).replace( /\\/g, "\\\\" ).replace( /[,;]/g, "\\$&" ).replace( /\n/g, "\\n" ); }
-
+    // The card as a .vcf download: shared/vcard.js writes it (public, as a
+    // person's page has no session - server/go/static.go).
     function saveVcf( c )
     {
-        var lines = [ "BEGIN:VCARD", "VERSION:3.0", "FN:" + vEsc( c.name ), "N:" + vEsc( c.name ) + ";;;;" ];
-        ( c.tels || [] ).forEach( function ( t ) { lines.push( "TEL;TYPE=CELL:" + vEsc( t ) ); } );
-        ( c.emails || [] ).forEach( function ( e ) { lines.push( "EMAIL:" + vEsc( e ) ); } );
-        lines.push( "END:VCARD" );
-        var url = URL.createObjectURL( new Blob( [ lines.join( "\r\n" ) + "\r\n" ], { type: "text/vcard" } ) );
-        var a = h( "a", { attrs: { href: url, download: ( c.name || "contacto" ).replace( /[\\/:*?"<>|]/g, "_" ) + ".vcf" } } );
-        document.body.appendChild( a );
-        a.click();
-        a.remove();
-        setTimeout( function () { URL.revokeObjectURL( url ); }, 5000 );
+        NayiveUI.saveFile( NayiveVCard.write( c ), ( c.name || "contacto" ).replace( /[\\/:*?"<>|]/g, "_" ) + ".vcf", "text/vcard" );
     }
 
     C.pollBody = function ( el, m, meta )

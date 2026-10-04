@@ -99,6 +99,10 @@
         return ! type && ( e === "jpg" || e === "jpeg" );
     }
 
+    // The formats the photo editor (apps/image) can load AND re-encode
+    // (canvas.toDataURL): Drive opens these in it, and Image refuses the rest.
+    var EDIT_EXT = [ "png", "jpg", "jpeg", "webp" ];
+
     /* "vacaciones.HEIC" -> "vacaciones.jpg" (the bytes really are JPEG now, so
      * the name has to say so or every viewer is misled). */
     function jpegName( name )
@@ -187,29 +191,42 @@
     //  Exif carried over to the shrunk copy
     //------------------------------------------------------------------------//
 
-    /* The Exif APP1 segment of a JPEG, as a Uint8Array copy (marker bytes and
-     * all), or null. A JPEG is a chain of segments: 0xFFD8 (start of image),
-     * then FF <marker> <2-byte length> <payload>..., until FFDA starts the
-     * compressed pixels. Exif is the APP1 (0xFFE1) whose payload begins with
-     * "Exif\0\0". */
-    function exifSegment( u8 )
+    /* Where a JPEG's Exif block is. A JPEG is a chain of segments: 0xFFD8
+     * (start of image), then FF <marker> <2-byte length> <payload>..., until
+     * FFDA starts the compressed pixels. Exif is the APP1 (0xFFE1) whose
+     * payload begins with "Exif\0\0". Answers { tiff, end } (its TIFF header;
+     * where the block ends, maybe past `u8` - Photos then reads more),
+     * { past: true } when the blocks before it run past `u8`, or null (not a
+     * JPEG, or the picture data starts first). Photos reads dates and places
+     * with it too. */
+    function exifAt( u8 )
     {
         if ( ! u8 || u8.length < 4 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
         var i = 2;
-        while ( i + 4 <= u8.length && u8[ i ] === 0xFF )
+        while ( i + 4 <= u8.length )
         {
+            if ( u8[ i ] !== 0xFF ) return null;
             var marker = u8[ i + 1 ];
-            if ( marker === 0xDA || marker === 0xD9 ) break;       // pixels / end
+            if ( marker === 0xD9 || marker === 0xDA ) return null;   // end / pixels
             var len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
-            if ( len < 2 || i + 2 + len > u8.length ) break;
+            if ( len < 2 ) return null;
             if ( marker === 0xE1 && i + 10 <= u8.length &&
                  u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 &&    // "Ex"
                  u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 &&    // "if"
                  u8[ i + 8 ] === 0x00 )
-                return u8.slice( i, i + 2 + len );                  // py-ish: a copy, not a view
+                return { tiff: i + 10, end: i + 2 + len };
             i += 2 + len;
         }
-        return null;
+        return { past: true };
+    }
+
+    /* The Exif APP1 segment of a JPEG, as a Uint8Array copy (marker bytes and
+     * all), or null - also when a block up to its end runs past `u8`. */
+    function exifSegment( u8 )
+    {
+        var at = exifAt( u8 );
+        if ( ! at || at.past || at.end > u8.length ) return null;
+        return u8.slice( at.tiff - 10, at.end );                    // py-ish: a copy, not a view
     }
 
     /* Fix the copied Exif so it describes the NEW image:
@@ -578,7 +595,9 @@
         thumbOf:      thumbOf,
         dropThumb:    dropThumb,
         copyExif:     copyExif,
+        exifAt:       exifAt,       // where a JPEG's Exif block is (Photos reads dates and places)
         jpegName:     jpegName,
+        EDIT_EXT:     EDIT_EXT,     // what Image can edit (Drive opens these there)
         isJpeg:       isJpeg
     };
 } )();

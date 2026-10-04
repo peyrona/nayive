@@ -997,27 +997,13 @@
     // small dialogs
     // ---------------------------------------------------------------------
 
-    // One text field in a dialog. Resolves to the text, or "" when cancelled.
+    // One text field in a dialog (shared/ui.js askText). Resolves to the
+    // text, or null when cancelled. Asked over the info sheet too: Escape
+    // closes only this one.
     C.askText = function ( o )
     {
-        return new Promise( function ( resolve )
-        {
-            var input = h( "input", { attrs: { type: "text", id: "askText", maxlength: String( o.max || 60 ), autocomplete: "off" },
-                                      value: o.value || "" } );
-            var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.accept" ) } } );
-            var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
-            var d = NayiveUI.modal( { cls: "sheet--pack", title: o.title, escape: function () { done( "" ); },
-                                      top: function () { return document.body.lastElementChild === d.back; } } );
-            [ h( "div", { class: "field" }, h( "label", { attrs: { for: "askText" }, text: o.label || "" } ), input ),
-              o.hint ? h( "p", { class: "hint", text: o.hint } ) : null,
-              h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { if( n ) d.sheet.appendChild( n ); } );
-            d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
-            function done( v ) { if( d.close() ) resolve( v ); }
-            ok.addEventListener( "click", function () { var v = input.value.trim(); if( v ) done( v ); else input.focus(); } );
-            no.addEventListener( "click", function () { done( "" ); } );
-            input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) ok.click(); } );
-            setTimeout( function () { input.focus(); input.select(); }, 30 );
-        } );
+        return NayiveUI.askText( { title: o.title, label: o.label, hint: o.hint, value: o.value, max: o.max || 60,
+                                   ids: { input: "askText" }, topOnly: true } );
     };
 
     // Settings › Your profile: your name and your picture, as the others
