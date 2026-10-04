@@ -2156,8 +2156,9 @@
     var waitStore = null; // sendWaiting's store: one per page (each store listens to the page's events)
 
     // A database as its owner opens it - the same upgrade, so opening it here
-    // first never leaves one with no store: "nayive-drafts" (shared/office.js),
-    // "nayive-mail-files" (email/compose.js).
+    // first never leaves one with no store: "nayive-drafts" (GumApi.draftsDb),
+    // "nayive-mail-files" (email/compose.js). GumApi.sideDb's opener, kept
+    // here: this file runs without gum-api.js (admin, the launcher, the harness).
     function openSide( name, store, keyPath )
     {
         return new Promise( function ( resolve )

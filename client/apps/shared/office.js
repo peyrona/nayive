@@ -758,45 +758,11 @@
 
     // ---- the device draft store ---------------------------------------------
 
-    var draftDb = null;
+    // "nayive-drafts" (GumApi.draftsDb). draftTx: fn( objectStore ) -> request;
+    // resolves with its result, null on any failure.
+    var drafts = GumApi.draftsDb();
 
-    function openDrafts()
-    {
-        if( draftDb ) return draftDb;
-
-        draftDb = new Promise( function ( resolve )
-        {
-            var rq;
-            try { rq = indexedDB.open( "nayive-drafts", 1 ); }
-            catch ( e ) { resolve( null ); return; }
-
-            rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
-            rq.onsuccess = function () { resolve( rq.result ); };
-            rq.onerror = rq.onblocked = function () { resolve( null ); };
-        } );
-        return draftDb;
-    }
-
-    // fn( objectStore ) -> request; resolves with its result, null on any failure.
-    function draftTx( mode, fn )
-    {
-        return openDrafts().then( function ( db )
-        {
-            if( ! db ) return null;
-
-            return new Promise( function ( resolve )
-            {
-                try
-                {
-                    var tx = db.transaction( "drafts", mode );
-                    var rq = fn( tx.objectStore( "drafts" ) );
-                    tx.oncomplete = function () { resolve( rq.result === undefined ? null : rq.result ); };
-                    tx.onerror = tx.onabort = function () { resolve( null ); };
-                }
-                catch ( e ) { resolve( null ); }
-            } );
-        } );
-    }
+    function draftTx( mode, fn ) { return drafts.tx( mode, fn ); }
 
     // The account this page belongs to, as store.js read it at load ("" = unknown).
     function draftWho() { return ( window.NayiveStore && NayiveStore.me ) || ""; }
@@ -841,17 +807,7 @@
     // this browser: a do-nothing release, and no tab is ever known to be alive.
     function holdLock( name )
     {
-        var none = function () {};
-        if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.resolve( none );
-
-        return new Promise( function ( resolve )
-        {
-            navigator.locks.request( name, { ifAvailable: true }, function ( lock )
-            {
-                if( ! lock ) { resolve( null ); return null; }
-                return new Promise( function ( release ) { resolve( release ); } );
-            } ).catch( function () { resolve( none ); } );
-        } );
+        return GumApi.tryLock( name, true ).catch( function () { return function () {}; } );
     }
 
     // id: the one to try first (null = a fresh one).
@@ -899,20 +855,9 @@
     }
 
     // The draft keys whose tab is open now; null = not known (no Web Locks).
-    async function liveDraftKeys()
+    function liveDraftKeys()
     {
-        if( ! ( navigator.locks && navigator.locks.query ) ) return null;
-        try
-        {
-            var got = await navigator.locks.query();
-            var out = new Set();
-            ( got.held || [] ).forEach( function ( l )
-            {
-                if( l.name && l.name.indexOf( "nayive-draft:" ) === 0 ) out.add( l.name.slice( 13 ) );
-            } );
-            return out;
-        }
-        catch ( e ) { return null; }
+        return GumApi.heldLocks( "nayive-draft:" ).catch( function () { return null; } );
     }
 
     function hhmm( at )

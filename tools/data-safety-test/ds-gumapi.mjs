@@ -10,6 +10,9 @@
 //     another file's are not.
 // L5 (office #14, GumApi half): a page left open after another account signed
 //     in on this browser gets 423 - its write never lands in the other home.
+// On this device: sideDb / draftsDb (the device drafts) never hang on a
+//     failure; tryLock / heldLocks (a writer's tab is alive) reject with no
+//     Web Locks, so each caller keeps its own fallback.
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
 import { installRace, arm, raced } from "./race.mjs";
 
@@ -160,6 +163,46 @@ section( "L5 · EVERY CALL THAT CHANGES FILES NAMES THE PAGE'S OWNER" );
         return window.__who;` );
     ok( me && Array.isArray( r ) && r.length === 8 && r.every( x => x.endsWith( " " + me ) ),
         "new folder, move, bin, restore, delete, purge, bin delete, a POST of the app's own: each says whose page it is", { me, r } );
+}
+
+//------------------------------------------------------------------------//
+// ON THIS DEVICE: GumApi.sideDb / draftsDb (the device drafts of Write, Calc,
+// Text and eMail) and the Web Locks that tell a writer's tab is alive.
+section( "sideDb: a record goes in and comes back; a failure is null, never a hang" );
+{
+    const r = await run( `const a = GumApi.draftsDb(), b = GumApi.sideDb( 'nayive-drafts', 'drafts', 'app' );
+        await a.tx( 'readwrite', os => os.put( { app: 'ds:side', text: 'kept' } ) );
+        const back = await b.tx( 'readonly', os => os.get( 'ds:side' ) );
+        const none = await a.tx( 'readonly', os => undefined );
+        const bad  = await a.tx( 'readonly', os => os.get( {} ) );
+        const gone = await GumApi.sideDb( 'nayive-drafts', 'nostore', 'k' ).tx( 'readonly', os => os.getAll() );
+        await a.tx( 'readwrite', os => os.delete( 'ds:side' ) );
+        const after = await a.tx( 'readonly', os => os.get( 'ds:side' ) );
+        return { back, none, bad, gone, after, same: a.open() === a.open() };` );
+    ok( r && r.back && r.back.text === "kept", "a second opener of the same database reads what the first wrote", r );
+    ok( r && r.none === null && r.bad === null && r.gone === null, "no request / a bad key / no such store: null, not a hang", r );
+    ok( r && r.after === null && r.same === true, "deleted, gone; the database opened once", r );
+}
+
+section( "tryLock / heldLocks: a held lock is seen by everyone, ifAvailable says taken" );
+{
+    const r = await run( `const rel = await GumApi.tryLock( 'ds-lock:one', true );
+        const second = await GumApi.tryLock( 'ds-lock:one', true );
+        const held = await GumApi.heldLocks( 'ds-lock:' );
+        rel();
+        await new Promise( k => setTimeout( k, 50 ) );
+        const later = await GumApi.heldLocks( 'ds-lock:' );
+        const again = await GumApi.tryLock( 'ds-lock:one', true );
+        if( again ) again();
+        Object.defineProperty( navigator, 'locks', { value: undefined, configurable: true } );
+        let noTry = 'resolved', noHeld = 'resolved';
+        try { await GumApi.tryLock( 'ds-lock:x', true ); } catch( e ) { noTry = 'rejected'; }
+        try { await GumApi.heldLocks( 'ds-lock:' ); } catch( e ) { noHeld = 'rejected'; }
+        delete navigator.locks;
+        return { first: typeof rel, second, held: [ ...held ], later: [ ...later ], again: typeof again, noTry, noHeld, back: !! navigator.locks };` );
+    ok( r && r.first === "function" && r.second === null, "the first gets a release, the second (ifAvailable) null", r );
+    ok( r && r.held.length === 1 && r.held[ 0 ] === "one" && r.later.length === 0 && r.again === "function", "held while held, free once released", r );
+    ok( r && r.noTry === "rejected" && r.noHeld === "rejected" && r.back, "no Web Locks: both reject (the caller decides)", r );
 }
 
 //------------------------------------------------------------------------//

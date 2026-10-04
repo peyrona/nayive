@@ -679,6 +679,97 @@
     }
 
     //------------------------------------------------------------------------//
+    // ON THIS DEVICE  -  an IndexedDB database with one object store, and the
+    // Web Locks that tell a tab's writer is still alive.
+    //
+    //   var db = GumApi.sideDb( "nayive-mail-files", "files", "key" );
+    //   db.tx( "readwrite", function ( os ) { return os.put( rec ); } )
+    //
+    // sideDb: opened once per page, on first use; the store made by the
+    // upgrade - every opener of a database must make the SAME store, as
+    // whoever opens it first makes it. open() -> the database, null when it
+    // cannot be (private mode, no IndexedDB, blocked). tx( mode, fn ):
+    // fn( objectStore ) -> a request; its result once the transaction is
+    // done, null on any failure (never a hang). draftsDb(): "nayive-drafts",
+    // the device drafts of Write / Calc / Text and eMail (shared/office.js),
+    // also Chat's outbox (chat/compose.js keeps its own opener: the guest page
+    // has no gum-api.js) - shared/store.js's sign-out counts and empties it.
+    function sideDb( name, store, keyPath )
+    {
+        var db = null;
+
+        function open()
+        {
+            if( db ) return db;
+            db = new Promise( function ( resolve )
+            {
+                var rq;
+                try { rq = indexedDB.open( name, 1 ); }
+                catch ( e ) { resolve( null ); return; }
+                rq.onupgradeneeded = function () { rq.result.createObjectStore( store, { keyPath: keyPath } ); };
+                rq.onsuccess = function () { resolve( rq.result ); };
+                rq.onerror = rq.onblocked = function () { resolve( null ); };
+            } );
+            return db;
+        }
+
+        function tx( mode, fn )
+        {
+            return open().then( function ( d )
+            {
+                if( ! d ) return null;
+                return new Promise( function ( resolve )
+                {
+                    try
+                    {
+                        var t  = d.transaction( store, mode );
+                        var rq = fn( t.objectStore( store ) );
+                        t.oncomplete = function () { resolve( rq && rq.result !== undefined ? rq.result : null ); };
+                        t.onerror = t.onabort = function () { resolve( null ); };
+                    }
+                    catch ( e ) { resolve( null ); }
+                } );
+            } );
+        }
+
+        return { open: open, tx: tx };
+    }
+
+    function draftsDb() { return sideDb( "nayive-drafts", "drafts", "app" ); }
+
+    // The Web Lock `name`, held from now on: resolves its release() - call it
+    // to let go; the page closing lets go too - or null when another tab or
+    // window holds it and `ifAvailable` (else it waits for it). REJECTS when
+    // this browser has no Web Locks or the request fails: what that means
+    // (taken, or not) is the caller's call.
+    function tryLock( name, ifAvailable )
+    {
+        if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.reject( new Error( "no Web Locks" ) );
+        return new Promise( function ( resolve, reject )
+        {
+            navigator.locks.request( name, { ifAvailable: !! ifAvailable }, function ( lock )
+            {
+                if( ! lock ) { resolve( null ); return null; }
+                return new Promise( function ( release ) { resolve( release ); } );
+            } ).catch( reject );
+        } );
+    }
+
+    // The Web Locks held now in this browser (every tab and window) whose
+    // name starts with `prefix`: a Set of the rest of each name. REJECTS when
+    // that cannot be known (no Web Locks, the query failed).
+    async function heldLocks( prefix )
+    {
+        var got = await navigator.locks.query();
+        var out = new Set();
+        ( got.held || [] ).forEach( function ( l )
+        {
+            if( l.name && l.name.indexOf( prefix ) === 0 ) out.add( l.name.slice( prefix.length ) );
+        } );
+        return out;
+    }
+
+    //------------------------------------------------------------------------//
     // ACCESS PROBE
     //
     // GET /api/whoami: 200 + { user, role } for a signed-in visitor, 401 for an
@@ -742,6 +833,12 @@
         trashDelete:     trashDelete,
         trashDays:       trashDays,
         setTrashDays:    setTrashDays,
+
+        // on this device
+        sideDb:          sideDb,
+        draftsDb:        draftsDb,
+        tryLock:         tryLock,
+        heldLocks:       heldLocks,
 
         // access
         owner:           owner,            // whose page this is ("" = unknown)
