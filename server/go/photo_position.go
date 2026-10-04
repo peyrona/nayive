@@ -60,15 +60,11 @@ func (s *Server) photoUploaded(user, rel string, target Resolved) {
 		return
 	}
 
-	file, err := target.Open()
+	file, info, err := target.OpenRegular() // a FIFO named .jpg never blocks the goroutine
 	if err != nil {
 		return
 	}
 	defer file.Close()
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return
-	}
 	meta, err := readJPEGMeta(file, info.Size())
 	if err != nil || !meta.HasGPS {
 		return

@@ -279,6 +279,34 @@ func TestDS_D9_GuestAddNameTakenAtPlacement(t *testing.T) {
 	}
 }
 
+// TestDS_D9_GuestAddMakesNoFolders: an "add" share lends ana's folders to
+// drop files in; beto's PUT into a folder that is not there is refused, as
+// his mkdir is, and makes nothing (B5-17). Into a folder that is: saved.
+func TestDS_D9_GuestAddMakesNoFolders(t *testing.T) {
+	srv, ts, _ := newTestServer(t)
+	dir, slug := dsAddGrant(t, srv)
+	guest := signedInClient(t, ts.URL, "beto", "xyz")
+
+	resp := do(t, guest, "PUT", ts.URL+"/api/files?file=shared/"+slug+"/new/deep/IMG_1.jpg", strings.NewReader("beto's photo"), nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("PUT into a new folder = %d, want 403", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the refused PUT made a folder: %v", err)
+	}
+
+	os.MkdirAll(filepath.Join(dir, "day1"), 0o755)
+	resp = do(t, guest, "PUT", ts.URL+"/api/files?file=shared/"+slug+"/day1/IMG_2.jpg", strings.NewReader("beto's photo"), nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("PUT into a folder that is there = %d, want 200", resp.StatusCode)
+	}
+	if got := dsRead(filepath.Join(dir, "day1", "IMG_2.jpg")); got != "beto's photo" {
+		t.Errorf("IMG_2.jpg = %q", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // D8: a restore never replaces anything
 // ---------------------------------------------------------------------------

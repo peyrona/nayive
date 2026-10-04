@@ -337,22 +337,14 @@ func (s *Server) dlSendFile(ctx context.Context, w *dlWriter, r *http.Request, j
 	if !ok {
 		return &dlRefusal{http.StatusForbidden, "forbidden"}
 	}
-	// Stat BEFORE opening, then what is sent is what was OPENED - as filesRead.
-	// A home the admin moved since the POST: 503, never 404 (missingStatus).
-	if info, err := src.Stat(); err != nil || !info.Mode().IsRegular() {
-		status, msg := missingStatus(err, "no existe")
-		return &dlRefusal{status, msg}
-	}
-	f, err := src.Open()
+	// What is sent is what was OPENED (OpenRegular). A home the admin moved
+	// since the POST: 503, never 404 (missingStatus).
+	f, info, err := src.OpenRegular()
 	if err != nil {
 		status, msg := missingStatus(err, "no existe")
 		return &dlRefusal{status, msg}
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return &dlRefusal{http.StatusNotFound, "no existe"}
-	}
 	job.total.Store(info.Size())
 
 	dlHeaders(w, ContentType(src.Abs), job.name)

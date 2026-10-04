@@ -253,7 +253,14 @@ func (s *Server) streamToFile(w http.ResponseWriter, r *http.Request,
 	}
 	defer root.Close()
 	dir := filepath.Dir(target.Rel)
-	if err := root.MkdirAll(dir, 0o755); err != nil {
+	// An "add" share (the 409 clash, filesWrite) lends its folders to drop
+	// files in, never to make new ones - mkdir refuses them too (B5-17).
+	if clash == http.StatusConflict {
+		if info, err := root.Stat(dir); err != nil || !info.IsDir() {
+			sendError(w, r, http.StatusForbidden, "forbidden")
+			return 0, errors.New("no new folders in a shared folder")
+		}
+	} else if err := root.MkdirAll(dir, 0o755); err != nil {
 		sendError(w, r, http.StatusInternalServerError, "no se pudo crear la carpeta")
 		return 0, err
 	}

@@ -14,12 +14,16 @@ package main
 // the test swaps in between the two, with no timing involved.
 
 import (
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // swapOut resolves files/sub/<name> for ana, then replaces files/sub with a
@@ -183,5 +187,47 @@ func TestSandboxKeepsInHomeSymlinks(t *testing.T) {
 	srv.filesRead(rec, req, p, cleanQuery(req))
 	if rec.Code != http.StatusOK || rec.Body.String() != "hola\n" {
 		t.Errorf("read through an in-home symlink = %d %q", rec.Code, rec.Body)
+	}
+}
+
+// TestOpenRegularNeverOpensAFIFO: OpenRegular (every "open a file safely"
+// copy, SG6) stats before it opens - a FIFO named like a photo is refused at
+// once instead of blocking the open - and a folder is refused too; a file
+// opens, with the info of what was opened.
+func TestOpenRegularNeverOpensAFIFO(t *testing.T) {
+	dir := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(dir, "IMG_1.jpg"), 0o644); err != nil {
+		t.Skip("no FIFOs here:", err)
+	}
+	os.Mkdir(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, "ok.txt"), []byte("hola"), 0o644)
+
+	for _, name := range []string{"IMG_1.jpg", "sub"} {
+		p, _ := newResolved(dir, filepath.Join(dir, name), false)
+		done := make(chan error, 1)
+		go func() {
+			f, _, err := p.OpenRegular()
+			if f != nil {
+				f.Close()
+			}
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if !errors.Is(err, errNotRegular) || !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("%s: err = %v, want errNotRegular", name, err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s: OpenRegular blocked", name)
+		}
+	}
+	p, _ := newResolved(dir, filepath.Join(dir, "ok.txt"), false)
+	f, info, err := p.OpenRegular()
+	if err != nil || info.Size() != 4 {
+		t.Fatalf("ok.txt: %v %v", info, err)
+	}
+	f.Close()
+	if _, _, err := p.at("nope.txt").OpenRegular(); !errors.Is(err, fs.ErrNotExist) || errors.Is(err, errNotRegular) {
+		t.Errorf("missing file: err = %v, want the stat error as it is", err)
 	}
 }

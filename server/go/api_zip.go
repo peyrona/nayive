@@ -139,12 +139,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A home the admin moved under the request: 503, never 404 (sendMissing).
-	info, err := src.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		sendMissing(w, r, err, "no existe")
-		return
-	}
-	f, err := src.Open()
+	f, info, err := src.OpenRegular()
 	if err != nil {
 		sendMissing(w, r, err, "no existe")
 		return

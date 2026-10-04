@@ -209,29 +209,14 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 // -----------------------------------------------------------------------------
 
 func (s *Server) filesRead(w http.ResponseWriter, r *http.Request, target Resolved, q Query) {
-	// Stat BEFORE opening: opening a FIFO or a device could block, or worse.
-	// A home the admin moved under this read is 503, never 404 "empty"
-	// (sendMissing).
-	info, err := target.Stat()
-	if err != nil {
-		sendMissing(w, r, err, "not found")
-		return
-	}
-	if !info.Mode().IsRegular() {
-		sendError(w, r, http.StatusNotFound, "not found")
-		return
-	}
-	file, err := target.Open()
+	// What goes out is what was OPENED (OpenRegular). A home the admin moved
+	// under this read is 503, never 404 "empty" (sendMissing).
+	file, info, err := target.OpenRegular()
 	if err != nil {
 		sendMissing(w, r, err, "not found")
 		return
 	}
 	defer file.Close()
-	// What goes out is what was OPENED, whatever the name points at by now.
-	if info, err = file.Stat(); err != nil || !info.Mode().IsRegular() {
-		sendError(w, r, http.StatusNotFound, "not found")
-		return
-	}
 	// ?immutable=1 -> the CLIENT promises this URL's content never changes (it
 	// names files by size+mtime, e.g. the Photos thumbnails), so the browser may
 	// cache it for good instead of revalidating on every render.
