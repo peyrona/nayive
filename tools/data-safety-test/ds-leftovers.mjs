@@ -83,6 +83,22 @@ section( "LOCKER SETTINGS · NEVER INTO ANOTHER ACCOUNT'S HOME" );
         body: JSON.stringify( { user: 'test', password: 'test' } ) } ).then( r => r.status )` );
 }
 
+{
+    // The lockers' code loads only when first needed - here AFTER beto signed
+    // in: it must still name the page's owner as the page loaded (locker.js).
+    await c.open( "/nayive/desktop/index.html" );
+    await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined'" );
+    ok( await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify( { user: 'beto', password: 'bbb' } ) } ).then( r => r.status === 200 )` ), "beto signs in on this browser first" );
+    ok( await c.evaluate( `new Promise( ( ok, no ) => { const sc = document.createElement( 'script' ); sc.src = '../shared/lockers/culture.js';
+        sc.onload = () => ok( !! window.NayiveSalon ); sc.onerror = no; document.head.appendChild( sc ); } )` ), "then the locker's settings code loads (test's page)" );
+    const r = await c.evaluate( "NayiveSalon.update( function ( s ) { s.units = 'f'; return s; } ).then( () => 'written', e => String( e && e.message ) )" );
+    ok( onDisk( s, "data/salon.json", "beto" ) === null, "test's settings did not land in beto's home", r );
+    ok( /423/.test( r ), "the server refused it (423)", r );
+    await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify( { user: 'test', password: 'test' } ) } ).then( r => r.status )` );
+}
+
 //----------------------------------------------------------------------------//
 section( "UI · AN INFORMATIONAL TOAST WAITS FOR A PENDING UNDO" );
 {

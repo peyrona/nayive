@@ -393,8 +393,15 @@
     //------------------------------------------------------------------------//
     // START
 
+    // Whose page this is, as it LOADED (the "nayive_who" cookie; data-safety
+    // L5): the lockers' scripts load later, maybe after another account
+    // signed in on this browser, and name this owner on their saves.
+    var WHO = "";
+    try { var wm = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); WHO = wm ? wm[ 1 ] : ""; } catch ( e ) {}
+
     window.NayiveLock = {
         LOCKERS:  LOCKERS,
+        who:      WHO,
         settings: settings,
         save:     save,
         lock:     lock,

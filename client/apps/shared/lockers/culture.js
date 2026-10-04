@@ -301,7 +301,8 @@ function fetchTagged( file, ms )
 // on this browser gets 423 - never writes these settings into that other
 // person's home (L5).
 var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
-            ( window.GumApi && GumApi.owner && GumApi.owner() ) || ( function ()
+            ( window.GumApi && GumApi.owner && GumApi.owner() ) ||
+            ( window.NayiveLock && NayiveLock.who ) || ( function ()
 {
     try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
     catch ( e ) { return ""; }
