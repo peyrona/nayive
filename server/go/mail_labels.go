@@ -11,9 +11,10 @@ package main
 // alone - isServerData keeps Drive out):
 //
 //	labels.json    {"labels": [{id,name,color}], "tags": {"<acct>|<message-id>": tag}}
-//	trash.json     {"<acct>|<message-id>": {"at", "from", "more"}}
-//	               "more": the trays of the other copies of that Message-ID
-//	               in the Trash (a mail to yourself), newest first after "from"
+//	trash.json     {"<acct>|<message-id>": {"at", "from", "copies": [{"ref", "from"}]}}
+//	               "copies": each copy of that Message-ID in the Trash (a mail
+//	               to yourself: Inbox and Sent), its ref there and its tray,
+//	               newest first; "from" is the newest one's (older files: alone)
 //	settings.json  {"trashDays": 30, "showImages": false, "signature": ""}
 //	state.json     {"sent": {"<acct>|<message-id>": at}, "trash": {"<acct>": folder}, "purgeAt": at}
 //	               what the server notes for itself: the drafts sent lately (a
@@ -41,6 +42,7 @@ package main
 // Trash after 30 days by itself, whatever this says.
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -149,13 +151,30 @@ type mailLabelsFile struct {
 }
 
 type mailTrashEntry struct {
-	At   time.Time  `json:"at"`
-	From MailRole   `json:"from,omitempty"` // the copy put in the Trash last
-	More []MailRole `json:"more,omitempty"` // the copies before it, newest first
+	At     time.Time       `json:"at"`
+	From   MailRole        `json:"from,omitempty"`   // the copy put in the Trash last
+	Copies []mailTrashCopy `json:"copies,omitempty"` // every copy, newest first
+}
+
+// mailTrashCopy is one copy in the Trash: its ref there ("" when the server
+// did not tell it) and the tray it came from.
+type mailTrashCopy struct {
+	Ref  string   `json:"ref,omitempty"`
+	From MailRole `json:"from"`
 }
 
 // mailTrashMore: the most copies of one Message-ID whose trays are kept.
 const mailTrashMore = 8
+
+// copyAt is the copy at Trash ref `ref`; else the first whose ref is not
+// known; -1 when none.
+func (e mailTrashEntry) copyAt(ref string) int {
+	i := slices.IndexFunc(e.Copies, func(c mailTrashCopy) bool { return ref != "" && c.Ref == ref })
+	if i < 0 {
+		i = slices.IndexFunc(e.Copies, func(c mailTrashCopy) bool { return c.Ref == "" })
+	}
+	return i
+}
 
 type MailSettings struct {
 	TrashDays  int    `json:"trashDays"`
@@ -208,7 +227,11 @@ func mailHashID(s MailSummary) string {
 // is refused, and the log names it. h.mu held.
 func (h *MailHub) writeMailFile(user, name string, v any) error {
 	if u := h.owners[user]; u != nil && u.damaged[name] != nil {
-		h.log.Error("mail: not saving over a file that cannot be read", "user", user, "file", name, "err", u.damaged[name])
+		if errors.Is(u.damaged[name], errMailUserGone) { // a late write for a deleted user: expected
+			h.log.Info("mail: not saving for a user the admin deleted or renamed", "user", user, "file", name)
+		} else {
+			h.log.Error("mail: not saving over a file that cannot be read", "user", user, "file", name, "err", u.damaged[name])
+		}
 		return fmt.Errorf("mail: %s: %w", name, errDamaged)
 	}
 	dir := h.dir(user)
@@ -387,7 +410,7 @@ func (h *MailHub) sendDone(user, acct, mid string) {
 		}
 	}
 	u.state.Sent[key] = now
-	if err := h.saveStateLocked(user, u); err != nil {
+	if err := h.saveStateLocked(user, u); err != nil && !isMailTombstone(u) {
 		// held in memory still: only a restart in the next minutes forgets it
 		h.log.Warn("mail: noting a mail sent", "user", user, "err", err)
 	}
@@ -759,8 +782,9 @@ func (h *MailHub) moveTags(user, acct string, rows []MailSummary, moved map[stri
 // the Trash
 // -----------------------------------------------------------------------------
 
-// noteTrashed: these rows are going to the Trash now, from where they are.
-func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary) {
+// noteTrashed: these rows are going to the Trash now, from where they are;
+// moved: their refs in the Trash, where the server told them.
+func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary, moved map[string]MailRef) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	u := h.userLocked(user)
@@ -770,14 +794,21 @@ func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary) {
 		if !ok || ref.Role == RoleTrash {
 			continue
 		}
-		// A second copy (a mail to yourself: Inbox and Sent) keeps the
-		// first one's tray, newest first like FindAll: each goes back to
-		// its own (SF6). Its clock is the later one: never purged early.
+		// Each copy (a mail to yourself: Inbox and Sent) is kept with its
+		// ref in the Trash: each goes back to its own tray (SF6). The clock
+		// is the later one: never purged early.
 		key := mailKey(acct, r.MessageID)
-		e := mailTrashEntry{At: now, From: ref.Role}
-		if old, ok := u.trash[key]; ok && old.From != "" {
-			e.More = append([]MailRole{old.From}, old.More...)
-			e.More = e.More[:min(len(e.More), mailTrashMore)]
+		c := mailTrashCopy{From: ref.Role}
+		if to, ok := moved[r.Ref]; ok && to.Role == RoleTrash {
+			c.Ref = to.String()
+		}
+		e := mailTrashEntry{At: now, From: ref.Role, Copies: []mailTrashCopy{c}}
+		if old, ok := u.trash[key]; ok {
+			if len(old.Copies) == 0 { // an older file, or a clock the purge started: its tray, or Inbox
+				old.Copies = []mailTrashCopy{{From: cmp.Or(old.From, RoleInbox)}}
+			}
+			e.Copies = append(e.Copies, old.Copies...)
+			e.Copies = e.Copies[:min(len(e.Copies), mailTrashMore)]
 		}
 		u.trash[key] = e
 	}
@@ -786,9 +817,9 @@ func (h *MailHub) noteTrashed(user, acct string, rows []MailSummary) {
 	}
 }
 
-// trashFrom is where the nth copy (0: the newest) of a message in the Trash
-// came from: the first copy's tray when no more are known, Inbox when none.
-func (h *MailHub) trashFrom(user, acct, mid string, nth int) MailRole {
+// trashFrom is where the copy at Trash ref `ref` came from: that copy's
+// tray, else (its ref not known) the entry's, Inbox when unknown.
+func (h *MailHub) trashFrom(user, acct, mid, ref string) MailRole {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	e, ok := h.userLocked(user).trash[mailKey(acct, mid)]
@@ -796,8 +827,8 @@ func (h *MailHub) trashFrom(user, acct, mid string, nth int) MailRole {
 		return RoleInbox
 	}
 	from := e.From
-	if nth > 0 && nth <= len(e.More) {
-		from = e.More[nth-1]
+	if i := e.copyAt(ref); i >= 0 {
+		from = e.Copies[i].From
 	}
 	if from == "" || from == RoleTrash {
 		return RoleInbox
@@ -815,7 +846,16 @@ func (h *MailHub) forget(user, acct string, rows []MailSummary, labelsToo bool) 
 	tagsDirty := false
 	for _, row := range rows {
 		key := mailKey(acct, row.MessageID)
-		delete(u.trash, key)
+		// Only this copy goes: another one still in the Trash keeps its
+		// tray and its clock (SF6).
+		e := u.trash[key]
+		if i := e.copyAt(row.Ref); i >= 0 && len(e.Copies) > 1 {
+			e.Copies = slices.Delete(e.Copies, i, i+1)
+			e.From = e.Copies[0].From
+			u.trash[key] = e
+		} else if i >= 0 || len(e.Copies) <= 1 {
+			delete(u.trash, key)
+		}
 		if t := u.labels.Tags[key]; labelsToo && t != nil {
 			if t.drop(row.Ref) {
 				delete(u.labels.Tags, key)

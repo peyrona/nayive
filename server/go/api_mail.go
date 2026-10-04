@@ -554,7 +554,7 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		}
 		rows = mailDone(rows, failed)
 		if ch.Move == RoleTrash {
-			s.mail.noteTrashed(user, acct, rows)
+			s.mail.noteTrashed(user, acct, rows, moved)
 		} else if ch.Move != "" {
 			var out []MailSummary
 			for _, row := range rows {
@@ -618,14 +618,12 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		}
 		groups := map[MailRole][]MailRef{}
 		var back []MailSummary
-		nth := map[string]int{} // copies of one Message-ID: each to its own tray (SF6)
 		for _, row := range rows {
 			ref, ok := parseMailRef(row.Ref)
 			if !ok || ref.Role != RoleTrash {
 				continue
 			}
-			to := s.mail.trashFrom(user, acct, row.MessageID, nth[row.MessageID])
-			nth[row.MessageID]++
+			to := s.mail.trashFrom(user, acct, row.MessageID, row.Ref)
 			groups[to] = append(groups[to], ref)
 			back = append(back, row)
 		}
