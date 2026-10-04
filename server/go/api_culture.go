@@ -40,7 +40,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -329,46 +328,10 @@ func (s *Server) cuSweep() {
 		return
 	}
 	defer cuSweepMu.Unlock()
-	entries, err := os.ReadDir(s.cuDir())
-	if err != nil {
-		return
-	}
-	type kept struct {
-		path string
-		size int64
-		mod  time.Time
-	}
-	var all []kept
-	var total int64
-	for _, e := range entries {
-		fi, err := e.Info()
-		if err != nil || !fi.Mode().IsRegular() {
-			continue
+	trimCache(s.cuDir(), cuCacheMax, func(_ string, age time.Duration) cacheFate {
+		if age > cuKeepMax {
+			return cacheDrop
 		}
-		p := filepath.Join(s.cuDir(), e.Name())
-		if strings.HasSuffix(e.Name(), ".part") {
-			if time.Since(fi.ModTime()) > time.Minute {
-				_ = os.Remove(p)
-			}
-			continue
-		}
-		if time.Since(fi.ModTime()) > cuKeepMax {
-			_ = os.Remove(p)
-			continue
-		}
-		all = append(all, kept{p, fi.Size(), fi.ModTime()})
-		total += fi.Size()
-	}
-	if total <= cuCacheMax {
-		return
-	}
-	sort.Slice(all, func(i, j int) bool { return all[i].mod.Before(all[j].mod) })
-	for _, k := range all {
-		if total <= cuCacheMax/10*9 {
-			break
-		}
-		if os.Remove(k.path) == nil {
-			total -= k.size
-		}
-	}
+		return cacheCount
+	})
 }

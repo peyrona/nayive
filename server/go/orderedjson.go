@@ -19,8 +19,7 @@ package main
 //
 //	config/server.json          the whole thing
 //	homes/<user>/data/config.json
-//	.trash/index.json           (see trashIndex, which predates this and stays
-//	                             typed because its values are all one shape)
+//	.trash/index.json           (trashIndex: the same map, typed rows)
 //
 // java: this is LinkedHashMap<String, RawJson>, plus the two methods
 // encoding/json looks for. There is no annotation and no ObjectMapper module to
@@ -33,47 +32,56 @@ import (
 	"errors"
 )
 
-// orderedJSON is a JSON object whose keys come out in the order they went in.
-type orderedJSON struct {
+// orderedMap is a JSON object whose keys come out in the order they went in.
+// orderedJSON holds raw values (server.json, config.json); trashIndex holds
+// typed rows (.trash/index.json).
+type orderedMap[V any] struct {
 	order []string
-	rows  map[string]json.RawMessage
+	rows  map[string]V
+	kind  string // names the object in a parse error ("trash index"); "" = a plain one
 }
+
+type orderedJSON = orderedMap[json.RawMessage]
 
 func newOrderedJSON() *orderedJSON {
 	return &orderedJSON{rows: make(map[string]json.RawMessage)}
 }
 
-// Get is the raw value for a key, and whether it was there at all.
-func (o *orderedJSON) Get(key string) (json.RawMessage, bool) {
+// Get is the value for a key, and whether it was there at all.
+func (o *orderedMap[V]) Get(key string) (V, bool) {
 	if o == nil || o.rows == nil {
-		return nil, false
+		var none V
+		return none, false
 	}
-	raw, found := o.rows[key]
-	return raw, found
+	v, found := o.rows[key]
+	return v, found
 }
 
-// Set stores an already-encoded value, keeping an existing key in place and
-// appending a new one at the end.
-func (o *orderedJSON) Set(key string, raw json.RawMessage) {
+// Set stores a value, keeping an existing key in place and appending a new
+// one at the end.
+func (o *orderedMap[V]) Set(key string, v V) {
 	if o.rows == nil {
-		o.rows = make(map[string]json.RawMessage)
+		o.rows = make(map[string]V)
 	}
 	if _, found := o.rows[key]; !found {
 		o.order = append(o.order, key)
 	}
-	o.rows[key] = raw
+	o.rows[key] = v
 }
 
-// Put encodes `value` and stores it. An unencodable value is dropped rather
-// than failing the whole write: no single setting is worth losing the file for.
-func (o *orderedJSON) Put(key string, value any) {
+// Put encodes `value` and stores it (an orderedJSON's). An unencodable value
+// is dropped rather than failing the whole write: no single setting is worth
+// losing the file for.
+func (o *orderedMap[V]) Put(key string, value any) {
 	if raw, err := json.Marshal(value); err == nil {
-		o.Set(key, raw)
+		if v, ok := any(json.RawMessage(raw)).(V); ok {
+			o.Set(key, v)
+		}
 	}
 }
 
 // Remove deletes a key, and is a no-op when it was not there.
-func (o *orderedJSON) Remove(key string) {
+func (o *orderedMap[V]) Remove(key string) {
 	if o == nil || o.rows == nil {
 		return
 	}
@@ -90,20 +98,28 @@ func (o *orderedJSON) Remove(key string) {
 	o.order = kept
 }
 
+// keys is the keys in file order - the one safe way to iterate.
+func (o *orderedMap[V]) keys() []string {
+	out := make([]string, len(o.order))
+	copy(out, o.order)
+	return out
+}
+
 // Fields is the plain map, for the readers that only look things up.
-func (o *orderedJSON) Fields() map[string]json.RawMessage {
+func (o *orderedMap[V]) Fields() map[string]V {
 	if o == nil || o.rows == nil {
-		return map[string]json.RawMessage{}
+		return map[string]V{}
 	}
 	return o.rows
 }
 
 // Clone is a copy that can be modified without touching the original.
-func (o *orderedJSON) Clone() *orderedJSON {
-	out := newOrderedJSON()
+func (o *orderedMap[V]) Clone() *orderedMap[V] {
+	out := &orderedMap[V]{rows: make(map[string]V)}
 	if o == nil {
 		return out
 	}
+	out.kind = o.kind
 	for _, k := range o.order {
 		out.Set(k, o.rows[k])
 	}
@@ -114,9 +130,9 @@ func (o *orderedJSON) Clone() *orderedJSON {
 //
 // java: a Decoder read TOKEN BY TOKEN is the only way to see the raw key
 // sequence - unmarshalling into a map throws it away before you can look.
-func (o *orderedJSON) UnmarshalJSON(data []byte) error {
+func (o *orderedMap[V]) UnmarshalJSON(data []byte) error {
 	o.order = nil
-	o.rows = make(map[string]json.RawMessage)
+	o.rows = make(map[string]V)
 
 	dec := json.NewDecoder(bytes.NewReader(data))
 	open, err := dec.Token()
@@ -124,6 +140,9 @@ func (o *orderedJSON) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if delim, ok := open.(json.Delim); !ok || delim != '{' {
+		if o.kind != "" {
+			return errors.New("the " + o.kind + " is not a JSON object")
+		}
 		return errors.New("not a JSON object")
 	}
 	for dec.More() {
@@ -133,20 +152,24 @@ func (o *orderedJSON) UnmarshalJSON(data []byte) error {
 		}
 		key, ok := keyToken.(string)
 		if !ok {
+			if o.kind != "" {
+				return errors.New("a " + o.kind + " key is not a string")
+			}
 			return errors.New("a key is not a string")
 		}
-		var raw json.RawMessage
-		if err := dec.Decode(&raw); err != nil {
+		var v V
+		if err := dec.Decode(&v); err != nil {
 			return err
 		}
-		o.Set(key, raw)
+		o.Set(key, v)
 	}
 	_, err = dec.Token() // the closing brace
 	return err
 }
 
-// MarshalJSON writes the keys back in that same order.
-func (o orderedJSON) MarshalJSON() ([]byte, error) {
+// MarshalJSON writes the keys back in that same order. A raw value goes out
+// as it is; a typed one through json.Marshal (which escapes <, > and &).
+func (o orderedMap[V]) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	for i, key := range o.order {
@@ -159,7 +182,15 @@ func (o orderedJSON) MarshalJSON() ([]byte, error) {
 		}
 		buf.Write(encoded)
 		buf.WriteByte(':')
-		buf.Write(o.rows[key])
+		if raw, ok := any(o.rows[key]).(json.RawMessage); ok {
+			buf.Write(raw)
+			continue
+		}
+		row, err := json.Marshal(o.rows[key])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(row)
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil

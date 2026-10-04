@@ -31,10 +31,8 @@ package main
 // entryIds instead.
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -78,115 +76,19 @@ type TrashItem struct {
 	Size    int64  `json:"size"`
 }
 
-// trashIndex is .trash/index.json, KEEPING THE ORDER OF ITS KEYS.
+// trashIndex is .trash/index.json, KEEPING THE ORDER OF ITS KEYS
+// (orderedjson.go).
 //
 // java: a Go map has no order at all - `for k := range m` is deliberately
 // randomised, so two consecutive reads of the same trash can came back in
 // different orders whenever two items shared a deletion second, and the
 // Papelera list jumped around under the user. The listing must be
-// chronological and steady.
-//
-// This type is the smallest thing that buys that: the key order is captured on
-// read and written back out in that order, new entries appended at the end.
-type trashIndex struct {
-	order []string
-	rows  map[string]TrashEntry
-}
+// chronological and steady: the key order is captured on read and written
+// back out in that order, new entries appended at the end.
+type trashIndex = orderedMap[TrashEntry]
 
 func newTrashIndex() *trashIndex {
-	return &trashIndex{rows: make(map[string]TrashEntry)}
-}
-
-func (ix *trashIndex) get(id string) (TrashEntry, bool) {
-	row, found := ix.rows[id]
-	return row, found
-}
-
-func (ix *trashIndex) set(id string, row TrashEntry) {
-	if _, found := ix.rows[id]; !found {
-		ix.order = append(ix.order, id)
-	}
-	ix.rows[id] = row
-}
-
-func (ix *trashIndex) remove(id string) {
-	if _, found := ix.rows[id]; !found {
-		return
-	}
-	delete(ix.rows, id)
-	kept := ix.order[:0]
-	for _, k := range ix.order {
-		if k != id {
-			kept = append(kept, k)
-		}
-	}
-	ix.order = kept
-}
-
-// keys is the ids in file order - the one safe way to iterate this type.
-func (ix *trashIndex) keys() []string {
-	out := make([]string, len(ix.order))
-	copy(out, ix.order)
-	return out
-}
-
-// UnmarshalJSON captures the order the keys appear in the file.
-//
-// java: a Decoder reading TOKEN BY TOKEN is how you see the raw key sequence;
-// unmarshalling straight into a map throws it away before you can look.
-func (ix *trashIndex) UnmarshalJSON(data []byte) error {
-	ix.order = nil
-	ix.rows = make(map[string]TrashEntry)
-
-	dec := json.NewDecoder(bytes.NewReader(data))
-	open, err := dec.Token()
-	if err != nil {
-		return err
-	}
-	if delim, ok := open.(json.Delim); !ok || delim != '{' {
-		return errors.New("the trash index is not a JSON object")
-	}
-	for dec.More() {
-		keyToken, err := dec.Token()
-		if err != nil {
-			return err
-		}
-		key, ok := keyToken.(string)
-		if !ok {
-			return errors.New("a trash index key is not a string")
-		}
-		var row TrashEntry
-		if err := dec.Decode(&row); err != nil {
-			return err
-		}
-		ix.set(key, row)
-	}
-	_, err = dec.Token() // the closing brace
-	return err
-}
-
-// MarshalJSON writes the entries back in that same order.
-func (ix trashIndex) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	buf.WriteByte('{')
-	for i, id := range ix.order {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		key, err := json.Marshal(id)
-		if err != nil {
-			return nil, err
-		}
-		buf.Write(key)
-		buf.WriteByte(':')
-		row, err := json.Marshal(ix.rows[id])
-		if err != nil {
-			return nil, err
-		}
-		buf.Write(row)
-	}
-	buf.WriteByte('}')
-	return buf.Bytes(), nil
+	return &trashIndex{rows: make(map[string]TrashEntry), kind: "trash index"}
 }
 
 // Trash owns every trash can on the box.
@@ -315,7 +217,7 @@ func (t *Trash) moveIn(role, user string, p Resolved, origRel string, was os.Fil
 	if err != nil {
 		return "", err // the item stays where it is: nothing is lost
 	}
-	index.set(entryID, TrashEntry{
+	index.Set(entryID, TrashEntry{
 		Orig:    origRel,
 		Name:    filepath.Base(p.Abs),
 		Deleted: time.Now().Unix(),
@@ -342,7 +244,7 @@ func (t *Trash) moveIn(role, user string, p Resolved, origRel string, was os.Fil
 	unlock()
 	if err != nil {
 		// A failed move must never leave a dangling row: roll it back.
-		index.remove(entryID)
+		index.Remove(entryID)
 		saveIndex(tdir, index)
 		return "", err
 	}
@@ -377,15 +279,15 @@ func (t *Trash) List(role, user string) ([]TrashItem, error) {
 	}
 	changed := false
 	for _, id := range index.keys() { // file order, so ties stay chronological
-		entry, _ := index.get(id)
+		entry, _ := index.Get(id)
 		p := filepath.Join(tdir, id)
 		if !entryRE.MatchString(id) {
-			index.remove(id)
+			index.Remove(id)
 			changed = true
 			continue
 		}
 		if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
-			index.remove(id)
+			index.Remove(id)
 			changed = true
 			continue
 		}
@@ -435,9 +337,9 @@ func (t *Trash) List(role, user string) ([]TrashItem, error) {
 		// re-read: it may have changed meanwhile (and a failed read writes nothing)
 		if index, err := t.loadIndex(tdir); err == nil {
 			for id, size := range learned {
-				if entry, found := index.get(id); found {
+				if entry, found := index.Get(id); found {
 					entry.Size = ptrInt64(size)
-					index.set(id, entry)
+					index.Set(id, entry)
 				}
 			}
 			saveIndex(tdir, index)
@@ -536,7 +438,7 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 		if !entryRE.MatchString(id) {
 			continue
 		}
-		entry, found := index.get(id)
+		entry, found := index.Get(id)
 		if !found {
 			continue
 		}
@@ -544,7 +446,7 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 		info, err := os.Lstat(src)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) { // only a row whose item is really gone
-				index.remove(id)
+				index.Remove(id)
 			}
 			continue
 		}
@@ -567,7 +469,7 @@ func (t *Trash) Restore(role, user string, ids []string) ([]string, error) {
 			t.log.Warn("trash: restore failed", "id", id, "err", err)
 			continue
 		}
-		index.remove(id)
+		index.Remove(id)
 		if newName != "" {
 			renamed = append(renamed, newName)
 		}
@@ -609,7 +511,7 @@ func (t *Trash) Purge(role, user string, ids []string) (int, error) {
 			os.RemoveAll(p) // recursive; a plain file goes the same way
 			n++
 		}
-		index.remove(id)
+		index.Remove(id)
 	}
 	saveIndex(tdir, index)
 	t.mu.Unlock()
@@ -688,18 +590,18 @@ func (t *Trash) SweepExpired(defaultDays int) {
 		}
 		gone := 0
 		for _, id := range index.keys() {
-			entry, _ := index.get(id)
+			entry, _ := index.Get(id)
 			// A row with no timestamp counts as epoch 0 => always expired.
 			if entryRE.MatchString(id) && entry.Deleted < cutoff {
 				os.RemoveAll(filepath.Join(c.dir, id))
-				index.remove(id)
+				index.Remove(id)
 				gone++
 			}
 		}
 		// Also drop entries whose file is already gone (and only those).
 		for _, id := range index.keys() {
 			if _, err := os.Lstat(filepath.Join(c.dir, id)); errors.Is(err, fs.ErrNotExist) {
-				index.remove(id)
+				index.Remove(id)
 			}
 		}
 
@@ -718,7 +620,7 @@ func (t *Trash) SweepExpired(defaultDays int) {
 				if !entryRE.MatchString(id) {
 					continue // index.json, or something that was never ours
 				}
-				if _, found := index.get(id); found {
+				if _, found := index.Get(id); found {
 					continue
 				}
 				stamp, _, _ := strings.Cut(id, "-")

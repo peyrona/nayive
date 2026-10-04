@@ -1,9 +1,6 @@
 package main
 
 import (
-	"crypto/ecdh"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,11 +12,7 @@ import (
 // again when it is read to send (a push.json written by hand).
 func TestUserPushOnlyToPushServices(t *testing.T) {
 	users, cfg, _ := newTestUsers(t)
-	key, _ := ecdh.P256().GenerateKey(rand.Reader)
-	auth := make([]byte, 16)
-	rand.Read(auth)
-	p256 := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
-	au := base64.RawURLEncoding.EncodeToString(auth)
+	p256, au := testPushKeys(t)
 
 	for _, bad := range []string{"https://127.0.0.1/x", "https://intranet.local/x", "https://fcm.googleapis.com:8443/x",
 		"https://[::1]/x", "https://[::1%25.google.com]/fcm/send/x", "https://[::ffff:127.0.0.1%25.google.com]/x",

@@ -50,7 +50,7 @@ func TestBug_SS3_PasswordChangeDropsPushSubs(t *testing.T) {
 	signIn(t, client, base, "ana", "abc")
 
 	const ep = "https://fcm.googleapis.com/fcm/send/intruso"
-	p256, au := pushRenewKeys(t)
+	p256, au := testPushKeys(t)
 	jsonCall(t, client, "POST", base+"/api/push",
 		`{"subscription":{"endpoint":"`+ep+`","keys":{"p256dh":"`+p256+`","auth":"`+au+`"}},"window_minutes":20}`, 200, nil)
 	var before struct {

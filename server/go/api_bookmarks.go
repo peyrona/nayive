@@ -62,7 +62,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -432,55 +431,21 @@ func (s *Server) keepIcon(dir, base string, img []byte, err error) {
 func bmSweep(dir string) {
 	bmSweepMu.Lock()
 	defer bmSweepMu.Unlock()
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	type kept struct {
-		path string
-		size int64
-		mod  time.Time
-	}
-	var icons []kept
-	var total int64
-	now := time.Now()
-	for _, e := range entries {
-		fi, err := e.Info()
-		if err != nil || !fi.Mode().IsRegular() {
-			continue
-		}
-		p, age := filepath.Join(dir, e.Name()), now.Sub(fi.ModTime())
-		switch filepath.Ext(e.Name()) {
+	trimCache(dir, bmCacheMax, func(name string, age time.Duration) cacheFate {
+		switch filepath.Ext(name) {
 		case ".img":
-			icons = append(icons, kept{p, fi.Size(), fi.ModTime()})
-			total += fi.Size()
+			return cacheCount
 		case ".none":
 			if age > bmIconRetry {
-				_ = os.Remove(p)
+				return cacheDrop
 			}
 		case ".err":
 			if age > bmErrRetry {
-				_ = os.Remove(p)
-			}
-		case ".part":
-			if age > time.Minute {
-				_ = os.Remove(p)
+				return cacheDrop
 			}
 		}
-	}
-	if total <= bmCacheMax {
-		return
-	}
-	sort.Slice(icons, func(i, j int) bool { return icons[i].mod.Before(icons[j].mod) })
-	for _, k := range icons {
-		if total <= bmCacheMax/10*9 {
-			break
-		}
-		if os.Remove(k.path) == nil {
-			total -= k.size
-		}
-	}
+		return cacheLeave
+	})
 }
 
 // sendNoIcon: 204, not 404 - the page shows the coloured initial either way,
