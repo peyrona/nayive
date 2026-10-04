@@ -282,8 +282,7 @@ type gpsLoggerMessage struct {
 }
 
 func (s *Server) locationFromGpsLogger(w http.ResponseWriter, r *http.Request, owner string) {
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 
@@ -308,8 +307,7 @@ func (s *Server) locationFromGpsLogger(w http.ResponseWriter, r *http.Request, o
 // "Set up GPSLogger" link in Trips opens. The key is already in the URL asking
 // for it, so the file may hold the sending URL in clear.
 func (s *Server) locationGpsLoggerProfile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet) {
 		return
 	}
 	sendBytes(w, r, http.StatusOK, "text/plain; charset=utf-8",
@@ -368,8 +366,7 @@ type overlandBatch struct {
 }
 
 func (s *Server) locationFromOverland(w http.ResponseWriter, r *http.Request, owner string) {
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 	if r.ContentLength > maxOverlandBody {

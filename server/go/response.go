@@ -23,6 +23,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -196,6 +197,26 @@ func sendBodyError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	sendError(w, r, http.StatusBadRequest, "bad JSON")
+}
+
+// readJSONBody is readJSON + sendBodyError, the preamble of a JSON route: false
+// means the body was refused and already answered.
+func readJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := readJSON(w, r, dst); err != nil {
+		sendBodyError(w, r, err)
+		return false
+	}
+	return true
+}
+
+// allowMethod is a route's method check: false means it was another method,
+// already answered 405 with `msg`.
+func allowMethod(w http.ResponseWriter, r *http.Request, msg string, methods ...string) bool {
+	if slices.Contains(methods, r.Method) {
+		return true
+	}
+	sendError(w, r, http.StatusMethodNotAllowed, msg)
+	return false
 }
 
 // gzipBytes compresses in memory at the fastest level.

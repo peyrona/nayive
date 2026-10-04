@@ -124,8 +124,7 @@ func (s *Server) apiShares(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request, user, role string) {
 	var body shareRequest
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if body.Link {

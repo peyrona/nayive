@@ -305,8 +305,7 @@ func (s *Server) chatCallStart(w http.ResponseWriter, r *http.Request, conv stri
 		Video bool   `json:"video"`
 		Dev   string `json:"dev"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if !validDev(body.Dev) {
@@ -384,8 +383,7 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 		sendError(w, r, http.StatusRequestEntityTooLarge, "señal demasiado grande")
 		return
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if act != "answer" && act != "end" && act != "sig" {

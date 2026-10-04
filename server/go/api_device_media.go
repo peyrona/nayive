@@ -393,8 +393,7 @@ func (s *Server) mediaStart(w http.ResponseWriter, r *http.Request, dev *deviceR
 		Lat   *float64 `json:"lat"`
 		Lon   *float64 `json:"lon"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if dev.Media == 0 {

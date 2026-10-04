@@ -264,8 +264,7 @@ func (s *Server) mailAccountRoute(w http.ResponseWriter, r *http.Request, user, 
 		var in struct {
 			Ref string `json:"ref"`
 		}
-		if err := readJSON(w, r, &in); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &in) {
 			return
 		}
 		ref, ok := parseMailRef(in.Ref)
@@ -418,8 +417,7 @@ func (s *Server) mailAddAccount(w http.ResponseWriter, r *http.Request, user str
 		SMTPHost string `json:"smtpHost"`
 		SMTPPort int    `json:"smtpPort"`
 	}
-	if err := readJSON(w, r, &in); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &in) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
@@ -471,8 +469,7 @@ func (s *Server) mailNewPassword(w http.ResponseWriter, r *http.Request, user, i
 	var in struct {
 		Pass string `json:"pass"`
 	}
-	if err := readJSON(w, r, &in); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &in) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
@@ -492,8 +489,7 @@ func (s *Server) mailChange(w http.ResponseWriter, r *http.Request, user, acct s
 		Add     []string `json:"add"`
 		Remove  []string `json:"remove"`
 	}
-	if err := readJSON(w, r, &in); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &in) {
 		return
 	}
 	if len(in.Refs)+len(in.Mids) > 1000 {
@@ -743,8 +739,7 @@ func (s *Server) mailUserRoute(w http.ResponseWriter, r *http.Request, user stri
 		Signature  *string `json:"signature"`
 	}
 	body := func() bool {
-		if err := readJSON(w, r, &in); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &in) {
 			return false
 		}
 		return true

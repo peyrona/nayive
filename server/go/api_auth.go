@@ -50,8 +50,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	isForm := strings.EqualFold(ctype, "application/x-www-form-urlencoded")
 
 	if ctype == "application/json" {
-		if err := readJSON(w, r, &creds); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &creds) {
 			return
 		}
 	} else {
@@ -258,14 +257,12 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 
 	var body passwordRequest
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 
@@ -340,14 +337,12 @@ func (s *Server) apiUnlock(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 
 	var body unlockRequest
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 
@@ -425,8 +420,7 @@ func (s *Server) apiUsers(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method != http.MethodGet {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet) {
 		return
 	}
 	others := []string{}

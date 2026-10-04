@@ -240,8 +240,7 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 			// A pointer: left out, the motto stays as it is; "" clears it.
 			Motto *string `json:"motto"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		resolve(func(a chatActor) {
@@ -284,8 +283,7 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 		var body struct {
 			Days int `json:"days"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		if body.Days < 0 || body.Days > chatMaxDeleteAfter {
@@ -638,8 +636,7 @@ func (s *Server) chatPush(w http.ResponseWriter, r *http.Request, resolve func(f
 			} `json:"subscription"`
 			Lang string `json:"lang"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		sub, ok := cleanSub(PushSub{Endpoint: body.Subscription.Endpoint, Keys: body.Subscription.Keys,
@@ -710,8 +707,7 @@ func (s *Server) chatContacts(w http.ResponseWriter, r *http.Request, rest []str
 		Card string `json:"card"` // POST: the Contacts app's card they are picked from
 	}
 	if r.Method == http.MethodPost && len(rest) == 0 || r.Method == http.MethodPatch {
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 	}
@@ -858,8 +854,7 @@ func (s *Server) chatGroups(w http.ResponseWriter, r *http.Request, rest []strin
 		Members *[]string `json:"members"`
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPatch {
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 	}
@@ -1197,8 +1192,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			var body struct {
 				Text string `json:"text"`
 			}
-			if err := readJSON(w, r, &body); err != nil {
-				sendBodyError(w, r, err)
+			if !readJSONBody(w, r, &body) {
 				return
 			}
 			in(func(a chatActor, c *chatConv) { s.chatEdit(w, r, a, c, id, body.Text) })
@@ -1216,8 +1210,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			Emoji string `json:"emoji"`
 			Opt   int    `json:"opt"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		id := msgID(rest[1])
@@ -1236,8 +1229,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 		var body struct {
 			Dir string `json:"dir"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		id := msgID(rest[1])
@@ -1264,8 +1256,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			return
 		}
 		var body chatSendReq
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		id := msgID(rest[1])
@@ -1302,8 +1293,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 		var body struct {
 			ID int64 `json:"id"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		in(func(a chatActor, c *chatConv) {
@@ -1374,8 +1364,7 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			Pin  *bool `json:"pin"`
 			Mute *bool `json:"mute"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		in(func(a chatActor, c *chatConv) {
@@ -1491,8 +1480,7 @@ type chatSendReq struct {
 
 func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(chatActor, *chatConv))) {
 	var req chatSendReq
-	if err := readJSON(w, r, &req); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &req) {
 		return
 	}
 	if len(req.CID) > 40 {
@@ -1787,8 +1775,7 @@ func (s *Server) chatLater(w http.ResponseWriter, r *http.Request, rest []string
 			ReplyTo int64  `json:"replyTo"`
 			CID     string `json:"cid"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		text, ok := cleanChatText(body.Text, chatMaxText)

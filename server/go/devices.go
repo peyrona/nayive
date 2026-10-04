@@ -885,8 +885,7 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 		}
 		switch rest {
 		case "wait":
-			if r.Method != http.MethodGet {
-				sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+			if !allowMethod(w, r, "use GET", http.MethodGet) {
 				return
 			}
 			s.deviceWait(w, r, dev)
@@ -911,15 +910,13 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case rest == "":
-		if r.Method != http.MethodGet {
-			sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+		if !allowMethod(w, r, "use GET", http.MethodGet) {
 			return
 		}
 		s.deviceList(w, r, user)
 
 	case rest == "enrol":
-		if r.Method != http.MethodPost {
-			sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+		if !allowMethod(w, r, "use POST", http.MethodPost) {
 			return
 		}
 		var body struct {
@@ -927,8 +924,7 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			Name     string `json:"name"`
 			Endpoint string `json:"endpoint"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		if !validDeviceToken(body.T) {
@@ -943,15 +939,13 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]string{"id": id})
 
 	case rest == "find":
-		if r.Method != http.MethodPost {
-			sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+		if !allowMethod(w, r, "use POST", http.MethodPost) {
 			return
 		}
 		s.deviceFindStart(w, r, user)
 
 	case len(parts) == 3 && parts[0] == "find" && parts[2] == "stop":
-		if r.Method != http.MethodPost {
-			sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+		if !allowMethod(w, r, "use POST", http.MethodPost) {
 			return
 		}
 		if !s.devices.StopFind(user, parts[1], "cancelled") {
@@ -961,8 +955,7 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
 
 	case rest == "here":
-		if r.Method != http.MethodPost {
-			sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+		if !allowMethod(w, r, "use POST", http.MethodPost) {
 			return
 		}
 		var body struct {
@@ -971,8 +964,7 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			Acc  *float64 `json:"acc"`
 			Find string   `json:"find"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		if body.Lat == nil || body.Lon == nil || !validLatLon(*body.Lat, *body.Lon) {
@@ -998,8 +990,7 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			Media    *bool   `json:"media"`
 			MediaDir *string `json:"mediaDir"`
 		}
-		if err := readJSON(w, r, &body); err != nil {
-			sendBodyError(w, r, err)
+		if !readJSONBody(w, r, &body) {
 			return
 		}
 		if body.Endpoint == nil && body.Media == nil && body.MediaDir == nil {
@@ -1082,8 +1073,7 @@ func (s *Server) deviceFindStart(w http.ResponseWriter, r *http.Request, user st
 		Ask      bool   `json:"ask"`
 		Endpoint string `json:"endpoint"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if !body.Ask {
@@ -1169,8 +1159,7 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 
 // deviceReport: positions from the app, and/or the answer to a find.
 func (s *Server) deviceReport(w http.ResponseWriter, r *http.Request, dev *deviceRow) {
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 	var body struct {
@@ -1182,8 +1171,7 @@ func (s *Server) deviceReport(w http.ResponseWriter, r *http.Request, dev *devic
 		} `json:"positions"`
 		Find string `json:"find"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	if len(body.Positions) > deviceReportMax {
@@ -1207,8 +1195,7 @@ func (s *Server) deviceReport(w http.ResponseWriter, r *http.Request, dev *devic
 
 // deviceAck: what the user did on the phone - declined a call, stopped the alarm.
 func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRow) {
-	if r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use POST")
+	if !allowMethod(w, r, "use POST", http.MethodPost) {
 		return
 	}
 	var body struct {
@@ -1216,8 +1203,7 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 		Find string `json:"find"`
 		Act  string `json:"act"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &body) {
 		return
 	}
 	switch {
@@ -1241,8 +1227,7 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 // fingerprint, so it lives in config/, not in the repo. None there: 404, and
 // the app still works - inside Chrome's own bar.
 func (s *Server) assetLinks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet, http.MethodHead) {
 		return
 	}
 	raw, err := os.ReadFile(filepath.Join(s.cfg.ConfigDir, "assetlinks.json"))

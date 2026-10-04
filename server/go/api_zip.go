@@ -109,8 +109,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 	}
 	role, user := sess.Role, sess.User
 
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
+	if !allowMethod(w, r, "use GET or POST", http.MethodGet, http.MethodPost) {
 		return
 	}
 	// Extract and Compress write files: never from a page of another account

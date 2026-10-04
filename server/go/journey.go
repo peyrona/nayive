@@ -34,8 +34,7 @@ func (s *Server) journeyTarget(w http.ResponseWriter, r *http.Request) (string, 
 		sendError(w, r, http.StatusForbidden, "el administrador no tiene viajes")
 		return "", "", trip, false
 	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet, http.MethodHead) {
 		return "", "", trip, false
 	}
 	w.Header().Set("Cache-Control", "no-cache")

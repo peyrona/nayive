@@ -17,8 +17,7 @@ func (s *Server) apiConvert(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method != http.MethodGet {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet) {
 		return
 	}
 	// Only a user's own uploads convert: the admin has no devices to tell

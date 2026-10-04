@@ -202,8 +202,7 @@ func pickedPaths(w http.ResponseWriter, r *http.Request, q Query) ([]string, boo
 	var in struct {
 		Paths []string `json:"paths"`
 	}
-	if err := readJSON(w, r, &in); err != nil {
-		sendBodyError(w, r, err)
+	if !readJSONBody(w, r, &in) {
 		return nil, false
 	}
 	return in.Paths, true

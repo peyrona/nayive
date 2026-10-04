@@ -144,8 +144,7 @@ func (s *Server) apiBookmarks(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method != http.MethodGet {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet) {
 		return
 	}
 	q := cleanQuery(r)

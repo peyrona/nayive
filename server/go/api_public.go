@@ -182,8 +182,7 @@ func (s *Server) publicPage(w http.ResponseWriter, r *http.Request) {
 // answering.
 func (s *Server) publicTarget(w http.ResponseWriter, r *http.Request) (*Grant, string, bool) {
 	publicHeaders(w)
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		sendError(w, r, http.StatusMethodNotAllowed, "use GET")
+	if !allowMethod(w, r, "use GET", http.MethodGet, http.MethodHead) {
 		return nil, "", false
 	}
 	g, root := s.liveLink(r.PathValue("token"))
