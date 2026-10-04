@@ -45,7 +45,7 @@ certificate's SHA-256 (`keytool -list -v -keystore ...`). Without it the app
 still works, inside Chrome's own bar.
 
 Icons come from the real logo, `tools/launcher-logo-512.png`, scaled and never
-redrawn: `python3 make-icons.py`.
+redrawn: `go -C tools run ./android-icons`.
 
 Toolchain as built (2026-09-21): AGP 9.4.1, Gradle 9.7.1, compileSdk/targetSdk 36,
 minSdk 26, android-browser-helper 2.7.3.
