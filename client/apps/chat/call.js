@@ -94,13 +94,20 @@
         var conv = S.open;
         if( call ) { if( call.el ) call.el.hidden = false; return; }
         if( ! conv || conv.indexOf( "d-" ) !== 0 ) return;
-        call = newCall( { conv: conv, video: !! video, dir: "out", state: "calling", w: C.W( conv ) } );
+        var mine = call = newCall( { conv: conv, video: !! video, dir: "out", state: "calling", w: C.W( conv ) } );
         show();
-        if( ! await getMedia() ) { drop(); return; }
+        // false also when it was hung up while the phone asked for the mic
+        if( ! await getMedia() ) { if( ! gone( mine ) ) drop(); return; }
         try
         {
             var r = await C.api( "POST", "conv/" + conv + "/call", { video: !! video, dev: S.dev } );
-            if( ! call ) return;
+            if( gone( mine ) )
+            {
+                // Hung up before the server answered: there was no id to end
+                // then - end it now, or the other phone rings on (AA1).
+                C.api( "POST", "call/" + r.id + "/end", {}, { base: mine.w.api } ).catch( function () {} );
+                return;
+            }
             call.id  = r.id;
             call.ice = r.ice;
             if( r.incoming )
@@ -117,7 +124,7 @@
         }
         catch( e )
         {
-            if( ! call ) return;
+            if( gone( mine ) ) return;
             if( e.status === 409 && e.body && e.body.busy ) { finish( "busy" ); return; }   // chat_call.go: {"busy": true}
             drop();
             if( e.status === 409 ) C.toast( "chat.inCall", 2600 );
@@ -135,6 +142,7 @@
     C.answerCall = async function ()
     {
         if( ! call || call.state !== "incoming" ) return;
+        var mine = call;
         tone( null );
         call.state = "connecting";
         render();
@@ -143,15 +151,18 @@
         try
         {
             var r = await C.api( "POST", "call/" + call.id + "/answer", { dev: S.dev }, { base: call.w.api } );
+            if( gone( mine ) ) return;            // hung up meanwhile: its /end went with the id
             call.ice = r.ice;
         }
         catch( e )
         {
+            if( gone( mine ) ) return;
             if( e.status === 409 ) { finish( "elsewhere" ); return; }
             finish( "lost" );
             return;
         }
-        if( ! call.local && ! await getMedia() ) { hangUp( "fail" ); return; }
+        if( ! call.local && ! await getMedia() ) { if( ! gone( mine ) ) hangUp( "fail" ); return; }
+        if( gone( mine ) ) return;
         makePeer();
         armConnect();
         // The offer comes as a signal (onSig) - or it already came, while the
@@ -175,37 +186,52 @@
     // the media
     // ---------------------------------------------------------------------
 
+    // A call that ended (or was replaced) while we waited on something: what
+    // comes back after an await must not start anything on it (AA1).
+    function gone( mine ) { return call !== mine || mine.state === "ended"; }
+
+    // The mic (and camera) for the call on screen. False when there is none -
+    // or when that call ended while the phone asked: what it gave is stopped.
     async function getMedia()
     {
+        var mine = call;
         var want = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
-        if( call.video ) want.video = { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
-        try { call.local = await navigator.mediaDevices.getUserMedia( want ); }
+        if( mine.video ) want.video = { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
+        var local = null;
+        try { local = await navigator.mediaDevices.getUserMedia( want ); }
         catch( e )
         {
-            if( call.video && e && e.name !== "NotAllowedError" )
+            if( mine.video && e && e.name !== "NotAllowedError" && ! gone( mine ) )
             {
                 // No camera (or it is busy): the call still works as voice.
                 try
                 {
-                    call.local = await navigator.mediaDevices.getUserMedia( { audio: want.audio } );
-                    call.cam = false;
+                    local = await navigator.mediaDevices.getUserMedia( { audio: want.audio } );
+                    mine.cam = false;
                 }
                 catch( _ ) {}
             }
-            if( ! call.local )
+            if( ! local && ! gone( mine ) )
             {
-                C.toast( call.video ? "chat.camBlocked" : "chat.micBlocked", 3600 );
+                C.toast( mine.video ? "chat.camBlocked" : "chat.micBlocked", 3600 );
                 return false;
             }
         }
+        if( gone( mine ) )
+        {
+            if( local ) local.getTracks().forEach( function ( t ) { t.stop(); } );
+            return false;
+        }
+        call.local = local;
         call.facing = "user";
         if( call.el ) render();
         try
         {
             var devs = await navigator.mediaDevices.enumerateDevices();
-            call.cams = devs.filter( function ( d ) { return d.kind === "videoinput"; } ).length;
+            mine.cams = devs.filter( function ( d ) { return d.kind === "videoinput"; } ).length;
         }
-        catch( _ ) { call.cams = 0; }
+        catch( _ ) { mine.cams = 0; }
+        if( gone( mine ) ) return false;          // stopAll() stopped call.local
         if( call.el ) render();
         return true;
     }
@@ -399,12 +425,14 @@
     // two open), then the new track takes its place without a new offer.
     async function flip()
     {
+        var mine = call;
         var old = call.local.getVideoTracks()[ 0 ];
         var next = call.facing === "user" ? "environment" : "user";
         if( old ) old.stop();
         try
         {
             var s = await navigator.mediaDevices.getUserMedia( { video: { facingMode: next } } );
+            if( gone( mine ) ) { s.getTracks().forEach( function ( t ) { t.stop(); } ); return; }   // ended meanwhile
             var track = s.getVideoTracks()[ 0 ];
             track.enabled = call.cam;
             if( old ) call.local.removeTrack( old );
@@ -474,6 +502,7 @@
     {
         if( ! call ) return;
         if( call.state !== "ended" ) stopAll();
+        tone( null );                             // whatever started after the end, too
         var el = call.el;
         call = null;
         if( el ) { el.remove(); C.popNav( isSmall( el ) ? "callguard" : "call" ); }

@@ -735,11 +735,29 @@
                 if( seenT.has( t.id ) && Number.isFinite( Number( t.id ) ) ) t.id = free( t.id );
                 seenT.add( t.id );
 
-                ( t.subtasks || [] ).forEach( function( s )
+                const subs = t.subtasks || [], moved = new Map();     // this task's renamed sub-task ids: old -> new
+                subs.forEach( function( s )
                 {
-                    if( seenS.has( s.id ) && Number.isFinite( Number( s.id ) ) ) s.id = free( s.id );
+                    if( seenS.has( s.id ) && Number.isFinite( Number( s.id ) ) )
+                    {
+                        const was = s.id;
+                        s.id = free( s.id );
+                        if( ! moved.has( was ) ) moved.set( was, s.id );
+                    }
                     seenS.add( s.id );
                 } );
+
+                // Its siblings that wait on a renamed one wait on its new id -
+                // unless the old id still names another sub-task here (AA6).
+                if( moved.size )
+                    subs.forEach( function( s )
+                    {
+                        if( Array.isArray( s.after ) )
+                            s.after = s.after.map( function( id )
+                            {
+                                return moved.has( id ) && ! subs.some( function( o ) { return o.id === id; } ) ? moved.get( id ) : id;
+                            } );
+                    } );
             } );
 
             return list;

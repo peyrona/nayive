@@ -577,4 +577,50 @@ ok( await c.until( "! document.getElementById( 'composeView' ).hidden && NayiveM
     "kept: the writer is back with them", await c.evaluate( "NayiveMail.composeText()" ) );
 await closeWriter();
 
+const post = ( what, o ) => phone.call( "POST", `/api/mail/${enc( acct )}/${what}`, JSON.stringify( o ), { "Content-Type": "application/json" } );
+const subjects = async tray => ( await rows( tray ) ).map( m => m.subject );
+
+section( "OL3 (bugs-2) - THE UNDO OF A DELETE RESTORES IN THE ACCOUNT IT CAME FROM" );
+// A tray's rows do not carry their account: the Undo took the one on screen
+// by then, and another account's restore found nothing.
+ok( await openMail() && await c.until( "NayiveMail.S.items.some( m => m.subject === 'Hello 4' )" ), "the Inbox shows 'Hello 4'" );
+await c.evaluate( "window.__toasts = []; NayiveMail.act.del( NayiveMail.S.items.filter( m => m.subject === 'Hello 4' ) ); true" );
+ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "Delete: to the Trash, with Undo" );
+ok( await until( async () => ( await subjects( "trash" ) ).includes( "Hello 4" ) ), "(it is in the Trash)" );
+await c.evaluate( "NayiveMail.S.acct = 'otra-cuenta'; true" );        // another account on screen now
+await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+ok( await until( async () => ( await subjects( "inbox" ) ).includes( "Hello 4" ) ), "the Undo brings it back to its own account's Inbox",
+    await subjects( "trash" ) );
+
+section( "OL4 (bugs-2) - DELETED FOR GOOD AS THE TAB CLOSES: EVERY PIECE GOES" );
+// Only the calls started in the closing tick get keepalive: the pieces after
+// the first awaited each other and were lost with the page.
+{
+    const pick = ( await rows( "inbox" ) ).filter( m => /^Hello [5-7]$/.test( m.subject ) );
+    ok( pick.length === 3 && ( await post( "set", { refs: pick.map( m => m.ref ), tray: "trash" } ) ).status === 200, "(three mails go to the Trash)" );
+    ok( await openMail(), "eMail again" );
+    await c.evaluate( "NayiveMail.openTray( 'trash' ); true" );
+    ok( await c.until( "NayiveMail.S.tray === 'trash' && ! NayiveMail.S.loading && NayiveMail.S.items.filter( m => /^Hello [5-7]$/.test( m.subject ) ).length === 3" ),
+        "the Trash shows them" );
+    await c.evaluate( "NayiveMail.CHUNK = 1; NayiveMail.act.forget( NayiveMail.S.items.filter( m => /^Hello [5-7]$/.test( m.subject ) ) ); true" );
+    await away();                                                         // the tab closes under the Undo
+    ok( await until( async () => ! ( await subjects( "trash" ) ).some( t => /^Hello [5-7]$/.test( t ) ) ), "all three are deleted for good, not only the first",
+        await subjects( "trash" ) );
+}
+
+section( "OL5 (bugs-2) - A SIGNATURE THAT FAILED TO SAVE GOES AGAIN WHEN THE DIALOG CLOSES" );
+await c.open( PAGE );                                                     // on the Trash, empty now
+ok( await c.until( "NayiveMail.S.acct && ! NayiveMail.S.loading" ), "eMail again" );
+await c.evaluate( "NayiveMail.openSettings( 'general' ); true" );
+ok( await c.until( "document.getElementById( 'setSheet' ).classList.contains( 'open' )" ), "Settings open" );
+await c.evaluate( `window.__fetch0 = window.fetch; window.fetch = function( u, o ) {
+    if( o && o.method === 'PUT' && String( u ).includes( '/settings' ) ) return Promise.reject( new TypeError( 'offline' ) );
+    return window.__fetch0.call( window, u, o ); }; window.__toasts = []; true` );
+await field( "signature", "Ana, desde Nayive" );
+ok( await c.until( "( window.__toasts || [] ).length > 0", 10000 ), "offline: the save fails, and says so", await toasts() );
+await c.evaluate( "window.fetch = window.__fetch0; true" );               // back online
+await c.evaluate( "NayiveUI.close( 'setSheet' ); true" );
+ok( await until( async () => JSON.parse( ( await phone.call( "GET", "/api/mail/settings" ) ).text ).signature === "Ana, desde Nayive" ),
+    "closing the dialog saves it", ( await phone.call( "GET", "/api/mail/settings" ) ).text );
+
 await done( c, s );

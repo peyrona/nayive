@@ -77,9 +77,11 @@
 
     // E.api( "GET", "a1/list?tray=inbox" ) -> the JSON answer. A failure
     // throws an Error with .status and .code ("auth", "down", "gone"...).
-    E.api = async function ( method, path, body )
+    // o.keepalive: it outlives a closing page (actions.js, forget).
+    E.api = async function ( method, path, body, o )
     {
         var opts = { method: method, credentials: "same-origin", headers: { Accept: "application/json" } };
+        if( o && o.keepalive ) opts.keepalive = true;
         if( method !== "GET" ) E.owned( opts.headers );
         if( body !== undefined )
         {

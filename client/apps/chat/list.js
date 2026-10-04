@@ -132,14 +132,17 @@
         {
             if( w.running ) return;
             w.running = true;
-            loop( w );
+            loop( w, w.gen = ( w.gen || 0 ) + 1 );
         } );
     };
 
-    async function loop( w )
+    // `gen`: this loop's number. A loop hidden away while it slept (offline)
+    // wakes to find a newer one started meanwhile, and stops - without
+    // touching `running`, which is the newer one's now (AA4).
+    async function loop( w, gen )
     {
         var pause = 1000;
-        while( w.running )
+        while( w.running && w.gen === gen )
         {
             // Hidden: let go (the server then notifies) - unless a call is on:
             // its signals and its end come through here.

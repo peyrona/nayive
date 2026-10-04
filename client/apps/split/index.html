@@ -1823,10 +1823,32 @@
             NayiveUI.open( 'membersSheetBackdrop' );
         }
 
+        // The splits as Save will leave them: the people binned in this sheet
+        // (msGone) taken out. Asked against these, not the entries as they
+        // are, the last one still sharing an expense shows hide, not the bin:
+        // two bins in a row emptied a split, and the balances lost that debt (AA2).
+        function withoutGone( g )
+        {
+            return Object.assign( {}, g, { entries: ( Array.isArray( g.entries ) ? g.entries : [] ).map( function( e )
+            {
+                const sp = e.split;
+                if( ! sp || ! msGone.length ) return e;
+                const out = Object.assign( {}, sp );
+                if( Array.isArray( sp.among ) ) out.among = sp.among.filter( x => msGone.indexOf( x ) === -1 );
+                if( sp.parts && typeof sp.parts === 'object' )
+                {
+                    out.parts = Object.assign( {}, sp.parts );
+                    msGone.forEach( id => { delete out.parts[ id ]; } );
+                }
+                return Object.assign( {}, e, { split: out } );
+            } ) } );
+        }
+
         function renderMembersSheet()
         {
             const box = $( 'memberRows' );
             box.innerHTML = '';
+            const view = withoutGone( current );
 
             ms.forEach( ( m, i ) =>
             {
@@ -1853,7 +1875,7 @@
 
                 const btn = el( 'button', 'icon-btn sm' );
                 btn.type = 'button';
-                const shared = M.sharedOnly( current, m.id );
+                const shared = M.sharedOnly( view, m.id );
                 if( shared < 0 )
                 {
                     btn.innerHTML = m.hidden ? IC.eye : IC.eyeoff;
@@ -1880,6 +1902,16 @@
             if( ! g || ! ms ) return;
             const clean = ms.map( m => Object.assign( {}, m, { name: ( m.name || '' ).trim() } ) );
             if( clean.some( m => ! m.name ) ) { toast( T( 'split.nameAll' ) ); return; }
+
+            // Never an expense left shared by nobody: the entries may have
+            // changed (another device) since the sheet was drawn (AA2).
+            const all = Array.isArray( g.entries ) ? g.entries : [];
+            const after = withoutGone( g ).entries;
+            if( all.some( ( e, i ) => M.participants( e ).ids.length && ! M.participants( after[ i ] ).ids.length ) )
+            {
+                toast( T( 'split.lastSharer' ) );
+                return;
+            }
 
             // Someone removed who only shared expenses: out of those splits,
             // the rest share them now.

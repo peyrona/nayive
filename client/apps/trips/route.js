@@ -218,17 +218,16 @@ function reminderSection()
         input.disabled = true;
         try
         {
+            // Through GumApi: it names the page's owner (X-Nayive-User), so an
+            // old tab of another account is refused (423), not saved (AB3).
             const q = new URLSearchParams( { tripdays: '1', value: String( v ) } ).toString();
-            const r = await fetch( '/api/files?' + q, { method: 'POST', credentials: 'same-origin' } );
-            const d = await r.json().catch( function() { return {}; } );
-            if( r.ok )
-            {
-                saved = d.days; input.value = d.days;
-                say( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : t( 'acct.tripNone' ) );
-            }
-            else { input.value = ( saved == null ? '' : saved ); say( t( 'ui.saveFailed' ) ); }
+            const text = await GumApi.fetchText( '/api/files?' + q, { method: 'POST' } );
+            let d = {};
+            try { d = JSON.parse( text ) || {}; } catch( _ ) {}
+            saved = d.days; input.value = d.days;
+            say( d.days > 0 ? NayiveUI.tf( 'acct.tripMsg', { n: d.days } ) : t( 'acct.tripNone' ) );
         }
-        catch( e ) { input.value = ( saved == null ? '' : saved ); say( t( 'login.noServer' ) ); }
+        catch( e ) { input.value = ( saved == null ? '' : saved ); say( e && e.status ? t( 'ui.saveFailed' ) : t( 'login.noServer' ) ); }
         input.disabled = false;
     } );
 

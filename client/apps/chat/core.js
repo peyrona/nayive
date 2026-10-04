@@ -554,10 +554,19 @@
     // A layer closed by other means (a button inside it): drop its step too.
     // `then` (optional) runs once that step is gone - a layer opened before it
     // would be the one the step closes.
+    // A step that only guards (no close: a small call's step under the list)
+    // may be buried under layers opened since: its history step cannot be
+    // taken out from there, so it is marked and goes with the layer over it -
+    // no dead Back press left behind (AA3).
     C.popNav = function ( kind, then )
     {
         var top = stack[ stack.length - 1 ];
-        if( ! top || top.kind !== kind ) { if( then ) then(); return; }
+        if( ! top || top.kind !== kind )
+        {
+            stack.forEach( function ( s ) { if( s.kind === kind && ! s.close ) s.dead = true; } );
+            if( then ) then();
+            return;
+        }
         top.close = null;
         top.then  = then;
         history.back();
@@ -571,6 +580,10 @@
         var top = stack.pop();
         if( top && top.close ) top.close();
         if( top && top.then ) top.then();
+        // the dead guards now on top go too, in one jump
+        var dead = 0;
+        while( stack.length && stack[ stack.length - 1 ].dead ) { stack.pop(); dead++; }
+        if( dead ) { skipPop = true; history.go( -dead ); }
     } );
 
     // Forget every open layer at once (the caller has already closed them):

@@ -168,6 +168,7 @@ function selectIfListed( path )
 function compressFailText( err )
 {
     const s = err && err.status;
+    if( err && err.tooMany ) return T( 'drive.pickTooMany' );     // postPaths, actions.js
     if( s === 507 ) return T( 'drive.compressQuota' );
     if( s === 403 ) return T( 'drive.compressReadOnly' );
     if( s === 413 ) return T( 'drive.compressTooMany' );
@@ -182,14 +183,11 @@ async function compressSelection()
     const paths = actionTargets();
     if( ! paths.length ) return;
 
-    const q = new URLSearchParams();
-    paths.forEach( function( p ) { q.append( 'paths', p ); } );
-
     showProgress( T( 'drive.zipping' ) );
     let r;
     try
     {
-        r = JSON.parse( await withBusy( GumApi.fetchText( '/api/zip?' + q.toString(), { method: 'POST' } ) ) );
+        r = JSON.parse( await withBusy( postPaths( '/api/zip', paths ) ) );     // actions.js: a big pick goes in the body
     }
     catch( err )
     {

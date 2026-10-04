@@ -102,20 +102,23 @@
 
     // The signature: in use at once (a message written right away has it),
     // saved a moment after the typing stops - or at once when the box is left.
-    var sigTimer = 0;
+    // One that failed goes again at the next key, when the box is left, or
+    // when the dialog closes - even with the same text (OL5).
+    var sigTimer = 0, sigFailed = false;
     function saveSignature( now )
     {
         clearTimeout( sigTimer );
         var text = E.$( "signature" ).value;
-        if( text === S.settings.signature && now !== true ) return;
+        if( text === S.settings.signature && now !== true && ! sigFailed ) return;
         S.settings.signature = text;
         sigTimer = setTimeout( async function ()
         {
             sigTimer = 0;
-            try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { signature: text } ) ); }
-            catch( err ) { NayiveUI.toast( E.errText( err ) ); }
+            try { S.settings = Object.assign( S.settings, await E.api( "PUT", "settings", { signature: text } ) ); sigFailed = false; }
+            catch( err ) { sigFailed = true; NayiveUI.toast( E.errText( err ) ); }
         }, now === true ? 0 : 800 );
     }
+    function retrySignature() { if( sigTimer || sigFailed ) saveSignature( true ); }
 
     // The domain being typed picks the provider - until the user picks one.
     function followDomain()
@@ -357,7 +360,8 @@
         E.$( "addPass" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); E.addAccount(); } } );
         E.$( "trashDays" ).addEventListener( "input", saveDays );
         E.$( "signature" ).addEventListener( "input", saveSignature );
-        E.$( "signature" ).addEventListener( "change", function () { if( sigTimer ) saveSignature( true ); } );
+        E.$( "signature" ).addEventListener( "change", retrySignature );
+        NayiveUI.onSheetClose( "setSheet", retrySignature );
         document.querySelector( "#setSheet .mail-tabs" ).addEventListener( "click", function ( e )
         {
             var b = e.target.closest( "[data-tab]" );
