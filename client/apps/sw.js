@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-a70b542a80ac";
+var CACHE_VERSION = "nayive-8355ab304d0f";
 /* @end */
 
 /* @generated:precache */
@@ -198,6 +198,7 @@ var PRECACHE_SHELL = [
     "trips/index.html",
     "trips/init.js",
     "trips/intro.js",
+    "trips/journey-draw.js",
     "trips/journey.js",
     "trips/location.js",
     "trips/manifest.json",
