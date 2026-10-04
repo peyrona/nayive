@@ -7,8 +7,8 @@
  *     CORPUS=<folder> node tools/docx-editor-smoke/smoke.mjs Report     only names containing this
  *
  * KEEP=1 keeps the saved .docx and the PDFs in a temp folder; JSON=<file>
- * dumps every row. Needs Chromium, python3, pandoc and poppler-utils (pdfinfo,
- * pdftotext). Nothing is written outside a temp folder removed at the end; the
+ * dumps every row. Needs Chromium, Go (~/sdk/go1.27.1 or on PATH, for
+ * zipdiff), pandoc and poppler-utils (pdfinfo, pdftotext). Nothing is written outside a temp folder removed at the end; the
  * files in CORPUS are only read.
  *
  * The question is not "does it work" but "what is lost". For every file:
@@ -129,10 +129,20 @@ function truth( zip )
     };
 }
 
-// Two zips, part by part, by MEANING (zipdiff.py says why not by bytes), plus
-// an integrity check of the saved one.
-const zipdiff = ( a, b ) => JSON.parse( execFileSync( 'python3', [ path.join( HERE, 'zipdiff.py' ), a, b ],
-                                                      { encoding: 'utf8' } ) );
+// Two zips, part by part, by MEANING (zipdiff/main.go says why not by bytes),
+// plus an integrity check of the saved one. Built once into TMP.
+const GO = [ path.join( os.homedir(), 'sdk', 'go1.27.1', 'bin', 'go' ) ].find( f => fs.existsSync( f ) ) || 'go';
+let ZIPDIFF = null;
+const zipdiff = ( a, b ) =>
+{
+    if ( !ZIPDIFF )
+    {
+        const bin = path.join( TMP, 'zipdiff' );
+        execFileSync( GO, [ '-C', path.join( HERE, '..' ), 'build', '-o', bin, './docx-editor-smoke/zipdiff' ] );
+        ZIPDIFF = bin;
+    }
+    return JSON.parse( execFileSync( ZIPDIFF, [ a, b ], { encoding: 'utf8' } ) );
+};
 
 // pandoc is the independent reader: if IT sees the same text, the save kept it.
 function plain( file )
@@ -152,7 +162,7 @@ const files = fs.readdirSync( CORPUS )
 
 if( ! files.length ) { console.error( `smoke: no .docx in ${ CORPUS }` ); process.exit( 1 ); }
 
-// The page server runs as its own process: pandoc and python run synchronously
+// The page server runs as its own process: pandoc and zipdiff run synchronously
 // here and would otherwise stall every request the page makes meanwhile.
 const server = spawn( process.execPath, [ path.join( HERE, 'serve.mjs' ) ],
                       { env: { ...process.env, PORT: '0', HOST: '127.0.0.1', CORPUS }, stdio: [ 'ignore', 'pipe', 'inherit' ] } );
@@ -417,7 +427,7 @@ if( withComments.length )
                  `kept on save in ${ withComments.filter( r => r.save1 && r.save1.truth.comments === r.inFile.comments ).length }` );
 
 console.log( '\npages(Word) = the count Word stored in the file, when it did. "~" = estimated metrics, no fonts.' );
-console.log( '"save untouched" compares each zip part by meaning (zipdiff.py); "text≠" = pandoc reads other text;' );
+console.log( '"save untouched" compares each zip part by meaning (zipdiff); "text≠" = pandoc reads other text;' );
 console.log( '"DEFECTS" = something Word would refuse: an undeclared mc:Ignorable prefix, a broken relationship.' );
 console.log( '"type+save" types ' + JSON.stringify( TYPED ) + ' at the start and asks pandoc for the old text + that.' );
 

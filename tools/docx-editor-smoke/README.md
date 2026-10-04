@@ -12,7 +12,7 @@ CORPUS=<folder of .docx> node tools/docx-editor-smoke/smoke.mjs Report   # names
 CORPUS=<folder of .docx> node tools/docx-editor-smoke/serve.mjs          # by hand: open the printed URL, ?f=<name>
 ```
 
-Needs Chromium, python3, pandoc and poppler-utils (`pdfinfo`, `pdftotext`).
+Needs Chromium, Go (for zipdiff), pandoc and poppler-utils (`pdfinfo`, `pdftotext`).
 The files in `CORPUS` are only read; everything written goes to a temp folder
 that is removed at the end (`KEEP=1` keeps it, `JSON=<file>` dumps every row).
 `tools/` is never deployed.
@@ -24,7 +24,7 @@ that is removed at the end (`KEEP=1` keeps it, `JSON=<file>` dumps every row).
    a watermark; and whether the layout used real font metrics (the packaged
    fonts and the HarfBuzz wasm were found beside the bundle).
 2. **Save untouched** — the two zips compared part by part by *meaning*
-   (`zipdiff.py`: the engine re-serialises every XML part, so bytes always
+   (`zipdiff/`: the engine re-serialises every XML part, so bytes always
    differ), plus an integrity check (undeclared `mc:Ignorable` prefixes, broken
    relationships) and pandoc's reading of the text.
 3. **Type and save** — Spanish typed at the start with real key events; pandoc
@@ -45,7 +45,7 @@ to build a replacement.
 | `smoke.mjs` | the run and the table |
 | `serve.mjs` | the repo over HTTP, `/engine/` = the vendored engine, `/corpus/` = `CORPUS` |
 | `index.html` + `page.js` | the engine alone on a page, loaded by the names in its lock file; open / save / print by hand |
-| `zipdiff.py` | two `.docx` compared part by part by meaning, and the integrity check |
+| `zipdiff/` | two `.docx` compared part by part by meaning, and the integrity check (Go; `go -C tools run ./docx-editor-smoke/zipdiff a.docx b.docx`) |
 
 ## Results
 
