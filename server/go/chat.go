@@ -1601,19 +1601,28 @@ func (h *ChatHub) sendDueIn(o *chatOwner, now int64) {
 		}
 	}
 	o.data.Later = keep
-	h.saveData(o)
+	if err := h.saveData(o); err != nil {
+		// chat.json still lists the texts just sent: sendLater knows them
+		// by their cid, and never sends one twice (SF3).
+		h.log.Error("chat: sent scheduled texts not taken out of chat.json", "user", o.user, "err", err)
+	}
 	o.changed(true)
 }
 
 // sendLater turns `l` into a message from its sender, now - nothing when they
 // are no longer in that chat (a person deleted, a group gone). The caller has
 // taken it out of o.data.Later and saves; on an error the message was not
-// stored, and the caller keeps `l`. Caller holds h.mu.
+// stored, and the caller keeps `l`. Sent already (that save failed, then a
+// restart read `l` back): the message it made, not a second one (SF3).
+// Caller holds h.mu.
 func (h *ChatHub) sendLater(o *chatOwner, l *ChatLater) (*chatConv, *ChatMsg, error) {
 	if !o.isMember(l.Conv, l.From) {
 		return nil, nil, nil
 	}
 	c := h.conv(o, l.Conv)
+	if id, sent := c.cids[l.From+"|later-"+l.ID]; sent {
+		return c, c.byID[id], nil
+	}
 	m := &ChatMsg{From: l.From, Kind: "text", Text: l.Text, CID: "later-" + l.ID}
 	if l.ReplyTo > 0 && c.byID[l.ReplyTo] != nil {
 		m.ReplyTo = l.ReplyTo

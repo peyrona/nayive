@@ -296,8 +296,12 @@ func (s *Server) chatRoute(w http.ResponseWriter, r *http.Request, who func() (c
 			if !ownerOnly(a) {
 				return
 			}
+			was := a.o.data.DeleteAfter
 			a.o.data.DeleteAfter = body.Days
 			if err := h.saveData(a.o); err != nil {
+				// Not saved: the old number stays, also for the hourly
+				// auto-delete, which reads memory (SF2).
+				a.o.data.DeleteAfter = was
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 				return
 			}

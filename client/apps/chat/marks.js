@@ -15,6 +15,10 @@
     var ITEM_RE = /^[ \t]*- /;
     var WORD_RE = /[\p{L}\p{N}]/u;
     var TAIL_RE = /[*_~.,;:!?)\]'"]/;
+    // Only a text's first characters are stripped (SS1): the scan is slow on
+    // a long text packed with marks and links, and one-line places clip far
+    // shorter anyway. chat_marks.go's marksMax is the same.
+    var MAX     = 600;
 
     function isWord( c )  { return !! c && WORD_RE.test( c ); }
     function isSpace( c ) { return !! c && /\s/.test( c ); }
@@ -98,10 +102,12 @@
     }
 
     // The words without their marks, for one-line places: "*hi*" -> "hi",
-    // "- a" / "- b" -> "• a" / "• b".
+    // "- a" / "- b" -> "• a" / "• b". Only the first MAX characters.
     function strip( text )
     {
         var lines = [];
+        text = String( text || "" );
+        if( text.length > MAX ) text = Array.from( text ).slice( 0, MAX ).join( "" );
         parse( text ).forEach( function ( bl )
         {
             bl.lines.forEach( function ( ln ) { lines.push( ( bl.list ? "• " : "" ) + flat( ln.s, ln.runs ) ); } );

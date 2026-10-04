@@ -22,6 +22,12 @@ var (
 
 const marksTail = `*_~.,;:!?)]'"`
 
+// marksMax: only a text's first runes are stripped (SS1). The scan is slow on
+// a long text packed with marks and links, it runs for every quote under the
+// hub's lock, and every place that strips clips the line far shorter anyway.
+// marks.js's MAX is the same.
+const marksMax = 600
+
 type marksSpan struct{ a, b int } // [a, b) in runes
 
 func isMarkChar(r rune) bool { return r == '*' || r == '_' || r == '~' }
@@ -111,8 +117,13 @@ func marksInline(w *strings.Builder, s []rune, a, b int, L []marksSpan) {
 }
 
 // stripMarks: the words without their marks ("*hi*" -> "hi"), list lines
-// as "• item".
+// as "• item". Only the first marksMax runes.
 func stripMarks(text string) string {
+	if len(text) > marksMax {
+		if r := []rune(text); len(r) > marksMax {
+			text = string(r[:marksMax])
+		}
+	}
 	lines := strings.Split(text, "\n")
 	var w strings.Builder
 	for n, line := range lines {
