@@ -11,6 +11,8 @@ package main
 //   - 404 / 410: the device is gone for good -> drop it from push.json.
 //   - 401 / 403: OUR VAPID key is wrong, not the device -> log loudly and
 //     NEVER prune (that would wipe every device on the server in one go).
+//   - 400 / 413: the push service refuses this message for good (bad request,
+//     too big) -> the device is kept, but a retry would not do better.
 //   - anything else: transient, the device is kept.
 //
 // java: no locks here. deliverPush only touches Users (which locks itself) and
@@ -55,12 +57,14 @@ func deliverPushTo(push *VapidStore, log Logger, sub PushSub, payload any, ttl i
 }
 
 // pushTransient is a failure that keeps the device: not a success, not "gone",
-// not "our key is wrong".
+// not "our key is wrong", not a message refused for good (400, 413).
 func pushTransient(status int) bool {
 	switch {
 	case status >= 200 && status < 300:
 		return false
 	case status == 404 || status == 410 || status == 401 || status == 403:
+		return false
+	case status == 400 || status == 413:
 		return false
 	}
 	return true

@@ -299,6 +299,9 @@ func (s *Server) apiPassword(w http.ResponseWriter, r *http.Request) {
 		ttl = s.cfg.SessionTTL
 	}
 	s.sessions.DropUser(sess.User)
+	// And every push device: an intruder's browser would still get each chat
+	// line and mail subject. This page registers its own again (index.html).
+	s.users.DropPushSubs(sess.User)
 	token := s.sessions.Create(sess.User, sess.Role, ttl, remember)
 	w.Header().Set("Set-Cookie", sessionCookieHeader(token, ttl, remember, r.TLS != nil))
 

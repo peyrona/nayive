@@ -409,6 +409,11 @@ func (s *Server) adminSaveUser(w http.ResponseWriter, r *http.Request, body *adm
 			// newcomer's eMail starts from their own empty home (L1).
 			s.mail.NameReused(name)
 		}
+		if opts.ClearPassword || opts.Password != "" {
+			// A password set or cleared here signs them out everywhere, as
+			// their own change does: a kept session must not pick the next one.
+			s.sessions.DropUser(name)
+		}
 		s.log.Info("user saved", "status", status, "name", name)
 		sendJSON(w, r, http.StatusOK,
 			map[string]string{"message": "usuario guardado", "name": name})

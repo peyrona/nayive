@@ -1409,6 +1409,26 @@ func (u *Users) RemovePushSub(user, endpoint string) bool {
 	return atomicWriteJSON(path, data, 4) == nil
 }
 
+// DropPushSubs forgets every device of `user` (a password change: an
+// intruder's browser must stop getting chat and mail). The window stays; each
+// page of the owner registers its own device again (index.html healPush).
+func (u *Users) DropPushSubs(user string) {
+	path := u.pushPath(user)
+	u.cfgMu.Lock()
+	defer u.cfgMu.Unlock()
+	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
+		return
+	}
+	data := u.UserPush(user)
+	if len(data.Subs) == 0 {
+		return
+	}
+	data.Subs = []PushSub{}
+	if err := atomicWriteJSON(path, data, 4); err != nil {
+		u.log.Error("cannot save push.json", "user", user, "err", err)
+	}
+}
+
 // cleanTZ is a zone name this server can load, or "".
 func cleanTZ(name string) string {
 	name = strings.TrimSpace(name)

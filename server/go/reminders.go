@@ -111,6 +111,7 @@ type Reminders struct {
 	fails     map[string]int       // "<user>|<device>" -> consecutive send failures
 	events    map[string]cachedICS // "<home name>|<zone>" -> the parsed calendar
 	tripDay   map[string]string    // user -> the "yyyy-mm-dd" its trips were last scanned
+	refused   map[string]string    // "<user>|<device>" -> the day it refused a trip push (SF4)
 	lastDaily time.Time
 
 	phrases *phrasebook // the UI's own dictionaries
@@ -170,6 +171,7 @@ func NewReminders(cfg *Config, users *Users, trash *Trash, sessions *SessionStor
 		fails:   make(map[string]int),
 		events:  make(map[string]cachedICS),
 		tripDay: make(map[string]string),
+		refused: make(map[string]string),
 		phrases: newPhrasebook(cfg.AppsDir),
 	}
 }
@@ -308,12 +310,20 @@ func (r *Reminders) announce(user string, subs []PushSub, ev Event, start time.T
 // device, 401/403 is OUR key being wrong and must never prune. What is left -
 // transient - is only counted here.
 func (r *Reminders) send(user string, sub PushSub, dev string, payload any, ttl int) bool {
+	sent, _ := r.trySend(user, sub, dev, payload, ttl)
+	return sent
+}
+
+// trySend is send that also says whether a failure is worth another try: only
+// a transient one is. A 401/403 (our key) or a gone device will not do better
+// on the next tick (SF4).
+func (r *Reminders) trySend(user string, sub PushSub, dev string, payload any, ttl int) (sent, retry bool) {
 	status, err := deliverPush(r.push, r.users, r.log, user, sub, payload, ttl)
 	fkey := user + "|" + dev
 
 	if status >= 200 && status < 300 {
 		delete(r.fails, fkey) // clear the failure counter
-		return true
+		return true, false
 	}
 
 	if pushTransient(status) {
@@ -322,8 +332,9 @@ func (r *Reminders) send(user string, sub PushSub, dev string, payload any, ttl 
 		if n == 1 || n%30 == 0 { // once, then hourly-ish, not every tick
 			r.log.Warn("reminders: push failing", "user", user, "times", n, "err", err)
 		}
+		return false, true
 	}
-	return false
+	return false, false
 }
 
 // -----------------------------------------------------------------------------
@@ -358,8 +369,9 @@ func (r *Reminders) tripTick(user string, subs []PushSub, loc *time.Location) {
 	}
 	// Marked only now, and only for a user who got this far (they have at least
 	// one device): someone who registers their first one at noon is scanned
-	// today, not tomorrow. Nor while a push failed: the next tick tries that
-	// device again (the saved keys skip the ones that got it), as events do.
+	// today, not tomorrow. Nor while a push failed for a passing reason: the
+	// next tick tries that device again (the saved keys skip the ones that got
+	// it), as events do. A refused one (401/403/410) waits for tomorrow (SF4).
 	if r.announceTrips(user, subs, trips, loc) {
 		r.tripDay[user] = today
 	}
@@ -373,7 +385,8 @@ type dueTrip struct {
 
 // announceTrips pushes every due trip to every device that has not had it yet,
 // then saves the keys - once, after the whole fan-out. False when a push
-// failed, so there is something left to try again.
+// failed for a passing reason (5xx, no answer), so there is something left to
+// try again; a refused one (401/403, a gone device) is done for today.
 //
 // `trips` may be empty and this still has work to do: the save at the end is
 // what drops the keys of trips already past, so the file cannot grow for ever.
@@ -383,6 +396,11 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 	path := filepath.Join(r.cfg.HomesDir, user, "data", "reminders.json")
 	done := true
 	saved := loadSentKeys(path, "trips")
+	today := time.Now()
+	if loc != nil {
+		today = today.In(loc)
+	}
+	day := today.Format("2006-01-02")
 
 	keys := make(map[string]bool, len(saved))
 	for k := range saved {
@@ -394,7 +412,10 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 		for _, sub := range subs {
 			dev := deviceID(sub.Endpoint)
 			key := fmt.Sprintf("%s|%s@%d", dev, trip.id, epoch)
-			if keys[key] {
+			// A device that refused today (401/403/400...) is left for
+			// tomorrow, even while another one's passing failure keeps the
+			// day open (SF4).
+			if keys[key] || r.refused[user+"|"+dev] == day {
 				continue
 			}
 			title, body := r.tripText(sub.Lang, trip.dest, trip.start)
@@ -404,11 +425,14 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 				"url":   URLPrefix + "/trips/",
 				"tag":   "trip-" + trip.id,
 			}
-			if r.send(user, sub, dev, payload, dailySeconds) {
+			sent, retry := r.trySend(user, sub, dev, payload, dailySeconds)
+			if sent {
 				keys[key] = true
 				r.log.Info("reminders: trip sent", "user", user, "dest", trip.dest, "start", trip.start)
-			} else {
+			} else if retry {
 				done = false
+			} else {
+				r.refused[user+"|"+dev] = day
 			}
 		}
 	}
