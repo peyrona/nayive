@@ -565,10 +565,19 @@
     // Makes the waiting note moves, in order, each one version-checked; one
     // that fails stops the rest (they must not overtake it). True when none
     // waits any more.
+    // The list is shared by every tab: one tab at a time makes it (a Web
+    // Lock), so the same move is never made twice - a second run parked the
+    // note the first had just moved. A tab stuck holding it 30 s: this round
+    // is skipped (false: the moves stay queued, the user is told).
     var settling = null;     // the run in progress: a second caller waits for it
     function settleNoteMoves()
     {
-        if( ! settling ) settling = makeMoves().finally( function () { settling = null; } );
+        if( ! settling )
+            settling = ( navigator.locks && window.AbortSignal && AbortSignal.timeout
+                         ? navigator.locks.request( movesKey(), { signal: AbortSignal.timeout( 30000 ) }, makeMoves )
+                                          .catch( function () { return false; } )
+                         : makeMoves() )
+                       .finally( function () { settling = null; } );
         return settling;
     }
 

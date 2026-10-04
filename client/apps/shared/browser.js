@@ -119,6 +119,18 @@
         return k;
     }
 
+    // The key of a shortcut. e.key is what the LAYOUT types: Ctrl+C on a
+    // Cyrillic keyboard reads "с", Mac's ⌥N a dead "˜". With Ctrl / Alt held
+    // and no Latin letter, the key's place (e.code "KeyC") names it, as the
+    // old Drive keyboard.js did; a Latin letter keeps e.key (AZERTY's A).
+    function keyOf( e )
+    {
+        var key = e.key && e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        if( ( e.ctrlKey || e.metaKey || e.altKey ) && ! /^[a-z]$/.test( key ) && /^Key[A-Z]$/.test( e.code || "" ) )
+            return e.code.charAt( 3 ).toLowerCase();
+        return key;
+    }
+
     function keyMatches( spec, e )
     {
         var specs = Array.isArray( spec ) ? spec : [ spec ];
@@ -128,7 +140,7 @@
             var ctrl = UI.isMac ? e.metaKey : e.ctrlKey;
             if( ctrl !== k.ctrl || e.altKey !== k.alt ) return false;
             if( UI.isMac ? e.ctrlKey : e.metaKey ) return false;
-            var key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            var key = keyOf( e );
             // A letter's Shift is part of the spec; Shift+Del is too.
             if( e.shiftKey !== k.shift ) return false;
             return key === k.key;
@@ -162,7 +174,12 @@
         return !! el.closest( "input, textarea, select, [contenteditable=''], [contenteditable='true']" );
     }
 
-    function dialogOpen() { return !! document.querySelector( ".sheet-backdrop.open" ); }
+    // A dialog - or Drive's picture viewer / media player, Chat's photo
+    // editor - owns the screen: the list behind it takes no keys.
+    function dialogOpen()
+    {
+        return !! document.querySelector( ".sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open, .editor-backdrop.open" );
+    }
 
     // Was a dialog open when this Escape was pressed? Read before any
     // listener (window, capture): a sheet that shuts on Escape without
@@ -940,14 +957,14 @@
                 clear();
                 return;
             }
-            if( mod && ! e.shiftKey && ! e.altKey && k.toLowerCase() === "a" )
+            if( mod && ! e.shiftKey && ! e.altKey && keyOf( e ) === "a" )
             {
                 if( ! idsShown().length ) return;
                 e.preventDefault();
                 selectAll();
                 return;
             }
-            if( mod && ! e.shiftKey && ! e.altKey && k.toLowerCase() === "f" && cfg.search )
+            if( mod && ! e.shiftKey && ! e.altKey && keyOf( e ) === "f" && cfg.search )
             {
                 e.preventDefault();
                 cfg.search();
@@ -1236,6 +1253,7 @@
                 case "Tab":
                     if( ! api.peer || e.shiftKey ) return;
                     api.peer.focus();
+                    if( host.contains( document.activeElement ) ) return;   // no row took it (empty list): the browser's Tab goes on
                     break;
                 case "ContextMenu":
                     if( ! cfg.menu ) return;

@@ -59,7 +59,9 @@ var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "
 	"shared/i18n/fr.json", "shared/i18n/de.json"}
 
 // The launcher lives at apps/index.html itself; login.html is the sign-in page.
-var rootFiles = []string{"index.html", "login.html", "manifest.json", "icons/*"}
+// admin.html and device.html are pages too: every page is precached, so it is
+// always the same build as the shared/*.js it loads (sw.js htmlStrategy).
+var rootFiles = []string{"index.html", "login.html", "admin.html", "device.html", "manifest.json", "icons/*"}
 
 func main() {
 	flag.Parse()
@@ -67,6 +69,7 @@ func main() {
 	sw := filepath.Join(apps, "sw.js")
 
 	rels := collect(apps)
+	checkPages(apps, rels)
 	ver, err := version(apps, rels)
 	if err != nil {
 		fail("%v", err)
@@ -128,13 +131,16 @@ func collect(apps string) []string {
 	// Every app's own top-level scripts and stylesheet, offline app or not
 	// (drive/*.js, drive/drive.css). The service worker serves them cache-first,
 	// so they must be in the list - and so in CACHE_VERSION - or an edit never
-	// reaches a browser that already holds the old copy.
+	// reaches a browser that already holds the old copy. Its index.html too: the
+	// service worker never re-saves a cached page in the background, so a page
+	// only changes with a new CACHE_VERSION - together with the shared/*.js it
+	// calls (new HTML beside an old ui.js threw right after a deploy).
 	if entries, err := os.ReadDir(apps); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
-			for _, pat := range []string{"*.js", "*.css"} {
+			for _, pat := range []string{"*.js", "*.css", "index.html"} {
 				for _, rel := range glob(apps, e.Name()+"/"+pat) {
 					rels[rel] = true
 				}
@@ -177,6 +183,40 @@ func collect(apps string) []string {
 	}
 	sort.Strings(out) // byte order = code-point order for UTF-8, like Python's sorted()
 	return out
+}
+
+// pageExceptions are the pages served OUTSIDE the service worker's scope (a
+// link with no session: /c/<token>/, /s/<token>), so no stale copy of them can
+// be kept; they may be left out of the precache.
+var pageExceptions = map[string]bool{
+	"chat/guest.html":   true, // /c/<token>/ (server/go/api_chat.go)
+	"trips/public.html": true, // /s/<token>  (server/go/api_public.go)
+}
+
+// checkPages FAILS the build when a page under apps/ is not in the precache:
+// sw.js serves a cached page as it is (never re-saved in the background), so a
+// page outside the list - and so outside CACHE_VERSION - would stay stale.
+func checkPages(apps string, rels []string) {
+	in := map[string]bool{}
+	for _, r := range rels {
+		in[r] = true
+	}
+	var missing []string
+	filepath.WalkDir(apps, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".html") {
+			return nil
+		}
+		rel := relTo(apps, p)
+		if !in[rel] && !pageExceptions[rel] {
+			missing = append(missing, rel)
+		}
+		return nil
+	})
+	if len(missing) > 0 {
+		fail("build-precache: these pages are not in the precache list, so a browser would keep them stale:\n  %s\n"+
+			"Add them to rootFiles / offlineApps / the every-app index.html in tools/build-precache/main.go\n"+
+			"(or to pageExceptions if served outside /nayive/).", strings.Join(missing, "\n  "))
+	}
 }
 
 // isDocxEditorCore says whether rel is one of the docx-editor.dev files an open

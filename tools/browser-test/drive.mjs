@@ -5,7 +5,7 @@ import { server, browser, ok, section, done, sleep, where, mouse, key, finger, d
 
 const s = await server();
 seed( s, { "files/Docs/a.txt": "a", "files/Docs/b.txt": "b", "files/Docs/c.md": "c", "files/Docs/Work": null,
-           "files/Pics": null, "files/Old/x.txt": "x" } );
+           "files/Pics": null, "files/Old/x.txt": "x", "files/Empty": null } );
 const c = await browser( s, { mouse: true } );
 const ROW = p => `#listing .row[data-path="${p}"]`;
 const sel = () => c.evaluate( "browse.ids().join()" );
@@ -99,6 +99,44 @@ const lit = await drag( c, ROW( "files/Docs/c.md" ), '#tree .tree-row[data-id="f
 ok( lit === true && await c.until( "! document.querySelector('#listing .row[data-path=\"files/Docs/c.md\"]')" ) && exists( s, "files/Pics/c.md" ), "a row dragged onto a tree folder moves (target lit)", lit );
 await mouse( c, ROW( "files/Docs/Work" ), { dx: 120, count: 2 } );
 ok( await c.until( "currentFolder === 'files/Docs/Work'" ), "a double-click opens a folder" );
+
+section( "DRIVE · KEYS: BEHIND A VIEWER, OTHER LAYOUTS, AN EMPTY FOLDER" );
+// A key as another layout sends it: e.key is what the layout types, e.code the place.
+const rawKey = async ( k, code, vk, mods ) =>
+{
+    await c.send( "Input.dispatchKeyEvent", { type: "rawKeyDown", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods } );
+    await c.send( "Input.dispatchKeyEvent", { type: "keyUp", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods } );
+    await sleep( 120 );
+};
+await c.until( "! listingLoading && document.querySelectorAll('#listing .row[data-path]').length === 1" );
+await mouse( c, ROW( "files/Docs/Work/b.txt" ), { dx: 120 } );
+// CS3: the picture viewer (or the player) is open over the list.
+await c.evaluate( "document.getElementById('viewerBackdrop').classList.add('open'); true" );
+await key( c, "F2" );
+await key( c, "Delete" );
+await sleep( 300 );
+ok( await c.evaluate( "! document.querySelector('.sheet-backdrop.open')" ) && exists( s, "files/Docs/Work/b.txt" ) && await sel() === "files/Docs/Work/b.txt",
+    "with the viewer open, F2 / Del do nothing to the list behind it" );
+await c.evaluate( "document.getElementById('viewerBackdrop').classList.remove('open'); true" );
+// CS4: Ctrl+A on a Russian keyboard ("ф"), Alt+N on a Mac (a dead key).
+await key( c, "Escape" );
+await mouse( c, ROW( "files/Docs/Work/b.txt" ), { dx: 120 } );
+await key( c, "Escape" );
+await rawKey( "ф", "KeyA", 65, 2 );
+ok( await sel() === "files/Docs/Work/b.txt", "Ctrl+A on a Cyrillic layout picks all", await sel() );
+await key( c, "Escape" );
+await rawKey( "Dead", "KeyN", 78, 1 );
+ok( await c.until( "document.getElementById('newFolderBackdrop').classList.contains('open')" ), "Mac ⌥N (a dead key) opens New folder" );
+await c.evaluate( "document.getElementById('newFolderCancelBtn').click(); true" );
+await sleep( 200 );
+// CS5: Tab leaves the tree when the list is empty.
+await c.evaluate( "navigateTo('files/Empty'); true" );
+await c.until( "currentFolder === 'files/Empty' && ! listingLoading" );
+await c.evaluate( `( () => { window.__tabPrevented = null;
+    window.addEventListener( 'keydown', e => { if( e.key === 'Tab' ) window.__tabPrevented = e.defaultPrevented; } );
+    document.querySelector( '#tree .tree-row[data-id="files/Empty"]' ).focus(); return true; } )()` );
+await key( c, "Tab" );
+ok( await c.evaluate( "window.__tabPrevented === false" ), "Tab from the tree, the list empty: the browser's Tab goes on" );
 
 section( "DRIVE · PHONE" );
 await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true } );

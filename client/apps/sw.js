@@ -12,7 +12,8 @@
  *               (vendored lib/, dictionaries, the editor bundle) is warmed in
  *               the background after activation, so a post-deploy update never
  *               starves the page that triggered it.
- *   - fetch   : HTML          -> stale-while-revalidate (instant, self-updating)
+ *   - fetch   : HTML          -> cache-first (every page is precached: a deploy
+ *                                 changes CACHE_VERSION and brings the new one)
  *               versioned libs -> cache-first (filenames carry the version)
  *               a file GET      -> the network first, untouched; the "nayive-trips-docs"
  *               (/api/files?file=)  copy (the trips page fills it with just the active
@@ -29,11 +30,12 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-e869529e239e";
+var CACHE_VERSION = "nayive-8122a24ab25b";
 /* @end */
 
 /* @generated:precache */
 var PRECACHE_SHELL = [
+    "admin.html",
     "bookmarks/bookmarks.css",
     "bookmarks/boot.js",
     "bookmarks/icons/icon-192.png",
@@ -50,6 +52,7 @@ var PRECACHE_SHELL = [
     "calc/codec.js",
     "calc/format.js",
     "calc/grid.js",
+    "calc/index.html",
     "calendar/icons/icon-192.png",
     "calendar/icons/icon-512.png",
     "calendar/index.html",
@@ -62,6 +65,7 @@ var PRECACHE_SHELL = [
     "chat/core.js",
     "chat/guest-sw.js",
     "chat/guest.js",
+    "chat/index.html",
     "chat/info.js",
     "chat/list.js",
     "chat/marks.js",
@@ -73,10 +77,12 @@ var PRECACHE_SHELL = [
     "contact/manifest.json",
     "desktop/index.html",
     "desktop/tiling.js",
+    "device.html",
     "drive/actions.js",
     "drive/advsearch.js",
     "drive/dragdrop.js",
     "drive/drive.css",
+    "drive/index.html",
     "drive/init.js",
     "drive/keyboard.js",
     "drive/listing.js",
@@ -98,6 +104,7 @@ var PRECACHE_SHELL = [
     "email/core.js",
     "email/email.css",
     "email/email.js",
+    "email/index.html",
     "email/labels.js",
     "email/list.js",
     "email/read.js",
@@ -125,9 +132,13 @@ var PRECACHE_SHELL = [
     "icons/logo-lines.svg",
     "image/image.css",
     "image/image.js",
+    "image/index.html",
     "index.html",
     "login.html",
     "manifest.json",
+    "movies/index.html",
+    "music/index.html",
+    "photos/index.html",
     "planner/icons/icon-192.png",
     "planner/icons/icon-512.png",
     "planner/index.html",
@@ -171,6 +182,7 @@ var PRECACHE_SHELL = [
     "tasks/icons/icon-512.png",
     "tasks/index.html",
     "tasks/manifest.json",
+    "text/index.html",
     "trips/actions.js",
     "trips/converter.js",
     "trips/currency-sheet.js",
@@ -493,7 +505,7 @@ self.addEventListener( "fetch", function ( event )
     if( url.pathname.indexOf( SCOPE_PATH + "trips/" ) === 0 && /\.pdf$/i.test( url.pathname ) )
         event.respondWith( tripDocStrategy( req ) );
     // ...and a page's own fetch() of an .html file: Games loads its nine games that
-    // way, and cache-first would keep serving an edited game's OLD file.
+    // way. Each is precached like every page: a deploy's new CACHE_VERSION brings an edit.
     else if( req.mode === "navigate" || req.destination === "document" || /\.html$/i.test( url.pathname ) )
         event.respondWith( htmlStrategy( req, url ) );
     else
@@ -675,8 +687,8 @@ async function tripDocStrategy( req )
     }
 }
 
-// HTML - serve cache immediately when present and refresh it in the background;
-// otherwise go to the network and fall back to any cached copy.
+// HTML - serve this version's cached copy when present; otherwise go to the
+// network (and keep what it sends) and fall back to the launcher.
 async function htmlStrategy( req, url )
 {
     var cache = await caches.open( CACHE_NAME );
@@ -688,18 +700,21 @@ async function htmlStrategy( req, url )
               ? new URL( "index.html", url.href ).toString()
               : url.origin + url.pathname;
 
+    // A cached page is served as it is, never re-saved from the network in
+    // the background: that stored a NEW page in this OLD version's cache,
+    // beside its old shared/*.js (calls such as NayiveUI.pwEye then threw).
+    // Every page is precached, so a deploy brings the new one with the new
+    // worker's cache.
     var cached  = await cache.match( key, { ignoreSearch: true } );
-    var network = fetch( req ).then( function ( res )
+    if( cached ) return cached;
+
+    var res = await fetch( req ).then( function ( res )
     {
         if( res && res.ok && res.type === "basic" && ! res.redirected )
             cache.put( key, res.clone() );
 
         return res;
     } ).catch( function () { return null; } );
-
-    if( cached ) return cached;
-
-    var res = await network;
 
     if( res ) return res;
 
@@ -853,7 +868,10 @@ async function openTarget( url )
         if( all[ j ].url.indexOf( SCOPE_PATH ) !== -1 && ! isChat( all[ j ].url ) && ! isEditor( all[ j ].url ) &&
             "navigate" in all[ j ] )
         {
-            await all[ j ].navigate( target );
+            // A tab this worker does not control (opened with Shift+Reload)
+            // refuses navigate(): try the next one, else a new window.
+            try { await all[ j ].navigate( target ); }
+            catch( e ) { continue; }
             return all[ j ].focus();
         }
     }

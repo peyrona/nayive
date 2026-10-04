@@ -2158,7 +2158,7 @@
         cw.addEventListener( 'keydown', function ( e )
         {
             if( e.key !== 'Alt' ) altAlone = false;
-            else if( ! e.repeat ) altAlone = true;
+            else if( ! e.repeat ) altAlone = ! ( e.ctrlKey || e.shiftKey || e.metaKey );   // Ctrl / Shift already held: not alone (Shift+Alt = layout switch)
         }, true );
         cw.addEventListener( 'keyup', function ( e )
         {
