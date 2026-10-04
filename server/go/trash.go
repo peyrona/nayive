@@ -671,8 +671,7 @@ func moveResolved(src, dst Resolved) error {
 // and for a whole directory tree, so the fallback is written out here.
 //
 // It is not a theoretical path: the admin's trash is <base>/.trash while a home
-// could sit on its own mount, and the external-storage setting in the admin
-// panel is heading exactly there. A rename within one filesystem stays what it
+// could sit on its own mount. A rename within one filesystem stays what it
 // always was - instant, and never a copy.
 //
 // Never over anything at dst (D8): the copy starts with a Mkdir / an O_EXCL

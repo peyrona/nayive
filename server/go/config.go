@@ -61,38 +61,28 @@ type AdminAccount struct {
 	Password string `json:"password"`
 }
 
-// ExternalStorage is the admin panel's "where big files get offloaded to" block.
-// UI + config only for now: nothing moves files onto the mounted volume yet.
-type ExternalStorage struct {
-	Mount     string   `json:"mount"`
-	AlwaysExt []string `json:"always_ext"`
-	NeverExt  []string `json:"never_ext"`
-	MinMB     float64  `json:"min_mb"`
-}
-
 // ServerConfig is config/server.json.
 //
 // java: the pointer fields are the nullable ones. A plain `int` cannot tell
 // "absent" from "0", and for TrashDays the difference matters (a negative value
 // disables the sweep; absent means "use the default"). *int can be nil.
 type ServerConfig struct {
-	Host             string           `json:"host"`
-	Port             int              `json:"port"`
-	LogLevel         string           `json:"log_level"`
-	BaseDir          string           `json:"base_dir"`
-	AppsDir          string           `json:"apps_dir"`
-	SitesDir         string           `json:"sites_dir"`
-	TurnURIs         []string         `json:"turn_uris"` // Chat calls: coturn (chat_call.go); the secret is config/turn_secret
-	TLS              TLSConfig        `json:"tls"`
-	Admin            *AdminAccount    `json:"admin"`
-	AdminLang        *string          `json:"admin_lang"`
-	AdminTZ          *string          `json:"admin_tz"`
-	TrashDays        *int             `json:"trash_days"`
-	SessionHours     *int             `json:"session_hours"`
-	RememberDays     *int             `json:"remember_days"`
-	TripReminderDays *int             `json:"trip_reminder_days"`
-	PushContact      string           `json:"push_contact"`
-	ExternalStorage  *ExternalStorage `json:"external_storage"`
+	Host             string        `json:"host"`
+	Port             int           `json:"port"`
+	LogLevel         string        `json:"log_level"`
+	BaseDir          string        `json:"base_dir"`
+	AppsDir          string        `json:"apps_dir"`
+	SitesDir         string        `json:"sites_dir"`
+	TurnURIs         []string      `json:"turn_uris"` // Chat calls: coturn (chat_call.go); the secret is config/turn_secret
+	TLS              TLSConfig     `json:"tls"`
+	Admin            *AdminAccount `json:"admin"`
+	AdminLang        *string       `json:"admin_lang"`
+	AdminTZ          *string       `json:"admin_tz"`
+	TrashDays        *int          `json:"trash_days"`
+	SessionHours     *int          `json:"session_hours"`
+	RememberDays     *int          `json:"remember_days"`
+	TripReminderDays *int          `json:"trip_reminder_days"`
+	PushContact      string        `json:"push_contact"`
 }
 
 // TLSConfig is the "tls" block. Empty paths mean "serve plain HTTP".
@@ -189,7 +179,6 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Server.Admin = readOptional[AdminAccount](cfg.raw.Fields(), "admin")
 		cfg.Server.AdminLang = readOptional[string](cfg.raw.Fields(), "admin_lang")
 		cfg.Server.AdminTZ = readOptional[string](cfg.raw.Fields(), "admin_tz")
-		cfg.Server.ExternalStorage = readOptional[ExternalStorage](cfg.raw.Fields(), "external_storage")
 		cfg.Server.TrashDays = readNumber[int](cfg.raw.Fields(), "trash_days")
 		cfg.Server.SessionHours = readNumber[int](cfg.raw.Fields(), "session_hours")
 		cfg.Server.RememberDays = readNumber[int](cfg.raw.Fields(), "remember_days")
@@ -349,9 +338,6 @@ func (c *Config) merged() *orderedJSON {
 	}
 	if s.AdminTZ != nil {
 		put("admin_tz", *s.AdminTZ)
-	}
-	if s.ExternalStorage != nil {
-		put("external_storage", s.ExternalStorage)
 	}
 	if s.PushContact != "" {
 		put("push_contact", s.PushContact)
