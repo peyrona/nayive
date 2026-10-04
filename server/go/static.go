@@ -85,6 +85,7 @@ var publicStatic = map[string]bool{
 	// them - those come from /api/c/<token>, token-checked. chat/*.js,
 	// chat/*.css and chat/icons/ are public too (isPublicStatic).
 	"shared/photo.js": true,
+	"shared/vcard.js": true, // a shared contact's "Save" (.vcf) on a Chat link
 	// The Android app's first step (devices.go): it only moves the phone's token
 	// from the URL's #fragment into this browser, then goes to the launcher.
 	"device.html": true,

@@ -7,6 +7,7 @@
  *     NayiveVCard.contentLines( text )        physical lines -> content lines
  *     NayiveVCard.read( text )                every card, the light way (see read)
  *     NayiveVCard.cards( text )               every card as the text it is in the file
+ *     NayiveVCard.write( { name, tels, emails } )   one small card's text (Chat)
  *     ... and the pieces they are made of: splitOnce, splitOutsideQuotes,
  *     splitEscaped, parseParams, decodeValue, isQuotedPrintable, unescapeText,
  *     escapeText, foldLine, photoOf.
@@ -17,6 +18,9 @@
  *
  * Contacts loads it NOT deferred, right before its inline script, which takes
  * the functions on its first lines. Nothing here touches the DOM.
+ *
+ * Public on purpose (server/go/static.go): a person's Chat link has no
+ * session, and saves a shared contact with write(). No data lives here.
  */
 ( function ()
 {
@@ -207,6 +211,18 @@
             .replace( /;/g,  '\\;' );
     }
 
+    // A small card of its own: { name, tels: [ ], emails: [ ] } -> the text of
+    // one vCard 3.0 (Chat's shared contact, "Save" -> a .vcf). Contacts writes
+    // its whole model its own way.
+    function write( c )
+    {
+        const lines = [ 'BEGIN:VCARD', 'VERSION:3.0', 'FN:' + escapeText( c.name ), 'N:' + escapeText( c.name ) + ';;;;' ];
+        ( c.tels   || [] ).forEach( function ( t ) { lines.push( 'TEL;TYPE=CELL:' + escapeText( t ) ); } );
+        ( c.emails || [] ).forEach( function ( e ) { lines.push( 'EMAIL:' + escapeText( e ) ); } );
+        lines.push( 'END:VCARD' );
+        return lines.join( '\r\n' ) + '\r\n';
+    }
+
     // RFC 6350 §3.2: fold content lines longer than 75 octets. Continuation lines begin
     // with a single space. Folding is done on UTF-8 octet boundaries without splitting a
     // multi-byte character.
@@ -334,6 +350,7 @@
         parseParams       : parseParams,
         unescapeText      : unescapeText,
         escapeText        : escapeText,
+        write             : write,
         foldLine          : foldLine,
         photoOf           : photoOf
     };
