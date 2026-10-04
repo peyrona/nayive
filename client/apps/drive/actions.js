@@ -35,7 +35,7 @@ async function confirmRename()
     setBackdrop( 'renameBackdrop', false );
     setStatus( T( 'drive.renaming' ) );
 
-    const parent  = oldPath.includes( '/' ) ? oldPath.slice( 0, oldPath.lastIndexOf( '/' ) ) : '';
+    const parent  = NayiveMedia.dirOf( oldPath );
     const newPath = joinPath( parent, newName );
 
     // What the Undo walks back (undoMoves, move-copy.js): the rename, and
@@ -235,8 +235,7 @@ function fileKind( node )
 
 function parentLabel( path )
 {
-    const parent = path.indexOf( '/' ) !== -1 ? path.slice( 0, path.lastIndexOf( '/' ) ) : '';
-    return fsRel( parent ) || 'Drive';
+    return fsRel( NayiveMedia.dirOf( path ) ) || 'Drive';
 }
 
 // Where a multi-selection lives, or null when it is spread over several folders.
@@ -375,7 +374,7 @@ async function applyDeepLink()
     const sel = params.get( 'sel' );
     if( ! sel ) return;
 
-    const parent = sel.indexOf( '/' ) !== -1 ? sel.slice( 0, sel.lastIndexOf( '/' ) ) : '';
+    const parent = NayiveMedia.dirOf( sel );
 
     if( parent && ! findNode( parent ) )
     {

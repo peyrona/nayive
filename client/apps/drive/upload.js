@@ -877,8 +877,6 @@ async function freeRel( dest, relPath, used )
     return dir + uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) } );
 }
 
-function inShared( path ) { return path === 'shared' || path.indexOf( 'shared/' ) === 0; }
-
 // Sends a file the user did NOT say "Replace" to, into `dest`: it may only
 // make a new file. A 412 is a name taken since filesThere looked (another
 // device or window; this very upload's first try never gets here, see
@@ -898,7 +896,7 @@ async function sendNew( dest, relPath, blob, conv, used )
         catch( err )
         {
             status = err && err.status;
-            if( ( status !== 412 && ! ( status === 409 && inShared( path ) ) ) || tries >= 20 ) throw err;
+            if( ( status !== 412 && ! ( status === 409 && NayiveUI.isShared( path ) ) ) || tries >= 20 ) throw err;
         }
 
         if( status === 412 )
@@ -987,7 +985,7 @@ async function uploadItems( items )
     // into an .mp4 on the server, BEFORE anything is sent. Never inside a
     // shared folder: the job ends by moving the original to the papelera.
     let toConvert = new Set();
-    const inSharedDir = inShared( dest );
+    const inSharedDir = NayiveUI.isShared( dest );
     const videos      = inSharedDir ? [] : items.filter( function( it ) { return isConvertible( it.relPath ); } );
     if( videos.length )
     {

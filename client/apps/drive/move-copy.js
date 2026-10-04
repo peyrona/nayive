@@ -21,16 +21,8 @@ async function openFolderPicker( mode )
     if( ! paths.length ) return;
 
     // A folder is not a valid destination if it is one of the selected
-    // folders itself, or lives inside one (you cannot move/copy a folder
-    // into its own subtree).
-    const isBadDest = function( path )
-    {
-        return paths.some( function( p )
-        {
-            const n = findNode( p );
-            return n && isDir( n ) && (path === p || path.indexOf( p + '/' ) === 0);
-        } );
-    };
+    // folders itself, or lives inside one (dragdrop.js intoOwnTree).
+    const isBadDest = function( path ) { return intoOwnTree( paths, path ); };
     const what = paths.length === 1
         ? ('"' + paths[0].split( '/' ).pop() + '"')
         : TF( 'drive.nItems', { n: paths.length } );
@@ -77,8 +69,7 @@ async function doMove( paths, dest )
     const destNames = await destNameSet( dest );
     const clashes = paths.filter( function( p )
     {
-        const parent = p.indexOf( '/' ) !== -1 ? p.slice( 0, p.lastIndexOf( '/' ) ) : '';
-        return parent !== dest && destNames.has( p.split( '/' ).pop() );
+        return NayiveMedia.dirOf( p ) !== dest && destNames.has( p.split( '/' ).pop() );
     } );
 
     let replace = false;
@@ -103,7 +94,7 @@ async function doMove( paths, dest )
         for( const p of paths )
         {
             const name   = p.split( '/' ).pop();
-            const parent = p.indexOf( '/' ) !== -1 ? p.slice( 0, p.lastIndexOf( '/' ) ) : '';
+            const parent = NayiveMedia.dirOf( p );
 
             if( parent === dest ) { skipped++; continue; }      // already there
 

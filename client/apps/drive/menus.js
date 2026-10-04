@@ -236,14 +236,10 @@ async function doPaste()
     const paths = clipboard.paths;
     const dest  = currentFolder;
 
-    for( const p of paths )
+    if( intoOwnTree( paths, dest ) )
     {
-        const n = findNode( p );
-        if( n && isDir( n ) && (dest === p || dest.indexOf( p + '/' ) === 0) )
-        {
-            NayiveUI.toast( T( 'drive.pasteIntoItself' ) );
-            return;
-        }
+        NayiveUI.toast( T( 'drive.pasteIntoItself' ) );
+        return;
     }
 
     clipboard = null;

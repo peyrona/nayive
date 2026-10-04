@@ -240,11 +240,13 @@ const extOf = NayiveUI.extOf, pad2 = NayiveUI.pad2;   // shared/ui.js (loads bef
 // Unix seconds). Dates always render yyyy-mm-dd (Nayive ANSI-date rule).
 function fmtSize( bytes ) { return bytes == null ? '' : NayiveUI.fmtBytes( bytes ); }
 
+// A day as yyyy-mm-dd (the listing's dates, the search dialog's fields).
+function isoDay( d ) { return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() ); }
+
 function fmtDate( unixSec )
 {
     if( ! unixSec ) return '';
-    const d = new Date( unixSec * 1000 );
-    return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() );
+    return isoDay( new Date( unixSec * 1000 ) );
 }
 
 function fmtDateTime( unixSec )
@@ -327,8 +329,7 @@ function buildListRow( node, showPath )
 
     if( showPath )
     {
-        const parent = node.path.indexOf( '/' ) !== -1 ? node.path.slice( 0, node.path.lastIndexOf( '/' ) ) : '';
-        meta.textContent = fsRel( parent ) || 'Drive';
+        meta.textContent = fsRel( NayiveMedia.dirOf( node.path ) ) || 'Drive';
         meta.title       = node.path;
 
         // The "Biggest files" list leads with the size - the one thing it is

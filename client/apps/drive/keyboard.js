@@ -21,13 +21,9 @@
 
 const IS_MAC = NayiveUI.isMac;
 
-// "Ctrl+F" on a PC, "⌘F" on a Mac. The modifier NAMES are translated
-// (Strg / Entf in German, Supr in Spanish); the Mac glyphs are the same
-// in every language, so they stay literal.
+// "Ctrl+F" on a PC, "⌘F" on a Mac (NayiveUI.keyLabel: the modifier NAMES
+// translated - Strg in German - the Mac glyphs the same in every language).
 const HINT_SEP = ' · ';                                   // "Renombrar · F2"
-function combo( parts ) { return parts.join( IS_MAC ? '' : '+' ); }
-function kMod() { return IS_MAC ? '⌘' : T( 'ui.keyCtrl' ); }   // ⌘ / Ctrl
-function kAlt() { return IS_MAC ? '⌥' : T( 'ui.keyAlt'  ); }   // ⌥ / Alt
 
 // The Ctrl of the platform, and nothing else held down. e.code (not e.key)
 // because e.key is what the LAYOUT produces: Ctrl+F on a Cyrillic keyboard
@@ -41,14 +37,14 @@ function modOnly( e )
 const SHORTCUTS = [
     // Ctrl+F is the one key that also works from inside a text box — that
     // is where the browser's own find bar would have opened.
-    { el: 'searchInput', label: () => combo( [ kMod(), 'F' ] ),
+    { el: 'searchInput', label: () => NayiveUI.keyLabel( 'Ctrl+F' ),
       match: e => modOnly( e ) && e.code === 'KeyF',
       run:   focusSearch },
 
     // Ctrl+Shift+N is Chrome's incognito window and cannot be taken away
     // from it, so nueva carpeta gets Alt+N instead.
-    { el: 'newFolderBtn', label: () => combo( [ kAlt(), 'N' ] ), match: () => false },
-    { el: 'uploadBtn',    label: () => combo( [ kMod(), 'U' ] ), match: () => false }
+    { el: 'newFolderBtn', label: () => NayiveUI.keyLabel( 'Alt+N' ), match: () => false },
+    { el: 'uploadBtn',    label: () => NayiveUI.keyLabel( 'Ctrl+U' ), match: () => false }
 ];
 
 function focusSearch()

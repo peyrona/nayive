@@ -41,9 +41,7 @@ const keptOnce  = new Set();   // paths whose original is safe this session: bin
 let heldTag     = null;
 let fromCopy    = false;   // loaded from the offline copy (X-Nayive-Copy): never saved over
 
-function extOf( name ) { const i = name.lastIndexOf( '.' ); return i < 0 ? '' : name.slice( i + 1 ).toLowerCase(); }
-function nameOf( path ) { return path.split( '/' ).pop(); }
-function dirOf( path ) { const i = path.lastIndexOf( '/' ); return i < 0 ? '' : path.slice( 0, i ); }
+const extOf = NayiveMedia.extOf, nameOf = NayiveMedia.baseName, dirOf = NayiveMedia.dirOf;   // shared/media.js
 
 function showName( path )
 {
