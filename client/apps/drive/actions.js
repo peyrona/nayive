@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * actions.js - Drive: rename, properties, copy link, deep links, delete and download.
  */

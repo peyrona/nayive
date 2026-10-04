@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * media.js - what a message can carry besides text: photos, files, a place,
  * a contact card, a poll. How each is drawn in its bubble, how it is sent,

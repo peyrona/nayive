@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * model.js - Bookmarks: the data, its repair, and every pure helper over it
  * (paths, counts, search, the duplicate key). No DOM here.

@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * sheets.js - Bookmarks: the add / edit sheet, the folder sheet, "Move to…",
  * and the deletes (a bookmark goes at once with Undo; a folder asks once).

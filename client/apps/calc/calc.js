@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * calc.js - Calc: a spreadsheet editor (xlsx / csv) over the user's files.
  * Handsontable + HyperFormula. Loaded as a module by index.html, after the

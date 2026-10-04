@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * open.js - Drive: opening a file: openNode, Write / Calc, LibreOffice twins and
  * the "Abrir con" dialog.

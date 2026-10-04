@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * info.js - the info screen of a chat (tap its name at the top): a person's
  * link, notifications and groups; a group's members; the photos and files

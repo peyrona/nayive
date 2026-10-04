@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * upload.js - Drive: new folder and upload (replace prompt, MP4 conversion,
  * Calendar / Contacts imports).

@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * image.js - Image: the photo editor on ONE picture, ?file=<path>. A module
  * for its top-level await of the dictionary.

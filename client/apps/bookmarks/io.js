@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * io.js - Bookmarks: import (browser HTML or this app's JSON), export (the
  * same two), and the duplicates sheet.

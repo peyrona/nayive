@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * compose.js - writing (the bar at the bottom, emoji, the clip's panel, the
  * Send button held down: without sound, or scheduled), holding a message down

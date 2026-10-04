@@ -1,3 +1,4 @@
+// SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * ical.js - The .ics event model + DST-safe recurrence engine. Only the
  * Calendar app imports it now (Tasks used to, for its "what's on the calendar
