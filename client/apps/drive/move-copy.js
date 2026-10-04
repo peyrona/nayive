@@ -51,11 +51,7 @@ async function openFolderPicker( mode )
 // — the server's own clobber guard is the real backstop.
 async function destNameSet( dest )
 {
-    try
-    {
-        const r = await GumApi.listDir( dest );
-        return new Set( ( r.nodes || [] ).map( function( n ) { return n.path.split( '/' ).pop(); } ) );
-    }
+    try { return await GumApi.namesIn( dest ); }
     catch( _ ) { return new Set(); }
 }
 
@@ -221,7 +217,7 @@ async function doCopy( paths, dest )
             const node = rowNode( p );
             if( ! node ) continue;
 
-            const topName = uniqueName( nameOf( node ), taken );
+            const topName = GumApi.uniqueName( nameOf( node ), taken, T( 'drive.copyWord' ) );
             taken.add( topName );
 
             // A folder comes whole, sub-folders and all. The server never
@@ -255,24 +251,3 @@ async function doCopy( paths, dest )
         hideProgress();
     }
 }
-
-// A name not already in `taken` (a Set of names present in the
-// destination). On a clash it becomes "name (copia).ext", then
-// "name (copia 2).ext", … - "copia" in the user's language. The caller
-// adds each returned name to `taken`.
-function uniqueName( name, taken )
-{
-    if( ! taken.has( name ) ) return name;
-
-    const dot  = name.lastIndexOf( '.' );
-    const base = dot > 0 ? name.slice( 0, dot ) : name;
-    const ext  = dot > 0 ? name.slice( dot ) : '';
-    const word = T( 'drive.copyWord' );
-
-    for( let i = 1; ; i++ )
-    {
-        const cand = base + ' (' + word + (i > 1 ? ' ' + i : '') + ')' + ext;
-        if( ! taken.has( cand ) ) return cand;
-    }
-}
-

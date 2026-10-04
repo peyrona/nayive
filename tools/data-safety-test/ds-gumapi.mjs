@@ -10,6 +10,11 @@
 //     another file's are not.
 // L5 (office #14, GumApi half): a page left open after another account signed
 //     in on this browser gets 423 - its write never lands in the other home.
+// A new file under the first free name: createFresh skips a name taken since
+//     the page looked (412), never writes over it; namesIn, uniqueName.
+// On this device: sideDb / draftsDb (the device drafts) never hang on a
+//     failure; tryLock / heldLocks (a writer's tab is alive) reject with no
+//     Web Locks, so each caller keeps its own fallback.
 import { server, browser, ok, section, done, onDisk } from "./lib.mjs";
 import { installRace, arm, raced } from "./race.mjs";
 
@@ -160,6 +165,76 @@ section( "L5 · EVERY CALL THAT CHANGES FILES NAMES THE PAGE'S OWNER" );
         return window.__who;` );
     ok( me && Array.isArray( r ) && r.length === 8 && r.every( x => x.endsWith( " " + me ) ),
         "new folder, move, bin, restore, delete, purge, bin delete, a POST of the app's own: each says whose page it is", { me, r } );
+}
+
+//------------------------------------------------------------------------//
+// A NEW FILE UNDER THE FIRST FREE NAME: GumApi.namesIn / uniqueName /
+// createFresh (eMail's Save to Drive, Share, Bookmarks' export, Trips'
+// documents, Chat's edited photo, Office's Save as).
+section( "createFresh: names taken since the page looked (412) are skipped, never written over" );
+{
+    await seed( "files/fr/a.txt", "FIRST" );
+    await seed( "files/fr/a (2).txt", "SECOND" );
+    const r = await run( `const names = await GumApi.namesIn( 'files/fr' );
+        let missing = null;
+        try { await GumApi.namesIn( 'files/nope' ); } catch( e ) { missing = e.status || e.message; }
+        const taken = new Set(), tried = [];
+        const got = await GumApi.createFresh( 'files/fr', n => { const nm = GumApi.uniqueName( 'a.txt', taken ); taken.add( nm ); tried.push( n + ':' + nm ); return nm; },
+                                              new TextEncoder().encode( 'MINE' ) );
+        let calls = 0, last = null;
+        try { await GumApi.createFresh( 'files/fr', () => { calls++; return 'a.txt'; }, new TextEncoder().encode( 'NO' ), { tries: 2 } ); }
+        catch( e ) { last = e.status; }
+        return { names: [ ...names ].sort(), missing, got, tried, calls, last };` );
+    ok( r && r.names && r.names.join( "|" ) === "a (2).txt|a.txt" && r.missing === 404, "namesIn: the names in the folder; a missing folder throws its 404", r );
+    ok( r && r.got === "a (3).txt" && r.tried.join( "|" ) === "0:a.txt|1:a (2).txt|2:a (3).txt", "the page knew no names: a.txt and a (2).txt answer 412, it lands as a (3).txt", r );
+    ok( onDisk( s, "files/fr/a.txt", "ana" ) === "FIRST" && onDisk( s, "files/fr/a (2).txt", "ana" ) === "SECOND" && onDisk( s, "files/fr/a (3).txt", "ana" ) === "MINE",
+        "the two files there are untouched; the new one holds its bytes" );
+    ok( r && r.calls === 3 && r.last === 412, "past opts.tries taken names it gives up with the 412 (3 tries for tries: 2)", r );
+    const u = await run( `const U = GumApi.uniqueName;
+        return [ U( 'x.jpg', new Set() ), U( 'x.jpg', new Set( [ 'x.jpg' ] ) ), U( 'x.jpg', new Set( [ 'x.jpg', 'x (2).jpg' ] ) ),
+                 U( 'x.jpg', new Set( [ 'x.jpg' ] ), 'copia' ), U( 'x.jpg', new Set( [ 'x.jpg', 'x (copia).jpg' ] ), 'copia' ),
+                 U( 'notes', new Set( [ 'notes' ] ) ), U( '.env', new Set( [ '.env' ] ) ) ].join( '|' );` );
+    ok( u === "x.jpg|x (2).jpg|x (3).jpg|x (copia).jpg|x (copia 2).jpg|notes (2)|.env (2)", "uniqueName: (2), (3)...; with a word (copia), (copia 2)...", u );
+}
+
+//------------------------------------------------------------------------//
+// ON THIS DEVICE: GumApi.sideDb / draftsDb (the device drafts of Write, Calc,
+// Text and eMail) and the Web Locks that tell a writer's tab is alive.
+section( "sideDb: a record goes in and comes back; a failure is null, never a hang" );
+{
+    const r = await run( `const a = GumApi.draftsDb(), b = GumApi.sideDb( 'nayive-drafts', 'drafts', 'app' );
+        await a.tx( 'readwrite', os => os.put( { app: 'ds:side', text: 'kept' } ) );
+        const back = await b.tx( 'readonly', os => os.get( 'ds:side' ) );
+        const none = await a.tx( 'readonly', os => undefined );
+        const bad  = await a.tx( 'readonly', os => os.get( {} ) );
+        const gone = await GumApi.sideDb( 'nayive-drafts', 'nostore', 'k' ).tx( 'readonly', os => os.getAll() );
+        await a.tx( 'readwrite', os => os.delete( 'ds:side' ) );
+        const after = await a.tx( 'readonly', os => os.get( 'ds:side' ) );
+        return { back, none, bad, gone, after, same: a.open() === a.open() };` );
+    ok( r && r.back && r.back.text === "kept", "a second opener of the same database reads what the first wrote", r );
+    ok( r && r.none === null && r.bad === null && r.gone === null, "no request / a bad key / no such store: null, not a hang", r );
+    ok( r && r.after === null && r.same === true, "deleted, gone; the database opened once", r );
+}
+
+section( "tryLock / heldLocks: a held lock is seen by everyone, ifAvailable says taken" );
+{
+    const r = await run( `const rel = await GumApi.tryLock( 'ds-lock:one', true );
+        const second = await GumApi.tryLock( 'ds-lock:one', true );
+        const held = await GumApi.heldLocks( 'ds-lock:' );
+        rel();
+        await new Promise( k => setTimeout( k, 50 ) );
+        const later = await GumApi.heldLocks( 'ds-lock:' );
+        const again = await GumApi.tryLock( 'ds-lock:one', true );
+        if( again ) again();
+        Object.defineProperty( navigator, 'locks', { value: undefined, configurable: true } );
+        let noTry = 'resolved', noHeld = 'resolved';
+        try { await GumApi.tryLock( 'ds-lock:x', true ); } catch( e ) { noTry = 'rejected'; }
+        try { await GumApi.heldLocks( 'ds-lock:' ); } catch( e ) { noHeld = 'rejected'; }
+        delete navigator.locks;
+        return { first: typeof rel, second, held: [ ...held ], later: [ ...later ], again: typeof again, noTry, noHeld, back: !! navigator.locks };` );
+    ok( r && r.first === "function" && r.second === null, "the first gets a release, the second (ifAvailable) null", r );
+    ok( r && r.held.length === 1 && r.held[ 0 ] === "one" && r.later.length === 0 && r.again === "function", "held while held, free once released", r );
+    ok( r && r.noTry === "rejected" && r.noHeld === "rejected" && r.back, "no Web Locks: both reject (the caller decides)", r );
 }
 
 //------------------------------------------------------------------------//

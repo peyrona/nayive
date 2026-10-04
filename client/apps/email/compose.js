@@ -1010,50 +1010,14 @@
     var KEEP_AFTER = 300;    // ms after the last change: the copy here...
     var KEEP_EVERY = 1000;   // ...and while typing goes on, at least this often
 
-    // One IndexedDB database, opened once; null when it cannot be.
-    function opener( name, store, keyPath )
-    {
-        var db = null;
-        return function ()
-        {
-            if( db ) return db;
-            db = new Promise( function ( resolve )
-            {
-                var rq;
-                try { rq = indexedDB.open( name, 1 ); }
-                catch( e ) { resolve( null ); return; }
-                rq.onupgradeneeded = function () { rq.result.createObjectStore( store, { keyPath: keyPath } ); };
-                rq.onsuccess = function () { resolve( rq.result ); };
-                rq.onerror = rq.onblocked = function () { resolve( null ); };
-            } );
-            return db;
-        };
-    }
-    // "nayive-drafts": the same upgrade as shared/office.js - whoever opens it first makes it
-    var openLocal = opener( "nayive-drafts", "drafts", "app" );
-    var openBytes = opener( "nayive-mail-files", "files", "key" );
-
-    // fn( objectStore ) -> request: its result once the transaction is done (null on any failure).
-    function tx( open, store, mode, fn )
-    {
-        return open().then( function ( db )
-        {
-            if( ! db ) return null;
-            return new Promise( function ( resolve )
-            {
-                try
-                {
-                    var t = db.transaction( store, mode );
-                    var rq = fn( t.objectStore( store ) );
-                    t.oncomplete = function () { resolve( rq && rq.result !== undefined ? rq.result : null ); };
-                    t.onerror = t.onabort = function () { resolve( null ); };
-                }
-                catch( e ) { resolve( null ); }
-            } );
-        } );
-    }
-    function localTx( mode, fn ) { return tx( openLocal, "drafts", mode, fn ); }
-    function bytesTx( mode, fn ) { return tx( openBytes, "files", mode, fn ); }
+    // "nayive-drafts" (GumApi.draftsDb: the same upgrade as shared/office.js),
+    // and the bytes of the files from this device. localTx / bytesTx:
+    // fn( objectStore ) -> request: its result once the transaction is done
+    // (null on any failure).
+    var localDb = GumApi.draftsDb();
+    var bytesDb = GumApi.sideDb( "nayive-mail-files", "files", "key" );
+    function localTx( mode, fn ) { return localDb.tx( mode, fn ); }
+    function bytesTx( mode, fn ) { return bytesDb.tx( mode, fn ); }
 
     function localKey( lid ) { return "email:" + lid; }
     function bytesOf( lid ) { return IDBKeyRange.bound( lid + "#", lid + "#￿" ); }
@@ -1122,19 +1086,9 @@
     }
 
     // The lids of the writers on screen now, in this browser (their locks).
-    async function liveLids()
+    function liveLids()
     {
-        var out = new Set();
-        if( ! ( navigator.locks && navigator.locks.query ) ) return out;
-        try
-        {
-            ( ( await navigator.locks.query() ).held || [] ).forEach( function ( l )
-            {
-                if( l.name && l.name.indexOf( "nayive-mail-writer:" ) === 0 ) out.add( l.name.slice( 19 ) );
-            } );
-        }
-        catch( e ) {}
-        return out;
+        return GumApi.heldLocks( "nayive-mail-writer:" ).catch( function () { return new Set(); } );
     }
 
     // File bytes whose copy is gone (sent, binned, sign-out emptied the
@@ -1161,14 +1115,7 @@
     {
         if( mine.lock ) return Promise.resolve( true );
         if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.resolve( true );   // no locks here: never known taken
-        var lock = new Promise( function ( resolve )
-        {
-            navigator.locks.request( "nayive-mail-writer:" + mine.lid, { ifAvailable: !! claim }, function ( l )
-            {
-                if( ! l ) { resolve( null ); return null; }
-                return new Promise( function ( release ) { resolve( release ); } );
-            } ).catch( function () { resolve( null ); } );
-        } );
+        var lock = GumApi.tryLock( "nayive-mail-writer:" + mine.lid, claim ).catch( function () { return null; } );
         mine.lock = lock;
         return lock.then( function ( release )
         {

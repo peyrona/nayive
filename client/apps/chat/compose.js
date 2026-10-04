@@ -687,7 +687,8 @@
             var rq;
             try { rq = indexedDB.open( "nayive-drafts", 1 ); }
             catch( _ ) { resolve( null ); return; }
-            // the same upgrade as shared/office.js: whoever opens it first makes it
+            // the same upgrade as GumApi.draftsDb (shared/gum-api.js): whoever opens it first
+            // makes it. Its own copy: the guest page loads no gum-api.js.
             rq.onupgradeneeded = function () { rq.result.createObjectStore( "drafts", { keyPath: "app" } ); };
             rq.onsuccess = function () { resolve( rq.result ); };
             rq.onerror = rq.onblocked = function () { resolve( null ); };

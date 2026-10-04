@@ -417,6 +417,48 @@
         return writeFileBytes( path, bytes, { createOnly: true, convert: opts && opts.convert } );
     }
 
+    // A NEW file in `dir`, never over one, under the first name free: try n
+    // (0, 1, 2...) goes up create-only as `nameAt( n )` (sync or async; the
+    // caller's naming rule), and a name taken - a 412, also a 409 with
+    // opts.on409 (a folder shared with us, which only ever gains files) -
+    // moves on to the next. Resolves the name it was saved under. Past
+    // opts.tries taken names (default 50; that is not a race any more) the
+    // last error is thrown, as is any other. (A 412 that is this very save's
+    // first try, sent again after a dropped connection, is a success
+    // already: OUR OWN FIRST TRY above.)
+    async function createFresh( dir, nameAt, bytes, opts )
+    {
+        opts = opts || {};
+        var tries = opts.tries || 50;
+        for( var n = 0; ; n++ )
+        {
+            var name = await nameAt( n );
+            try { await createFileBytes( dir + "/" + name, bytes ); return name; }
+            catch ( e )
+            {
+                if( ! e || ! ( e.status === 412 || ( e.status === 409 && opts.on409 ) ) || n >= tries ) throw e;
+            }
+        }
+    }
+
+    // A name `taken` (anything with .has) does not hold: `name` itself, else
+    // "foto (2).jpg", "foto (3).jpg"... - or, given a `word` ("copia", in the
+    // user's language), "foto (copia).jpg", "foto (copia 2).jpg"... The
+    // caller adds what it uses to `taken`. (NayiveUI.uniqueName is the same
+    // rule with no word, for the pages that load no gum-api.js.)
+    function uniqueName( name, taken, word )
+    {
+        if( ! taken.has( name ) ) return name;
+        var dot  = name.lastIndexOf( "." );
+        var stem = dot > 0 ? name.slice( 0, dot ) : name;
+        var ext  = dot > 0 ? name.slice( dot )    : "";
+        for( var i = word ? 1 : 2; ; i++ )
+        {
+            var cand = stem + " (" + ( word ? word + ( i > 1 ? " " + i : "" ) : i ) + ")" + ext;
+            if( ! taken.has( cand ) ) return cand;
+        }
+    }
+
     // Small JSON sidecar helpers (data/<app>/config.json and friends). readJson
     // resolves null when the file isn't there yet (a fresh account); any other
     // failure - including a 401 - is thrown so the caller can react. writeJson
@@ -502,6 +544,17 @@
         // reaches the handler; the server strips the slash back off.
         var q = new URLSearchParams( { dir: path || "/" } ).toString();
         return JSON.parse( await fetchText( API_FILES + "?" + q ) );
+    }
+
+    // The names (no folder part) of what is directly inside `dir`, files and
+    // sub-folders: a Set. Throws as listDir does - a 404 is no such folder -
+    // and the caller says what a failure means (no names, or stop). Read
+    // through window.GumApi.listDir: a page (or a test) that swaps the
+    // listing swaps this too.
+    async function namesIn( dir )
+    {
+        var r = await window.GumApi.listDir( dir );
+        return new Set( ( ( r && r.nodes ) || [] ).map( function ( n ) { return String( n.path ).split( "/" ).pop(); } ) );
     }
 
     // The whole subtree under ONE folder (that folder's files and sub-folders,
@@ -679,6 +732,97 @@
     }
 
     //------------------------------------------------------------------------//
+    // ON THIS DEVICE  -  an IndexedDB database with one object store, and the
+    // Web Locks that tell a tab's writer is still alive.
+    //
+    //   var db = GumApi.sideDb( "nayive-mail-files", "files", "key" );
+    //   db.tx( "readwrite", function ( os ) { return os.put( rec ); } )
+    //
+    // sideDb: opened once per page, on first use; the store made by the
+    // upgrade - every opener of a database must make the SAME store, as
+    // whoever opens it first makes it. open() -> the database, null when it
+    // cannot be (private mode, no IndexedDB, blocked). tx( mode, fn ):
+    // fn( objectStore ) -> a request; its result once the transaction is
+    // done, null on any failure (never a hang). draftsDb(): "nayive-drafts",
+    // the device drafts of Write / Calc / Text and eMail (shared/office.js),
+    // also Chat's outbox (chat/compose.js keeps its own opener: the guest page
+    // has no gum-api.js) - shared/store.js's sign-out counts and empties it.
+    function sideDb( name, store, keyPath )
+    {
+        var db = null;
+
+        function open()
+        {
+            if( db ) return db;
+            db = new Promise( function ( resolve )
+            {
+                var rq;
+                try { rq = indexedDB.open( name, 1 ); }
+                catch ( e ) { resolve( null ); return; }
+                rq.onupgradeneeded = function () { rq.result.createObjectStore( store, { keyPath: keyPath } ); };
+                rq.onsuccess = function () { resolve( rq.result ); };
+                rq.onerror = rq.onblocked = function () { resolve( null ); };
+            } );
+            return db;
+        }
+
+        function tx( mode, fn )
+        {
+            return open().then( function ( d )
+            {
+                if( ! d ) return null;
+                return new Promise( function ( resolve )
+                {
+                    try
+                    {
+                        var t  = d.transaction( store, mode );
+                        var rq = fn( t.objectStore( store ) );
+                        t.oncomplete = function () { resolve( rq && rq.result !== undefined ? rq.result : null ); };
+                        t.onerror = t.onabort = function () { resolve( null ); };
+                    }
+                    catch ( e ) { resolve( null ); }
+                } );
+            } );
+        }
+
+        return { open: open, tx: tx };
+    }
+
+    function draftsDb() { return sideDb( "nayive-drafts", "drafts", "app" ); }
+
+    // The Web Lock `name`, held from now on: resolves its release() - call it
+    // to let go; the page closing lets go too - or null when another tab or
+    // window holds it and `ifAvailable` (else it waits for it). REJECTS when
+    // this browser has no Web Locks or the request fails: what that means
+    // (taken, or not) is the caller's call.
+    function tryLock( name, ifAvailable )
+    {
+        if( ! ( navigator.locks && navigator.locks.request ) ) return Promise.reject( new Error( "no Web Locks" ) );
+        return new Promise( function ( resolve, reject )
+        {
+            navigator.locks.request( name, { ifAvailable: !! ifAvailable }, function ( lock )
+            {
+                if( ! lock ) { resolve( null ); return null; }
+                return new Promise( function ( release ) { resolve( release ); } );
+            } ).catch( reject );
+        } );
+    }
+
+    // The Web Locks held now in this browser (every tab and window) whose
+    // name starts with `prefix`: a Set of the rest of each name. REJECTS when
+    // that cannot be known (no Web Locks, the query failed).
+    async function heldLocks( prefix )
+    {
+        var got = await navigator.locks.query();
+        var out = new Set();
+        ( got.held || [] ).forEach( function ( l )
+        {
+            if( l.name && l.name.indexOf( prefix ) === 0 ) out.add( l.name.slice( prefix.length ) );
+        } );
+        return out;
+    }
+
+    //------------------------------------------------------------------------//
     // ACCESS PROBE
     //
     // GET /api/whoami: 200 + { user, role } for a signed-in visitor, 401 for an
@@ -719,10 +863,13 @@
         versionOf:       versionOf,
         writeFileBytes:  writeFileBytes,
         createFileBytes: createFileBytes,
+        createFresh:     createFresh,      // a new file under the first free name
+        uniqueName:      uniqueName,
         readJson:        readJson,
         writeJson:       writeJson,
         updateJson:      updateJson,
         listDir:         listDir,
+        namesIn:         namesIn,
         listDirRecursive: listDirRecursive,
         dirTree:         dirTree,
         find:            find,
@@ -742,6 +889,12 @@
         trashDelete:     trashDelete,
         trashDays:       trashDays,
         setTrashDays:    setTrashDays,
+
+        // on this device
+        sideDb:          sideDb,
+        draftsDb:        draftsDb,
+        tryLock:         tryLock,
+        heldLocks:       heldLocks,
 
         // access
         owner:           owner,            // whose page this is ("" = unknown)

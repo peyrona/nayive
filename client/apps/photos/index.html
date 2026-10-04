@@ -2613,11 +2613,7 @@ async function newAlbum( parent )
 // failure: the server's own clash guard is the real backstop.
 async function destNameSet( dest )
 {
-    try
-    {
-        const r = await GumApi.listDir( dest );
-        return new Set( ( r.nodes || [] ).map( n => baseName( n.path ) ) );
-    }
+    try { return await GumApi.namesIn( dest ); }
     catch( _ ) { return new Set(); }
 }
 
