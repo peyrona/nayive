@@ -7,30 +7,43 @@
 // /e2e/draft?fail=1 / ?slow=MS to make draft saves fail or wait).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { browser, client, ok, section, done, REPO, sleep } from "./lib.mjs";
+import { browser, client, ok, section, done, REPO, sleep, freePort } from "./lib.mjs";
 
 const GO = process.env.GO || ( fs.existsSync( os.homedir() + "/sdk/go1.27.1/bin/go" ) ? os.homedir() + "/sdk/go1.27.1/bin/go" : "go" );
 
 async function mailServer()
 {
-    const port = await new Promise( res => { const x = net.createServer(); x.listen( 0, "127.0.0.1", () => { const p = x.address().port; x.close( () => res( p ) ); } ); } );
     const tmp  = fs.mkdtempSync( path.join( os.tmpdir(), "ds-mail-" ) );
     const stop = path.join( tmp, "stop" );
-    const proc = spawn( GO, [ "test", "-v", "-count=1", "-timeout", "20m", "-run", "^TestMailE2EServe$", "." ],
-                        { cwd: path.join( REPO, "server/go" ), stdio: [ "ignore", "pipe", "inherit" ],
-                          env: { ...process.env, NAYIVE_MAIL_E2E: "127.0.0.1:" + port, NAYIVE_MAIL_E2E_STOP: stop } } );
+    let proc = null, port = 0;
     // a test that dies half way must not leave the server running (15 min)
     process.on( "exit", () => { try { fs.writeFileSync( stop, "" ); } catch {} try { proc.kill(); } catch {} } );
-    await new Promise( ( res, rej ) =>
+    // The port is picked free and handed over; on a busy machine another
+    // server may take it first (lib.mjs server()). The mail server binds it
+    // before it says READY, so a taken port stops it: another port.
+    for( let attempt = 1; ; attempt++ )
     {
+        port = await freePort();
+        proc = spawn( GO, [ "test", "-v", "-count=1", "-timeout", "20m", "-run", "^TestMailE2EServe$", "." ],
+                      { cwd: path.join( REPO, "server/go" ), stdio: [ "ignore", "pipe", "inherit" ],
+                        env: { ...process.env, NAYIVE_MAIL_E2E: "127.0.0.1:" + port, NAYIVE_MAIL_E2E_STOP: stop } } );
         let buf = "";
-        const t = setTimeout( () => rej( new Error( "the mail test server did not start: " + buf ) ), 300000 );
-        proc.stdout.on( "data", d => { buf += d; if( buf.includes( "E2E READY" ) ) { clearTimeout( t ); res(); } } );
-        proc.on( "exit", code => rej( new Error( "the mail test server stopped: " + code + " " + buf ) ) );
-    } );
+        const up = await new Promise( ( res, rej ) =>
+        {
+            const t = setTimeout( () => rej( new Error( "the mail test server did not start: " + buf ) ), 300000 );
+            proc.stdout.on( "data", d => { buf += d; if( buf.includes( "E2E READY" ) ) { clearTimeout( t ); res( true ); } } );
+            proc.on( "exit", code =>
+            {
+                clearTimeout( t );
+                if( /address already in use/.test( buf ) && attempt < 5 ) res( false );
+                else rej( new Error( "the mail test server stopped: " + code + " " + buf ) );
+            } );
+        } );
+        if( up ) break;
+        console.log( `  (port ${port} was taken - another port)` );
+    }
     return {
         base: "http://127.0.0.1:" + port, users: { ana: "abc" },
         stop: async () =>
@@ -69,7 +82,7 @@ const toasts = () => c.evaluate( "( window.__toasts || [] ).join( ' | ' )" );
 // this device's copies (IndexedDB "nayive-drafts", "email:<lid>"): their subjects
 // c.until() takes its expression as a plain value (a promise would count as
 // true at once): this one waits for what a promise answers
-const settles = async ( expr, ms = 15000 ) =>
+const settles = async ( expr, ms = 30000 ) =>
 {
     const end = Date.now() + ms;
     while( Date.now() < end ) { try { if( await c.evaluate( expr ) ) return true; } catch {} await new Promise( r => setTimeout( r, 100 ) ); }
@@ -111,7 +124,7 @@ const phoneSave = async ( row, text, keep = [] ) =>
                                          mid: row.mid, draftRef: row.ref, keep, drive: [] } ) );
     return ( await phone.call( "POST", `/api/mail/${encodeURIComponent( acct )}/draft`, fd ) ).status;
 };
-const until = async ( fn, ms = 15000 ) => { const end = Date.now() + ms; while( Date.now() < end ) { if( await fn() ) return true; await sleep( 150 ); } return false; };
+const until = async ( fn, ms = 30000 ) => { const end = Date.now() + ms; while( Date.now() < end ) { if( await fn() ) return true; await sleep( 150 ); } return false; };
 // the question a copy with no draft on the server brings (restoreLocal)
 const ASKED = "document.querySelector( '.sheet-backdrop.open h2' )?.textContent === 'Un correo sin guardar'";
 // its buttons, in shared/ui.js confirmDialog's order: Más tarde, Descartar, Recuperar como borrador
@@ -179,9 +192,9 @@ section( "I1 - SAVES REFUSED: SAID, KEPT HERE, ASKED ON CLOSE, BACK NEXT TIME" )
 await knob( "fail=1" );
 await compose( "bob@example.com", "Larga", "<div>Veinte minutos de texto</div>" );
 // the app's own timer: the first save goes 4 s after the last change
-ok( await c.until( "( window.__toasts || [] ).some( t => /No se guardó en Borradores/.test( t ) )", 12000 ),
+ok( await c.until( "( window.__toasts || [] ).some( t => /No se guardó en Borradores/.test( t ) )", 30000 ),
     "a save that fails is said in a toast", await toasts() );
-ok( await settles( COPIES + ".then( l => l.includes( 'Larga' ) )", 5000 ), "the writer is kept on this device", await c.evaluate( COPIES ) );
+ok( await settles( COPIES + ".then( l => l.includes( 'Larga' ) )", 20000 ), "the writer is kept on this device", await c.evaluate( COPIES ) );
 await c.evaluate( "window.__asked = typeof window.nayiveBeforeClose === 'function' ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
 ok( await c.until( "document.querySelector( '.sheet-backdrop.open h2' )?.textContent === 'Sin guardar en Borradores'" ),
     "the desktop's × (window.nayiveBeforeClose) asks first", await c.evaluate( "String( typeof window.nayiveBeforeClose )" ) );
@@ -198,9 +211,9 @@ ok( await c.evaluate( "document.getElementById( 'cSubject' ).value" ) === "Larga
 // (the toast may come before lib's recorder is on: what shows now counts too)
 ok( /Recuperado/.test( await toasts() + ( await c.evaluate( "document.getElementById( 'toast' ).textContent" ) ) ), "…saying so", await toasts() );
 await knob( "fail=0" );
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "saves working again: it goes to Drafts", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saves working again: it goes to Drafts", await status() );
 ok( ( await drafts() ).some( d => d.subject === "Larga" && d.text.includes( "Veinte minutos de texto" ) ), "the server has it", await drafts() );
-ok( await settles( COPIES + ".then( l => ! l.length )", 5000 ), "the copy here is gone", await c.evaluate( COPIES ) );
+ok( await settles( COPIES + ".then( l => ! l.length )", 20000 ), "the copy here is gone", await c.evaluate( COPIES ) );
 await c.evaluate( "window.__asked = window.nayiveBeforeClose ? window.nayiveBeforeClose() : Promise.resolve( 'none' ); true" );
 ok( await c.until( "window.__asked.then( v => window.__answer = v ) && window.__answer === true" ) &&
     ! await c.evaluate( "!! document.querySelector( '.sheet-backdrop.open' )" ), "all in Drafts: the × closes with no question" );
@@ -212,24 +225,24 @@ section( "I1 - A TAB CLOSED RIGHT AFTER TYPING: NOTHING COMES BACK TWICE" );
 // the copy left here must not pop up as "recovered" nor make a second draft)
 await compose( "bob@example.com", "Rápido", "<div>cerrado enseguida</div>" );
 // the app's own pause (300 ms) before the copy here is written
-ok( await settles( COPIES + ".then( l => l.includes( 'Rápido' ) )", 5000 ), "typed: the copy here is written" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Rápido' ) )", 20000 ), "typed: the copy here is written" );
 await away();
 got = false;
-for( let i = 0; i < 100 && ! got; i++ ) { got = ( await drafts() ).some( d => d.subject === "Rápido" ); if( ! got ) await sleep( 100 ); }
+for( let i = 0; i < 300 && ! got; i++ ) { got = ( await drafts() ).some( d => d.subject === "Rápido" ); if( ! got ) await sleep( 100 ); }
 ok( got, "closed before its first save: the save as the page went reached Drafts" );
 ok( ( await c.evaluate( COPIES ) ).includes( "Rápido" ), "(the copy is still here: the page could not know)" );
-ok( await openMail() && await settles( COPIES + ".then( l => ! l.length )", 8000 ), "opened again: the copy, same words as the draft, is dropped", await c.evaluate( COPIES ) );
+ok( await openMail() && await settles( COPIES + ".then( l => ! l.length )", 30000 ), "opened again: the copy, same words as the draft, is dropped", await c.evaluate( COPIES ) );
 ok( ! await writing(), "…and no writer pops up" );
 ok( ( await drafts() ).filter( d => d.subject === "Rápido" ).length === 1, "one draft of it", await drafts() );
 
 section( "I4 - THE LAST WORDS, A SAVE ON ITS WAY WHEN THE PAGE GOES" );
 await knob( "slow=3000" );
 await compose( "bob@example.com", "Al vuelo", "<div>uno</div>" );
-ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a slow save is on its way", await status() );
+ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "a slow save is on its way", await status() );
 await body( "<div>uno dos tres</div>" );
 await away();
 got = false;
-for( let i = 0; i < 150 && ! got; i++ ) { got = ( await drafts() ).some( d => d.subject === "Al vuelo" && d.text.includes( "uno dos tres" ) ); if( ! got ) await sleep( 100 ); }
+for( let i = 0; i < 400 && ! got; i++ ) { got = ( await drafts() ).some( d => d.subject === "Al vuelo" && d.text.includes( "uno dos tres" ) ); if( ! got ) await sleep( 100 ); }
 ok( got, "the words typed during that save reached Drafts after the page went", await drafts() );
 await knob( "slow=0" );
 await c.evaluate( FORGET );
@@ -238,22 +251,22 @@ section( "I4 - A DRAFT IN CYRILLIC: BYTES, NOT LETTERS" );
 ok( await openMail(), "eMail again" );
 // 25 000 letters: under 60 000 as JS counts them (text + HTML), over 64 KiB as UTF-8 bytes
 await compose( "bob@example.com", "Кириллица", "<div>" + "Привет мир ".repeat( 2300 ).slice( 0, 25000 ) + "</div>" );
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "it saves (not 'offline')", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "it saves (not 'offline')", await status() );
 await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
 await c.until( "document.getElementById( 'composeView' ).hidden" );
 
 section( "I4 - THE SESSION ENDS WHILE WRITING: SIGN IN, AND IT IS BACK" );
 await compose( "bob@example.com", "Sesión", "<div>texto antes de entrar</div>" );
 await c.evaluate( "fetch( '/api/logout', { method: 'POST', credentials: 'same-origin' } ).then( r => r.status )" );
-ok( await c.until( "!! document.getElementById( 'nayive-session-bar' )", 12000 ), "the next save meets the ended session: the bar says so" );
+ok( await c.until( "!! document.getElementById( 'nayive-session-bar' )", 30000 ), "the next save meets the ended session: the bar says so" );
 await c.evaluate( "document.querySelector( '#nayive-session-bar button' ).click(); true" );
-ok( await c.until( "location.pathname === '/nayive/login.html'", 10000 ), "'Sign in' goes to the sign-in page" );
+ok( await c.until( "location.pathname === '/nayive/login.html'", 30000 ), "'Sign in' goes to the sign-in page" );
 await c.evaluate( "fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { user: 'ana', password: 'abc' } ) } ).then( r => r.status )" );
 ok( await openMail() && await c.until( ASKED ), "signed in again: it asks about the copy" );
 await answer( "keep" );
 ok( await c.until( "! document.getElementById( 'composeView' ).hidden && NayiveMail.composeText().includes( 'texto antes de entrar' )", 8000 ),
     "…and the writer is back with its text", await c.evaluate( "NayiveMail.composeText()" ) );
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "…and it reaches Drafts", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "…and it reaches Drafts", await status() );
 await c.evaluate( "document.getElementById( 'backBtn' ).click(); true" );
 await c.until( "document.getElementById( 'composeView' ).hidden" );
 
@@ -269,11 +282,11 @@ const gone = ( trash.items || trash.msgs || [] ).find( m => m.subject === "Hello
 const f = gone && await phone.call( "POST", `/api/mail/${encodeURIComponent( acct )}/forget`, JSON.stringify( { refs: [ gone.ref ] } ), { "Content-Type": "application/json" } );
 ok( f && f.status === 200, "(another device empties it from the Trash)", f && f.status );
 await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
-ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudieron devolver/.test( t ) )", 10000 ), "the Undo says one did not come back", await toasts() );
+ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudieron devolver/.test( t ) )", 30000 ), "the Undo says one did not come back", await toasts() );
 
 section( "I1 - THE DRAFT CHANGED ON THE PHONE: BOTH STAY (review RV-A)" );
 await compose( "bob@example.com", "Conflicto", "<div>palabras del PC</div>" );
-ok( await settles( COPIES + ".then( l => l.includes( 'Conflicto' ) )", 5000 ), "the copy here is written" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Conflicto' ) )", 20000 ), "the copy here is written" );
 await away();
 ok( await until( async () => ( await drafts() ).some( d => d.subject === "Conflicto" ) ), "the save as the page went reached Drafts" );
 ok( ( await c.evaluate( COPIES ) ).includes( "Conflicto" ), "(the copy stays on the PC)" );
@@ -282,7 +295,7 @@ ok( await phoneSave( rowA, "palabras del PC y un parrafo largo del movil" ) === 
 ok( await openMail() && await c.until( "! document.getElementById( 'composeView' ).hidden && NayiveMail.composeText().includes( 'palabras del PC' )" ),
     "the PC opens eMail: its copy comes back in the writer" );
 ok( /aparte/.test( await toastNow() ), "…as a draft apart, saying so", await toastNow() );
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "…and it is saved", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "…and it is saved", await status() );
 const afterA = ( await drafts() ).filter( d => d.subject === "Conflicto" );
 ok( afterA.some( d => d.text.includes( "parrafo largo del movil" ) ), "the phone's paragraph is still in Drafts", afterA );
 ok( afterA.length === 2, "both stay: two drafts", afterA );
@@ -290,7 +303,7 @@ await closeWriter();
 
 section( "I1 - A DRAFT THE PHONE SENT: ASKED, NEVER SAVED ON ITS OWN (review RV-B)" );
 await compose( "bob@example.com", "Enviado ya", "<div>texto enviado desde el movil</div>" );
-ok( await settles( COPIES + ".then( l => l.includes( 'Enviado ya' ) )", 5000 ), "the copy here is written" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Enviado ya' ) )", 20000 ), "the copy here is written" );
 await away();
 ok( await until( async () => ( await drafts() ).some( d => d.subject === "Enviado ya" ) ), "the save as the page went reached Drafts" );
 {
@@ -305,19 +318,19 @@ ok( await openMail() && await c.until( ASKED ), "the PC opens eMail: it asks wha
 await sleep( 6000 );    // longer than the writer's 4 s autosave: nothing may save it meanwhile
 ok( ! ( await drafts() ).some( d => d.subject === "Enviado ya" ) && ! await writing(), "nothing goes back to Drafts on its own" );
 await answer( "drop" );
-ok( await settles( COPIES + ".then( l => ! l.includes( 'Enviado ya' ) )", 5000 ), "'Descartar': the copy goes" );
+ok( await settles( COPIES + ".then( l => ! l.includes( 'Enviado ya' ) )", 20000 ), "'Descartar': the copy goes" );
 ok( ! ( await drafts() ).some( d => d.subject === "Enviado ya" ) && ! await writing(), "…and Drafts stays without it" );
 
 section( "I4 - THE SAVE ON ITS WAY AND THE LEAVING ONE: THE LAST WORDS STAY (review RV-C)" );
 await knob( "slow=3000" );
 await compose( "bob@example.com", "Dos veces 0", "<div>uno</div>" );
-ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a slow save is on its way" );
+ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "a slow save is on its way" );
 await body( "<div>uno dos tres</div>" );
 await away();
-ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos veces 0" ).length >= 2, 15000 ), "both saves land" );
+ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos veces 0" ).length >= 2, 45000 ), "both saves land" );
 await knob( "slow=0" );
 ok( await openMail(), "eMail again" );
-ok( await settles( COPIES + ".then( l => ! l.includes( 'Dos veces 0' ) )", 15000 ) || await c.until( ASKED, 1000 ), "the copy is settled" );
+ok( await settles( COPIES + ".then( l => ! l.includes( 'Dos veces 0' ) )", 45000 ) || await c.until( ASKED, 1000 ), "the copy is settled" );
 if( await c.evaluate( ASKED ) ) await answer( "keep" );
 await sleep( 5000 );    // a copy put back is saved 4 s after it shows
 ok( ( await drafts() ).some( d => d.subject === "Dos veces 0" && d.text.includes( "uno dos tres" ) ), "the last words are still in Drafts", await drafts() );
@@ -327,15 +340,15 @@ await c.evaluate( FORGET );
 section( "I4 - TWINS OF ONE WRITER: BOTH STAY, NOTHING IS TRASHED (review RV-C, round 2)" );
 await knob( "slow=3000" );
 await compose( "bob@example.com", "Dos veces", "<div>uno</div>" );
-ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a slow save is on its way" );
+ok( await c.until( "/Guardando/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "a slow save is on its way" );
 await body( "<div>uno dos tres</div>" );
 await sleep( 1500 );    // the two saves then land in different seconds (the server's date has whole seconds)
 await away();
-ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos veces" ).length === 2, 15000 ), "both saves land: two drafts, one Message-ID",
+ok( await until( async () => ( await drafts() ).filter( d => d.subject === "Dos veces" ).length === 2, 45000 ), "both saves land: two drafts, one Message-ID",
     ( await drafts() ).filter( d => d.subject === "Dos veces" ) );
 await knob( "slow=0" );
 ok( await openMail(), "eMail again (the copy here makes it look at that draft)" );
-ok( await settles( COPIES + ".then( l => ! l.includes( 'Dos veces' ) )", 15000 ), "the copy (same words as the newest) only goes" );
+ok( await settles( COPIES + ".then( l => ! l.includes( 'Dos veces' ) )", 45000 ), "the copy (same words as the newest) only goes" );
 ok( await readDrafts(), "the Drafts tray is read" );
 ok( ( await drafts() ).filter( d => d.subject === "Dos veces" ).length === 2, "both drafts stay (a duplicate is not a loss)",
     ( await drafts() ).filter( d => d.subject === "Dos veces" ) );
@@ -348,10 +361,10 @@ section( "I1 - A KEPT FILE GONE: MENDED, AND IT SAVES AGAIN (review 4)" );
 ok( await openMail(), "eMail again" );
 await compose( "bob@example.com", "Con fichero", "<div>con adjunto</div>" );
 ok( await attach( "informe-ds.txt", "un informe\n" ), "a file from this device" );
-ok( await settles( COPIES + ".then( l => l.includes( 'Con fichero' ) )", 5000 ), "the copy here is written" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Con fichero' ) )", 20000 ), "the copy here is written" );
 ok( ( await c.evaluate( RECORDS ) ).length === 1, "one record here for the mail and its file (sign-out counts mails, not files)", await c.evaluate( RECORDS ) );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "saved: the file now lives in the draft", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saved: the file now lives in the draft", await status() );
 const rowF = ( await rows( "drafts" ) ).find( m => m.subject === "Con fichero" );
 const partF = ( ( await msgOf( rowF.ref ) ).parts || [] ).find( p => p.name === "informe-ds.txt" );
 ok( partF && await phoneSave( rowF, "con adjunto y del movil", [ { acct, ref: rowF.ref, part: partF.id } ] ) === 200,
@@ -359,7 +372,7 @@ ok( partF && await phoneSave( rowF, "con adjunto y del movil", [ { acct, ref: ro
 await body( "<div>con adjunto y mas del PC</div>" );
 await c.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; true" );     // the next 'saved' is this save's
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "the PC's save meets 'gone', mends, and saves", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "the PC's save meets 'gone', mends, and saves", await status() );
 let pc = null;
 for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "mas del PC" ) ) pc = m; }
 ok( pc && ( pc.parts || [] ).some( p => p.name === "informe-ds.txt" ), "the PC's draft has its words and the file", pc && pc.parts );
@@ -381,7 +394,7 @@ await closeWriter();
 section( "I1 - A COPY WRITTEN BEFORE THE ACCOUNT IS KNOWN GETS ITS OWNER (review 6)" );
 await c.evaluate( "NayiveMail.S.user = ''; true" );        // as after a start with no answer
 await compose( "bob@example.com", "Sin dueño", "<div>de quién</div>" );
-ok( await settles( RECORDS + ".then( l => l.some( x => x.endsWith( '=ana=Sin dueño' ) ) )", 8000 ), "the copy is written again with its owner", await c.evaluate( RECORDS ) );
+ok( await settles( RECORDS + ".then( l => l.some( x => x.endsWith( '=ana=Sin dueño' ) ) )", 30000 ), "the copy is written again with its owner", await c.evaluate( RECORDS ) );
 await closeWriter();
 
 section( "ROUND 2 T1 - TWINS THAT DIFFER (SUBJECT, TO, A FILE, EMPTY TEXT) BOTH STAY" );
@@ -417,7 +430,7 @@ ok( ! ( await byMid( "trash", M3 ) ).length, "the draft open in tab 2 is not tra
 await t2.evaluate( "( async () => { document.getElementById( 'cText' ).innerHTML = '<div>Adjunto el contrato. Saludos desde la pestana 2</div>'; await new Promise( r => setTimeout( r, 80 ) ); return true; } )()" );
 await t2.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; true" );
 await t2.evaluate( "Object.defineProperty( document, 'hidden', { value: true, configurable: true } ); document.dispatchEvent( new Event( 'visibilitychange' ) ); delete document.hidden; true" );
-ok( await t2.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "tab 2 saves" );
+ok( await t2.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "tab 2 saves" );
 let t3 = null;
 for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "pestana 2" ) ) t3 = r; }
 ok( t3 && ( await filesOf( t3.ref ) ).some( f => f.startsWith( "contrato.pdf=CONTRATO-BYTES" ) ), "tab 2's draft still has contrato.pdf" );
@@ -430,13 +443,13 @@ await compose( "bob@example.com", "Mismo nombre", "<div>foto del PC</div>" );
 await attachMany( c, [ mkfile( "a", "image.png", "IMAGEN-ORIGINAL-DEL-PC" ) ] );
 await c.until( "document.getElementById( 'cFiles' ).textContent.includes( 'image.png' )" );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "saved with image.png" );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saved with image.png" );
 const r4 = ( await rows( "drafts" ) ).find( m => m.subject === "Mismo nombre" );
 await save( { mid: r4.mid, ref: r4.ref, subject: "Mismo nombre", text: "foto del movil" }, [ [ "image.png", "OTRA-IMAGEN-DEL-MOVIL" ] ] );
 await body( "<div>foto del PC y mas del PC cuatro</div>" );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'cStatus' ).textContent = ''; true" );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "the PC's save mends and saves", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "the PC's save mends and saves", await status() );
 let t4 = null;
 for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "mas del PC cuatro" ) ) t4 = r; }
 ok( t4 && ! ( await filesOf( t4.ref ) ).some( f => f.includes( "OTRA-IMAGEN-DEL-MOVIL" ) ), "the PC's draft does not carry the phone's other image.png", t4 && await filesOf( t4.ref ) );
@@ -448,14 +461,14 @@ await compose( "bob@example.com", "Dos imagenes", "<div>dos capturas</div>" );
 await attachMany( c, [ mkfile( "b", "image.png", "CAPTURA-UNO" ), mkfile( "c", "image.png", "CAPTURA-DOS" ) ] );
 await c.until( "( document.getElementById( 'cFiles' ).textContent.match( /image\\.png/g ) || [] ).length >= 2" );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "saved with two image.png" );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "saved with two image.png" );
 const r5 = ( await rows( "drafts" ) ).find( m => m.subject === "Dos imagenes" );
 const p5 = ( ( await msgOf( r5.ref ) ).parts || [] ).filter( p => ! p.inline );
 await save( { mid: r5.mid, ref: r5.ref, subject: "Dos imagenes", text: "dos capturas y del movil", keep: p5.map( p => ( { acct, ref: r5.ref, part: p.id } ) ) } );
 await body( "<div>dos capturas y mas del PC cinco</div>" );
 await c.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; true" );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 15000 ), "the PC's save mends and saves" );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "the PC's save mends and saves" );
 let t5 = null;
 for( const r of await rows( "drafts" ) ) { const m = await msgOf( r.ref ); if( ( m.text || "" ).includes( "mas del PC cinco" ) ) t5 = r; }
 const t5files = t5 ? await filesOf( t5.ref ) : [];
@@ -472,16 +485,16 @@ ok( await t6.until( "NayiveMail.S.accounts.length && typeof navigator.locks.quer
 await sleep( 2500 );     // eMail's opening (restoreLocal, where the sweep is) has had its time
 ok( await c.evaluate( BYTES( "get", "dsorphan#f1" ) ), "bytes with no copy are left alone there (it cannot tell a writer on screen)" );
 await t6.evaluate( "location.href = 'about:blank'; true" );
-ok( await openMail() && await settles( BYTES( "get", "dsorphan#f1" ) + ".then( v => ! v )", 8000 ), "(a browser that can tell sweeps them)" );
+ok( await openMail() && await settles( BYTES( "get", "dsorphan#f1" ) + ".then( v => ! v )", 30000 ), "(a browser that can tell sweeps them)" );
 
 section( "ROUND 2 (5) - A COPY'S DRAFT BEYOND THE FIRST PAGE OF DRAFTS IS FOUND" );
 await compose( "bob@example.com", "Lejos", "<div>en la segunda pagina</div>" );
-ok( await settles( COPIES + ".then( l => l.includes( 'Lejos' ) )", 5000 ), "the copy here is written" );
+ok( await settles( COPIES + ".then( l => l.includes( 'Lejos' ) )", 20000 ), "the copy here is written" );
 await away();
 ok( await until( async () => ( await rows( "drafts" ) ).some( m => m.subject === "Lejos" ) ), "the save as the page went reached Drafts" );
 for( let i = 0; i < 52; i++ ) await save( { mid: "nayive.dsfill" + i + "." + Date.now() + "@example.com", subject: "Relleno " + i, text: "relleno" } );
 ok( ! ( await rows( "drafts" ) ).some( m => m.subject === "Lejos" ), "(52 newer drafts: it is past the first page)" );
-ok( await openMail() && await settles( COPIES + ".then( l => ! l.includes( 'Lejos' ) )", 15000 ), "the copy finds its draft (same words) and only goes",
+ok( await openMail() && await settles( COPIES + ".then( l => ! l.includes( 'Lejos' ) )", 45000 ), "the copy finds its draft (same words) and only goes",
     await c.evaluate( COPIES ) );
 ok( ! await c.evaluate( ASKED ) && ! await writing(), "no question, no writer" );
 
@@ -491,7 +504,7 @@ ok( await openMail(), "eMail again" );
 await compose( "juan, bob@example.com", "Para Juan", "<div>un texto para juan</div>" );
 await c.evaluate( "document.getElementById( 'cStatus' ).textContent = ''; window.__toasts = []; true" );
 await saveNow();
-ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "a To of 'juan' does not stop the save", await status() );
+ok( await c.until( "/Borrador guardado/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "a To of 'juan' does not stop the save", await status() );
 ok( ! /No se guardó/.test( await toasts() ), "…and no 'not saved' is said", await toasts() );
 await closeWriter();
 ok( await readDrafts() && await c.until( "NayiveMail.S.items.some( m => m.subject === 'Para Juan' )" ), "the draft is in Drafts" );
@@ -505,9 +518,9 @@ await fetch( s.base + "/e2e/send?nocopy=1" );
 await c.evaluate( "NayiveMail.openTray( 'inbox' ); true" );
 await compose( "bob@example.com", "Sin copia", "<div>el texto sin copia</div>" );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'cSend' ).click(); true" );
-ok( await c.until( "document.getElementById( 'composeView' ).hidden && !! document.querySelector( '#toast .toast-undo' )", 15000 ), "Send: saved, then its Undo" );
+ok( await c.until( "document.getElementById( 'composeView' ).hidden && !! document.querySelector( '#toast .toast-undo' )", 30000 ), "Send: saved, then its Undo" );
 await c.evaluate( "NayiveUI.undoSettle(); true" );         // the Undo's 6 s, now
-ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudo guardar una copia en Enviados/.test( t ) )", 15000 ),
+ok( await c.until( "( window.__toasts || [] ).some( t => /no se pudo guardar una copia en Enviados/.test( t ) )", 30000 ),
     "it went, and the toast says no copy was kept in Sent", await toasts() );
 ok( await until( async () => ( await rows( "drafts" ) ).some( m => m.subject === "Sin copia" ) ), "its draft stays in Drafts (the only copy of the words)" );
 await fetch( s.base + "/e2e/send?nocopy=0" );
@@ -547,14 +560,14 @@ await knob( "fail=1" );
 await fetch( s.base + "/e2e/send?nocopy=1" );
 await compose( "bob@example.com", "Cuota llena", "<div>texto que solo existe aqui</div>" );
 await saveNow();
-ok( await c.until( "/No se guard|no responde/.test( document.getElementById( 'cStatus' ).textContent )", 12000 ), "the draft save is refused", await status() );
+ok( await c.until( "/No se guard|no responde/.test( document.getElementById( 'cStatus' ).textContent )", 30000 ), "the draft save is refused", await status() );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'cSend' ).click(); true" );
-ok( await c.until( "document.getElementById( 'composeView' ).hidden", 15000 ), "Send: it goes out at once (no draft to wait in)" );
+ok( await c.until( "document.getElementById( 'composeView' ).hidden", 30000 ), "Send: it goes out at once (no draft to wait in)" );
 ok( await until( async () => /Cuota llena/.test( await ( await fetch( s.base + "/e2e/sent" ) ).text() ) ), "it was sent" );
-ok( await c.until( "( window.__toasts || [] ).some( t => /ni en Enviados ni en Borradores/.test( t ) )", 10000 ),
+ok( await c.until( "( window.__toasts || [] ).some( t => /ni en Enviados ni en Borradores/.test( t ) )", 30000 ),
     "the toast says no copy is anywhere but here", await toasts() );
 ok( ! ( await rows( "drafts" ) ).some( m => m.subject === "Cuota llena" ), "(no draft of it on the server)" );
-ok( await settles( COPIES + ".then( l => l.includes( 'Cuota llena' ) )", 5000 ), "the copy on this device stays", await c.evaluate( COPIES ) );
+ok( await settles( COPIES + ".then( l => l.includes( 'Cuota llena' ) )", 20000 ), "the copy on this device stays", await c.evaluate( COPIES ) );
 await knob( "fail=0" );
 await fetch( s.base + "/e2e/send?nocopy=0" );
 ok( await openMail() && await c.until( ASKED ), "eMail opened again: it offers the words back" );

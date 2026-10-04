@@ -111,6 +111,12 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, http.StatusMethodNotAllowed, "use GET or POST")
 		return
 	}
+	// Extract and Compress write files: never from a page of another account
+	// (L5, store_owner.go). Before the zip's own 423 (a password): a stale
+	// tab is told nothing about a zip it may not even reach.
+	if r.Method == http.MethodPost && !s.saveOwnerOK(w, r, role, user) {
+		return
+	}
 	q := cleanQuery(r)
 	if r.Method == http.MethodPost && q.Has("paths") {
 		s.zipCompress(w, r, role, user, q.All("paths"))

@@ -105,7 +105,7 @@ func TestDS_L2_PurgeNotAnsweredWhenHomeMoved(t *testing.T) {
 func TestDS_L1_EnqueueAfterRenameQueuesNoOldName(t *testing.T) {
 	srv, ts, _ := newTestServer(t)
 	if !srv.convert.Available() {
-		// Enqueue needs ffmpeg to be there; nothing runs it in a test (the
+		// EnqueueAt needs ffmpeg to be there; nothing runs it in a test (the
 		// worker starts in main), so any name will do.
 		srv.convert.ffmpeg, srv.convert.ffprobe = "ffmpeg", "ffprobe"
 	}

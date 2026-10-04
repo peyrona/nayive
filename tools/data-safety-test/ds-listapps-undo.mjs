@@ -17,6 +17,10 @@ import { server, browser, ok, section, done, onDisk, click, sleep } from "./lib.
 const s = await server();
 const c = await browser( s );
 const phone = await s.client();
+// Every wait here is for something that must come (a save, a re-read, a
+// toast): a loaded machine gets 30 s for each, not lib.mjs's 15.
+const until15 = c.until;
+c.until = ( expr, ms = 30000 ) => until15( expr, ms );
 await c.evaluate( "['split','contact','bookmarks','calendar'].forEach( a => localStorage.setItem( 'balata-intro-dismiss:' + a, '1' ) ); true" );
 
 // A file set up for a case, through the server (a PUT): written straight to disk
@@ -25,7 +29,7 @@ await c.evaluate( "['split','contact','bookmarks','calendar'].forEach( a => loca
 const write = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json  = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
 // Waits for a condition on the server's disk (never a fixed time).
-async function disk( fn, ms = 15000 )
+async function disk( fn, ms = 30000 )
 {
     const end = Date.now() + ms;
     while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
@@ -63,9 +67,12 @@ async function reopen( p, want )
     return opened;
 }
 const TMP = fs.mkdtempSync( path.join( os.tmpdir(), "ds-undo-" ) );
-// Presses the Undo once it is on show (false when none comes).
-const undo = async () => ( await c.until( "document.querySelector( '#toast .toast-undo' )", 15000 ) ) &&
-    c.evaluate( "( () => { const b = document.querySelector( '#toast .toast-undo' ); if( b ) b.click(); return !! b; } )()" );
+// The Undo of the toast ON SHOW, clicked once it is there: an app shows it
+// after its save answered (Contacts' import: after `await saveContacts()`),
+// which a loaded machine makes take seconds. (A hidden toast keeps its old
+// button in the DOM - only `.show` is the current one.)
+const UNDO = "document.querySelector( '#toast.show .toast-undo' )";
+const undo = async () => await c.until( UNDO, 30000 ) && c.evaluate( `( () => { const b = ${UNDO}; if( b ) b.click(); return !! b; } )()` );
 // The page's PUT answers from now on (window.__puts): proof that a save really
 // met another device's (412) - a re-read in between would make it a plain 200.
 const PUTLOG = `( () => { window.__puts = []; const f = window.fetch;
@@ -247,7 +254,8 @@ section( "H4 · CALENDAR: delete on a stale copy (412 -> merge), the Undo stays 
     await c.evaluate( "document.getElementById('deleteBtn').click(); true" );
     ok( await disk( () => sums() === "Alpha,Charlie" ), "deleted; the save met the phone's and kept Charlie", sums() );
     ok( await c.evaluate( "window.__puts.includes( 412 )" ), "...through a 412 and a merge", await c.evaluate( "window.__puts" ) );
-    ok( await c.evaluate( "document.getElementById('toast').classList.contains('actionable') && document.getElementById('toast').classList.contains('show')" ),
+    // (waited for: the page hears its save's answer after the disk has it)
+    ok( await c.until( "document.getElementById('toast').classList.contains('actionable') && document.getElementById('toast').classList.contains('show')" ),
         "the Undo is still on show after the merge" );
     await undo();
     ok( await disk( () => sums() === "Alpha,Bravo,Charlie" ), "Undo: Bravo back, Charlie kept", sums() );

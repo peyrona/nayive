@@ -1240,6 +1240,11 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 				sendError(w, r, http.StatusForbidden, "no permitido")
 				return
 			}
+			// It writes into the owner's files: never from a page of
+			// another account (L5, store_owner.go).
+			if !s.saveOwnerOK(w, r, "user", a.o.user) {
+				return
+			}
 			s.chatKeep(w, r, a, c, id, body.Dir)
 		})
 
@@ -1256,6 +1261,9 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 		in(func(a chatActor, c *chatConv) {
 			if a.guest() {
 				sendError(w, r, http.StatusForbidden, "no permitido")
+				return
+			}
+			if !s.saveOwnerOK(w, r, "user", a.o.user) { // as Copiar: the owner's files
 				return
 			}
 			s.chatEdited(w, r, a, c, id, body)
@@ -2299,7 +2307,10 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 		sendError(w, r, http.StatusForbidden, "no permitido")
 		return
 	}
-	if info, err := folder.Stat(); err != nil || !info.IsDir() {
+	if info, err := folder.Stat(); err != nil {
+		sendMissing(w, r, err, "esa carpeta no existe") // 503 when the home moved under the request
+		return
+	} else if !info.IsDir() {
 		sendError(w, r, http.StatusNotFound, "esa carpeta no existe")
 		return
 	}
