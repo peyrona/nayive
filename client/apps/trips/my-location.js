@@ -159,22 +159,13 @@ function locationSection()
     // On makes the address; off asks first, then drops it.
     function masterRow()
     {
-        const row = document.createElement( 'label' );
-        row.className = 'share-add loc-master' + ( tracker ? ' on' : '' );
-
         const text = document.createElement( 'span' );
         text.className   = 'loc-master-text';
         text.textContent = loaded ? t( tracker ? 'trips.loc.on' : 'trips.loc.none' ) : '…';
-        row.appendChild( text );
-        if( loaded && ! tracker ) row.appendChild( infoButton() );
 
-        const input = document.createElement( 'input' );
-        input.type     = 'checkbox';
-        // The row is a <label>: tie it to the switch, or a click anywhere
-        // in it goes to the (i), the first control inside.
-        input.id       = 'locMasterSw';
-        row.htmlFor    = input.id;
-        input.checked  = !! tracker;
+        const sw    = switchRow( 'share-add loc-master' + ( tracker ? ' on' : '' ), 'locMasterSw', !! tracker,
+                                 loaded && ! tracker ? [ text, infoButton() ] : [ text ] );
+        const input = sw.input;
         input.disabled = ! loaded;
         input.addEventListener( 'change', function()
         {
@@ -187,15 +178,7 @@ function locationSection()
             done.then( load, function( e ) { NayiveUI.toast( e.message || t( 'ui.loadFailed' ) ); load(); } );
         } );
 
-        const sw = document.createElement( 'span' );
-        sw.className = 'switch sm';
-        const track = document.createElement( 'span' );
-        track.className = 'track';
-        sw.appendChild( input );
-        sw.appendChild( track );
-        row.appendChild( sw );
-
-        return row;
+        return sw.row;
     }
 
     function render()

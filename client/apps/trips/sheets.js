@@ -1,6 +1,64 @@
 /* sheets.js - the trip sheet and the stage sheet. */
 
 //------------------------------------------------------------------------//
+// RENDERING - THE FRAME BOTH SHEETS SHARE
+
+// Empties the sheet and starts it: the <h2> title, then the last save's error.
+function sheetTop( sheet, sTitle, sError )
+{
+    sheet.innerHTML = '';
+
+    const h2 = document.createElement( 'h2' );
+    h2.textContent = sTitle;
+    sheet.appendChild( h2 );
+
+    if( sError )
+    {
+        const err = document.createElement( 'p' );
+        err.className = 'calc-warn';
+        err.textContent = sError;
+        sheet.appendChild( err );
+    }
+}
+
+// The sheet's bottom row: [delete] (only with fnDelete) ... [cancel] [save].
+function sheetActions( sheet, bBusy, sDeleteTitle, fnDelete, fnCancel, fnSave )
+{
+    const actions = document.createElement( 'div' );
+    actions.className = 'sheet-actions';
+
+    if( fnDelete )
+    {
+        const delBtn = document.createElement( 'button' );
+        delBtn.className = 'btn btn-danger sheet-actions-left';
+        delBtn.title = sDeleteTitle;
+        delBtn.disabled = bBusy;
+        delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
+        // Already inside a dialog: no second question, it goes at once with an Undo.
+        delBtn.addEventListener( 'click', fnDelete );
+        actions.appendChild( delBtn );
+    }
+
+    const cancelBtn = document.createElement( 'button' );
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
+    cancelBtn.disabled = bBusy;
+    cancelBtn.appendChild( svgIcon( ICON_X, 17 ) );
+    cancelBtn.addEventListener( 'click', fnCancel );
+
+    const saveBtn = document.createElement( 'button' );
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.title = bBusy ? T( 'ui.sync.saving' ) : T( 'ui.save' );
+    saveBtn.disabled = bBusy;
+    saveBtn.appendChild( svgIcon( ICON_CHECK, 18 ) );
+    saveBtn.addEventListener( 'click', fnSave );
+
+    actions.appendChild( cancelBtn );
+    actions.appendChild( saveBtn );
+    sheet.appendChild( actions );
+}
+
+//------------------------------------------------------------------------//
 // RENDERING - TRIP SHEET
 
 let tripSheetBusy = false;
@@ -15,19 +73,7 @@ function setTripSheetBusy( b )
 function renderTripSheet()
 {
     const sheet = document.getElementById( 'tripSheet' );
-    sheet.innerHTML = '';
-
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = isEditingTrip ? T( 'trips.editTrip' ) : T( 'trips.newTrip' );
-    sheet.appendChild( h2 );
-
-    if( tripSaveError )
-    {
-        const err = document.createElement( 'p' );
-        err.className = 'calc-warn';
-        err.textContent = tripSaveError;
-        sheet.appendChild( err );
-    }
+    sheetTop( sheet, isEditingTrip ? T( 'trips.editTrip' ) : T( 'trips.newTrip' ), tripSaveError );
 
     // The label reads "Descripcion" now, but the key and the stored field stay
     // `destination`: that is what names the trip's folder (resolveNewTripDirName)
@@ -44,32 +90,15 @@ function renderTripSheet()
     // "Save where I am": on unless switched off. The server keeps the trip's
     // positions (a location app, photos with GPS) for its Journey map; only an OFF is
     // written - on is the key left out (server/go/positions.go).
-    const trackLab = document.createElement( 'label' );
-    trackLab.className = 'share-add';
-    const trackBox = document.createElement( 'input' );
-    trackBox.type    = 'checkbox';
-    // Tie the <label> to the switch, or a click in it goes to the (i).
-    trackBox.id      = 'tripTrackSw';
-    trackLab.htmlFor = trackBox.id;
-    trackBox.checked = tripDraft.track !== false;
-    trackBox.addEventListener( 'change', function()
-    {
-        if( trackBox.checked ) delete tripDraft.track; else tripDraft.track = false;
-    });
     const trackInfo = document.createElement( 'button' );
     trackInfo.className = 'info-dot';
     trackInfo.setAttribute( 'data-info', T( 'trips.trackInfo' ) );
-    // An on / off option: the text, its (i), then the shared .switch.
-    const trackSw = document.createElement( 'span' );
-    trackSw.className = 'switch sm';
-    const trackTrack = document.createElement( 'span' );
-    trackTrack.className = 'track';
-    trackSw.appendChild( trackBox );
-    trackSw.appendChild( trackTrack );
-    trackLab.appendChild( document.createTextNode( T( 'trips.track' ) ) );
-    trackLab.appendChild( trackInfo );
-    trackLab.appendChild( trackSw );
-    sheet.appendChild( trackLab );
+    const track = switchRow( 'share-add', 'tripTrackSw', tripDraft.track !== false, [ document.createTextNode( T( 'trips.track' ) ), trackInfo ] );
+    track.input.addEventListener( 'change', function()
+    {
+        if( track.input.checked ) delete tripDraft.track; else tripDraft.track = false;
+    });
+    sheet.appendChild( track.row );
 
     // A plain "Documentos" heading: the "+" and the info dot live beside the one
     // on the trip detail screen, which is also where this sheet is opened from.
@@ -89,38 +118,7 @@ function renderTripSheet()
     tripDocsField.classList.add( 'trip-docs-field' );
     sheet.appendChild( tripDocsField );
 
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
-
-    if( isEditingTrip )
-    {
-        const delBtn = document.createElement( 'button' );
-        delBtn.className = 'btn btn-danger sheet-actions-left';
-        delBtn.title = T( 'trips.deleteTrip' );
-        delBtn.disabled = tripSheetBusy;
-        delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
-        // Already inside a dialog: no second question, it goes at once with an Undo.
-        delBtn.addEventListener( 'click', deleteTrip );
-        actions.appendChild( delBtn );
-    }
-
-    const cancelBtn = document.createElement( 'button' );
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
-    cancelBtn.disabled = tripSheetBusy;
-    cancelBtn.appendChild( svgIcon( ICON_X, 17 ) );
-    cancelBtn.addEventListener( 'click', closeTripSheet );
-
-    const saveBtn = document.createElement( 'button' );
-    saveBtn.className = 'btn btn-primary';
-    saveBtn.title = tripSheetBusy ? T( 'ui.sync.saving' ) : T( 'ui.save' );
-    saveBtn.disabled = tripSheetBusy;
-    saveBtn.appendChild( svgIcon( ICON_CHECK, 18 ) );
-    saveBtn.addEventListener( 'click', saveTrip );
-
-    actions.appendChild( cancelBtn );
-    actions.appendChild( saveBtn );
-    sheet.appendChild( actions );
+    sheetActions( sheet, tripSheetBusy, T( 'trips.deleteTrip' ), isEditingTrip ? deleteTrip : null, closeTripSheet, saveTrip );
 }
 
 // Updates the visible "will be stored at ..." preview under each UPLOAD document row
@@ -267,19 +265,7 @@ function buildTzStatusField()
 function renderStageSheet()
 {
     const sheet = document.getElementById( 'stageSheet' );
-    sheet.innerHTML = '';
-
-    const h2 = document.createElement( 'h2' );
-    h2.textContent = editingStageId ? T( 'trips.editStage' ) : T( 'trips.addStage' );
-    sheet.appendChild( h2 );
-
-    if( stageSaveError )
-    {
-        const err = document.createElement( 'p' );
-        err.className = 'calc-warn';
-        err.textContent = stageSaveError;
-        sheet.appendChild( err );
-    }
+    sheetTop( sheet, editingStageId ? T( 'trips.editStage' ) : T( 'trips.addStage' ), stageSaveError );
 
     sheet.appendChild( locationField( T( 'trips.location' ), T( 'trips.cityOrPlace' ), stageDraft.location, function( v ) { stageDraft.location = v; scheduleStageTzLookup(); } ) );
     sheet.appendChild( buildTzStatusField() );
@@ -328,36 +314,5 @@ function renderStageSheet()
 
     sheet.appendChild( buildDocsField( docRows, [ docsInfo, addDocBtn ], stageDocsCollapsed, function( b ) { stageDocsCollapsed = b; } ) );
 
-    const actions = document.createElement( 'div' );
-    actions.className = 'sheet-actions';
-
-    if( editingStageId )
-    {
-        const delBtn = document.createElement( 'button' );
-        delBtn.className = 'btn btn-danger sheet-actions-left';
-        delBtn.title = T( 'trips.deleteStage' );
-        delBtn.disabled = stageSheetBusy;
-        delBtn.appendChild( svgIcon( ICON_TRASH, 17 ) );
-        // Already inside a dialog: no second question, it goes at once with an Undo.
-        delBtn.addEventListener( 'click', deleteStageFromSheet );
-        actions.appendChild( delBtn );
-    }
-
-    const cancelBtn = document.createElement( 'button' );
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.title = NayiveUI.t( 'ui.cancel' );
-    cancelBtn.disabled = stageSheetBusy;
-    cancelBtn.appendChild( svgIcon( ICON_X, 17 ) );
-    cancelBtn.addEventListener( 'click', closeStageSheet );
-
-    const saveBtn = document.createElement( 'button' );
-    saveBtn.className = 'btn btn-primary';
-    saveBtn.title = stageSheetBusy ? T( 'ui.sync.saving' ) : T( 'ui.save' );
-    saveBtn.disabled = stageSheetBusy;
-    saveBtn.appendChild( svgIcon( ICON_CHECK, 18 ) );
-    saveBtn.addEventListener( 'click', saveStage );
-
-    actions.appendChild( cancelBtn );
-    actions.appendChild( saveBtn );
-    sheet.appendChild( actions );
+    sheetActions( sheet, stageSheetBusy, T( 'trips.deleteStage' ), editingStageId ? deleteStageFromSheet : null, closeStageSheet, saveStage );
 }
