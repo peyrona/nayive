@@ -1,5 +1,5 @@
 /* bookmarks.css - Bookmarks' own layout. Every control wears the shared look
-   from ../shared/app.css (.icon-btn, .folder-row, .card-row, .pill, .sheet,
+   from ../shared/app.css (.icon-btn, .ntree, .card-row, .pill, .sheet,
    .field, .top-menu, .open-crumb, .empty-hint, .pane-resizer, .text-btn);
    only placement and the few things no other app has live here. */
 
@@ -16,9 +16,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 .tree-head  { display: flex; align-items: center; gap: 2px; padding: 2px 0 6px 6px; }
 .tree-head .section-label { flex: 1 1 auto; margin: 0; }
-/* The rows are the shared tree (.ntree, app.css). */
-#tree.ntree { min-width: 0; }
-#tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The rows are the shared tree (.ntree.tree-fit, app.css). */
 
 /* --- List pane -------------------------------------------------------- */
 .list-pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 28px; }

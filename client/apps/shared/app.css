@@ -1131,6 +1131,26 @@ input[type="range"]
 }
 .tb-select:hover   { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
+/* The same control as a number box (Text's right-margin spinner): every
+ * property restated, to beat the filled FORM FIELD look every <input> gets.
+ * It keeps the browser's own up / down arrows - that is what makes it a
+ * spinner. */
+.tb-num
+{
+    width: 4.6em;
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0 0 0 6px;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    outline: none;
+}
+.tb-num:hover      { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
 
 /* -----------------------------------------------------------------------------
  * TOOLBAR INPUT  (.tb-input)  -  Calc's name box and formula bar
@@ -1194,6 +1214,8 @@ input[type="range"]
 /* A settings dialog's tabs: a row of .pill buttons over its panes
    (Trips, Chat). */
 .set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+/* A page's own row of .pill tabs (Habits, Split): the margin is the page's. */
+.tabs     { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .tag
 {
@@ -2286,7 +2308,7 @@ button { -webkit-touch-callout: none; }
 
 
 /* -----------------------------------------------------------------------------
- * MEDIA VIEWER  (.main-row, .folder-row, .scope-chip, .empty-hint, .player-bar)
+ * MEDIA VIEWER  (.main-row, .view-head, .media-card, .scope-chip, .empty-hint, .player-bar)
  *
  * Photos, Music and Movies are one app shape wearing three skins: a folder tree
  * (or scope chip) on the left, a scrolling library in the middle, a transport
@@ -2301,28 +2323,25 @@ button { -webkit-touch-callout: none; }
  * ---------------------------------------------------------------------------*/
 .main-row          { flex: 1 1 auto; display: flex; min-height: 0; }
 
-/* A row in the folder tree / side list. Also the "pick a folder" rows. */
-.folder-row
+/* A library view's heading (Music, Movies). Its bottom margin is the app's. */
+.view-head         { font-size: 0.95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.view-head small   { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+
+/* A card in a library grid (Music's albums and artists, Movies' genres): its
+   title and the line under it. The grid, the art and any other padding are
+   the app's. */
+.media-card
 {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    padding: 8px 10px;
-    border: none;
-    border-radius: var(--radius-s);
-    background: none;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.88rem;
-    text-align: left;
-    cursor: pointer;
-    transition: background-color var(--tr-fast), color var(--tr-fast);
+    display: flex; flex-direction: column; gap: 10px; padding: 12px;
+    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
+    cursor: pointer; text-align: left; font: inherit; color: inherit;
+    transition: border-color var(--tr-fast), background-color var(--tr-fast);
 }
-.folder-row:hover           { background: color-mix(in srgb, var(--text) 8%, transparent); }
-.folder-row.is-active       { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-.folder-row svg             { width: 16px; height: 16px; flex: 0 0 auto; color: var(--text-dim); }
-.folder-row.is-active svg   { color: var(--accent); }
+.media-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.media-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+.media-card-title     { font-size: 0.86rem; font-weight: 600; color: var(--text);
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-card-sub       { font-size: 0.76rem; color: var(--text-dim); }
 
 /* "You are looking at <folder> [x]" - the pill above a scoped library. */
 .scope-chip
@@ -2635,7 +2654,8 @@ input[type=range]:disabled           { opacity: 0.5; }
     /* Fingers, not pointers: the dense 30px toolbar button grows to 36px, and
        the toolbar select grows with it so the row stays one height. */
     .icon-btn.sm       { width: 36px; height: 36px; }
-    .tb-select         { height: 36px; }
+    .tb-select,
+    .tb-num            { height: 36px; }
 }
 /* A text field under 16px makes iOS Safari zoom the whole page in when it gets
    focus - and it never zooms back out. So on a touch phone every field is at
@@ -2881,6 +2901,11 @@ html.nv-locked body { visibility: hidden; }
 .ntree .tree-row.is-active .twisty,
 .ntree .tree-row.is-active .tree-ic          { color: inherit; }
 .ntree .tree-name                            { flex: 1 1 auto; }
+/* .tree-fit: a side pane of fixed width (Music, Movies, Photos, Bookmarks,
+   Contacts) - the tree drops its max-content floor and a long name ends in
+   "…". Drive's has no .tree-fit: its pane scrolls sideways instead. */
+.ntree.tree-fit                              { min-width: 0; }
+.ntree.tree-fit .tree-name                   { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ntree .tree-badge
 {
     flex: 0 0 auto;

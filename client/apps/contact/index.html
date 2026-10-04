@@ -7,7 +7,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The interface language. First of all: it hides the page until the
          dictionary is in, and every inline script below may call it. -->
     <script src="../shared/i18n.js"></script>
@@ -192,12 +192,11 @@
 
         /* --- The groups tree (All contacts, Favourites, Groups) -------------
            Above 640px the card widens and the tree sits left of the list; on a
-           phone it slides in from #treeBtn (the shared .tree-sheet, app.css).
+           phone it slides in from #treeBtn (the shared .tree-sheet, app.css);
+           its rows are the shared .ntree.tree-fit.
            The rail and its bubble follow the wider card's right edge. */
         .ct-body { display: flex; align-items: flex-start; gap: 12px; }
         .ct-body > .list-scroll { flex: 1 1 auto; min-width: 0; }
-        #tree.ntree { min-width: 0; }
-        #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .ct-where  { display: none; }
         @media (min-width: 641px)
         {
@@ -387,7 +386,7 @@
                      window both scroll on their own, under the toolbar. -->
                 <div class="ct-body">
                 <nav id="treePane" class="tree-pane" data-i18n-attr="aria-label:contact.groups">
-                    <div id="tree"></div>
+                    <div id="tree" class="tree-fit"></div>
                 </nav>
                 <div class="list-scroll">
                 <div id="contactList"></div>

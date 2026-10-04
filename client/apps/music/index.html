@@ -86,9 +86,9 @@
        comes from shared/app.css (folder-backed viewers), search field included. */
 
     /* ---- main row: library + queue ----------------------------------
-       .main-row, .folder-row, .scope-chip, .empty-hint and the whole player
-       bar are the shared MEDIA VIEWER block in shared/app.css. Only what is
-       really Music's own is below. */
+       .main-row, .view-head, .media-card, .scope-chip, .empty-hint and the
+       whole player bar are the shared MEDIA VIEWER block in shared/app.css.
+       Only what is really Music's own is below. */
 
     .pane-resizer { flex: 0 0 auto; width: 5px; cursor: col-resize; background: transparent;
                      transition: background-color var(--tr-fast); }
@@ -97,35 +97,20 @@
     .lib-pane   { flex: 1 1 auto; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
 
     /* ---- the tree: Library (songs, albums, artists, folders) and the
-       playlists. Its rows are the shared tree (.ntree, app.css); on a phone
-       it slides in from #treeBtn (the shared .tree-sheet). ---------------- */
+       playlists. Its rows are the shared tree (.ntree.tree-fit, app.css); on a
+       phone it slides in from #treeBtn (the shared .tree-sheet). ---------- */
     .tree-pane  { flex: 0 0 auto; width: 210px; overflow: auto; padding: 14px 6px 16px;
                   border-right: 1px solid var(--line); }
-    #tree.ntree { min-width: 0; }
-    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     #treeBtn    { display: none; }
-    .view-head  { margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; color: var(--text);
-                  overflow-wrap: anywhere; }
-    .view-head small { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+    .view-head  { margin: 0 0 12px; }
 
     .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 20px 28px; }
 
     .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
-    .album-card, .artist-card
-    { display: flex; flex-direction: column; gap: 10px; padding: 12px;
-      background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
-      cursor: pointer; text-align: left; font: inherit; color: inherit;
-      transition: border-color var(--tr-fast), background-color var(--tr-fast); }
-    .album-card:hover, .artist-card:hover { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-    .album-card.is-active, .artist-card.is-active
-    { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+    /* The album and artist cards are the shared .media-card (app.css). */
     .album-art  { width: 100%; aspect-ratio: 1; border-radius: var(--radius-s);
                   display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
     .album-art svg { width: 32%; height: 32%; }
-    .album-card-title, .artist-name
-    { font-size: 0.86rem; font-weight: 600; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .album-card-sub, .artist-meta { font-size: 0.76rem; color: var(--text-dim); }
 
     .artist-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
     .artist-card  { align-items: center; text-align: center; padding: 18px 10px; }
@@ -295,7 +280,7 @@
     <div class="main-row" id="mainRow" hidden>
 
         <!-- The tree: Library and the playlists (NayiveUI.tree, see TREE below). -->
-        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:music.library"><div id="tree"></div></nav>
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:music.library"><div id="tree" class="tree-fit"></div></nav>
 
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
@@ -952,10 +937,10 @@ function renderLibrary()
         html += '<div class="album-grid">' + albums.map( function ( a )
         {
             var active = st.selectedAlbum === a.key;
-            return '<button class="album-card' + ( active ? ' is-active' : '' ) + '" data-album="' + esc( a.key ) + '">' +
+            return '<button class="album-card media-card' + ( active ? ' is-active' : '' ) + '" data-album="' + esc( a.key ) + '">' +
                 '<span class="album-art" style="background:' + a.color + '">' + MUSIC_NOTE_SVG + '</span>' +
-                '<span class="album-card-title">' + esc( a.title ) + '</span>' +
-                '<span class="album-card-sub">' + esc( a.artist ) + ' · ' + a.count + '</span></button>';
+                '<span class="album-card-title media-card-title">' + esc( a.title ) + '</span>' +
+                '<span class="album-card-sub media-card-sub">' + esc( a.artist ) + ' · ' + a.count + '</span></button>';
         } ).join( "" ) + '</div>';
         if( st.selectedAlbum )
         {
@@ -971,10 +956,10 @@ function renderLibrary()
         html += '<div class="artist-grid">' + artists.map( function ( a )
         {
             var active = st.selectedArtist === a.name;
-            return '<button class="artist-card' + ( active ? ' is-active' : '' ) + '" data-artist="' + esc( a.name ) + '">' +
+            return '<button class="artist-card media-card' + ( active ? ' is-active' : '' ) + '" data-artist="' + esc( a.name ) + '">' +
                 '<span class="artist-avatar" style="background:' + a.color + '">' + esc( a.name.charAt( 0 ).toUpperCase() ) + '</span>' +
-                '<span class="artist-name">' + esc( a.name ) + '</span>' +
-                '<span class="artist-meta">' + esc( NayiveUI.tf( "music.artistCounts", { albums: a.albumCount, songs: a.songCount } ) ) + '</span></button>';
+                '<span class="artist-name media-card-title">' + esc( a.name ) + '</span>' +
+                '<span class="artist-meta media-card-sub">' + esc( NayiveUI.tf( "music.artistCounts", { albums: a.albumCount, songs: a.songCount } ) ) + '</span></button>';
         } ).join( "" ) + '</div>';
         if( st.selectedArtist )
         {
