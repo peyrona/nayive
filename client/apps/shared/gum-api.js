@@ -667,11 +667,6 @@
         return fetchText( API_FILES + "?" + q, { method: "POST" } ).then( JSON.parse );
     }
 
-    function trashEmpty()
-    {
-        return fetchText( API_FILES + "?trash=empty", { method: "POST" } ).then( JSON.parse );
-    }
-
     function trashDelete( ids )
     {
         var q = new URLSearchParams( { trash: "1", ids: ids.join( ";" ) } ).toString();
@@ -752,7 +747,6 @@
         // trash can
         trashList:       trashList,
         trashRestore:    trashRestore,
-        trashEmpty:      trashEmpty,
         trashDelete:     trashDelete,
         trashDays:       trashDays,
         setTrashDays:    setTrashDays,

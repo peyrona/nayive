@@ -5,7 +5,7 @@
  * today" sync).
  *
  * ES module - import what you need:
- *     import { icsToEventDefs, expandEventDef, eventDefsToIcs } from '../shared/ical.js';
+ *     import { icsToCalendar, expandEventDef, eventDefsToIcs } from '../shared/ical.js';
  *
  * Dependencies, all loaded by the app BEFORE its module script:
  *   - luxon  (classic-script global `luxon`)   - all the wall-clock / DST math
@@ -56,8 +56,6 @@ export function makeEventDef()
              start: { date: null, time: null }, end: { date: null, time: null },
              rrule: null };
 }
-
-export function icsToEventDefs( icsText ) { return icsToCalendar( icsText ).defs; }
 
 function vEventToDef( ev )
 {
@@ -1061,7 +1059,7 @@ export function instantiate( def, start, end, zone, durationMsOverride )
               startMs: startDt.toMillis(), endMs: endDt.toMillis() };
 }
 
-export function wallParts( wc )
+function wallParts( wc )
 {
     const [ y, m, d ] = wc.date.split( '-' ).map( Number );
     const [ hh, mm ]  = (wc.time || '00:00').split( ':' ).map( Number );
@@ -1094,7 +1092,7 @@ function wallDurationMs( def )
     return Math.max( eMs - sMs, 60000 );
 }
 
-export function overlaps( inst, rangeStartMs, rangeEndMs )
+function overlaps( inst, rangeStartMs, rangeEndMs )
 {
     return inst.startMs < rangeEndMs && inst.endMs > rangeStartMs;
 }

@@ -214,7 +214,6 @@ var PRECACHE_SHELL = [
     "write/find.js",
     "write/icons/icon-192.png",
     "write/icons/icon-512.png",
-    "write/icons/logo.svg",
     "write/index.html",
     "write/manifest.json",
     "write/proofing-overlay.js",

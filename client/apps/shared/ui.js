@@ -18,7 +18,7 @@
  *   - the bottom-centre transient toast (paired CSS is in shared/theme.css)
  *   - the viewer's IANA time zone
  *   - the interface language, re-exported from shared/i18n.js: t / tf /
- *     applyI18n / lang / saved / locale / weekday / month / setLang
+ *     applyI18n / lang / locale / weekday / month
  *   - dialog action buttons: the one Nayive style (see Calendar -> "Ir a mes").
  *   - the info dot: a circled "i" by a label that opens a small popup
  *     (NayiveUI.applyInfoDots; paired CSS .info-dot / .info-popup in app.css).
@@ -5527,11 +5527,9 @@
         tf:        tf,
         applyI18n: applyI18n,
         lang:      I18N ? I18N.lang    : function () { return "es"; },
-        saved:     I18N ? I18N.saved   : function () { return null; },
         locale:    I18N ? I18N.locale  : function () { return "es"; },
         weekday:   I18N ? I18N.weekday : function ( n ) { return String( n ); },
         month:     I18N ? I18N.month   : function ( n ) { return String( n ); },
-        setLang:   I18N ? I18N.setLang : function () {},
         applySheetButtons: applySheetButtons,
         applyInfoDots:     applyInfoDots,
         applyHomeLinks:    applyHomeLinks,

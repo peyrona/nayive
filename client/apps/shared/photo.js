@@ -572,8 +572,6 @@
         prepare:      prepare,
         shrinkToJpeg: shrinkToJpeg,
         keepExif:     keepExif,
-        editorLocale: editorLocale,
-        localizeEditor: localizeEditor,
         loadEditor:   loadEditor,
         newEditor:    newEditor,
         dataUrlBytes: dataUrlBytes,
