@@ -125,11 +125,8 @@ const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
                                ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'scBtn' ] } );
 
 // Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
-// Ayuda menu shows the same ones). setHelpMenu tells shared/ui.js to leave
-// the click to this menu instead of opening the guide card itself; the card
-// is the third entry.
-const helpMenu = O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
-NayiveUI.setHelpMenu( true );
+// Ayuda menu shows the same ones; the guide card is the third).
+const helpMenu = O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
 // ---- the toolbar's group cards (shared/office.js, groupPopup) ----
 // Four runs of near-identical buttons that cost fifteen slots on the bar and
@@ -147,46 +144,27 @@ const groups =
 
 // Called by format.js after every toolbar refresh.
 function syncGroupTriggers() { groups.forEach( function( g ) { if( g ) g.sync(); } ); }
-function closeGroupPopups()  { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // Folding sets height:0 rather than display:none - Handsontable sizes
 // itself to the space left over and re-renders on resize either way.
 const fold = O.foldingToolbar( { toolbar: 'fmtToolbar', afterChange: function() { if( table ) table.refreshDimensions(); } } );
 
-// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
-// first in the toolbar on a PC, a .fmt-btn with the drop-down caret its
-// neighbours carry; in the header on a phone, because the toolbar folds away
-// while you type.
-function placeFileButton()
-{
-    const btn = document.getElementById( 'moreBtn' );
-    const sep = document.getElementById( 'fileSep' );
-
-    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
-    else                sep.parentNode.insertBefore( btn, sep );
-
-    btn.className = PHONE.matches ? 'icon-btn' : 'fmt-btn has-popup';
-}
-
-// Once at start-up and again whenever the phone is turned. The split
-// itself is pure CSS, so this only does what CSS cannot: move the "?",
-// close the menus, unfold.
+// Once at start-up and again whenever the phone is turned (shared/office.js,
+// phoneChrome): the "?" and the File button move between the header and the
+// toolbar - the File button a .fmt-btn with the drop-down caret its neighbours
+// carry on a PC - the menus close, the toolbar unfolds on a PC. (The coach
+// marks skip a "?" they cannot see and try again later - shared/ui.js,
+// coachTargets.)
 function applyPhoneChrome()
 {
-    // The "?" moves to the header on a phone, where the toolbar folds away
-    // while you type - but NEVER in menu mode: the Ayuda menu is right
-    // there, and one "?" in two places at once is one too many. (The
-    // coach marks skip a "?" they cannot see and try again later, so
-    // hiding it costs nothing - shared/ui.js, coachTargets.)
-    const headerHelp = PHONE.matches && ! CHROME.on();
-
-    O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'savedAt' );
-    placeFileButton();
-    fileMenu.close();
-    if( helpMenu ) helpMenu.close();
-    closeGroupPopups();
-    fold.setMore( false );
-    if( ! PHONE.matches ) fold.setOpen( true );
+    O.phoneChrome( PHONE.matches, {
+        menus     : function() { return CHROME.on(); },
+        tools     : 'fmtToolbar',
+        helpBefore: 'moreToolsBtn',
+        fileClass : function( btn, phone ) { btn.className = phone ? 'icon-btn' : 'fmt-btn has-popup'; },
+        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
+        fold      : function() { return fold; }
+    } );
 }
 
 function wireStaticUI()
@@ -423,9 +401,6 @@ function wireStaticUI()
 
     document.getElementById( 'sortAscBtn'      ).addEventListener( 'click', function() { sortByColumn( false ); } );
     document.getElementById( 'sortDescBtn'     ).addEventListener( 'click', function() { sortByColumn( true  ); } );
-    document.getElementById( 'scBtn'           ).addEventListener( 'click', openShortcuts );
-    document.getElementById( 'statsBtn'        ).addEventListener( 'click', openStats );
-    document.getElementById( 'guideBtn'        ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
 
     document.getElementById( 'fmtFreezeBtn'    ).addEventListener( 'click', toggleFreezeColumns );
     document.getElementById( 'fmtFreezeRowBtn' ).addEventListener( 'click', toggleFreezeRows );
@@ -1082,14 +1057,12 @@ function openStats()
         }
     }
 
-    const n = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
-
     O.showStats( [
-        { text: T( 'calc.statSheets'   ), value: n( ( doc && doc.sheets ? doc.sheets.length : 1 ) ) },
-        { text: T( 'calc.statRows'     ), value: n( lastRow + 1 ) },
-        { text: T( 'calc.statCols'     ), value: n( lastCol + 1 ) },
-        { text: T( 'calc.statCells'    ), value: n( filled   ) },
-        { text: T( 'calc.statFormulas' ), value: n( formulas ) }
+        { text: T( 'calc.statSheets'   ), value: doc && doc.sheets ? doc.sheets.length : 1 },
+        { text: T( 'calc.statRows'     ), value: lastRow + 1 },
+        { text: T( 'calc.statCols'     ), value: lastCol + 1 },
+        { text: T( 'calc.statCells'    ), value: filled      },
+        { text: T( 'calc.statFormulas' ), value: formulas    }
     ], T( 'calc.statNote' ) );
 }
 

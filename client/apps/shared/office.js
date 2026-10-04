@@ -632,6 +632,31 @@
         else byId( pcHost ).appendChild( help );
     }
 
+    // THE PHONE CHROME of Write and Calc - at start-up and whenever the phone is
+    // turned; the split itself is CSS, this is only what CSS cannot do. The "?"
+    // and the File button (#moreBtn) are the SAME buttons in both layouts: on a
+    // phone they go up into the header (#topActions), because the tool row folds
+    // away while you type - the "?" never in menu mode (`o.menus()`), where the
+    // Ayuda menu is right there; on a PC the "?" goes back into `o.tools`
+    // (before `o.helpBefore`, or last) and the File button in front of #fileSep.
+    // `o.fileClass( btn, phone )` gives the File button its look. Then every
+    // menu and popup `o.close()` lists is shut, the "..." expansion folded, and
+    // on a PC the row unfolded (`o.fold()`: null while it is not made yet).
+    function phoneChrome( phone, o )
+    {
+        placeHelpButton( phone && ! o.menus(), "topActions", o.tools, o.helpBefore, "savedAt" );
+
+        var btn = byId( "moreBtn" ), sep = byId( "fileSep" );
+        if( phone ) byId( "topActions" ).appendChild( btn );
+        else        sep.parentNode.insertBefore( btn, sep );
+        o.fileClass( btn, phone );
+
+        o.close().forEach( function ( m ) { if( m ) m.close(); } );
+        var fold = o.fold();
+        if( fold ) fold.setMore( false );
+        if( fold && ! phone ) fold.setOpen( true );
+    }
+
     // The folding toolbar: "Aa" (#fmtBtn) folds the whole row away while you
     // type, "..." (#moreToolsBtn) opens the rest of it in place. Folding sets
     // height: 0 through .is-folded, never display: none - the editors measure
@@ -2841,6 +2866,21 @@
     ];
     var HELP_IDS = HELP_ITEMS.map( function ( it ) { return it.el; } );
 
+    //   var menu = NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
+    //
+    // Wires the three hidden entries (#statsBtn, #scBtn, #guideBtn: the guide
+    // card) and builds the "?" menu (#helpBtn -> #helpMenu) from them;
+    // setHelpMenu leaves the "?" click to that menu. Returns the menu.
+    function helpMenu( o )
+    {
+        byId( "statsBtn" ).addEventListener( "click", o.stats );
+        byId( "scBtn"    ).addEventListener( "click", o.shortcuts );
+        byId( "guideBtn" ).addEventListener( "click", function () { NayiveUI.showIntro(); } );
+        var menu = buttonMenu( { btn: "helpBtn", menu: "helpMenu", ids: HELP_IDS } );
+        NayiveUI.setHelpMenu( true );
+        return menu;
+    }
+
     //------------------------------------------------------------------------//
     // KEYBOARD SHORTCUTS  -  Help ▸ "Keyboard shortcuts" in Calc and Write
     //
@@ -2875,10 +2915,11 @@
     //------------------------------------------------------------------------//
     // STATISTICS  -  Help > "Statistics" in Write, Calc and Text
     //
-    //   NayiveOffice.showStats( [ { text: "Words", value: "812" }, ... ], note );
+    //   NayiveOffice.showStats( [ { text: "Words", value: 812 }, ... ], note );
     //
     // Same sheet in the three apps: #statsBackdrop, one #stList row per figure,
-    // the number on the right, an optional grey `note` under the list. Paired
+    // the number on the right (with the reader's own thousands separators), an
+    // optional grey `note` under the list. Paired
     // CSS: .st-list / .st-row / .st-note in the OFFICE CHROME block of app.css.
 
     function showStats( rows, note )
@@ -2894,7 +2935,7 @@
             var val  = document.createElement( "b" );
             row.className    = "st-row";
             what.textContent = r.text;
-            val.textContent  = r.value;
+            val.textContent  = typeof r.value === "number" ? r.value.toLocaleString( NayiveUI.locale() ) : r.value;
             row.appendChild( what );
             row.appendChild( val );
             list.appendChild( row );
@@ -3091,6 +3132,7 @@
         buttonMenu:     buttonMenu,
         groupPopup:     groupPopup,
         placeHelpButton: placeHelpButton,
+        phoneChrome:    phoneChrome,
         foldingToolbar: foldingToolbar,
         autosave:       autosave,
         session:        session,
@@ -3100,6 +3142,7 @@
         appConfig:      appConfig,
         HELP_ITEMS:     HELP_ITEMS,
         HELP_IDS:       HELP_IDS,
+        helpMenu:       helpMenu,
         clip:           clip
     };
 } )();

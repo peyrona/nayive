@@ -135,7 +135,6 @@ let helpMenu = null;    // the "?" menu, ditto
 // The tool row's group cards: print / PDF, and the four page ones. The buttons
 // in them are the real ones, wired below exactly as when they sat on the row.
 let groups = [];
-function closeGroupPopups() { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // `fold.isOpen()` is the truth now; this stays only for readability at call sites.
 function toolbarOpen() { return fold ? fold.isOpen() : true; }
@@ -149,44 +148,21 @@ let fold = null;   // set in wireStaticUI, once the DOM is there
 
 function setToolbarOpen( open ) { if( fold ) fold.setOpen( open ); }
 
-// The "⋮" at the end of the row: show every toolbar item (it wraps onto a few
-// lines) or just the ones the phone keeps. index.html does the hiding; this only
-// flips the class and the button's own pressed look.
-function setMoreTools( open ) { if( fold ) fold.setMore( open ); }
-
-// The "?" is the SAME button in both layouts — on a phone it moves into the
-// header, because the row it normally sits in folds away. A second copy would
-// break the coach marks, which point at the first [data-intro-open] on the page.
-// only the things CSS cannot do: move the "?", close the menus, unfold.
+// Phone or PC (shared/office.js, phoneChrome): the "?" and the File button move
+// between the header and the tool row - the File button with the drop-down
+// caret its neighbours carry on a PC - the menus close, the row unfolds on a PC.
 function applyPhoneChrome()
 {
     applyKeyHints();          // the hints come off on a phone and back on a PC
 
-    // shared/office.js does exactly this: "?" in the header on a phone (after the
-    // two chrome buttons, before the sync dot), last in the tool row on a PC.
-    //
-    // Never in the header in MENU mode, on a phone or not: the Ayuda menu is
-    // right there, and one "?" in two places at once is one too many.
-    NayiveOffice.placeHelpButton( PHONE.matches && ! CHROME.on(), 'topActions', 'writeTools', null, 'savedAt' );
-    placeFileButton();
-    if( fileMenu ) fileMenu.close();
-    if( helpMenu ) helpMenu.close();
-    closeGroupPopups();
-    setMoreTools( false );
-    if( ! PHONE.matches ) setToolbarOpen( true );
-}
-// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
-// first in the tool row on a PC, with the drop-down caret its neighbours carry;
-// in the header on a phone, because the row folds away while you type.
-function placeFileButton()
-{
-    const btn = document.getElementById( 'moreBtn' );
-    const sep = document.getElementById( 'fileSep' );
-
-    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
-    else                sep.parentNode.insertBefore( btn, sep );
-
-    btn.classList.toggle( 'has-popup', ! PHONE.matches );
+    NayiveOffice.phoneChrome( PHONE.matches, {
+        menus     : function() { return CHROME.on(); },
+        tools     : 'writeTools',
+        helpBefore: null,
+        fileClass : function( btn, phone ) { btn.classList.toggle( 'has-popup', ! phone ); },
+        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
+        fold      : function() { return fold; }
+    } );
 }
 
 let ready         = false;   // a document is on screen; edits after this are the user's
@@ -309,9 +285,7 @@ function wireStaticUI()
                 syncParagraphRows();
             } );
 
-    document.getElementById( 'statsBtn'         ).addEventListener( 'click', openStats );
     document.getElementById( 'statsCloseBtn'    ).addEventListener( 'click', function() { setBackdrop( 'statsBackdrop', false ); } );
-    document.getElementById( 'scBtn'            ).addEventListener( 'click', openShortcuts );
     document.getElementById( 'scCloseBtn'       ).addEventListener( 'click', function() { setBackdrop( 'scBackdrop', false ); } );
     document.getElementById( 'pdfBtn'           ).addEventListener( 'click', function() { printDocument( true ); } );
     document.getElementById( 'saveAsCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'saveAsBackdrop', false ); } );
@@ -337,12 +311,9 @@ function wireStaticUI()
     fileMenu = NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
                                         ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
 
-    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds.
-    // setHelpMenu tells shared/ui.js to leave the click to this menu instead of
-    // opening the guide card itself (the card is the third entry).
-    document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-    helpMenu = NayiveOffice.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: NayiveOffice.HELP_IDS } );
-    NayiveUI.setHelpMenu( true );
+    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds
+    // (the guide card is the third).
+    helpMenu = NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     groups =
     [
         NayiveOffice.groupPopup( { btn: 'wrOutputBtn', popup: 'outputPopup' } ),
@@ -674,16 +645,7 @@ function toggleHeaderFooter( kind )
 
     const cmd = hfEditing() === kind ? { type: 'exitHeaderFooter' }
                                      : { type: 'editHeaderFooter', position: kind };
-    let r;
-    try { r = editor.exec( cmd ); }
-    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
-
-    if( r && r.ok === false )
-    {
-        console.error( 'Write: ' + cmd.type + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) );
-        return;
-    }
+    if( ! engineRun( cmd.type, function() { return editor.exec( cmd ); }, 'write.headerFailed' ) ) return;
     focusEditor();          // the engine keeps the caret in the header or footer
     refreshToolbar();
 }
@@ -1439,19 +1401,12 @@ async function openStats()
     }
 
     NayiveOffice.showStats( [
-        { text: NayiveUI.t( 'write.statWords'      ), value: fmtCount( words )    },
-        { text: NayiveUI.t( 'write.statChars'      ), value: fmtCount( chars )    },
-        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: fmtCount( noSpaces ) },
-        { text: NayiveUI.t( 'write.statParagraphs' ), value: fmtCount( count )    },
-        { text: NayiveUI.t( 'write.statPages'      ), value: fmtCount( editor.getTotalPages() ) }
+        { text: NayiveUI.t( 'write.statWords'      ), value: words    },
+        { text: NayiveUI.t( 'write.statChars'      ), value: chars    },
+        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: noSpaces },
+        { text: NayiveUI.t( 'write.statParagraphs' ), value: count    },
+        { text: NayiveUI.t( 'write.statPages'      ), value: editor.getTotalPages() }
     ], NayiveUI.t( 'write.statNote' ) );
-}
-
-// Thousands separators in the reader's own locale.
-function fmtCount( n )
-{
-    try { return new Intl.NumberFormat( NayiveUI.locale() ).format( n ); }
-    catch( _ ) { return String( n ); }
 }
 
 //----------------------------------------------------------------------------//
@@ -1561,16 +1516,7 @@ function runSlot( slot, value )
 {
     if( ! ready || ! editor || slotBlocked( slot ) ) return;
 
-    let r;
-    try { r = value === undefined ? runToolbarCommand( editor, slot ) : runToolbarCommand( editor, slot, value ); }
-    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
-
-    if( r && r.ok === false )
-    {
-        console.error( 'Write: ' + slot + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
-        return;
-    }
+    if( ! engineRun( slot, function() { return value === undefined ? runToolbarCommand( editor, slot ) : runToolbarCommand( editor, slot, value ); } ) ) return;
     if( slot === 'insert.pageBreak' ) landAfterPageBreak();
     focusEditor();
 }
@@ -1640,18 +1586,24 @@ function replaceMatch( match, text )
 function runExec( cmd )
 {
     if( ! ready || ! editor ) return;
+    if( engineRun( cmd.type, function() { return editor.exec( cmd ); } ) ) focusEditor();
+}
 
+// One engine call: false (logged under `label`, and `failKey` - default
+// write.actionFailed - toasted) when it throws or answers { ok: false }.
+function engineRun( label, fn, failKey )
+{
     let r;
-    try { r = editor.exec( cmd ); }
+    try { r = fn(); }
     catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
 
     if( r && r.ok === false )
     {
-        console.error( 'Write: ' + cmd.type + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
-        return;
+        console.error( 'Write: ' + label + ' -', r.reason );
+        NayiveUI.toast( NayiveUI.t( failKey || 'write.actionFailed' ) );
+        return false;
     }
-    focusEditor();
+    return true;
 }
 
 //---- TABLE CELLS: Tab and Shift+Tab ------------------------------------------//

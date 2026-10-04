@@ -692,14 +692,8 @@
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
 
             // Ayuda (see AYUDA below): the "?" opens a three-entry menu built
-            // from these three hidden buttons. setHelpMenu tells shared/ui.js to
-            // leave the click to that menu instead of opening the guide card -
-            // the card is the third entry.
-            document.getElementById( 'statsBtn' ).addEventListener( 'click', openStats );
-            document.getElementById( 'scBtn'    ).addEventListener( 'click', openShortcuts );
-            document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-            O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
-            NayiveUI.setHelpMenu( true );
+            // from the three hidden #helpTools buttons (the guide card is the third).
+            O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
             const marginInput = document.getElementById( 'marginInput' );
             marginInput.value = String( marginCols );
@@ -771,13 +765,12 @@
         {
             const txt   = editor ? editor.getValue() : '';
             const words = txt.trim() ? txt.trim().split( /\s+/ ).length : 0;
-            const n     = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
 
             O.showStats( [
-                { text: T( 'text.statLines'       ), value: n( editor ? editor.lineCount() : 0 ) },
-                { text: T( 'write.statWords'      ), value: n( words ) },
-                { text: T( 'write.statChars'      ), value: n( txt.length ) },
-                { text: T( 'write.statCharsNoSp'  ), value: n( txt.replace( /\s/g, '' ).length ) }
+                { text: T( 'text.statLines'       ), value: editor ? editor.lineCount() : 0 },
+                { text: T( 'write.statWords'      ), value: words },
+                { text: T( 'write.statChars'      ), value: txt.length },
+                { text: T( 'write.statCharsNoSp'  ), value: txt.replace( /\s/g, '' ).length }
             ], T( 'text.statNote' ) );
         }
 
