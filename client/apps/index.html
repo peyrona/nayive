@@ -2146,6 +2146,10 @@
                         return;
                     }
                     if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
+                    // The server dropped every push device of the account (a
+                    // possible intruder's too): register this one again now.
+                    pushNote( null );
+                    healPush();
                     // Mandatory lock lifted: a big screen may start on the
                     // desktop again.
                     if( mandatory )

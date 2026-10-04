@@ -245,12 +245,17 @@ func TestB4MustSetPasswordGate(t *testing.T) {
 		t.Error("after the first password: blank still signs in, or the new one does not")
 	}
 
-	// The admin removing it again closes the doors again, on the live session.
+	// The admin removing it again signs the live session out (bugs-2 SS2), and
+	// a fresh blank sign-in finds the doors closed again.
 	admin := noFollow()
 	signIn(t, admin, ts.URL, "jefe", "secreto")
 	if code := postAdmin(t, admin, ts.URL, `{"action":"update-user","name":"nuevo","password":null}`); code != http.StatusOK {
 		t.Fatalf("clear password = %d", code)
 	}
+	if code, _ := get("/api/files?list=files"); code != http.StatusUnauthorized {
+		t.Errorf("files on the old session after the admin cleared it = %d, want 401", code)
+	}
+	signIn(t, client, ts.URL, "nuevo", "")
 	if code, body := get("/api/files?list=files"); code != http.StatusForbidden || body["must_set_password"] != true {
 		t.Errorf("files after the admin cleared it = %d %v", code, body)
 	}

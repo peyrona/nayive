@@ -1181,10 +1181,14 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 			deadline = time.Now() // answer what there is, now
 		}
 		timer.Stop()
-		if cur := s.devices.byID(dev.ID); cur == nil || cur.Owner != dev.Owner {
+		// Only a phone that is gone is told so. A rename, or the app signing
+		// in to another account, moves the row: wait on with its fresh copy.
+		cur := s.devices.byID(dev.ID)
+		if cur == nil {
 			sendError(w, r, http.StatusUnauthorized, "este móvil ya no está dado de alta")
 			return
 		}
+		dev = cur
 	}
 }
 
