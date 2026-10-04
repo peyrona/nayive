@@ -4348,6 +4348,108 @@
     }
 
     //------------------------------------------------------------------------//
+    // SIGN OUT - the launcher's button and admin.html's link, one copy
+    //
+    // Sign out is a POST (a GET could be fired by a picture in an email, or a
+    // link on another site): the link only works through this.
+    //
+    // First the saves still waiting here get one more chance to go up (up to
+    // 10 s while one is being sent, no wait offline); what is left - saves and
+    // untitled drafts - is counted, the user is asked, and only what was
+    // counted is deleted: a save another tab makes while the question is up is
+    // counted and asked about again, never deleted unseen
+    // (NayiveStore.leaveDevice, shared/store.js SIGNING OUT).
+    //
+    // Then what this browser keeps for the account must not outlive the
+    // session (forgetBrowser): the push subscription (else the notices keep
+    // coming here, and the next person's sign-in would register it for them
+    // too), the active trip's PDFs and the share inbox. Before the logout: the
+    // DELETE needs the session. getRegistration(), not .ready - .ready never
+    // settles with no service worker, and a sign-out must never hang (3 s cap).
+    //
+    // opts.unlinkPhone (the launcher): also THIS phone's link to the account:
+    // unlinked, the Android app asks to be linked again, and the next person
+    // to sign in on it gets it (server/go/devices.go, ENROLMENT). Admin's
+    // sign-out does not (his call, 2026-10-04).
+    // opts.swScope: the scope getRegistration asks for (admin: "/nayive/").
+    function forgetBrowser( opts )
+    {
+        var work = ( async function ()
+        {
+            if( opts.unlinkPhone )
+            {
+                try
+                {
+                    var phone = JSON.parse( localStorage.getItem( "nayive-device" ) || "null" );
+                    if( phone && phone.id )
+                    {
+                        var r = await fetch( "/api/device/" + encodeURIComponent( phone.id ),
+                                             { method: "DELETE", credentials: "same-origin" } );
+                        if( r.ok || r.status === 404 ) localStorage.removeItem( "nayive-device" );
+                    }
+                }
+                catch ( e ) {}
+            }
+            try
+            {
+                var reg = ( "serviceWorker" in navigator ) ? await navigator.serviceWorker.getRegistration( opts.swScope ) : null;
+                var sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+                if( sub )
+                {
+                    var ep = sub.endpoint;
+                    try { await sub.unsubscribe(); } catch ( e ) {}
+                    await fetch( "/api/push?endpoint=" + encodeURIComponent( ep ),
+                                 { method: "DELETE", credentials: "same-origin" } );
+                }
+            }
+            catch ( e ) {}
+            try { localStorage.removeItem( "nayive-push-note" ); } catch ( e ) {}
+            try
+            {
+                if( window.caches ) await Promise.all( [ caches.delete( "nayive-trips-docs" ),
+                                                         caches.delete( "nayive-share-inbox" ) ] );
+            }
+            catch ( e ) {}
+        } )();
+        return Promise.race( [ work, new Promise( function ( r ) { setTimeout( r, 3000 ); } ) ] );
+    }
+
+    var signingOut = false;
+    async function signOut( opts )
+    {
+        opts = opts || {};
+        if( signingOut ) return;
+        signingOut = true;
+        try
+        {
+            if( window.NayiveStore )
+            {
+                var go = true;
+                try
+                {
+                    go = await NayiveStore.leaveDevice( function ( n, why )
+                    {
+                        // A list save that only its app can merge (L6): going
+                        // online is not enough - name the app to open.
+                        var apps = ( why && why.apps ) || [];
+                        // window.NayiveUI.confirm, not confirmDialog: a test answers it.
+                        return window.NayiveUI.confirm( { title: t( "launcher.unsavedTitle" ),
+                                                          body: apps.length ? tf( "launcher.unsavedBodyApps", { n: n, apps: apps.join( ", " ) } )
+                                                                            : tf( "launcher.unsavedBody", { n: n } ),
+                                                          confirm: t( "launcher.unsavedOk" ), danger: true } );
+                    } );
+                }
+                catch ( err ) {}
+                if( ! go ) return;
+            }
+            await forgetBrowser( opts );
+            try { await fetch( "/api/logout", { method: "POST", credentials: "same-origin" } ); } catch ( err ) {}
+            location.href = "/nayive/login.html";
+        }
+        finally { signingOut = false; }
+    }
+
+    //------------------------------------------------------------------------//
     // TRANSFER BAR - uploads and downloads, one look
     //
     // One box, a row per transfer under way: the uploads (drawn from GumApi's
@@ -5503,6 +5605,7 @@
         toast:    toast,
         sessionExpired: sessionExpired,   // the shared "your session expired" bar (gum-api / store call it)
         loginRedirect:  loginRedirect,    // to the sign-in page and back here (GumApi.loginRedirect too)
+        signOut:        signOut,          // the launcher's and admin's sign-out ({ unlinkPhone, swScope })
         viewerTz: viewerTz,
         escapeHtml: escapeHtml,
         townName:   townName,      // the town at a position, "" when unknown (trips/public.html)
