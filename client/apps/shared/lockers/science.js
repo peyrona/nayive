@@ -167,36 +167,27 @@ function shared( b )
 }
 
 var FILE  = "data/science.json";       // in the user's home
-var LOCAL = "nayive-science";          // this device's copy
+// This device's copy (culture.js localJson; asked only once culture.js is in).
+function local() { return S().localJson( "nayive-science" ); }
 
-function localCopy()
-{
-    try { return JSON.parse( localStorage.getItem( LOCAL ) || "null" ); } catch ( e ) { return null; }
-}
-function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
-
-// The server's copy, waiting `ms` at most; null when it was never saved (404).
+// The server's copy, waiting `ms` at most for its answer (the body is read
+// after it: culture.js getFile); null when it was never saved (404).
 // Anything else that is not a good answer - no answer in time, a 5xx, a 401,
 // a file that is not JSON - rejects.
 function fetchSettings( ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            clearTimeout( timer );
-            if( r.status === 404 ) return null;
-            if( ! r.ok ) throw new Error( "status " + r.status );
-            return r.json().then( function ( s ) { s = normalise( s ); keepLocal( s ); return s; } );
-        }, function ( e ) { clearTimeout( timer ); throw e; } );
+    return S().getFile( FILE, ms, function ( r ) { return r; } ).then( function ( r )
+    {
+        if( r.status === 404 ) return null;
+        if( ! r.ok ) throw new Error( "status " + r.status );
+        return r.json().then( function ( s ) { s = normalise( s ); local().put( s ); return s; } );
+    } );
 }
 
 // What this device has: its own copy, else Bellas artes' shared part.
 function localSettings()
 {
-    var l = localCopy();
+    var l = local().get();
     if( l ) return normalise( l );
     try { return shared( JSON.parse( localStorage.getItem( "nayive-salon" ) || "null" ) ); }
     catch ( e ) { return normalise( null ); }
@@ -214,17 +205,11 @@ function read()
 // For the settings dialog: the server's copy (never saved: Bellas artes'
 // part, read as strictly), or a rejection whose `local` is what read() would
 // show instead - never that stand-in as the settings, which ✓ would save over
-// the real ones (F6). See culture.js readStrict().
+// the real ones (F6). See culture.js strictly().
 function readStrict()
 {
-    return fetchSettings( 10000 )
-        .then( function ( s ) { return s || S().readStrict().then( shared ); } )
-        .catch( function ( e )
-        {
-            var err = new Error( "settings not read: " + ( e && e.message || e ) );
-            err.local = localSettings();
-            throw err;
-        } );
+    return S().strictly( fetchSettings( 10000 ).then( function ( s ) { return s || S().readStrict().then( shared ); } ),
+                         localSettings );
 }
 
 // ✓ of the settings dialog, version-checked (culture.js updateFile): never
@@ -239,7 +224,7 @@ function update( fn )
             if( v.s ) return { s: normalise( v.s ), tag: v.tag };
             return S().readStrict().then( shared ).then( function ( s ) { return { s: s, tag: null }; } );
         } );
-    }, fn, normalise, keepLocal );
+    }, fn, normalise, local().put );
 }
 
 window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, readStrict: readStrict, update: update };
@@ -319,15 +304,10 @@ function start( host, cfg )
     var E = S().engine, T = E.T, el = E.el, pad = E.pad, ymd = E.ymd, cap = E.cap;
     var cached = E.store( "nv-science:" );
     var alive = true;
-    var TURN = cfg.turn;
     var OFFSET = { clock: 0, picture: 12, days: 24, news: 36, element: 48 };
     var L0 = cfg.langs[ 0 ];
-
-    function langsOf( card )
-    {
-        var c = cfg.cards[ card ];
-        return c && c.langs ? c.langs : cfg.langs;
-    }
+    var kit = E.screen( cfg, OFFSET, function () { return alive; } );     // culture.js THE SCREEN KIT
+    var langsOf = kit.langsOf, box = kit.box, refill = kit.refill, turnLang = kit.turnLang, hm = kit.hm;
     function on( card ) { return cfg.cards[ card ].on; }
     function fmt( s, k, v ) { return s.replace( "{" + k + "}", v ); }
 
@@ -497,47 +477,12 @@ function start( host, cfg )
     style.textContent = E.css() + "\n" + CSS;
     document.head.appendChild( style );
 
-    function box( parent, cls, source )
-    {
-        var b = el( "section", "cl-box " + cls, null, parent );
-        var h = el( "div", "cl-head", null, b );
-        var l = el( "span", "", null, h );
-        var s = el( "span", "src", source || "", h );
-        var body = el( "div", "cl-body", null, b );
-        return { box: b, head: l, src: s, body: body, shown: "" };
-    }
-    // Fades a box out, refills it, fades it in; the same thing is not redrawn.
-    function refill( part, sig, head, lang, fill )
-    {
-        if( part.shown === sig ) return;
-        var first = ! part.shown;
-        part.shown = sig;
-        part.box.classList.add( "out" );
-        setTimeout( function ()
-        {
-            if( ! alive || part.shown !== sig ) return;
-            part.head.textContent = head;
-            part.box.lang = lang || "";
-            part.body.innerHTML = "";
-            fill( part.body );
-            part.box.classList.remove( "out" );
-        }, first ? 0 : 350 );
-    }
     function quiet( part, head, key )
     {
         refill( part, "quiet:" + key + head, head, L0, function ( b ) { el( "div", "cl-quiet", T[ L0 ][ key ] || W[ L0 ][ key ], b ); } );
     }
 
-    var wall  = el( "img", "cl-wall", null, host ); wall.alt = "";
-    var grid  = el( "div", "cl-grid sc-grid" + ( cfg.contrast === "high" ? " cl-high" : "" ), null, host );
-    var fonts = S().FONT_SETS[ cfg.font ];
-    grid.style.setProperty( "--cl-display", fonts[ 0 ] );
-    grid.style.setProperty( "--cl-text", fonts[ 1 ] );
-    grid.style.setProperty( "--k", { s: 0.88, m: 1, l: 1.15 }[ cfg.size ] );
-    if( cfg.contrast === "high" ) wall.hidden = true;
-    var left  = el( "div", "cl-wing", null, grid );
-    var mid   = el( "div", "cl-wing", null, grid );
-    var right = el( "div", "cl-wing", null, grid );
+    var st = kit.stage( host, "sc-grid" ), wall = st.wall, grid = st.grid, left = st.left, mid = st.mid, right = st.right;
 
     var clock   = box( left,  "cl-clock", "" );
     var sky     = box( left,  "sc-sky", S().WEATHER[ cfg.weather ].name );
@@ -551,24 +496,10 @@ function start( host, cfg )
     [ [ clock, "clock" ], [ sky, "sky" ], [ picture, "picture" ], [ days, "days" ], [ news, "news" ], [ element, "element" ] ]
         .forEach( function ( p ) { if( ! on( p[ 1 ] ) ) p[ 0 ].box.remove(); } );
     if( ! pair.childNodes.length ) pair.remove();
-    var cols = [];
-    [ [ left, 25 ], [ mid, 45 ], [ right, 30 ] ].forEach( function ( w )
-    {
-        if( w[ 0 ].childNodes.length ) cols.push( "minmax(0," + w[ 1 ] + "fr)" );
-        else w[ 0 ].remove();
-    } );
-    grid.style.gridTemplateColumns = cols.join( " " );
+    kit.columns( grid, [ [ left, 25 ], [ mid, 45 ], [ right, 30 ] ] );
 
     [ [ sky, W[ L0 ].skyHere ], [ picture, W[ L0 ].picture ], [ days, W[ L0 ].days ],
       [ news, W[ L0 ].news ], [ element, W[ L0 ].element ] ].forEach( function ( p ) { quiet( p[ 0 ], p[ 1 ], "wait" ); } );
-
-    function turnLang( card, have )
-    {
-        var list = langsOf( card ).filter( have );
-        if( ! list.length ) return "";
-        var n = Math.floor( ( Date.now() / 1000 - OFFSET[ card ] ) / TURN );
-        return list[ ( ( n % list.length ) + list.length ) % list.length ];
-    }
 
     // -- the clock: the time, UTC, the day of the year, Unix time ----------- //
 
@@ -581,16 +512,7 @@ function start( host, cfg )
     function drawClock( d )
     {
         var H = d.getHours(), m = d.getMinutes();
-        timeEl.innerHTML = "";
-        timeEl.appendChild( document.createTextNode( cfg.hours === 12 ? String( H % 12 || 12 ) : pad( H ) ) );
-        el( "span", "colon", ":", timeEl );
-        timeEl.appendChild( document.createTextNode( pad( m ) ) );
-        if( cfg.hours === 12 )
-        {
-            var ap = new Intl.DateTimeFormat( L0, { hour: "numeric", hour12: true } ).formatToParts( d )
-                .filter( function ( x ) { return x.type === "dayPeriod"; } )[ 0 ];
-            if( ap ) el( "span", "ampm", ap.value, timeEl );
-        }
+        kit.drawTime( timeEl, d );
         unixEl.textContent = W[ clock.lang || L0 ].unix + " " + Math.floor( d / 1000 );
         var lang = turnLang( "clock", function () { return true; } ) || L0;
         var sig = lang + H + ":" + m;
@@ -610,13 +532,6 @@ function start( host, cfg )
     // -- the sky: weather, sun, daylight, the Moon (in the first language) --- //
 
     var where = null, wx = null;
-    function hm( iso )
-    {
-        if( ! iso ) return "";
-        if( cfg.hours !== 12 ) return iso.slice( 11, 16 );
-        return new Intl.DateTimeFormat( L0, { hour: "numeric", minute: "2-digit", hour12: true } )
-            .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ), +iso.slice( 14, 16 ) ) );
-    }
     function mins( iso ) { return +iso.slice( 11, 13 ) * 60 + +iso.slice( 14, 16 ); }
 
     function drawSky( d )
@@ -758,20 +673,7 @@ function start( host, cfg )
     // -- on this day: scientists -------------------------------------------- //
 
     var dayList = {};
-    function drawDays( d )
-    {
-        var lang = turnLang( "days", function ( l ) { return !! ( dayList[ l ] && dayList[ l ].length ); } );
-        if( ! lang ) return;
-        var l = dayList[ lang ], e = l[ d.getHours() % l.length ];
-        refill( days, lang + e.year + e.text, W[ lang ].days, lang, function ( b )
-        {
-            var p = el( "div", "cl-day", null, b );
-            el( "span", "yr", String( e.year ), p );
-            el( "span", "kind", ( e.kind === "b" ? T[ lang ].born : T[ lang ].died ), p );
-            p.appendChild( document.createTextNode( " " + e.text ) );
-            E.linkTo( p, e.url );
-        } );
-    }
+    function drawDays( d ) { kit.drawDay( days, dayList, d, function ( l ) { return W[ l ].days; } ); }
 
     // -- the news ---------------------------------------------------------- //
 

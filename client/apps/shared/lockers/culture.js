@@ -225,73 +225,85 @@ function normalise( s )
     return o;
 }
 
-var FILE  = "data/salon.json";         // in the user's home
-var LOCAL = "nayive-salon";            // this device's copy
-
-function localCopy()
+// GET `file` from the user's home (Science's too), aborted after `ms`: `use( response )` runs
+// under the same timer (whatever it reads of the body counts too); the timer
+// stops when it is done, either way.
+function getFile( file, ms, use )
 {
-    try { return JSON.parse( localStorage.getItem( LOCAL ) || "null" ); } catch ( e ) { return null; }
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
+    return fetch( "/api/files?file=" + encodeURIComponent( file ),
+                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
+        .then( use )
+        .then( function ( v ) { clearTimeout( timer ); return v; },
+               function ( e ) { clearTimeout( timer ); throw e; } );
 }
-function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
+
+// This device's copy of a locker's settings, under localStorage `key`.
+function localJson( key )
+{
+    return {
+        get: function () { try { return JSON.parse( localStorage.getItem( key ) || "null" ); } catch ( e ) { return null; } },
+        put: function ( s ) { try { localStorage.setItem( key, JSON.stringify( s ) ); } catch ( e ) {} }
+    };
+}
+
+// For the settings dialog: what `p` reads, or a rejection whose `local` is
+// what read() would show instead (`local()`). Never that stand-in as the
+// settings: the dialog's ✓ would save it over the real ones, on every device
+// (F6). The dialog can wait longer than a lock screen.
+function strictly( p, local )
+{
+    return p.catch( function ( e )
+    {
+        var err = new Error( "settings not read: " + ( e && e.message || e ) );
+        err.local = local();
+        throw err;
+    } );
+}
+
+var FILE  = "data/salon.json";               // in the user's home
+var LOCAL = localJson( "nayive-salon" );     // this device's copy
 
 // The server's copy, waiting `ms` at most. Never saved (404): the defaults.
 // Anything else that is not a good answer - no answer in time, a 5xx, a 401,
 // a file that is not JSON - rejects.
 function fetchSettings( ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            if( r.status === 404 ) return {};                       // never saved: the defaults
-            if( ! r.ok ) throw new Error( "status " + r.status );
-            return r.json();
-        } )
-        .then( function ( s ) { clearTimeout( timer ); s = normalise( s ); keepLocal( s ); return s; },
-               function ( e ) { clearTimeout( timer ); throw e; } );
+    return getFile( FILE, ms, function ( r )
+    {
+        if( r.status === 404 ) return {};                       // never saved: the defaults
+        if( ! r.ok ) throw new Error( "status " + r.status );
+        return r.json();
+    } ).then( function ( s ) { s = normalise( s ); LOCAL.put( s ); return s; } );
 }
 
 // The user's settings, for the locker (and the desktop's weather): the
 // server's copy, else this device's, else the defaults - a screen must start.
 function read()
 {
-    return fetchSettings( 4000 ).catch( function () { return normalise( localCopy() ); } );
+    return fetchSettings( 4000 ).catch( function () { return normalise( LOCAL.get() ); } );
 }
 
-// For the settings dialog: the server's copy, or a rejection whose `local` is
-// what read() would show instead. Never that stand-in as the settings: the
-// dialog's ✓ would save it over the real ones, on every device (F6). The
-// dialog can wait longer than a lock screen.
+// For the settings dialog (see strictly).
 function readStrict()
 {
-    return fetchSettings( 10000 ).catch( function ( e )
-    {
-        var err = new Error( "settings not read: " + ( e && e.message || e ) );
-        err.local = normalise( localCopy() );
-        throw err;
-    } );
+    return strictly( fetchSettings( 10000 ), function () { return normalise( LOCAL.get() ); } );
 }
 
 // The server's copy of `file` WITH its version: { s: the JSON as it is, null
 // when it was never saved (404), tag: its ETag }. Anything that is not a good
-// answer in `ms` rejects, as fetchSettings. (Science's file too.)
+// answer in `ms` rejects, as fetchSettings, and so does the service worker's
+// offline copy (X-Nayive-Copy). (Science's file too.)
 function fetchTagged( file, ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( file ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            if( r.status === 404 ) return { s: null, tag: null };
-            if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) throw new Error( "status " + r.status );
-            var tag = r.headers.get( "ETag" );
-            return r.json().then( function ( s ) { return { s: s, tag: /^"[^"]*"$/.test( tag || "" ) ? tag : null }; } );
-        } )
-        .then( function ( v ) { clearTimeout( timer ); return v; },
-               function ( e ) { clearTimeout( timer ); throw e; } );
+    return getFile( file, ms, function ( r )
+    {
+        if( r.status === 404 ) return { s: null, tag: null };
+        if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) throw new Error( "status " + r.status );
+        var tag = r.headers.get( "ETag" );
+        return r.json().then( function ( s ) { return { s: s, tag: /^"[^"]*"$/.test( tag || "" ) ? tag : null }; } );
+    } );
 }
 
 // Whose page this is: the "nayive_who" cookie as the PAGE loaded, as GumApi
@@ -302,18 +314,15 @@ function fetchTagged( file, ms )
 // person's home (L5).
 var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
             ( window.GumApi && GumApi.owner && GumApi.owner() ) ||
-            ( window.NayiveLock && NayiveLock.who ) || ( function ()
-{
-    try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
-    catch ( e ) { return ""; }
-} )();
+            ( window.NayiveLock && NayiveLock.who ) ||
+            ( window.NayiveI18n && NayiveI18n.whoAtLoad ) || "";
 
 // ✓ of the settings dialog: `fn( now )` gets the settings as they are on the
 // server NOW (`readNow()` -> { s, tag }) and returns what to save. That goes
 // up only over the version just read (If-Match; create-only when there was
 // no file): a save made meanwhile on another device answers 412, and the
 // read and `fn` run again - never written over (F6). Kept on this device
-// first (keepLocal). Rejects, writing nothing, when the settings cannot be
+// first (`keep`). Rejects, writing nothing, when the settings cannot be
 // read: e.read = true then; any other rejection is the write's.
 function updateFile( file, readNow, fn, norm, keep )
 {
@@ -346,7 +355,7 @@ function update( fn )
     return updateFile( FILE, function ()
     {
         return fetchTagged( FILE, 10000 ).then( function ( v ) { return { s: normalise( v.s || {} ), tag: v.tag }; } );
-    }, fn, normalise, keepLocal );
+    }, fn, normalise, LOCAL.put );
 }
 
 window.NayiveSalon =
@@ -363,7 +372,8 @@ window.NayiveSalon =
     read:      read,
     readStrict: readStrict,
     update:    update,
-    fetchTagged: fetchTagged, updateFile: updateFile     // for Science's file (science.js)
+    fetchTagged: fetchTagged, updateFile: updateFile,    // for Science's file (science.js)
+    getFile: getFile, localJson: localJson, strictly: strictly
 };
 
 // The locker: the settings first (4 s at most), then the screen.
@@ -996,6 +1006,135 @@ function linkTo( node, url )
 }
 function wiki( host, title ) { return "https://" + host + "/wiki/" + encodeURIComponent( String( title ).replace( / /g, "_" ) ); }
 
+//------------------------------------------------------------------------//
+// THE SCREEN KIT - what both lockers' screens share (Bellas artes' start()
+// below, Science's as engine.screen). `cfg` the settings; `OFFSET` the second
+// each box turns at; `isAlive()` false once the screen is gone. Each locker
+// keeps its own boxes, OFFSET table and words.
+
+function screen( cfg, OFFSET, isAlive )
+{
+    var L0 = cfg.langs[ 0 ];
+
+    // The languages a box shows: its own, else the locker's.
+    function langsOf( card )
+    {
+        var c = cfg.cards[ card ];
+        return c && c.langs ? c.langs : cfg.langs;
+    }
+
+    // The wall picture behind, the grid (`cls` added) in the chosen letters,
+    // size and contrast, and its three columns.
+    function stage( host, cls )
+    {
+        var wall  = el( "img", "cl-wall", null, host ); wall.alt = "";
+        var grid  = el( "div", "cl-grid" + ( cls ? " " + cls : "" ) + ( cfg.contrast === "high" ? " cl-high" : "" ), null, host );
+        grid.style.setProperty( "--cl-display", FONT_SETS[ cfg.font ][ 0 ] );
+        grid.style.setProperty( "--cl-text", FONT_SETS[ cfg.font ][ 1 ] );
+        grid.style.setProperty( "--k", { s: 0.88, m: 1, l: 1.15 }[ cfg.size ] );
+        if( cfg.contrast === "high" ) wall.hidden = true;           // plain black behind the boxes
+        var left  = el( "div", "cl-wing", null, grid );
+        var mid   = el( "div", "cl-wing", null, grid );
+        var right = el( "div", "cl-wing", null, grid );
+        return { wall: wall, grid: grid, left: left, mid: mid, right: right };
+    }
+
+    // An empty column goes, the others share its room: `wings` [ [ column, share ], ... ].
+    function columns( grid, wings )
+    {
+        var cols = [];
+        wings.forEach( function ( w )
+        {
+            if( w[ 0 ].childNodes.length ) cols.push( "minmax(0," + w[ 1 ] + "fr)" );
+            else w[ 0 ].remove();
+        } );
+        grid.style.gridTemplateColumns = cols.join( " " );
+    }
+
+    function box( parent, cls, source )
+    {
+        var b = el( "section", "cl-box " + cls, null, parent );
+        var h = el( "div", "cl-head", null, b );
+        var l = el( "span", "", null, h );
+        var s = el( "span", "src", source || "", h );
+        var body = el( "div", "cl-body", null, b );
+        return { box: b, head: l, src: s, body: body, lang: "", shown: "" };
+    }
+
+    // Fades a box out, refills it, fades it in. `sig` = what it will show:
+    // the same thing again is not redrawn (no blink).
+    function refill( part, sig, head, lang, fill )
+    {
+        if( part.shown === sig ) return;
+        var first = ! part.shown;
+        part.shown = sig;
+        part.box.classList.add( "out" );
+        setTimeout( function ()
+        {
+            if( ! isAlive() || part.shown !== sig ) return;
+            part.head.textContent = head;
+            part.box.lang = lang || "";
+            part.body.innerHTML = "";
+            fill( part.body );
+            part.box.classList.remove( "out" );
+        }, first ? 0 : 350 );
+    }
+
+    // Which language a box shows now: its turn, among those that have something.
+    function turnLang( card, have )
+    {
+        var list = langsOf( card ).filter( have );
+        if( ! list.length ) return "";
+        var n = Math.floor( ( Date.now() / 1000 - OFFSET[ card ] ) / cfg.turn );
+        return list[ ( ( n % list.length ) + list.length ) % list.length ];
+    }
+
+    // "2026-09-30T19:58" -> "19:58", or "7:58 p. m." on a 12-hour clock.
+    function hm( iso )
+    {
+        if( ! iso ) return "";
+        if( cfg.hours !== 12 ) return iso.slice( 11, 16 );
+        return new Intl.DateTimeFormat( L0, { hour: "numeric", minute: "2-digit", hour12: true } )
+            .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ), +iso.slice( 14, 16 ) ) );
+    }
+
+    // The clock's "11:03", or "11:03 p. m." on a 12-hour clock.
+    function drawTime( timeEl, d )
+    {
+        var H = d.getHours(), m = d.getMinutes();
+        timeEl.innerHTML = "";
+        timeEl.appendChild( document.createTextNode( cfg.hours === 12 ? String( H % 12 || 12 ) : pad( H ) ) );
+        el( "span", "colon", ":", timeEl );
+        timeEl.appendChild( document.createTextNode( pad( m ) ) );
+        if( cfg.hours === 12 )
+        {
+            var ap = new Intl.DateTimeFormat( L0, { hour: "numeric", hour12: true } ).formatToParts( d )
+                .filter( function ( x ) { return x.type === "dayPeriod"; } )[ 0 ];
+            if( ap ) el( "span", "ampm", ap.value, timeEl );
+        }
+    }
+
+    // On this day: one of `list[ lang ]` an hour, in its turn; `head( lang )`
+    // the box's heading.
+    function drawDay( part, list, d, head )
+    {
+        var lang = turnLang( "days", function ( l ) { return !! ( list[ l ] && list[ l ].length ); } );
+        if( ! lang ) return;
+        var l = list[ lang ], e = l[ d.getHours() % l.length ];
+        refill( part, lang + e.year + e.text, head( lang ), lang, function ( b )
+        {
+            var p = el( "div", "cl-day", null, b );
+            el( "span", "yr", String( e.year ), p );
+            el( "span", "kind", ( e.kind === "b" ? T[ lang ].born : T[ lang ].died ), p );
+            p.appendChild( document.createTextNode( " " + e.text ) );
+            linkTo( p, e.url );
+        } );
+    }
+
+    return { langsOf: langsOf, stage: stage, columns: columns, box: box, refill: refill,
+             turnLang: turnLang, hm: hm, drawTime: drawTime, drawDay: drawDay };
+}
+
 window.NayiveSalon.engine =
 {
     T: T, FONTS: FONTS, skyOf: skyOf, SAY: SAY, dateWords: dateWords,
@@ -1003,25 +1142,20 @@ window.NayiveSalon.engine =
     store: store, src: src, page: page, wikitext: wikitext, sparql: sparql,
     clean: clean, v: v, qid: qid, year: year, plain: plain, templates: templates,
     onThisDay: onThisDay, story: story, placeOf: placeOf, weatherAt: weatherAt,
-    el: el, deg: deg, linkTo: linkTo, wiki: wiki,
+    el: el, deg: deg, linkTo: linkTo, wiki: wiki, screen: screen,
     css: function () { return CSS.replace( /FONTS\//g, FONTS ); }   // the fonts and the boxes (.cl-*)
 };
 
 
 function start( host, cfg )
 {
-    var TURN = cfg.turn;                                   // seconds each language stays
-    var OFFSET = { clock: 0, art: 12, word: 24, quote: 36, days: 48 };   // ...and when each box turns
-
-    function langsOf( card )
-    {
-        var c = cfg.cards[ card ];
-        return c && c.langs ? c.langs : cfg.langs;
-    }
+    var OFFSET = { clock: 0, art: 12, word: 24, quote: 36, days: 48 };   // when each box turns (s)
 
     // The shared engine, bound to this locker's cache and settings.
     var cached = store( "nv-culture:" );
     var alive = true;
+    var kit = screen( cfg, OFFSET, function () { return alive; } );
+    var langsOf = kit.langsOf, box = kit.box, refill = kit.refill, turnLang = kit.turnLang, hm = kit.hm;
     function getDays( lang, d )   { return onThisDay( cached, lang, d, ARTS_OCC, NOT_OCC ); }
     function getStory( lang, t )  { return story( cached, lang, t ); }
     function getPlace()           { return placeOf( cfg, cached ); }
@@ -1379,57 +1513,12 @@ function start( host, cfg )
             .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ) ) );
     }
 
-    // "2026-09-30T19:58" -> "19:58", or "7:58 p. m." on a 12-hour clock.
-    function hm( iso )
-    {
-        if( ! iso ) return "";
-        if( cfg.hours !== 12 ) return iso.slice( 11, 16 );
-        return new Intl.DateTimeFormat( cfg.langs[ 0 ], { hour: "numeric", minute: "2-digit", hour12: true } )
-            .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ), +iso.slice( 14, 16 ) ) );
-    }
-
-    function box( parent, cls, source )
-    {
-        var b = el( "section", "cl-box " + cls, null, parent );
-        var h = el( "div", "cl-head", null, b );
-        var l = el( "span", "", null, h );
-        el( "span", "src", source || "", h );
-        var body = el( "div", "cl-body", null, b );
-        return { box: b, head: l, body: body, lang: "", shown: "" };
-    }
-
-    // Fades a box out, refills it, fades it in. `sig` = what it will show:
-    // the same thing again is not redrawn (no blink).
-    function refill( part, sig, head, lang, fill )
-    {
-        if( part.shown === sig ) return;
-        var first = ! part.shown;
-        part.shown = sig;
-        part.box.classList.add( "out" );
-        setTimeout( function ()
-        {
-            if( ! alive || part.shown !== sig ) return;
-            part.head.textContent = head;
-            part.box.lang = lang || "";
-            part.body.innerHTML = "";
-            fill( part.body );
-            part.box.classList.remove( "out" );
-        }, first ? 0 : 350 );
-    }
     function quiet( part, lang, head, key )
     {
         refill( part, "quiet:" + lang + ":" + key, head, lang, function ( b ) { el( "div", "cl-quiet", T[ lang ][ key ], b ); } );
     }
 
-    var wall  = el( "img", "cl-wall", null, host ); wall.alt = "";
-    var grid  = el( "div", "cl-grid" + ( cfg.contrast === "high" ? " cl-high" : "" ), null, host );
-    grid.style.setProperty( "--cl-display", FONT_SETS[ cfg.font ][ 0 ] );
-    grid.style.setProperty( "--cl-text", FONT_SETS[ cfg.font ][ 1 ] );
-    grid.style.setProperty( "--k", { s: 0.88, m: 1, l: 1.15 }[ cfg.size ] );
-    if( cfg.contrast === "high" ) wall.hidden = true;           // plain black behind the boxes
-    var left  = el( "div", "cl-wing", null, grid );
-    var mid   = el( "div", "cl-wing", null, grid );
-    var right = el( "div", "cl-wing", null, grid );
+    var st = kit.stage( host, "" ), wall = st.wall, grid = st.grid, left = st.left, mid = st.mid, right = st.right;
 
     var clock   = box( left, "cl-clock", "" );
     var weather = box( left, "cl-weather", WEATHER[ cfg.weather ].name );
@@ -1444,28 +1533,13 @@ function start( host, cfg )
     function on( card ) { return cfg.cards[ card ].on; }
     [ [ clock, "clock" ], [ weather, "weather" ], [ art, "art" ], [ days, "days" ], [ word, "word" ], [ quote, "quote" ] ]
         .forEach( function ( p ) { if( ! on( p[ 1 ] ) ) p[ 0 ].box.remove(); } );
-    var cols = [];
-    [ [ left, 26 ], [ mid, 48 ], [ right, 26 ] ].forEach( function ( w )
-    {
-        if( w[ 0 ].childNodes.length ) cols.push( "minmax(0," + w[ 1 ] + "fr)" );
-        else w[ 0 ].remove();
-    } );
-    grid.style.gridTemplateColumns = cols.join( " " );
+    kit.columns( grid, [ [ left, 26 ], [ mid, 48 ], [ right, 26 ] ] );
 
     var L0 = cfg.langs[ 0 ];
     [ [ art, "art" ], [ days, "days" ], [ word, "wordDay" ], [ quote, "quote" ], [ weather, "now" ] ].forEach( function ( p )
     {
         quiet( p[ 0 ], L0, T[ L0 ][ p[ 1 ] ].replace( "{c}", "…" ), "wait" );
     } );
-
-    // Which language a box shows now: its turn, among those that have something.
-    function turnLang( card, have )
-    {
-        var list = langsOf( card ).filter( have );
-        if( ! list.length ) return "";
-        var n = Math.floor( ( Date.now() / 1000 - OFFSET[ card ] ) / TURN );
-        return list[ ( ( n % list.length ) + list.length ) % list.length ];
-    }
 
     // -- the clock --------------------------------------------------------- //
 
@@ -1477,16 +1551,7 @@ function start( host, cfg )
     function drawClock( d )
     {
         var H = d.getHours(), m = d.getMinutes();
-        timeEl.innerHTML = "";
-        timeEl.appendChild( document.createTextNode( cfg.hours === 12 ? String( H % 12 || 12 ) : pad( H ) ) );
-        el( "span", "colon", ":", timeEl );
-        timeEl.appendChild( document.createTextNode( pad( m ) ) );
-        if( cfg.hours === 12 )
-        {
-            var ap = new Intl.DateTimeFormat( cfg.langs[ 0 ], { hour: "numeric", hour12: true } ).formatToParts( d )
-                .filter( function ( x ) { return x.type === "dayPeriod"; } )[ 0 ];
-            if( ap ) el( "span", "ampm", ap.value, timeEl );
-        }
+        kit.drawTime( timeEl, d );
         var lang = turnLang( "clock", function () { return true; } ) || L0;
         var sig = lang + H + ":" + m;
         if( clock.shown === sig ) return;
@@ -1647,20 +1712,7 @@ function start( host, cfg )
     // -- on this day -------------------------------------------------------- //
 
     var dayList = {};
-    function drawDays( d )
-    {
-        var lang = turnLang( "days", function ( l ) { return !! ( dayList[ l ] && dayList[ l ].length ); } );
-        if( ! lang ) return;
-        var l = dayList[ lang ], e = l[ d.getHours() % l.length ];
-        refill( days, lang + e.year + e.text, T[ lang ].days, lang, function ( b )
-        {
-            var p = el( "div", "cl-day", null, b );
-            el( "span", "yr", String( e.year ), p );
-            el( "span", "kind", ( e.kind === "b" ? T[ lang ].born : T[ lang ].died ), p );
-            p.appendChild( document.createTextNode( " " + e.text ) );
-            linkTo( p, e.url );
-        } );
-    }
+    function drawDays( d ) { kit.drawDay( days, dayList, d, function ( l ) { return T[ l ].days; } ); }
 
     // -- the word ----------------------------------------------------------- //
 

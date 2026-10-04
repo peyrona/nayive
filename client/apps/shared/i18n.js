@@ -257,7 +257,23 @@
         if( e && e.key === KEY ) location.reload();
     } );
 
+    // WHOSE PAGE: the "nayive_who" cookie (server/go/store_owner.go), the
+    // account signed in on this browser. whoNow() reads it as it is NOW;
+    // whoAtLoad is what it was as this page LOADED - this script runs first,
+    // before gum-api / store / locker / office - so a tab left open across
+    // another account's sign-in still names its own owner (data-safety L5).
+    // "" = unknown. shared/store.js keeps its own copy of the read: the
+    // data-safety harness loads it alone.
+    function whoNow()
+    {
+        try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
+        catch ( e ) { return ""; }
+    }
+    var WHO_AT_LOAD = whoNow();
+
     window.NayiveI18n = {
+        whoNow:    whoNow,
+        whoAtLoad: WHO_AT_LOAD,
         t:         t,
         tf:        tf,
         applyI18n: applyI18n,

@@ -48,18 +48,12 @@
            full width and a comfortable gap under each. */
         input          { width: 100%; margin-bottom: 16px; }
 
-        .pw-wrap { position: relative; margin-bottom: 16px; }
+        /* The eye: app.css PASSWORD EYE; here only what differs. */
+        .pw-wrap { margin-bottom: 16px; }
         .pw-wrap input { margin-bottom: 0; padding-right: 44px; }
-        .pw-eye
-        {
-            position: absolute; top: 0; right: 0; height: 100%;
-            width: 40px; display: flex; align-items: center; justify-content: center;
-            border: none; background: none; padding: 0; margin: 0; cursor: pointer;
-            color: var(--text-dim); border-radius: 0;
-        }
-        .pw-eye:hover { color: var(--text); filter: none; }
-        .pw-eye:active { filter: none; }
-        .pw-eye svg { width: 18px; height: 18px; margin: 0; }
+        .pw-eye { width: 40px; margin: 0; border-radius: 0; }
+        .pw-eye:hover, .pw-eye:active { filter: none; }
+        .pw-eye svg { margin: 0; }
         .remember
         {
             display: flex; align-items: center; justify-content: flex-start; gap: 10px;

@@ -34,7 +34,7 @@
  *
  * THE TOKENS  (defined in theme.css - use the name, never the literal)
  *   colour     --bg --card --card2 --line --text --text-dim --text-faint
- *              --accent --on-accent --danger --link --ok --warn --busy --shadow
+ *              --accent --on-accent --on-solid --danger --link --ok --warn --busy --shadow
  *              (each has a one-line "what it's for" comment in theme.css)
  *   type       --font-sans --font-mono
  *   radius     --radius-s (8) --radius-m (12) --radius-l (16) --radius-pill (999)
@@ -485,16 +485,8 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 }
 .menu-info:empty        { display: none; }
 
-/* The trailing group of the view/filter toolbar: search + reload + help.
-   Sits right after the view/filter buttons - not pushed to the right edge. */
-.tb-end
-{
-    display: flex;
-    align-items: center;
-    gap: 2px;
-}
 /* A row of toolbar groups (the games' option bars). .tb-modes switches WHAT is
-   shown, .tb-actions acts ON it (introduced by a .tb-sep), .tb-end closes it. The
+   shown, .tb-actions acts ON it (introduced by a .tb-sep). The
    action group carries its own divider inside it, so a group whose buttons are
    all hidden takes the divider with it instead of leaving it hanging. */
 .view-bar
@@ -552,7 +544,6 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .topbar-actions:has(.search-fold.is-open),
 .header-actions:has(.search-fold.is-open),
 .tb-group:has(> .search-fold.is-open)       { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
-.tb-end:has(> .search-fold.is-open)         { flex: 1 1 auto; min-width: 0; }
 /* A card .header's title grows at rest (it pushes the buttons right); while
    searching it keeps its width, as a .topbar's does, and the field gets the room. */
 .header.searching h1        { flex-grow: 0; }
@@ -659,9 +650,9 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .icon-btn.lg                { width: 60px; height: 60px; }
 .icon-btn.lg svg            { width: 26px; height: 26px; }
 .icon-btn.solid-ok,
-.icon-btn.solid-ok:hover    { background: var(--ok); color: #fff; }
+.icon-btn.solid-ok:hover    { background: var(--ok); color: var(--on-solid); }
 .icon-btn.solid-danger,
-.icon-btn.solid-danger:hover { background: var(--danger); color: #fff; }
+.icon-btn.solid-danger:hover { background: var(--danger); color: var(--on-solid); }
 .icon-btn.solid-ok:active,
 .icon-btn.solid-danger:active { filter: brightness(0.9); }
 
@@ -884,7 +875,7 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: 0 0 auto; }
 .switch input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
 .switch .track { position: absolute; inset: 0; background: rgba(128,128,128,0.35); background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: var(--radius-pill); transition: background .15s; cursor: pointer; }
-.switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.switch .track::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: var(--on-solid); border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .switch input:checked + .track { background: var(--accent); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -967,6 +958,20 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
     font-size: 0.8rem;
     line-height: 1.35;
 }
+
+/* PASSWORD EYE: a password box with a show / hide eye inside its right end
+ * (login.html, admin.html, the launcher's My account). Each page adds only
+ * what differs: the eye's width, the icon size, the field's room and margins. */
+.pw-wrap           { position: relative; }
+.pw-eye
+{
+    position: absolute; top: 0; right: 0; height: 100%;
+    width: 38px; display: flex; align-items: center; justify-content: center;
+    border: none; background: none; padding: 0; cursor: pointer;
+    color: var(--text-dim);
+}
+.pw-eye:hover      { color: var(--text); }
+.pw-eye svg        { width: 18px; height: 18px; }
 
 /* A field's control fills the row. Scoped to .field so it never stretches a
  * toolbar / search input that lives outside a form. */
@@ -1815,7 +1820,6 @@ button { -webkit-touch-callout: none; }
 .loc-link  { display: inline-flex; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 6px 12px; font-size: 0.8rem; color: var(--link); text-decoration: none; }
 .loc-link:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
 /* Location sending not set up: the (i) sits right after "not set up", the "+" stays right. */
-.share-link-app .share-link-url.has-info { flex: 0 1 auto; }
 .share-link-app .info-dot                { margin-right: auto; }
 
 
