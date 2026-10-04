@@ -23,8 +23,9 @@ const T  = function( k )    { return NayiveUI.t( k ); };
 const TF = function( k, o ) { return NayiveUI.tf( k, o ); };
 const $  = function( id )   { return document.getElementById( id ); };
 
-// The formats the editor can load AND re-encode (canvas.toDataURL).
-const EDIT_EXT = [ 'png', 'jpg', 'jpeg', 'webp' ];
+// The formats the editor can load AND re-encode (canvas.toDataURL); Drive
+// opens these here (shared/photo.js).
+const EDIT_EXT = NayivePhoto.EDIT_EXT;
 
 let imageEditor = null;    // the live tui.ImageEditor, or null
 let editorPath  = '';      // the file being edited - the copy, after "Save a copy"

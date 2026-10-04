@@ -1330,7 +1330,7 @@ async function exifFor( p )
         // opens the file. Only when it runs past that, or other big blocks
         // come before it, is a longer stretch read - never past 256 KB.
         let buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-65535" } } );
-        const x    = exifAt( buf );
+        const x    = NayivePhoto.exifAt( buf );   // { tiff, end } | { past } | null (shared/photo.js)
         const need = ! x ? 0 : x.past ? 262144 : x.end;
         if( need > buf.length && buf.length >= 65536 )
             buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-" + ( Math.min( need, 262144 ) - 1 ) } } );
@@ -1341,36 +1341,11 @@ async function exifFor( p )
     catch( _ ) { return null; }
 }
 
-// Where a JPEG's Exif block is, walking its marker segments to the Exif
-// APP1: { tiff, end } (its TIFF header; where the block ends - to read it
-// whole), { past: true } when the blocks before it run past `u8`, or null
-// (not a JPEG, or the picture data starts first).
-function exifAt( u8 )
-{
-    if( ! u8 || u8.length < 4 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
-    let i = 2;
-    while( i + 4 <= u8.length )
-    {
-        if( u8[ i ] !== 0xFF ) return null;
-        const marker = u8[ i + 1 ];
-        if( marker === 0xD9 || marker === 0xDA ) return null;   // EOI / start of scan
-        const len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
-        if( len < 2 ) return null;
-        if( marker === 0xE1 && i + 10 <= u8.length &&
-            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 &&      // "Ex"
-            u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 &&      // "if"
-            u8[ i + 8 ] === 0x00 )
-            return { tiff: i + 10, end: i + 2 + len };
-        i += 2 + len;
-    }
-    return { past: true };
-}
-
 function parseJpegExif( u8 )
 {
     if( ! u8 || u8.length < 12 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
 
-    const at   = exifAt( u8 );
+    const at   = NayivePhoto.exifAt( u8 );
     const tiff = at && ! at.past ? at.tiff : -1;
     if( tiff < 0 || tiff + 8 > u8.length ) return null;
 
