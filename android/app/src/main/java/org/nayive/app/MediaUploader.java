@@ -14,6 +14,7 @@ import org.json.JSONObject;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -49,6 +50,7 @@ final class MediaUploader {
     static Result run(Context c, long deadline, Stop stop) {
         Result res = new Result();
         Media.scan(c);
+        Set<Long> again = new HashSet<>();   // changed on the phone during this run
         while (true) {
             if (stop.now() || System.currentTimeMillis() > deadline) return res;
             Media.Item it = Media.peek(c);
@@ -56,6 +58,7 @@ final class MediaUploader {
                 res.finished = true;
                 return res;
             }
+            if (again.contains(it.mid)) return res;   // round again: still changing, the next run
             int outcome;
             try {
                 outcome = send(c, it, deadline, stop, res);
@@ -71,15 +74,32 @@ final class MediaUploader {
                 case STOP_TODAY:   // quota full, switched off, not enrolled: no point going on now
                     res.finished = true;
                     return res;
+                case CHANGED:      // queued again, after the others
+                    again.add(it.mid);
+                    break;
                 default:           // LATER: out of time
                     return res;
             }
         }
     }
 
-    private static final int SENT = 0, SKIP = 1, LATER = 2, STOP_TODAY = 3;
+    private static final int SENT = 0, SKIP = 1, LATER = 2, STOP_TODAY = 3, CHANGED = 4;
+
+    /**
+     * Read again right before each send: a file edited in place since it was
+     * queued (same row, new bytes) goes to the end of the queue as it is now,
+     * with a new id - never a cut or mixed copy.
+     */
+    private static boolean requeueIfChanged(Context c, Media.Item it) {
+        Media.Item now = Media.changed(c, it);
+        if (now == null) return false;
+        Log.i(TAG, "media: " + it.name + " changed on the phone, queued again");
+        Media.requeue(c, now);
+        return true;
+    }
 
     private static int send(Context c, Media.Item it, long deadline, Stop stop, Result res) throws IOException {
+        if (requeueIfChanged(c, it)) return CHANGED;
         Uri uri = original(c, it.uri());
         double[] ll = it.video ? videoPlace(c, uri) : photoPlace(c, uri);
 
@@ -105,6 +125,7 @@ final class MediaUploader {
         byte[] buf = new byte[(int) Math.min(CHUNK, Math.max(1, it.size))];
         while (offset < it.size) {
             if (stop.now() || System.currentTimeMillis() > deadline) return LATER;
+            if (requeueIfChanged(c, it)) return CHANGED;
             int n;
             try (InputStream in = c.getContentResolver().openInputStream(uri)) {
                 if (in == null) return SKIP;
@@ -124,6 +145,7 @@ final class MediaUploader {
             if (!p.ok()) throw new IOException("PUT answered " + p.status);
             offset = p.body.optLong("offset", offset + n);
         }
+        if (requeueIfChanged(c, it)) return CHANGED;   // while the last bytes went
 
         Api.Reply e = Api.post(c, "/api/device/media/" + upload + "/end", new JSONObject());
         if (e.status == 404) return LATER;        // "start" will say it is done

@@ -76,7 +76,10 @@ public class LinkService extends Service {
     /** Wakes the poll loop now (network back, the app opened, an ack sent). */
     static void kick() {
         LinkService s = running;
-        if (s != null) s.wakeUp();
+        if (s != null) {
+            s.refused = 0;
+            s.wakeUp();
+        }
     }
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -85,6 +88,9 @@ public class LinkService extends Service {
     private Thread loop;
     private volatile boolean alive;
     private boolean kicked;
+
+    /** 401s in a row (not enrolled, or revoked): the wait between them grows. */
+    private volatile int refused;
 
     private Tracker tracker;
     private PowerManager.WakeLock wake;
@@ -121,6 +127,7 @@ public class LinkService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        refused = 0;   // the app opened (Launcher): ask often again, it may be enrolling now
         wakeUp();
         return START_STICKY;
     }
@@ -235,6 +242,7 @@ public class LinkService extends Service {
             wake.acquire(15_000);
             if (r.status == 200) {
                 failures = 0;
+                refused = 0;
                 if (!Prefs.enrolled(this)) Prefs.setEnrolled(this, true);
                 version = r.body.optString("v", "");
                 holdSeconds = Math.max(20, Math.min(600, r.body.optInt("hold", 180)));
@@ -250,7 +258,7 @@ public class LinkService extends Service {
                     apply(new JSONObject());
                     show(Notes.Link.ENROL);
                 });
-                pause(15_000);
+                pause(refusedPause(++refused));
             } else {
                 failures++;
                 Log.i(TAG, "wait answered " + r.status);
@@ -261,6 +269,16 @@ public class LinkService extends Service {
 
     private static long backoff(int failures) {
         return Math.min(5 * 60_000L, 5_000L << Math.min(failures, 6));
+    }
+
+    /**
+     * After a 401: every 15 s for the first 5 minutes (the user may be signing
+     * in to enrol it), then doubling up to an hour - a revoked phone must not
+     * keep the CPU awake. Opening the app (start, kick) asks often again.
+     */
+    private static long refusedPause(int refused) {
+        if (refused <= 20) return 15_000L;
+        return Math.min(3600_000L, 15_000L << Math.min(refused - 20, 8));
     }
 
     // ------------------------------------------------------------------

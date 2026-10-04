@@ -60,6 +60,11 @@ final class Prefs {
 
     static void setMediaLastId(Context c, long id) { sp(c).edit().putLong("mediaLastId", id).commit(); }
 
+    /** When the camera's files were last looked at (unix s): the look back reaches a day before it. */
+    static long mediaScanned(Context c) { return sp(c).getLong("mediaScanned", 0); }
+
+    static void setMediaScanned(Context c, long s) { sp(c).edit().putLong("mediaScanned", s).apply(); }
+
     /** Upload runs in a row that sent nothing: MediaJob waits longer each time. */
     static int mediaFails(Context c) { return sp(c).getInt("mediaFails", 0); }
 

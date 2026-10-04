@@ -2348,10 +2348,10 @@
         // ---- The Android app, and "Buscar mi móvil" (server/go/devices.go) --
         //
         // 1. Enrolment. The app opened device.html, which left the phone's token
-        //    in this browser; once somebody is signed in (here), it is handed
-        //    over - with this browser's own push endpoint, so the server stops
-        //    ringing a call twice on that phone (the app rings it). Sent again
-        //    only when that endpoint changes.
+        //    in this browser; once somebody is signed in (here) and says yes to
+        //    "Add phone '<n>'?", it is handed over - with this browser's own
+        //    push endpoint, so the server stops ringing a call twice on that
+        //    phone (the app rings it). Sent again only when that endpoint changes.
         // 2. "?here=<find>": the answer to a "¿Dónde estás?" push (the iPhone
         //    path) - send where this device is, once, and clean the address.
         // 3. The round button in the panel's bottom-right corner and its dialog.
@@ -2411,8 +2411,21 @@
                     put( 'nayive-device', JSON.stringify( known ) );
                 }
                 if( ! pending || ! pending.t ) { if( known ) moveEndpoint( known ); return; }
-                myEndpoint().then( function ( ep )
+                // Anyone can send a device.html#t=... link: never enrol a phone
+                // without a yes. No / Escape drops it (the app opens device.html
+                // again until it is enrolled); a yes is kept for a retry.
+                var asked = pending.ok ? Promise.resolve( true ) : NayiveUI.confirm( {
+                    title: pending.n ? TF( 'dev.addAsk', { name: pending.n } ) : T( 'dev.addAskNoName' ),
+                    body:  T( 'dev.addAskBody' ) } );
+                asked.then( function ( yes )
                 {
+                    if( ! yes ) { put( 'nayive-enrol', null ); return; }
+                    pending.ok = true;
+                    put( 'nayive-enrol', JSON.stringify( pending ) );
+                    return myEndpoint();
+                } ).then( function ( ep )
+                {
+                    if( ep === undefined ) return;     // said no
                     return api( 'POST', '/enrol', { t: pending.t, name: pending.n || '', endpoint: ep } ).then( function ( j )
                     {
                         if( j._status === 200 )
