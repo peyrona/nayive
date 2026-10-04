@@ -1826,7 +1826,7 @@
             const meName = $( 'meNameInput' ).value.trim() || meUser || T( 'split.meDefault' );
             const others = $( 'othersInput' ).value.split( /[\n,;]/ ).map( s => s.trim() ).filter( Boolean );
             const mem    = [ { id: newId( 'm' ), name: meName, me: true } ].concat( others.map( n => ( { id: newId( 'm' ), name: n } ) ) );
-            const id     = NayiveUI.slugify( name, 'grupo', 24 ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
+            const id     = NayiveUI.slugify( name, T( 'split.groupSlug' ), 24 ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
 
             const g = { id, name, currency: cur, created: NayiveUI.todayIso(), archived: false, members: mem, rates: {}, entries: [] };
             g._base = DIR + '/' + id;
@@ -2044,7 +2044,7 @@
             root.innerHTML = pdfHtml( g );
 
             const prevTitle = document.title;
-            document.title  = NayiveUI.slugify( g.name, 'grupo', 24 );
+            document.title  = NayiveUI.slugify( g.name, T( 'split.groupSlug' ), 24 );
             document.documentElement.classList.add( 'printing' );
 
             window.addEventListener( 'afterprint', function done()

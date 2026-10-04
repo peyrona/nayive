@@ -188,7 +188,7 @@
                 chk, h( "span", { text: o } ), h( "span", { class: "n", text: String( counts[ i ] ) } ), bar ) );
         } );
         el.appendChild( meta( m ) );
-        el.appendChild( h( "div", { class: "poll-foot" },
+        el.appendChild( h( "div", { class: "cc-act poll-foot" },
             h( "button", { attrs: { type: "button" }, text: T( "chat.seeVotes" ),
                            on: { click: function ( e ) { e.stopPropagation(); showVotes( m ); } } } ) ) );
     };

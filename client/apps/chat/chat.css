@@ -471,7 +471,7 @@ button.who { cursor: pointer; }
 .msg.loc .lt small { font-size: 0.74rem; color: var(--text-dim); }
 .msg.loc .from, .msg.loc .fwd, .msg.loc .quote { margin: 3px 6px 5px; }
 
-/* contact card */
+/* contact card - its footer (.cc-act) is also the poll's */
 .msg.vcard   { width: 250px; padding-bottom: 0; white-space: normal; }
 .cc          { display: flex; align-items: center; gap: 10px; padding: 4px 0 8px; }
 .cc b        { display: block; font-size: 0.92rem; }
@@ -505,8 +505,7 @@ button.who { cursor: pointer; }
 .popt .n         { font-size: 0.8rem; color: var(--text-dim); }
 .popt .barx      { grid-column: 2 / 4; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
 .popt .barx i    { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
-.poll-foot       { display: flex; justify-content: center; margin: 4px -8px 0 -9px; border-top: 1px solid var(--line); }
-.poll-foot button{ padding: 8px; border: none; background: none; font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--accent); cursor: pointer; }
+.poll-foot       { margin-top: 4px; }   /* the card footer (.cc-act), a little below the options */
 
 .down
 {

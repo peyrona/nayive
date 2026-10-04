@@ -1247,6 +1247,7 @@
                     boardEl.insertBefore( el, overEl );
                     squares.push( el );
                 }
+                NayiveGames.roving( boardEl, squares, 8 );   // one tab stop; arrows inside
 
                 // One listener on the board rather than sixty-four on the
                 // squares - and it reads the square off the button, so it does

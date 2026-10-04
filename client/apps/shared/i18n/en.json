@@ -317,6 +317,7 @@
   "split.groupCurrency": "Group currency",
   "split.groupDeleted": "Group deleted",
   "split.groupName": "Name",
+  "split.groupSlug": "group",
   "split.hidePerson": "Hide (has paid, cannot be removed)",
   "split.kindExpense": "Expense",
   "split.kindPayment": "Payment",
