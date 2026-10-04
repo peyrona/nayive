@@ -495,6 +495,31 @@
             return !! ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable ) );
         }
 
+        // The best times of a timed game (Mines, Sudoku, Solitaire), read from
+        // the saved map { minesEasy: 47, ... } into `times` ({ easy: 47, ... })
+        // by MINIMUM: the plug re-reads the file whenever the tab is focused, and
+        // that answer can be older than the game just won here. A value that is
+        // absent, damaged or below 0 is ignored; 0 is a record. With `legacy`
+        // the level's old bare key ('easy') counts as well. Returns what to
+        // write back: the new keys only.
+        function adoptTimes( times, saved, order, key, legacy )
+        {
+            var out = {};
+
+            order.forEach( function ( k )
+            {
+                ( legacy ? [ saved[ key[ k ] ], saved[ k ] ] : [ saved[ key[ k ] ] ] ).forEach( function ( v )
+                {
+                    var n = parseFloat( v );
+
+                    if( ! isFinite( n ) || n < 0 ) return;      // absent, or not a number
+                    if( typeof times[ k ] !== 'number' || n < times[ k ] ) times[ k ] = n;
+                } );
+                if( typeof times[ k ] === 'number' ) out[ key[ k ] ] = times[ k ];
+            } );
+            return out;
+        }
+
         // A board of square buttons (Chess, Checkers) is ONE tab stop, not 64:
         // Tab lands on the square last used, the arrow keys move inside the
         // board, Enter / Space press the square as any button does.
@@ -1365,7 +1390,7 @@
 
         window.NayiveGames = {
             T: T, TF: TF, STEP: STEP, clock: clock, keyBusy: keyBusy,
-            pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop, roving: roving,
+            pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop, roving: roving, adoptTimes: adoptTimes,
             arcade: arcade, saveBest: saveBest, saveTime: saveTime, sfx: Sfx,
             add: function ( name, mod ) { MODS[ name ] = mod; }
         };

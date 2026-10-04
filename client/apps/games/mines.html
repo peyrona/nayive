@@ -733,19 +733,7 @@
             // only the new one is written back.
             function adoptTimes( saved )
             {
-                var out = {};
-
-                ORDER.forEach( function ( k )
-                {
-                    [ saved[ KEY[ k ] ], saved[ k ] ].forEach( function ( v )
-                    {
-                        var n = parseFloat( v );
-
-                        if( ! isFinite( n ) || n < 0 ) return;      // absent, or not a number
-                        if( ! has( k ) || n < times[ k ] ) times[ k ] = n;
-                    } );
-                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
-                } );
+                var out = NayiveGames.adoptTimes( times, saved, ORDER, KEY, true );
 
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
                 return out;

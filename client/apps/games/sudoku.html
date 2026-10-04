@@ -852,15 +852,7 @@
 
             function adoptTimes( saved )
             {
-                var out = {};
-
-                ORDER.forEach( function ( k )
-                {
-                    var n = parseFloat( saved[ KEY[ k ] ] );        // NaN when absent or damaged
-
-                    if( isFinite( n ) && n >= 0 && ( ! has( k ) || n < times[ k ] ) ) times[ k ] = n;
-                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
-                } );
+                var out = NayiveGames.adoptTimes( times, saved, ORDER, KEY, false );
 
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
                 return out;
