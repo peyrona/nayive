@@ -9,6 +9,7 @@ package main
 //	GET  /api/zip?file=files/x.zip           what is inside - nothing is unpacked
 //	POST /api/zip?file=files/x.zip           unpack it beside itself -> {"path", "files", "skipped"}
 //	POST /api/zip?paths=files/a&paths=...    pack them into ONE new .zip -> {"path", "files", "size"}
+//	POST /api/zip  {"paths": [...]}          the same, for a pick too long for an address
 //
 // The last one is Drive's "Compress" - see COMPRESS at the end of this file.
 //
@@ -120,8 +121,10 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := cleanQuery(r)
-	if r.Method == http.MethodPost && q.Has("paths") {
-		s.zipCompress(w, r, role, user, q.All("paths"))
+	if r.Method == http.MethodPost && (q.Has("paths") || jsonBody(r)) {
+		if paths, ok := pickedPaths(w, r, q); ok { // api_download.go
+			s.zipCompress(w, r, role, user, paths)
+		}
 		return
 	}
 	if !q.Has("file") {

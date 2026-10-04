@@ -487,13 +487,15 @@
         if( S.more )
             wallIn.appendChild( h( "button", { class: "text-btn ghost older", attrs: { type: "button" }, text: T( "chat.older" ),
                                                on: { click: loadOlder } } ) );
-        var prevDay = null, prev = null;
+        // The "N unread" band: before the first unread one from someone else -
+        // the one it was set at may have been deleted since (AA5).
+        var prevDay = null, prev = null, band = S.bandId, me = C.me();
         S.order.forEach( function ( id )
         {
             var m = S.msgs.get( id );
             var day = C.dayKey( m.at );
             if( day !== prevDay ) { wallIn.appendChild( h( "span", { class: "chip", text: C.dayLabel( m.at ) } ) ); prev = null; }
-            if( S.bandId && id === S.bandId ) wallIn.appendChild( bandEl() );
+            if( band && id >= band && m.from !== me ) { wallIn.appendChild( bandEl() ); band = 0; }
             var el = C.bubble( m, prev );
             wallIn.appendChild( el );
             S.els.set( id, el );

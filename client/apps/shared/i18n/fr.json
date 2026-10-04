@@ -364,6 +364,7 @@
   "split.recordPayment": "Noter ce paiement",
   "split.removePerson": "Retirer",
   "split.removeSharer": "Retirer (sa part de {n} dépenses passe aux autres)",
+  "split.lastSharer": "Impossible de retirer la dernière personne qui partage une dépense : masquez-la.",
   "split.samePerson": "Choisis deux personnes différentes",
   "split.saved": "Enregistré",
   "split.shareGroup": "Partager avec un autre utilisateur",

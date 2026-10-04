@@ -5,6 +5,7 @@ package main
 // =============================================================================
 //
 //	POST   /api/download?paths=a&paths=b      check them -> {"id", "name", "total", "files"}
+//	POST   /api/download  {"paths": [a, b]}   the same, for a pick too long for an address
 //	GET    /api/download?id=<id>              the bytes, as an attachment
 //	GET    /api/download?id=<id>&progress=1   {"state", "sent", "total", "files", "done"}
 //	DELETE /api/download?id=<id>              stop it
@@ -155,7 +156,9 @@ func (s *Server) apiDownload(w http.ResponseWriter, r *http.Request) {
 	q := cleanQuery(r)
 
 	if r.Method == http.MethodPost {
-		s.dlStart(w, r, role, user, q.All("paths"))
+		if paths, ok := pickedPaths(w, r, q); ok {
+			s.dlStart(w, r, role, user, paths)
+		}
 		return
 	}
 	job := s.downloads.get(q.Get("id"), user)
@@ -185,6 +188,30 @@ func (s *Server) apiDownload(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.dlSend(w, r, job)
 	}
+}
+
+// pickedPaths is what Download and Compress (api_zip.go) pack: the ?paths= of
+// the address, or {"paths": [...]} in a JSON body. The body is for a big pick:
+// Ctrl+A in a folder of 1,300 photos makes an address past the server's 64 KiB
+// header cap, refused with 431 every time (AB1). ok false: the answer (400 bad
+// JSON, 413 over 1 MiB) is sent.
+func pickedPaths(w http.ResponseWriter, r *http.Request, q Query) ([]string, bool) {
+	if q.Has("paths") || !jsonBody(r) {
+		return q.All("paths"), true
+	}
+	var in struct {
+		Paths []string `json:"paths"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		sendBodyError(w, r, err)
+		return nil, false
+	}
+	return in.Paths, true
+}
+
+// jsonBody reports a request that says it carries JSON.
+func jsonBody(r *http.Request) bool {
+	return strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json")
 }
 
 // dlStart is the POST: the paths are checked, measured and named.

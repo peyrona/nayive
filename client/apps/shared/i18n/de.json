@@ -364,6 +364,7 @@
   "split.recordPayment": "Diese Zahlung eintragen",
   "split.removePerson": "Entfernen",
   "split.removeSharer": "Entfernen (der Anteil an {n} Ausgaben geht an die anderen)",
+  "split.lastSharer": "Wer als Letzter eine Ausgabe teilt, kann nicht entfernt werden: blende die Person aus.",
   "split.samePerson": "Wähle zwei verschiedene Personen",
   "split.saved": "Gespeichert",
   "split.shareGroup": "Mit einem anderen Nutzer teilen",

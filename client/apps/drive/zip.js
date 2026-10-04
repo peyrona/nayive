@@ -182,14 +182,11 @@ async function compressSelection()
     const paths = actionTargets();
     if( ! paths.length ) return;
 
-    const q = new URLSearchParams();
-    paths.forEach( function( p ) { q.append( 'paths', p ); } );
-
     showProgress( T( 'drive.zipping' ) );
     let r;
     try
     {
-        r = JSON.parse( await withBusy( GumApi.fetchText( '/api/zip?' + q.toString(), { method: 'POST' } ) ) );
+        r = JSON.parse( await withBusy( postPaths( '/api/zip', paths ) ) );     // actions.js: a big pick goes in the body
     }
     catch( err )
     {

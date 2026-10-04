@@ -165,11 +165,30 @@
     // A move also answers `moved`: target -> its new ref, where the server
     // told it. A big pick goes in pieces (E.CHUNK), the bar in the middle
     // of the screen (E.job) counting them; an account whose piece failed is left.
-    async function perAccount( list, path, body )
+    // `together`: every piece's call starts at once, none waits for the one
+    // before - a page closing keeps alive only the calls started in that same
+    // tick (NayiveUI's withKeepalive), the rest stayed in the Trash (OL4).
+    // Nayive takes them one at a time per account (mail_imap.go, run).
+    async function perAccount( list, path, body, together )
     {
         var groups = {}, out = { done: [], err: null, refused: 0, moved: new Map() };
         list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m ); } );
         var job = E.job( list.length ), sent = 0;
+        function send( acct, piece )
+        {
+            var b = Object.assign( { refs: piece.map( function ( m ) { return m.ref; } ) }, body || {} );
+            return E.api( "POST", encodeURIComponent( acct ) + "/" + path, b );
+        }
+        var started = {};
+        if( together ) Object.keys( groups ).forEach( function ( a )
+        {
+            started[ a ] = E.chunks( groups[ a ] ).map( function ( piece )
+            {
+                var p = send( a, piece );
+                p.catch( function () {} );      // read below, in order
+                return p;
+            } );
+        } );
         try
         {
             for( var acct in groups )
@@ -178,10 +197,9 @@
                 for( var i = 0; i < pieces.length; i++ )
                 {
                     job.step( sent );
-                    var b = Object.assign( { refs: pieces[ i ].map( function ( m ) { return m.ref; } ) }, body || {} );
                     try
                     {
-                        var data = await E.api( "POST", encodeURIComponent( acct ) + "/" + path, b );
+                        var data = await ( together ? started[ acct ][ i ] : send( acct, pieces[ i ] ) );
                         var failed = {};
                         ( ( data && data.failed ) || [] ).forEach( function ( r ) { failed[ r ] = true; } );
                         pieces[ i ].forEach( function ( m )
@@ -191,7 +209,7 @@
                             if( data && data.moved && data.moved[ m.ref ] ) out.moved.set( m, data.moved[ m.ref ] );
                         } );
                     }
-                    catch( err ) { out.err = out.err || err; break; }
+                    catch( err ) { out.err = out.err || err; if( together ) continue; break; }   // together: the rest went already
                     sent += pieces[ i ].length;
                 }
             }
@@ -312,14 +330,18 @@
         // (data-safety I9, mail-chat #12).
         del: function ( list )
         {
-            moveTo( list || targets(), "trash", function ( list )
+            list = list || targets();
+            // whose each is, taken now: a tray's rows do not carry their
+            // account, and another may be on screen by the Undo (OL3)
+            var whose = new Map( list.map( function ( m ) { return [ m, E.acctOf( m ) ]; } ) );
+            moveTo( list, "trash", function ( list )
             {
                 NayiveUI.undoToast( E.TF( "mail.deletedN", { n: list.length } ), function ()
                 {
                     run( async function ()
                     {
                         var groups = {}, back = 0;
-                        list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m.mid ); } );
+                        list.forEach( function ( m ) { var a = whose.get( m ); ( groups[ a ] = groups[ a ] || [] ).push( m.mid ); } );
                         var job = E.job( list.length ), sent = 0;
                         try
                         {
@@ -372,7 +394,7 @@
             {
                 run( async function ()
                 {
-                    var r = await perAccount( pinned, "forget" );
+                    var r = await perAccount( pinned, "forget", undefined, true );   // all at once: the page may be closing (OL4)
                     // what the server kept comes back in sight (a deleted
                     // one's ref never comes again: it may stay in the set)
                     pinned.forEach( function ( p, i ) { if( r.done.indexOf( p ) < 0 ) S.goneRows.delete( keys[ i ] ); } );

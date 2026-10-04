@@ -7,12 +7,17 @@
 //------------------------------------------------------------------------//
 // ACTIONS: RENAME
 
+// The item the open dialog renames, kept as it opened: the picks may change
+// meanwhile (a picked file deleted elsewhere drops out of the list, and the
+// tree menu's target with it), and OK must not rename another one (AB2).
+let renameTarget = null;
+
 function openRename()
 {
     const targets = actionTargets();
     if( targets.length !== 1 ) return;
 
-    const path = targets[0];
+    const path = renameTarget = targets[0];
     document.getElementById( 'renameName' ).value = path.split( '/' ).pop();
     setBackdrop( 'renameBackdrop', true );
     document.getElementById( 'renameName' ).focus();
@@ -20,12 +25,12 @@ function openRename()
 
 async function confirmRename()
 {
-    const targets = actionTargets();
-    if( targets.length !== 1 ) return;
+    const oldPath = renameTarget;
+    if( ! oldPath ) return;
 
-    const oldPath = targets[0];
     const newName = document.getElementById( 'renameName' ).value.trim();
     if( ! newName ) return;
+    renameTarget = null;
 
     setBackdrop( 'renameBackdrop', false );
     setStatus( T( 'drive.renaming' ) );
@@ -429,6 +434,11 @@ function openDeleteConfirm()
 
 let deleteBusy = false;   // a move to the bin is on its way: a held Del key must not send it twice
 
+// A big pick goes to the bin in batches: every path rides in the address
+// (?paths=), and Ctrl+A in a folder of 1,300 photos made one the server
+// refuses (431, AB1). The bin ids of all the batches make ONE Undo.
+const BIN_BATCH = 200;
+
 async function confirmDelete()
 {
     if( ! deleteTargets.length || deleteBusy ) return;
@@ -439,33 +449,42 @@ async function confirmDelete()
 
     setStatus( T( 'drive.movingToTrash' ) );
 
-    const droppedCurrent = targets.indexOf( currentFolder ) !== -1;
-
+    let ids = [], sent = 0, failed = false;
     try
     {
-        const ids = await withBusy( GumApi.binPaths( targets ) );
-        await NayiveMedia.purgePaths( targets );
-        clearSel();
-        deleteBusy = false;
-
-        if( droppedCurrent )
-            currentFolder = currentFolder.includes( '/' )
-                            ? currentFolder.slice( 0, currentFolder.lastIndexOf( '/' ) ) : FS_ROOT;
-
-        await reload();
-        setStatus( '' );      // clears "Moving to the bin..."; the bin itself says it landed
-        flashBin();
-
-        // An old server does not say the bin ids: no way back from here.
-        if( ids ) NayiveUI.undoToast( T( 'ui.toast.binned' ), function() { undoBin( ids ); } );
-        else      NayiveUI.toast( T( 'ui.toast.binned' ) );
+        for( ; sent < targets.length; sent += BIN_BATCH )
+        {
+            const batch = targets.slice( sent, sent + BIN_BATCH );
+            const got   = await withBusy( GumApi.binPaths( batch ) );
+            ids = ids && got ? ids.concat( got ) : null;     // an old server does not say them
+            await NayiveMedia.purgePaths( batch );
+        }
     }
-    catch( _ )
+    catch( _ ) { failed = true; }
+
+    deleteBusy = false;
+    if( ! sent )
     {
-        deleteBusy = false;
         NayiveUI.toast( T( 'drive.trashFailed' ) );
         setStatus( '' );
+        return;
     }
+
+    // What went (all, or the batches before the one that failed): the view
+    // shows it, and the Undo brings it back.
+    clearSel();
+    if( targets.slice( 0, sent ).indexOf( currentFolder ) !== -1 )
+        currentFolder = currentFolder.includes( '/' )
+                        ? currentFolder.slice( 0, currentFolder.lastIndexOf( '/' ) ) : FS_ROOT;
+
+    await reload();
+    setStatus( '' );      // clears "Moving to the bin..."; the bin itself says it landed
+    flashBin();
+
+    // An old server does not say the bin ids: no way back from here.
+    const msg = T( failed ? 'drive.trashFailed' : 'ui.toast.binned' );
+    if( ids && ids.length ) NayiveUI.undoToast( msg, function() { undoBin( ids ); } );
+    else                    NayiveUI.toast( msg );
 }
 
 // Undo of a move to the bin: everything comes back to where it was. The
@@ -476,8 +495,16 @@ async function undoBin( ids )
 {
     setStatus( T( 'drive.restoring' ) );
 
-    let res;
-    try { res = await withBusy( GumApi.trashRestore( ids ) ); }
+    // In batches too: the ids ride in the address as well (AB1).
+    const res = { renamed: [] };
+    try
+    {
+        for( let i = 0; i < ids.length; i += BIN_BATCH )
+        {
+            const r = await withBusy( GumApi.trashRestore( ids.slice( i, i + BIN_BATCH ) ) );
+            if( r && r.renamed ) res.renamed = res.renamed.concat( r.renamed );
+        }
+    }
     catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); await refreshView(); return; }
 
     await refreshView();
@@ -524,19 +551,33 @@ const DL_NET_TRIES = 20;     // polls in a row that may fail before Drive stops 
 
 let dlJob = null;            // the download under way: { id, name, files, row, timer, fails, stopped }
 
+// The POST of a Download or a Compress (zip.js) of `paths`: in the address
+// while they fit - any server takes that - and in a JSON body past that:
+// Ctrl+A in a folder of 1,300 photos made an address the server refuses
+// (431, AB1). Resolves to the answer's text, as GumApi.fetchText.
+const PATHS_IN_URL = 8000;
+
+function postPaths( url, paths )
+{
+    const q = new URLSearchParams();
+    paths.forEach( function( p ) { q.append( 'paths', p ); } );
+    const query = q.toString();
+
+    if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + '?' + query, { method: 'POST' } );
+    return GumApi.fetchText( url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify( { paths: paths } ) } );
+}
+
 async function downloadSelection()
 {
     if( dlJob ) return;
     const paths = actionTargets();
     if( ! paths.length ) return;
 
-    const q = new URLSearchParams();
-    paths.forEach( function( p ) { q.append( 'paths', p ); } );
-
     let r;
     try
     {
-        r = JSON.parse( await withBusy( GumApi.fetchText( '/api/download?' + q.toString(), { method: 'POST' } ) ) );
+        r = JSON.parse( await withBusy( postPaths( '/api/download', paths ) ) );
     }
     catch( err )
     {

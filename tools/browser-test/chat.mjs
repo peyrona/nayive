@@ -183,6 +183,24 @@ ok( await sel() === CA + "," + LU && ! await opened(), "while picking, a tap add
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "NayiveChat.browse.ids().length === 0 && ! document.getElementById( 'rows' ).classList.contains( 'is-picking' )" ), "the × stops picking" );
 
+section( "CHAT · THE 'N UNREAD' LINE WHEN THE FIRST UNREAD ONE IS DELETED (AA5, bugs-2)" );
+{
+    const first = await ( await guestSend( carmen, "aa5-uno" ) ).json();
+    await guestSend( carmen, "aa5-dos" );
+    await c.open( "/nayive/chat/index.html" );
+    await c.until( "document.querySelectorAll( '#rows .row[data-conv]' ).length === 2 && !! window.NayiveChat.browse" );
+    await c.evaluate( `NayiveChat.openConv( ${JSON.stringify( CA )} ); true` );
+    ok( await c.until( "!! document.querySelector( '.wall-in .band' ) && document.querySelector( '.wall-in .band' ).nextElementSibling.textContent.includes( 'aa5-uno' )" ),
+        "the line sits before her first unread message" );
+    // Carmen deletes it for everyone: it leaves no trace
+    const del = await fetch( s.base + "/api/c/" + carmen.token + "/conv/" + CA + "/messages/" + first.id, { method: "DELETE" } );
+    ok( del.status === 200, "(Carmen deletes it)", del.status );
+    ok( await c.until( "! document.querySelector( '.wall-in' ).textContent.includes( 'aa5-uno' )" ), "it goes from the wall" );
+    await c.evaluate( "NayiveChat.renderAll(); true" );
+    ok( await c.until( "!! document.querySelector( '.wall-in .band' ) && document.querySelector( '.wall-in .band' ).nextElementSibling.textContent.includes( 'aa5-dos' )" ),
+        "the line moves to the next unread one", await c.evaluate( "!! document.querySelector( '.wall-in .band' )" ) );
+}
+
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );
 await done( c, s );

@@ -364,6 +364,7 @@
   "split.recordPayment": "Record this payment",
   "split.removePerson": "Remove",
   "split.removeSharer": "Remove (their share of {n} expenses goes to the others)",
+  "split.lastSharer": "The last person sharing an expense cannot be removed: hide them instead.",
   "split.samePerson": "Choose two different people",
   "split.saved": "Saved",
   "split.shareGroup": "Share with another user",
