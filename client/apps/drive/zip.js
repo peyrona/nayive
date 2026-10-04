@@ -168,6 +168,7 @@ function selectIfListed( path )
 function compressFailText( err )
 {
     const s = err && err.status;
+    if( err && err.tooMany ) return T( 'drive.pickTooMany' );     // postPaths, actions.js
     if( s === 507 ) return T( 'drive.compressQuota' );
     if( s === 403 ) return T( 'drive.compressReadOnly' );
     if( s === 413 ) return T( 'drive.compressTooMany' );

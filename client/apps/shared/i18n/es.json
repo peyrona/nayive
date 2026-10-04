@@ -1877,6 +1877,7 @@
   "drive.compressQuota": "No se creó el .zip: no hay espacio suficiente.",
   "drive.compressReadOnly": "Esta carpeta es de solo lectura: aquí no se puede crear el .zip.",
   "drive.compressTooMany": "Hay demasiados archivos para un solo .zip.",
+  "drive.pickTooMany": "Demasiados elementos a la vez: elige menos.",
   "drive.compressFailed": "No se pudo crear el .zip.",
   "drive.renaming": "Renombrando…",
   "drive.nameExistsTitle": "Ya existe ese nombre",

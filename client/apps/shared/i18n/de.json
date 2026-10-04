@@ -1877,6 +1877,7 @@
   "drive.compressQuota": "Die .zip-Datei wurde nicht erstellt: Es ist nicht genug Platz frei.",
   "drive.compressReadOnly": "Dieser Ordner ist schreibgeschützt: Die .zip-Datei kann hier nicht erstellt werden.",
   "drive.compressTooMany": "Zu viele Dateien für eine einzige .zip-Datei.",
+  "drive.pickTooMany": "Zu viele Elemente auf einmal: wähle weniger aus.",
   "drive.compressFailed": "Die .zip-Datei konnte nicht erstellt werden.",
   "drive.renaming": "Wird umbenannt…",
   "drive.nameExistsTitle": "Diesen Namen gibt es schon",

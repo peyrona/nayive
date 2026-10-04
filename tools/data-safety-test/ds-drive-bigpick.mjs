@@ -67,4 +67,31 @@ section( "BIN 1,300 PICKED FILES, THEN ONE UNDO" );
     ok( await until( () => jpgsOnDisk() === N, 60000 ), "the Undo brings all 1,300 back", jpgsOnDisk() );
 }
 
+//------------------------------------------------------------------------//
+section( "A PICK TOO BIG EVEN FOR A BODY (OVER 1 MIB): SAID CLEARLY (review)" );
+{
+    const said = await c.evaluate( `postPaths( '/api/zip', Array.from( { length: 20000 }, ( _, i ) => 'files/Big/' + i + '_${names[ 0 ]}' ) )
+        .then( () => 'sent', err => err.tooMany ? compressFailText( err ) : 'other: ' + err.message )` );
+    ok( said === await c.evaluate( "T( 'drive.pickTooMany' )" ), "refused before sending, with 'too many items at once'", said );
+}
+
+//------------------------------------------------------------------------//
+section( "A BATCH THAT HALF WENT: WHAT WENT STILL HAS ITS UNDO (review)" );
+{
+    // b.txt sits in a folder nobody may write: it cannot leave it; a.txt goes.
+    // The server answers 500 with the ids of what went.
+    const half = s.home() + "/files/Half";
+    fs.mkdirSync( half + "/ro", { recursive: true } );
+    fs.writeFileSync( half + "/a.txt", "a" );
+    fs.writeFileSync( half + "/ro/b.txt", "b" );
+    fs.chmodSync( half + "/ro", 0o555 );
+    await c.evaluate( "deleteTargets = [ 'files/Half/a.txt', 'files/Half/ro/b.txt' ]; confirmDelete(); true" );
+    ok( await until( () => ! fs.existsSync( half + "/a.txt" ) ), "a.txt goes to the bin" );
+    ok( fs.existsSync( half + "/ro/b.txt" ), "(b.txt cannot, and stays)" );
+    ok( await c.until( "document.querySelector( '.actionable .toast-undo' ) && ! deleteBusy", 30000 ), "the failure toast still has an Undo" );
+    await c.evaluate( "document.querySelector( '.actionable .toast-undo' ).click(); true" );
+    ok( await until( () => fs.existsSync( half + "/a.txt" ) ), "the Undo brings a.txt back" );
+    fs.chmodSync( half + "/ro", 0o755 );
+}
+
 await done( c, s );

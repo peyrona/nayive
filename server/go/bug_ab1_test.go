@@ -95,6 +95,23 @@ func TestBug_AB1_CompressBodyOwnerCheck(t *testing.T) {
 	}
 }
 
+// An "Extract here" (?file=) that says it carries JSON is still an extract,
+// not a Compress of an empty list.
+func TestBug_AB1_ExtractWithJSONType(t *testing.T) {
+	srv, ts, client := newTestServer(t)
+	signIn(t, client, ts.URL, "ana", "abc")
+	os.WriteFile(filepath.Join(srv.cfg.HomesDir, "ana", "files", "caja.zip"), makeZip(t, file("dentro.txt", "hola")), 0o644)
+
+	resp := do(t, client, "POST", ts.URL+"/api/zip?file=files/caja.zip", strings.NewReader("{}"),
+		map[string]string{"Content-Type": "application/json"})
+	var got map[string]any
+	json.NewDecoder(resp.Body).Decode(&got)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || got["path"] != "files/caja" {
+		t.Errorf("extract with a JSON content type = %d %v, want 200 and files/caja", resp.StatusCode, got)
+	}
+}
+
 func TestBug_AB1_DownloadBodyPaths(t *testing.T) {
 	srv, ts, client := newTestServer(t)
 	signIn(t, client, ts.URL, "ana", "abc")

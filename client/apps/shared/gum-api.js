@@ -169,6 +169,7 @@
             // for "HTTP 404", and toasts show it. New code reads err.status.
             var err = new Error( "HTTP " + res.status + ": " + res.statusText );
             err.status = res.status;
+            err.response = res;         // its body unread: binPaths reads the ids of a half-done bin
             throw err;
         }
 
@@ -602,7 +603,10 @@
 
     // The same delete, for an Undo: resolves to the bin ids of what went in
     // (trashRestore( ids ) puts them back), or null from a server too old to
-    // say - the caller then shows a plain toast, no Undo.
+    // say - the caller then shows a plain toast, no Undo. A half-done one
+    // (500: some went, some stayed) throws, the error carrying err.ids: the
+    // bin ids of what DID go, for the Undo - and err.failed, the paths that
+    // stayed (api_files.go, filesDelete).
     function binPaths( paths )
     {
         return deletePaths( paths ).then( function ( text )
@@ -610,6 +614,17 @@
             var ids = null;
             try { ids = JSON.parse( text ).ids; } catch ( e ) {}
             return Array.isArray( ids ) ? ids : null;
+        }, function ( err )
+        {
+            var res = err && err.response;
+            if( ! res ) throw err;
+            return res.json().then( function ( b )
+                                    {
+                                        if( b && Array.isArray( b.ids ) )    err.ids    = b.ids;
+                                        if( b && Array.isArray( b.failed ) ) err.failed = b.failed;
+                                    },
+                                    function () {} )
+                             .then( function () { throw err; } );
         } );
     }
 

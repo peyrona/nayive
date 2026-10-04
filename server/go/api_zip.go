@@ -121,7 +121,7 @@ func (s *Server) apiZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := cleanQuery(r)
-	if r.Method == http.MethodPost && (q.Has("paths") || jsonBody(r)) {
+	if r.Method == http.MethodPost && (q.Has("paths") || (jsonBody(r) && !q.Has("file"))) {
 		if paths, ok := pickedPaths(w, r, q); ok { // api_download.go
 			s.zipCompress(w, r, role, user, paths)
 		}

@@ -449,13 +449,29 @@ async function confirmDelete()
 
     setStatus( T( 'drive.movingToTrash' ) );
 
+    // `sent`: the paths asked so far that (may) have gone - counted the
+    // moment a batch answers, so what went is shown and undone whatever fails next.
     let ids = [], sent = 0, failed = false;
     try
     {
-        for( ; sent < targets.length; sent += BIN_BATCH )
+        while( sent < targets.length )
         {
             const batch = targets.slice( sent, sent + BIN_BATCH );
-            const got   = await withBusy( GumApi.binPaths( batch ) );
+            let got;
+            try { got = await withBusy( GumApi.binPaths( batch ) ); }
+            catch( err )
+            {
+                // Half done: some of this batch went (err.ids), the rest stayed (err.failed).
+                if( err && err.ids && err.ids.length )
+                {
+                    sent += batch.length;
+                    if( ids ) ids = ids.concat( err.ids );
+                    const stayed = err.failed || [];
+                    await NayiveMedia.purgePaths( batch.filter( function( p ) { return stayed.indexOf( p ) === -1; } ) );
+                }
+                throw err;
+            }
+            sent += batch.length;
             ids = ids && got ? ids.concat( got ) : null;     // an old server does not say them
             await NayiveMedia.purgePaths( batch );
         }
@@ -555,7 +571,8 @@ let dlJob = null;            // the download under way: { id, name, files, row, 
 // while they fit - any server takes that - and in a JSON body past that:
 // Ctrl+A in a folder of 1,300 photos made an address the server refuses
 // (431, AB1). Resolves to the answer's text, as GumApi.fetchText.
-const PATHS_IN_URL = 8000;
+const PATHS_IN_URL  = 8000;
+const PATHS_IN_BODY = 1 << 20;    // server/go/response.go, maxBody
 
 function postPaths( url, paths )
 {
@@ -564,8 +581,17 @@ function postPaths( url, paths )
     const query = q.toString();
 
     if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + '?' + query, { method: 'POST' } );
-    return GumApi.fetchText( url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify( { paths: paths } ) } );
+
+    // The server reads a body of 1 MiB at most (413 past it): a pick that
+    // big is refused here, as "too many items at once" (err.tooMany).
+    const body = JSON.stringify( { paths: paths } );
+    if( new TextEncoder().encode( body ).length > PATHS_IN_BODY )
+    {
+        const err = new Error( 'too many items at once' );
+        err.tooMany = true;
+        return Promise.reject( err );
+    }
+    return GumApi.fetchText( url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body } );
 }
 
 async function downloadSelection()
@@ -581,7 +607,8 @@ async function downloadSelection()
     }
     catch( err )
     {
-        NayiveUI.toast( err && err.status === 413 ? T( 'drive.compressTooMany' ) : T( 'drive.downloadFailed' ),
+        NayiveUI.toast( err && err.tooMany ? T( 'drive.pickTooMany' ) :
+                        err && err.status === 413 ? T( 'drive.compressTooMany' ) : T( 'drive.downloadFailed' ),
                         { ms: 6000 } );
         return;
     }

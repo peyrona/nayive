@@ -165,25 +165,35 @@
     // A move also answers `moved`: target -> its new ref, where the server
     // told it. A big pick goes in pieces (E.CHUNK), the bar in the middle
     // of the screen (E.job) counting them; an account whose piece failed is left.
-    // `together`: every piece's call starts at once, none waits for the one
-    // before - a page closing keeps alive only the calls started in that same
-    // tick (NayiveUI's withKeepalive), the rest stayed in the Trash (OL4).
-    // Nayive takes them one at a time per account (mail_imap.go, run).
-    async function perAccount( list, path, body, together )
+    // `leaving` (the page is closing): only fetches marked keepalive outlive
+    // it, and only those started now, so the pieces start at once, keepalive
+    // - first ones first, as many as the browser's keepalive budget holds
+    // (KEEPALIVE_BYTES); the rest stay in the Trash, for its purge (OL4).
+    // Otherwise one at a time: Nayive runs one call per account at a time
+    // (mail_imap.go, run), a crowd of them would time out.
+    var KEEPALIVE_BYTES = 60000;     // the browser's cap is 64 KiB for all of them together
+
+    // A delete-for-good waiting on its Undo when the page closes goes now.
+    var forgetOnLeave = null;
+    window.addEventListener( "pagehide", function () { if( forgetOnLeave ) forgetOnLeave( true ); } );
+    async function perAccount( list, path, body, leaving )
     {
         var groups = {}, out = { done: [], err: null, refused: 0, moved: new Map() };
         list.forEach( function ( m ) { ( groups[ E.acctOf( m ) ] = groups[ E.acctOf( m ) ] || [] ).push( m ); } );
         var job = E.job( list.length ), sent = 0;
+        function bodyOf( piece ) { return Object.assign( { refs: piece.map( function ( m ) { return m.ref; } ) }, body || {} ); }
         function send( acct, piece )
         {
-            var b = Object.assign( { refs: piece.map( function ( m ) { return m.ref; } ) }, body || {} );
-            return E.api( "POST", encodeURIComponent( acct ) + "/" + path, b );
+            return E.api( "POST", encodeURIComponent( acct ) + "/" + path, bodyOf( piece ), leaving ? { keepalive: true } : undefined );
         }
-        var started = {};
-        if( together ) Object.keys( groups ).forEach( function ( a )
+        var started = {}, room = KEEPALIVE_BYTES;
+        if( leaving ) Object.keys( groups ).forEach( function ( a )
         {
             started[ a ] = E.chunks( groups[ a ] ).map( function ( piece )
             {
+                var n = JSON.stringify( bodyOf( piece ) ).length;
+                if( n > room ) { room = 0; return null; }      // past the budget: it stays
+                room -= n;
                 var p = send( a, piece );
                 p.catch( function () {} );      // read below, in order
                 return p;
@@ -197,9 +207,10 @@
                 for( var i = 0; i < pieces.length; i++ )
                 {
                     job.step( sent );
+                    if( leaving && ! started[ acct ][ i ] ) continue;       // not sent: stays in the Trash
                     try
                     {
-                        var data = await ( together ? started[ acct ][ i ] : send( acct, pieces[ i ] ) );
+                        var data = await ( leaving ? started[ acct ][ i ] : send( acct, pieces[ i ] ) );
                         var failed = {};
                         ( ( data && data.failed ) || [] ).forEach( function ( r ) { failed[ r ] = true; } );
                         pieces[ i ].forEach( function ( m )
@@ -209,7 +220,7 @@
                             if( data && data.moved && data.moved[ m.ref ] ) out.moved.set( m, data.moved[ m.ref ] );
                         } );
                     }
-                    catch( err ) { out.err = out.err || err; if( together ) continue; break; }   // together: the rest went already
+                    catch( err ) { out.err = out.err || err; if( leaving ) continue; break; }   // leaving: the rest went already
                     sent += pieces[ i ].length;
                 }
             }
@@ -386,15 +397,18 @@
             keys.forEach( function ( k ) { S.goneRows.add( k ); } );
             if( S.open ) E.closeMessage( true );
             E.dropRows( list );
-            NayiveUI.undoToast( E.T( "mail.forgotten" ), function ()
+            // Once: at the Undo's end, or as the page closes (closing: the
+            // pieces at once, keepalive - OL4). keepOnLeave: NayiveUI leaves
+            // the closing to us (forgetOnLeave below).
+            var settled = false;
+            var expire = function ( closing )
             {
-                keys.forEach( function ( k ) { S.goneRows.delete( k ); } );
-                if( here() ) E.loadList( false );
-            }, { onExpire: function ()
-            {
+                if( settled ) return;
+                settled = true;
+                if( forgetOnLeave === expire ) forgetOnLeave = null;
                 run( async function ()
                 {
-                    var r = await perAccount( pinned, "forget", undefined, true );   // all at once: the page may be closing (OL4)
+                    var r = await perAccount( pinned, "forget", undefined, closing );
                     // what the server kept comes back in sight (a deleted
                     // one's ref never comes again: it may stay in the set)
                     pinned.forEach( function ( p, i ) { if( r.done.indexOf( p ) < 0 ) S.goneRows.delete( keys[ i ] ); } );
@@ -402,7 +416,15 @@
                     if( ( r.err || r.refused ) && here() ) E.loadList( false );
                     tell( r );
                 } );
-            } } );
+            };
+            NayiveUI.undoToast( E.T( "mail.forgotten" ), function ()
+            {
+                settled = true;
+                if( forgetOnLeave === expire ) forgetOnLeave = null;
+                keys.forEach( function ( k ) { S.goneRows.delete( k ); } );
+                if( here() ) E.loadList( false );
+            }, { keepOnLeave: true, onExpire: function () { expire( false ); } } );
+            forgetOnLeave = expire;      // after the toast: it settled the Undo before it
         },
         // the Trash's or Spam's bar: everything there, for good (asks once)
         emptyTray: async function ()

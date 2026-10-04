@@ -1877,6 +1877,7 @@
   "drive.compressQuota": "The .zip was not made: there is not enough free space.",
   "drive.compressReadOnly": "This folder is read-only: the .zip cannot be made here.",
   "drive.compressTooMany": "Too many files for one .zip.",
+  "drive.pickTooMany": "Too many items at once: pick fewer.",
   "drive.compressFailed": "The .zip could not be made.",
   "drive.renaming": "Renaming…",
   "drive.nameExistsTitle": "That name already exists",
