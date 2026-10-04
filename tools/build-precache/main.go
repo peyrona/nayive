@@ -59,7 +59,9 @@ var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "
 	"shared/i18n/fr.json", "shared/i18n/de.json"}
 
 // The launcher lives at apps/index.html itself; login.html is the sign-in page.
-var rootFiles = []string{"index.html", "login.html", "manifest.json", "icons/*"}
+// admin.html and device.html are pages too: every page is precached, so it is
+// always the same build as the shared/*.js it loads (sw.js htmlStrategy).
+var rootFiles = []string{"index.html", "login.html", "admin.html", "device.html", "manifest.json", "icons/*"}
 
 func main() {
 	flag.Parse()
@@ -128,13 +130,16 @@ func collect(apps string) []string {
 	// Every app's own top-level scripts and stylesheet, offline app or not
 	// (drive/*.js, drive/drive.css). The service worker serves them cache-first,
 	// so they must be in the list - and so in CACHE_VERSION - or an edit never
-	// reaches a browser that already holds the old copy.
+	// reaches a browser that already holds the old copy. Its index.html too: the
+	// service worker never re-saves a cached page in the background, so a page
+	// only changes with a new CACHE_VERSION - together with the shared/*.js it
+	// calls (new HTML beside an old ui.js threw right after a deploy).
 	if entries, err := os.ReadDir(apps); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
-			for _, pat := range []string{"*.js", "*.css"} {
+			for _, pat := range []string{"*.js", "*.css", "index.html"} {
 				for _, rel := range glob(apps, e.Name()+"/"+pat) {
 					rels[rel] = true
 				}

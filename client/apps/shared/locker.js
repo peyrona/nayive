@@ -78,7 +78,7 @@
         s = s || {};
         var id  = LOCKERS.indexOf( s.id ) >= 0 ? s.id : "";
         var min = Math.floor( Number( s.min ) );
-        if( ! s.v && ! id ) min = 0;
+        if( ! s.v && ! s.id ) min = 0;     // a v1 "off"; an unknown id (the dropped "stars") is black, minutes kept
         return { v:    2,
                  id:   id,
                  min:  min >= 0 ? Math.min( min, 999 ) : MIN_DEFAULT,

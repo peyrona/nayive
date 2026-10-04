@@ -2583,6 +2583,7 @@
             var selected  = null;     // the folder path the user has highlighted
             var filesNode = null;     // { path:'files', nodes:[...] }, once loaded
             var treeErr   = false;
+            var jsErr     = false;   // browser.js failed to load: show it, never retry in a loop
 
             // The three folder verbs (delete / rename / new folder) live in the
             // bottom-left corner. While a name is being typed the same sheet
@@ -2839,14 +2840,14 @@
                     return p;
                 };
 
-                if( treeErr )
+                if( treeErr || jsErr )
                     box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
                 else if( filesNode === null )
                     box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
                 else if( ! window.NayiveUI.tree )
                 {
                     box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
-                    loadBrowser().then( function () { if( ! done ) render(); } );
+                    loadBrowser().then( function () { if( ! window.NayiveUI.tree ) jsErr = true; if( ! done ) render(); } );
                 }
                 else
                 {

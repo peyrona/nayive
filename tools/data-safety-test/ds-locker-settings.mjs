@@ -116,4 +116,14 @@ ok( await onDiskWhen( () => ( json( SALON ) || {} ).contrast === "normal" ), "cl
 st = json( SALON );
 ok( st && st.units === "c", "saved over the fresh copy", st );
 
+//----------------------------------------------------------------------------
+section( "CS1 - a locker this build does not know (the dropped \"stars\") keeps the minutes" );
+
+const lockSet = raw => c.evaluate( `( () => { localStorage.setItem( 'nayive-locker', ${JSON.stringify( raw )} ); return JSON.stringify( NayiveLock.settings() ); } )()` );
+let ls = JSON.parse( await lockSet( '{"id":"stars","min":15}' ) );
+ok( ls.id === "" && ls.min === 15, "stars, 15 min: the black screen after 15 min (was: never locks)", ls );
+ls = JSON.parse( await lockSet( '{"id":"","min":15}' ) );
+ok( ls.min === 0, "an old \"off\" (id \"\", no v) stays off", ls );
+await c.evaluate( "localStorage.removeItem( 'nayive-locker' ); true" );
+
 await done( c, s );

@@ -11,6 +11,7 @@
 //     now (another device saving round after round, no connection) is said,
 //     kept on the device and made later - Photos' sweep never deletes those
 //     notes at their old path (review C4b #3).
+// CS7 (bugs-2 #35): one tab at a time makes the waiting note moves.
 // A4 (list-apps #5): Music's "Save list".
 // A7 (list-apps #30, #31, #32): Movies' posters.json and progress.json,
 //     Photos' places.json; and Photos' own note save.
@@ -190,6 +191,25 @@ section( "C7 · A MOVE WHOSE NOTES CANNOT FOLLOW NOW: SAID, KEPT, MADE LATER - N
     ok( await disk( () => json( NOTES )[ "files/N/m.png" ] === "note m" ), "the waiting move was made: the note followed its photo to N", json( NOTES ) );
     ok( ! ( "files/M/m.png" in json( NOTES ) ), "...and is not left at M", json( NOTES ) );
     ok( await c.until( "! NayiveMedia.noteMoveWaits( 'files/M/m.png' )" ), "nothing waits any more" );
+}
+
+//----------------------------------------------------------------------------
+section( "CS7 · ONE TAB AT A TIME MAKES THE WAITING NOTE MOVES" );
+{
+    // Another tab is making the list (it holds the Web Lock): this tab waits
+    // for it, so a move is never made twice (the second run parked the note).
+    await c.evaluate( `( () => { const k = 'nayive-notes-moves:' + ( ( window.GumApi && GumApi.owner && GumApi.owner() ) || '' );
+        localStorage.setItem( k, JSON.stringify( [ { pairs: [ [ 'files/N/m.png', 'files/Q/m.png' ] ], keep: false } ] ) );
+        window.__free = null; window.__settled = null;
+        navigator.locks.request( k, () => new Promise( r => { window.__free = r; } ) );
+        NayiveMedia.settleNoteMoves().then( v => { window.__settled = v; } );
+        return true; } )()` );
+    ok( await c.until( "!! window.__free" ), "another tab holds the note moves" );
+    await sleep( 1500 );
+    ok( json( NOTES )[ "files/N/m.png" ] === "note m" && ! ( "files/Q/m.png" in json( NOTES ) ), "this tab waits: nothing moved meanwhile", json( NOTES ) );
+    await c.evaluate( "window.__free(); true" );
+    ok( await disk( () => json( NOTES )[ "files/Q/m.png" ] === "note m" ), "then this tab makes the move", json( NOTES ) );
+    ok( await c.until( "window.__settled === true" ), "...and nothing waits any more" );
 }
 
 await done( c, s );

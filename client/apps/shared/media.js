@@ -565,10 +565,15 @@
     // Makes the waiting note moves, in order, each one version-checked; one
     // that fails stops the rest (they must not overtake it). True when none
     // waits any more.
+    // The list is shared by every tab: one tab at a time makes it (a Web
+    // Lock), so the same move is never made twice - a second run parked the
+    // note the first had just moved.
     var settling = null;     // the run in progress: a second caller waits for it
     function settleNoteMoves()
     {
-        if( ! settling ) settling = makeMoves().finally( function () { settling = null; } );
+        if( ! settling )
+            settling = ( navigator.locks ? navigator.locks.request( movesKey(), makeMoves ) : makeMoves() )
+                       .finally( function () { settling = null; } );
         return settling;
     }
 
