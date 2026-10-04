@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-8122a24ab25b";
+var CACHE_VERSION = "nayive-a70b542a80ac";
 /* @end */
 
 /* @generated:precache */
