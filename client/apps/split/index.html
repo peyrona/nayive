@@ -912,10 +912,22 @@
         // room beside the JSON for receipts later. Which groups exist = the
         // folder listing (online) or the store's cache (offline).
 
+        // What each own group.json was in the listing when it was last read from the
+        // server ("mtime|size"). A re-read (focus, tab, plug) skips a group whose file
+        // has not moved since and keeps the object already on screen: one group
+        // edited elsewhere costs one GET, not one per group. Still read every time:
+        // a group not read from the server yet, one with a save waiting here, the
+        // ones shared with us (no mtime in that list) and the unlisted ones (that is
+        // how a delete elsewhere is seen). An edit in the same second with the same
+        // size waits for the next change; a save made from the older copy is still
+        // checked by the store (If-Unmodified-Since / merge), so nothing is lost.
+        const seen = {};
+
         async function loadGroups()
         {
             let paths = null;
             let unlisted = new Set();   // cached here, not in the listing: deleted elsewhere, or not uploaded yet
+            const stamp = {};           // own group.json path -> "mtime|size" in this listing
 
             if( navigator.onLine )
             {
@@ -923,9 +935,14 @@
                 {
                     const node = await GumApi.listDirRecursive( DIR );
                     const dirs = ( node.nodes || [] ).filter( n => Array.isArray( n.nodes ) );
-                    paths = dirs
-                        .filter( dn => ( dn.nodes || [] ).some( n => n.path === dn.path + '/' + FILE ) )
-                        .map( dn => dn.path + '/' + FILE );
+                    paths = [];
+                    dirs.forEach( dn =>
+                    {
+                        const f = ( dn.nodes || [] ).find( n => n.path === dn.path + '/' + FILE );
+                        if( ! f ) return;
+                        paths.push( f.path );
+                        stamp[ f.path ] = f.mtime + '|' + f.size;
+                    } );
                 }
                 catch( err )
                 {
@@ -947,11 +964,21 @@
                 paths = own.concat( shared ).filter( p => p.endsWith( '/' + FILE ) );
             }
 
-            const results = await Promise.all( paths.map( p => store.read( p ).then( r => ( { path: p, res: r } ) ) ) );
+            let reads = 0;
+            const results = await Promise.all( paths.map( async p =>
+            {
+                const had = stamp[ p ] && seen[ p ] === stamp[ p ] && groups.find( g => g._base + '/' + FILE === p );
+                if( had && ! ( await store.pending( p ) ) ) return { path: p, had: had };
+                reads++;
+                return { path: p, res: await store.read( p ) };
+            } ) );
             const loaded  = [];
 
-            for( const { path, res } of results )
+            for( const { path, res, had } of results )
             {
+                if( had ) { loaded.push( had ); continue; }   // unchanged on the server: the one on screen
+                if( stamp[ path ] && res.source === 'network' ) seen[ path ] = stamp[ path ];
+                else delete seen[ path ];
                 // Deleted on another device: forgotten here too, or the next save of
                 // this cached copy would bring the group back. (One made offline and
                 // not uploaded yet reads back its own body and stays.)
@@ -976,6 +1003,8 @@
 
             if( paths.length === 0 )                 // nothing to read -> the store never emitted
                 setSyncStatus( navigator.onLine ? 'synced' : 'offline' );
+            else if( reads === 0 )                   // all unchanged: the store's state from what is queued
+                await store.resting();
 
             render();
         }
@@ -1797,7 +1826,7 @@
             const meName = $( 'meNameInput' ).value.trim() || meUser || T( 'split.meDefault' );
             const others = $( 'othersInput' ).value.split( /[\n,;]/ ).map( s => s.trim() ).filter( Boolean );
             const mem    = [ { id: newId( 'm' ), name: meName, me: true } ].concat( others.map( n => ( { id: newId( 'm' ), name: n } ) ) );
-            const id     = NayiveUI.slugify( name, 'grupo', 24 ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
+            const id     = NayiveUI.slugify( name, T( 'split.groupSlug' ), 24 ) + '-' + Math.random().toString( 36 ).slice( 2, 6 );
 
             const g = { id, name, currency: cur, created: NayiveUI.todayIso(), archived: false, members: mem, rates: {}, entries: [] };
             g._base = DIR + '/' + id;
@@ -2015,7 +2044,7 @@
             root.innerHTML = pdfHtml( g );
 
             const prevTitle = document.title;
-            document.title  = NayiveUI.slugify( g.name, 'grupo', 24 );
+            document.title  = NayiveUI.slugify( g.name, T( 'split.groupSlug' ), 24 );
             document.documentElement.classList.add( 'printing' );
 
             window.addEventListener( 'afterprint', function done()

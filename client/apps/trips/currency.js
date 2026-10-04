@@ -151,6 +151,36 @@ function ratesAgree( a, b )
     return Math.abs( a - b ) <= rateTolerance( a, b );
 }
 
+// One quoted source: GET sUrl, then fnRate( json ) gives the EUR -> sCurrency
+// rate (anything not a number: "does not track") and fnAsOf( json ) its date.
+// fnFailed( json ), when given, names a failed lookup before any of that.
+async function rateFrom( SOURCE, sUrl, sCurrency, fnRate, fnAsOf, fnFailed )
+{
+    try
+    {
+        const res = await fetch( sUrl );
+
+        if( ! res.ok )
+            return { ok: false, source: SOURCE, reason: 'HTTP ' + res.status };
+
+        const data = await res.json();
+
+        if( fnFailed && fnFailed( data ) )
+            return { ok: false, source: SOURCE, reason: fnFailed( data ) };
+
+        const rate = fnRate( data );
+
+        if( typeof rate !== 'number' )
+            return { ok: false, source: SOURCE, reason: 'does not track ' + sCurrency };
+
+        return { ok: true, rate: rate, asOf: fnAsOf( data ), source: SOURCE };
+    }
+    catch( _ )
+    {
+        return { ok: false, source: SOURCE, reason: 'network error' };
+    }
+}
+
 async function fetchRateFrankfurter( sCurrency )
 {
     const SOURCE = 'Frankfurter (ECB reference rates)';
@@ -158,79 +188,24 @@ async function fetchRateFrankfurter( sCurrency )
     if( sCurrency === 'EUR' )
         return { ok: true, rate: 1, asOf: null, source: SOURCE };
 
-    try
-    {
-        const res = await fetch( 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=' + encodeURIComponent( sCurrency ) );
-
-        if( ! res.ok )
-            return { ok: false, source: SOURCE, reason: 'HTTP ' + res.status };
-
-        const data = await res.json();
-        const rate = data && data.rates ? data.rates[ sCurrency ] : undefined;
-
-        if( typeof rate !== 'number' )
-            return { ok: false, source: SOURCE, reason: 'does not track ' + sCurrency };
-
-        return { ok: true, rate: rate, asOf: data.date, source: SOURCE };
-    }
-    catch( _ )
-    {
-        return { ok: false, source: SOURCE, reason: 'network error' };
-    }
+    return rateFrom( SOURCE, 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=' + encodeURIComponent( sCurrency ), sCurrency,
+                     function( d ) { return d && d.rates ? d.rates[ sCurrency ] : undefined; },
+                     function( d ) { return d.date; } );
 }
 
-async function fetchRateExchangerateApi( sCurrency )
+function fetchRateExchangerateApi( sCurrency )
 {
-    const SOURCE = 'exchangerate-api.com (open access)';
-
-    try
-    {
-        const res = await fetch( 'https://open.er-api.com/v6/latest/EUR' );
-
-        if( ! res.ok )
-            return { ok: false, source: SOURCE, reason: 'HTTP ' + res.status };
-
-        const data = await res.json();
-
-        if( data.result !== 'success' || ! data.rates )
-            return { ok: false, source: SOURCE, reason: 'lookup failed' };
-
-        const rate = data.rates[ sCurrency ];
-
-        if( typeof rate !== 'number' )
-            return { ok: false, source: SOURCE, reason: 'does not track ' + sCurrency };
-
-        return { ok: true, rate: rate, asOf: data.time_last_update_utc, source: SOURCE };
-    }
-    catch( _ )
-    {
-        return { ok: false, source: SOURCE, reason: 'network error' };
-    }
+    return rateFrom( 'exchangerate-api.com (open access)', 'https://open.er-api.com/v6/latest/EUR', sCurrency,
+                     function( d ) { return d.rates[ sCurrency ]; },
+                     function( d ) { return d.time_last_update_utc; },
+                     function( d ) { return d.result !== 'success' || ! d.rates ? 'lookup failed' : ''; } );
 }
 
-async function fetchRateFawaz( sCurrency )
+function fetchRateFawaz( sCurrency )
 {
-    const SOURCE = 'fawazahmed0/currency-api';
-
-    try
-    {
-        const res = await fetch( 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json' );
-
-        if( ! res.ok )
-            return { ok: false, source: SOURCE, reason: 'HTTP ' + res.status };
-
-        const data = await res.json();
-        const rate = data && data.eur ? data.eur[ sCurrency.toLowerCase() ] : undefined;
-
-        if( typeof rate !== 'number' )
-            return { ok: false, source: SOURCE, reason: 'does not track ' + sCurrency };
-
-        return { ok: true, rate: rate, asOf: data.date, source: SOURCE };
-    }
-    catch( _ )
-    {
-        return { ok: false, source: SOURCE, reason: 'network error' };
-    }
+    return rateFrom( 'fawazahmed0/currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json', sCurrency,
+                     function( d ) { return d && d.eur ? d.eur[ sCurrency.toLowerCase() ] : undefined; },
+                     function( d ) { return d.date; } );
 }
 
 // Priority-ordered source list. Extend here (a 4th, 5th... source) to give the

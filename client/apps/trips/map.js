@@ -25,6 +25,40 @@ function offlineNote()
     return off;
 }
 
+// What the app map and the PDF map share: the stages they plot (enabled, with
+// coordinates, numbered from 1), the line a leg is drawn with (coloured by the
+// transport it leaves with) and the legend of the modes each one passes in
+// (classes sPrefix-legend, -legend-item, -legend-swatch).
+function mapPoints( trip )
+{
+    return ( trip.stages || [] )
+        .filter( function( st ) { return stageEnabled( st ) && typeof st.lat === 'number' && typeof st.lon === 'number'; } )
+        .map( function( st, i ) { return { id: st.id, lat: st.lat, lon: st.lon, label: st.location, index: i + 1, transport: st.transport || 'other' }; } );
+}
+
+function legStyle( sMode )
+{
+    return { color: ownKey( TRANSPORT_COLORS, sMode ) || TRANSPORT_COLORS.other, weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' };
+}
+
+function mapLegend( sPrefix, aModes )
+{
+    const legend = document.createElement( 'div' );
+    legend.className = sPrefix + '-legend';
+    aModes.forEach( function( m )
+    {
+        const it = document.createElement( 'span' );
+        it.className = sPrefix + '-legend-item';
+        const sw = document.createElement( 'span' );
+        sw.className = sPrefix + '-legend-swatch';
+        sw.style.background = ownKey( TRANSPORT_COLORS, m ) || TRANSPORT_COLORS.other;
+        it.appendChild( sw );
+        it.appendChild( document.createTextNode( ownKey( TRANSPORT_LABELS(), m ) || T( 'trips.trOther' ) ) );
+        legend.appendChild( it );
+    });
+    return legend;
+}
+
 function destroyMap( sWhich )
 {
     const instance = sWhich === 'panel' ? panelMapInstance : sheetMapInstance;
@@ -90,9 +124,7 @@ function buildRealMap( trip, container, sWhich )
         }
     } } );
 
-    const points = trip.stages
-        .filter( function( st ) { return stageEnabled( st ) && typeof st.lat === 'number' && typeof st.lon === 'number'; } )
-        .map( function( st, i ) { return { id: st.id, lat: st.lat, lon: st.lon, label: st.location, index: i + 1, transport: st.transport || 'other' }; } );
+    const points = mapPoints( trip );
 
     // Every drawn leg, keyed by the id of the stage it DEPARTS from - that is what
     // setLegActive() looks up when the pointer enters a stage card.
@@ -109,8 +141,7 @@ function buildRealMap( trip, container, sWhich )
         {
             const mode = points[ i - 1 ].transport;
             legs[ points[ i - 1 ].id ] =
-                L.polyline( [ [ points[i-1].lat, points[i-1].lon ], [ points[i].lat, points[i].lon ] ],
-                    { color: ownKey( TRANSPORT_COLORS, mode ) || TRANSPORT_COLORS.other, weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' } )
+                L.polyline( [ [ points[i-1].lat, points[i-1].lon ], [ points[i].lat, points[i].lon ] ], legStyle( mode ) )
                     .bindTooltip( ownKey( TRANSPORT_LABELS(), mode ) || T( 'trips.leg' ), { sticky: true } )
                     .addTo( map );
         }
@@ -205,22 +236,7 @@ function buildRouteMapBlock( trip, sWhich, parentEl )
     });
 
     if( usedModes.length )
-    {
-        const legend = document.createElement( 'div' );
-        legend.className = 'map-legend';
-        usedModes.forEach( function( m )
-        {
-            const it = document.createElement( 'span' );
-            it.className = 'map-legend-item';
-            const sw = document.createElement( 'span' );
-            sw.className = 'map-legend-swatch';
-            sw.style.background = ownKey( TRANSPORT_COLORS, m ) || TRANSPORT_COLORS.other;
-            it.appendChild( sw );
-            it.appendChild( document.createTextNode( ownKey( TRANSPORT_LABELS(), m ) || T( 'trips.trOther' ) ) );
-            legend.appendChild( it );
-        });
-        bar.insertBefore( legend, bar.firstChild );
-    }
+        bar.insertBefore( mapLegend( 'map', usedModes ), bar.firstChild );
 
     const mapDiv = document.createElement( 'div' );
     mapDiv.className = 'route-map';

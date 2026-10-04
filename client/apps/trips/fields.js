@@ -3,36 +3,49 @@
 //------------------------------------------------------------------------//
 // FORM FIELD BUILDERS
 
-function textField( sLabel, sPlaceholder, sValue, fnOnChange )
+// The frame every field shares: <div class="field"><label>sLabel</label>control</div>.
+function fieldShell( sLabel, elControl )
 {
     const field = document.createElement( 'div' );
     field.className = 'field';
     const label = document.createElement( 'label' );
     label.textContent = sLabel;
+    field.appendChild( label );
+    field.appendChild( elControl );
+    return field;
+}
+
+// The <option>s of a <select>, sValue picked: aOptions is [ [ value, text ], ... ].
+function fillOptions( select, aOptions, sValue )
+{
+    aOptions.forEach( function( opt )
+    {
+        const o = document.createElement( 'option' );
+        o.value = opt[0];
+        o.textContent = opt[1];
+        if( opt[0] === sValue ) o.selected = true;
+        select.appendChild( o );
+    });
+}
+
+function textField( sLabel, sPlaceholder, sValue, fnOnChange )
+{
     const input = document.createElement( 'input' );
     input.type = 'text';
     input.placeholder = sPlaceholder;
     input.value = sValue;
     input.addEventListener( 'input', function() { fnOnChange( input.value ); } );
-    field.appendChild( label );
-    field.appendChild( input );
-    return field;
+    return fieldShell( sLabel, input );
 }
 
 function textAreaField( sLabel, sPlaceholder, sValue, fnOnChange, nRows )
 {
-    const field = document.createElement( 'div' );
-    field.className = 'field';
-    const label = document.createElement( 'label' );
-    label.textContent = sLabel;
     const ta = document.createElement( 'textarea' );
     ta.placeholder = sPlaceholder;
     ta.value = sValue;
     if( nRows ) ta.rows = nRows;
     ta.addEventListener( 'input', function() { fnOnChange( ta.value ); } );
-    field.appendChild( label );
-    field.appendChild( ta );
-    return field;
+    return fieldShell( sLabel, ta );
 }
 
 // "Ubicación": the text input carries an in-field "locate on the map" button on its
@@ -40,11 +53,6 @@ function textAreaField( sLabel, sPlaceholder, sValue, fnOnChange, nRows )
 // it, a round button that opens the Calendar app on this stage's start date.
 function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
 {
-    const field = document.createElement( 'div' );
-    field.className = 'field';
-    const label = document.createElement( 'label' );
-    label.textContent = sLabel;
-
     const row = document.createElement( 'div' );
     row.className = 'loc-row';
 
@@ -75,84 +83,63 @@ function locationField( sLabel, sPlaceholder, sValue, fnOnChange )
 
     row.appendChild( inputWrap );
     row.appendChild( calBtn );
-    field.appendChild( label );
-    field.appendChild( row );
-    return field;
+    return fieldShell( sLabel, row );
 }
 
-function dateField( sLabel, sValue, fnOnChange )
+// A date or time input under a span that shows the value, or sEmpty when blank.
+function dtField( sType, sEmpty, sLabel, sValue, fnOnChange )
 {
-    const field = document.createElement( 'div' );
-    field.className = 'field';
-    const label = document.createElement( 'label' );
-    label.textContent = sLabel;
     const dt = document.createElement( 'div' );
     dt.className = 'dt-field';
     const input = document.createElement( 'input' );
-    input.type = 'date';
+    input.type = sType;
     input.value = sValue;
     const display = document.createElement( 'span' );
     display.className = 'dt-display' + (sValue ? '' : ' placeholder');
-    display.textContent = sValue || T( 'ui.dateHint' );
+    display.textContent = sValue || sEmpty;
     input.addEventListener( 'input', function()
     {
         fnOnChange( input.value );
-        display.textContent = input.value || T( 'ui.dateHint' );
+        display.textContent = input.value || sEmpty;
         display.classList.toggle( 'placeholder', ! input.value );
     });
     dt.appendChild( input );
     dt.appendChild( display );
-    field.appendChild( label );
-    field.appendChild( dt );
-    return field;
+    return fieldShell( sLabel, dt );
 }
 
-function timeField( sLabel, sValue, fnOnChange )
-{
-    const field = document.createElement( 'div' );
-    field.className = 'field';
-    const label = document.createElement( 'label' );
-    label.textContent = sLabel;
-    const dt = document.createElement( 'div' );
-    dt.className = 'dt-field';
-    const input = document.createElement( 'input' );
-    input.type = 'time';
-    input.value = sValue;
-    const display = document.createElement( 'span' );
-    display.className = 'dt-display' + (sValue ? '' : ' placeholder');
-    display.textContent = sValue || 'hh:mm';
-    input.addEventListener( 'input', function()
-    {
-        fnOnChange( input.value );
-        display.textContent = input.value || 'hh:mm';
-        display.classList.toggle( 'placeholder', ! input.value );
-    });
-    dt.appendChild( input );
-    dt.appendChild( display );
-    field.appendChild( label );
-    field.appendChild( dt );
-    return field;
-}
+function dateField( sLabel, sValue, fnOnChange ) { return dtField( 'date', T( 'ui.dateHint' ), sLabel, sValue, fnOnChange ); }
+function timeField( sLabel, sValue, fnOnChange ) { return dtField( 'time', 'hh:mm', sLabel, sValue, fnOnChange ); }
 
 function selectField( sLabel, sValue, aOptions, fnOnChange )
 {
-    const field = document.createElement( 'div' );
-    field.className = 'field';
-    const label = document.createElement( 'label' );
-    label.textContent = sLabel;
     const select = document.createElement( 'select' );
-    aOptions.forEach( function( opt )
-    {
-        const o = document.createElement( 'option' );
-        o.value = opt[0];
-        o.textContent = opt[1];
-        if( opt[0] === sValue ) o.selected = true;
-        select.appendChild( o );
-    });
+    fillOptions( select, aOptions, sValue );
     select.addEventListener( 'change', function() { fnOnChange( select.value ); } );
-    field.appendChild( label );
-    field.appendChild( select );
-    return field;
+    return fieldShell( sLabel, select );
+}
+
+// An on / off option: a <label class="sClass"> holding aBefore (the text, its
+// (i)), then the shared .switch around the checkbox. The label is tied to the
+// checkbox by sId, or a click anywhere in it goes to the (i), the first control.
+function switchRow( sClass, sId, bChecked, aBefore )
+{
+    const row = document.createElement( 'label' );
+    row.className = sClass;
+    const input = document.createElement( 'input' );
+    input.type    = 'checkbox';
+    input.id      = sId;
+    row.htmlFor   = sId;
+    input.checked = bChecked;
+    const sw = document.createElement( 'span' );
+    sw.className = 'switch sm';
+    const track = document.createElement( 'span' );
+    track.className = 'track';
+    sw.appendChild( input );
+    sw.appendChild( track );
+    aBefore.forEach( function( el ) { row.appendChild( el ); } );
+    row.appendChild( sw );
+    return { row: row, input: input };
 }
 
 // The "Documentos (3)" block of the trip and stage sheets: heading, then the rows.
@@ -227,14 +214,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
     row.className = 'doc-row';
 
     const typeSelect = document.createElement( 'select' );
-    [ ['passport',T( 'trips.docPassport' )], ['visa',T( 'trips.docVisa' )], ['ticket',T( 'trips.docTicket' )], ['hotel',T( 'trips.docHotel' )], ['other',T( 'trips.trOther' )] ].forEach( function( opt )
-    {
-        const o = document.createElement( 'option' );
-        o.value = opt[0];
-        o.textContent = opt[1];
-        if( opt[0] === d.type ) o.selected = true;
-        typeSelect.appendChild( o );
-    });
+    fillOptions( typeSelect, [ ['passport',T( 'trips.docPassport' )], ['visa',T( 'trips.docVisa' )], ['ticket',T( 'trips.docTicket' )], ['hotel',T( 'trips.docHotel' )], ['other',T( 'trips.trOther' )] ], d.type );
     typeSelect.addEventListener( 'change', function() { fnSetType( typeSelect.value ); } );
 
     const attach = document.createElement( 'div' );
@@ -272,11 +252,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
 
     // A trashcan, not an "x": this deletes the document row (and its upload),
     // it does not close or clear anything. Same icon every other delete uses.
-    const removeBtn = document.createElement( 'button' );
-    removeBtn.className = 'icon-btn danger';
-    removeBtn.title = T( 'trips.remove' );
-    removeBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
-    removeBtn.addEventListener( 'click', fnRemove );
+    const removeBtn = iconBtn( 'icon-btn danger', T( 'trips.remove' ), ICON_TRASH, 15, fnRemove );
 
     row.appendChild( typeSelect );
     row.appendChild( attach );

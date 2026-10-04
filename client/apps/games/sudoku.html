@@ -167,14 +167,11 @@
             font-size:    calc( var(--board) * 0.038 );
         }
 
-        /* The hint is OUTSIDE .sudoku-area now: it is not sized off --board,
+        /* The hint (.game-hint, index.html) is OUTSIDE .sudoku-area: it is not sized off --board,
            and a size container must hold nothing that is not, or the line of
            text would eat into the height the board is measured against. It
            sits at the foot of the pane, where Tetris' and Asteroids' do, and
            takes its width from padding rather than from --board. */
-        .sudoku-hint { margin: var(--space-2) 0 0;
-                       padding: 0 var(--space-4) var(--space-3); text-align: center;
-                       font-size: 0.78rem; color: var(--text-faint); }
 
         /* PHONE: less padding round the board, and the width is what limits it
            there (94vw of 390px is 367px, well under 56vh of any phone), so the
@@ -248,7 +245,7 @@
                             <div class="sudoku-pad" id="sudokuPad"></div>
                         </div>
                     </div>
-                    <p class="sudoku-hint" data-i18n="games.hintSudoku"></p>
+                    <p class="game-hint" data-i18n="games.hintSudoku"></p>
                 </div>
             </section>
 
@@ -852,15 +849,7 @@
 
             function adoptTimes( saved )
             {
-                var out = {};
-
-                ORDER.forEach( function ( k )
-                {
-                    var n = parseFloat( saved[ KEY[ k ] ] );        // NaN when absent or damaged
-
-                    if( isFinite( n ) && n >= 0 && ( ! has( k ) || n < times[ k ] ) ) times[ k ] = n;
-                    if( has( k ) ) out[ KEY[ k ] ] = times[ k ];
-                } );
+                var out = NayiveGames.adoptTimes( times, saved, ORDER, KEY, false );
 
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
                 return out;

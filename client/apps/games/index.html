@@ -226,6 +226,12 @@
            is not a pause, it is free thinking time. Nothing is lost by hiding it
            whole - there is no animation to keep an eye on underneath. */
         .game-cover.solid    { cursor: pointer; background: var(--bg); }
+        /* The line of help under a game. .tight where the game's own gap
+           already spaces it (2048, Solitaire, Checkers, Chess). */
+        .game-hint       { margin: var(--space-2) 0 0; padding: 0 var(--space-4) var(--space-3);
+                           text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+        .game-hint.tight { margin: 0; padding: 0; }
+
         .game-cover-t { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text); }
         .game-cover-s { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
 
@@ -493,6 +499,64 @@
 
             if( document.querySelector( '.sheet-backdrop.open' ) ) return true;
             return !! ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable ) );
+        }
+
+        // The best times of a timed game (Mines, Sudoku, Solitaire), read from
+        // the saved map { minesEasy: 47, ... } into `times` ({ easy: 47, ... })
+        // by MINIMUM: the plug re-reads the file whenever the tab is focused, and
+        // that answer can be older than the game just won here. A value that is
+        // absent, damaged or below 0 is ignored; 0 is a record. With `legacy`
+        // the level's old bare key ('easy') counts as well. Returns what to
+        // write back: the new keys only.
+        function adoptTimes( times, saved, order, key, legacy )
+        {
+            var out = {};
+
+            order.forEach( function ( k )
+            {
+                ( legacy ? [ saved[ key[ k ] ], saved[ k ] ] : [ saved[ key[ k ] ] ] ).forEach( function ( v )
+                {
+                    var n = parseFloat( v );
+
+                    if( ! isFinite( n ) || n < 0 ) return;      // absent, or not a number
+                    if( typeof times[ k ] !== 'number' || n < times[ k ] ) times[ k ] = n;
+                } );
+                if( typeof times[ k ] === 'number' ) out[ key[ k ] ] = times[ k ];
+            } );
+            return out;
+        }
+
+        // A board of square buttons (Chess, Checkers) is ONE tab stop, not 64:
+        // Tab lands on the square last used, the arrow keys move inside the
+        // board, Enter / Space press the square as any button does.
+        function roving( boardEl, squares, cols )
+        {
+            var at = 0, rows = squares.length / cols;
+
+            squares.forEach( function ( el, i ) { el.tabIndex = i === at ? 0 : -1; } );
+
+            function go( i ) { squares[ at ].tabIndex = -1; at = i; squares[ at ].tabIndex = 0; }
+
+            boardEl.addEventListener( 'focusin', function ( e )
+            {
+                var i = squares.indexOf( e.target );
+                if( i >= 0 && i !== at ) go( i );
+            } );
+            boardEl.addEventListener( 'keydown', function ( e )
+            {
+                var i = squares.indexOf( e.target ), c = i % cols, r = ( i - c ) / cols, to = -1;
+
+                if( i < 0 || e.ctrlKey || e.altKey || e.metaKey ) return;
+                if     ( e.key === 'ArrowLeft'  ) to = r * cols + Math.max( 0, c - 1 );
+                else if( e.key === 'ArrowRight' ) to = r * cols + Math.min( cols - 1, c + 1 );
+                else if( e.key === 'ArrowUp'    ) to = Math.max( 0, r - 1 ) * cols + c;
+                else if( e.key === 'ArrowDown'  ) to = Math.min( rows - 1, r + 1 ) * cols + c;
+                else return;
+
+                e.preventDefault();
+                go( to );
+                squares[ to ].focus();
+            } );
         }
 
         // The toolbar's play / pause button, in all nine games. It is one button
@@ -1332,7 +1396,7 @@
 
         window.NayiveGames = {
             T: T, TF: TF, STEP: STEP, clock: clock, keyBusy: keyBusy,
-            pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop,
+            pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop, roving: roving, adoptTimes: adoptTimes,
             arcade: arcade, saveBest: saveBest, saveTime: saveTime, sfx: Sfx,
             add: function ( name, mod ) { MODS[ name ] = mod; }
         };
