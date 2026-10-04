@@ -2413,19 +2413,31 @@
                 if( ! pending || ! pending.t ) { if( known ) moveEndpoint( known ); return; }
                 // Anyone can send a device.html#t=... link: never enrol a phone
                 // without a yes. No / Escape drops it (the app opens device.html
-                // again until it is enrolled); a yes is kept for a retry.
-                var asked = pending.ok ? Promise.resolve( true ) : NayiveUI.confirm( {
-                    title: pending.n ? TF( 'dev.addAsk', { name: pending.n } ) : T( 'dev.addAskNoName' ),
-                    body:  T( 'dev.addAskBody' ) } );
-                asked.then( function ( yes )
+                // again until it is enrolled); a yes is kept for a retry - by
+                // the same user only (another one signing in here is asked).
+                fetch( '/api/whoami', { credentials: 'same-origin' } ).then( function ( r )
                 {
-                    if( ! yes ) { put( 'nayive-enrol', null ); return; }
-                    pending.ok = true;
-                    put( 'nayive-enrol', JSON.stringify( pending ) );
-                    return myEndpoint();
+                    return r.ok ? r.json() : null;
+                } ).then( function ( me )
+                {
+                    var user = me && me.user;
+                    if( ! user ) return false;                 // nobody signed in: keep it for later
+                    if( pending.ok === user ) return true;
+                    return NayiveUI.confirm( {
+                        title: pending.n ? TF( 'dev.addAsk', { name: pending.n } ) : T( 'dev.addAskNoName' ),
+                        body:  T( 'dev.addAskBody' ) } ).then( function ( yes )
+                    {
+                        if( ! yes ) { put( 'nayive-enrol', null ); return false; }
+                        pending.ok = user;
+                        put( 'nayive-enrol', JSON.stringify( pending ) );
+                        return true;
+                    } );
+                } ).then( function ( yes )
+                {
+                    return yes ? myEndpoint() : undefined;
                 } ).then( function ( ep )
                 {
-                    if( ep === undefined ) return;     // said no
+                    if( ep === undefined ) return;     // no yes (yet)
                     return api( 'POST', '/enrol', { t: pending.t, name: pending.n || '', endpoint: ep } ).then( function ( j )
                     {
                         if( j._status === 200 )

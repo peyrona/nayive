@@ -19,9 +19,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Set;
 
 /**
  * "Upload new photos and videos" (docs/phone-media-upload-plan.md): what the
@@ -188,13 +186,18 @@ final class Media {
         // `last` was dealt with already - only marked here, never queued again.
         boolean first = !seenFile(c).exists();
         JSONObject seen = loadSeen(c);   // key -> DATE_ADDED
-        Set<String> queued = new HashSet<>();
-        for (int i = 0; i < q.length(); i++) {
-            JSONObject o = q.optJSONObject(i);
-            if (o != null) queued.add(Item.of(o).key());
-        }
         long top = last;
         int added = 0;
+        try {
+            // What is in the queue (an older app's too) is seen: once sent, the look back skips it.
+            for (int i = 0; i < q.length(); i++) {
+                JSONObject o = q.optJSONObject(i);
+                if (o != null && !seen.has(Item.of(o).key())) seen.put(Item.of(o).key(), o.optLong("added"));
+            }
+        } catch (JSONException e) {
+            Log.w(TAG, "media scan failed", e);
+            return;
+        }
         try (Cursor cur = c.getContentResolver().query(files, cols, sel,
                 new String[]{String.valueOf(since), String.valueOf(last), String.valueOf(back)}, "_id ASC")) {
             if (cur == null) return;
@@ -206,7 +209,7 @@ final class Media {
                 long taken = cur.isNull(5) || cur.getLong(5) <= 0 ? dateAdded * 1000 : cur.getLong(5);
                 if (mid > top) top = mid;
                 String key = mid + "-" + dateAdded;
-                if (seen.has(key) || queued.contains(key)) continue;
+                if (seen.has(key)) continue;
                 if (first && mid <= last) {
                     seen.put(key, dateAdded);
                     continue;
@@ -291,6 +294,17 @@ final class Media {
         }
         q.remove(0);
         save(c, q);
+    }
+
+    /**
+     * Not sent, but not done with either (MediaStore says 0 bytes, or the file
+     * reads shorter than it says): forgotten as looked at, so the look back
+     * finds it again once it is whole.
+     */
+    static synchronized void unsee(Context c, Item it) {
+        if (!seenFile(c).exists()) return;
+        JSONObject seen = loadSeen(c);
+        if (seen.remove(it.key()) != null) write(seenFile(c), seen.toString());
     }
 
     static synchronized void clear(Context c) {

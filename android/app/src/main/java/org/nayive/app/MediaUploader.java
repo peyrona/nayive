@@ -88,18 +88,28 @@ final class MediaUploader {
     /**
      * Read again right before each send: a file edited in place since it was
      * queued (same row, new bytes) goes to the end of the queue as it is now,
-     * with a new id - never a cut or mixed copy.
+     * with a new id - never a cut or mixed copy. A file MediaStore calls empty
+     * (0 bytes, no size) leaves the queue; the look back finds it once whole.
+     * -1 = the same, send it.
      */
-    private static boolean requeueIfChanged(Context c, Media.Item it) {
+    private static int recheck(Context c, Media.Item it) {
         Media.Item now = Media.changed(c, it);
-        if (now == null) return false;
+        if (now == null) return -1;
+        if (now.size <= 0) return incomplete(c, it);
         Log.i(TAG, "media: " + it.name + " changed on the phone, queued again");
         Media.requeue(c, now);
-        return true;
+        return CHANGED;
+    }
+
+    /** Not whole now: dropped from the queue, but not as done - a later look queues it again. */
+    private static int incomplete(Context c, Media.Item it) {
+        Media.unsee(c, it);
+        return SKIP;
     }
 
     private static int send(Context c, Media.Item it, long deadline, Stop stop, Result res) throws IOException {
-        if (requeueIfChanged(c, it)) return CHANGED;
+        int check = recheck(c, it);
+        if (check >= 0) return check;
         Uri uri = original(c, it.uri());
         double[] ll = it.video ? videoPlace(c, uri) : photoPlace(c, uri);
 
@@ -125,16 +135,17 @@ final class MediaUploader {
         byte[] buf = new byte[(int) Math.min(CHUNK, Math.max(1, it.size))];
         while (offset < it.size) {
             if (stop.now() || System.currentTimeMillis() > deadline) return LATER;
-            if (requeueIfChanged(c, it)) return CHANGED;
+            check = recheck(c, it);
+            if (check >= 0) return check;
             int n;
             try (InputStream in = c.getContentResolver().openInputStream(uri)) {
                 if (in == null) return SKIP;
-                if (!skipFully(in, offset)) return SKIP;   // shorter than MediaStore said
+                if (!skipFully(in, offset)) return incomplete(c, it);   // shorter than MediaStore said
                 n = readFully(in, buf, (int) Math.min(buf.length, it.size - offset));
             } catch (FileNotFoundException | SecurityException e) {
                 return SKIP;   // deleted on the phone meanwhile
             }
-            if (n <= 0) return SKIP;   // shorter than MediaStore said: changed under us
+            if (n <= 0) return incomplete(c, it);   // shorter than MediaStore said: changed under us
             Api.Reply p = Api.put(c, "/api/device/media/" + upload + "?offset=" + offset, buf, n);
             if (p.status == 409) {
                 offset = p.body.optLong("offset", offset);
@@ -145,7 +156,8 @@ final class MediaUploader {
             if (!p.ok()) throw new IOException("PUT answered " + p.status);
             offset = p.body.optLong("offset", offset + n);
         }
-        if (requeueIfChanged(c, it)) return CHANGED;   // while the last bytes went
+        check = recheck(c, it);   // while the last bytes went
+        if (check >= 0) return check;
 
         Api.Reply e = Api.post(c, "/api/device/media/" + upload + "/end", new JSONObject());
         if (e.status == 404) return LATER;        // "start" will say it is done

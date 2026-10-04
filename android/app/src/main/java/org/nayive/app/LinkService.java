@@ -258,7 +258,7 @@ public class LinkService extends Service {
                     apply(new JSONObject());
                     show(Notes.Link.ENROL);
                 });
-                pause(refusedPause(++refused));
+                pause(refusedPause(++refused, Prefs.revoked(this)));
             } else {
                 failures++;
                 Log.i(TAG, "wait answered " + r.status);
@@ -273,12 +273,14 @@ public class LinkService extends Service {
 
     /**
      * After a 401: every 15 s for the first 5 minutes (the user may be signing
-     * in to enrol it), then doubling up to an hour - a revoked phone must not
-     * keep the CPU awake. Opening the app (start, kick) asks often again.
+     * in to enrol it), then doubling - up to 5 minutes for a phone never
+     * enrolled (it links soon after the user enrols it), up to an hour for a
+     * revoked one: it must not keep the CPU awake. Opening the app (start,
+     * kick) asks often again.
      */
-    private static long refusedPause(int refused) {
+    private static long refusedPause(int refused, boolean revoked) {
         if (refused <= 20) return 15_000L;
-        return Math.min(3600_000L, 15_000L << Math.min(refused - 20, 8));
+        return Math.min(revoked ? 3600_000L : 5 * 60_000L, 15_000L << Math.min(refused - 20, 8));
     }
 
     // ------------------------------------------------------------------
