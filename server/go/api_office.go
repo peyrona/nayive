@@ -108,15 +108,9 @@ func (s *Server) apiOffice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The bytes land in whoever's home the folder is in - see filesWrite.
-	payer := s.users.HomeOwner(dst.Abs)
-	if payer == "" {
-		payer = user
-	}
 	budget := int64(-1)
-	if role != "admin" {
-		if quota := s.users.UserQuotaBytes(payer); quota != nil {
-			budget = *quota - s.users.UserUsageBytes(payer) + max(already, 0)
-		}
+	if left, limited := s.quotaLeft(role, user, dst.Abs); limited {
+		budget = left + max(already, 0)
 	}
 
 	size, err := s.office.Convert(r.Context(), path.Base(virt), src, dst, budget, already >= 0)

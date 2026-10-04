@@ -387,8 +387,7 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 
 	// The original AND the mp4 exist until the end; count on the mp4 being
 	// about as big as the original.
-	if q := c.users.UserQuotaBytes(job.User); q != nil &&
-		*q-c.users.UserUsageBytes(job.User) < info.Size() {
+	if left, limited := c.users.QuotaLeft(job.User); limited && left < info.Size() {
 		return "", errors.New("no room in the quota for the mp4")
 	}
 	if free := freeBytes(filepath.Dir(src.Abs)); free >= 0 && free < info.Size() {
@@ -485,21 +484,19 @@ func (c *Converter) convert(ctx context.Context, job ConvertJob) (string, error)
 func placeMP4(root *os.Root, tmpRel, srcRel string) (string, error) {
 	dir := filepath.Dir(srcRel)
 	base := strings.TrimSuffix(filepath.Base(srcRel), filepath.Ext(srcRel))
-	for n := 0; n < 10000; n++ {
-		name := base + ".mp4"
-		if n > 0 {
-			name = base + " (" + strconv.Itoa(n) + ").mp4"
-		}
-		rel := filepath.Join(dir, name)
+	var rel string
+	_, err := claimName(base, ".mp4", 1, 10000, func(name string) error {
+		rel = filepath.Join(dir, name)
 		err := renameNoReplace(root, tmpRel, rel)
 		if errors.Is(err, errSourceLeft) {
-			return rel, nil // in place; the temp's name goes with the caller's deferred remove
+			return nil // in place; the temp's name goes with the caller's deferred remove
 		}
-		if !errors.Is(err, fs.ErrExist) {
-			return rel, err
-		}
+		return err
+	})
+	if errors.Is(err, fs.ErrExist) {
+		return "", errors.New("no free name for the mp4")
 	}
-	return "", errors.New("no free name for the mp4")
+	return rel, err
 }
 
 // freeBytes is the space left on the disk holding `dir`, or -1 when unknown.

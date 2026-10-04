@@ -255,27 +255,7 @@ func (h *MailHub) writeMailFile(user, name string, v any) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(dir, fmt.Sprintf("%s.%d.%d.tmp", name, os.Getpid(), tmpCounter.Add(1)))
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(append(raw, '\n'))
-	if err == nil {
-		err = f.Sync()
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return syncDir(dir)
+	return atomicWriteFile(filepath.Join(dir, name), append(raw, '\n'), 0o600)
 }
 
 // loadMailFile reads one of the user's mail files into `dst`, and says

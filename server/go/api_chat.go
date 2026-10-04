@@ -2117,7 +2117,7 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 	}
 	// The quota OUTSIDE the lock: past its cache, the usage figure is a walk of
 	// the whole home, and every chat would wait on it (S2-#17).
-	if q := h.users.UserQuotaBytes(owner); q != nil && h.users.UserUsageBytes(owner)+size > *q {
+	if left, limited := h.users.QuotaLeft(owner); limited && size > left {
 		sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
 		return
 	}
@@ -2346,7 +2346,7 @@ func (s *Server) chatFwdCopy(w http.ResponseWriter, r *http.Request, in func(fun
 	// 2. The quota and the copy (no lock). The temp goes in the owner's chat
 	// folder, there already: no folder is made here for a chat or an owner
 	// deleted meanwhile (L2) - chatSend makes media/ under the lock.
-	if q := h.users.UserQuotaBytes(fwd.owner); q != nil && h.users.UserUsageBytes(fwd.owner)+fwd.n > *q {
+	if left, limited := h.users.QuotaLeft(fwd.owner); limited && fwd.n > left {
 		sendError(w, r, http.StatusInsufficientStorage, "no queda espacio")
 		return nil, false
 	}
@@ -2438,24 +2438,21 @@ func (s *Server) chatKeep(w http.ResponseWriter, r *http.Request, a chatActor, c
 	base, ext := strings.TrimSuffix(name, filepath.Ext(name)), filepath.Ext(name)
 	var dst Resolved
 	var copied int64
-	for i := 1; ; i++ {
-		if i > 999 {
-			sendError(w, r, http.StatusConflict, "demasiadas fotos con ese nombre")
-			return
-		}
-		if i > 1 {
-			name = base + " (" + strconv.Itoa(i) + ")" + ext
-		}
+	name, err := claimName(base, ext, 2, 999, func(name string) error {
 		dst = folder.at(filepath.Join(folder.Rel, name))
 		n, err := linkNoReplace(src, dst, keptID{})
 		if err == nil {
 			copied = n
-			break
 		}
-		if !errors.Is(err, fs.ErrExist) {
-			sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
-			return
-		}
+		return err
+	})
+	if errors.Is(err, fs.ErrExist) {
+		sendError(w, r, http.StatusConflict, "demasiadas fotos con ese nombre")
+		return
+	}
+	if err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+		return
 	}
 	if copied > 0 {
 		h.users.AdjustUsage(a.o.user, copied) // a copy (a disk with no links)

@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -244,4 +245,34 @@ func oneLine(s string, max int) string {
 		n++
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// numberedName is "base (n)ext", or base+ext for n 0.
+func numberedName(base, ext string, n int) string {
+	if n == 0 {
+		return base + ext
+	}
+	return base + " (" + strconv.Itoa(n) + ")" + ext
+}
+
+// claimName gives `try` up to `tries` names - base+ext, then "base (first)ext",
+// "base (first+1)ext", ... - until one is taken (try nil) or try fails for
+// another reason than fs.ErrExist. The name and try's last error: an
+// fs.ErrExist one when every name was in use.
+func claimName(base, ext string, first, tries int, try func(name string) error) (string, error) {
+	var err error
+	for k := 0; k < tries; k++ {
+		n := 0
+		if k > 0 {
+			n = first + k - 1
+		}
+		name := numberedName(base, ext, n)
+		if err = try(name); !errors.Is(err, fs.ErrExist) {
+			if err != nil {
+				return "", err
+			}
+			return name, nil
+		}
+	}
+	return "", err
 }

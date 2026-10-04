@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,27 +69,16 @@ func setCardPhoto(path, uid string, img []byte) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(filepath.Dir(path), fmt.Sprintf("%s.%d.%d.tmp",
-		filepath.Base(path), os.Getpid(), tmpCounter.Add(1)))
-	if err := os.WriteFile(tmp, out, 0o644); err != nil {
-		os.Remove(tmp)
-		return err
-	}
 	// The whole address book on disk before it takes the name, and the name
 	// durable after (K1): a power cut must leave either book, never a cut one.
-	if err := syncFile(tmp); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
+	if err := atomicWriteFile(path, out, 0o644); err != nil {
 		return err
 	}
 	if root, err := os.OpenRoot(filepath.Dir(path)); err == nil {
 		nextSecond(root, filepath.Base(path), prev)
 		root.Close()
 	}
-	return syncDir(filepath.Dir(path))
+	return nil
 }
 
 // imageKind is "JPEG" or "PNG" by the bytes' own signature, or "".

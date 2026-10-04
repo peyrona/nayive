@@ -438,16 +438,22 @@ func atomicWriteJSON(path string, obj any, indent int) error {
 		return err
 	}
 	// Encoder already ends with "\n".
+	return atomicWriteFile(path, buf.Bytes(), 0o644)
+}
 
+// atomicWriteFile is atomicWriteJSON's write for bytes already made: a temp
+// beside `path` (atomicTempName), synced, renamed onto `path`, the folder
+// synced. The eMail files (0600) and a card's photo use it too.
+func atomicWriteFile(path string, data []byte, perm fs.FileMode) error {
 	tmp := atomicTempName(path)
 
 	// Synced before the rename: a power cut right after it must find the new
 	// file whole, never an empty shares.json or config.json (S2-#23).
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(buf.Bytes())
+	_, err = f.Write(data)
 	if err == nil {
 		err = f.Sync()
 	}

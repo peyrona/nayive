@@ -109,22 +109,13 @@ func (s *Server) filesWrite(w http.ResponseWriter, r *http.Request,
 	// shared folder those differ. The quota check has to agree with the usage
 	// bookkeeping below, or a guest would spend their own quota while filling
 	// somebody else's disk.
-	payer := s.users.HomeOwner(target.Abs)
-	if payer == "" {
-		payer = user
-	}
-	var quota *int64
-	if role != "admin" {
-		quota = s.users.UserQuotaBytes(payer)
-	}
-
 	budget := int64(-1) // -1 = no quota
-	if quota != nil {
+	if left, limited := s.quotaLeft(role, user, target.Abs); limited {
 		// The most this file may grow to and still fit. On a gzipped PUT
 		// Content-Length is the COMPRESSED size, so this pre-check can only
 		// catch the obvious cases - the ceiling below enforces the real,
 		// decompressed byte count as it inflates.
-		budget = *quota - (s.users.UserUsageBytes(payer) - already)
+		budget = left + already
 		if r.ContentLength > budget {
 			sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
 			return
@@ -212,6 +203,15 @@ func clashText(code int) string {
 		return "ya existe un archivo con ese nombre; en una carpeta compartida sólo puedes añadir"
 	}
 	return "ya existe un archivo con ese nombre"
+}
+
+// quotaLeft is what a write by `user` at `abs` may still add to the quota it
+// spends (Users.Payer): limited false for an admin or a payer with no quota.
+func (s *Server) quotaLeft(role, user, abs string) (left int64, limited bool) {
+	if role == "admin" {
+		return 0, false
+	}
+	return s.users.QuotaLeft(s.users.Payer(abs, user))
 }
 
 // streamToFile is the write itself. It answers the request on every failure and

@@ -1724,3 +1724,23 @@ func (u *Users) ForgetUsage(user string) {
 func (u *Users) HomeOwner(absPath string) string {
 	return homeOwner(u.cfg.HomesDir, absPath)
 }
+
+// Payer is whose quota bytes written at `absPath` spend: the owner of the home
+// they land in - on a shared folder not the writer - or else `user`.
+func (u *Users) Payer(absPath, user string) string {
+	if payer := u.HomeOwner(absPath); payer != "" {
+		return payer
+	}
+	return user
+}
+
+// QuotaLeft is what `user` may still store (quota - usage; below 0 when over
+// it). limited false = no quota set, and no usage is measured. An admin has no
+// quota: the callers that may write as one check the role first.
+func (u *Users) QuotaLeft(user string) (left int64, limited bool) {
+	q := u.UserQuotaBytes(user)
+	if q == nil {
+		return 0, false
+	}
+	return *q - u.UserUsageBytes(user), true
+}
