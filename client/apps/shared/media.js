@@ -723,24 +723,6 @@
             '<button id="clearScopeBtn" title="' + t + '" aria-label="' + t + '">' + ICONS.x + '</button></span></div>';
     }
 
-    // The folders-only tree of a listDirRecursive() result as indented rows
-    // (button.folder-row[data-folder]); `selected` is the active folder path.
-    function folderTreeHtml( node, selected, depth )
-    {
-        depth = depth || 0;
-        if( ! node || ! node.nodes ) return "";
-        var html = "";
-        node.nodes.forEach( function ( n )
-        {
-            if( n.nodes === undefined || n.nodes === null ) return;   // a file, not a folder
-            html += '<button class="folder-row' + ( selected === n.path ? ' is-active' : '' ) +
-                '" style="padding-left:' + ( 10 + depth * 22 ) + 'px" data-folder="' + esc( n.path ) + '">' +
-                ICONS.folder + esc( baseName( n.path ) ) + '</button>';
-            html += folderTreeHtml( n, selected, depth + 1 );
-        } );
-        return html;
-    }
-
     //------------------------------------------------------------------------//
     // PLAYER BITS
 
@@ -804,7 +786,7 @@
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
-        ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
+        ICONS: ICONS, scopeBarHtml: scopeBarHtml,
         setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState
     };
 } )();

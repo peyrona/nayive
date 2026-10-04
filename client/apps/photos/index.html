@@ -487,21 +487,9 @@
         border-bottom: 1px solid var(--line);
     }
 
-    /* ---------- scene : a real photo <img>, or (example mode) placeholder art ----------
-     * A real thumbnail is an <img> so the browser applies EXIF orientation.
-     * The .s-* gradient classes + their noise overlay are the example-mode
-     * stand-ins and are the only place hex colours live in this file. */
+    /* ---------- scene : a real photo <img> ----------
+     * A real thumbnail is an <img> so the browser applies EXIF orientation. */
     .scene { background-size: cover; }
-    .scene::after
-    {
-        content: "";
-        position: absolute;
-        inset: 0;
-        mix-blend-mode: overlay;
-        opacity: 0.4;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-        background-size: 120px;
-    }
     /* a real photo shows its own pixels - no placeholder noise / decoration */
     .scene.is-photo { background: var(--card2); }
     .scene.is-photo::after,
@@ -516,22 +504,6 @@
         display: block;
     }
     .lb-photo .scene .ph { object-fit: contain; }
-
-    .s-river   { background: linear-gradient(180deg, #2b3a6b 0%, #7a5a8f 30%, #e08a4c 56%, #f2b56a 70%, #8a6a5a 73%, #3f4a63 100%); }
-    .s-river::before   { content: ""; position: absolute; left: 60%; top: 34%; width: 20%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #ffe6b0, #f4a94e 68%, transparent 72%); }
-    .s-azulejo { background: repeating-linear-gradient(45deg, #1e5aa8 0 13px, #4f8bd0 13px 26px), linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent); background-blend-mode: multiply, normal; }
-    .s-tram    { background: linear-gradient(118deg, #c49a54 0 38%, #ecc267 38% 56%, #b0754a 56% 100%); }
-    .s-facade  { background: linear-gradient(92deg, #e7b7c4 0 25%, #f2d69a 25% 50%, #bfe0cf 50% 75%, #e7c1a0 75% 100%); }
-    .s-facade::before  { content: ""; position: absolute; inset: 14% 10%; background-image: linear-gradient(#0000 62%, rgba(60, 40, 30, 0.18) 63%), linear-gradient(90deg, #0000 60%, rgba(60, 40, 30, 0.16) 61%); background-size: 24% 30%; }
-    .s-roofs   { background: linear-gradient(180deg, #8fb7d8 0 44%, #d98a5e 44% 60%, #b5623a 60% 100%); }
-    .s-castle  { background: linear-gradient(180deg, #a9c4d8 0 42%, #9a8f7e 42% 100%); }
-    .s-castle::before  { content: ""; position: absolute; left: 0; right: 0; top: 38%; height: 11%; background: repeating-linear-gradient(90deg, #7c7161 0 11%, transparent 11% 19%); }
-    .s-street  { background: linear-gradient(178deg, #e6dcc6 0 20%, #cdb994 20% 33%, #9a8a6d 33% 60%, #5f5442 100%); }
-    .s-street::before  { content: ""; position: absolute; inset: 0; background: linear-gradient(102deg, transparent 38%, rgba(255, 240, 205, 0.34) 51%, transparent 64%); }
-    .s-food    { background: radial-gradient(circle at 50% 56%, #efe0c4 0 24%, #c99a5e 25% 38%, #7a5636 39% 100%); }
-    .s-pena    { background: linear-gradient(120deg, #c9433a 0 36%, #e3b23c 36% 64%, #d98a2b 64% 100%); }
-    .s-night   { background: linear-gradient(180deg, #10162e, #1d2749 68%, #0c1022); }
-    .s-night::before   { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, #ffd98a 0 38%, transparent 44%); background-size: 8% 11%; background-position: 10% 62%; opacity: 0.5; }
 
     @media (max-width: 640px)
     {
@@ -741,8 +713,7 @@ const st = {
     map: null, markers: [], geoReady: false,
 };
 
-/* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust,
- *            scene, hue }]   (scene / hue only in DEMO mode) */
+/* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust }] */
 let PHOTOS   = [];
 let CLUSTERS = [];     // [{ id, lat, lon, items:[photo], place }]
 let COMMENTS = {};     // photo id -> comment text
@@ -777,9 +748,7 @@ function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.local
 /* ---------------------------------------------------------------------------
  * RENDERING A PHOTO
  *
- * A real photo is an <img> (so the browser applies EXIF orientation). In DEMO
- * mode an un-edited photo is a CSS gradient via its .s-* class; an edited one
- * (DEMO) becomes an <img> of the editor's data URL.
+ * A real photo is an <img> (so the browser applies EXIF orientation).
  * -------------------------------------------------------------------------*/
 const NOTE_MARK = '<span class="note-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>';
 
@@ -824,7 +793,6 @@ let   thumbWorkers  = 0;
 function thumbKey( p )  { return p.size + "_" + p.mtime + ".jpg"; }
 function thumbPath( p ) { return THUMB_DIR + "/" + thumbKey( p ); }
 
-function realPhoto( p ) { return ! DEMO; }
 function srcFor( p )
 {
     if( p.localUrl )    return p.localUrl;      // just uploaded: show the local bytes
@@ -999,78 +967,22 @@ async function refreshStat( p )
     catch( _ ) {}
 }
 
-function sceneClass( p ) { return realPhoto( p ) ? "scene is-photo" : ( "scene " + p.scene ); }
-function sceneStyle( p ) { return realPhoto( p ) ? "" : ( "filter:hue-rotate(" + p.hue + ")" ); }
 function sceneInner( p, thumb )
 {
-    if( ! realPhoto( p ) ) return "";
     const t = thumb ? thumbSrc( p ) : { src: srcFor( p ), stage: "full" };
     return '<img class="ph" loading="lazy" decoding="async" draggable="false" alt="" src="' + esc( t.src ) + '"'
          + ' data-id="' + esc( p.id ) + '" data-stage="' + t.stage + '">';
 }
 function sceneHtml( p, thumb )
 {
-    const style = sceneStyle( p );
-    return '<div class="' + sceneClass( p ) + '"' + ( style ? ' style="' + style + '"' : "" ) + '>' + sceneInner( p, thumb ) + '</div>';
+    return '<div class="scene is-photo">' + sceneInner( p, thumb ) + '</div>';
 }
 function paintScene( el, p, thumb )
 {
     if( ! p ) return;
-    el.className     = sceneClass( p );
-    el.style.cssText = sceneStyle( p );
+    el.className     = "scene is-photo";
+    el.style.cssText = "";
     el.innerHTML     = sceneInner( p, thumb );
-}
-
-/* ---------------------------------------------------------------------------
- * EXAMPLE DATA (DEMO mode only)
- * -------------------------------------------------------------------------*/
-const DEMO_HOME = {   // rough real coordinates so the map + geocoder still demo
-    baixa:  [ 38.7108, -9.1394 ], alfama: [ 38.7118, -9.1300 ],
-    belem:  [ 38.6975, -9.2064 ], nacoes: [ 38.7636, -9.0945 ],
-    sintra: [ 38.7876, -9.3904 ],
-};
-const DEMO_GROUPS = [
-    { day: "2025-10-09", h: 11, cl: "baixa",  scenes: [ "street", "tram", "facade", "street" ] },
-    { day: "2025-10-09", h: 15, cl: null,     scenes: [ "food", "azulejo" ] },
-    { day: "2025-10-09", h: 18, cl: "baixa",  scenes: [ "river", "river", "night" ] },
-    { day: "2025-10-10", h: 10, cl: "belem",  scenes: [ "castle", "street", "castle", "river", "street" ] },
-    { day: "2025-10-10", h: 13, cl: null,     scenes: [ "food", "food" ] },
-    { day: "2025-10-10", h: 16, cl: "sintra", scenes: [ "pena", "pena", "castle", "street", "roofs" ] },
-    { day: "2025-10-11", h: 10, cl: "alfama", scenes: [ "castle", "roofs", "street", "roofs" ] },
-    { day: "2025-10-11", h: 13, cl: "alfama", scenes: [ "roofs", "azulejo", "roofs" ] },
-    { day: "2025-10-11", h: 16, cl: null,     scenes: [ "street", "facade" ] },
-    { day: "2025-10-11", h: 18, cl: "baixa",  scenes: [ "river", "roofs", "river" ] },
-    { day: "2025-10-12", h: 11, cl: "nacoes", scenes: [ "street", "night" ] },
-    { day: "2025-10-12", h: 14, cl: "baixa",  scenes: [ "food", "street" ] },
-];
-function buildDemo()
-{
-    PHOTOS = [];
-    DEMO_GROUPS.forEach( ( g, gi ) =>
-    {
-        const base = new Date( g.day + "T00:00:00" ).getTime();
-        g.scenes.forEach( ( sc, i ) =>
-        {
-            const ts = base + ( g.h * 60 + i * 8 ) * 60000;
-            const c  = g.cl ? DEMO_HOME[ g.cl ] : null;
-            PHOTOS.push( {
-                id: "d" + gi + "_" + i, name: NayiveUI.tf( "photos.photoN", { n: PHOTOS.length + 1 } ),
-                ts: ts, day: dayOf( ts ), time: timeOf( ts ), place: "",
-                scene: "s-" + sc, hue: ( ( gi * 37 + i * 13 ) % 24 ) - 12 + "deg",
-                lat: c ? c[ 0 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
-                lon: c ? c[ 1 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
-            } );
-        } );
-    } );
-    sortPhotos();
-    try { COMMENTS = JSON.parse( localStorage.getItem( "photos-comments" ) || "{}" ); }
-    catch( _ ) { COMMENTS = {}; }
-
-    buildClusters();
-    st.geoReady = true;
-    setCrumb();
-    updateNoGeoChip();
-    geocode().then( () => { renderGrid(); if( st.mode === "map" ) drawMap(); } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1690,11 +1602,10 @@ async function reverseGeocode( lat, lon )
  * PER-PHOTO COMMENTS
  *
  * Real: data/photos/comments.json, keyed by the image's files/ path - the
- * same sidecar the image editor (apps/image) reads and writes. DEMO: localStorage.
+ * same sidecar the image editor (apps/image) reads and writes.
  * -------------------------------------------------------------------------*/
 async function loadComments()
 {
-    if( DEMO ) return;                           // handled in buildDemo()
     // A move whose notes could not follow (media.js remapComments) is made
     // first, so the notes read are where their photos are now.
     await NayiveMedia.settleNoteMoves();
@@ -1722,28 +1633,6 @@ async function loadOwnerNotes()
 }
 function noteFor( id ) { return COMMENTS[ id ] || OWNER_NOTES[ id ] || ""; }
 
-async function saveComment( id, text )
-{
-    if( DEMO )
-    {
-        if( text ) COMMENTS[ id ] = text; else delete COMMENTS[ id ];
-        try { localStorage.setItem( "photos-comments", JSON.stringify( COMMENTS ) ); } catch( _ ) {}
-        return true;
-    }
-    // This one note, laid on the sidecar as it is on the server NOW, so a
-    // stale in-memory copy can't wipe a note added elsewhere (the image
-    // editor, another device) - and version-checked (updateComments): one
-    // saved between the read and the write makes it read again. Only a
-    // missing file (404) is an empty map: on any other read error, or a file
-    // that is not a map, nothing is written - it would put this one note over
-    // all. True when the note is on disk.
-    try
-    {
-        COMMENTS = await NayiveMedia.updateComments( map => { if( text ) map[ id ] = text; else delete map[ id ]; } );
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); return false; }
-    return true;
-}
 /* Drop notes for photos that no longer exist in THIS folder (deleted from disk,
  * or a trash-restore that landed under a new name - Drive re-keys move/rename/
  * copy but not those). Only ever touches keys that sit directly in DIR.
@@ -1815,7 +1704,7 @@ function setCrumb()
     const count = ( st.q.trim() && shown !== total )
         ? NayiveUI.tf( "photos.shownOfTotal", { shown: shown, total: total } )
         : NayiveUI.tf( total === 1 ? "photos.onePhoto" : "photos.nPhotos", { n: total } );
-    setCrumbPath( DEMO ? NayiveUI.t( 'photos.demoCrumb' ) : dirLabel() );
+    setCrumbPath( dirLabel() );
     $( "#subStrip" ).textContent = count;
     NayiveMedia.searchCount( shown, total );
 }
@@ -3103,8 +2992,6 @@ async function boot()
             return;
         }
     }
-
-    if( DEMO ) { buildDemo(); renderGrid(); return; }
 
     // The albums tree (its rows come in the background: the photos do not
     // wait for them) and the item browser on the grid.

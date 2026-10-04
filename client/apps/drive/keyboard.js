@@ -37,12 +37,11 @@ function modOnly( e )
     return ( IS_MAC ? ( e.metaKey && ! e.ctrlKey ) : ( e.ctrlKey && ! e.metaKey ) )
            && ! e.altKey && ! e.shiftKey;
 }
-function bare( e ) { return ! e.ctrlKey && ! e.metaKey && ! e.altKey && ! e.shiftKey; }
 
 const SHORTCUTS = [
     // Ctrl+F is the one key that also works from inside a text box — that
     // is where the browser's own find bar would have opened.
-    { el: 'searchInput', label: () => combo( [ kMod(), 'F' ] ), inField: true,
+    { el: 'searchInput', label: () => combo( [ kMod(), 'F' ] ),
       match: e => modOnly( e ) && e.code === 'KeyF',
       run:   focusSearch },
 
@@ -97,14 +96,6 @@ function stripKeyHint( title )
     return title;
 }
 
-// A checkbox is not a text field: ticking rows and then pressing Supr is
-// exactly how a person deletes, so that one keeps working.
-function inTextField( t )
-{
-    const f = ( t && t.closest ) ? t.closest( 'input, textarea, select, [contenteditable]' ) : null;
-    return !! f && f.type !== 'checkbox';
-}
-
 function onShortcutKey( e )
 {
     const s = SHORTCUTS.find( function( x ) { return x.match( e ); } );
@@ -115,7 +106,6 @@ function onShortcutKey( e )
     // A dialog, the viewer or the player owns the screen:
     // the toolbar behind it is not what the key is for.
     if( document.querySelector( '.sheet-backdrop.open, .viewer-backdrop.open, .media-backdrop.open' ) ) return;
-    if( ! s.inField && inTextField( e.target ) ) return;
 
     // Swallowed even when the action itself cannot run, so the browser's
     // find bar / view-source / bookmark never appears over Drive.

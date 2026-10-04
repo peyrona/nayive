@@ -14,7 +14,7 @@
 // CS7 (bugs-2 #35): one tab at a time makes the waiting note moves.
 // A4 (list-apps #5): Music's "Save list".
 // A7 (list-apps #30, #31, #32): Movies' posters.json and progress.json,
-//     Photos' places.json; and Photos' own note save.
+//     Photos' places.json; and the note save (updateComments).
 import fs from "node:fs";
 import path from "node:path";
 import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
@@ -122,7 +122,9 @@ section( "A7 · Photos: places and notes saved in between are kept" );
     ok( json( PLACES )[ "50.000,60.000" ] === "Phone" && json( PLACES )[ "1.000,1.000" ] === "Old", "...and the phone's is kept", json( PLACES ) );
 
     await arm( c, NOTES, add( { "files/G/b.png": "phone's note" } ) );
-    ok( await c.evaluate( "saveComment( 'files/G/a.png', 'note a' )" ) === true, "a note saved here" );
+    // (Photos' own saveComment was dead - the note editor is Image's - so the
+    // shared write every note goes through is raced here.)
+    ok( await c.evaluate( "NayiveMedia.updateComments( map => { map[ 'files/G/a.png' ] = 'note a'; } ).then( () => true )" ) === true, "a note saved here" );
     ok( await raced( c ), "the phone saved a note in between" );
     const n = json( NOTES );
     ok( n && n[ "files/G/a.png" ] === "note a" && n[ "files/G/b.png" ] === "phone's note" && n[ "files/Z/x.png" ] === "note x", "notes: both kept", n );
