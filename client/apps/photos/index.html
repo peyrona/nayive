@@ -487,21 +487,9 @@
         border-bottom: 1px solid var(--line);
     }
 
-    /* ---------- scene : a real photo <img>, or (example mode) placeholder art ----------
-     * A real thumbnail is an <img> so the browser applies EXIF orientation.
-     * The .s-* gradient classes + their noise overlay are the example-mode
-     * stand-ins and are the only place hex colours live in this file. */
+    /* ---------- scene : a real photo <img> ----------
+     * A real thumbnail is an <img> so the browser applies EXIF orientation. */
     .scene { background-size: cover; }
-    .scene::after
-    {
-        content: "";
-        position: absolute;
-        inset: 0;
-        mix-blend-mode: overlay;
-        opacity: 0.4;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-        background-size: 120px;
-    }
     /* a real photo shows its own pixels - no placeholder noise / decoration */
     .scene.is-photo { background: var(--card2); }
     .scene.is-photo::after,
@@ -516,22 +504,6 @@
         display: block;
     }
     .lb-photo .scene .ph { object-fit: contain; }
-
-    .s-river   { background: linear-gradient(180deg, #2b3a6b 0%, #7a5a8f 30%, #e08a4c 56%, #f2b56a 70%, #8a6a5a 73%, #3f4a63 100%); }
-    .s-river::before   { content: ""; position: absolute; left: 60%; top: 34%; width: 20%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #ffe6b0, #f4a94e 68%, transparent 72%); }
-    .s-azulejo { background: repeating-linear-gradient(45deg, #1e5aa8 0 13px, #4f8bd0 13px 26px), linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent); background-blend-mode: multiply, normal; }
-    .s-tram    { background: linear-gradient(118deg, #c49a54 0 38%, #ecc267 38% 56%, #b0754a 56% 100%); }
-    .s-facade  { background: linear-gradient(92deg, #e7b7c4 0 25%, #f2d69a 25% 50%, #bfe0cf 50% 75%, #e7c1a0 75% 100%); }
-    .s-facade::before  { content: ""; position: absolute; inset: 14% 10%; background-image: linear-gradient(#0000 62%, rgba(60, 40, 30, 0.18) 63%), linear-gradient(90deg, #0000 60%, rgba(60, 40, 30, 0.16) 61%); background-size: 24% 30%; }
-    .s-roofs   { background: linear-gradient(180deg, #8fb7d8 0 44%, #d98a5e 44% 60%, #b5623a 60% 100%); }
-    .s-castle  { background: linear-gradient(180deg, #a9c4d8 0 42%, #9a8f7e 42% 100%); }
-    .s-castle::before  { content: ""; position: absolute; left: 0; right: 0; top: 38%; height: 11%; background: repeating-linear-gradient(90deg, #7c7161 0 11%, transparent 11% 19%); }
-    .s-street  { background: linear-gradient(178deg, #e6dcc6 0 20%, #cdb994 20% 33%, #9a8a6d 33% 60%, #5f5442 100%); }
-    .s-street::before  { content: ""; position: absolute; inset: 0; background: linear-gradient(102deg, transparent 38%, rgba(255, 240, 205, 0.34) 51%, transparent 64%); }
-    .s-food    { background: radial-gradient(circle at 50% 56%, #efe0c4 0 24%, #c99a5e 25% 38%, #7a5636 39% 100%); }
-    .s-pena    { background: linear-gradient(120deg, #c9433a 0 36%, #e3b23c 36% 64%, #d98a2b 64% 100%); }
-    .s-night   { background: linear-gradient(180deg, #10162e, #1d2749 68%, #0c1022); }
-    .s-night::before   { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, #ffd98a 0 38%, transparent 44%); background-size: 8% 11%; background-position: 10% 62%; opacity: 0.5; }
 
     @media (max-width: 640px)
     {
@@ -741,8 +713,7 @@ const st = {
     map: null, markers: [], geoReady: false,
 };
 
-/* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust,
- *            scene, hue }]   (scene / hue only in DEMO mode) */
+/* PHOTOS: [{ id, path, name, url, ts, day, time, lat, lon, place, cluster, bust }] */
 let PHOTOS   = [];
 let CLUSTERS = [];     // [{ id, lat, lon, items:[photo], place }]
 let COMMENTS = {};     // photo id -> comment text
@@ -753,14 +724,9 @@ let PLACES   = {};     // "lat,lon" (3 dp) -> reverse-geocoded name
 // cached EXIF read of every image (any type); see SCAN CACHE below.
 const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
 
-// What scanExif() reads goes into SCAN_CACHE through cacheSet(): never into a
-// cache that could not be read. SCAN_CACHE.set() (shared/media.js) writes the
-// file in batches and once more after the last read.
-function cacheSet( p, fields )
-{
-    if( ! SCAN_CACHE.loaded || DEMO ) return;
-    SCAN_CACHE.set( p, fields );
-}
+// What scanExif() reads goes into SCAN_CACHE.set() (shared/media.js): never
+// into a cache that could not be read; it writes the file in batches, and
+// scanExif once more after the last read.
 
 // The photos the grid / list / lightbox work on: all of them, or - when the
 // header search box has text - just those whose file name or comment matches.
@@ -771,15 +737,27 @@ function photos()
                                 || noteFor( p.id ).toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
 }
 function dayOf( ts )  { const d = new Date( ts ), p = NayiveUI.pad2; return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ); }
-function timeOf( ts ) { const d = new Date( ts ), p = NayiveUI.pad2; return p( d.getHours() ) + ":" + p( d.getMinutes() ); }
+// p.day stays yyyy-mm-dd (it groups and sorts); what is shown - the day
+// and the time - is in the user's language.
+function timeOf( ts ) { return dateFmt( "t", { hour: "numeric", minute: "2-digit" } ).format( new Date( ts ) ); }
+function dayLabel( day )
+{
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( day || "" );
+    if( ! m ) return day || "";
+    return dateFmt( "d", { day: "numeric", month: "long", year: "numeric" } ).format( new Date( +m[ 1 ], +m[ 2 ] - 1, +m[ 3 ] ) );
+}
+const DATE_FMT = {};
+function dateFmt( kind, opts )
+{
+    const k = kind + "|" + NayiveUI.locale();
+    return DATE_FMT[ k ] || ( DATE_FMT[ k ] = new Intl.DateTimeFormat( NayiveUI.locale(), opts ) );
+}
 function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.localeCompare( b.name, NayiveUI.lang() ) ); }
 
 /* ---------------------------------------------------------------------------
  * RENDERING A PHOTO
  *
- * A real photo is an <img> (so the browser applies EXIF orientation). In DEMO
- * mode an un-edited photo is a CSS gradient via its .s-* class; an edited one
- * (DEMO) becomes an <img> of the editor's data URL.
+ * A real photo is an <img> (so the browser applies EXIF orientation).
  * -------------------------------------------------------------------------*/
 const NOTE_MARK = '<span class="note-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>';
 
@@ -824,7 +802,6 @@ let   thumbWorkers  = 0;
 function thumbKey( p )  { return p.size + "_" + p.mtime + ".jpg"; }
 function thumbPath( p ) { return THUMB_DIR + "/" + thumbKey( p ); }
 
-function realPhoto( p ) { return ! DEMO; }
 function srcFor( p )
 {
     if( p.localUrl )    return p.localUrl;      // just uploaded: show the local bytes
@@ -999,78 +976,22 @@ async function refreshStat( p )
     catch( _ ) {}
 }
 
-function sceneClass( p ) { return realPhoto( p ) ? "scene is-photo" : ( "scene " + p.scene ); }
-function sceneStyle( p ) { return realPhoto( p ) ? "" : ( "filter:hue-rotate(" + p.hue + ")" ); }
 function sceneInner( p, thumb )
 {
-    if( ! realPhoto( p ) ) return "";
     const t = thumb ? thumbSrc( p ) : { src: srcFor( p ), stage: "full" };
     return '<img class="ph" loading="lazy" decoding="async" draggable="false" alt="" src="' + esc( t.src ) + '"'
          + ' data-id="' + esc( p.id ) + '" data-stage="' + t.stage + '">';
 }
 function sceneHtml( p, thumb )
 {
-    const style = sceneStyle( p );
-    return '<div class="' + sceneClass( p ) + '"' + ( style ? ' style="' + style + '"' : "" ) + '>' + sceneInner( p, thumb ) + '</div>';
+    return '<div class="scene is-photo">' + sceneInner( p, thumb ) + '</div>';
 }
 function paintScene( el, p, thumb )
 {
     if( ! p ) return;
-    el.className     = sceneClass( p );
-    el.style.cssText = sceneStyle( p );
+    el.className     = "scene is-photo";
+    el.style.cssText = "";
     el.innerHTML     = sceneInner( p, thumb );
-}
-
-/* ---------------------------------------------------------------------------
- * EXAMPLE DATA (DEMO mode only)
- * -------------------------------------------------------------------------*/
-const DEMO_HOME = {   // rough real coordinates so the map + geocoder still demo
-    baixa:  [ 38.7108, -9.1394 ], alfama: [ 38.7118, -9.1300 ],
-    belem:  [ 38.6975, -9.2064 ], nacoes: [ 38.7636, -9.0945 ],
-    sintra: [ 38.7876, -9.3904 ],
-};
-const DEMO_GROUPS = [
-    { day: "2025-10-09", h: 11, cl: "baixa",  scenes: [ "street", "tram", "facade", "street" ] },
-    { day: "2025-10-09", h: 15, cl: null,     scenes: [ "food", "azulejo" ] },
-    { day: "2025-10-09", h: 18, cl: "baixa",  scenes: [ "river", "river", "night" ] },
-    { day: "2025-10-10", h: 10, cl: "belem",  scenes: [ "castle", "street", "castle", "river", "street" ] },
-    { day: "2025-10-10", h: 13, cl: null,     scenes: [ "food", "food" ] },
-    { day: "2025-10-10", h: 16, cl: "sintra", scenes: [ "pena", "pena", "castle", "street", "roofs" ] },
-    { day: "2025-10-11", h: 10, cl: "alfama", scenes: [ "castle", "roofs", "street", "roofs" ] },
-    { day: "2025-10-11", h: 13, cl: "alfama", scenes: [ "roofs", "azulejo", "roofs" ] },
-    { day: "2025-10-11", h: 16, cl: null,     scenes: [ "street", "facade" ] },
-    { day: "2025-10-11", h: 18, cl: "baixa",  scenes: [ "river", "roofs", "river" ] },
-    { day: "2025-10-12", h: 11, cl: "nacoes", scenes: [ "street", "night" ] },
-    { day: "2025-10-12", h: 14, cl: "baixa",  scenes: [ "food", "street" ] },
-];
-function buildDemo()
-{
-    PHOTOS = [];
-    DEMO_GROUPS.forEach( ( g, gi ) =>
-    {
-        const base = new Date( g.day + "T00:00:00" ).getTime();
-        g.scenes.forEach( ( sc, i ) =>
-        {
-            const ts = base + ( g.h * 60 + i * 8 ) * 60000;
-            const c  = g.cl ? DEMO_HOME[ g.cl ] : null;
-            PHOTOS.push( {
-                id: "d" + gi + "_" + i, name: NayiveUI.tf( "photos.photoN", { n: PHOTOS.length + 1 } ),
-                ts: ts, day: dayOf( ts ), time: timeOf( ts ), place: "",
-                scene: "s-" + sc, hue: ( ( gi * 37 + i * 13 ) % 24 ) - 12 + "deg",
-                lat: c ? c[ 0 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
-                lon: c ? c[ 1 ] + ( Math.random() - 0.5 ) * 0.0016 : null,
-            } );
-        } );
-    } );
-    sortPhotos();
-    try { COMMENTS = JSON.parse( localStorage.getItem( "photos-comments" ) || "{}" ); }
-    catch( _ ) { COMMENTS = {}; }
-
-    buildClusters();
-    st.geoReady = true;
-    setCrumb();
-    updateNoGeoChip();
-    geocode().then( () => { renderGrid(); if( st.mode === "map" ) drawMap(); } );
 }
 
 /* ---------------------------------------------------------------------------
@@ -1317,7 +1238,7 @@ async function scanExif()
             // Not a JPEG: nothing to read, but record it anyway - the cache is
             // also the registry of every image (its size + mtime) that the
             // thumbnail sweep keeps thumbs for.
-            cacheSet( p, { ts: 0, lat: null, lon: null } );
+            SCAN_CACHE.set( p, { ts: 0, lat: null, lon: null } );
             dirty = true;
         }
         else todo.push( p );
@@ -1331,7 +1252,7 @@ async function scanExif()
         if( ! x ) return;                       // fetch failed - try again next open
         if( x.ts ) { p.ts = x.ts; p.day = dayOf( x.ts ); p.time = timeOf( x.ts ); }
         if( x.lat != null ) { p.lat = x.lat; p.lon = x.lon; }
-        cacheSet( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
+        SCAN_CACHE.set( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
     } );
 
     // Only this folder's own entries (not a sub-folder's) can be judged dead
@@ -1340,7 +1261,7 @@ async function scanExif()
     const inScope = k => k.indexOf( prefix ) === 0 && k.slice( prefix.length ).indexOf( "/" ) === -1;
     if( SCAN_CACHE.prune( new Set( PHOTOS.map( p => p.path ) ), inScope ) ) dirty = true;
 
-    if( dirty && ! DEMO && SCAN_CACHE.loaded ) SCAN_CACHE.saveNow();
+    if( dirty ) SCAN_CACHE.saveNow();          // (an unread cache is never written)
 }
 
 async function enrich()
@@ -1409,7 +1330,8 @@ async function exifFor( p )
         // opens the file. Only when it runs past that, or other big blocks
         // come before it, is a longer stretch read - never past 256 KB.
         let buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-65535" } } );
-        const need = exifEnd( buf );
+        const x    = exifAt( buf );
+        const need = ! x ? 0 : x.past ? 262144 : x.end;
         if( need > buf.length && buf.length >= 65536 )
             buf = await GumApi.fetchBinary( p.url, { headers: { Range: "bytes=0-" + ( Math.min( need, 262144 ) - 1 ) } } );
         // a JPEG with no Exif still counts as "scanned" - return an empty
@@ -1419,48 +1341,37 @@ async function exifFor( p )
     catch( _ ) { return null; }
 }
 
-// How many bytes from the file's start hold its whole Exif block: where the
-// block ends when it is found, 256 KB when the blocks before it run past `u8`,
-// 0 when there is none (not a JPEG, or the picture data starts first).
-function exifEnd( u8 )
+// Where a JPEG's Exif block is, walking its marker segments to the Exif
+// APP1: { tiff, end } (its TIFF header; where the block ends - to read it
+// whole), { past: true } when the blocks before it run past `u8`, or null
+// (not a JPEG, or the picture data starts first).
+function exifAt( u8 )
 {
-    if( ! u8 || u8.length < 4 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return 0;
+    if( ! u8 || u8.length < 4 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
     let i = 2;
     while( i + 4 <= u8.length )
     {
-        if( u8[ i ] !== 0xFF ) return 0;
+        if( u8[ i ] !== 0xFF ) return null;
         const marker = u8[ i + 1 ];
-        if( marker === 0xD9 || marker === 0xDA ) return 0;      // EOI / start of scan
+        if( marker === 0xD9 || marker === 0xDA ) return null;   // EOI / start of scan
         const len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
-        if( len < 2 ) return 0;
+        if( len < 2 ) return null;
         if( marker === 0xE1 && i + 10 <= u8.length &&
-            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 && u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 && u8[ i + 8 ] === 0x00 )
-            return i + 2 + len;
+            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 &&      // "Ex"
+            u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 &&      // "if"
+            u8[ i + 8 ] === 0x00 )
+            return { tiff: i + 10, end: i + 2 + len };
         i += 2 + len;
     }
-    return 262144;
+    return { past: true };
 }
 
 function parseJpegExif( u8 )
 {
     if( ! u8 || u8.length < 12 || u8[ 0 ] !== 0xFF || u8[ 1 ] !== 0xD8 ) return null;
 
-    // walk the JPEG marker segments to the Exif APP1
-    let i = 2, tiff = -1;
-    while( i + 4 <= u8.length )
-    {
-        if( u8[ i ] !== 0xFF ) break;
-        const marker = u8[ i + 1 ];
-        if( marker === 0xD9 || marker === 0xDA ) break;         // EOI / start of scan
-        const len = ( u8[ i + 2 ] << 8 ) | u8[ i + 3 ];
-        if( len < 2 ) break;
-        if( marker === 0xE1 && i + 10 <= u8.length &&
-            u8[ i + 4 ] === 0x45 && u8[ i + 5 ] === 0x78 &&      // "Ex"
-            u8[ i + 6 ] === 0x69 && u8[ i + 7 ] === 0x66 &&      // "if"
-            u8[ i + 8 ] === 0x00 )
-        { tiff = i + 10; break; }
-        i += 2 + len;
-    }
+    const at   = exifAt( u8 );
+    const tiff = at && ! at.past ? at.tiff : -1;
     if( tiff < 0 || tiff + 8 > u8.length ) return null;
 
     const le  = u8[ tiff ] === 0x49;                            // 'II' little / 'MM' big
@@ -1690,11 +1601,10 @@ async function reverseGeocode( lat, lon )
  * PER-PHOTO COMMENTS
  *
  * Real: data/photos/comments.json, keyed by the image's files/ path - the
- * same sidecar the image editor (apps/image) reads and writes. DEMO: localStorage.
+ * same sidecar the image editor (apps/image) reads and writes.
  * -------------------------------------------------------------------------*/
 async function loadComments()
 {
-    if( DEMO ) return;                           // handled in buildDemo()
     // A move whose notes could not follow (media.js remapComments) is made
     // first, so the notes read are where their photos are now.
     await NayiveMedia.settleNoteMoves();
@@ -1722,28 +1632,6 @@ async function loadOwnerNotes()
 }
 function noteFor( id ) { return COMMENTS[ id ] || OWNER_NOTES[ id ] || ""; }
 
-async function saveComment( id, text )
-{
-    if( DEMO )
-    {
-        if( text ) COMMENTS[ id ] = text; else delete COMMENTS[ id ];
-        try { localStorage.setItem( "photos-comments", JSON.stringify( COMMENTS ) ); } catch( _ ) {}
-        return true;
-    }
-    // This one note, laid on the sidecar as it is on the server NOW, so a
-    // stale in-memory copy can't wipe a note added elsewhere (the image
-    // editor, another device) - and version-checked (updateComments): one
-    // saved between the read and the write makes it read again. Only a
-    // missing file (404) is an empty map: on any other read error, or a file
-    // that is not a map, nothing is written - it would put this one note over
-    // all. True when the note is on disk.
-    try
-    {
-        COMMENTS = await NayiveMedia.updateComments( map => { if( text ) map[ id ] = text; else delete map[ id ]; } );
-    }
-    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'photos.commentSaveFailed' ) ); return false; }
-    return true;
-}
 /* Drop notes for photos that no longer exist in THIS folder (deleted from disk,
  * or a trash-restore that landed under a new name - Drive re-keys move/rename/
  * copy but not those). Only ever touches keys that sit directly in DIR.
@@ -1815,7 +1703,7 @@ function setCrumb()
     const count = ( st.q.trim() && shown !== total )
         ? NayiveUI.tf( "photos.shownOfTotal", { shown: shown, total: total } )
         : NayiveUI.tf( total === 1 ? "photos.onePhoto" : "photos.nPhotos", { n: total } );
-    setCrumbPath( DEMO ? NayiveUI.t( 'photos.demoCrumb' ) : dirLabel() );
+    setCrumbPath( dirLabel() );
     $( "#subStrip" ).textContent = count;
     NayiveMedia.searchCount( shown, total );
 }
@@ -1834,7 +1722,7 @@ let gridObs = null;
 function tileCap( p )  { return p.time + ( p.place ? " · " + p.place : "" ); }
 function tileBits( p )
 {
-    const bits = [ p.day + " " + p.time ];
+    const bits = [ dayLabel( p.day ) + " " + p.time ];
     if( p.place )      bits.push( p.place );
     if( p.size )       bits.push( fmtSize( p.size ) );
     return bits.join( " · " );
@@ -1954,7 +1842,7 @@ function renderGrid( keepTop )
             const g = groups[ gi ];
             const h = document.createElement( "div" );
             h.className = "day-h";
-            h.innerHTML = esc( g.day ) + "<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: g.items.length } ) ) + "</span>";
+            h.innerHTML = esc( dayLabel( g.day ) ) + "<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: g.items.length } ) ) + "</span>";
             const shots = document.createElement( "div" );
             shots.className = "shots";
             shots.innerHTML = g.items.map( tileHtml ).join( "" );
@@ -2141,7 +2029,7 @@ function paintLb()
     st.lbId = p.id;
     paintScene( $( "#lbScene" ), p );
     $( "#lbTitle" ).textContent = p.place || p.name;
-    $( "#lbMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#lbMeta" ).textContent  = dayLabel( p.day ) + " · " + p.time;
     $( "#lbMap" ).style.display = ( p.cluster != null ) ? "" : "none";
     const c = noteFor( p.id );
     $( "#lbNote" ).hidden = ! c;
@@ -2210,7 +2098,7 @@ function showPase()
     st.ab = ! st.ab;
 
     $( "#paseTitle" ).textContent = p.place || p.name;
-    $( "#paseMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#paseMeta" ).textContent  = dayLabel( p.day ) + " · " + p.time;
     $( "#paseCount" ).textContent = ( st.paseIdx + 1 ) + " / " + list.length;
     $( "#paseProg" ).style.width  = ( ( st.paseIdx + 1 ) / list.length * 100 ) + "%";
 
@@ -2696,17 +2584,16 @@ function showOnMap( ids )
 }
 
 // Download: the server sends it, one photo as it is, several as one .zip
-// (server/go/api_download.go) - the same call Drive's Download makes.
+// (server/go/api_download.go) - the same call Drive's Download makes, the
+// list in a body when a big pick does not fit the address (postPaths).
 let dlBusy = false;
 async function downloadPaths( paths )
 {
     if( dlBusy || ! paths.length ) return;
     dlBusy = true;
-    const q = new URLSearchParams();
-    paths.forEach( p => q.append( "paths", p ) );
     try
     {
-        const r = JSON.parse( await GumApi.fetchText( "/api/download?" + q.toString(), { method: "POST" } ) );
+        const r = JSON.parse( await NayiveMedia.postPaths( "/api/download", paths ) );
         const a = document.createElement( "a" );
         a.href     = "/api/download?id=" + encodeURIComponent( r.id );
         a.download = r.name || "";
@@ -2714,7 +2601,11 @@ async function downloadPaths( paths )
         a.click();
         a.remove();
     }
-    catch( err ) { NayiveUI.toast( NayiveUI.t( err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) ); }
+    catch( err )
+    {
+        NayiveUI.toast( NayiveUI.t( err && err.tooMany ? "drive.pickTooMany" :
+                                    err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) );
+    }
     finally { dlBusy = false; }
 }
 
@@ -2942,32 +2833,24 @@ async function copyPaths( paths, dest )
 }
 
 // To the bin, at once (no question: the toast's Undo brings it back) -
-// Drive's confirmDelete: GumApi.binPaths, then NayiveMedia.purgePaths drops
-// the scan entries and thumbnails (the notes stay for a restore).
+// Drive's confirmDelete: in batches (NayiveMedia.binInBatches: Ctrl+A in a
+// big album passed the server's address cap), each batch's scan entries and
+// thumbnails purged (the notes stay for a restore). A batch that fails stops
+// there: what went before it is shown gone, with its Undo.
 let binBusy = false;
 async function binPaths( paths )
 {
     if( binBusy || ! paths.length || RO || DEMO ) return;
     binBusy = true;
     setSync( "saving" );
-    let ids;
-    try
-    {
-        ids = await GumApi.binPaths( paths );
-        await NayiveMedia.purgePaths( paths );
-    }
-    catch( _ )
-    {
-        binBusy = false;
-        setSync( "synced" );
-        NayiveUI.toast( NayiveUI.t( "drive.trashFailed" ) );
-        return;
-    }
+    const { ids, went, failed } = await NayiveMedia.binInBatches( paths );
     binBusy = false;
     setSync( "synced" );
+    if( ! went.length ) { NayiveUI.toast( NayiveUI.t( "drive.trashFailed" ) ); return; }
     // The open album (or one it is in) went: the album above it opens.
-    const gone = paths.find( p => under( DIR, p ) );
-    settle( paths, gone ? NayiveMedia.dirOf( gone ) : DIR, NayiveUI.t( "ui.toast.binned" ), ids ? { kind: "bin", ids: ids } : null );
+    const gone = went.find( p => under( DIR, p ) );
+    settle( went, gone ? NayiveMedia.dirOf( gone ) : DIR, NayiveUI.t( failed ? "drive.trashFailed" : "ui.toast.binned" ),
+            ids && ids.length ? { kind: "bin", ids: ids } : null );
 }
 
 // After a move or the bin: show the truth. `next` is where the open album is
@@ -3024,7 +2907,7 @@ async function runUndo( undo )
     let err = null, res = null;
     if( undo.kind === "bin" )
     {
-        try { res = await GumApi.trashRestore( undo.ids ); } catch( e ) { err = e; }
+        try { res = await NayiveMedia.restoreInBatches( undo.ids ); } catch( e ) { err = e; }
     }
     else
     {
@@ -3042,7 +2925,7 @@ async function runUndo( undo )
         await NayiveMedia.remapPaths( back );
         if( ids.length )
         {
-            try { res = await GumApi.trashRestore( ids ); } catch( e ) { err = err || e; }
+            try { res = await NayiveMedia.restoreInBatches( ids ); } catch( e ) { err = err || e; }
         }
     }
     setSync( "synced" );
@@ -3103,8 +2986,6 @@ async function boot()
             return;
         }
     }
-
-    if( DEMO ) { buildDemo(); renderGrid(); return; }
 
     // The albums tree (its rows come in the background: the photos do not
     // wait for them) and the item browser on the grid.

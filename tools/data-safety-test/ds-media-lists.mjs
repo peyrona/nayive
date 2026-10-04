@@ -51,7 +51,7 @@ await put( LISTS, [ { id: "plA", name: "A", paths: [] }, { id: "plB", name: "B",
 
 await c.evaluate( `( () => { st.queue = [ { song: { path: 'files/Music/song.mp3', title: 'song' } } ]; openSaveSheet();
                              document.getElementById( 'playlistName' ).value = 'C'; return true; } )()` );
-await c.evaluate( "confirmSave().then( () => true )" );
+await c.evaluate( "confirmName().then( () => true )" );
 ok( await disk( () => ( json( LISTS ) || [] ).some( p => p.name === "C" ) ), "Save list: C is on the server" );
 ok( ids().split( "," ).length === 3 && ids().includes( "plA" ) && ids().includes( "plB" ), "Save list: the phone's B is still there", json( LISTS ) );
 
@@ -74,11 +74,11 @@ await c.evaluate( `( () => { window.__lie = true; const open = XMLHttpRequest.pr
         if( x.__lie && window.__lie ) x.onload = function () { if( x.onerror ) x.onerror(); };
         return send.apply( this, arguments ); };
     openSaveSheet(); document.getElementById( 'playlistName' ).value = 'E'; return true; } )()` );
-await c.evaluate( "window.__toasts = []; confirmSave().then( () => true )" );
+await c.evaluate( "window.__toasts = []; confirmName().then( () => true )" );
 ok( await c.evaluate( "( window.__toasts || [] ).some( t => t.indexOf( NayiveUI.t( 'music.listSaveFailed' ) ) !== -1 )" ), "the failed save is said", await c.toasts() );
 ok( await c.evaluate( "document.getElementById( 'saveBackdrop' ).classList.contains( 'open' ) && document.getElementById( 'playlistName' ).value === 'E'" ),
     "the sheet stays open, the name kept" );
-await c.evaluate( "window.__lie = false; confirmSave().then( () => true )" );
+await c.evaluate( "window.__lie = false; confirmName().then( () => true )" );
 ok( await c.evaluate( "! document.getElementById( 'saveBackdrop' ).classList.contains( 'open' )" ), "✓ again: saved, the sheet closes" );
 ok( ( json( LISTS ) || [] ).filter( p => p.name === "E" ).length === 1, "one list E, not two", json( LISTS ) );
 

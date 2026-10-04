@@ -49,6 +49,9 @@ function shownTrash( items )
     return items.filter( function( it ) { return ! trashPurging.has( it.id ); } );
 }
 
+// The disk space bin items hold (the bin bar, the disk bar's "empty it" question).
+function binHeld( items ) { return items.reduce( function( sum, it ) { return sum + ( it.size || 0 ); }, 0 ); }
+
 function renderTrashBar()
 {
     const host = document.getElementById( 'breadcrumb' );
@@ -61,7 +64,7 @@ function renderTrashBar()
 
     // The bin shows the disk space it is holding, not how many rows: what
     // matters is the room emptying it would give back.
-    const held = trashItems.reduce( function( sum, it ) { return sum + ( it.size || 0 ); }, 0 );
+    const held = binHeld( trashItems );
 
     const title = document.createElement( 'span' );
     title.className   = 'trash-title';
@@ -143,8 +146,7 @@ function renderTrashListing()
 
         const meta = document.createElement( 'span' );
         meta.className = 'row-meta';
-        const where = fsRel( item.orig.indexOf( '/' ) !== -1
-                             ? item.orig.slice( 0, item.orig.lastIndexOf( '/' ) ) : '' ) || 'Drive';
+        const where = fsRel( NayiveMedia.dirOf( item.orig ) ) || 'Drive';
         const bits = [ where, fmtDate( item.deleted ) ];
         if( ! item.dir ) bits.push( fmtSize( item.size ) );
         meta.textContent = bits.join( ' · ' );
@@ -185,10 +187,7 @@ async function restoreTrash( ids )
     {
         const res = await withBusy( GumApi.trashRestore( ids ) );
         await refreshTrash();
-        if( res && res.renamed && res.renamed.length )
-            flashStatus( TF( 'drive.restoredAs', { name: res.renamed[0] } ) );
-        else
-            flashStatus( T( 'drive.restored' ) );
+        restoredStatus( res );                          // actions.js
     }
     catch( _ ) { setStatus( '' ); NayiveUI.toast( T( 'drive.restoreFailed' ) ); }
 }

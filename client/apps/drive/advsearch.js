@@ -35,8 +35,6 @@ let sbSeq     = 0;          // guards the live count against a late answer
 let sbTimer   = null;       // debounce for the live count
 let sbPreview = null;       // { key, nodes, truncated }: the last count, reused by Search
 
-function sbIso( d ) { return d.getFullYear() + '-' + pad2( d.getMonth() + 1 ) + '-' + pad2( d.getDate() ); }
-
 function sbMidnight( iso )
 {
     const p = iso.split( '-' );
@@ -47,7 +45,7 @@ function sbEmpty()
 {
     const now = new Date();
     return { rules: [ { op: 'has', text: '' } ], any: false, kinds: [], when: 'any',
-             from: sbIso( new Date( now.getFullYear(), now.getMonth(), 1 ) ), to: sbIso( now ) };
+             from: isoDay( new Date( now.getFullYear(), now.getMonth(), 1 ) ), to: isoDay( now ) };
 }
 
 // "Hoy", "Últimos 7 días"... are the user's own days: local midnights, sent

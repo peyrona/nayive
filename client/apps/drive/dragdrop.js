@@ -20,12 +20,17 @@ function canDropInto( destPath, paths )
     if( NayiveUI.isShared( destPath ) ) return false;
     if( paths.some( NayiveUI.isShared ) ) return false;
 
-    for( const p of paths )
+    return paths.indexOf( destPath ) === -1          // onto itself
+        && ! intoOwnTree( paths, destPath );         // into its own subtree
+}
+
+// `dest` is one of the picked folders, or inside one: a folder never moves,
+// copies or pastes into its own subtree (the drop, the paste, the picker).
+function intoOwnTree( paths, dest )
+{
+    return paths.some( function( p )
     {
-        if( p === destPath ) return false;                        // onto itself
         const n = findNode( p );
-        if( n && isDir( n ) && destPath.indexOf( p + '/' ) === 0 ) // into its own subtree
-            return false;
-    }
-    return true;
+        return n && isDir( n ) && ( dest === p || dest.indexOf( p + '/' ) === 0 );
+    } );
 }

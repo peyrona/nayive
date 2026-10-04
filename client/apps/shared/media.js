@@ -5,9 +5,9 @@
  * Each of them used to carry its own copy of the same small helpers (HTML
  * escaping, path / extension utils, the hash-to-colour, time formats), the
  * same "scan cache" (data/<app>/scan-cache.json keyed by path + size + mtime),
- * the same duration probe, the same crumb / scope bar / folder tree markup,
- * the same play icon, MediaSession wrapper, folder-load error handling and
- * phone search toggle. This is the single copy. Plain classic script, one
+ * the same duration probe, the same crumb / scope bar markup, the same
+ * play icon, player-bar wiring, MediaSession wrapper, library start-up and
+ * folder tree, folder-load error handling and phone search toggle. This is the single copy. Plain classic script, one
  * global:
  *
  *     <script src="../shared/media.js"></script>     <- NOT deferred, placed
@@ -237,7 +237,12 @@
     //                                          // new entries, or 2.5 s after the last
     //   cache.prune( alivePaths, inScope );    // drop dead entries; true if any
     //   cache.save() / cache.saveNow()         // debounced / immediate write
+    //   cache.flush()                          // saveNow, only if set() ran since the last flush
     //   cache.map                              // the raw { path: entry } object
+    //
+    // A cache that could not be read (cache.loaded false) is never written:
+    // set, prune and the saves do nothing then - its empty map would be
+    // merged over the real file (the trap the apps each guarded by hand).
     //
     // A save is MERGED over the file as it is at that moment, never written
     // whole from memory: Drive's re-keys (remapPaths below) and another
@@ -251,6 +256,7 @@
         var timer   = null;
         var unsaved = 0;          // set() calls since the last save
         var known   = {};         // the keys the file had at our last load / save
+        var dirty   = false;      // set() since the last flush()
         var self = {
             map: {},
             loaded: false,
@@ -269,6 +275,8 @@
             },
             set: function ( item, fields )
             {
+                if( ! self.loaded ) return;
+                dirty = true;
                 self.map[ item.path ] = Object.assign( self.map[ item.path ] || {},
                                                        { size: item.size, mtime: item.mtime }, fields );
                 // A first scan of 20 000 photos sets as fast as it reads: the
@@ -286,6 +294,7 @@
             // so it may only judge that folder's entries.
             prune: function ( alive, inScope )
             {
+                if( ! self.loaded ) return false;
                 var has = alive instanceof Set ? function ( k ) { return alive.has( k ); }
                                                : function ( k ) { return alive.indexOf( k ) !== -1; };
                 var dropped = false;
@@ -298,12 +307,13 @@
             },
             save: function ()
             {
-                if( timer ) return;
+                if( timer || ! self.loaded ) return;
                 timer = setTimeout( function () { timer = null; self.saveNow(); }, 2500 );
             },
             saveNow: async function ()
             {
                 if( timer ) { clearTimeout( timer ); timer = null; }
+                if( ! self.loaded ) return;
                 unsaved = 0;
 
                 // Version-checked (GumApi.updateJson): a re-key or a scan saved
@@ -331,6 +341,12 @@
                 Object.keys( fresh ).forEach( function ( k ) { if( ! ( k in map ) ) map[ k ] = fresh[ k ]; } );
                 known = {};
                 Object.keys( out ).forEach( function ( k ) { known[ k ] = true; } );
+            },
+            flush: function ()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                return self.saveNow();
             }
         };
         return self;
@@ -675,6 +691,97 @@
     }
 
     //------------------------------------------------------------------------//
+    // BIG PICKS (Drive and Photos)
+    //
+    // The paths of a move to the bin and the ids of its Undo ride in the
+    // address, and Ctrl+A in a folder of 1,300 photos made one the server
+    // refuses (431, AB1). So both go in batches - the bin ids of all of them
+    // make ONE Undo - and Download / Compress send the list in a body.
+    var BIN_BATCH = 200;
+
+    // To the bin in batches, each batch's scan entries and thumbnails purged
+    // as it lands (the notes stay, for a restore). `wrap( promise )`
+    // (optional) wraps each call: Drive's busy mark. Never throws; resolves
+    //   { ids, sent, went, failed }
+    // `ids`: the bin ids of what went, for the Undo (null when an old server
+    // does not say them); `sent`: how many paths were asked before a batch
+    // failed (a half-done batch counts whole); `went`: the paths that did go;
+    // `failed`: a batch failed, so what came after it was never asked.
+    async function binInBatches( paths, wrap )
+    {
+        var ids = [], sent = 0, went = [], failed = false;
+        try
+        {
+            while( sent < paths.length )
+            {
+                var batch = paths.slice( sent, sent + BIN_BATCH ), got;
+                try { got = await ( wrap ? wrap( GumApi.binPaths( batch ) ) : GumApi.binPaths( batch ) ); }
+                catch( err )
+                {
+                    // Half done: some of this batch went (err.ids), the rest stayed (err.failed).
+                    if( err && err.ids && err.ids.length )
+                    {
+                        sent += batch.length;
+                        if( ids ) ids = ids.concat( err.ids );
+                        var stayed = err.failed || [];
+                        var gone = batch.filter( function ( p ) { return stayed.indexOf( p ) === -1; } );
+                        went = went.concat( gone );
+                        await purgePaths( gone );
+                    }
+                    throw err;
+                }
+                sent += batch.length;
+                ids = ids && got ? ids.concat( got ) : null;     // an old server does not say them
+                went = went.concat( batch );
+                await purgePaths( batch );
+            }
+        }
+        catch( e ) { failed = true; }
+        return { ids: ids, sent: sent, went: went, failed: failed };
+    }
+
+    // The Undo: those bin ids back, in batches too. Resolves { renamed: [the
+    // names one landed under, its old one taken meanwhile] }; throws when a
+    // batch fails (the ones before it are back).
+    async function restoreInBatches( ids, wrap )
+    {
+        var res = { renamed: [] };
+        for( var i = 0; i < ids.length; i += BIN_BATCH )
+        {
+            var call = GumApi.trashRestore( ids.slice( i, i + BIN_BATCH ) );
+            var r = await ( wrap ? wrap( call ) : call );
+            if( r && r.renamed ) res.renamed = res.renamed.concat( r.renamed );
+        }
+        return res;
+    }
+
+    // The POST of a Download or a Compress of `paths`: in the address while
+    // they fit - any server takes that - and in a JSON body past that.
+    // Resolves to the answer's text, as GumApi.fetchText. The server reads a
+    // body of 1 MiB at most (413 past it): a pick that big is refused here,
+    // as "too many items at once" (err.tooMany).
+    var PATHS_IN_URL  = 8000;
+    var PATHS_IN_BODY = 1 << 20;    // server/go/response.go, maxBody
+
+    function postPaths( url, paths )
+    {
+        var q = new URLSearchParams();
+        paths.forEach( function ( p ) { q.append( "paths", p ); } );
+        var query = q.toString();
+
+        if( query.length <= PATHS_IN_URL ) return GumApi.fetchText( url + "?" + query, { method: "POST" } );
+
+        var body = JSON.stringify( { paths: paths } );
+        if( new TextEncoder().encode( body ).length > PATHS_IN_BODY )
+        {
+            var err = new Error( "too many items at once" );
+            err.tooMany = true;
+            return Promise.reject( err );
+        }
+        return GumApi.fetchText( url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body } );
+    }
+
+    //------------------------------------------------------------------------//
     // DURATION PROBE - a throwaway <audio> / <video> with preload=metadata.
     // Cheap: the server supports Range, so the browser only pulls the header.
     // Resolves with the length in seconds, or null - after PROBE_MS at most: a
@@ -723,24 +830,6 @@
             '<button id="clearScopeBtn" title="' + t + '" aria-label="' + t + '">' + ICONS.x + '</button></span></div>';
     }
 
-    // The folders-only tree of a listDirRecursive() result as indented rows
-    // (button.folder-row[data-folder]); `selected` is the active folder path.
-    function folderTreeHtml( node, selected, depth )
-    {
-        depth = depth || 0;
-        if( ! node || ! node.nodes ) return "";
-        var html = "";
-        node.nodes.forEach( function ( n )
-        {
-            if( n.nodes === undefined || n.nodes === null ) return;   // a file, not a folder
-            html += '<button class="folder-row' + ( selected === n.path ? ' is-active' : '' ) +
-                '" style="padding-left:' + ( 10 + depth * 22 ) + 'px" data-folder="' + esc( n.path ) + '">' +
-                ICONS.folder + esc( baseName( n.path ) ) + '</button>';
-            html += folderTreeHtml( n, selected, depth + 1 );
-        } );
-        return html;
-    }
-
     //------------------------------------------------------------------------//
     // PLAYER BITS
 
@@ -787,6 +876,101 @@
         catch( e ) {}
     }
 
+    // The player bar's own wiring, the same in Music and Movies: the seek
+    // slider (#seekRange; #elapsedLabel follows it while dragged), the volume
+    // (#volumeRange), the length (#totalLabel), the time as it plays, the
+    // play icon and the lock screen's playing / paused. `el`: the <audio> or
+    // <video>. Hooks, each optional: loaded() once the length is shown, tick()
+    // on every timeupdate, play() / pause() before the lock screen is told;
+    // finiteSeek: a seek only once the length is known (Movies).
+    function wirePlayer( el, hooks )
+    {
+        var seekRange = document.getElementById( "seekRange" ), seeking = false;
+        seekRange.addEventListener( "input", function () { seeking = true; document.getElementById( "elapsedLabel" ).textContent = fmtClock( Number( seekRange.value ) ); } );
+        seekRange.addEventListener( "change", function () { if( ! hooks.finiteSeek || isFinite( el.duration ) ) el.currentTime = Number( seekRange.value ); seeking = false; } );
+
+        var volumeRange = document.getElementById( "volumeRange" );
+        el.volume = Number( volumeRange.value ) / 100;
+        volumeRange.addEventListener( "input", function () { el.volume = Number( volumeRange.value ) / 100; } );
+
+        el.addEventListener( "loadedmetadata", function ()
+        {
+            seekRange.max = Math.floor( el.duration ) || 1;
+            document.getElementById( "totalLabel" ).textContent = fmtClock( el.duration );
+            if( hooks.loaded ) hooks.loaded();
+        } );
+        el.addEventListener( "timeupdate", function ()
+        {
+            if( ! seeking )
+            {
+                seekRange.value = Math.floor( el.currentTime );
+                document.getElementById( "elapsedLabel" ).textContent = fmtClock( el.currentTime );
+            }
+            if( hooks.tick ) hooks.tick();
+        } );
+        function played( on, hook )
+        {
+            setPlayIcon( on );
+            if( hook ) hook();
+            if( "mediaSession" in navigator ) navigator.mediaSession.playbackState = on ? "playing" : "paused";
+        }
+        el.addEventListener( "play",  function () { played( true,  hooks.play  ); } );
+        el.addEventListener( "pause", function () { played( false, hooks.pause ); } );
+    }
+
+    //------------------------------------------------------------------------//
+    // LIBRARY START-UP AND TREE (Music and Movies)
+
+    // The folder of ?dir= (`dir`), or the one the launcher remembers or asks
+    // for. None: the #noDirHint note, and null. With one, the crumb shows it
+    // and the library's rows, tools and player bar come out. cfg: { app,
+    // title, note } for NayiveUI.launcherFolder.
+    async function openLibrary( dir, cfg )
+    {
+        if( ! dir )
+        {
+            dir = await NayiveUI.launcherFolder( { app: cfg.app, title: cfg.title, note: cfg.note } );
+            if( ! dir )
+            {
+                document.getElementById( "noDirHint" ).hidden = false;
+                return dir;
+            }
+        }
+        setCrumb( dirLabel( dir ) );
+        document.getElementById( "mainRow" ).hidden = false;
+        document.querySelectorAll( "#tools, [data-tools]" ).forEach( function ( el ) { el.hidden = false; } );
+        document.getElementById( "playerBar" ).hidden = false;
+        return dir;
+    }
+
+    // The folders under a scanned folder (a listDirRecursive() result), as
+    // rows of the library tree: ids "f:<path>".
+    function folderNodes( node, icon )
+    {
+        return ( node && node.nodes || [] )
+            .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
+            .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: icon, noMenu: true, kids: folderNodes( n, icon ) }; } );
+    }
+
+    // The library tree (NayiveUI.tree in #tree / #treePane; the header's
+    // #treeBtn slides it in on a phone). `open`: the app's map of open rows,
+    // this visit. cfg: roots, current, go - and Music's menu, drop.
+    function libraryTree( open, cfg )
+    {
+        var tree = NayiveUI.tree( Object.assign( {
+            host:    document.getElementById( "tree" ),
+            pane:    document.getElementById( "treePane" ),
+            isOpen:  function ( id ) { return !! open[ id ]; },
+            setOpen: function ( id, v ) { open[ id ] = v; }
+        }, cfg ) );
+        document.getElementById( "treeBtn" ).addEventListener( "click", function () { tree.openSheet(); } );
+        return tree;
+    }
+
+    // Drive, at the file (a new window on the desktop, a new tab elsewhere):
+    // what plays here goes on playing.
+    function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
+
     //------------------------------------------------------------------------//
 
     window.NayiveMedia =
@@ -803,8 +987,10 @@
         parkNotes:   function ( map, path ) { return park( map, path, null ); },
         unparkNotes: function ( map, path ) { return unpark( map, path, true ); },
         remapPaths: remapPaths, copyPaths: copyPaths, purgePaths: purgePaths,
+        binInBatches: binInBatches, restoreInBatches: restoreInBatches, postPaths: postPaths,
         settleNoteMoves: settleNoteMoves, noteMoveWaits: noteMoveWaits,
-        ICONS: ICONS, scopeBarHtml: scopeBarHtml, folderTreeHtml: folderTreeHtml,
-        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState
+        ICONS: ICONS, scopeBarHtml: scopeBarHtml,
+        setPlayIcon: setPlayIcon, mediaSession: mediaSession, positionState: positionState, wirePlayer: wirePlayer,
+        openLibrary: openLibrary, folderNodes: folderNodes, libraryTree: libraryTree, showInDrive: showInDrive
     };
 } )();

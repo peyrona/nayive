@@ -41,7 +41,7 @@ function renderBreadcrumb()
     // "shared/..." is not under FS_ROOT (files/): it is the other virtual
     // root, so its crumbs are built from the real path, and the first
     // segment is shown by its Spanish name.
-    const inShared = currentFolder === 'shared' || currentFolder.indexOf( 'shared/' ) === 0;
+    const inShared = NayiveUI.isShared( currentFolder );
     const segs  = splitPath( inShared ? currentFolder : fsRel( currentFolder ) );
     let   accum = inShared ? '' : FS_ROOT;
 

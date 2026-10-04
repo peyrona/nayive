@@ -83,7 +83,7 @@ function offerEmptyTrash( on, held )
         catch( _ ) { NayiveUI.toast( T( 'drive.emptyTrashFailed' ) ); return; }
         if( ! items.length ) { reload(); return; }
         const ids  = items.map( function( it ) { return it.id; } );
-        const size = items.reduce( function( sum, it ) { return sum + ( it.size || 0 ); }, 0 );
+        const size = binHeld( items );
         if( ! await NayiveUI.confirm( {
                 title:   T( 'drive.emptyTrashTitle' ),
                 body:    TF( 'drive.diskFullBody', { held: fmtSize( size ) } ) + '\n\n' + TF( 'drive.emptyTrashBody', { n: ids.length } ),
@@ -165,7 +165,7 @@ function onFilesNews( msg )
 {
     if( ! dirTreeRoot ) return;      // still starting: the first load shows it anyway
 
-    const parent = function( p ) { const i = p.lastIndexOf( '/' ); return i < 0 ? '' : p.slice( 0, i ); };
+    const parent = NayiveMedia.dirOf;
     const seen   = ( msg.paths || [] ).filter( function( p )
     {
         if( typeof p !== 'string' ) return false;
