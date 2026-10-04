@@ -652,10 +652,9 @@ async function applyDurations()
         if( hit && hit.duration != null ) mv.duration = hit.duration;
     } );
     // A film gone from the folder leaves a dead entry. Only entries under this
-    // folder can be judged from its listing, and never in a cache that could
-    // not be read (its empty map would be written over the real one).
-    if( SCAN_CACHE.loaded &&
-        SCAN_CACHE.prune( new Set( st.movies.map( function ( mv ) { return mv.path; } ) ),
+    // folder can be judged from its listing (a cache that could not be read
+    // is never pruned nor written: scanCache sees to it).
+    if( SCAN_CACHE.prune( new Set( st.movies.map( function ( mv ) { return mv.path; } ) ),
                           function ( k ) { return k.indexOf( DIR + "/" ) === 0; } ) )
         SCAN_CACHE.save();
 }
@@ -665,16 +664,15 @@ async function applyDurations()
 async function loadDurations()
 {
     var pending = st.movies.filter( function ( mv ) { return mv.duration == null; } );
-    var probed  = false;
     await NayiveMedia.pool( pending, 2, async function ( mv )
     {
         var d = await NayiveMedia.probeDuration( "video", GumApi.fileUrl( mv.path ) );
         if( d == null ) return;
         mv.duration = d;
-        if( SCAN_CACHE.loaded ) { SCAN_CACHE.set( mv, { duration: d } ); probed = true; }
+        SCAN_CACHE.set( mv, { duration: d } );
         renderRuntime( mv );
     } );
-    if( probed ) SCAN_CACHE.saveNow();
+    SCAN_CACHE.flush();
     renderCollectionSummary();     // now the "N h en total" is known
 }
 

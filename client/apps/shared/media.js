@@ -237,7 +237,12 @@
     //                                          // new entries, or 2.5 s after the last
     //   cache.prune( alivePaths, inScope );    // drop dead entries; true if any
     //   cache.save() / cache.saveNow()         // debounced / immediate write
+    //   cache.flush()                          // saveNow, only if set() ran since the last flush
     //   cache.map                              // the raw { path: entry } object
+    //
+    // A cache that could not be read (cache.loaded false) is never written:
+    // set, prune and the saves do nothing then - its empty map would be
+    // merged over the real file (the trap the apps each guarded by hand).
     //
     // A save is MERGED over the file as it is at that moment, never written
     // whole from memory: Drive's re-keys (remapPaths below) and another
@@ -251,6 +256,7 @@
         var timer   = null;
         var unsaved = 0;          // set() calls since the last save
         var known   = {};         // the keys the file had at our last load / save
+        var dirty   = false;      // set() since the last flush()
         var self = {
             map: {},
             loaded: false,
@@ -269,6 +275,8 @@
             },
             set: function ( item, fields )
             {
+                if( ! self.loaded ) return;
+                dirty = true;
                 self.map[ item.path ] = Object.assign( self.map[ item.path ] || {},
                                                        { size: item.size, mtime: item.mtime }, fields );
                 // A first scan of 20 000 photos sets as fast as it reads: the
@@ -286,6 +294,7 @@
             // so it may only judge that folder's entries.
             prune: function ( alive, inScope )
             {
+                if( ! self.loaded ) return false;
                 var has = alive instanceof Set ? function ( k ) { return alive.has( k ); }
                                                : function ( k ) { return alive.indexOf( k ) !== -1; };
                 var dropped = false;
@@ -298,12 +307,13 @@
             },
             save: function ()
             {
-                if( timer ) return;
+                if( timer || ! self.loaded ) return;
                 timer = setTimeout( function () { timer = null; self.saveNow(); }, 2500 );
             },
             saveNow: async function ()
             {
                 if( timer ) { clearTimeout( timer ); timer = null; }
+                if( ! self.loaded ) return;
                 unsaved = 0;
 
                 // Version-checked (GumApi.updateJson): a re-key or a scan saved
@@ -331,6 +341,12 @@
                 Object.keys( fresh ).forEach( function ( k ) { if( ! ( k in map ) ) map[ k ] = fresh[ k ]; } );
                 known = {};
                 Object.keys( out ).forEach( function ( k ) { known[ k ] = true; } );
+            },
+            flush: function ()
+            {
+                if( ! dirty ) return;
+                dirty = false;
+                return self.saveNow();
             }
         };
         return self;

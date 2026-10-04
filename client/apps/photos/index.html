@@ -724,14 +724,9 @@ let PLACES   = {};     // "lat,lon" (3 dp) -> reverse-geocoded name
 // cached EXIF read of every image (any type); see SCAN CACHE below.
 const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
 
-// What scanExif() reads goes into SCAN_CACHE through cacheSet(): never into a
-// cache that could not be read. SCAN_CACHE.set() (shared/media.js) writes the
-// file in batches and once more after the last read.
-function cacheSet( p, fields )
-{
-    if( ! SCAN_CACHE.loaded || DEMO ) return;
-    SCAN_CACHE.set( p, fields );
-}
+// What scanExif() reads goes into SCAN_CACHE.set() (shared/media.js): never
+// into a cache that could not be read; it writes the file in batches, and
+// scanExif once more after the last read.
 
 // The photos the grid / list / lightbox work on: all of them, or - when the
 // header search box has text - just those whose file name or comment matches.
@@ -1229,7 +1224,7 @@ async function scanExif()
             // Not a JPEG: nothing to read, but record it anyway - the cache is
             // also the registry of every image (its size + mtime) that the
             // thumbnail sweep keeps thumbs for.
-            cacheSet( p, { ts: 0, lat: null, lon: null } );
+            SCAN_CACHE.set( p, { ts: 0, lat: null, lon: null } );
             dirty = true;
         }
         else todo.push( p );
@@ -1243,7 +1238,7 @@ async function scanExif()
         if( ! x ) return;                       // fetch failed - try again next open
         if( x.ts ) { p.ts = x.ts; p.day = dayOf( x.ts ); p.time = timeOf( x.ts ); }
         if( x.lat != null ) { p.lat = x.lat; p.lon = x.lon; }
-        cacheSet( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
+        SCAN_CACHE.set( p, { ts: x.ts || 0, lat: x.lat, lon: x.lon } );
     } );
 
     // Only this folder's own entries (not a sub-folder's) can be judged dead
@@ -1252,7 +1247,7 @@ async function scanExif()
     const inScope = k => k.indexOf( prefix ) === 0 && k.slice( prefix.length ).indexOf( "/" ) === -1;
     if( SCAN_CACHE.prune( new Set( PHOTOS.map( p => p.path ) ), inScope ) ) dirty = true;
 
-    if( dirty && ! DEMO && SCAN_CACHE.loaded ) SCAN_CACHE.saveNow();
+    if( dirty ) SCAN_CACHE.saveNow();          // (an unread cache is never written)
 }
 
 async function enrich()

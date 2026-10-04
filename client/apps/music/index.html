@@ -461,25 +461,10 @@ var audio = $( "#player" );
 // / loadDurations() as they read files (shared/media.js scanCache).
 var SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
 
-// What a pass reads goes into SCAN_CACHE through cacheSet(): never into a
-// cache that could not be read. SCAN_CACHE.set() (shared/media.js) writes the
-// file in batches; cacheFlush() writes the rest at the end of a pass, only
-// when something was set since.
-var cacheDirty = false;
-
-function cacheSet( song, fields )
-{
-    if( ! SCAN_CACHE.loaded ) return;
-    cacheDirty = true;
-    SCAN_CACHE.set( song, fields );
-}
-
-function cacheFlush()
-{
-    if( ! cacheDirty || ! SCAN_CACHE.loaded ) return;
-    cacheDirty = false;
-    SCAN_CACHE.saveNow();
-}
+// What a pass reads goes into SCAN_CACHE.set() (shared/media.js), which
+// never writes a cache that could not be read and saves in batches;
+// SCAN_CACHE.flush() writes the rest at the end of a pass, only when
+// something was set since.
 
 // Every scan() takes a new number; the tag and length readers of an older pass
 // (a Rescan while they still run) see it and stop.
@@ -622,8 +607,7 @@ async function applyCache()
     // so sweep here: drop the orphans and rewrite the file.
     // Only entries under DIR can be judged from its listing: the library of
     // another folder (Music opened on it from Drive) keeps its own.
-    if( SCAN_CACHE.loaded &&
-        SCAN_CACHE.prune( new Set( st.songs.map( function ( s ) { return s.path; } ) ),
+    if( SCAN_CACHE.prune( new Set( st.songs.map( function ( s ) { return s.path; } ) ),
                           function ( k ) { return k.indexOf( DIR + "/" ) === 0; } ) )
         SCAN_CACHE.save();
 }
@@ -787,7 +771,7 @@ async function refineTags( gen )
             catch( e ) { /* keep the filename guess */ }
             if( gen !== scanGen ) return;               // a Rescan replaced this pass
             song.tagRead = true;
-            cacheSet( song, {
+            SCAN_CACHE.set( song, {
                 tagRead: true, title: song.title, artist: song.artist,
                 album: song.album, track: song.track
             } );
@@ -799,7 +783,7 @@ async function refineTags( gen )
     await Promise.all( workers );
     if( gen !== scanGen ) return;
 
-    cacheFlush();
+    SCAN_CACHE.flush();
     // The tags may have moved songs to another artist / album / track number:
     // one re-sort and one full draw now.
     st.songs.sort( songCmp );
@@ -847,11 +831,11 @@ async function loadDurations( gen )
         var d = await NayiveMedia.probeDuration( "audio", GumApi.fileUrl( song.path ) );
         if( d == null || gen !== scanGen ) return;
         song.duration = d;
-        cacheSet( song, { duration: d } );
+        SCAN_CACHE.set( song, { duration: d } );
         renderLibraryDuration( song );
         renderQueueDuration( song );
     } );
-    if( gen === scanGen ) cacheFlush();         // final flush once everything is probed
+    if( gen === scanGen ) SCAN_CACHE.flush();   // final flush once everything is probed
 }
 
 /* ---------------------------------------------------------------------------
