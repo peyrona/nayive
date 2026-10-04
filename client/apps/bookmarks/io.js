@@ -318,17 +318,6 @@ function toNetscape()
     return lines.join( '\n' ) + '\n';
 }
 
-function download( text, name, type )
-{
-    const blob = new Blob( [ text ], { type: type } );
-    const a = document.createElement( 'a' );
-    a.href = URL.createObjectURL( blob );
-    a.download = name;
-    document.body.appendChild( a );
-    a.click();
-    setTimeout( function() { URL.revokeObjectURL( a.href ); a.remove(); }, 1000 );
-}
-
 // The export sheet's "Where": this device (a download) or a Nayive folder.
 function exportWhere()
 {
@@ -339,7 +328,7 @@ function exportWhere()
 async function deliver( text, name, type )
 {
     if( exportWhere() === 'nayive' ) { if( ! await saveInNayive( text, name ) ) return; }
-    else download( text, name, type );
+    else NayiveUI.saveFile( text, name, type );
     NayiveUI.close( 'exportBackdrop' );
 }
 

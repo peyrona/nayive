@@ -592,7 +592,6 @@
     </div>
 
     <input type="file" id="importInput" accept=".vcf,text/vcard,text/x-vcard" style="display:none;">
-    <a id="downloadAnchor" style="display:none;"></a>
     <div id="toast" class="toast"></div>
 
     <script src="../shared/vcard.js"></script>     <!-- NOT deferred: the script below takes it on its first lines -->
@@ -2351,13 +2350,8 @@
         function exportCards( list )
         {
             if( ! list.length ) return;
-            const f   = cardsFile( list );
-            const url = URL.createObjectURL( f );
-            const a   = document.getElementById( 'downloadAnchor' );
-            a.href     = url;
-            a.download = f.name;
-            a.click();
-            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+            const f = cardsFile( list );
+            NayiveUI.saveFile( f, f.name );
         }
 
         // Every picked card goes at once; "Deleted [Undo]" puts them back by
@@ -3610,15 +3604,7 @@
                 return;
             }
 
-            const blob = new Blob( [ contactsToVcf( contacts ) ], { type: 'text/vcard;charset=utf-8' } );
-            const url  = URL.createObjectURL( blob );
-            const a    = document.getElementById( 'downloadAnchor' );
-
-            a.href     = url;
-            a.download = T( 'contact.exportFile' );
-            a.click();
-
-            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+            NayiveUI.saveFile( contactsToVcf( contacts ), T( 'contact.exportFile' ), 'text/vcard;charset=utf-8' );
         }
 
         async function importVcf( file )

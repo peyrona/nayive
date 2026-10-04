@@ -2032,7 +2032,7 @@
         //
         // No PDF library: fill the hidden #printRoot with a light-theme sheet (balances,
         // who pays whom, every expense) and let the browser's print dialog write the
-        // file ("Save as PDF"). Same shape Calendar and Trips use. document.title
+        // file ("Save as PDF"): NayiveUI.printPage, as Calendar. The group's name
         // seeds the suggested file name.
 
         function exportPdf()
@@ -2040,23 +2040,7 @@
             const g = current;
             if( ! g ) return;
 
-            const root = $( 'printRoot' );
-            root.innerHTML = pdfHtml( g );
-
-            const prevTitle = document.title;
-            document.title  = NayiveUI.slugify( g.name, T( 'split.groupSlug' ), 24 );
-            document.documentElement.classList.add( 'printing' );
-
-            window.addEventListener( 'afterprint', function done()
-            {
-                window.removeEventListener( 'afterprint', done );
-                document.documentElement.classList.remove( 'printing' );
-                document.title = prevTitle;
-                root.innerHTML = '';
-            } );
-
-            NayiveUI.toast( T( 'calendar.pdfHint' ), { ms: 5000 } );
-            setTimeout( function() { window.print(); }, 350 );
+            NayiveUI.printPage( pdfHtml( g ), NayiveUI.slugify( g.name, T( 'split.groupSlug' ), 24 ), 'calendar.pdfHint' );
         }
 
         function pdfHtml( g )

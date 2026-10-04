@@ -3834,6 +3834,44 @@
         return new Promise( function ( resolve ) { legacy(); resolve(); } );
     }
 
+    // To this device as a file (a download): `data` is a Blob / File as it is,
+    // or text put in one of `type`. A throwaway link, dropped after 1 s.
+    function saveFile( data, name, type )
+    {
+        var blob = data instanceof Blob ? data : new Blob( [ data ], { type: type } );
+        var a = document.createElement( "a" );
+        a.href = URL.createObjectURL( blob );
+        a.download = name;
+        document.body.appendChild( a );
+        a.click();
+        setTimeout( function () { URL.revokeObjectURL( a.href ); a.remove(); }, 1000 );
+    }
+
+    // "Export to PDF" with no PDF library (Calendar, Split): `html` goes into the
+    // page's hidden #printRoot, <html> gets .printing (the page's own @media print
+    // rules show only #printRoot), `title` seeds the suggested file name, and the
+    // browser's print dialog writes the file ("Save as PDF"). All undone on afterprint.
+    function printPage( html, title, hintKey )
+    {
+        var root = document.getElementById( "printRoot" );
+        root.innerHTML = html;
+
+        var prevTitle = document.title;
+        document.title = title;
+        document.documentElement.classList.add( "printing" );
+
+        window.addEventListener( "afterprint", function done()
+        {
+            window.removeEventListener( "afterprint", done );
+            document.documentElement.classList.remove( "printing" );
+            document.title = prevTitle;
+            root.innerHTML = "";
+        } );
+
+        toast( t( hintKey ), { ms: 5000 } );
+        setTimeout( function () { window.print(); }, 350 );
+    }
+
     // The public links whose × is still on Undo: a sheet opened again meanwhile
     // must not show (or hand out) a link about to die.
     var linksGoing = {};
@@ -5658,6 +5696,8 @@
         rowButton:       rowButton,           // the share sheet's round button (trips/my-location.js too)
         jsonApi:         jsonApi,             // one JSON call to this server
         copyText:        copyText,            // to the clipboard, or a rejected promise
+        saveFile:        saveFile,            // to this device as a download (Blob or text)
+        printPage:       printPage,           // "Export to PDF" through #printRoot + window.print()
         isIOS:           isIOS,
         inAndroidApp:    inAndroidApp,
         pickFolder:           pickFolder,
