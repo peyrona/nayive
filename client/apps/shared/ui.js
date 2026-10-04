@@ -5019,7 +5019,7 @@
 
     // "foto.jpg" -> "foto (2).jpg", "foto (3).jpg"... while the name is in
     // `taken` (a Set of the folder's names). Photos' and the share target's
-    // uploads; Drive's copies say "(copia)" instead (move-copy.js).
+    // uploads; Drive passes its "(copia)" word to GumApi.uniqueName instead.
     function uniqueName( name, taken )
     {
         if( ! taken.has( name ) ) return name;
