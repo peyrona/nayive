@@ -505,7 +505,7 @@ self.addEventListener( "fetch", function ( event )
     if( url.pathname.indexOf( SCOPE_PATH + "trips/" ) === 0 && /\.pdf$/i.test( url.pathname ) )
         event.respondWith( tripDocStrategy( req ) );
     // ...and a page's own fetch() of an .html file: Games loads its nine games that
-    // way, and cache-first would keep serving an edited game's OLD file.
+    // way. Each is precached like every page: a deploy's new CACHE_VERSION brings an edit.
     else if( req.mode === "navigate" || req.destination === "document" || /\.html$/i.test( url.pathname ) )
         event.respondWith( htmlStrategy( req, url ) );
     else
