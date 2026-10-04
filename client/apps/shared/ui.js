@@ -1581,6 +1581,112 @@
     function alertDialog( opts )   { return makeDialog( opts, false ); }
 
     //------------------------------------------------------------------------//
+    // ASK FOR ONE NAME  -  a new album (Photos), a group (Chat, Contacts), a rename
+    //
+    //   var name = await NayiveUI.askText( { title: '...', label: '...' } );
+    //   if( ! name ) return;             // cancelled, or Escape: null
+    //
+    //   o.value        the text it starts with (selected)
+    //   o.label        a <label> above the field, or
+    //   o.placeholder  the field's own grey text (and its aria-label)
+    //   o.hint         a line under the field
+    //   o.okTitle      the ✓'s tooltip (default "Accept");  o.okClass  a class on it
+    //   o.max          the field's maxlength
+    //   o.ids          { input, ok, cancel }: ids for the three
+    //   o.wide         a full sheet (default: a packed one, sheet--pack)
+    //   o.topOnly      Escape only while it is the page's last node (asked over
+    //                  another dialog that also hears Escape)
+    //   o.check( v )   the answer for the trimmed text v, or false to keep the
+    //                  dialog open (check says why); the field is then selected
+    //
+    // An empty field is never an answer: the ✓ only puts the focus back in it.
+    function askText( o )
+    {
+        o = o || {};
+        var ids = o.ids || {};
+
+        return new Promise( function ( resolve )
+        {
+            var d = modal( { cls: o.wide ? "" : "sheet--pack", title: o.title, escape: function () { finish( null ); },
+                             top: o.topOnly ? function () { return document.body.lastElementChild === d.back; } : null } );
+
+            var field = document.createElement( "div" );
+            field.className = "field";
+            var input = document.createElement( "input" );
+            input.type = "text";
+            input.autocomplete = "off";
+            if( ids.input ) input.id = ids.input;
+            if( o.max ) input.maxLength = o.max;
+            input.value = o.value || "";
+            if( o.label )
+            {
+                var lbl = document.createElement( "label" );
+                lbl.textContent = o.label;
+                if( ids.input ) lbl.htmlFor = ids.input;
+                field.appendChild( lbl );
+            }
+            if( o.placeholder )
+            {
+                input.placeholder = o.placeholder;
+                input.setAttribute( "aria-label", o.placeholder );
+            }
+            field.appendChild( input );
+            d.sheet.appendChild( field );
+
+            if( o.hint )
+            {
+                var hint = document.createElement( "p" );
+                hint.className = "hint";
+                hint.textContent = o.hint;
+                d.sheet.appendChild( hint );
+            }
+
+            var row = document.createElement( "div" );
+            row.className = "sheet-actions";
+            var no = document.createElement( "button" );
+            no.type = "button";
+            if( ids.cancel ) no.id = ids.cancel;
+            no.setAttribute( "data-act", "close" );
+            no.title = t( "ui.cancel" );
+            var ok = document.createElement( "button" );
+            ok.type = "button";
+            if( ids.ok ) ok.id = ids.ok;
+            if( o.okClass ) ok.className = o.okClass;
+            ok.setAttribute( "data-act", "primary" );
+            ok.title = o.okTitle || t( "ui.accept" );
+            row.appendChild( no );
+            row.appendChild( ok );
+            d.sheet.appendChild( row );
+            applySheetButtons( d.sheet );
+
+            function finish( v ) { if( d.close() ) resolve( v ); }
+
+            function submit()
+            {
+                var v = input.value.trim();
+                if( ! v ) { input.focus(); return; }
+                if( o.check )
+                {
+                    var r = o.check( v );
+                    if( r === false ) { input.select(); return; }
+                    v = r;
+                }
+                finish( v );
+            }
+
+            no.addEventListener( "click", function () { finish( null ); } );
+            ok.addEventListener( "click", submit );
+            input.addEventListener( "keydown", function ( e )
+            {
+                if( e.key === "Enter" && ! e.isComposing ) { e.preventDefault(); submit(); }
+            } );
+
+            d.show();
+            setTimeout( function () { input.focus(); input.select(); }, 30 );
+        } );
+    }
+
+    //------------------------------------------------------------------------//
     // ASK FOR A PASSWORD  -  the sheet the office apps lock a document with
     //
     //   var pw = await NayiveUI.askPassword( { title: '...', body: '...',
@@ -5741,6 +5847,7 @@
         windowed:          WINDOWED,     // true inside a desktop window
         confirm:  confirmDialog,
         askPassword: askPassword,
+        askText:  askText,        // one name in a small dialog -> the text, or null
         alert:    alertDialog,
         fmtBytes:   fmtBytes,
         ensureRoom: ensureRoom,

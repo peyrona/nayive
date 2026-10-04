@@ -2584,49 +2584,12 @@ async function downloadPaths( paths )
     finally { dlBusy = false; }
 }
 
-// A name for a new album or a rename: a small dialog. Resolves the trimmed
-// name, or null.
+// A name for a new album or a rename: a small dialog (shared/ui.js askText).
+// Resolves the trimmed name, or null.
 function askName( title, value, okTitle )
 {
-    return new Promise( resolve =>
-    {
-        let done = false;
-        const d = NayiveUI.modal( { title: title, cls: "sheet--pack", escape: () => finish( null ) } );
-        function finish( v ) { if( done ) return; done = true; d.close(); resolve( v ); }
-
-        const field = document.createElement( "div" );
-        field.className = "field";
-        const input = document.createElement( "input" );
-        input.type = "text";
-        input.autocomplete = "off";
-        input.value = value || "";
-        input.placeholder = NayiveUI.t( "photos.albumName" );
-        input.setAttribute( "aria-label", NayiveUI.t( "photos.albumName" ) );
-        field.appendChild( input );
-        d.sheet.appendChild( field );
-
-        const row = document.createElement( "div" );
-        row.className = "sheet-actions";
-        const cancel = document.createElement( "button" );
-        cancel.type = "button";
-        cancel.setAttribute( "data-act", "close" );
-        cancel.title = NayiveUI.t( "ui.cancel" );
-        cancel.addEventListener( "click", () => finish( null ) );
-        const ok = document.createElement( "button" );
-        ok.type = "button";
-        ok.className = "name-ok";
-        ok.setAttribute( "data-act", "primary" );
-        ok.title = okTitle;
-        ok.addEventListener( "click", () => { const v = input.value.trim(); if( v ) finish( v ); } );
-        input.addEventListener( "keydown", e => { if( e.key === "Enter" ) { e.preventDefault(); ok.click(); } } );
-        row.appendChild( cancel );
-        row.appendChild( ok );
-        d.sheet.appendChild( row );
-        NayiveUI.applySheetButtons( d.sheet );
-        d.show();
-        input.focus();
-        input.select();
-    } );
+    return NayiveUI.askText( { title: title, value: value, okTitle: okTitle, okClass: "name-ok",
+                               placeholder: NayiveUI.t( "photos.albumName" ) } );
 }
 function okName( name ) { return !! name && name !== "." && name !== ".." && ! /[\/\\]/.test( name ); }
 
