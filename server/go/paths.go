@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode"
 )
 
 // splitPath splits an API path into segments, dropping empty and "." ones.
@@ -225,4 +226,22 @@ func quotePath(p string) string {
 		}
 	}
 	return out.String()
+}
+
+// oneLine is `s` fit for one line: every control character a space, at most
+// `max` runes, trimmed (cleanDeviceName, cleanPlace).
+func oneLine(s string, max int) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range strings.TrimSpace(s) {
+		if unicode.IsControl(r) {
+			r = ' '
+		}
+		if n == max {
+			break
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return strings.TrimSpace(b.String())
 }

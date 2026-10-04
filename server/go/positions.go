@@ -51,7 +51,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 const (
@@ -405,17 +404,5 @@ func cleanPosition(p tripPosition) (tripPosition, bool) {
 // cleanPlace is a place name fit to show a stranger: one line, no control
 // characters, not too long.
 func cleanPlace(place string) string {
-	var b strings.Builder
-	n := 0
-	for _, r := range strings.TrimSpace(place) {
-		if unicode.IsControl(r) {
-			r = ' '
-		}
-		if n == placeMaxRunes {
-			break
-		}
-		b.WriteRune(r)
-		n++
-	}
-	return strings.TrimSpace(b.String())
+	return oneLine(place, placeMaxRunes)
 }

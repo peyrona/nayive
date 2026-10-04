@@ -76,7 +76,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 // Timeouts are vars, not consts, so the tests can shorten them.
@@ -308,18 +307,7 @@ func (d *Devices) touchLocked(i int) {
 }
 
 func cleanDeviceName(name string) string {
-	var b strings.Builder
-	n := 0
-	for _, r := range strings.TrimSpace(name) {
-		if unicode.IsControl(r) {
-			r = ' '
-		}
-		if n++; n > deviceNameMax {
-			break
-		}
-		b.WriteRune(r)
-	}
-	if s := strings.TrimSpace(b.String()); s != "" {
+	if s := oneLine(name, deviceNameMax); s != "" {
 		return s
 	}
 	return "Android"
