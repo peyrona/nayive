@@ -76,7 +76,7 @@ section( "LOCKER SETTINGS · NEVER INTO ANOTHER ACCOUNT'S HOME" );
         sc.onload = () => ok( !! window.NayiveSalon ); sc.onerror = no; document.head.appendChild( sc ); } )` ), "the locker's settings code is loaded (test's page)" );
     ok( await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify( { user: 'beto', password: 'bbb' } ) } ).then( r => r.status === 200 )` ), "beto signs in on this browser" );
-    const r = await c.evaluate( "NayiveSalon.write( { units: 'f' } ).then( () => 'written', e => String( e && e.message ) )" );
+    const r = await c.evaluate( "NayiveSalon.update( function ( s ) { s.units = 'f'; return s; } ).then( () => 'written', e => String( e && e.message ) )" );
     ok( onDisk( s, "data/salon.json", "beto" ) === null, "test's settings did not land in beto's home", r );
     ok( /423/.test( r ), "the server refused it (another account's page: 423)", r );
     await c.evaluate( `fetch( '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
