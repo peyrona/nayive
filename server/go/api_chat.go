@@ -1505,7 +1505,11 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 			return
 		}
 		if fwd != nil {
-			defer os.Remove(fwd.tmp) // gone already once it took its name
+			defer func() {
+				if fwd.tmp != "" { // "": it took its name - never touch a later temp
+					os.Remove(fwd.tmp)
+				}
+			}()
 		}
 	}
 	in(func(a chatActor, c *chatConv) {
@@ -1516,7 +1520,7 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 				return
 			}
 		}
-		if !a.o.allowSend(a.pid) {
+		if fwd == nil && !a.o.allowSend(a.pid) { // a copied forward was counted before its copy
 			sendError(w, r, http.StatusTooManyRequests, "demasiados mensajes seguidos")
 			return
 		}
@@ -1555,6 +1559,12 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 				// owner renamed meanwhile has another folder).
 				if fwd == nil || fwd.owner != a.o.user || fwd.dir != a.o.dir {
 					sendError(w, r, http.StatusGone, "ese fichero ya no está")
+					return
+				}
+				// The owner swapped the photo (chatEdited) during the copy:
+				// those bytes are no longer what the message shows.
+				if *orig.File != fwd.ref {
+					sendError(w, r, http.StatusConflict, "esa foto acaba de cambiar; inténtalo otra vez")
 					return
 				}
 				f := *orig.File
@@ -1603,7 +1613,7 @@ func (s *Server) chatSend(w http.ResponseWriter, r *http.Request, in func(func(c
 				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
 				return
 			}
-			copied = true
+			fwd.tmp, copied = "", true
 			m.File.Size = fwd.n // a kept photo may have been edited since
 			h.users.AdjustUsage(a.o.user, fwd.n)
 		}
@@ -1855,7 +1865,13 @@ func (s *Server) chatLater(w http.ResponseWriter, r *http.Request, rest []string
 					return
 				}
 			}
-			h.saveData(a.o)
+			if err := h.saveData(a.o); err != nil && len(rest) == 1 {
+				// Not cancelled on disk: a restart would send it. Still
+				// scheduled, and said so. (Sent, it is known by its cid, SF3.)
+				a.o.data.Later = append(a.o.data.Later, l)
+				sendError(w, r, http.StatusInternalServerError, "no se pudo guardar")
+				return
+			}
 			a.o.changed(true)
 			if m == nil {
 				w.WriteHeader(http.StatusNoContent)
@@ -2262,6 +2278,7 @@ type chatFwdFile struct {
 	dir   string // the owner's chat folder (chatOwner.dir)
 	owner string
 	n     int64
+	ref   ChatFileRef // the original's, as copied: chatSend refuses a changed one
 }
 
 // chatFwdCopy copies the file of the message `req` forwards, with no lock
@@ -2295,6 +2312,13 @@ func (s *Server) chatFwdCopy(w http.ResponseWriter, r *http.Request, in func(fun
 		if orig == nil || orig.Deleted || orig.Kind == "call" || orig.File == nil {
 			return
 		}
+		// The per-minute count here, as an upload: a sender past it causes
+		// no copy (chatSend does not count this message again).
+		if !a.o.allowSend(a.pid) {
+			answered = true
+			sendError(w, r, http.StatusTooManyRequests, "demasiados mensajes seguidos")
+			return
+		}
 		f, info, err := h.openMedia(a.o, src, orig)
 		if err != nil {
 			answered = true
@@ -2308,7 +2332,7 @@ func (s *Server) chatFwdCopy(w http.ResponseWriter, r *http.Request, in func(fun
 			sendError(w, r, http.StatusTooManyRequests, "demasiados envíos seguidos")
 			return
 		}
-		file, fwd.dir, fwd.owner, fwd.n = f, a.o.dir, a.o.user, info.Size()
+		file, fwd.dir, fwd.owner, fwd.n, fwd.ref = f, a.o.dir, a.o.user, info.Size(), *orig.File
 	})
 	if !reached || answered {
 		return nil, false

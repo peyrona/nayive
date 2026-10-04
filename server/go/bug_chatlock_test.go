@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -98,6 +99,91 @@ func TestBug_OL1_ForwardRecheckedUnderLock(t *testing.T) {
 	media, _ := os.ReadDir(filepath.Join(f.srv.chat.chatDir("ana"), "conv", "d-"+f.ids["Javi"], "media"))
 	if len(media) != 0 {
 		t.Fatalf("files left in the chat it was going to: %d", len(media))
+	}
+}
+
+// TestBug_OL1_ForwardRateLimitedNoCopy: a person past the per-minute count
+// is refused before any copy is made.
+func TestBug_OL1_ForwardRateLimitedNoCopy(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	api := fmt.Sprintf("%s/api/c/%s/conv/%s/messages", f.base, f.carmen, conv)
+	orig := f.upload(t, "file", "notas.txt", []byte("muchas veces"))
+	limited := false
+	for i := 0; i < 2*chatGuestPerMin && !limited; i++ {
+		code, _ := callJSON(t, anonymous(), "POST", api, `{"kind":"text","text":"hola"}`)
+		limited = code == 429
+	}
+	if !limited {
+		t.Fatal("never past the per-minute count")
+	}
+	_, runs := hearUnlocked(t, f, "fwd-copy", nil)
+	if code, body := callJSON(t, anonymous(), "POST", api, fmt.Sprintf(`{"fwdConv":"%s","fwdId":%d}`, conv, orig.ID)); code != 429 {
+		t.Fatalf("a forward past the count = %d %s", code, body)
+	}
+	if *runs != 0 {
+		t.Fatalf("a refused forward was copied %d times", *runs)
+	}
+}
+
+// TestBug_OL1_ForwardOfSwappedPhotoRefused: the owner swaps the photo
+// (Editar) while its forward is copied: the old bytes are never stored under
+// the new photo's name and size.
+func TestBug_OL1_ForwardOfSwappedPhotoRefused(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	home := filepath.Join(f.srv.cfg.HomesDir, "ana")
+	os.MkdirAll(filepath.Join(home, "files", "Fotos"), 0o755)
+	os.WriteFile(filepath.Join(home, "files", "Fotos", "IMG_7.jpg"), keepJPEG, 0o644)
+	os.WriteFile(filepath.Join(home, "files", "Fotos", "IMG_7-editado.jpg"), append(dsOtherJPEG(0x44), 0, 0, 0), 0o644)
+	var m chatMsgOut
+	f.call(t, f.owner, "POST", "/api/chat/conv/"+conv+"/messages", `{"ref":"files/Fotos/IMG_7.jpg"}`, 201, &m)
+	hearUnlocked(t, f, "fwd-copy", func() {
+		if code, body := callJSON(t, f.owner, "POST", fmt.Sprintf("%s/api/chat/conv/%s/messages/%d/edited", f.base, conv, m.ID),
+			`{"ref":"files/Fotos/IMG_7-editado.jpg","w":40,"h":30}`); code != 200 {
+			t.Errorf("edit during the copy = %d %s", code, body)
+		}
+	})
+	f.call(t, f.owner, "POST", "/api/chat/conv/d-"+f.ids["Javi"]+"/messages",
+		fmt.Sprintf(`{"fwdConv":"%s","fwdId":%d}`, conv, m.ID), 409, nil)
+	var list msgList
+	f.call(t, f.owner, "GET", "/api/chat/conv/d-"+f.ids["Javi"]+"/messages", "", 200, &list)
+	if len(list.Msgs) != 0 {
+		t.Fatalf("a forward of a swapped photo was sent: %+v", list.Msgs)
+	}
+	if left := fwTemps(f); len(left) != 0 {
+		t.Fatalf("temps left: %v", left)
+	}
+}
+
+// TestBug_OL2_ParallelWalksShared: many pages asking at once for a home's
+// index (a guest's thumbnails) make a walk or two, not one each.
+func TestBug_OL2_ParallelWalksShared(t *testing.T) {
+	home := t.TempDir()
+	for i := range 2000 {
+		dir := filepath.Join(home, "files", fmt.Sprint(i%20))
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.jpg", i)), []byte("x"), 0o644)
+	}
+	const n = 16
+	got := make(chan *keptIndex, n)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			<-start
+			got <- refreshKeptIndex(home)
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(got)
+	walks := map[*keptIndex]bool{}
+	for idx := range got {
+		walks[idx] = true
+	}
+	if len(walks) > 2 {
+		t.Fatalf("%d pages at once made %d walks", n, len(walks))
 	}
 }
 

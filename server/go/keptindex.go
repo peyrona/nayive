@@ -32,7 +32,8 @@ const (
 )
 
 type keptIndex struct {
-	built time.Time
+	from  time.Time         // when its walk started
+	built time.Time         // when its walk ended
 	byID  map[keptID]string // "files/..." by inode + size
 }
 
@@ -41,6 +42,13 @@ var keptIndexes = struct {
 	sync.Mutex
 	m map[string]*keptIndex
 }{m: map[string]*keptIndex{}}
+
+// keptWalks is one walk lock per home: many pages asking at once (a guest's
+// thumbnails of an album of moved photos) make a walk or two, not one each.
+var keptWalks = struct {
+	sync.Mutex
+	m map[string]*sync.Mutex
+}{m: map[string]*sync.Mutex{}}
 
 // findKeptIndexed is the owner's file known by `id`, as "files/...", or "".
 func findKeptIndexed(home string, id keptID) string {
@@ -76,9 +84,28 @@ func keptIndexLookup(home string, id keptID) (rel string, walk bool) {
 	return "", true
 }
 
-// refreshKeptIndex walks the home and keeps the index it makes.
+// refreshKeptIndex walks the home and keeps the index it makes - one walk at
+// a time per home: an index whose walk started after this was asked for, made
+// while it waited, is taken as it is.
 func refreshKeptIndex(home string) *keptIndex {
-	idx := buildKeptIndex(home)
+	asked := time.Now()
+	keptWalks.Lock()
+	walk := keptWalks.m[home]
+	if walk == nil {
+		walk = &sync.Mutex{}
+		keptWalks.m[home] = walk
+	}
+	keptWalks.Unlock()
+	walk.Lock()
+	defer walk.Unlock()
+
+	keptIndexes.Lock()
+	idx := keptIndexes.m[home]
+	keptIndexes.Unlock()
+	if idx != nil && !idx.from.Before(asked) {
+		return idx
+	}
+	idx = buildKeptIndex(home)
 	keptIndexes.Lock()
 	keptIndexes.m[home] = idx
 	keptIndexes.Unlock()
@@ -96,7 +123,7 @@ func keptStillAt(home, rel string, id keptID) bool {
 // when the walk ENDS: a big home can take longer than keptIndexFresh, and a
 // miss read just after a walk made outside the lock must be believed (OL2).
 func buildKeptIndex(home string) *keptIndex {
-	idx := &keptIndex{byID: map[keptID]string{}}
+	idx := &keptIndex{from: time.Now(), byID: map[keptID]string{}}
 	seen := 0
 	filepath.WalkDir(filepath.Join(home, "files"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

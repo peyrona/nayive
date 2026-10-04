@@ -72,3 +72,33 @@ func TestBug_SF3_LaterSentOnce(t *testing.T) {
 		t.Fatalf("%d texts still waiting", n)
 	}
 }
+
+// TestBug_SF3_LaterCancelFailedSaveKept: cancelling a scheduled text whose
+// chat.json cannot be saved is refused - it stays scheduled, as on disk -
+// and is never "cancelled" here only to be sent after a restart.
+func TestBug_SF3_LaterCancelFailedSaveKept(t *testing.T) {
+	f := newChatFixture(t)
+	conv := "d-" + f.ids["Carmen"]
+	api := "/api/c/" + f.carmen + "/conv/" + conv + "/later"
+	var l ChatLater
+	f.call(t, anonymous(), "POST", api, fmt.Sprintf(`{"text":"mejor no","at":%d}`, time.Now().Add(time.Hour).UnixMilli()), 201, &l)
+
+	undo := chatJSONReadOnly(t, f)
+	f.call(t, anonymous(), "DELETE", api+"/"+l.ID, "", 500, nil)
+	undo()
+	var mine laterSummary
+	f.call(t, anonymous(), "GET", "/api/c/"+f.carmen, "", 200, &mine)
+	if got := laterIn(mine, conv); len(got) != 1 || got[0].ID != l.ID {
+		t.Fatalf("after a failed cancel the sender sees %+v waiting", got)
+	}
+	// Saved again: the cancel goes, also after a restart.
+	f.call(t, anonymous(), "DELETE", api+"/"+l.ID, "", 204, nil)
+	srv2, _ := f.restart(t)
+	srv2.chat.sendDue(time.Now().Add(2 * time.Hour))
+	srv2.chat.mu.Lock()
+	o := srv2.chat.owners["ana"] // nil: nothing waits, nothing was read
+	srv2.chat.mu.Unlock()
+	if o != nil && len(o.data.Later) != 0 {
+		t.Fatalf("%d texts waiting after the cancel", len(o.data.Later))
+	}
+}
