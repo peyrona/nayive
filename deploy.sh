@@ -225,12 +225,23 @@ fi
 # --delete-delay: a file gone from client/apps/ (an old engine, a renamed page)
 # is deleted there too, after the transfer, so an open page never meets a gap.
 # The --exclude'd names are never deleted (rsync protects what it excludes).
+# --delay-updates: the changed files are renamed into place together, at the end.
+#
+# sw.js (and its .gz) goes ALONE, AFTER everything else: a browser that checks
+# for an update mid-copy would install the new service worker and precache a
+# mix of old and new files - and a cached page is kept until the next deploy.
 # ------------------------------------------------------------------------------
 echo "==> Deploying apps  $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"
-if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay \
+SW_FILES=("$APPSSRC/sw.js")
+[ -f "$APPSSRC/sw.js.gz" ] && SW_FILES+=("$APPSSRC/sw.js.gz")
+if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay --delay-updates \
       --exclude='.*' --exclude='*~' --exclude='*.swp' \
+      --exclude='/sw.js' --exclude='/sw.js.gz' \
       -e "$RSYNC_RSH" \
-      "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"; then
+      "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" ||
+   ! rsync "${DRY[@]}" -ltz --itemize-changes --delay-updates \
+      -e "$RSYNC_RSH" \
+      "${SW_FILES[@]}" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"; then
     echo "ERROR: apps rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/ failed." >&2
     exit 1
 fi

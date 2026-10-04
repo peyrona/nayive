@@ -69,6 +69,7 @@ func main() {
 	sw := filepath.Join(apps, "sw.js")
 
 	rels := collect(apps)
+	checkPages(apps, rels)
 	ver, err := version(apps, rels)
 	if err != nil {
 		fail("%v", err)
@@ -182,6 +183,40 @@ func collect(apps string) []string {
 	}
 	sort.Strings(out) // byte order = code-point order for UTF-8, like Python's sorted()
 	return out
+}
+
+// pageExceptions are the pages served OUTSIDE the service worker's scope (a
+// link with no session: /c/<token>/, /s/<token>), so no stale copy of them can
+// be kept; they may be left out of the precache.
+var pageExceptions = map[string]bool{
+	"chat/guest.html":   true, // /c/<token>/ (server/go/api_chat.go)
+	"trips/public.html": true, // /s/<token>  (server/go/api_public.go)
+}
+
+// checkPages FAILS the build when a page under apps/ is not in the precache:
+// sw.js serves a cached page as it is (never re-saved in the background), so a
+// page outside the list - and so outside CACHE_VERSION - would stay stale.
+func checkPages(apps string, rels []string) {
+	in := map[string]bool{}
+	for _, r := range rels {
+		in[r] = true
+	}
+	var missing []string
+	filepath.WalkDir(apps, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".html") {
+			return nil
+		}
+		rel := relTo(apps, p)
+		if !in[rel] && !pageExceptions[rel] {
+			missing = append(missing, rel)
+		}
+		return nil
+	})
+	if len(missing) > 0 {
+		fail("build-precache: these pages are not in the precache list, so a browser would keep them stale:\n  %s\n"+
+			"Add them to rootFiles / offlineApps / the every-app index.html in tools/build-precache/main.go\n"+
+			"(or to pageExceptions if served outside /nayive/).", strings.Join(missing, "\n  "))
+	}
 }
 
 // isDocxEditorCore says whether rel is one of the docx-editor.dev files an open
