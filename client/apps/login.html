@@ -204,6 +204,10 @@
                         // after each sign-in (see "after each login" there).
                         if( info.role !== 'admin' )
                             try { sessionStorage.setItem( 'nayive-just-in', '1' ); } catch ( e ) {}
+                        // A password change elsewhere may have dropped this
+                        // device's push: the launcher's next load registers it
+                        // again, even when this sign-in goes straight to Chat.
+                        try { localStorage.removeItem( 'nayive-push-note' ); } catch ( e ) {}
                         // No password yet: the launcher (never the big-screen
                         // desktop, whose apps the server now refuses) asks for one.
                         try

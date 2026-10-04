@@ -111,6 +111,7 @@ type Reminders struct {
 	fails     map[string]int       // "<user>|<device>" -> consecutive send failures
 	events    map[string]cachedICS // "<home name>|<zone>" -> the parsed calendar
 	tripDay   map[string]string    // user -> the "yyyy-mm-dd" its trips were last scanned
+	refused   map[string]string    // "<user>|<device>" -> the day it refused a trip push (SF4)
 	lastDaily time.Time
 
 	phrases *phrasebook // the UI's own dictionaries
@@ -170,6 +171,7 @@ func NewReminders(cfg *Config, users *Users, trash *Trash, sessions *SessionStor
 		fails:   make(map[string]int),
 		events:  make(map[string]cachedICS),
 		tripDay: make(map[string]string),
+		refused: make(map[string]string),
 		phrases: newPhrasebook(cfg.AppsDir),
 	}
 }
@@ -394,6 +396,11 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 	path := filepath.Join(r.cfg.HomesDir, user, "data", "reminders.json")
 	done := true
 	saved := loadSentKeys(path, "trips")
+	today := time.Now()
+	if loc != nil {
+		today = today.In(loc)
+	}
+	day := today.Format("2006-01-02")
 
 	keys := make(map[string]bool, len(saved))
 	for k := range saved {
@@ -405,7 +412,10 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 		for _, sub := range subs {
 			dev := deviceID(sub.Endpoint)
 			key := fmt.Sprintf("%s|%s@%d", dev, trip.id, epoch)
-			if keys[key] {
+			// A device that refused today (401/403/400...) is left for
+			// tomorrow, even while another one's passing failure keeps the
+			// day open (SF4).
+			if keys[key] || r.refused[user+"|"+dev] == day {
 				continue
 			}
 			title, body := r.tripText(sub.Lang, trip.dest, trip.start)
@@ -421,6 +431,8 @@ func (r *Reminders) announceTrips(user string, subs []PushSub, trips []dueTrip, 
 				r.log.Info("reminders: trip sent", "user", user, "dest", trip.dest, "start", trip.start)
 			} else if retry {
 				done = false
+			} else {
+				r.refused[user+"|"+dev] = day
 			}
 		}
 	}
