@@ -197,3 +197,44 @@ func TestDS_L5_ChatCopyFromAnotherAccountsPage(t *testing.T) {
 		t.Errorf("ana's own Copiar did not land: %v", err)
 	}
 }
+
+// TestDS_L5_MailFromAnotherAccountsPage: account ids are per user ("a1" is
+// ana's AND beto's), so ana's eMail tab left open under beto's session would
+// empty beto's Trash, delete or send from his account. Every change is 423;
+// a read, beto's own page and a page that names nobody go through.
+func TestDS_L5_MailFromAnotherAccountsPage(t *testing.T) {
+	srv, ts, beto := newTestServer(t)
+	signIn(t, beto, ts.URL, "beto", "xyz")
+	anasPage := map[string]string{whoHeader: whoValue("user", "ana")}
+	for _, c := range []struct{ name, method, url, body string }{
+		{"new account", "POST", "/api/mail/accounts", `{"email":"b@x.es"}`},
+		{"empty the Trash", "POST", "/api/mail/a1/trash/empty", ""},
+		{"delete for good", "DELETE", "/api/mail/a1/msg/1", ""},
+		{"send", "POST", "/api/mail/a1/send", ""},
+		{"draft", "POST", "/api/mail/a1/draft", ""},
+	} {
+		var body io.Reader
+		if c.body != "" {
+			body = strings.NewReader(c.body)
+		}
+		resp := do(t, beto, c.method, ts.URL+c.url, body, anasPage)
+		if raw := readBody(t, resp); resp.StatusCode != http.StatusLocked {
+			t.Errorf("%s from ana's page under beto's session = %d %s, want 423", c.name, resp.StatusCode, raw)
+		}
+	}
+	if n := len(srv.mail.Accounts("beto")); n != 0 {
+		t.Errorf("ana's page added %d mail account(s) to beto", n)
+	}
+	for _, h := range []map[string]string{anasPage, nil} {
+		resp := do(t, beto, "GET", ts.URL+"/api/mail/unread", nil, h)
+		if raw := readBody(t, resp); resp.StatusCode != http.StatusOK {
+			t.Errorf("a read (%v) = %d %s, want 200", h, resp.StatusCode, raw)
+		}
+	}
+	for _, h := range []map[string]string{{whoHeader: whoValue("user", "beto")}, nil} {
+		resp := do(t, beto, "POST", ts.URL+"/api/mail/a1/trash/empty", nil, h)
+		if raw := readBody(t, resp); resp.StatusCode == http.StatusLocked {
+			t.Errorf("beto's own page (%v) = 423 %s", h, raw)
+		}
+	}
+}

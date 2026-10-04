@@ -82,6 +82,11 @@ func (s *Server) apiMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := sess.User
+	// A page of another account (a tab left open when someone else signed in
+	// on this browser) never sends, empties or deletes in this one (L5).
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !s.saveOwnerOK(w, r, "user", user) {
+		return
+	}
 	rest := splitPath(r.PathValue("rest"))
 	method := func(m string) bool {
 		if r.Method != m {

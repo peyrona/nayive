@@ -620,7 +620,7 @@
         {
             if( fd.small )
             {
-                var r = await fetch( url, { method: "POST", credentials: "same-origin", body: fd, keepalive: true } );
+                var r = await fetch( url, { method: "POST", credentials: "same-origin", body: fd, keepalive: true, headers: E.owned( {} ) } );
                 res = { ok: r.ok, status: r.status, body: await r.text() };
             }
             else res = await upload( url, fd );
@@ -652,6 +652,8 @@
         {
             var x = new XMLHttpRequest();
             x.open( "POST", url );
+            var h = E.owned( {} );
+            for( var k in h ) x.setRequestHeader( k, h[ k ] );
             x.upload.onprogress = function ( e ) { if( e.lengthComputable ) tell( { id: id, loaded: e.loaded, total: e.total } ); };
             x.onload = function () { tell( { id: id, done: true } ); ok( { ok: x.status >= 200 && x.status < 300, status: x.status, body: x.responseText } ); };
             x.onerror = x.onabort = x.ontimeout = function () { tell( { id: id, done: true } ); fail( new TypeError( "Failed to fetch" ) ); };
@@ -1487,7 +1489,7 @@
         try
         {
             fetch( "/api/mail/" + encodeURIComponent( acct ) + "/draft",
-                   { method: "POST", credentials: "same-origin", body: fd, keepalive: true } ).catch( function () {} );
+                   { method: "POST", credentials: "same-origin", body: fd, keepalive: true, headers: E.owned( {} ) } ).catch( function () {} );
         }
         catch( e ) {}
     }

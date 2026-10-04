@@ -106,7 +106,7 @@ export async function server( users = { test: "test" } )
         {
             try
             {
-                const r = await fetch( url + "/nayive/icons/ds-run.txt" );
+                const r = await fetch( url + "/nayive/icons/ds-run.txt", { signal: AbortSignal.timeout( 2000 ) } );
                 if( r.status === 200 && ( await r.text() ) === TOKEN ) { BASE = url; break; }
             }
             catch {}

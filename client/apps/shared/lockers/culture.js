@@ -293,11 +293,14 @@ function fetchTagged( file, ms )
                function ( e ) { clearTimeout( timer ); throw e; } );
 }
 
-// Whose page this is: the "nayive_who" cookie as the page loaded, as GumApi
-// and shared/store.js send it (X-Nayive-User). A dialog left open while
-// another account signed in on this browser gets 423 - never writes these
-// settings into that other person's home (L5).
-var OWNER = ( function ()
+// Whose page this is: the "nayive_who" cookie as the PAGE loaded, as GumApi
+// and shared/store.js send it (X-Nayive-User) - this file loads only when a
+// locker is first shown, maybe after another account signed in, so their
+// name is asked first. A dialog left open while another account signed in
+// on this browser gets 423 - never writes these settings into that other
+// person's home (L5).
+var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && NayiveStore.me ) ||
+            ( window.GumApi && GumApi.owner && GumApi.owner() ) || ( function ()
 {
     try { var m = document.cookie.match( /(?:^|;\s*)nayive_who=([^;]*)/ ); return m ? m[ 1 ] : ""; }
     catch ( e ) { return ""; }

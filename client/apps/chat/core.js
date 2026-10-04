@@ -219,6 +219,9 @@
         opts = opts || {};
         var init = { method: method, headers: { Accept: "application/json" }, signal: opts.signal,
                      credentials: "same-origin" };
+        // the page's owner on a change (L5): a tab of another account gets 423
+        var who = C.S.mode === "owner" && method !== "GET" && window.GumApi && GumApi.owner && GumApi.owner();
+        if( who ) init.headers[ "X-Nayive-User" ] = who;
         if( body !== undefined && body !== null )
         {
             init.headers[ "Content-Type" ] = "application/json";

@@ -347,7 +347,7 @@ async function deliver( text, name, type )
 // all the same (If-None-Match: *): a listing that failed told nothing - it
 // used to count as "no name taken", and the export replaced a file of that
 // name - and a file put there since is never written over either. A name
-// taken answers 412: the next one is tried.
+// taken answers 412 (409 in a folder shared with us): the next one is tried.
 async function saveInNayive( text, name )
 {
     const dir = await NayiveUI.pickFolder( { title: T( 'bookmarks.export' ), allowRoot: true } );
@@ -362,7 +362,7 @@ async function saveInNayive( text, name )
     for( let tries = 0; ; tries++, i++ )
     {
         try { await GumApi.createFileBytes( dir + '/' + nth( i ), new TextEncoder().encode( text ) ); break; }
-        catch( e ) { if( ! e || e.status !== 412 || tries >= 50 ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; } }
+        catch( e ) { if( ! e || ( e.status !== 412 && e.status !== 409 ) || tries >= 50 ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; } }
     }
     const free = nth( i );
     const rel = dir.replace( /^files\/?/, '' );

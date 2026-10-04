@@ -64,11 +64,22 @@
     // the server
     // ---------------------------------------------------------------------
 
+    // `h` plus the page's owner (X-Nayive-User): a change made from a tab left
+    // open after another account signed in gets 423, never acts on that
+    // account's mail (data-safety L5).
+    E.owned = function ( h )
+    {
+        var who = window.GumApi && GumApi.owner && GumApi.owner();
+        if( who ) h[ "X-Nayive-User" ] = who;
+        return h;
+    };
+
     // E.api( "GET", "a1/list?tray=inbox" ) -> the JSON answer. A failure
     // throws an Error with .status and .code ("auth", "down", "gone"...).
     E.api = async function ( method, path, body )
     {
         var opts = { method: method, credentials: "same-origin", headers: { Accept: "application/json" } };
+        if( method !== "GET" ) E.owned( opts.headers );
         if( body !== undefined )
         {
             opts.headers[ "Content-Type" ] = "application/json";

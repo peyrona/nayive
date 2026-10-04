@@ -674,6 +674,7 @@
     //
     //   saver.edited()            the user changed the document
     //   saver.flush()             save what is waiting, now (before a swap or a rename)
+    //   saver.idle()              resolves when no save is running
     //   saver.saveNow()           Ctrl+S
     //   saver.saveTo( path )      "Guardar como": write there; the app then makes it the open doc
     //   saver.opened( o )         another document is on screen; o.pristine = imported bytes, o.dirty
@@ -1477,6 +1478,7 @@
         return {
             edited:    edited,
             flush:     flush,
+            idle:      idle,
             catchUp:   catchUp,
             settle:    settle,
             kept:      kept,
@@ -1584,6 +1586,8 @@
         var sync     = NayiveUI.syncIndicator( { titles: OFFICE_TITLES } );
         var label    = fileLabel( { onCommit: rename } );
         var dirField = folderField( { dir: o.appDir } );
+        var renaming = null;        // the old name while a rename is on its way: no save goes to it
+        var renameHeld = false;     // a save was held by it: saved under the new name after
         var saver    = autosave( {
             app:      o.app,
             store:    o.store,
@@ -1591,7 +1595,12 @@
             readOnly: function () { return readOnly; },
             name:     function () { return pending || ( path && baseName( path ) ); },
             encode:   o.encode,
-            blocked:  o.blocked,
+            // a rename on its way holds the old name's saves (see rename)
+            blocked:  function ( p )
+            {
+                if( renaming && p === renaming ) { renameHeld = true; return true; }
+                return !! ( o.blocked && o.blocked( p ) );
+            },
             failKey:  "ui.saveFailed",
             setSync:  sync,
             saveAs:   openSaveAs,
@@ -2290,7 +2299,12 @@
             {
                 // The latest body under the OLD name, and nothing queued for it:
                 // a PUT flushing after the move would recreate the old file.
+                // From then on the old name takes no save (an autosave or a
+                // Ctrl+S during the move: device draft, saved under the new
+                // name right after), and one already running is waited for.
                 await saver.flush();
+                renaming = path;
+                await saver.idle();
                 try { await o.store.flush(); } catch ( e ) {}
 
                 // Still waiting for the old name: the rename would leave it
@@ -2331,6 +2345,11 @@
             {
                 sync( "error" );
                 toast( "text.renameFailed" );
+            }
+            finally
+            {
+                renaming = null;
+                if( renameHeld ) { renameHeld = false; saver.edited(); }
             }
         }
 
