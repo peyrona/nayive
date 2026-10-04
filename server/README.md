@@ -3,7 +3,7 @@
 Nothing in this folder is ever deployed or run from where it sits.
 
     server/
-    └── go/       the server (Go; see docs/go-port.md)
+    └── go/       the server (Go)
 
 The distinction the top folders make:
 
@@ -46,5 +46,3 @@ Cross-compiling for the VPS (x86_64 Linux, no libc needed):
 ```sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o nayive .
 ```
-
-See `docs/go-port.md` for the port itself.
