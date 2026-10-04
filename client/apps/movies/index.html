@@ -1482,7 +1482,7 @@ function updateMediaSession( mv )
         {
             title:  mv.title,
             artist: genreName( mv ) + ( mv.year ? " · " + mv.year : "" ),
-            album:  "Movies",
+            album:  T( "movies.movies" ),
             artwork: mv.poster ? [ { src: posterUrl( mv.poster ) } ] : []
         },
         {

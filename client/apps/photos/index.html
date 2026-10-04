@@ -737,7 +737,21 @@ function photos()
                                 || noteFor( p.id ).toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
 }
 function dayOf( ts )  { const d = new Date( ts ), p = NayiveUI.pad2; return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ); }
-function timeOf( ts ) { const d = new Date( ts ), p = NayiveUI.pad2; return p( d.getHours() ) + ":" + p( d.getMinutes() ); }
+// p.day stays yyyy-mm-dd (it groups and sorts); what is shown - the day
+// and the time - is in the user's language.
+function timeOf( ts ) { return dateFmt( "t", { hour: "numeric", minute: "2-digit" } ).format( new Date( ts ) ); }
+function dayLabel( day )
+{
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( day || "" );
+    if( ! m ) return day || "";
+    return dateFmt( "d", { day: "numeric", month: "long", year: "numeric" } ).format( new Date( +m[ 1 ], +m[ 2 ] - 1, +m[ 3 ] ) );
+}
+const DATE_FMT = {};
+function dateFmt( kind, opts )
+{
+    const k = kind + "|" + NayiveUI.locale();
+    return DATE_FMT[ k ] || ( DATE_FMT[ k ] = new Intl.DateTimeFormat( NayiveUI.locale(), opts ) );
+}
 function sortPhotos() { PHOTOS.sort( ( a, b ) => ( a.ts - b.ts ) || a.name.localeCompare( b.name, NayiveUI.lang() ) ); }
 
 /* ---------------------------------------------------------------------------
@@ -1708,7 +1722,7 @@ let gridObs = null;
 function tileCap( p )  { return p.time + ( p.place ? " · " + p.place : "" ); }
 function tileBits( p )
 {
-    const bits = [ p.day + " " + p.time ];
+    const bits = [ dayLabel( p.day ) + " " + p.time ];
     if( p.place )      bits.push( p.place );
     if( p.size )       bits.push( fmtSize( p.size ) );
     return bits.join( " · " );
@@ -1828,7 +1842,7 @@ function renderGrid( keepTop )
             const g = groups[ gi ];
             const h = document.createElement( "div" );
             h.className = "day-h";
-            h.innerHTML = esc( g.day ) + "<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: g.items.length } ) ) + "</span>";
+            h.innerHTML = esc( dayLabel( g.day ) ) + "<span>" + esc( NayiveUI.tf( "photos.nPhotos", { n: g.items.length } ) ) + "</span>";
             const shots = document.createElement( "div" );
             shots.className = "shots";
             shots.innerHTML = g.items.map( tileHtml ).join( "" );
@@ -2015,7 +2029,7 @@ function paintLb()
     st.lbId = p.id;
     paintScene( $( "#lbScene" ), p );
     $( "#lbTitle" ).textContent = p.place || p.name;
-    $( "#lbMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#lbMeta" ).textContent  = dayLabel( p.day ) + " · " + p.time;
     $( "#lbMap" ).style.display = ( p.cluster != null ) ? "" : "none";
     const c = noteFor( p.id );
     $( "#lbNote" ).hidden = ! c;
@@ -2084,7 +2098,7 @@ function showPase()
     st.ab = ! st.ab;
 
     $( "#paseTitle" ).textContent = p.place || p.name;
-    $( "#paseMeta" ).textContent  = p.day + " · " + p.time;
+    $( "#paseMeta" ).textContent  = dayLabel( p.day ) + " · " + p.time;
     $( "#paseCount" ).textContent = ( st.paseIdx + 1 ) + " / " + list.length;
     $( "#paseProg" ).style.width  = ( ( st.paseIdx + 1 ) / list.length * 100 ) + "%";
 
