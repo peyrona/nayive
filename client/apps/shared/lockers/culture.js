@@ -225,73 +225,85 @@ function normalise( s )
     return o;
 }
 
-var FILE  = "data/salon.json";         // in the user's home
-var LOCAL = "nayive-salon";            // this device's copy
-
-function localCopy()
+// GET `file` from the user's home (Science's too), aborted after `ms`: `use( response )` runs
+// under the same timer (whatever it reads of the body counts too); the timer
+// stops when it is done, either way.
+function getFile( file, ms, use )
 {
-    try { return JSON.parse( localStorage.getItem( LOCAL ) || "null" ); } catch ( e ) { return null; }
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
+    return fetch( "/api/files?file=" + encodeURIComponent( file ),
+                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
+        .then( use )
+        .then( function ( v ) { clearTimeout( timer ); return v; },
+               function ( e ) { clearTimeout( timer ); throw e; } );
 }
-function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
+
+// This device's copy of a locker's settings, under localStorage `key`.
+function localJson( key )
+{
+    return {
+        get: function () { try { return JSON.parse( localStorage.getItem( key ) || "null" ); } catch ( e ) { return null; } },
+        put: function ( s ) { try { localStorage.setItem( key, JSON.stringify( s ) ); } catch ( e ) {} }
+    };
+}
+
+// For the settings dialog: what `p` reads, or a rejection whose `local` is
+// what read() would show instead (`local()`). Never that stand-in as the
+// settings: the dialog's ✓ would save it over the real ones, on every device
+// (F6). The dialog can wait longer than a lock screen.
+function strictly( p, local )
+{
+    return p.catch( function ( e )
+    {
+        var err = new Error( "settings not read: " + ( e && e.message || e ) );
+        err.local = local();
+        throw err;
+    } );
+}
+
+var FILE  = "data/salon.json";               // in the user's home
+var LOCAL = localJson( "nayive-salon" );     // this device's copy
 
 // The server's copy, waiting `ms` at most. Never saved (404): the defaults.
 // Anything else that is not a good answer - no answer in time, a 5xx, a 401,
 // a file that is not JSON - rejects.
 function fetchSettings( ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            if( r.status === 404 ) return {};                       // never saved: the defaults
-            if( ! r.ok ) throw new Error( "status " + r.status );
-            return r.json();
-        } )
-        .then( function ( s ) { clearTimeout( timer ); s = normalise( s ); keepLocal( s ); return s; },
-               function ( e ) { clearTimeout( timer ); throw e; } );
+    return getFile( FILE, ms, function ( r )
+    {
+        if( r.status === 404 ) return {};                       // never saved: the defaults
+        if( ! r.ok ) throw new Error( "status " + r.status );
+        return r.json();
+    } ).then( function ( s ) { s = normalise( s ); LOCAL.put( s ); return s; } );
 }
 
 // The user's settings, for the locker (and the desktop's weather): the
 // server's copy, else this device's, else the defaults - a screen must start.
 function read()
 {
-    return fetchSettings( 4000 ).catch( function () { return normalise( localCopy() ); } );
+    return fetchSettings( 4000 ).catch( function () { return normalise( LOCAL.get() ); } );
 }
 
-// For the settings dialog: the server's copy, or a rejection whose `local` is
-// what read() would show instead. Never that stand-in as the settings: the
-// dialog's ✓ would save it over the real ones, on every device (F6). The
-// dialog can wait longer than a lock screen.
+// For the settings dialog (see strictly).
 function readStrict()
 {
-    return fetchSettings( 10000 ).catch( function ( e )
-    {
-        var err = new Error( "settings not read: " + ( e && e.message || e ) );
-        err.local = normalise( localCopy() );
-        throw err;
-    } );
+    return strictly( fetchSettings( 10000 ), function () { return normalise( LOCAL.get() ); } );
 }
 
 // The server's copy of `file` WITH its version: { s: the JSON as it is, null
 // when it was never saved (404), tag: its ETag }. Anything that is not a good
-// answer in `ms` rejects, as fetchSettings. (Science's file too.)
+// answer in `ms` rejects, as fetchSettings, and so does the service worker's
+// offline copy (X-Nayive-Copy). (Science's file too.)
 function fetchTagged( file, ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( file ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            if( r.status === 404 ) return { s: null, tag: null };
-            if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) throw new Error( "status " + r.status );
-            var tag = r.headers.get( "ETag" );
-            return r.json().then( function ( s ) { return { s: s, tag: /^"[^"]*"$/.test( tag || "" ) ? tag : null }; } );
-        } )
-        .then( function ( v ) { clearTimeout( timer ); return v; },
-               function ( e ) { clearTimeout( timer ); throw e; } );
+    return getFile( file, ms, function ( r )
+    {
+        if( r.status === 404 ) return { s: null, tag: null };
+        if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) throw new Error( "status " + r.status );
+        var tag = r.headers.get( "ETag" );
+        return r.json().then( function ( s ) { return { s: s, tag: /^"[^"]*"$/.test( tag || "" ) ? tag : null }; } );
+    } );
 }
 
 // Whose page this is: the "nayive_who" cookie as the PAGE loaded, as GumApi
@@ -310,7 +322,7 @@ var OWNER = ( window.NayiveStore && typeof NayiveStore.me === "string" && Nayive
 // up only over the version just read (If-Match; create-only when there was
 // no file): a save made meanwhile on another device answers 412, and the
 // read and `fn` run again - never written over (F6). Kept on this device
-// first (keepLocal). Rejects, writing nothing, when the settings cannot be
+// first (`keep`). Rejects, writing nothing, when the settings cannot be
 // read: e.read = true then; any other rejection is the write's.
 function updateFile( file, readNow, fn, norm, keep )
 {
@@ -343,7 +355,7 @@ function update( fn )
     return updateFile( FILE, function ()
     {
         return fetchTagged( FILE, 10000 ).then( function ( v ) { return { s: normalise( v.s || {} ), tag: v.tag }; } );
-    }, fn, normalise, keepLocal );
+    }, fn, normalise, LOCAL.put );
 }
 
 window.NayiveSalon =
@@ -360,7 +372,8 @@ window.NayiveSalon =
     read:      read,
     readStrict: readStrict,
     update:    update,
-    fetchTagged: fetchTagged, updateFile: updateFile     // for Science's file (science.js)
+    fetchTagged: fetchTagged, updateFile: updateFile,    // for Science's file (science.js)
+    getFile: getFile, localJson: localJson, strictly: strictly
 };
 
 // The locker: the settings first (4 s at most), then the screen.

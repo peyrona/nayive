@@ -167,36 +167,27 @@ function shared( b )
 }
 
 var FILE  = "data/science.json";       // in the user's home
-var LOCAL = "nayive-science";          // this device's copy
+// This device's copy (culture.js localJson; asked only once culture.js is in).
+function local() { return S().localJson( "nayive-science" ); }
 
-function localCopy()
-{
-    try { return JSON.parse( localStorage.getItem( LOCAL ) || "null" ); } catch ( e ) { return null; }
-}
-function keepLocal( s ) { try { localStorage.setItem( LOCAL, JSON.stringify( s ) ); } catch ( e ) {} }
-
-// The server's copy, waiting `ms` at most; null when it was never saved (404).
+// The server's copy, waiting `ms` at most for its answer (the body is read
+// after it: culture.js getFile); null when it was never saved (404).
 // Anything else that is not a good answer - no answer in time, a 5xx, a 401,
 // a file that is not JSON - rejects.
 function fetchSettings( ms )
 {
-    var ctl = window.AbortController ? new AbortController() : null;
-    var timer = setTimeout( function () { if( ctl ) ctl.abort(); }, ms );
-    return fetch( "/api/files?file=" + encodeURIComponent( FILE ),
-                  { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined } )
-        .then( function ( r )
-        {
-            clearTimeout( timer );
-            if( r.status === 404 ) return null;
-            if( ! r.ok ) throw new Error( "status " + r.status );
-            return r.json().then( function ( s ) { s = normalise( s ); keepLocal( s ); return s; } );
-        }, function ( e ) { clearTimeout( timer ); throw e; } );
+    return S().getFile( FILE, ms, function ( r ) { return r; } ).then( function ( r )
+    {
+        if( r.status === 404 ) return null;
+        if( ! r.ok ) throw new Error( "status " + r.status );
+        return r.json().then( function ( s ) { s = normalise( s ); local().put( s ); return s; } );
+    } );
 }
 
 // What this device has: its own copy, else Bellas artes' shared part.
 function localSettings()
 {
-    var l = localCopy();
+    var l = local().get();
     if( l ) return normalise( l );
     try { return shared( JSON.parse( localStorage.getItem( "nayive-salon" ) || "null" ) ); }
     catch ( e ) { return normalise( null ); }
@@ -214,17 +205,11 @@ function read()
 // For the settings dialog: the server's copy (never saved: Bellas artes'
 // part, read as strictly), or a rejection whose `local` is what read() would
 // show instead - never that stand-in as the settings, which ✓ would save over
-// the real ones (F6). See culture.js readStrict().
+// the real ones (F6). See culture.js strictly().
 function readStrict()
 {
-    return fetchSettings( 10000 )
-        .then( function ( s ) { return s || S().readStrict().then( shared ); } )
-        .catch( function ( e )
-        {
-            var err = new Error( "settings not read: " + ( e && e.message || e ) );
-            err.local = localSettings();
-            throw err;
-        } );
+    return S().strictly( fetchSettings( 10000 ).then( function ( s ) { return s || S().readStrict().then( shared ); } ),
+                         localSettings );
 }
 
 // ✓ of the settings dialog, version-checked (culture.js updateFile): never
@@ -239,7 +224,7 @@ function update( fn )
             if( v.s ) return { s: normalise( v.s ), tag: v.tag };
             return S().readStrict().then( shared ).then( function ( s ) { return { s: s, tag: null }; } );
         } );
-    }, fn, normalise, keepLocal );
+    }, fn, normalise, local().put );
 }
 
 window.NayiveScience = { CARDS: CARDS, NEWS: NEWS, PICS: PICS, normalise: normalise, read: read, readStrict: readStrict, update: update };
