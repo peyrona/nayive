@@ -40,6 +40,8 @@
     <script src="/nayive/shared/basemap.js" defer></script>
     <!-- NayiveUI: translations, icons - and basemap.js reads NayiveUI.lang(). -->
     <script src="/nayive/shared/ui.js" defer></script>
+    <!-- The map, drawn as a trip's Journey map is. -->
+    <script src="/nayive/trips/journey-draw.js" defer></script>
 
     <style>
     /* Layout only; every control is a shared class (.icon-btn, .editor-btn). */
@@ -215,31 +217,10 @@
         return fmt.formatRange ? fmt.formatRange( from, to < from ? from : to ) : fmt.format( from );
     }
 
-    function agoText( epoch )
-    {
-        const secs = Math.max( 0, Date.now() / 1000 - epoch );
-        const rtf  = new Intl.RelativeTimeFormat( NayiveUI.locale(), { numeric: "auto" } );
-        if( secs < 3600 )  return rtf.format( -Math.max( 1, Math.round( secs / 60 ) ), "minute" );
-        if( secs < 86400 ) return rtf.format( -Math.round( secs / 3600 ), "hour" );
-        return rtf.format( -Math.round( secs / 86400 ), "day" );
-    }
-
     /* -------- where I am, the stages -------- */
 
-    // source: "photo", "plan", or a location app (every app said the same way).
-    function nowText()
-    {
-        const now = TRIP.now;
-        if( ! now ) return "";
-        if( now.source === "plan" ) return TF( "trips.pub.nowPlan", { place: now.place || "" } );
-
-        const ago = agoText( now.at );
-        if( now.source === "photo" )
-            return now.place ? TF( "trips.pub.nowPhoto", { place: now.place, ago: ago } )
-                             : TF( "trips.pub.nowPhotoNoPlace", { ago: ago } );
-        return now.place ? TF( "trips.pub.nowPhone", { place: now.place, ago: ago } )
-                         : TF( "trips.pub.nowPhoneNoPlace", { ago: ago } );
-    }
+    // The same sentences as a trip's Journey map (trips/journey-draw.js).
+    function nowText() { return TRIP.now ? NayiveJourney.nowText( TRIP.now ) : ""; }
 
     // A position from a photo or a location app comes with no place name: look
     // the town up once, for the one position the page names.
@@ -327,74 +308,19 @@
 
     /* -------- the map -------- */
 
-    function cssVar( name, fallback )
-    {
-        return getComputedStyle( document.documentElement ).getPropertyValue( name ).trim() || fallback;
-    }
-
+    // Drawn as a trip's Journey map is (trips/journey-draw.js); a pin opens its
+    // first photo in the full view, and the mouse wheel scrolls the page.
     function renderMap()
     {
-        const box    = $( "#map" );
-        const bounds = [];
-
-        TRIP.route.forEach( function ( p ) { bounds.push( [ p.lat, p.lon ] ); } );
-
-        // Photos taken at the same (rounded) spot share one pin.
-        const spots = new Map();
-        PHOTOS.forEach( function ( p, i )
-        {
-            if( p.lat == null || p.lon == null ) return;
-            const key = p.lat + "," + p.lon;
-            if( ! spots.has( key ) ) spots.set( key, { lat: p.lat, lon: p.lon, first: i, n: 0 } );
-            spots.get( key ).n++;
+        const box = $( "#map" );
+        const r   = NayiveJourney.draw( box, { route: TRIP.route, spots: NayiveJourney.spots( PHOTOS ), now: TRIP.now }, {
+            wheel:   false,
+            padding: 30,
+            pin:     function ( pin, s ) { pin.on( "click", function () { openViewer( s.first ); } ); },
+            nowTip:  NayiveUI.escapeHtml( nowText() )
         } );
-        spots.forEach( function ( s ) { bounds.push( [ s.lat, s.lon ] ); } );
-        if( TRIP.now ) bounds.push( [ TRIP.now.lat, TRIP.now.lon ] );
-
-        if( ! bounds.length || ! window.L ) { box.hidden = true; return; }
-        box.hidden = false;
-
-        const map = L.map( box, { zoomControl: true, attributionControl: true, scrollWheelZoom: false } );
-        if( window.NayiveBaseMap ) NayiveBaseMap.add( map );
-
-        const accent = cssVar( "--accent", "#16A085" );
-        const blue   = cssVar( "--link",   "#5B9DF9" );
-        const gold   = cssVar( "--warn",   "#E0A21E" );
-        const red    = cssVar( "--danger", "#D9707D" );
-        // A photo spot: a tiny camera, in the marker pane above every route dot.
-        const photoIcon = L.divIcon( { className: "", iconSize: [ 18, 18 ], iconAnchor: [ 9, 9 ], popupAnchor: [ 0, -9 ], tooltipAnchor: [ 0, -9 ],
-                                        html: "<svg width='18' height='18' viewBox='0 0 24 24' style='display:block;filter:drop-shadow(0 0 1px rgba(0,0,0,.6))'><path d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z' fill='" + gold + "' stroke='#fff' stroke-width='2' stroke-linejoin='round'/><circle cx='12' cy='13' r='3.6' fill='none' stroke='#fff' stroke-width='2'/></svg>" } );
-
-        if( TRIP.route.length > 1 )
-            L.polyline( TRIP.route.map( function ( p ) { return [ p.lat, p.lon ]; } ),
-                        { color: accent, weight: 2, opacity: 0.85, dashArray: "1, 6", lineCap: "round" } ).addTo( map );
-
-        TRIP.route.forEach( function ( p )
-        {
-            const stage  = p.kind === "stage";
-            const colour = stage ? accent : blue;
-            const mark   = L.circleMarker( [ p.lat, p.lon ], { radius: stage ? 7 : 4, color: colour, weight: 2,
-                                                             fillColor: colour, fillOpacity: stage ? 0.9 : 0.7 } );
-            // A tooltip string is HTML to Leaflet, and a place name is someone's text.
-            if( p.place ) mark.bindTooltip( NayiveUI.escapeHtml( p.place ), { direction: "top" } );
-            mark.addTo( map );
-        } );
-
-        spots.forEach( function ( s )
-        {
-            L.marker( [ s.lat, s.lon ], { icon: photoIcon } )
-                .bindTooltip( TF( "trips.pub.photoCount", { n: s.n } ), { direction: "top" } )
-                .on( "click", function () { openViewer( s.first ); } )
-                .addTo( map );
-        } );
-
-        if( TRIP.now )
-            nowMarker = L.circleMarker( [ TRIP.now.lat, TRIP.now.lon ], { radius: 11, color: red, weight: 3, fillColor: red, fillOpacity: 0.3 } )
-                .bindTooltip( NayiveUI.escapeHtml( nowText() ), { direction: "top" } )
-                .addTo( map );
-
-        if( bounds.length === 1 ) map.setView( bounds[ 0 ], 11 );
-        else map.fitBounds( bounds, { padding: [ 30, 30 ], maxZoom: 12 } );
+        if( ! r ) { box.hidden = true; return; }
+        nowMarker = r.now;
     }
 
     /* -------- the full view -------- */
