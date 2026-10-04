@@ -192,8 +192,6 @@ function prKvTable( rows )
     return kv;
 }
 
-function tripFolderPath( trip ) { return tripBase( trip ) + '/'; }
-
 function coordText( lat, lon )
 {
     return ( typeof lat === 'number' && typeof lon === 'number' )
@@ -265,14 +263,14 @@ function buildTripPrintDoc( trip )
             // (stage start/end time, on the stage start/end date). The plain date
             // range lives in "Fechas"; the times move onto their own rows next to
             // the transport mode.
-            const depTxt = st.startTime ? fmtDate( st.startDate ) + ' ' + st.startTime : '';
-            const arrTxt = st.endTime   ? fmtDate( st.endDate )   + ' ' + st.endTime   : '';
+            const depTxt = st.startTime ? st.startDate + ' ' + st.startTime : '';
+            const arrTxt = st.endTime   ? st.endDate   + ' ' + st.endTime   : '';
             const cur      = stageCurrency( st );
             const stDocs   = st.documents || [];
 
             li.appendChild( prKvTable( [
                 [ T( 'trips.location' ),   st.location || T( 'trips.noLocation' ) ],
-                [ T( 'trips.dates' ),      fmtRange( fmtDate( st.startDate ), fmtDate( st.endDate ) ) ],
+                [ T( 'trips.dates' ),      fmtRange( st.startDate, st.endDate ) ],
                 [ T( 'trips.timezone' ), [ st.tzLabel, st.tz && st.tz !== st.tzLabel ? '(' + st.tz + ')' : '' ].filter( Boolean ).join( ' ' ) || st.tz || '' ],
                 [ T( 'trips.coords' ), coordText( st.lat, st.lon ) ],
                 [ T( 'trips.transport' ),  isLast ? '' : ( ownKey( TRANSPORT_LABELS(), st.transport ) || T( 'trips.trOther' ) ) ],

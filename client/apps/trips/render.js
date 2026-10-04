@@ -804,8 +804,8 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     dtRow.className = 'stage-row stage-daterow';
     dtRow.appendChild( svgIcon( ICON_CALENDAR, 14 ) );
     const dtText = document.createElement( 'span' );
-    const startTxt = fmtDate( st.startDate ) + ( st.startTime ? ' ' + st.startTime : '' );
-    const endTxt   = fmtDate( st.endDate )   + ( st.endTime   ? ' ' + st.endTime   : '' );
+    const startTxt = st.startDate + ( st.startTime ? ' ' + st.startTime : '' );
+    const endTxt   = st.endDate   + ( st.endTime   ? ' ' + st.endTime   : '' );
     dtText.textContent = fmtRange( startTxt, endTxt );   // one date-range format in the app
     dtRow.appendChild( dtText );
 

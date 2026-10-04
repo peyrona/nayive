@@ -340,7 +340,6 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 #printRoot h1, #printRoot h2 { color: #111; }
 #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 18px; }
 #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; }
-#printRoot .pr-dates { font-size: 13px; color: #444; }
 #printRoot .pr-sec { margin-bottom: 20px; }
 #printRoot .pr-sec > h2 { font-size: 13px; margin: 0 0 8px; padding-bottom: 3px; border-bottom: 1px solid #bbb; text-transform: uppercase; letter-spacing: .05em; }
 #printRoot .pr-empty { color: #666; font-style: italic; }
@@ -349,7 +348,6 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 #printRoot .pr-doc-name { font-weight: 600; }
 #printRoot .pr-doc-kind { color: #555; font-size: 10.5px; }
 #printRoot .pr-doc-path { color: #555; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; word-break: break-all; }
-#printRoot .pr-folder { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; color: #555; margin-top: 3px; }
 #printRoot table.pr-files { border-collapse: collapse; width: 100%; font-size: 10.5px; margin-top: 2px; }
 #printRoot table.pr-files th { text-align: left; color: #555; font-weight: 600; padding: 3px 10px 3px 0; white-space: nowrap; vertical-align: top; border-bottom: 1px solid #bbb; }
 #printRoot table.pr-files td { padding: 3px 10px 3px 0; font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all; vertical-align: top; border-bottom: 1px solid #e2e2e2; }

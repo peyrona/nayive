@@ -461,7 +461,7 @@
         return k;
     };
 
-    C.fmtBytes = function ( n ) { return NayiveUI.fmtBytes ? NayiveUI.fmtBytes( n ) : ( Math.round( n / 1024 ) + " KB" ); };
+    C.fmtBytes = function ( n ) { return NayiveUI.fmtBytes( n ); };
 
     // Accent- and case-blind, for searching.
     C.fold = function ( s )

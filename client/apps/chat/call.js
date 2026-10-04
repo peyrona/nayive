@@ -818,7 +818,6 @@
         var two = function ( n ) { return ( n < 10 ? "0" : "" ) + n; };
         return ( hh ? hh + ":" + two( m % 60 ) : m ) + ":" + two( s % 60 );
     }
-    C.callClock = clock;
 
     // ---------------------------------------------------------------------
     // the call bubble and its line in the list

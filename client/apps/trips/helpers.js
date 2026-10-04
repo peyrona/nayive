@@ -4,7 +4,6 @@
 // DATE / TIME / TEXT HELPERS
 
 // Dates are stored and shown as ANSI yyyy-mm-dd.
-function fmtDate( sIso ) { return sIso; }
 function fmtRange( sStart, sEnd ) { return sStart + ' – ' + sEnd; }
 
 // Combines a date and an optional time into one lexicographically comparable key, so

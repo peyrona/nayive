@@ -261,7 +261,6 @@ button.who { cursor: pointer; }
 }
 .row .chk.on        { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .row .chk svg       { width: 14px; height: 14px; }
-.row .x-btn         { margin-right: -6px; }
 .badge
 {
     flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
@@ -509,8 +508,6 @@ button.who { cursor: pointer; }
 .poll-foot       { display: flex; justify-content: center; margin: 4px -8px 0 -9px; border-top: 1px solid var(--line); }
 .poll-foot button{ padding: 8px; border: none; background: none; font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--accent); cursor: pointer; }
 
-.typing-dots { align-self: flex-start; }
-
 .down
 {
     position: absolute; right: 16px; bottom: 84px; z-index: 3;
@@ -594,7 +591,6 @@ button.who { cursor: pointer; }
 .send          { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .send svg      { width: 21px; height: 21px; margin-left: -2px; }
 .send:disabled { opacity: 0.5; cursor: default; }
-.composer-note { flex: 1 1 auto; padding: 12px; text-align: center; font-size: 0.85rem; color: var(--text-dim); }
 
 /* the Send button's menu (held down): over the button, inside the composer */
 .composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
