@@ -116,11 +116,8 @@
         .mcell[data-n="7"] { color: var(--m7); }
         .mcell[data-n="8"] { color: var(--m8); }
 
-        /* Outside .mines-area, the way Sudoku's and Invaders' are: a size
+        /* The hint (.game-hint, index.html) is outside .mines-area, the way Sudoku's and Invaders' are: a size
            container may hold nothing but the thing it is measuring. */
-        .mines-hint   { margin: var(--space-2) 0 0;
-                        padding: 0 var(--space-4) var(--space-3); text-align: center;
-                        font-size: 0.78rem; color: var(--text-faint); }
 
         /* PHONE: less padding round the board, and a lower FLOOR - 32px and
            28px rather than the 34 / 32 / 28 above. The floor is all that
@@ -198,7 +195,7 @@
                             <div class="mines-board" id="minesBoard"></div>
                         </div>
                     </div>
-                    <p class="mines-hint" data-i18n="games.hintMines"></p>
+                    <p class="game-hint" data-i18n="games.hintMines"></p>
                 </div>
             </section>
 

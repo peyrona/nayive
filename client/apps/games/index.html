@@ -226,6 +226,12 @@
            is not a pause, it is free thinking time. Nothing is lost by hiding it
            whole - there is no animation to keep an eye on underneath. */
         .game-cover.solid    { cursor: pointer; background: var(--bg); }
+        /* The line of help under a game. .tight where the game's own gap
+           already spaces it (2048, Solitaire, Checkers, Chess). */
+        .game-hint       { margin: var(--space-2) 0 0; padding: 0 var(--space-4) var(--space-3);
+                           text-align: center; font-size: 0.78rem; color: var(--text-faint); }
+        .game-hint.tight { margin: 0; padding: 0; }
+
         .game-cover-t { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text); }
         .game-cover-s { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
 
