@@ -2164,7 +2164,7 @@ function showFormulaResult( ed )
 function feShow( v, ed )
 {
     if( v === null || v === '' ) return '';
-    if( typeof v === 'boolean' ) return v ? 'TRUE' : 'FALSE';
+    if( typeof v === 'boolean' ) return T( v ? 'calc.fe.true' : 'calc.fe.false' );
 
     if( typeof v === 'number' )
     {

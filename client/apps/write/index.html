@@ -663,19 +663,8 @@
 
     </div>
 
-    <!-- Open dialog -->
-    <div id="openBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.openDoc"></h2>
-            <!-- The last ten documents opened, above the folder listing. -->
-            <div id="openRecent" hidden></div>
-            <div id="openCrumb" class="open-crumb"></div>
-            <ul id="openList" class="open-list"></ul>
-            <div class="sheet-actions">
-                <button id="openCancelBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
+    <!-- Open, Save as, Statistics and Keyboard shortcuts: the sheets the three
+         editors share, built by shared/office.js (session, THE SHEETS). -->
 
     <!-- Page-setup dialog -->
     <div id="pageSetupBackdrop" class="sheet-backdrop">
@@ -716,29 +705,6 @@
             <div class="sheet-actions">
                 <button id="pageSetupCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
                 <button id="pageSetupConfirmBtn" data-act="primary" data-i18n-attr="title:write.apply"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
-         document goes instead of dropping it in the folder Write was opened in. -->
-    <div id="saveAsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="ui.saveAs"></h2>
-            <div class="field">
-                <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" data-i18n-attr="placeholder:write.defaultFile" autocomplete="off">
-            </div>
-            <div class="field">
-                <label for="saveDirBtn" data-i18n="ui.folder"></label>
-                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
-                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
-                </button>
-            </div>
-            <div class="sheet-actions">
-                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
-                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>
         </div>
     </div>
@@ -843,32 +809,6 @@
     <div id="symPopup" class="popup tb-popup sym-popup" role="menu" data-i18n-attr="aria-label:write.symbols">
         <div id="symTabs" class="sym-tabs"></div>
         <div id="symGrid" class="sym-grid"></div>
-    </div>
-
-    <!-- Estadísticas. Read on open, not live — see openStats() in write.js.
-         The rows are filled by NayiveOffice.showStats, the same sheet Calc and
-         Text open from their own Ayuda menu. -->
-    <div id="statsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.stats"></h2>
-            <div id="stList" class="st-list"></div>
-            <p id="stNote" class="dialog-text st-note" hidden></p>
-            <div class="sheet-actions">
-                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Keyboard shortcuts. The rows are built by write.js from the same
-         SHORTCUTS table the keys themselves come from, so the two cannot drift. -->
-    <div id="scBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.shortcuts"></h2>
-            <div id="scList" class="sc-list"></div>
-            <div class="sheet-actions">
-                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
     </div>
 
     <!-- The two drop-down panels: one for a menu, one for its submenu. Both are

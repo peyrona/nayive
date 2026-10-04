@@ -1505,6 +1505,8 @@
   "calc.fe.err.REF": "Apunta a una celda que no existe.",
   "calc.fe.err.CYCLE": "La fórmula usa su propia celda.",
   "calc.fe.err.other": "La fórmula tiene un error.",
+  "calc.fe.true": "VERDADERO",
+  "calc.fe.false": "FALSO",
   "calc.noFxMatch": "Ninguna función coincide.",
   "calc.insRow": "Insertar fila",
   "calc.grpTable": "Filas y columnas",

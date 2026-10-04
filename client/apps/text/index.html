@@ -412,87 +412,9 @@
 
     </div>
 
-    <!-- Keyboard shortcuts - Write's and Calc's sheet; openShortcuts() below
-         fills it through NayiveOffice.showShortcuts. -->
-    <div id="scBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.shortcuts"></h2>
-            <div id="scList" class="sc-list"></div>
-            <div class="sheet-actions">
-                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Estadísticas - ditto, through NayiveOffice.showStats. Read on open,
-         not live. -->
-    <div id="statsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.stats"></h2>
-            <div id="stList" class="st-list"></div>
-            <p id="stNote" class="dialog-text st-note" hidden></p>
-            <div class="sheet-actions">
-                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
-         document goes instead of dropping it in the folder Text was opened in;
-         #saveFormat is the extension, restricted to the ones Text can reopen. -->
-    <div id="saveAsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="ui.saveAs"></h2>
-            <div class="field">
-                <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" data-i18n-attr="placeholder:text.defaultFile" autocomplete="off">
-            </div>
-            <div class="field">
-                <label for="saveFormat" data-i18n="text.format"></label>
-                <select id="saveFormat">
-                    <option value="txt">.txt</option>
-                    <option value="html">HTML (.html)</option>
-                    <option value="css">CSS (.css)</option>
-                    <option value="js">JavaScript (.js)</option>
-                    <option value="json">JSON (.json)</option>
-                    <option value="xml">XML (.xml)</option>
-                    <option value="md">Markdown (.md)</option>
-                    <option value="yaml">YAML (.yaml)</option>
-                    <option value="sh">Shell (.sh)</option>
-                    <option value="sql">SQL (.sql)</option>
-                    <option value="py">Python (.py)</option>
-                    <option value="c">C / C++ / Java (.c)</option>
-                    <option value="ini">.ini</option>
-                    <option value="" data-i18n="text.extOther"></option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="saveDirBtn" data-i18n="ui.folder"></label>
-                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
-                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
-                </button>
-            </div>
-            <div class="sheet-actions">
-                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
-                <button id="saveAsCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Open dialog -->
-    <div id="openBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.openDoc"></h2>
-            <!-- The last ten documents opened, above the folder listing. -->
-            <div id="openRecent" hidden></div>
-            <div id="openCrumb" class="open-crumb"></div>
-            <ul id="openList" class="open-list"></ul>
-            <div class="sheet-actions">
-                <button id="openCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
+    <!-- Keyboard shortcuts, Statistics, Save as and Open: the sheets the three
+         editors share, built here by shared/office.js (session, THE SHEETS);
+         the Save-as format list is the extensions Text can reopen. -->
 
     <!-- Bottom-centre transient toast (shared .toast styling from theme.css) -->
     <div id="toast" class="toast"></div>
@@ -579,9 +501,11 @@
         const WRAP_KEY   = 'gum_text_wrap';
         const INDENT_KEY = 'gum_text_indent';
         const INDENTS    = [ '4', '2', 'tab' ];
-        const storedWrap = localStorage.getItem( WRAP_KEY );   // '0' is a real answer, so no `||` here
+        // A browser that blocks storage throws on the read: start as a first run.
+        const readPref   = function( k ) { try { return localStorage.getItem( k ); } catch( _ ) { return null; } };
+        const storedWrap = readPref( WRAP_KEY );   // '0' is a real answer, so no `||` here
         let   lineWrap   = ( storedWrap === null ? window.matchMedia( '( max-width: 640px )' ).matches : storedWrap === '1' );
-        const storedIdt  = localStorage.getItem( INDENT_KEY );
+        const storedIdt  = readPref( INDENT_KEY );
         const indentPref = ( INDENTS.includes( storedIdt ) ? storedIdt : '4' );   // a stale value must never reach setIndent()
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
@@ -597,14 +521,14 @@
         const FONT_KEY = 'gum_text_font_size';
         const FONT_MIN = 9;
         const FONT_MAX = 30;
-        let   fontSize = ( parseInt( localStorage.getItem( FONT_KEY ), 10 ) || 13 );
+        let   fontSize = ( parseInt( readPref( FONT_KEY ), 10 ) || 13 );
 
         // Right margin: the guide line the toolbar spinner moves, in columns of the
         // monospace grid. 132 is the wide-terminal width this editor is written to.
         const MARGIN_KEY = 'gum_text_margin';
         const MARGIN_MIN = 20;
         const MARGIN_MAX = 500;
-        let   marginCols = ( parseInt( localStorage.getItem( MARGIN_KEY ), 10 ) || 132 );
+        let   marginCols = ( parseInt( readPref( MARGIN_KEY ), 10 ) || 132 );
 
         // The Open browser: a shared widget, this app only says what it lists.
         // The open document - its path, whether it is someone else's, its name,
@@ -619,6 +543,17 @@
             appDir     : APP_DIR,
             openRoot   : OPEN_ROOT,
             defaultName: T( 'text.defaultFile' ),
+            nameKey    : 'text.defaultFile',
+            formatKey  : 'text.format',
+            formats    : [
+                { value: 'txt',  text: '.txt' },                     { value: 'html', text: 'HTML (.html)' },
+                { value: 'css',  text: 'CSS (.css)' },               { value: 'js',   text: 'JavaScript (.js)' },
+                { value: 'json', text: 'JSON (.json)' },             { value: 'xml',  text: 'XML (.xml)' },
+                { value: 'md',   text: 'Markdown (.md)' },           { value: 'yaml', text: 'YAML (.yaml)' },
+                { value: 'sh',   text: 'Shell (.sh)' },              { value: 'sql',  text: 'SQL (.sql)' },
+                { value: 'py',   text: 'Python (.py)' },             { value: 'c',    text: 'C / C++ / Java (.c)' },
+                { value: 'ini',  text: '.ini' },                     { value: '',     key: 'text.extOther' }
+            ],
             canOpen    : textCanOpen,              // what the Open dialog lists
             emptyKey   : 'text.noTextFiles',
             encode     : function() { return getEditorText(); },
@@ -690,14 +625,8 @@
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
 
             // Ayuda (see AYUDA below): the "?" opens a three-entry menu built
-            // from these three hidden buttons. setHelpMenu tells shared/ui.js to
-            // leave the click to that menu instead of opening the guide card -
-            // the card is the third entry.
-            document.getElementById( 'statsBtn' ).addEventListener( 'click', openStats );
-            document.getElementById( 'scBtn'    ).addEventListener( 'click', openShortcuts );
-            document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-            O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
-            NayiveUI.setHelpMenu( true );
+            // from the three hidden #helpTools buttons (the guide card is the third).
+            O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
             const marginInput = document.getElementById( 'marginInput' );
             marginInput.value = String( marginCols );
@@ -730,7 +659,7 @@
         // as the other two editors mirror their file buttons.
 
         const IS_MAC = NayiveUI.isMac;
-        const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
+        const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 
         // CodeMirror's own keys (its default keymap, the search and
         // jump-to-line add-ons) plus the four bound by hand in extraKeys above.
@@ -752,10 +681,10 @@
                 [ 'text.sc.findNext',   MOD + 'G'        ],
                 [ 'text.sc.findPrev',   SHIFT + MOD + 'G' ],
                 [ 'write.sc.replace',   replace          ],
-                [ 'text.sc.goLine',     'Alt+G'          ],
+                [ 'text.sc.goLine',     T( 'ui.keyAlt' ) + '+G' ],
                 [ 'text.sc.comment',    MOD + '/'        ],
                 // Bound as Ctrl-Q only, so it stays Ctrl even on a Mac.
-                [ 'text.sc.fold',       'Ctrl+Q'         ],
+                [ 'text.sc.fold',       T( 'ui.keyCtrl' ) + '+Q' ],
                 [ 'text.sc.zoomIn',     MOD + '+'        ],
                 [ 'text.sc.zoomOut',    MOD + '-'        ]
             ].map( function( r ) { return { text: T( r[ 0 ] ), keys: r[ 1 ] }; } );
@@ -769,13 +698,12 @@
         {
             const txt   = editor ? editor.getValue() : '';
             const words = txt.trim() ? txt.trim().split( /\s+/ ).length : 0;
-            const n     = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
 
             O.showStats( [
-                { text: T( 'text.statLines'       ), value: n( editor ? editor.lineCount() : 0 ) },
-                { text: T( 'write.statWords'      ), value: n( words ) },
-                { text: T( 'write.statChars'      ), value: n( txt.length ) },
-                { text: T( 'write.statCharsNoSp'  ), value: n( txt.replace( /\s/g, '' ).length ) }
+                { text: T( 'text.statLines'       ), value: editor ? editor.lineCount() : 0 },
+                { text: T( 'write.statWords'      ), value: words },
+                { text: T( 'write.statChars'      ), value: txt.length },
+                { text: T( 'write.statCharsNoSp'  ), value: txt.replace( /\s/g, '' ).length }
             ], T( 'text.statNote' ) );
         }
 

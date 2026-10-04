@@ -302,73 +302,8 @@
 
     </div>
 
-    <!-- Save-as dialog. The folder row is what makes a first save ask WHERE the
-         sheet goes instead of dropping it in the folder Calc was opened in. -->
-    <!-- Keyboard shortcuts - the same sheet as Write's; calc openShortcuts() fills it. -->
-    <div id="scBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.shortcuts"></h2>
-            <div id="scList" class="sc-list"></div>
-            <div class="sheet-actions">
-                <button id="scCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Estadísticas - Write's sheet too; openStats() below fills it through
-         NayiveOffice.showStats. Read on open, not live. -->
-    <div id="statsBackdrop" class="sheet-backdrop">
-        <div class="sheet sheet--pack">
-            <h2 data-i18n="write.stats"></h2>
-            <div id="stList" class="st-list"></div>
-            <p id="stNote" class="dialog-text st-note" hidden></p>
-            <div class="sheet-actions">
-                <button id="statsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <div id="saveAsBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.saveAs"></h2>
-            <div class="field">
-                <label for="saveName" data-i18n="ui.fileName"></label>
-                <input type="text" id="saveName" autocomplete="off" data-i18n-attr="placeholder:calc.defaultFile">
-            </div>
-            <div class="field">
-                <label for="saveFormat" data-i18n="calc.format"></label>
-                <select id="saveFormat">
-                    <option value="xlsx">Excel (.xlsx)</option>
-                    <option value="csv">CSV (.csv)</option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="saveDirBtn" data-i18n="ui.folder"></label>
-                <button type="button" id="saveDirBtn" class="folder-pick" data-i18n-attr="title:ui.fp.pickFolder">
-                    <span class="fp-btn-ic"></span><span id="saveDirName" class="fp-btn-nm"></span>
-                </button>
-            </div>
-            <div class="sheet-actions">
-                <button id="saveAsDeleteBtn"  class="sheet-actions-left" type="button" data-act="danger" hidden data-i18n-attr="title:ui.discardDoc"></button>
-                <button id="saveAsCloseBtn"   data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="saveAsConfirmBtn" data-act="primary" data-i18n-attr="title:ui.save"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Open dialog -->
-    <div id="openBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.openDoc"></h2>
-            <!-- The last ten documents opened, above the folder listing. -->
-            <div id="openRecent" hidden></div>
-            <div id="openCrumb" class="open-crumb"></div>
-            <ul id="openList" class="open-list"></ul>
-            <div class="sheet-actions">
-                <button id="openCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
+    <!-- Keyboard shortcuts, Statistics, Save as and Open: the sheets the three
+         editors share, built here by shared/office.js (session, THE SHEETS). -->
 
     <!-- Insert-function dialog -->
     <div id="fxBackdrop" class="sheet-backdrop">

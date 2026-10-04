@@ -46,9 +46,6 @@ const O = NayiveOffice;   // paths, the file label, the Open browser (../shared/
 // Folder for "Guardar como": Drive's ?dir=<folder>, else the files/ root.
 const APP_DIR = O.appDirFromUrl();
 
-// Extensions the "Abrir documento" browser shows: the two Calc opens.
-const OPEN_EXTS = [ 'xlsx', 'csv' ];
-
 // The browser never walks above the user's files/ root (the first path
 // segment of APP_DIR — "files" when Calc is opened from the launcher).
 const OPEN_ROOT = APP_DIR.split( '/' )[ 0 ] || 'files';
@@ -85,8 +82,12 @@ const session = O.session( {
     appDir     : APP_DIR,
     openRoot   : OPEN_ROOT,
     defaultName: T( 'calc.defaultFile' ),
-    canOpen    : isOpenable,                                    // what the Open dialog lists
-    onPick     : function( p ) { openPickedFile( p ); },        // any other format is turned away
+    nameKey    : 'calc.defaultFile',
+    formatKey  : 'calc.format',
+    formats    : [ { value: 'xlsx', text: 'Excel (.xlsx)' }, { value: 'csv', text: 'CSV (.csv)' } ],
+    pack       : false,                                         // "Guardar como" at the full sheet width
+    openExts   : [ 'xlsx', 'csv' ],                             // what the Open dialog lists; any other format is turned away
+    turnAwayEnd: '.',
     emptyKey   : 'calc.noSheets',
     // A draft is always .xlsx: a .csv would lose the formatting.
     encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
@@ -125,11 +126,8 @@ const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
                                ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'scBtn' ] } );
 
 // Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
-// Ayuda menu shows the same ones). setHelpMenu tells shared/ui.js to leave
-// the click to this menu instead of opening the guide card itself; the card
-// is the third entry.
-const helpMenu = O.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: O.HELP_IDS } );
-NayiveUI.setHelpMenu( true );
+// Ayuda menu shows the same ones; the guide card is the third).
+const helpMenu = O.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
 
 // ---- the toolbar's group cards (shared/office.js, groupPopup) ----
 // Four runs of near-identical buttons that cost fifteen slots on the bar and
@@ -147,46 +145,27 @@ const groups =
 
 // Called by format.js after every toolbar refresh.
 function syncGroupTriggers() { groups.forEach( function( g ) { if( g ) g.sync(); } ); }
-function closeGroupPopups()  { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // Folding sets height:0 rather than display:none - Handsontable sizes
 // itself to the space left over and re-renders on resize either way.
 const fold = O.foldingToolbar( { toolbar: 'fmtToolbar', afterChange: function() { if( table ) table.refreshDimensions(); } } );
 
-// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
-// first in the toolbar on a PC, a .fmt-btn with the drop-down caret its
-// neighbours carry; in the header on a phone, because the toolbar folds away
-// while you type.
-function placeFileButton()
-{
-    const btn = document.getElementById( 'moreBtn' );
-    const sep = document.getElementById( 'fileSep' );
-
-    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
-    else                sep.parentNode.insertBefore( btn, sep );
-
-    btn.className = PHONE.matches ? 'icon-btn' : 'fmt-btn has-popup';
-}
-
-// Once at start-up and again whenever the phone is turned. The split
-// itself is pure CSS, so this only does what CSS cannot: move the "?",
-// close the menus, unfold.
+// Once at start-up and again whenever the phone is turned (shared/office.js,
+// phoneChrome): the "?" and the File button move between the header and the
+// toolbar - the File button a .fmt-btn with the drop-down caret its neighbours
+// carry on a PC - the menus close, the toolbar unfolds on a PC. (The coach
+// marks skip a "?" they cannot see and try again later - shared/ui.js,
+// coachTargets.)
 function applyPhoneChrome()
 {
-    // The "?" moves to the header on a phone, where the toolbar folds away
-    // while you type - but NEVER in menu mode: the Ayuda menu is right
-    // there, and one "?" in two places at once is one too many. (The
-    // coach marks skip a "?" they cannot see and try again later, so
-    // hiding it costs nothing - shared/ui.js, coachTargets.)
-    const headerHelp = PHONE.matches && ! CHROME.on();
-
-    O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'savedAt' );
-    placeFileButton();
-    fileMenu.close();
-    if( helpMenu ) helpMenu.close();
-    closeGroupPopups();
-    fold.setMore( false );
-    if( ! PHONE.matches ) fold.setOpen( true );
+    O.phoneChrome( PHONE.matches, {
+        menus     : function() { return CHROME.on(); },
+        tools     : 'fmtToolbar',
+        helpBefore: 'moreToolsBtn',
+        fileClass : function( btn, phone ) { btn.className = phone ? 'icon-btn' : 'fmt-btn has-popup'; },
+        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
+        fold      : function() { return fold; }
+    } );
 }
 
 function wireStaticUI()
@@ -261,11 +240,12 @@ function wireStaticUI()
     document.addEventListener( 'click',       backToGrid );
     document.addEventListener( 'keydown', function( e )
     {
-        // Ctrl/Cmd+S: save now (an untitled sheet goes to "Guardar como"), as in Text and Write.
-        if( ( e.ctrlKey || e.metaKey ) && e.key.toLowerCase() === 's' )
+        // Ctrl/Cmd+S: save now (an untitled sheet goes to "Guardar como"), as in Text and Write:
+        // that exact combo (Ctrl+Shift+S is not it), and over a dialog it just does nothing.
+        if( e.code === 'KeyS' && ( e.ctrlKey || e.metaKey ) && ! e.altKey && ! e.shiftKey )
         {
             e.preventDefault();
-            saveNow();
+            if( ! document.querySelector( '.sheet-backdrop.open' ) ) saveNow();
             return;
         }
         // Ctrl/Cmd+B, I, U format the selection — unless something is being
@@ -422,9 +402,6 @@ function wireStaticUI()
 
     document.getElementById( 'sortAscBtn'      ).addEventListener( 'click', function() { sortByColumn( false ); } );
     document.getElementById( 'sortDescBtn'     ).addEventListener( 'click', function() { sortByColumn( true  ); } );
-    document.getElementById( 'scBtn'           ).addEventListener( 'click', openShortcuts );
-    document.getElementById( 'statsBtn'        ).addEventListener( 'click', openStats );
-    document.getElementById( 'guideBtn'        ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
 
     document.getElementById( 'fmtFreezeBtn'    ).addEventListener( 'click', toggleFreezeColumns );
     document.getElementById( 'fmtFreezeRowBtn' ).addEventListener( 'click', toggleFreezeRows );
@@ -975,22 +952,6 @@ window.addEventListener( 'balata:themechange', function()
 } );
 
 //------------------------------------------------------------------------//
-// OPEN  (the shared folder browser - shared/office.js - lists the files Calc
-// can open; see OPEN_EXTS)
-
-function isOpenable( path ) { return OPEN_EXTS.indexOf( O.extOf( path ) ) !== -1; }
-
-// Open a file the user picked. The Open dialog lists only xlsx / csv, but
-// "Recientes" hands over any path the session ever opened (a ?file= from
-// Drive included), so anything else is still turned away here.
-async function openPickedFile( path )
-{
-    if( isOpenable( path ) ) { await session.open( path ); return; }
-
-    NayiveUI.toast( T( 'write.formatUnsupported' ) + '.' );
-}
-
-//------------------------------------------------------------------------//
 // PULL-DOWN MENUS
 //
 // Calc has TWO chromes and the user picks one: the icon toolbar it always
@@ -1016,7 +977,7 @@ const calcCfg = O.appConfig( 'data/calc/config.json', 'ui.settingsNotRead' );
 // handful wired in wireStaticUI() plus the ones Handsontable itself
 // handles (copy / cut / paste, undo / redo).
 const IS_MAC = NayiveUI.isMac;
-const MOD    = IS_MAC ? '⌘' : 'Ctrl+';
+const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 const SC  =
 {
     save: MOD + 'S', bold: MOD + 'B', italic: MOD + 'I', underline: MOD + 'U',
@@ -1081,14 +1042,12 @@ function openStats()
         }
     }
 
-    const n = function( x ) { return x.toLocaleString( NayiveI18n.locale() ); };
-
     O.showStats( [
-        { text: T( 'calc.statSheets'   ), value: n( ( doc && doc.sheets ? doc.sheets.length : 1 ) ) },
-        { text: T( 'calc.statRows'     ), value: n( lastRow + 1 ) },
-        { text: T( 'calc.statCols'     ), value: n( lastCol + 1 ) },
-        { text: T( 'calc.statCells'    ), value: n( filled   ) },
-        { text: T( 'calc.statFormulas' ), value: n( formulas ) }
+        { text: T( 'calc.statSheets'   ), value: doc && doc.sheets ? doc.sheets.length : 1 },
+        { text: T( 'calc.statRows'     ), value: lastRow + 1 },
+        { text: T( 'calc.statCols'     ), value: lastCol + 1 },
+        { text: T( 'calc.statCells'    ), value: filled      },
+        { text: T( 'calc.statFormulas' ), value: formulas    }
     ], T( 'calc.statNote' ) );
 }
 
@@ -1245,22 +1204,6 @@ function addComment()
     plugin.focusEditor();
 }
 
-// "Recientes": the same ten paths the Open dialog lists (shared/office.js
-// keeps them), so the menu never drifts from it. An empty list still
-// shows one (greyed) row - a menu that silently has no submenu is worse
-// than one that says why.
-function recentItems()
-{
-    const list = session.recent();
-
-    if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
-
-    return list.map( function( p )
-    {
-        return { text: O.baseName( p ), run: function() { openPickedFile( p ); } };
-    } );
-}
-
 //---- the table -----------------------------------------------------//
 //
 // The grouping is the one every spreadsheet has used since Excel 5:
@@ -1276,7 +1219,7 @@ const MENUS =
     [
         { key: 'write.newDoc',    el: 'newBtn'     },
         { key: 'ui.openDoc',      el: 'openBtn'    },
-        { key: 'ui.recent',       sub: recentItems },
+        { key: 'ui.recent',       sub: session.recentItems },   // shared/office.js
         { sep: true },
         { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
         { key: 'ui.saveAs', el:  'saveAsBtn' },

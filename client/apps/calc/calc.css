@@ -111,8 +111,7 @@ html, body { height: 100%; overflow: hidden; }
     border-radius: 50%; border: none; color: var(--text-dim);
     cursor: pointer; padding: 0; font-weight: 700; font-size: 0.95rem; font-family: inherit;
 }
-.fmt-btn.active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
-.fmt-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+.fmt-btn.active, .fmt-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 /* Text/fill colour buttons — the same TinyMCE 'text-color' / 'highlight-bg-color'
    glyphs the Write app shows; the bar under each glyph tracks the current colour.
    The real <input type=color> is visually hidden but still opened by a click

@@ -135,7 +135,6 @@ let helpMenu = null;    // the "?" menu, ditto
 // The tool row's group cards: print / PDF, and the four page ones. The buttons
 // in them are the real ones, wired below exactly as when they sat on the row.
 let groups = [];
-function closeGroupPopups() { groups.forEach( function( g ) { if( g ) g.close(); } ); }
 
 // `fold.isOpen()` is the truth now; this stays only for readability at call sites.
 function toolbarOpen() { return fold ? fold.isOpen() : true; }
@@ -149,44 +148,21 @@ let fold = null;   // set in wireStaticUI, once the DOM is there
 
 function setToolbarOpen( open ) { if( fold ) fold.setOpen( open ); }
 
-// The "⋮" at the end of the row: show every toolbar item (it wraps onto a few
-// lines) or just the ones the phone keeps. index.html does the hiding; this only
-// flips the class and the button's own pressed look.
-function setMoreTools( open ) { if( fold ) fold.setMore( open ); }
-
-// The "?" is the SAME button in both layouts — on a phone it moves into the
-// header, because the row it normally sits in folds away. A second copy would
-// break the coach marks, which point at the first [data-intro-open] on the page.
-// only the things CSS cannot do: move the "?", close the menus, unfold.
+// Phone or PC (shared/office.js, phoneChrome): the "?" and the File button move
+// between the header and the tool row - the File button with the drop-down
+// caret its neighbours carry on a PC - the menus close, the row unfolds on a PC.
 function applyPhoneChrome()
 {
     applyKeyHints();          // the hints come off on a phone and back on a PC
 
-    // shared/office.js does exactly this: "?" in the header on a phone (after the
-    // two chrome buttons, before the sync dot), last in the tool row on a PC.
-    //
-    // Never in the header in MENU mode, on a phone or not: the Ayuda menu is
-    // right there, and one "?" in two places at once is one too many.
-    NayiveOffice.placeHelpButton( PHONE.matches && ! CHROME.on(), 'topActions', 'writeTools', null, 'savedAt' );
-    placeFileButton();
-    if( fileMenu ) fileMenu.close();
-    if( helpMenu ) helpMenu.close();
-    closeGroupPopups();
-    setMoreTools( false );
-    if( ! PHONE.matches ) setToolbarOpen( true );
-}
-// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
-// first in the tool row on a PC, with the drop-down caret its neighbours carry;
-// in the header on a phone, because the row folds away while you type.
-function placeFileButton()
-{
-    const btn = document.getElementById( 'moreBtn' );
-    const sep = document.getElementById( 'fileSep' );
-
-    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
-    else                sep.parentNode.insertBefore( btn, sep );
-
-    btn.classList.toggle( 'has-popup', ! PHONE.matches );
+    NayiveOffice.phoneChrome( PHONE.matches, {
+        menus     : function() { return CHROME.on(); },
+        tools     : 'writeTools',
+        helpBefore: null,
+        fileClass : function( btn, phone ) { btn.classList.toggle( 'has-popup', ! phone ); },
+        close     : function() { return [ fileMenu, helpMenu ].concat( groups ); },
+        fold      : function() { return fold; }
+    } );
 }
 
 let ready         = false;   // a document is on screen; edits after this are the user's
@@ -209,13 +185,13 @@ const session = NayiveOffice.session( {
     openRoot   : OPEN_ROOT,
     // Read when "Guardar como" opens: at module load the language is not in yet.
     get defaultName() { return NayiveUI.t( 'write.defaultFile' ); },
+    nameKey    : 'write.defaultFile',
     encode     : function() { return exportBytes(); },
     load       : loadBody,
     blank      : loadBlank,
     finishName : docxName,
     renameName : docxName,
-    canOpen    : isOpenable,                                 // what the Open dialog lists
-    onPick     : function( path ) { openPickedFile( path ); },   // any other format is turned away
+    openExts   : [ 'docx' ],                                 // what the Open dialog lists; any other format is turned away
     emptyKey   : 'write.noDocs',
     ready      : function() { return ready; },
     focus      : function() { focusEditor(); }                        // the caret stays where it was
@@ -309,9 +285,7 @@ function wireStaticUI()
                 syncParagraphRows();
             } );
 
-    document.getElementById( 'statsBtn'         ).addEventListener( 'click', openStats );
     document.getElementById( 'statsCloseBtn'    ).addEventListener( 'click', function() { setBackdrop( 'statsBackdrop', false ); } );
-    document.getElementById( 'scBtn'            ).addEventListener( 'click', openShortcuts );
     document.getElementById( 'scCloseBtn'       ).addEventListener( 'click', function() { setBackdrop( 'scBackdrop', false ); } );
     document.getElementById( 'pdfBtn'           ).addEventListener( 'click', function() { printDocument( true ); } );
     document.getElementById( 'saveAsCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'saveAsBackdrop', false ); } );
@@ -337,12 +311,9 @@ function wireStaticUI()
     fileMenu = NayiveOffice.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
                                         ids: MENU_IDS, phoneOnly: MENU_PHONE_ONLY } );
 
-    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds.
-    // setHelpMenu tells shared/ui.js to leave the click to this menu instead of
-    // opening the guide card itself (the card is the third entry).
-    document.getElementById( 'guideBtn' ).addEventListener( 'click', function() { NayiveUI.showIntro(); } );
-    helpMenu = NayiveOffice.buttonMenu( { btn: 'helpBtn', menu: 'helpMenu', ids: NayiveOffice.HELP_IDS } );
-    NayiveUI.setHelpMenu( true );
+    // Ayuda on the "?" - the same three entries the pull-down Ayuda menu holds
+    // (the guide card is the third).
+    helpMenu = NayiveOffice.helpMenu( { stats: openStats, shortcuts: openShortcuts } );
     groups =
     [
         NayiveOffice.groupPopup( { btn: 'wrOutputBtn', popup: 'outputPopup' } ),
@@ -674,16 +645,7 @@ function toggleHeaderFooter( kind )
 
     const cmd = hfEditing() === kind ? { type: 'exitHeaderFooter' }
                                      : { type: 'editHeaderFooter', position: kind };
-    let r;
-    try { r = editor.exec( cmd ); }
-    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
-
-    if( r && r.ok === false )
-    {
-        console.error( 'Write: ' + cmd.type + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.headerFailed' ) );
-        return;
-    }
+    if( ! engineRun( cmd.type, function() { return editor.exec( cmd ); }, 'write.headerFailed' ) ) return;
     focusEditor();          // the engine keeps the caret in the header or footer
     refreshToolbar();
 }
@@ -1007,7 +969,7 @@ async function renderTemplates( dir )
         li.innerHTML = '<span class="open-ic"></span>';
         const nm = document.createElement( 'span' );
         nm.className   = 'open-nm';
-        nm.textContent = baseName( n.path ).replace( /\.docx$/i, '' );
+        nm.textContent = NayiveOffice.baseName( n.path ).replace( /\.docx$/i, '' );
         li.appendChild( nm );
         li.addEventListener( 'click', function() { useTemplate( n.path ); } );
         list.appendChild( li );
@@ -1047,7 +1009,7 @@ async function useTemplate( path )
         await loadIntoEditor( bytes );
 
         if( dropping ) await session.dropDraft();     // or a reload would bring it back over the template
-        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: baseName( path ).replace( /\.docx$/i, '' ) } ) ),
+        session.untitled( docxName( NayiveUI.tf( 'write.templateCopy', { name: NayiveOffice.baseName( path ).replace( /\.docx$/i, '' ) } ) ),
                           { dirty: true } );
         if( kept )       session.offerBack( kept, aside );
         else if( aside ) NayiveUI.toast( NayiveUI.t( 'write.draftSetAside' ) );
@@ -1439,19 +1401,12 @@ async function openStats()
     }
 
     NayiveOffice.showStats( [
-        { text: NayiveUI.t( 'write.statWords'      ), value: fmtCount( words )    },
-        { text: NayiveUI.t( 'write.statChars'      ), value: fmtCount( chars )    },
-        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: fmtCount( noSpaces ) },
-        { text: NayiveUI.t( 'write.statParagraphs' ), value: fmtCount( count )    },
-        { text: NayiveUI.t( 'write.statPages'      ), value: fmtCount( editor.getTotalPages() ) }
+        { text: NayiveUI.t( 'write.statWords'      ), value: words    },
+        { text: NayiveUI.t( 'write.statChars'      ), value: chars    },
+        { text: NayiveUI.t( 'write.statCharsNoSp'  ), value: noSpaces },
+        { text: NayiveUI.t( 'write.statParagraphs' ), value: count    },
+        { text: NayiveUI.t( 'write.statPages'      ), value: editor.getTotalPages() }
     ], NayiveUI.t( 'write.statNote' ) );
-}
-
-// Thousands separators in the reader's own locale.
-function fmtCount( n )
-{
-    try { return new Intl.NumberFormat( NayiveUI.locale() ).format( n ); }
-    catch( _ ) { return String( n ); }
 }
 
 //----------------------------------------------------------------------------//
@@ -1561,16 +1516,7 @@ function runSlot( slot, value )
 {
     if( ! ready || ! editor || slotBlocked( slot ) ) return;
 
-    let r;
-    try { r = value === undefined ? runToolbarCommand( editor, slot ) : runToolbarCommand( editor, slot, value ); }
-    catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
-
-    if( r && r.ok === false )
-    {
-        console.error( 'Write: ' + slot + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
-        return;
-    }
+    if( ! engineRun( slot, function() { return value === undefined ? runToolbarCommand( editor, slot ) : runToolbarCommand( editor, slot, value ); } ) ) return;
     if( slot === 'insert.pageBreak' ) landAfterPageBreak();
     focusEditor();
 }
@@ -1640,18 +1586,24 @@ function replaceMatch( match, text )
 function runExec( cmd )
 {
     if( ! ready || ! editor ) return;
+    if( engineRun( cmd.type, function() { return editor.exec( cmd ); } ) ) focusEditor();
+}
 
+// One engine call: false (logged under `label`, and `failKey` - default
+// write.actionFailed - toasted) when it throws or answers { ok: false }.
+function engineRun( label, fn, failKey )
+{
     let r;
-    try { r = editor.exec( cmd ); }
+    try { r = fn(); }
     catch( e ) { r = { ok: false, reason: String( e && e.message || e ) }; }
 
     if( r && r.ok === false )
     {
-        console.error( 'Write: ' + cmd.type + ' -', r.reason );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
-        return;
+        console.error( 'Write: ' + label + ' -', r.reason );
+        NayiveUI.toast( NayiveUI.t( failKey || 'write.actionFailed' ) );
+        return false;
     }
-    focusEditor();
+    return true;
 }
 
 //---- TABLE CELLS: Tab and Shift+Tab ------------------------------------------//
@@ -2087,22 +2039,6 @@ function matIcon( d )
     return '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="' + d + '"></path></svg>';
 }
 
-// "Recientes": the same ten paths the Open dialog lists (shared/office.js keeps
-// them), so the menu never drifts from it. An empty list still shows one
-// (greyed) row - a menu that silently has no submenu is worse than one that
-// says why.
-function recentItems()
-{
-    const list = session.recent();
-
-    if( ! list.length ) return [ { key: 'ui.noRecent', enabled: function() { return false; } } ];
-
-    return list.map( function( p )
-    {
-        return { text: baseName( p ), run: function() { openPickedFile( p ); } };
-    } );
-}
-
 // Cortar / Copiar / Pegar / Pegar sin formato: the Edicion menu's and the
 // right-click menu's (see EDICION > CORTAR / COPIAR / PEGAR).
 const CLIP_ITEMS =
@@ -2141,7 +2077,7 @@ const MENUS = [
     [
         { key: 'write.newDoc',  el: 'newBtn'  },
         { key: 'ui.openDoc',    el: 'openBtn', sc: 'ui.openDoc' },
-        { key: 'ui.recent',     sub: recentItems },
+        { key: 'ui.recent',     sub: session.recentItems },   // shared/office.js
         { sep: true },
         { key: 'ui.save',       run: saveNow, sc: 'write.sc.save', icon: 'check' },
         { key: 'ui.saveAs',     el: 'saveAsBtn' },
@@ -3002,26 +2938,6 @@ async function exportBytes()
 function saveNow() { session.saveNow(); }
 
 //----------------------------------------------------------------------------//
-// OPEN  (the dialog itself is the shared one: shared/office.js, openBrowser -
-// recent documents over a folder browser. Write only says which files it lists
-// and what to do with the one picked.)
-
-// Extensions the Open dialog shows: Write opens .docx alone.
-const OPEN_EXTS = [ 'docx' ];
-
-function isOpenable( path ) { return OPEN_EXTS.indexOf( NayiveOffice.extOf( path ) ) !== -1; }
-
-// Open a file the user picked. The Open dialog lists only .docx, but
-// "Recientes" hands over any path the session ever opened (a ?file= from
-// Drive included), so anything else is still turned away here.
-async function openPickedFile( path )
-{
-    if( isOpenable( path ) ) { await session.open( path ); return; }
-
-    NayiveUI.toast( NayiveUI.t( 'write.formatUnsupported' ) );
-}
-
-//----------------------------------------------------------------------------//
 // THE DOCUMENT IN THE ENGINE  (what the session in shared/office.js needs from Write)
 
 // A .docx body on screen: opened, imported, the device draft or the .bak copy.
@@ -3066,12 +2982,8 @@ async function toBytes( body )
 //----------------------------------------------------------------------------//
 // HELPERS
 
-// Straight through to shared/office.js — this was an identical copy. A function
-// declaration on purpose: it is hoisted, and code above uses it.
-function baseName( path ) { return NayiveOffice.baseName( path ); }
-
 // Write's file-name rule, for "Guardar como" and a rename: always .docx.
-function docxName( name ) { return /\.docx$/i.test( name ) ? name : name + '.docx'; }
+function docxName( name ) { return NayiveOffice.withExt( name, 'docx' ); }
 
 async function fetchBytes( path )
 {
