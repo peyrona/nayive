@@ -1006,6 +1006,135 @@ function linkTo( node, url )
 }
 function wiki( host, title ) { return "https://" + host + "/wiki/" + encodeURIComponent( String( title ).replace( / /g, "_" ) ); }
 
+//------------------------------------------------------------------------//
+// THE SCREEN KIT - what both lockers' screens share (Bellas artes' start()
+// below, Science's as engine.screen). `cfg` the settings; `OFFSET` the second
+// each box turns at; `isAlive()` false once the screen is gone. Each locker
+// keeps its own boxes, OFFSET table and words.
+
+function screen( cfg, OFFSET, isAlive )
+{
+    var L0 = cfg.langs[ 0 ];
+
+    // The languages a box shows: its own, else the locker's.
+    function langsOf( card )
+    {
+        var c = cfg.cards[ card ];
+        return c && c.langs ? c.langs : cfg.langs;
+    }
+
+    // The wall picture behind, the grid (`cls` added) in the chosen letters,
+    // size and contrast, and its three columns.
+    function stage( host, cls )
+    {
+        var wall  = el( "img", "cl-wall", null, host ); wall.alt = "";
+        var grid  = el( "div", "cl-grid" + ( cls ? " " + cls : "" ) + ( cfg.contrast === "high" ? " cl-high" : "" ), null, host );
+        grid.style.setProperty( "--cl-display", FONT_SETS[ cfg.font ][ 0 ] );
+        grid.style.setProperty( "--cl-text", FONT_SETS[ cfg.font ][ 1 ] );
+        grid.style.setProperty( "--k", { s: 0.88, m: 1, l: 1.15 }[ cfg.size ] );
+        if( cfg.contrast === "high" ) wall.hidden = true;           // plain black behind the boxes
+        var left  = el( "div", "cl-wing", null, grid );
+        var mid   = el( "div", "cl-wing", null, grid );
+        var right = el( "div", "cl-wing", null, grid );
+        return { wall: wall, grid: grid, left: left, mid: mid, right: right };
+    }
+
+    // An empty column goes, the others share its room: `wings` [ [ column, share ], ... ].
+    function columns( grid, wings )
+    {
+        var cols = [];
+        wings.forEach( function ( w )
+        {
+            if( w[ 0 ].childNodes.length ) cols.push( "minmax(0," + w[ 1 ] + "fr)" );
+            else w[ 0 ].remove();
+        } );
+        grid.style.gridTemplateColumns = cols.join( " " );
+    }
+
+    function box( parent, cls, source )
+    {
+        var b = el( "section", "cl-box " + cls, null, parent );
+        var h = el( "div", "cl-head", null, b );
+        var l = el( "span", "", null, h );
+        var s = el( "span", "src", source || "", h );
+        var body = el( "div", "cl-body", null, b );
+        return { box: b, head: l, src: s, body: body, lang: "", shown: "" };
+    }
+
+    // Fades a box out, refills it, fades it in. `sig` = what it will show:
+    // the same thing again is not redrawn (no blink).
+    function refill( part, sig, head, lang, fill )
+    {
+        if( part.shown === sig ) return;
+        var first = ! part.shown;
+        part.shown = sig;
+        part.box.classList.add( "out" );
+        setTimeout( function ()
+        {
+            if( ! isAlive() || part.shown !== sig ) return;
+            part.head.textContent = head;
+            part.box.lang = lang || "";
+            part.body.innerHTML = "";
+            fill( part.body );
+            part.box.classList.remove( "out" );
+        }, first ? 0 : 350 );
+    }
+
+    // Which language a box shows now: its turn, among those that have something.
+    function turnLang( card, have )
+    {
+        var list = langsOf( card ).filter( have );
+        if( ! list.length ) return "";
+        var n = Math.floor( ( Date.now() / 1000 - OFFSET[ card ] ) / cfg.turn );
+        return list[ ( ( n % list.length ) + list.length ) % list.length ];
+    }
+
+    // "2026-09-30T19:58" -> "19:58", or "7:58 p. m." on a 12-hour clock.
+    function hm( iso )
+    {
+        if( ! iso ) return "";
+        if( cfg.hours !== 12 ) return iso.slice( 11, 16 );
+        return new Intl.DateTimeFormat( L0, { hour: "numeric", minute: "2-digit", hour12: true } )
+            .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ), +iso.slice( 14, 16 ) ) );
+    }
+
+    // The clock's "11:03", or "11:03 p. m." on a 12-hour clock.
+    function drawTime( timeEl, d )
+    {
+        var H = d.getHours(), m = d.getMinutes();
+        timeEl.innerHTML = "";
+        timeEl.appendChild( document.createTextNode( cfg.hours === 12 ? String( H % 12 || 12 ) : pad( H ) ) );
+        el( "span", "colon", ":", timeEl );
+        timeEl.appendChild( document.createTextNode( pad( m ) ) );
+        if( cfg.hours === 12 )
+        {
+            var ap = new Intl.DateTimeFormat( L0, { hour: "numeric", hour12: true } ).formatToParts( d )
+                .filter( function ( x ) { return x.type === "dayPeriod"; } )[ 0 ];
+            if( ap ) el( "span", "ampm", ap.value, timeEl );
+        }
+    }
+
+    // On this day: one of `list[ lang ]` an hour, in its turn; `head( lang )`
+    // the box's heading.
+    function drawDay( part, list, d, head )
+    {
+        var lang = turnLang( "days", function ( l ) { return !! ( list[ l ] && list[ l ].length ); } );
+        if( ! lang ) return;
+        var l = list[ lang ], e = l[ d.getHours() % l.length ];
+        refill( part, lang + e.year + e.text, head( lang ), lang, function ( b )
+        {
+            var p = el( "div", "cl-day", null, b );
+            el( "span", "yr", String( e.year ), p );
+            el( "span", "kind", ( e.kind === "b" ? T[ lang ].born : T[ lang ].died ), p );
+            p.appendChild( document.createTextNode( " " + e.text ) );
+            linkTo( p, e.url );
+        } );
+    }
+
+    return { langsOf: langsOf, stage: stage, columns: columns, box: box, refill: refill,
+             turnLang: turnLang, hm: hm, drawTime: drawTime, drawDay: drawDay };
+}
+
 window.NayiveSalon.engine =
 {
     T: T, FONTS: FONTS, skyOf: skyOf, SAY: SAY, dateWords: dateWords,
@@ -1013,25 +1142,20 @@ window.NayiveSalon.engine =
     store: store, src: src, page: page, wikitext: wikitext, sparql: sparql,
     clean: clean, v: v, qid: qid, year: year, plain: plain, templates: templates,
     onThisDay: onThisDay, story: story, placeOf: placeOf, weatherAt: weatherAt,
-    el: el, deg: deg, linkTo: linkTo, wiki: wiki,
+    el: el, deg: deg, linkTo: linkTo, wiki: wiki, screen: screen,
     css: function () { return CSS.replace( /FONTS\//g, FONTS ); }   // the fonts and the boxes (.cl-*)
 };
 
 
 function start( host, cfg )
 {
-    var TURN = cfg.turn;                                   // seconds each language stays
-    var OFFSET = { clock: 0, art: 12, word: 24, quote: 36, days: 48 };   // ...and when each box turns
-
-    function langsOf( card )
-    {
-        var c = cfg.cards[ card ];
-        return c && c.langs ? c.langs : cfg.langs;
-    }
+    var OFFSET = { clock: 0, art: 12, word: 24, quote: 36, days: 48 };   // when each box turns (s)
 
     // The shared engine, bound to this locker's cache and settings.
     var cached = store( "nv-culture:" );
     var alive = true;
+    var kit = screen( cfg, OFFSET, function () { return alive; } );
+    var langsOf = kit.langsOf, box = kit.box, refill = kit.refill, turnLang = kit.turnLang, hm = kit.hm;
     function getDays( lang, d )   { return onThisDay( cached, lang, d, ARTS_OCC, NOT_OCC ); }
     function getStory( lang, t )  { return story( cached, lang, t ); }
     function getPlace()           { return placeOf( cfg, cached ); }
@@ -1389,57 +1513,12 @@ function start( host, cfg )
             .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ) ) );
     }
 
-    // "2026-09-30T19:58" -> "19:58", or "7:58 p. m." on a 12-hour clock.
-    function hm( iso )
-    {
-        if( ! iso ) return "";
-        if( cfg.hours !== 12 ) return iso.slice( 11, 16 );
-        return new Intl.DateTimeFormat( cfg.langs[ 0 ], { hour: "numeric", minute: "2-digit", hour12: true } )
-            .format( new Date( 2000, 0, 1, +iso.slice( 11, 13 ), +iso.slice( 14, 16 ) ) );
-    }
-
-    function box( parent, cls, source )
-    {
-        var b = el( "section", "cl-box " + cls, null, parent );
-        var h = el( "div", "cl-head", null, b );
-        var l = el( "span", "", null, h );
-        el( "span", "src", source || "", h );
-        var body = el( "div", "cl-body", null, b );
-        return { box: b, head: l, body: body, lang: "", shown: "" };
-    }
-
-    // Fades a box out, refills it, fades it in. `sig` = what it will show:
-    // the same thing again is not redrawn (no blink).
-    function refill( part, sig, head, lang, fill )
-    {
-        if( part.shown === sig ) return;
-        var first = ! part.shown;
-        part.shown = sig;
-        part.box.classList.add( "out" );
-        setTimeout( function ()
-        {
-            if( ! alive || part.shown !== sig ) return;
-            part.head.textContent = head;
-            part.box.lang = lang || "";
-            part.body.innerHTML = "";
-            fill( part.body );
-            part.box.classList.remove( "out" );
-        }, first ? 0 : 350 );
-    }
     function quiet( part, lang, head, key )
     {
         refill( part, "quiet:" + lang + ":" + key, head, lang, function ( b ) { el( "div", "cl-quiet", T[ lang ][ key ], b ); } );
     }
 
-    var wall  = el( "img", "cl-wall", null, host ); wall.alt = "";
-    var grid  = el( "div", "cl-grid" + ( cfg.contrast === "high" ? " cl-high" : "" ), null, host );
-    grid.style.setProperty( "--cl-display", FONT_SETS[ cfg.font ][ 0 ] );
-    grid.style.setProperty( "--cl-text", FONT_SETS[ cfg.font ][ 1 ] );
-    grid.style.setProperty( "--k", { s: 0.88, m: 1, l: 1.15 }[ cfg.size ] );
-    if( cfg.contrast === "high" ) wall.hidden = true;           // plain black behind the boxes
-    var left  = el( "div", "cl-wing", null, grid );
-    var mid   = el( "div", "cl-wing", null, grid );
-    var right = el( "div", "cl-wing", null, grid );
+    var st = kit.stage( host, "" ), wall = st.wall, grid = st.grid, left = st.left, mid = st.mid, right = st.right;
 
     var clock   = box( left, "cl-clock", "" );
     var weather = box( left, "cl-weather", WEATHER[ cfg.weather ].name );
@@ -1454,28 +1533,13 @@ function start( host, cfg )
     function on( card ) { return cfg.cards[ card ].on; }
     [ [ clock, "clock" ], [ weather, "weather" ], [ art, "art" ], [ days, "days" ], [ word, "word" ], [ quote, "quote" ] ]
         .forEach( function ( p ) { if( ! on( p[ 1 ] ) ) p[ 0 ].box.remove(); } );
-    var cols = [];
-    [ [ left, 26 ], [ mid, 48 ], [ right, 26 ] ].forEach( function ( w )
-    {
-        if( w[ 0 ].childNodes.length ) cols.push( "minmax(0," + w[ 1 ] + "fr)" );
-        else w[ 0 ].remove();
-    } );
-    grid.style.gridTemplateColumns = cols.join( " " );
+    kit.columns( grid, [ [ left, 26 ], [ mid, 48 ], [ right, 26 ] ] );
 
     var L0 = cfg.langs[ 0 ];
     [ [ art, "art" ], [ days, "days" ], [ word, "wordDay" ], [ quote, "quote" ], [ weather, "now" ] ].forEach( function ( p )
     {
         quiet( p[ 0 ], L0, T[ L0 ][ p[ 1 ] ].replace( "{c}", "…" ), "wait" );
     } );
-
-    // Which language a box shows now: its turn, among those that have something.
-    function turnLang( card, have )
-    {
-        var list = langsOf( card ).filter( have );
-        if( ! list.length ) return "";
-        var n = Math.floor( ( Date.now() / 1000 - OFFSET[ card ] ) / TURN );
-        return list[ ( ( n % list.length ) + list.length ) % list.length ];
-    }
 
     // -- the clock --------------------------------------------------------- //
 
@@ -1487,16 +1551,7 @@ function start( host, cfg )
     function drawClock( d )
     {
         var H = d.getHours(), m = d.getMinutes();
-        timeEl.innerHTML = "";
-        timeEl.appendChild( document.createTextNode( cfg.hours === 12 ? String( H % 12 || 12 ) : pad( H ) ) );
-        el( "span", "colon", ":", timeEl );
-        timeEl.appendChild( document.createTextNode( pad( m ) ) );
-        if( cfg.hours === 12 )
-        {
-            var ap = new Intl.DateTimeFormat( cfg.langs[ 0 ], { hour: "numeric", hour12: true } ).formatToParts( d )
-                .filter( function ( x ) { return x.type === "dayPeriod"; } )[ 0 ];
-            if( ap ) el( "span", "ampm", ap.value, timeEl );
-        }
+        kit.drawTime( timeEl, d );
         var lang = turnLang( "clock", function () { return true; } ) || L0;
         var sig = lang + H + ":" + m;
         if( clock.shown === sig ) return;
@@ -1657,20 +1712,7 @@ function start( host, cfg )
     // -- on this day -------------------------------------------------------- //
 
     var dayList = {};
-    function drawDays( d )
-    {
-        var lang = turnLang( "days", function ( l ) { return !! ( dayList[ l ] && dayList[ l ].length ); } );
-        if( ! lang ) return;
-        var l = dayList[ lang ], e = l[ d.getHours() % l.length ];
-        refill( days, lang + e.year + e.text, T[ lang ].days, lang, function ( b )
-        {
-            var p = el( "div", "cl-day", null, b );
-            el( "span", "yr", String( e.year ), p );
-            el( "span", "kind", ( e.kind === "b" ? T[ lang ].born : T[ lang ].died ), p );
-            p.appendChild( document.createTextNode( " " + e.text ) );
-            linkTo( p, e.url );
-        } );
-    }
+    function drawDays( d ) { kit.drawDay( days, dayList, d, function ( l ) { return T[ l ].days; } ); }
 
     // -- the word ----------------------------------------------------------- //
 
