@@ -252,11 +252,7 @@ function buildDocRow( d, fnSetType, fnRemove, fnFolder, fnRerender, fnSiblings )
 
     // A trashcan, not an "x": this deletes the document row (and its upload),
     // it does not close or clear anything. Same icon every other delete uses.
-    const removeBtn = document.createElement( 'button' );
-    removeBtn.className = 'icon-btn danger';
-    removeBtn.title = T( 'trips.remove' );
-    removeBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
-    removeBtn.addEventListener( 'click', fnRemove );
+    const removeBtn = iconBtn( 'icon-btn danger', T( 'trips.remove' ), ICON_TRASH, 15, fnRemove );
 
     row.appendChild( typeSelect );
     row.appendChild( attach );

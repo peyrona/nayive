@@ -59,11 +59,7 @@ function renderHeader()
 
         if( ! trip ) { view = 'list'; renderHeader(); return; }
 
-        const backBtn = document.createElement( 'button' );
-        backBtn.className = 'icon-btn';
-        backBtn.title = T( 'trips.backToTrips' );
-        backBtn.appendChild( svgIcon( ICON_ARROW_L, 17 ) );
-        backBtn.addEventListener( 'click', goToList );
+        const backBtn = iconBtn( 'icon-btn', T( 'trips.backToTrips' ), ICON_ARROW_L, 17, goToList );
         header.appendChild( backBtn );
 
         const titleWrap = document.createElement( 'div' );
@@ -100,10 +96,7 @@ function renderHeader()
         // onto each stage card instead - see buildStageItem().
         if( currencyPlacement( trip ) === 'trip' )
         {
-            const calcBtn = document.createElement( 'button' );
-            calcBtn.className = 'icon-btn';
-            calcBtn.appendChild( svgIcon( ICON_CALCULATOR, 17 ) );
-            calcBtn.addEventListener( 'click', function() { openCurrency(); } );
+            const calcBtn = iconBtn( 'icon-btn', null, ICON_CALCULATOR, 17, function() { openCurrency(); } );
 
             // With no stages AND a destination that isn't a recognisable place, the
             // converter can only fall back to a guessed EUR - worse than nothing for
@@ -134,17 +127,10 @@ function renderHeader()
         // the title, see above.)
         if( ! tripIsRO( trip ) )
         {
-            const editBtn = document.createElement( 'button' );
-            editBtn.className = 'icon-btn';
-            editBtn.title = T( 'trips.editTrip' );
-            editBtn.appendChild( svgIcon( ICON_PENCIL, 17 ) );
-            editBtn.addEventListener( 'click', openEditTrip );
+            const editBtn = iconBtn( 'icon-btn', T( 'trips.editTrip' ), ICON_PENCIL, 17, openEditTrip );
             tools.appendChild( editBtn );
 
-            const delBtn = document.createElement( 'button' );
-            delBtn.className = 'icon-btn danger';
-            delBtn.title = T( 'trips.deleteTrip' );
-            delBtn.appendChild( svgIcon( ICON_TRASH, 16 ) );
+            const delBtn = iconBtn( 'icon-btn danger', T( 'trips.deleteTrip' ), ICON_TRASH, 16 );
             // A whole trip asks first (NayiveUI.confirm); a stage or a document
             // goes at once, with an Undo instead.
             delBtn.addEventListener( 'click', async function()
@@ -303,21 +289,15 @@ function buildTripCard( t, bPast )
     const actions = document.createElement( 'div' );
     actions.className = 'trip-card-actions';
 
-    const pdfBtn = document.createElement( 'button' );
-    pdfBtn.className = 'icon-btn sm trip-pdf-btn';     // the help dialog points at it
-    pdfBtn.title = T( 'trips.exportPdf' );
-    pdfBtn.appendChild( svgIcon( ICON_EXPORT, 17 ) );
-    pdfBtn.addEventListener( 'click', function() { exportTripPdf( t ); } );
+    // trip-pdf-btn / trip-share-btn: the help dialog points at them.
+    const pdfBtn = iconBtn( 'icon-btn sm trip-pdf-btn', T( 'trips.exportPdf' ), ICON_EXPORT, 17, function() { exportTripPdf( t ); } );
     actions.appendChild( pdfBtn );
 
     // A trip somebody shared with us is not ours to pass on - the server refuses
     // every write on a shared/... path. Printing it is fine, so only Share goes.
     if( ! tripIsRO( t ) )
     {
-        const shareBtn = document.createElement( 'button' );
-        shareBtn.className = 'icon-btn sm trip-share-btn';   // the help dialog points at it
-        shareBtn.title = T( 'trips.shareTrip' );
-        shareBtn.appendChild( svgIcon( ICON_SHARE, 17 ) );
+        const shareBtn = iconBtn( 'icon-btn sm trip-share-btn', T( 'trips.shareTrip' ), ICON_SHARE, 17 );
         shareBtn.addEventListener( 'click', function()
         {
             NayiveUI.shareSheet( { path: tripBase( t ), app: 'trips',
@@ -454,10 +434,7 @@ function buildPhotosRow( trip )
     // Someone else's trip: look at the folder, never repoint it.
     if( ro ) return row;
 
-    const btn = document.createElement( 'button' );
-    btn.className = 'icon-btn';
-    btn.title = T( 'trips.pickPhotoFolder' );
-    btn.appendChild( svgIcon( ICON_FOLDER, 15 ) );
+    const btn = iconBtn( 'icon-btn', T( 'trips.pickPhotoFolder' ), ICON_FOLDER, 15 );
     btn.addEventListener( 'click', function()
     {
         // Same folder picker Photos / Music / Movies use (NayiveUI.pickFolder),
@@ -472,10 +449,7 @@ function buildPhotosRow( trip )
 
     if( dir )
     {
-        const clearBtn = document.createElement( 'button' );
-        clearBtn.className = 'icon-btn';
-        clearBtn.title = T( 'trips.clearPhotoFolder' );
-        clearBtn.appendChild( svgIcon( ICON_X, 15 ) );
+        const clearBtn = iconBtn( 'icon-btn', T( 'trips.clearPhotoFolder' ), ICON_X, 15 );
         clearBtn.addEventListener( 'click', function()
         {
             const tripId = selectedTripId;
@@ -560,6 +534,18 @@ function collapsibleSection( sText, bFirst, sKey, aControls )
     return { el: el, body: body };
 }
 
+// A plain icon button: <button class="sClass" title="sTitle"> (no title when
+// sTitle is null) with the icon drawn at nSize px, fnClick on click if given.
+function iconBtn( sClass, sTitle, sIcon, nSize, fnClick )
+{
+    const b = document.createElement( 'button' );
+    b.className = sClass;
+    if( sTitle !== null ) b.title = sTitle;
+    b.appendChild( svgIcon( sIcon, nSize ) );
+    if( fnClick ) b.addEventListener( 'click', fnClick );
+    return b;
+}
+
 // A heading control, styled like the folder button on the "Fotos" row.
 function headingBtn( sTitle, sIcon, fnClick )
 {
@@ -629,10 +615,7 @@ function buildFileList( trip, docs, fnDelete )
 
         if( canDelete )
         {
-            const delBtn = document.createElement( 'button' );
-            delBtn.className = 'icon-btn sm danger file-del';
-            delBtn.title = T( 'trips.deleteDoc' );
-            delBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
+            const delBtn = iconBtn( 'icon-btn sm danger file-del', T( 'trips.deleteDoc' ), ICON_TRASH, 15 );
             // No question: it goes at once, with an Undo (deleteDocWithUndo).
             delBtn.addEventListener( 'click', function() { fnDelete( d ); } );
             row.appendChild( delBtn );
@@ -716,34 +699,19 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     const actions = document.createElement( 'div' );
     actions.className = 'stage-actions';
 
-    const editBtn = document.createElement( 'button' );
-    editBtn.className = 'icon-btn';
-    editBtn.title = T( 'trips.editStage' );
-    editBtn.appendChild( svgIcon( ICON_PENCIL, 15 ) );
-    editBtn.addEventListener( 'click', function() { openEditStage( st.id ); } );
+    const editBtn = iconBtn( 'icon-btn', T( 'trips.editStage' ), ICON_PENCIL, 15, function() { openEditStage( st.id ); } );
 
-    const delBtn = document.createElement( 'button' );
-    delBtn.className = 'icon-btn danger';
-    delBtn.title = T( 'trips.deleteStage' );
-    delBtn.appendChild( svgIcon( ICON_TRASH, 15 ) );
+    const delBtn = iconBtn( 'icon-btn danger', T( 'trips.deleteStage' ), ICON_TRASH, 15 );
     // No question: it goes at once, with an Undo (see deleteStage).
     delBtn.addEventListener( 'click', function() { deleteStage( st.id ); } );
 
     // The eye toggles this stage enabled/disabled - same control as a password field.
-    const eyeBtn = document.createElement( 'button' );
-    eyeBtn.className = 'icon-btn';
-    eyeBtn.title = enabled ? T( 'trips.disableStage' ) : T( 'trips.enableStage' );
-    eyeBtn.appendChild( svgIcon( enabled ? ICON_EYE : ICON_EYE_OFF, 15 ) );
-    eyeBtn.addEventListener( 'click', function() { toggleStage( st.id ); } );
+    const eyeBtn = iconBtn( 'icon-btn', enabled ? T( 'trips.disableStage' ) : T( 'trips.enableStage' ), enabled ? ICON_EYE : ICON_EYE_OFF, 15, function() { toggleStage( st.id ); } );
 
     // "Que hay aqui": the chooser, then the device's own browser (discover.js).
     // Deliberately outside the read-only gate below - looking a city up changes
     // nothing, so a trip somebody shared with us gets it too.
-    const discBtn = document.createElement( 'button' );
-    discBtn.className = 'icon-btn';
-    discBtn.title = T( 'trips.disc.btn' );
-    discBtn.appendChild( svgIcon( ICON_COMPASS, 15 ) );
-    discBtn.addEventListener( 'click', function() { openDiscover( st ); } );
+    const discBtn = iconBtn( 'icon-btn', T( 'trips.disc.btn' ), ICON_COMPASS, 15, function() { openDiscover( st ); } );
 
     if( enabled && ( st.location || '' ).trim() )
         actions.appendChild( discBtn );
@@ -816,11 +784,7 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     if( currencyPlacement( trip ) === 'stage' )
     {
         const cur     = stageCurrency( st );
-        const stCalc  = document.createElement( 'button' );
-        stCalc.className = 'icon-btn';
-        stCalc.title  = TF( 'trips.fxTitleCode', { code: cur.code } );
-        stCalc.appendChild( svgIcon( ICON_CALCULATOR, 15 ) );
-        stCalc.addEventListener( 'click', function() { openCurrency( cur.code, cur.matched, st.location ); } );
+        const stCalc  = iconBtn( 'icon-btn', TF( 'trips.fxTitleCode', { code: cur.code } ), ICON_CALCULATOR, 15, function() { openCurrency( cur.code, cur.matched, st.location ); } );
         dtRight.appendChild( stCalc );
     }
 

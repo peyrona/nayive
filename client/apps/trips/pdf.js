@@ -363,9 +363,7 @@ let printMapInstance = null;
 // stages #printRoot off-screen for exactly this).
 function buildPrintRouteMap( trip )
 {
-    const pts = ( trip.stages || [] )
-        .filter( function( st ) { return stageEnabled( st ) && typeof st.lat === 'number' && typeof st.lon === 'number'; } )
-        .map( function( st, i ) { return { lat: st.lat, lon: st.lon, label: st.location, index: i + 1, transport: st.transport || 'other' }; } );
+    const pts = mapPoints( trip );
 
     const hasTripPin = ( trip.stages || [] ).length === 0 && typeof trip.lat === 'number' && typeof trip.lon === 'number';
 
@@ -386,19 +384,7 @@ function buildPrintRouteMap( trip )
     pts.slice( 0, -1 ).forEach( function( p ) { if( modes.indexOf( p.transport ) === -1 ) modes.push( p.transport ); } );
 
     if( modes.length )
-    {
-        const legend = prEl( 'div', 'pr-map-legend' );
-        modes.forEach( function( m )
-        {
-            const it = prEl( 'span', 'pr-map-legend-item' );
-            const sw = prEl( 'span', 'pr-map-legend-swatch' );
-            sw.style.background = ownKey( TRANSPORT_COLORS, m ) || TRANSPORT_COLORS.other;
-            it.appendChild( sw );
-            it.appendChild( document.createTextNode( ownKey( TRANSPORT_LABELS(), m ) || T( 'trips.trOther' ) ) );
-            legend.appendChild( it );
-        });
-        sec.appendChild( legend );
-    }
+        sec.appendChild( mapLegend( 'pr-map', modes ) );
 
     const mapDiv = prEl( 'div', 'pr-map' );
     sec.appendChild( mapDiv );
@@ -421,9 +407,7 @@ function buildPrintRouteMap( trip )
             for( let i = 1; i < pts.length; i++ )
             {
                 const mode = pts[ i - 1 ].transport;
-                L.polyline( [ [ pts[i-1].lat, pts[i-1].lon ], [ pts[i].lat, pts[i].lon ] ],
-                    { color: ownKey( TRANSPORT_COLORS, mode ) || TRANSPORT_COLORS.other,
-                      weight: 4, opacity: 0.9, dashArray: '8, 8', lineJoin: 'round' } ).addTo( map );
+                L.polyline( [ [ pts[i-1].lat, pts[i-1].lon ], [ pts[i].lat, pts[i].lon ] ], legStyle( mode ) ).addTo( map );
             }
 
             pts.forEach( function( p )
