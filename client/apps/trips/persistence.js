@@ -341,21 +341,19 @@ async function syncDocFiles( folder, newDocs, oldDocs, otherDocs )
     // as the server has it NOW (another device's upload, trip.json itself).
     // And it goes up create-only: a name another device took after that
     // listing answers 412 and the next free one is used, never written over.
-    const listing = await GumApi.listDir( folder );
     const taken   = new Set( others );
-    for( const n of listing.nodes || [] ) taken.add( n.name || String( n.path || '' ).split( '/' ).pop() );
+    for( const n of await GumApi.namesIn( folder ) ) taken.add( n );
     for( const d of newDocs ) if( ! d._pending && docStoredFile( d ) ) taken.add( docStoredFile( d ) );
 
     for( const d of pending )
     {
         const bytes = new Uint8Array( await d._pending.arrayBuffer() );
-        for( let tries = 0; ; tries++ )
+        await GumApi.createFresh( folder, function()
         {
             if( taken.has( d.file ) ) d.file = uniqueFileName( d.file, [], taken );
             taken.add( d.file );
-            try { await GumApi.createFileBytes( folder + '/' + d.file, bytes ); break; }
-            catch( err ) { if( ! err || err.status !== 412 || tries >= 50 ) throw err; }
-        }
+            return d.file;
+        }, bytes );
         delete d._pending;
         stored[ d.id ] = d.file;
     }
@@ -535,10 +533,7 @@ async function claimNewTripDir( sDestination, sStartDate, bodyFor )
     const onServer = [];
     try
     {
-        ( ( await GumApi.listDir( 'data/trips' ) ).nodes || [] ).forEach( function( n )
-        {
-            onServer.push( n.name || String( n.path || '' ).split( '/' ).pop() );
-        } );
+        ( await GumApi.namesIn( 'data/trips' ) ).forEach( function( n ) { onServer.push( n ); } );
     }
     catch( err ) { if( ! err || err.status !== 404 ) throw err; }
 

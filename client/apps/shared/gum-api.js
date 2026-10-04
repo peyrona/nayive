@@ -417,6 +417,48 @@
         return writeFileBytes( path, bytes, { createOnly: true, convert: opts && opts.convert } );
     }
 
+    // A NEW file in `dir`, never over one, under the first name free: try n
+    // (0, 1, 2...) goes up create-only as `nameAt( n )` (sync or async; the
+    // caller's naming rule), and a name taken - a 412, also a 409 with
+    // opts.on409 (a folder shared with us, which only ever gains files) -
+    // moves on to the next. Resolves the name it was saved under. Past
+    // opts.tries taken names (default 50; that is not a race any more) the
+    // last error is thrown, as is any other. (A 412 that is this very save's
+    // first try, sent again after a dropped connection, is a success
+    // already: OUR OWN FIRST TRY above.)
+    async function createFresh( dir, nameAt, bytes, opts )
+    {
+        opts = opts || {};
+        var tries = opts.tries || 50;
+        for( var n = 0; ; n++ )
+        {
+            var name = await nameAt( n );
+            try { await createFileBytes( dir + "/" + name, bytes ); return name; }
+            catch ( e )
+            {
+                if( ! e || ! ( e.status === 412 || ( e.status === 409 && opts.on409 ) ) || n >= tries ) throw e;
+            }
+        }
+    }
+
+    // A name `taken` (anything with .has) does not hold: `name` itself, else
+    // "foto (2).jpg", "foto (3).jpg"... - or, given a `word` ("copia", in the
+    // user's language), "foto (copia).jpg", "foto (copia 2).jpg"... The
+    // caller adds what it uses to `taken`. (NayiveUI.uniqueName is the same
+    // rule with no word, for the pages that load no gum-api.js.)
+    function uniqueName( name, taken, word )
+    {
+        if( ! taken.has( name ) ) return name;
+        var dot  = name.lastIndexOf( "." );
+        var stem = dot > 0 ? name.slice( 0, dot ) : name;
+        var ext  = dot > 0 ? name.slice( dot )    : "";
+        for( var i = word ? 1 : 2; ; i++ )
+        {
+            var cand = stem + " (" + ( word ? word + ( i > 1 ? " " + i : "" ) : i ) + ")" + ext;
+            if( ! taken.has( cand ) ) return cand;
+        }
+    }
+
     // Small JSON sidecar helpers (data/<app>/config.json and friends). readJson
     // resolves null when the file isn't there yet (a fresh account); any other
     // failure - including a 401 - is thrown so the caller can react. writeJson
@@ -502,6 +544,17 @@
         // reaches the handler; the server strips the slash back off.
         var q = new URLSearchParams( { dir: path || "/" } ).toString();
         return JSON.parse( await fetchText( API_FILES + "?" + q ) );
+    }
+
+    // The names (no folder part) of what is directly inside `dir`, files and
+    // sub-folders: a Set. Throws as listDir does - a 404 is no such folder -
+    // and the caller says what a failure means (no names, or stop). Read
+    // through window.GumApi.listDir: a page (or a test) that swaps the
+    // listing swaps this too.
+    async function namesIn( dir )
+    {
+        var r = await window.GumApi.listDir( dir );
+        return new Set( ( ( r && r.nodes ) || [] ).map( function ( n ) { return String( n.path ).split( "/" ).pop(); } ) );
     }
 
     // The whole subtree under ONE folder (that folder's files and sub-folders,
@@ -810,10 +863,13 @@
         versionOf:       versionOf,
         writeFileBytes:  writeFileBytes,
         createFileBytes: createFileBytes,
+        createFresh:     createFresh,      // a new file under the first free name
+        uniqueName:      uniqueName,
         readJson:        readJson,
         writeJson:       writeJson,
         updateJson:      updateJson,
         listDir:         listDir,
+        namesIn:         namesIn,
         listDirRecursive: listDirRecursive,
         dirTree:         dirTree,
         find:            find,

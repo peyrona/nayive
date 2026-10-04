@@ -796,10 +796,10 @@ function renameTo( relPath, name, used, there )
 {
     const i    = relPath.lastIndexOf( '/' );
     const dir  = i < 0 ? '' : relPath.slice( 0, i + 1 );
-    // uniqueName() only ever calls taken.has(), so a small object with
+    // GumApi.uniqueName() only ever calls taken.has(), so a small object with
     // that one method does the job of a Set here.
     const taken = { has: n => there.has( dir + n ) || used.has( dir + n ) };
-    return dir + uniqueName( name, taken );
+    return dir + GumApi.uniqueName( name, taken, T( 'drive.copyWord' ) );
 }
 
 // THE FILES AT THE DESTINATION, AS THE SERVER HAS THEM NOW (D1, D3 -
@@ -872,9 +872,8 @@ async function freeRel( dest, relPath, used )
     const i      = relPath.lastIndexOf( '/' );
     const dir    = i < 0 ? '' : relPath.slice( 0, i + 1 );
     const parent = dir ? joinPath( dest, dir.slice( 0, -1 ) ) : dest;
-    const r      = await withBusy( GumApi.listDir( parent ) );
-    const names  = new Set( ( r.nodes || [] ).map( function( n ) { return n.path.split( '/' ).pop(); } ) );
-    return dir + uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) } );
+    const names  = await withBusy( GumApi.namesIn( parent ) );
+    return dir + GumApi.uniqueName( relPath.slice( i + 1 ), { has: n => names.has( n ) || used.has( dir + n ) }, T( 'drive.copyWord' ) );
 }
 
 // Sends a file the user did NOT say "Replace" to, into `dest`: it may only

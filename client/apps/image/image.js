@@ -333,7 +333,7 @@ function openSaveCopy()
 // as Drive's own check does.
 async function nameTaken( dir, name )
 {
-    try { return ( ( await GumApi.listDir( dir ) ).nodes || [] ).some( function( n ) { return nameOf( n.path ) === name; } ); }
+    try { return ( await GumApi.namesIn( dir ) ).has( name ); }
     catch( _ ) { return false; }
 }
 

@@ -353,19 +353,16 @@ async function saveInNayive( text, name )
 {
     const dir = await NayiveUI.pickFolder( { title: T( 'bookmarks.export' ), allowRoot: true } );
     if( ! dir ) return false;
-    let taken = [];
-    try { taken = ( ( await GumApi.listDir( dir ) ).nodes || [] ).map( function( n ) { return String( n.path ).split( '/' ).pop(); } ); }
+    let taken = new Set();
+    try { taken = await GumApi.namesIn( dir ); }
     catch( e ) {}
-    const dot = name.lastIndexOf( '.' );
-    const nth = function( i ) { return i < 2 ? name : name.slice( 0, dot ) + ' (' + i + ')' + name.slice( dot ); };
-    let i = 1;
-    while( taken.indexOf( nth( i ) ) >= 0 ) i++;
-    for( let tries = 0; ; tries++, i++ )
+    let free;
+    try
     {
-        try { await GumApi.createFileBytes( dir + '/' + nth( i ), new TextEncoder().encode( text ) ); break; }
-        catch( e ) { if( ! e || ( e.status !== 412 && e.status !== 409 ) || tries >= 50 ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; } }
+        free = await GumApi.createFresh( dir, function() { const n = GumApi.uniqueName( name, taken ); taken.add( n ); return n; },
+                                         new TextEncoder().encode( text ), { on409: true } );
     }
-    const free = nth( i );
+    catch( e ) { NayiveUI.toast( T( 'ui.saveFailed' ) ); return false; }
     const rel = dir.replace( /^files\/?/, '' );
     NayiveUI.toast( TF( 'bookmarks.savedIn', { path: ( rel ? rel + '/' : '' ) + free } ) );
     return true;

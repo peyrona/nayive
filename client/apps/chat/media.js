@@ -776,13 +776,12 @@
     {
         var dir  = path.slice( 0, path.lastIndexOf( "/" ) );
         var stem = path.slice( dir.length + 1 ).replace( /\.[^.]*$/, "" ) + "-" + T( "ui.editedSuffix" );
-        for( var i = 1; i < 1000; i++ )
+        try
         {
-            var name = dir + "/" + stem + ( i > 1 ? " (" + i + ")" : "" ) + ".jpg";
-            try { await GumApi.createFileBytes( name, bytes ); return name; }
-            catch( e ) { if( e.status !== 412 ) throw e; }
+            return dir + "/" + await GumApi.createFresh( dir, function ( n ) { return stem + ( n ? " (" + ( n + 1 ) + ")" : "" ) + ".jpg"; },
+                                                         bytes, { tries: 998 } );
         }
-        throw new Error( T( "chat.failed" ) );
+        catch( e ) { if( e.status === 412 ) throw new Error( T( "chat.failed" ) ); throw e; }
     }
 
     // Editar foto (TOAST UI Image Editor, as Drive and Photos: shared/photo.js

@@ -124,8 +124,6 @@ const PARAMS = new URLSearchParams( location.search );
 let ITEMS = [];          // [{ name, blob }]
 let DEST  = null;        // folder path, e.g. "files/fotos/viajes"
 
-function baseName( p ) { return String( p ).split( "/" ).pop(); }
-
 /* Pull the shared images back out of the Cache the service worker filled. */
 async function readInbox()
 {
@@ -243,15 +241,10 @@ function setDest( folder )
 // made the PUT go again, is a success already: GumApi's "our own first try".)
 // `taken` gains every name tried; 50 names in a row taken is not a race any
 // more: an error.
-async function sendNew( want, bytes, taken )
+function sendNew( want, bytes, taken )
 {
-    for( let tries = 0; ; tries++ )
-    {
-        const name = NayiveUI.uniqueName( want, taken );
-        taken.add( name );
-        try { await GumApi.createFileBytes( DEST + "/" + name, bytes ); return name; }
-        catch ( err ) { if( ! err || ( err.status !== 412 && err.status !== 409 ) || tries >= 50 ) throw err; }
-    }
+    return GumApi.createFresh( DEST, function () { const name = NayiveUI.uniqueName( want, taken ); taken.add( name ); return name; },
+                               bytes, { on409: true } );
 }
 
 async function upload()
@@ -280,8 +273,7 @@ async function upload()
     let unread = false;
     try
     {
-        const r = await GumApi.listDir( DEST );
-        taken = new Set( ( ( r && r.nodes ) || [] ).map( n => baseName( n.path ) ) );
+        taken = await GumApi.namesIn( DEST );
     }
     catch ( err )
     {

@@ -230,22 +230,10 @@
     async function freeName( dir, name, also )
     {
         var taken = {};
-        try
-        {
-            ( ( await GumApi.listDir( dir ) ).nodes || [] ).forEach( function ( n )
-            {
-                taken[ String( n.name || String( n.path || "" ).split( "/" ).pop() ).toLowerCase() ] = true;
-            } );
-        }
+        try { ( await GumApi.namesIn( dir ) ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } ); }
         catch( e ) { if( ! e || e.status !== 404 ) throw e; }
         ( also || [] ).forEach( function ( n ) { taken[ n.toLowerCase() ] = true; } );
-        if( ! taken[ name.toLowerCase() ] ) return name;
-        var dot = name.lastIndexOf( "." ), stem = dot > 0 ? name.slice( 0, dot ) : name, ext = dot > 0 ? name.slice( dot ) : "";
-        for( var i = 2; ; i++ )
-        {
-            var n = stem + " (" + i + ")" + ext;
-            if( ! taken[ n.toLowerCase() ] ) return n;
-        }
+        return GumApi.uniqueName( name, { has: function ( n ) { return !! taken[ n.toLowerCase() ]; } } );
     }
 
     // The attachment goes up as a NEW file only (create-only PUT): a name
@@ -253,16 +241,15 @@
     // is used, never written over. (A 412 that is this very save's first try,
     // landed before a dropped connection made the PUT go again, is a success
     // already: GumApi's "our own first try".) 50 names in a row taken: an error.
-    async function saveNew( dir, want, bytes )
+    function saveNew( dir, want, bytes )
     {
         var also = [];
-        for( var tries = 0; ; tries++ )
+        return GumApi.createFresh( dir, async function ()
         {
             var name = await freeName( dir, want, also );
-            try { await GumApi.createFileBytes( dir + "/" + name, bytes ); return name; }
-            catch( e ) { if( ! e || e.status !== 412 || tries >= 50 ) throw e; }
             also.push( name );
-        }
+            return name;
+        }, bytes );
     }
 
     async function saveToDrive( p, url, btn )

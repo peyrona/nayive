@@ -2347,16 +2347,10 @@
         // it is saved create-only, so a taken one is asked about again.
         async function freeName( p )
         {
-            var dir = dirName( p ), base = baseName( p ), dot = base.lastIndexOf( "." );
-            var stem = dot > 0 ? base.slice( 0, dot ) : base, ext = dot > 0 ? base.slice( dot ) : "";
-            var names = {};
-            try { ( ( await GumApi.listDir( dir ) ).nodes || [] ).forEach( function ( n ) { names[ n.path ] = true; } ); }
+            var dir = dirName( p ), base = baseName( p ), names = new Set();
+            try { names = await GumApi.namesIn( dir ); }
             catch ( e ) {}
-            for( var i = 2; ; i++ )
-            {
-                var c = dir + "/" + stem + " (" + i + ")" + ext;
-                if( ! names[ c ] ) return c;
-            }
+            return dir + "/" + GumApi.uniqueName( base, { has: function ( n ) { return n === base || names.has( n ); } } );
         }
 
         // ---- the file label: rename in place ----------------------------------

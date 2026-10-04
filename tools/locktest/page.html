@@ -12,14 +12,16 @@ var binSeq = 0;
 window.CALLS = [];
 function clone( b ) { return typeof b === "string" ? b : new Uint8Array( b ); }
 
-// The real device-side helpers (the draft database, Web Locks); the server
-// calls are stubbed below.
+// The real device-side helpers (the draft database, Web Locks) and name
+// rules (namesIn reads the stub's listDir); the server calls are stubbed below.
 var REAL = window.GumApi;
 window.GumApi = {
-    sideDb:    REAL.sideDb,
-    draftsDb:  REAL.draftsDb,
-    tryLock:   REAL.tryLock,
-    heldLocks: REAL.heldLocks,
+    sideDb:     REAL.sideDb,
+    draftsDb:   REAL.draftsDb,
+    tryLock:    REAL.tryLock,
+    heldLocks:  REAL.heldLocks,
+    namesIn:    REAL.namesIn,
+    uniqueName: REAL.uniqueName,
     API_FILES: "/api/files",
     fileUrl:   function ( p ) { return "/api/files?file=" + p; },
     readFileBytes: async function ( p )
