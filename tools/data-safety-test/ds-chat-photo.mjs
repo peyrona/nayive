@@ -101,7 +101,7 @@ ok( disk( "files/Fotos/IMG_7.jpg" )?.equals( ORIG ), "the library original still
 
 section( "J7 - AUTO-DELETE SAYS WHAT IT WOULD DELETE" );
 ok( await load(), "Chat again" );
-await c.evaluate( "NayiveChat.openAutoDelete(); true" );
+await c.evaluate( "NayiveChat.openSettings( 'autodel' ); true" );
 ok( await c.until( "document.getElementById( 'autoDelDays' )" ), "the auto-delete dialog" );
 await c.evaluate( `( () => { const i = document.getElementById( 'autoDelDays' ); i.value = '1'; i.dispatchEvent( new InputEvent( 'input' ) ); return true; } )()` );
 ok( await c.until( "/3 mensajes/.test( document.querySelector( '.days-count' )?.textContent || '' )" ),

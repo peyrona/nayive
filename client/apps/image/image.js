@@ -48,7 +48,9 @@ function dirOf( path ) { const i = path.lastIndexOf( '/' ); return i < 0 ? '' : 
 function showName( path )
 {
     const name = nameOf( path );
-    $( 'fileLabel' ).textContent = name;
+    const bdi = document.createElement( 'bdi' );   // see .file-label in app.css
+    bdi.textContent = name;
+    $( 'fileLabel' ).replaceChildren( bdi );
     document.title = name;                  // the desktop's bar button names the window by it
 }
 

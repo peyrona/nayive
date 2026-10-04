@@ -161,9 +161,10 @@ try
     await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
 
     // Edit through the row ⋮ menu.
-    await c.evaluate( "document.querySelector('.bm-item .row-menu').click(); true" );
-    ok( await c.evaluate( "!document.getElementById('ctxMenu').hidden && !!document.querySelector('#ctxMenu [data-act=edit]')" ), "row ⋮ opens the item menu" );
-    await c.evaluate( "document.querySelector('#ctxMenu [data-act=edit]').click(); document.getElementById('bmFav').checked = true; document.getElementById('bmSaveBtn').click(); true" );
+    await c.evaluate( "document.querySelector('.bm-item [data-more]').click(); true" );
+    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=edit]')" ), "row ⋮ opens the item menu" );
+    ok( await c.evaluate( "document.querySelector('.bm-item').classList.contains('is-selected') && !document.getElementById('selActions').hidden" ), "…on that row, picked (the header group shows)" );
+    await c.evaluate( "document.querySelector('.item-menu [data-act=edit]').click(); document.getElementById('bmFav').checked = true; document.getElementById('bmSaveBtn').click(); true" );
     ok( await c.evaluate( "allBookmarks()[0].favorite === true" ), "edit: favourite set" );
 
     console.log( "FOLDERS / MOVE / CYCLE" );
@@ -171,18 +172,22 @@ try
     const dev = await c.evaluate( "Object.values( data.nodes ).find( n => n.title === 'Dev' ).id" );
     // Subfolder from the tree row's right-click menu.
     await c.evaluate( `document.querySelector('.tree-row[data-id="${dev}"]').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 120 }) ); true` );
-    await c.evaluate( "document.querySelector('#ctxMenu [data-act=subfolder]').click(); document.getElementById('folderName').value = 'Frontend'; document.getElementById('folderSaveBtn').click(); true" );
+    await c.evaluate( "document.querySelector('.item-menu [data-act=subfolder]').click(); document.getElementById('folderName').value = 'Frontend'; document.getElementById('folderSaveBtn').click(); true" );
     const fe = await c.evaluate( "Object.values( data.nodes ).find( n => n.title === 'Frontend' ).id" );
     ok( await c.evaluate( `node('${fe}').parentId === '${dev}'` ), "tree menu: new subfolder" );
     ok( await c.evaluate( `!!document.querySelector('.tree-row[data-id="${fe}"]')` ), "tree shows the subfolder (parent opened)" );
 
     const bid = bm.id;
-    await c.evaluate( `openMoveSheet( ['${bid}'] ); document.getElementById('moveFolder').value = '${fe}'; document.getElementById('moveOkBtn').click(); true` );
-    ok( await c.evaluate( `node('${bid}').parentId === '${fe}'` ), "Move to… moves the bookmark" );
-    ok( await c.evaluate( `!Array.from( document.querySelectorAll('#moveFolder option') ).length || true` ), "move sheet lists folders" );
+    // "Move to…" is the shared tree in a dialog (NayiveUI.pickNode).
+    await c.evaluate( `openMoveSheet( ['${bid}'] ); true` );
+    ok( await waitFor( c, "!!document.querySelector('.sheet-backdrop.open .pick-tree .tree-row')" ), "move dialog shows the folder tree" );
+    await c.evaluate( `( () => { const P = '.sheet-backdrop.open .pick-tree '; const d = document.querySelector( P + '.tree-row[data-id="${dev}"]' ); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); document.querySelector( P + '.tree-row[data-id="${fe}"]' ).click(); document.querySelector('.sheet-backdrop.open .pick-ok').click(); } )(); true` );
+    ok( await waitFor( c, `node('${bid}').parentId === '${fe}'` ), "Move to… moves the bookmark" );
     await c.evaluate( `openMoveSheet( ['${dev}'] ); true` );
-    ok( await c.evaluate( `!Array.from( document.querySelectorAll('#moveFolder option') ).some( o => o.value === '${dev}' || o.value === '${fe}' )` ), "move sheet hides the folder and its subfolders" );
-    await c.evaluate( "NayiveUI.close('moveBackdrop'); true" );
+    await waitFor( c, "!!document.querySelector('.sheet-backdrop.open .pick-tree .tree-row')" );
+    await c.evaluate( `( () => { const d = document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="${dev}"]'); if( d.getAttribute('aria-expanded') !== 'true' ) d.querySelector('[data-twisty]').click(); } )(); true` );
+    ok( await c.evaluate( `[ '${dev}', '${fe}' ].every( id => document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="' + id + '"]').classList.contains('is-off') ) && !document.querySelector('.sheet-backdrop.open .pick-tree .tree-row[data-id="root"]').classList.contains('is-off')` ), "move dialog greys the folder and its subfolders" );
+    await c.evaluate( "document.querySelector('.sheet-backdrop.open .pick-cancel').click(); true" );
 
     // Drag Dev onto its own subfolder: refused with a toast, nothing moves.
     await c.evaluate( `revealInTree('${fe}'); renderTree(); window.__toasts = []; true` );
@@ -254,7 +259,9 @@ try
 
     console.log( "OPEN / TAG / SEARCH" );
     await c.evaluate( `window.__opened = []; window.open = function( u ) { window.__opened.push( u ); return null; }; goFolder('${dev}'); document.querySelector('.bm-item[data-id="${bid}"] .bm-title').click(); true` );
-    ok( await c.evaluate( "window.__opened[0] === 'https://example.com/'" ), "card body opens the link" );
+    ok( await c.evaluate( `window.__opened.length === 0 && browse.ids().join() === '${bid}'` ), "a click picks the card (it does not open it)" );
+    await c.evaluate( `document.querySelector('.bm-item[data-id="${bid}"] .bm-title').dispatchEvent( new MouseEvent('dblclick', { bubbles: true }) ); true` );
+    ok( await c.evaluate( "window.__opened[0] === 'https://example.com/'" ), "a double-click opens the link" );
     await c.evaluate( `document.querySelector('.bm-item[data-id="${bid}"] .bm-tag').click(); true` );
     ok( await c.evaluate( "query === '#docs' && document.querySelectorAll('#items .bm-item').length === 1 && window.__opened.length === 1" ), "a tag chip searches that tag (and does not open the link)" );
     await c.evaluate( "setQuery('EXÁMPLE'); true" );
@@ -276,10 +283,7 @@ try
     await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
     ok( await c.evaluate( `!!node('${bid}')` ), "Undo brings it back" );
     await c.evaluate( `deleteNodes( ['${dev}'] ); true` );
-    ok( await waitFor( c, "document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "folder delete asks once" );
-    ok( await c.evaluate( "/Folders: 2 · Bookmarks: 1/.test( document.querySelector('.sheet-backdrop.open[role=dialog]').textContent )" ), "…saying what goes with it",
-        await c.evaluate( "document.querySelector('.sheet-backdrop.open[role=dialog]').textContent" ) );
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open:not([id]) .sheet-actions button:last-child').click(); true" );
+    ok( await c.evaluate( "!document.querySelector('.sheet-backdrop.open[role=dialog]')" ), "folder delete does not ask (Undo instead)" );
     ok( await waitFor( c, `!node('${dev}') && !node('${fe}') && !node('${bid}')` ), "folder + contents deleted" );
     await c.evaluate( "document.querySelector('#toast .toast-undo').click(); true" );
     ok( await c.evaluate( `!!node('${dev}') && !!node('${fe}') && !!node('${bid}') && node('${fe}').parentId === '${dev}'` ), "Undo restores the whole folder" );
@@ -375,13 +379,23 @@ try
     await flushed( c );
     ok( diskCounts() && diskCounts().b === ( await c.evaluate( counts ) ).b, "disk file matches", diskCounts() );
 
-    console.log( "SELECTION" );
-    await c.evaluate( "goFolder(ROOT); setSelecting( true ); true" );
-    ok( await c.evaluate( "!document.getElementById('selectBar').hidden && document.getElementById('filterRow').hidden" ), "selection bar replaces the pills" );
-    await c.evaluate( "document.getElementById('selectAllBtn').click(); true" );
-    ok( await c.evaluate( "selected.size === document.querySelectorAll('#items .bm-item').length && selected.size > 0" ), "Select all" );
-    await c.evaluate( "document.getElementById('selectLeave').click(); true" );
-    ok( await c.evaluate( "!selecting && document.getElementById('selectBar').hidden" ), "← leaves selection" );
+    console.log( "SELECTION (the shared item browser)" );
+    await c.evaluate( "goFolder(ROOT); browse.clear(); true" );
+    const card = i => `document.querySelectorAll('#items .bm-item')[${i}]`;
+    await c.evaluate( `${card(0)}.click(); ${card(2)}.dispatchEvent( new MouseEvent('click', { bubbles: true, ctrlKey: true }) ); true` );
+    ok( await c.evaluate( "browse.ids().length === 2 && document.querySelectorAll('#items .bm-item.is-selected').length === 2" ), "click + Ctrl+click pick two" );
+    ok( await c.evaluate( "!document.getElementById('selActions').hidden && /2/.test( document.querySelector('#selActions .sel-count').textContent ) && !document.getElementById('filterRow').hidden" ), "the header group shows the count; the pills stay" );
+    await c.evaluate( `${card(0)}.click(); ${card(3)}.dispatchEvent( new MouseEvent('click', { bubbles: true, shiftKey: true }) ); true` );
+    ok( await c.evaluate( "browse.ids().length === 4" ), "Shift+click picks a range" );
+    await c.evaluate( "document.querySelector('#selActions [data-sel=all]').click(); true" );
+    ok( await c.evaluate( "browse.ids().length === document.querySelectorAll('#items .bm-item').length && browse.ids().length > 0" ), "Select all" );
+    await c.evaluate( "document.body.focus(); document.dispatchEvent( new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) ); true" );
+    ok( await c.evaluate( "!browse.ids().length && document.getElementById('selActions').hidden" ), "Esc clears the pick" );
+    await c.evaluate( `${card(0)}.dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true` );
+    ok( await c.evaluate( "browse.ids().length === 1 && !document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=delete]')" ), "right-click picks that card and opens the same menu" );
+    await c.evaluate( "NayiveUI.closeMenu(); document.getElementById('items').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }) ); true" );
+    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=add]') && !!document.querySelector('.item-menu [data-act=selectAll]')" ), "right-click on empty space: New bookmark, New folder, Select all" );
+    await c.evaluate( "NayiveUI.closeMenu(); browse.clear(); true" );
 
     console.log( "VIEWS / FILTERS / LAYOUT" );
     await c.evaluate( "document.querySelector('#filterRow [data-filter=fav]').click(); true" );
@@ -560,7 +574,10 @@ try
         const util = await c.evaluate( "Object.values( data.nodes ).find( n => n.title === 'Util' ).id" );
         await c.evaluate( `goFolder('${util}'); true` );
         await sleep( 800 );
-        ok( await c.evaluate( "getComputedStyle( document.getElementById('treePane') ).display === 'none'" ), `phone ${w}: no tree pane` );
+        ok( await c.evaluate( "document.getElementById('treePane').getBoundingClientRect().right <= 0 && getComputedStyle( document.getElementById('treeBtn') ).display !== 'none'" ), `phone ${w}: tree off screen, folder button there` );
+        await c.evaluate( "document.getElementById('treeBtn').click(); true" );
+        ok( await c.evaluate( "document.getElementById('treePane').classList.contains('open') && !!document.querySelector('.tree-backdrop.open')" ), `phone ${w}: the folder button slides the tree in` );
+        await c.evaluate( "treeView.closeSheet(); true" );
         ok( await c.evaluate( "!document.getElementById('upBtn').hidden" ), `phone ${w}: ← up inside a folder` );
         ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth && document.getElementById('listPane').scrollWidth <= document.getElementById('listPane').clientWidth" ), `phone ${w}: no sideways scroll`,
             await c.evaluate( "[document.documentElement.scrollWidth, innerWidth, document.getElementById('listPane').scrollWidth, document.getElementById('listPane').clientWidth]" ) );
@@ -609,9 +626,9 @@ try
     await o.send( "Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [ { x: r.x, y: r.y } ] } );
     await sleep( 700 );
     await o.send( "Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] } );
-    ok( await o.evaluate( "!document.getElementById('ctxMenu').hidden" ), "touch long-press opens the item menu" );
+    ok( await o.evaluate( "document.querySelector('.bm-item').classList.contains('is-selected') && document.getElementById('items').classList.contains('is-picking')" ), "touch long-press starts picking (ticks on)" );
     ok( await o.evaluate( "document.querySelector('.bm-item').draggable === false" ), "no HTML5 drag on touch" );
-    await o.evaluate( "closeItemMenu(); true" );
+    await o.evaluate( "browse.clear(); true" );
     const online = await o.evaluate( counts );
     await o.send( "Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 } );
     await openApp( o );

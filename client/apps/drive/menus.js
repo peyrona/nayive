@@ -1,298 +1,230 @@
 /*
- * menus.js - Drive: the right-click / row ⋮ context menus, the header ⋮ menu,
- * cut / paste and setBackdrop.
+ * menus.js - Drive: the item browser (shared/browser.js) on the listing and
+ * the tree - its ONE action list, which feeds the header's selection group,
+ * the menu (right-click, the row ⋮, the folder ⋮ in the tree, the group's ⋮)
+ * and the keys - plus the phone's header ⋮, cut / paste and setBackdrop.
  */
 "use strict";
 
-//------------------------------------------------------------------------//
-// CONTEXT MENUS (right-click on desktop; on touch, the row's ⋮ button)
-//
-//   #ctxMenu     - on a listing row: acts on the current selection
-//   #ctxAreaMenu - on empty space:  Nueva carpeta / Pegar (internal clipboard)
-//
-// Touch long-press is NOT a menu shortcut — it opens the pressed item
-// (folder: navigate in; file: viewer / editor), a firm alternative to the
-// fiddly double-tap.
+let browse    = null;     // NayiveUI.browser on #listing
+let treeView  = null;     // NayiveUI.tree in #treePane
+let clipboard = null;     // { mode: 'move' | 'copy', paths: [...] } set by Cortar / Copiar
 
-let ctxOpenedAt  = 0;      // guards the close-on-click that follows an open
-let swallowClick = false;  // eat the click a touch long-press leaves behind
-let clipboard    = null;   // { mode: 'move' | 'copy', paths: [...] } set by Cortar / Copiar
+// The paths an action works on. A row action: the picked rows. A folder's
+// menu in the tree: that folder (actTargets), until the next pick. There is
+// no "nothing picked = the open folder" any more: the folder's own menu in
+// the tree does that (one action, one knob).
+let actTargets = null;
 
-function wireContextMenu()
+function actionTargets()
 {
-    const listing = document.getElementById( 'listing' );
+    return actTargets ? actTargets.slice() : Array.from( selectedPaths );
+}
 
-    listing.addEventListener( 'contextmenu', onListingContextMenu );
+// The browser's picks are Drive's selectedPaths; everything that clears or
+// sets them goes through here, so the two never disagree.
+function clearSel() { if( browse ) browse.clear(); else selectedPaths.clear(); }
+function setSel( paths ) { if( browse ) browse.set( paths ); else selectedPaths = new Set( paths ); }
 
-    document.getElementById( 'ctxOpen'     ).addEventListener( 'click', function() { closeCtxMenus(); openSelectedNode(); } );
-    document.getElementById( 'ctxDownload' ).addEventListener( 'click', function() { closeCtxMenus(); downloadSelection(); } );
-    document.getElementById( 'ctxExtract'  ).addEventListener( 'click', function() { closeCtxMenus(); extractSelectedZip(); } );
-    document.getElementById( 'ctxCut'      ).addEventListener( 'click', function() { closeCtxMenus(); setClipboard( 'move' ); } );
-    document.getElementById( 'ctxClip'     ).addEventListener( 'click', function() { closeCtxMenus(); setClipboard( 'copy' ); } );
-    document.getElementById( 'ctxMove'     ).addEventListener( 'click', function() { closeCtxMenus(); openFolderPicker( 'move' ); } );
-    document.getElementById( 'ctxCopy'     ).addEventListener( 'click', function() { closeCtxMenus(); openFolderPicker( 'copy' ); } );
-    document.getElementById( 'ctxRename'   ).addEventListener( 'click', function() { closeCtxMenus(); openRename(); } );
-    document.getElementById( 'ctxLink'     ).addEventListener( 'click', function() { closeCtxMenus(); copySelectionLink(); } );
-    document.getElementById( 'ctxCompress' ).addEventListener( 'click', function() { closeCtxMenus(); compressSelection(); } );
-    // Share is the toolbar's button: one handler, one "who may share what" rule.
-    document.getElementById( 'ctxShare'    ).addEventListener( 'click', function() { closeCtxMenus(); document.getElementById( 'shareBtn' ).click(); } );
-    document.getElementById( 'ctxDelete'   ).addEventListener( 'click', function() { closeCtxMenus(); openDeleteConfirm(); } );
-    document.getElementById( 'ctxProps'    ).addEventListener( 'click', function() { closeCtxMenus(); openProperties(); } );
+// Anything under shared/ belongs to somebody else and the server refuses
+// every write on it, so the actions that would write are off there: an
+// action that can only ever end in an error toast is not worth offering.
+// Reading (Abrir, Descargar, Copiar, Copiar a…, Enlace) stays on: copying
+// OUT is fine.
+function readOnlyOf( paths ) { return paths.some( NayiveUI.isShared ); }
+function readOnlyHere()     { return NayiveUI.isShared( currentFolder ); }
 
-    document.getElementById( 'ctxAreaNewFolder' ).addEventListener( 'click', function() { closeCtxMenus(); openNewFolder(); } );
-    document.getElementById( 'ctxAreaPaste'     ).addEventListener( 'click', function() { closeCtxMenus(); doPaste(); } );
+// Compartir: exactly one thing, mine, and not a whole virtual root.
+function canShare( paths )
+{
+    const p = paths.length === 1 ? paths[ 0 ] : '';
+    return !! p && ! NayiveUI.isShared( p ) && p !== 'files' && p !== 'data';
+}
 
-    document.addEventListener( 'click', function( e )
+function sharePaths( paths )
+{
+    if( ! canShare( paths ) ) return;
+    const node = rowNode( paths[ 0 ] );
+    NayiveUI.shareSheet( {
+        path:   paths[ 0 ],
+        app:    (node && isDir( node )) ? 'folder' : 'file',
+        title:  paths[ 0 ].split( '/' ).pop(),
+        canAdd: !! (node && isDir( node ))   // only a folder can be added to
+    } );
+}
+
+// Each action states once when it works: the header button, the menu row
+// and the key all read it. `run` gets the paths; the Drive functions behind
+// them read actionTargets(), so the paths are handed over first.
+function act( fn ) { return function( paths ) { actTargets = paths.slice(); fn(); }; }
+
+function driveActions()
+{
+    const one = function( p ) { return p.length === 1; };
+    const rw  = function( p ) { return ! readOnlyOf( p ); };
+    return [
+        { id: 'open', label: T( 'drive.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
+          run: function( p ) { const n = rowNode( p[ 0 ] ); if( n ) openNode( n ); } },
+        { id: 'download', label: T( 'ui.download' ), icon: 'download', key: 'Ctrl+D', bar: 1, group: 0,
+          when: function() { return ! dlJob; }, run: act( downloadSelection ) },
+        { id: 'extract', label: T( 'drive.extractHere' ), icon: 'unzip', group: 0,
+          when: function( p ) { return one( p ) && rw( p ) && isZipNode( rowNode( p[ 0 ] ) ); }, run: act( extractSelectedZip ) },
+        { id: 'cut', label: T( 'ui.cut' ), icon: 'cut', key: 'Ctrl+X', group: 1, when: rw,
+          run: function( p ) { setClipboard( 'move', p ); } },
+        { id: 'copy', label: T( 'ui.copy' ), icon: 'copy', key: 'Ctrl+C', group: 1,
+          run: function( p ) { setClipboard( 'copy', p ); } },
+        { id: 'move', label: T( 'drive.moveToDots' ), icon: 'move', bar: 3, phone: 1, group: 1, when: rw,
+          run: act( function() { openFolderPicker( 'move' ); } ) },
+        { id: 'copyTo', label: T( 'drive.copyToDots' ), icon: 'copy', bar: 4, group: 1,
+          run: act( function() { openFolderPicker( 'copy' ); } ) },
+        { id: 'rename', label: T( 'ui.rename' ), icon: 'edit', key: 'F2', bar: 2, group: 2,
+          when: function( p ) { return one( p ) && rw( p ); }, run: act( openRename ) },
+        { id: 'link', label: T( 'drive.copyLink' ), icon: 'link', bar: 5, group: 2, when: one, run: act( copySelectionLink ) },
+        { id: 'share', label: T( 'ui.share' ), icon: 'share', bar: 6, phone: 1, group: 2, when: canShare, run: sharePaths },
+        { id: 'compress', label: T( 'drive.compress' ), icon: SVG_ZIP, bar: 7, group: 2, when: rw, run: act( compressSelection ) },
+        { id: 'props', label: T( 'drive.properties' ), icon: 'info', key: 'Alt+Enter', bar: 8, group: 2, run: act( openProperties ) },
+        { id: 'bin', label: T( 'ui.toTrash' ), icon: 'trash', key: IS_MAC ? [ 'Del', 'Backspace' ] : 'Del', bar: 9, phone: 1, group: 3,
+          danger: true, when: rw, run: act( openDeleteConfirm ) }
+    ];
+}
+
+// Right-click on empty space: what you make here.
+function driveAreaActions()
+{
+    return [
+        { id: 'newFolder', label: T( 'ui.newFolder' ), icon: 'folderplus', key: 'Alt+N',
+          when: function() { return ! readOnlyHere(); }, run: function() { openNewFolder(); } },
+        { id: 'upload', label: T( 'ui.upload' ), icon: 'upload', key: 'Ctrl+U',
+          when: function() { return ! readOnlyHere() || canAddHere; },
+          run: function() { document.getElementById( 'uploadBtn' ).click(); } },
+        { id: 'paste', key: 'Ctrl+V', icon: 'paste',
+          label: function() { return clipboard && clipboard.paths.length
+                     ? TF( clipboard.mode === 'move' ? 'drive.pasteMoveN' : 'drive.pasteCopyN', { n: clipboard.paths.length } )
+                     : T( 'ui.paste' ); },
+          when: function() { return !! ( clipboard && clipboard.paths.length ) && ! readOnlyHere(); },
+          run: function() { doPaste(); } }
+    ];
+}
+
+// The tree's folders: Drive, and "Shared with me" beside it.
+function treeRoots()
+{
+    const byName = function( a, b )
     {
-        if( swallowClick ) { swallowClick = false; e.preventDefault(); e.stopPropagation(); return; }
-        if( Date.now() - ctxOpenedAt < 300 ) return;
-        if( ! e.target.closest( '.ctx-menu' ) ) closeCtxMenus();
-    }, true );
-
-    document.addEventListener( 'scroll', function() { closeCtxMenus(); }, true );
-    window.addEventListener( 'resize', function() { closeCtxMenus(); } );
-
-    // Touch long-press on a row -> open that item (not a menu; the ⋮ button is the menu).
-    let lpTimer = null, lpX = 0, lpY = 0;
-
-    listing.addEventListener( 'touchstart', function( e )
+        return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base', numeric: true } );
+    };
+    function mk( node, depth, label )
     {
-        if( e.target.closest( '.row-menu' ) ) return;          // the ⋮ button handles its own tap
+        return {
+            id:     node.path,
+            name:   depth === 0 ? ( label || 'Drive' ) : displayName( node ),
+            kids:   ( node.nodes || [] ).filter( isDir ).sort( byName ).map( function( c ) { return mk( c, depth + 1 ); } ),
+            noMenu: depth === 0,                   // the roots have no actions
+            noDrag: depth === 0 || NayiveUI.isShared( node.path )
+        };
+    }
+    const roots = [];
+    const top = findNode( FS_ROOT ) || dirTreeRoot;
+    if( top ) roots.push( mk( top, 0 ) );
+    // Everything other people shared with us hangs off its own root, next
+    // to Drive. It is a virtual folder (server/go/shares.go) — the paths
+    // inside it are real, they just point into someone else's home, read-only.
+    const shared = findNode( 'shared' );
+    if( shared ) roots.push( mk( shared, 0, T( 'drive.sharedWithMe' ) ) );
+    return roots;
+}
 
-        const rowEl = e.target.closest( '.row' );
-        if( ! rowEl || ! rowEl.dataset.path ) return;
-        const t = e.touches[0];
-        lpX = t.clientX; lpY = t.clientY;
+function wireBrowser()
+{
+    treeView = NayiveUI.tree( {
+        host:    document.getElementById( 'tree' ),
+        pane:    document.getElementById( 'treePane' ),
+        roots:   treeRoots,
+        isOpen:  function( p ) { return expandedFolders.has( p ); },
+        setOpen: function( p, v ) { if( v ) expandedFolders.add( p ); else expandedFolders.delete( p ); },
+        current: function() { return currentFolder; },
+        go:      function( p ) { navigateTo( p ); },
+        // A folder's ⋮ / right-click: the same menu it has as a row, acting
+        // on that folder without going into it.
+        menu:    function( p, x, y, anchor ) { NayiveUI.menuAt( x, y, browse.items( [ p ] ), { anchor: anchor } ); },
+        drag:    function( p ) { return NayiveUI.isShared( p ) ? null : [ p ]; },
+        drop:    { can: function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
+                   drop: function( ids, dest ) { doMove( ids, dest ); } }
+    } );
 
-        lpTimer = setTimeout( function()
+    browse = NayiveUI.browser( {
+        list:     document.getElementById( 'listing' ),
+        row:      '.row[data-path]',
+        idOf:     function( el ) { return el.dataset.path; },
+        bar:      document.getElementById( 'selActions' ),
+        actions:  driveActions(),
+        area:     driveAreaActions(),
+        tree:     treeView,
+        active:   function() { return ! trashMode; },
+        open:     function( p ) { const n = rowNode( p ); if( n ) openNode( n ); },
+        onSelect: function( ids )
         {
-            lpTimer      = null;
-            swallowClick = true;
-            setTimeout( function() { swallowClick = false; }, 700 );   // self-heal if no click follows
-            const node = rowNode( rowEl.dataset.path );
-            if( node ) openNode( node );
-        }, 500 );
-    }, { passive: true } );
+            selectedPaths = new Set( ids );
+            actTargets    = null;
+            updateToolbarState();
+        },
+        drag:     { can: function( p ) { return ! NayiveUI.isShared( p ); },
+                    text: function( ids ) { return ids.join( '\n' ); } }
+    } );
 
-    listing.addEventListener( 'touchmove', function( e )
-    {
-        if( ! lpTimer ) return;
-        const t = e.touches[0];
-        if( Math.abs( t.clientX - lpX ) > 10 || Math.abs( t.clientY - lpY ) > 10 ) { clearTimeout( lpTimer ); lpTimer = null; }
-    }, { passive: true } );
-
-    listing.addEventListener( 'touchend', function() { if( lpTimer ) { clearTimeout( lpTimer ); lpTimer = null; } } );
-}
-
-function onListingContextMenu( e )
-{
-    // The papelera has none of these actions — its rows carry no
-    // dataset.path, so without this the empty-area menu would open and
-    // Nueva carpeta / Pegar would act on the folder BEHIND the papelera,
-    // which stays on screen after the reload. Same as the keyboard
-    // shortcuts: in trash mode Drive steps aside for the browser.
-    if( trashMode ) return;
-
-    e.preventDefault();
-    openMenuFor( e.target.closest( '.row' ), e.clientX, e.clientY );
-}
-
-// rowEl set  -> the per-item menu (acts on the selection);
-// rowEl null -> the empty-area menu (Nueva carpeta / Pegar).
-function openMenuFor( rowEl, x, y )
-{
-    if( rowEl && rowEl.dataset.path )
-    {
-        selectOnlyForMenu( rowEl.dataset.path );
-        openCtxMenu( 'ctxMenu', x, y );
-    }
-    else
-    {
-        openCtxMenu( 'ctxAreaMenu', x, y );
-    }
-}
-
-// If the right-clicked / long-pressed row is not already part of the
-// selection, make it the only selected item; otherwise leave the multi
-// selection alone so the menu acts on the whole set.
-function selectOnlyForMenu( path )
-{
-    if( selectedPaths.has( path ) ) return;
-    selectedPaths = new Set( [ path ] );
-    render();
-}
-
-// A folder row in the left tree, right-clicked or ⋮-tapped: make it the
-// sole selection and open the same per-item menu the listing uses. Every
-// action (Renombrar / Mover / Copiar / …) already works off selectedPaths,
-// so nothing else needs to know the target came from the tree.
-function openTreeMenuFor( path, x, y )
-{
-    if( ! path ) return;                       // the "Drive" root has no actions
-    selectedPaths = new Set( [ path ] );
-    render();
-    openCtxMenu( 'ctxMenu', x, y );
-}
-
-function openCtxMenu( id, x, y )
-{
-    closeCtxMenus();
-
-    if(      id === 'ctxMenu'     ) updateCtxMenuState();
-    else if( id === 'ctxAreaMenu' ) updateAreaMenuState();
-    else                            updateTopMenuState();   // the header's ⋮ (phone)
-
-    const m = document.getElementById( id );
-    m.classList.add( 'open' );
-
-    const mw = m.offsetWidth, mh = m.offsetHeight;
-    m.style.left = Math.max( 6, Math.min( x, window.innerWidth  - mw - 8 ) ) + 'px';
-    m.style.top  = Math.max( 6, Math.min( y, window.innerHeight - mh - 8 ) ) + 'px';
-
-    ctxOpenedAt = Date.now();
-}
-
-function closeCtxMenus()
-{
-    document.getElementById( 'ctxMenu'     ).classList.remove( 'open' );
-    document.getElementById( 'ctxAreaMenu' ).classList.remove( 'open' );
-    document.getElementById( 'topMenu'     ).classList.remove( 'open' );
-    document.getElementById( 'moreBtn'     ).setAttribute( 'aria-expanded', 'false' );
-}
-
-function anyCtxMenuOpen()
-{
-    return document.getElementById( 'ctxMenu'     ).classList.contains( 'open' ) ||
-           document.getElementById( 'ctxAreaMenu' ).classList.contains( 'open' ) ||
-           document.getElementById( 'topMenu'     ).classList.contains( 'open' );
+    // Folder rows in the listing take dropped items too (the tree's rows do
+    // through the tree).
+    NayiveUI.dropZone( document.getElementById( 'listing' ), {
+        sel:    '.row[data-dir]',
+        target: function( el ) { return el.dataset.path; },
+        can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
+        drop:   function( ids, dest ) { doMove( ids, dest ); }
+    } );
 }
 
 //--------------------------------------------------------------------//
 // HEADER "⋮"  (phone only — see B6b in the phone block)
 //
-// The header buttons a phone reaches for least are hidden there and
-// come back in this menu. Each entry is BUILT from the button it stands
-// for — same glyph, same title — and clicking it clicks that button, so
-// there is still exactly one set of handlers, one enabled/disabled rule
-// and one set of titles to keep up to date.
+// The header buttons a phone reaches for least are hidden there and come
+// back in this menu. Each row is built from the button it stands for - same
+// glyph, same title - and clicking it clicks that button, so there is still
+// one handler and one title per button.
 
-const TOP_MENU_BTNS = [ 'shareBtn', 'bigFilesBtn', 'trashViewBtn' ];
+const TOP_MENU_BTNS = [ 'bigFilesBtn', 'trashViewBtn' ];
 
 function wireTopMenu()
 {
-    const menu = document.getElementById( 'topMenu' );
-    const btn  = document.getElementById( 'moreBtn' );
-
-    for( const id of TOP_MENU_BTNS )
-    {
-        const src = document.getElementById( id );
-        const svg = src && src.querySelector( 'svg' );
-        if( ! svg ) continue;
-
-        const item = document.createElement( 'button' );
-        item.className    = 'menu-item';
-        item.dataset.menu = id;
-        item.appendChild( svg.cloneNode( true ) );
-
-        const label = document.createElement( 'span' );
-        item.appendChild( label );
-        menu.appendChild( item );
-    }
-
+    const btn = document.getElementById( 'moreBtn' );
     btn.addEventListener( 'click', function( e )
     {
-        e.stopPropagation();                       // the document handler would close it again
-        if( menu.classList.contains( 'open' ) ) { closeCtxMenus(); return; }
-
-        const r = btn.getBoundingClientRect();
-        openCtxMenu( 'topMenu', r.right, r.bottom + 4 );   // openCtxMenu clamps it to the screen
-        btn.setAttribute( 'aria-expanded', 'true' );
+        e.stopPropagation();
+        if( NayiveUI.menuOpen() ) { NayiveUI.closeMenu(); return; }
+        const trash = document.body.classList.contains( 'trash-mode' );
+        const items = TOP_MENU_BTNS.map( function( id )
+        {
+            const src = document.getElementById( id );
+            const svg = src.querySelector( 'svg' );
+            // stripKeyHint: a desktop window narrowed into the phone layout
+            // can still carry a "· Ctrl+U" in the title.
+            const t   = stripKeyHint( src.getAttribute( 'title' ) || '' );
+            return { id: id, label: t, icon: svg ? svg.outerHTML : '', disabled: !! src.disabled,
+                     // Trash mode takes most of the toolbar away; the menu must
+                     // not offer what the bar itself has just hidden.
+                     hidden: trash && id !== 'trashViewBtn',
+                     run: function() { src.click(); } };
+        } );
+        NayiveUI.menuAt( 0, 0, items, { anchor: btn, keyboard: e.detail === 0 } );
     } );
-
-    menu.addEventListener( 'click', function( e )
-    {
-        const item = e.target.closest( 'button[data-menu]' );
-        if( ! item || item.disabled ) return;
-
-        closeCtxMenus();
-        document.getElementById( item.dataset.menu ).click();
-    } );
 }
 
-// Called by openCtxMenu just before the menu shows: copy each source
-// button's live state across. A tooltip says more than a menu row should
-// — the reason a button is off after an em dash, or the file name in a
-// quote ("Compartir \"x.txt\" con…"). The row is labelled with whatever
-// comes before either; the whole title stays as the row's own tooltip.
-function updateTopMenuState()
+//--------------------------------------------------------------------//
+// CUT / COPY / PASTE  (Drive's own clipboard: paths, not files)
+
+function setClipboard( mode, paths )
 {
-    const trash = document.body.classList.contains( 'trash-mode' );
-
-    for( const item of document.querySelectorAll( '#topMenu button[data-menu]' ) )
-    {
-        const src = document.getElementById( item.dataset.menu );
-        // stripKeyHint: a desktop window narrowed into the phone layout can
-        // still carry a "· Ctrl+U" in the title, and a menu row is no place
-        // for a key the phone has not got.
-        const t   = stripKeyHint( src.getAttribute( 'title' ) || '' );
-
-        item.disabled = !! src.disabled;
-        item.title    = t;
-        item.querySelector( 'span' ).textContent = t.split( /[\u2014"]/ )[0].trim() || t;
-
-        // Trash mode takes most of the toolbar away; the menu must not
-        // offer what the bar itself has just hidden.
-        item.hidden = trash && item.dataset.menu !== 'trashViewBtn';
-    }
-}
-
-// Anything under shared/ belongs to somebody else and the server refuses
-// every write on it, so the menus turn those entries off exactly as the
-// toolbar does (updateToolbarState) — an action that can only ever end
-// in an error toast is not worth offering. Reading (Abrir, Descargar,
-// Copiar, Copiar a…, Enlace) stays on: copying OUT is fine.
-function readOnlySel()  { return actionTargets().some( NayiveUI.isShared ); }
-function readOnlyHere() { return NayiveUI.isShared( currentFolder ); }
-
-function updateCtxMenuState()
-{
-    const one = selectedPaths.size === 1;
-    const ro  = readOnlySel();
-    document.getElementById( 'ctxOpen'   ).disabled = ! one;
-    document.getElementById( 'ctxDownload' ).disabled = !! dlJob;   // one at a time
-    document.getElementById( 'ctxRename' ).disabled = ! one || ro;
-    document.getElementById( 'ctxLink'   ).disabled = ! one;
-    document.getElementById( 'ctxCut'    ).disabled = ro;   // a cut is a move
-    document.getElementById( 'ctxMove'   ).disabled = ro;
-    document.getElementById( 'ctxDelete' ).disabled = ro;
-    document.getElementById( 'ctxCompress' ).disabled = ro;   // the .zip lands beside them
-    document.getElementById( 'ctxShare'    ).disabled = document.getElementById( 'shareBtn' ).disabled;
-
-    // "Extract here" is there for ONE .zip only; it writes beside the zip.
-    const ext = document.getElementById( 'ctxExtract' );
-    ext.hidden   = ! ( one && isZipNode( rowNode( Array.from( selectedPaths )[0] ) ) );
-    ext.disabled = ro;
-}
-
-function updateAreaMenuState()
-{
-    // Both entries write into the open folder. An "add" grant does not
-    // help here: it only ever lets a file be UPLOADED (see canAddHere).
-    const ro   = readOnlyHere();
-    const btn  = document.getElementById( 'ctxAreaPaste' );
-    const has  = !! (clipboard && clipboard.paths.length);
-    document.getElementById( 'ctxAreaNewFolder' ).disabled = ro;
-    btn.disabled = ! has || ro;
-    btn.querySelector( 'span' ).textContent = has
-        ? TF( clipboard.mode === 'move' ? 'drive.pasteMoveN' : 'drive.pasteCopyN',
-              { n: clipboard.paths.length } )
-        : T( 'ui.paste' );
-}
-
-function setClipboard( mode )
-{
-    if( ! selectedPaths.size ) return;
-    clipboard = { mode: mode, paths: Array.from( selectedPaths ) };
+    paths = paths || actionTargets();
+    if( ! paths.length ) return;
+    clipboard = { mode: mode, paths: paths.slice() };
     flashStatus( TF( mode === 'move' ? 'drive.nCut' : 'drive.nCopiedClip', { n: clipboard.paths.length } ) );
 }
 
@@ -318,13 +250,6 @@ async function doPaste()
 
     if( mode === 'move' ) await doMove( paths, dest );
     else                  await doCopy( paths, dest );
-}
-
-function openSelectedNode()
-{
-    if( selectedPaths.size !== 1 ) return;
-    const node = rowNode( Array.from( selectedPaths )[0] );
-    if( node ) openNode( node );
 }
 
 function setBackdrop( id, open ) { NayiveUI.setOpen( id, open ); }   // impl in shared/ui.js

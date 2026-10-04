@@ -18,7 +18,7 @@
 }
 :root[data-theme="light"]
 {
-    --calc-paper:      color-mix(in srgb, var(--card2) 60%, #FFFFFF);        /* near-white paper  */
+    --calc-paper:      #EBE4D6;                                              /* parchment, as Write */
     --calc-chrome:     var(--card);
     --calc-header:     color-mix(in srgb, var(--card) 72%, var(--line));     /* tan, frames grid  */
     --calc-header-hi:  color-mix(in srgb, var(--accent) 18%, var(--card));
@@ -83,6 +83,9 @@ html, body { height: 100%; overflow: hidden; }
 .topbar { background: var(--calc-chrome); }
 /* The name keeps its own width, so the chrome switch sits right after it (app.css HEADER). */
 .topbar .file-label { flex: 0 1 auto; }
+/* The toolbar / menus switch hugs the right edge, the rest after it. */
+.topbar > .tb-modes               { margin-left: auto; margin-right: 0; }
+.topbar > .tb-modes ~ #topActions { margin-left: 0; }
 
 .sync-indicator { margin-left: 4px; }   /* base rule + states in ../shared/theme.css */
 
@@ -222,9 +225,12 @@ html, body { height: 100%; overflow: hidden; }
    more rows instead of scrolling sideways - a scrolling bar hides half its
    buttons with no hint they exist - and its buttons grow to finger size. */
 /* ---- Header controls ------------------------------------------------
-     "⋮"   #moreBtn  - the file buttons. ALWAYS there, phone or not: they
+     File  #moreBtn  - the file buttons. ALWAYS there, phone or not: they
                        are not on the toolbar at all any more (#fileTools
-                       in the HTML), so this is the only way to them.
+                       in the HTML), so this is the only way to them. On a
+                       PC calc.js moves it to the head of the toolbar (a
+                       .fmt-btn drop-down like its neighbours); on a phone
+                       it stays here.
      "Aa"  #fmtBtn   - phone only; folds the toolbar away while you type.
    #fmtBtn is a TEXT button, not an icon one: "Aa" says "formato" at a
    glance (its type is in shared/app.css, Write's too). (Note it is the
@@ -285,6 +291,7 @@ html, body { height: 100%; overflow: hidden; }
 {
     #fmtBtn       { display: flex; }
     #moreToolsBtn { display: inline-flex; }
+    #fileSep      { display: none; }
 
     #fmtToolbar { padding: 4px 2px; }
     #fmtToolbar .fmt-sep { margin: 4px 2px; }

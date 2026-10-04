@@ -16,14 +16,9 @@ html, body { height: 100%; overflow: hidden; }
 }
 .tree-head  { display: flex; align-items: center; gap: 2px; padding: 2px 0 6px 6px; }
 .tree-head .section-label { flex: 1 1 auto; margin: 0; }
-/* The rows are the shared .folder-row; the indent is set inline per depth. */
-.tree-row             { gap: 4px; padding-top: 6px; padding-bottom: 6px; }
-.tree-row .tree-name  { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The twisty: a 24 px target (a finger on a tablet), the row no taller. */
-.tree-row .twisty     { display: flex; flex: 0 0 auto; width: 24px; height: 24px; margin: -4px -4px -4px -4px; color: var(--text-dim); transition: transform var(--tr-move); }
-.tree-row .twisty svg { width: 13px; height: 13px; margin: auto; }
-.tree-row .twisty.open { transform: rotate(90deg); }
-.tree-row .twisty.leaf { visibility: hidden; }
+/* The rows are the shared tree (.ntree, app.css). */
+#tree.ntree { min-width: 0; }
+#tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* --- List pane -------------------------------------------------------- */
 .list-pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 28px; }
@@ -32,16 +27,8 @@ html, body { height: 100%; overflow: hidden; }
 
 .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
-/* Selection mode: the Contacts bar. */
-.select-bar
-{
-    display: flex; align-items: center; gap: 4px; margin-bottom: 10px;
-    padding: 4px 6px 4px 2px;
-    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
-}
-.select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); padding-left: 4px; }
-
 .crumb-row  { display: flex; align-items: center; gap: 4px; min-height: 36px; margin-bottom: 8px; }
+#treeBtn    { display: none; }                      /* a phone's way into the tree */
 .crumb-row .open-crumb { margin: 0; flex: 1 1 auto; min-width: 0; }
 .crumb-row .crumb-seg[aria-current] { color: var(--text); font-weight: 600; }
 .crumb-note { padding: 3px 5px; color: var(--text); font-weight: 600; }
@@ -53,7 +40,9 @@ html, body { height: 100%; overflow: hidden; }
 
 .bm-item      { cursor: pointer; min-width: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .bm-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.is-grid .bm-item { flex-direction: column; align-items: stretch; gap: 6px; }
+.is-grid .bm-item { flex-direction: column; align-items: stretch; gap: 6px; position: relative; }
+/* The pick tick: in a card, over its top-left corner; in a row, before the icon. */
+.is-grid .bm-top > .pick-tick { position: absolute; top: 4px; left: 4px; z-index: 1; background: var(--card2); }
 .is-list .bm-item { padding: 7px 8px 7px 10px; }
 .is-list .bm-notes, .is-list .bm-tags { display: none; }
 .is-list .bm-item { flex-wrap: wrap; }
@@ -96,15 +85,12 @@ html, body { height: 100%; overflow: hidden; }
 .bm-star svg { width: 16px; height: 16px; }
 .card-row.is-selected .bm-domain,
 .card-row.is-selected .bm-path,
-.card-row.is-selected .bm-notes,
-.card-row.is-selected .row-menu { color: var(--on-accent); }
+.card-row.is-selected .bm-notes { color: var(--on-accent); }
 
-/* Drag and drop */
-.dragging { opacity: 0.4; }
-.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 22%, transparent); }
-/* Tree reorder: a line on the row's top / bottom edge says where it lands. */
-.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
-.drop-after  { box-shadow: inset 0 -3px 0 var(--accent); }
+/* Drag and drop: the shared marks (app.css). The tree's reorder line is a
+   touch thicker here, where it is the only one. */
+.ntree .drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.ntree .drop-after  { box-shadow: inset 0 -3px 0 var(--accent); }
 
 /* Empty screens: the shared .empty-hint, with its buttons side by side. */
 .empty-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
@@ -136,12 +122,14 @@ html, body { height: 100%; overflow: hidden; }
 .dup-sub    { font-size: 0.78rem; color: var(--text-dim); overflow-wrap: anywhere; }
 
 /* --- Phone ------------------------------------------------------------------
-   No tree pane: folders are the rows at the top of the list, the crumbs say
-   where you are and ← goes up. The grid / list switch leaves the header (it
-   is in the "⋮"); the search field takes the room left on its row. */
+   The tree slides in from the folder button (the shared .tree-sheet);
+   folders are still the rows at the top of the list, the crumbs say where
+   you are and ← goes up. The grid / list switch leaves the header (it is in
+   the "⋮"); the search field takes the room left on its row. */
 @media (max-width: 640px)
 {
-    .tree-pane, .pane-resizer { display: none; }
+    .pane-resizer { display: none; }
+    #treeBtn      { display: flex; }
     .list-pane { padding: 10px 10px 24px; }
     .tb-modes  { display: none; }
     .topbar    { padding: 6px; }                     /* Drive's phone bar: fits a 320px screen on one row */

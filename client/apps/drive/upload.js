@@ -53,7 +53,7 @@ function onUploadInputChange( e )
 
 function onDrop( e )
 {
-    if( dragPaths ) return;                 // an internal move, handled by the folder row
+    if( NayiveUI.dragIds() ) return;                 // an internal move, handled by the folder row
     e.preventDefault();
     document.getElementById( 'listPane' ).classList.remove( 'drag-over' );
 

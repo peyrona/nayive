@@ -3,103 +3,10 @@
  */
 "use strict";
 
-function renderTree()
-{
-    const host = document.getElementById( 'treePane' );
-    host.innerHTML = '';
-    host.appendChild( buildTreeNode( findNode( FS_ROOT ) || dirTreeRoot, 0 ) );
-
-    // Everything other people shared with us hangs off its own root, next
-    // to Drive. It is a virtual folder (server/go/shares.go) — the paths inside
-    // it are real, they just point into someone else's home, read-only.
-    const shared = findNode( 'shared' );
-    if( shared ) host.appendChild( buildTreeNode( shared, 0, T( 'drive.sharedWithMe' ) ) );
-}
-
-function buildTreeNode( node, depth, rootLabel )
-{
-    const wrap = document.createElement( 'div' );
-    wrap.className = 'tree-node';
-
-    const subDirs = (node.nodes || []).filter( isDir ).sort( function( a, b )
-    {
-        return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base', numeric: true } );
-    });
-    const isOpen  = expandedFolders.has( node.path );
-
-    const row = document.createElement( 'div' );
-    // Only the open folder is highlighted: a folder selected in the list is
-    // already shown there, and two lit rows here read as two open folders.
-    row.className = 'tree-row'
-                  + (node.path === currentFolder ? ' selected' : '')
-                  + (kbdPane === 'tree' && node.path === kbdTreePath ? ' kbd' : '');
-    row.dataset.path = node.path;
-
-    const twisty = document.createElement( 'span' );
-    twisty.className = 'twisty' + (subDirs.length ? (isOpen ? ' open' : '') : ' leaf');
-    twisty.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-    twisty.addEventListener( 'click', function( e )
-    {
-        e.stopPropagation();
-        if( ! subDirs.length ) return;
-        if( isOpen ) expandedFolders.delete( node.path ); else expandedFolders.add( node.path );
-        renderTree();
-    });
-
-    const folderIc = document.createElement( 'span' );
-    folderIc.className = 'folder-ic';
-    folderIc.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
-
-    const label = document.createElement( 'span' );
-    label.className   = 'tree-name';
-    label.textContent = depth === 0 ? (rootLabel || 'Drive') : displayName( node );
-
-    row.appendChild( twisty );
-    row.appendChild( folderIc );
-    row.appendChild( label );
-
-    // Every folder but the "Drive" root gets the same per-item actions the
-    // right pane offers: right-click on desktop, a ⋮ button on touch, plus
-    // drag-to-move. They act on this folder without navigating into it.
-    if( depth > 0 )
-    {
-        const menuBtn = document.createElement( 'button' );
-        menuBtn.className = 'icon-btn sm row-menu';
-        menuBtn.title     = T( 'ui.actions' );
-        menuBtn.setAttribute( 'aria-label', T( 'ui.actions' ) );
-        menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
-        menuBtn.addEventListener( 'click', function( e )
-        {
-            e.stopPropagation();
-            const r = menuBtn.getBoundingClientRect();
-            openTreeMenuFor( node.path, r.right, r.bottom );
-        });
-        row.appendChild( menuBtn );
-
-        row.addEventListener( 'contextmenu', function( e )
-        {
-            e.preventDefault();
-            e.stopPropagation();
-            openTreeMenuFor( node.path, e.clientX, e.clientY );
-        });
-
-        makeDraggable( row, node );
-    }
-
-    row.addEventListener( 'click', function() { navigateTo( node.path ); } );
-    makeDropTarget( row, function() { return node.path; } );
-
-    wrap.appendChild( row );
-
-    const childrenHost = document.createElement( 'div' );
-    childrenHost.className = 'tree-children' + (isOpen ? ' open' : '');
-
-    subDirs.forEach( function( c ) { childrenHost.appendChild( buildTreeNode( c, depth + 1 ) ); } );
-
-    wrap.appendChild( childrenHost );
-
-    return wrap;
-}
+// The shared tree (NayiveUI.tree, made in menus.js): Drive, and "Shared
+// with me" beside it. Every folder but the roots has the same actions the
+// right pane offers (right-click, ⋮, long-press) and takes dropped items.
+function renderTree() { if( treeView ) treeView.render(); }
 
 function renderBreadcrumb()
 {
@@ -112,7 +19,7 @@ function renderBreadcrumb()
     const rootCrumb = document.createElement( 'span' );
     rootCrumb.className   = 'crumb crumb-root' + (currentFolder === FS_ROOT && ! searching ? ' current' : '');
     rootCrumb.textContent = 'Drive';
-    rootCrumb.addEventListener( 'click', function() { isPhone() ? openTreeSheet() : navigateTo( FS_ROOT ); } );
+    rootCrumb.addEventListener( 'click', function() { isPhone() ? treeView.openSheet() : navigateTo( FS_ROOT ); } );
     host.appendChild( rootCrumb );
 
     if( searching )
@@ -185,10 +92,9 @@ function navigateTo( path )
 {
     currentFolder = path;
     expandedFolders.add( path );
-    if( kbdPane === 'tree' ) kbdTreePath = path;
-    selectedPaths.clear();
+    clearSel();
     clearSearch();
-    if( isPhone() ) closeTreeSheet();
+    if( isPhone() ) treeView.closeSheet();
     loadListing( path );                // renders now, and again when the folder arrives
 }
 

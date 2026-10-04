@@ -102,7 +102,7 @@
         // here would arrive late and close what was just opened)
         var fromRead = !! S.open && !! ( history.state && history.state.mailRead );     // split pushes none
         if( S.open ) E.closeMessage( false );
-        if( S.selecting ) E.endSelect();
+        E.endSelect();
         C = blank();
         if( msg ) C.acct = msg.acct || S.acct;
         var sig = String( S.settings.signature || "" ).replace( /\s+$/, "" );
@@ -457,7 +457,7 @@
         E.$( "composeView" ).hidden = ! on;
         E.$( "listView" ).hidden = on || ! S.accounts.length;
         E.$( "writeActions" ).hidden = ! on;
-        E.$( "backBtn" ).hidden = ! on && ! S.open && ! S.selecting;
+        E.$( "backBtn" ).hidden = ! on && ! S.open;
         E.$( "composeView" ).parentNode.scrollTop = 0;
         E.syncBar();
     }
@@ -810,7 +810,7 @@
     {
         var fromRead = !! S.open && !! ( history.state && history.state.mailRead );     // split pushes none
         if( S.open ) E.closeMessage( false );
-        if( S.selecting ) E.endSelect();
+        E.endSelect();
         C = mine;
         C.closing = false;
         C.sending = false;
@@ -953,7 +953,7 @@
             mine.sending = false;
             E.plug( "synced" );
             if( r && r.noCopy ) NayiveUI.toast( E.T( "mail.sentNoCopy" ), { ms: 8000 } );
-            if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! S.selecting ) E.loadList( false );
+            if( ! C && ! S.label && ( S.tray === "drafts" || S.tray === "sent" ) && E.listShown() && ! E.picking() ) E.loadList( false );
         }, function ( err )
         {
             mine.sending = false;
@@ -1582,9 +1582,6 @@
     document.addEventListener( "DOMContentLoaded", function ()
     {
         E.$( "composeBtn" ).addEventListener( "click", function () { E.compose( { mode: "new" } ); } );
-        E.$( "actReply" ).addEventListener( "click", function () { if( S.msg ) E.compose( { mode: "reply", msg: S.msg } ); } );
-        E.$( "actReplyAll" ).addEventListener( "click", function () { if( S.msg ) E.compose( { mode: "all", msg: S.msg } ); } );
-        E.$( "actForward" ).addEventListener( "click", function () { if( S.msg ) E.compose( { mode: "fwd", msg: S.msg } ); } );
         E.$( "cSend" ).addEventListener( "click", send );
         E.$( "cDiscard" ).addEventListener( "click", discard );
         E.$( "cAttach" ).addEventListener( "click", function ( e ) { e.stopPropagation(); toggleAttach(); } );

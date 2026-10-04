@@ -1,7 +1,7 @@
 // SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
  * sheets.js - Bookmarks: the add / edit sheet, the folder sheet, "Move to…",
- * and the deletes (a bookmark goes at once with Undo; a folder asks once).
+ * and the deletes (at once, with Undo).
  */
 "use strict";
 
@@ -11,7 +11,6 @@ let titleSeq    = 0;      // the newest title lookup asked for
 let titleAsk    = null;   // { url, promise } - the page-title lookup in flight
 const titleSeen = new Map();   // url -> the answer it got on this page ("" = none)
 let folderEdit  = null;   // the folder being renamed, or null for a new one
-let moveIds     = [];     // what "Move to…" moves
 
 // The indented folder list every picker shares. `skip` is the folders that
 // may not be offered (a folder and everything below it, when moving it).
@@ -230,16 +229,23 @@ function saveFolderSheet()
 //------------------------------------------------------------------------//
 // MOVE TO…
 
-function openMoveSheet( ids )
+// The shared "Move to…" (NayiveUI.pickNode): the same tree as the side
+// pane, with "All" on top. A folder can not go into itself or below it.
+async function openMoveSheet( ids )
 {
-    moveIds = ids.filter( function( id ) { return node( id ) && id !== ROOT; } );
-    if( ! moveIds.length ) return;
-    document.getElementById( 'moveTitle' ).textContent = moveIds.length === 1
-        ? TF( 'bookmarks.moveOne', { name: node( moveIds[ 0 ] ).title || domainOf( node( moveIds[ 0 ] ).url || '' ) } )
-        : TF( 'bookmarks.moveN', { n: moveIds.length } );
-    const folders = moveIds.filter( function( id ) { return isFolder( node( id ) ); } );
-    fillFolderSelect( document.getElementById( 'moveFolder' ), node( moveIds[ 0 ] ).parentId, folders );
-    NayiveUI.open( 'moveBackdrop' );
+    ids = ids.filter( function( id ) { return node( id ) && id !== ROOT; } );
+    if( ! ids.length ) return;
+    const folders = ids.filter( function( id ) { return isFolder( node( id ) ); } );
+    const dest = await NayiveUI.pickNode( {
+        title:    ids.length === 1
+                  ? TF( 'bookmarks.moveOne', { name: node( ids[ 0 ] ).title || domainOf( node( ids[ 0 ] ).url || '' ) } )
+                  : TF( 'bookmarks.moveN', { n: ids.length } ),
+        okLabel:  T( 'bookmarks.moveHere' ),
+        roots:    function() { return [ { id: ROOT, name: T( 'bookmarks.all' ), kids: treeRoots() } ]; },
+        current:  node( ids[ 0 ] ).parentId,
+        disabled: function( id ) { return folders.some( function( f ) { return isInside( id, f ); } ); }
+    } );
+    if( dest ) doMove( ids, dest );
 }
 
 // Already all there ("Move here" on their own folder, a card dropped on the
@@ -252,7 +258,7 @@ function doMove( ids, dest )
     moveNodes( ids, dest );
     if( ! save() ) return false;
     NayiveUI.toast( TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
-    if( selecting ) setSelecting( false ); else render();
+    render();
     return true;
 }
 
@@ -268,43 +274,21 @@ function doPlace( ids, anchorId, where )
     if( ! save() ) return false;
     if( dest !== from ) NayiveUI.toast( TF( 'bookmarks.movedTo', { name: folderName( node( dest ) ) } ) );
     if( dest !== ROOT ) toggleOpen( dest, true );          // the tree shows where they went
-    if( selecting ) setSelecting( false ); else render();
+    render();
     return true;
 }
 
 //------------------------------------------------------------------------//
-// DELETE  -  a bookmark (or bookmarks only) goes at once, with Undo. A
-// folder asks ONE question that says what goes with it; then Undo too.
+// DELETE  -  at once, with Undo: a bookmark, a folder with all it holds, or
+// many. No "Are you sure?" (the item-browser rule); Undo puts it all back.
 
-async function deleteNodes( ids )
+function deleteNodes( ids )
 {
     ids = ids.filter( function( id ) { return node( id ) && id !== ROOT; } );
     if( ! ids.length || ! canEdit() ) return;
 
-    const folders = ids.filter( function( id ) { return isFolder( node( id ) ); } );
-    if( folders.length )
-    {
-        let nf = 0, nb = 0;
-        const counted = new Set();
-        for( const id of ids )
-            for( const n of [ node( id ) ].concat( isFolder( node( id ) ) ? descendants( id ) : [] ) )
-            {
-                if( counted.has( n.id ) ) continue;
-                counted.add( n.id );
-                if( isFolder( n ) ) nf++; else nb++;
-            }
-        const ok = await NayiveUI.confirm( {
-            title:   folders.length === 1 && ids.length === 1 ? TF( 'bookmarks.deleteFolderQ', { name: folderName( node( ids[ 0 ] ) ) } ) : T( 'bookmarks.deleteManyQ' ),
-            body:    TF( 'bookmarks.deleteCounts', { folders: nf, bookmarks: nb } ),
-            confirm: T( 'ui.delete' ),
-            danger:  true
-        } );
-        if( ! ok ) return;
-    }
-
     const rec = removeNodes( ids );
     save();
-    if( selecting ) setSelecting( false );
     pruneState();
     render();
     NayiveUI.undoToast( ids.length === 1 ? T( 'bookmarks.deleted' ) : TF( 'bookmarks.deletedN', { n: ids.length } ), function()
@@ -319,11 +303,15 @@ async function deleteNodes( ids )
 //------------------------------------------------------------------------//
 // SMALL ACTIONS
 
-function toggleFavourite( id )
+function toggleFavourite( id ) { setFavourite( [ id ] ); }
+
+// Many at once: all become favourites unless all already are (then none).
+function setFavourite( ids )
 {
-    const b = node( id );
-    if( ! b || isFolder( b ) || ! canEdit() ) return;
-    b.favorite = ! b.favorite;
+    const list = ids.map( node ).filter( function( b ) { return b && ! isFolder( b ); } );
+    if( ! list.length || ! canEdit() ) return;
+    const on = list.some( function( b ) { return ! b.favorite; } );
+    list.forEach( function( b ) { b.favorite = on; } );
     if( save() ) render();
 }
 

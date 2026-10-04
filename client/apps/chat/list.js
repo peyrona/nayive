@@ -41,7 +41,6 @@
         S.devices  = r.devices || 0;
         S.vapid    = r.vapid || S.vapid;
         S.myName   = r.name || "";
-        S.motto    = r.motto || "";
         S.users    = r.users || [];
         C.onCalls( r, S );   // call.js: calls on or off, a call ringing for me
 
@@ -231,11 +230,9 @@
         var head = h( "div", { class: "topbar list-head", attrs: { id: "listHead" } } );
         if( owner )
         {
-            // The icon + "Chat", and under both - when the owner wrote one in
-            // "Your profile" - their motto, in small print (renderList paints it).
+            // The icon + "Chat".
             head.appendChild( h( "div", { class: "brand" },
-                h( "div", { class: "brand-row" }, C.ic( "chat", "app-icon" ), h( "h1", { class: "app-title", text: "Chat" } ) ),
-                h( "div", { class: "app-motto", attrs: { id: "listMotto", hidden: true } } ) ) );
+                h( "div", { class: "brand-row" }, C.ic( "chat", "app-icon" ), h( "h1", { class: "app-title", text: "Chat" } ) ) ) );
         }
         else head.appendChild( h( "h1", { class: "app-title-guest", text: "Chat" } ) );
 
@@ -254,18 +251,21 @@
         var sys = h( "div", { class: "tb-group tb-sys" } );
         if( owner )
             [ [ "plus", "chat.newChat", function () { C.openNewChat(); }, "newChatBtn" ],
-              [ "user", "chat.editProfile", function () { C.editMyName(); }, "profileBtn" ],
-              [ "clock", "chat.autoDelete", function () { C.openAutoDelete(); }, "autoDelBtn" ],
+              [ "gear", "ui.settings", function () { C.openSettings(); }, "settingsBtn" ],
               [ "help", "chat.help", function () { C.showHelp(); }, "helpBtn" ]
             ].forEach( function ( b )
             {
                 var el = C.btn( b[ 0 ], b[ 1 ], b[ 2 ] );
                 el.id = b[ 3 ];
-                ( b[ 0 ] === "help" ? sys : tools ).appendChild( el );
+                ( b[ 0 ] === "plus" ? tools : sys ).appendChild( el );
             } );
         else sys.appendChild( moreBtn );
         var actions = h( "div", { class: "topbar-actions" }, tools, sys );
         actions.appendChild( h( "div", { class: "sync-indicator", attrs: { id: "syncIndicator" } } ) );   // the plug, last
+        // The owner: the item browser's selection group comes first (browser.js
+        // draws it while chats are picked; empty and hidden until then).
+        var selBar = owner && NayiveUI.browser ? h( "div", { class: "tb-group", attrs: { id: "selActions", hidden: true } } ) : null;
+        if( selBar ) actions.insertBefore( selBar, tools );
         head.appendChild( actions );
 
         // The shared fold (ui.js): the magnifier opens the field, and only a
@@ -291,6 +291,7 @@
         var rows = h( "div", { class: "rows", attrs: { id: "rows" } } );
         side.appendChild( h( "div", { class: "view", attrs: { id: "vList" } }, head, hint, filters, rows ) );
 
+        if( selBar ) wireBrowser( rows, selBar, search, searchBtn );
         if( owner ) return;
         var menu = h( "div", { class: "top-menu", attrs: { id: "listMenu", hidden: true } } );
         [ [ "bell", "chat.notifications", function () { C.guestNotifications(); } ],
@@ -305,6 +306,96 @@
         document.body.appendChild( menu );
         NayiveUI.wireMenu( { btn: moreBtn, menu: menu, onPick: function ( item ) { if( item._act ) item._act(); } } );
     };
+
+    // ---------------------------------------------------------------------
+    // the item browser (shared/browser.js, the owner's page): pick chats and
+    // act on them - right-click, the row's ⋮, a long-press, the header group.
+    // Each action calls what the open chat's ⋮ calls (conv.js, list.js).
+    // ---------------------------------------------------------------------
+
+    // Side by side (wider than a phone) a click on a chat still opens it, as
+    // it always has: it picks the chat and shows it, like eMail's wide view.
+    // A phone, or a window as narrow as one: a tap opens, a mouse click picks
+    // and a double-click opens (docs/item-browser-plan.md, decision 1).
+    var MQ_WIDE = window.matchMedia( "(min-width: 641px)" );
+
+    // Where the user is: the list's keys (arrows, Del, Esc...) only while
+    // the last press or focus was in the list's pane - never while reading a
+    // chat beside it (its arrows scroll the messages).
+    var listSide = true;
+    document.addEventListener( "pointerdown", function ( e ) { listSide = ! ( e.target.closest && e.target.closest( ".main" ) ); }, true );
+    document.addEventListener( "focusin", function ( e )
+    {
+        if( ! e.target.closest ) return;
+        if( e.target.closest( ".main" ) ) listSide = false;
+        else if( e.target.closest( ".side" ) ) listSide = true;
+    }, true );
+
+    function listOn()
+    {
+        var v = document.getElementById( "vList" );
+        if( ! v || ! v.offsetParent ) return false;    // a side screen over it, or a phone inside a chat
+        if( document.querySelector( ".editor-backdrop, .call-screen:not(.small), .ctx" ) ) return false;
+        var ev = window.event;
+        return ! ( ev && ev.type === "keydown" && ! listSide );
+    }
+
+    function chatsOf( ids ) { return ids.map( C.convOf ).filter( Boolean ); }
+    function anyNot( ids, flag ) { return chatsOf( ids ).some( function ( c ) { return ! c[ flag ]; } ); }
+
+    // One chat after another: each waits for its summary (two at once race).
+    async function eachPref( ids, pref )
+    {
+        for( var i = 0; i < ids.length; i++ ) await C.setPref( pref, ids[ i ] );
+    }
+
+    // Built once the dictionary is in (C.start runs after NayiveI18n.ready).
+    function actionList()
+    {
+        function one( ids ) { return ids.length === 1; }
+        return [
+            { id: "open", label: T( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
+              run: function ( ids ) { C.openConv( ids[ 0 ] ); } },
+            // A toggle: Pin when one of them is not pinned (then all are), else Unpin.
+            { id: "pin", icon: "pin", bar: 1, phone: 1, group: 1,
+              label: function ( ids ) { return T( anyNot( ids, "pin" ) ? "chat.pin" : "chat.unpin" ); },
+              run: function ( ids ) { eachPref( ids, { pin: anyNot( ids, "pin" ) } ); } },
+            { id: "mute", bar: 2, phone: 1, group: 1,
+              icon: function ( ids ) { return anyNot( ids, "mute" ) ? "bellOff" : C.ic( "bell" ).outerHTML; },
+              label: function ( ids ) { return T( anyNot( ids, "mute" ) ? "chat.mute" : "chat.unmute" ); },
+              run: function ( ids ) { eachPref( ids, { mute: anyNot( ids, "mute" ) } ); } },
+            { id: "read", label: T( "chat.markRead" ), icon: "mailOpen", bar: 3, group: 1,
+              when: function ( ids ) { return chatsOf( ids ).some( function ( c ) { return c.unread; } ); },
+              run: function ( ids ) { ids.forEach( function ( id ) { C.markConvRead( id ); } ); } },
+            // The chat's ⋮ -> Delete -> Delete chat (info.js): for me only,
+            // with Undo, so no question. One chat at a time: the shared Undo
+            // holds one delete, and a second toast makes the first final.
+            { id: "del", label: T( "chat.deleteChat" ), icon: "trash", key: "Del", bar: 9, phone: 1, danger: true, group: 2,
+              when: one,
+              run: function ( ids ) { var c = C.convOf( ids[ 0 ] ); if( c ) C.clearChat( c ); } }
+        ];
+    }
+
+    function wireBrowser( rows, bar, search, searchBtn )
+    {
+        C.browse = NayiveUI.browser( {
+            list:    rows,
+            row:     ".row[data-conv]",
+            idOf:    function ( el ) { return el.dataset.conv; },
+            bar:     bar,
+            // No round tick on the avatar: acting on several chats is rare, and
+            // it only confused. Right-click, the row ⋮, long-press and
+            // Ctrl/Shift+click still pick.
+            ticks:   false,
+            actions: actionList(),
+            area:    [ { id: "newChat", label: T( "chat.newChat" ), icon: "plus", run: function () { C.openNewChat(); } } ],
+            active:  listOn,
+            open:    function ( id ) { C.openConv( id ); },
+            // A click (not an arrow key: opening moves the focus to the box).
+            preview: function ( id, e ) { if( MQ_WIDE.matches && ! ( e && e.type === "keydown" ) ) C.openConv( id ); },
+            search:  function () { if( search.offsetParent ) search.focus(); else searchBtn.click(); }
+        } );
+    }
 
     function matches( c )
     {
@@ -341,13 +432,6 @@
 
         var pills = document.querySelectorAll( "#filters .pill" );
         pills.forEach( function ( p ) { p.classList.toggle( "is-active", p.dataset.f === S.filter ); } );
-        var motto = document.getElementById( "listMotto" );
-        if( motto )
-        {
-            motto.textContent = S.motto || "";
-            motto.title = S.motto || "";        // the long ones are cut with an ellipsis
-            motto.hidden = ! S.motto;
-        }
 
         var ttl = document.getElementById( "listTtl" );
         if( ttl )
@@ -391,9 +475,9 @@
         }
         else if( last )
         {
-            if( last.from === w.me && ! last.deleted ) prev.appendChild( C.tickEl( c.id, last ) );
+            if( last.from === w.me ) prev.appendChild( C.tickEl( c.id, last ) );
             if( pv[ 0 ] ) prev.appendChild( C.ic( pv[ 0 ] ) );
-            var who = ( c.kind === "g" && last.from !== w.me && ! last.deleted ) ? C.nameOf( last.from, c.id ) + ": " : "";
+            var who = ( c.kind === "g" && last.from !== w.me ) ? C.nameOf( last.from, c.id ) + ": " : "";
             prev.appendChild( h( "span", { text: who + pv[ 1 ] } ) );
         }
         else if( C.owns( c ) && c.kind === "d" )
@@ -408,9 +492,11 @@
         if( c.mute ) l2.appendChild( h( "span", { class: "flag" }, C.ic( "bell-off" ) ) );
         if( c.unread ) l2.appendChild( h( "span", { class: "badge", text: String( c.unread ) } ) );
 
+        // The owner's list: the item browser opens and picks (wireBrowser).
+        // A person's page (no browser.js): a click opens, as before.
         return h( "div", { class: "row" + ( c.unread ? " unread" : "" ) + ( S.open === c.id ? " is-open" : "" ),
                            attrs: { role: "button", tabindex: "0" }, data: { conv: c.id },
-                           on: { click: function () { C.openConv( c.id ); },
+                           on: C.browse ? {} : { click: function () { C.openConv( c.id ); },
                                  keydown: function ( e ) { if( e.target === this && ( e.key === "Enter" || e.key === " " ) ) { e.preventDefault(); C.openConv( c.id ); } } } },
             C.withDot( C.avatar( c.id, c.name, "lg" ), c.id ),
             h( "div", { class: "body" },
@@ -432,7 +518,9 @@
     // group, a person), so it stays off the list for good.
     C.deleteConv = function ( id, msg, call, gone )
     {
-        C.leaveToList();
+        // From the chat's ⋮ it is the open one; from the list's menu another
+        // chat may be open beside the list: that one stays.
+        if( ! S.open || S.open === id ) C.leaveToList();
         going.add( id );
         C.renderList();
         var mine = convUndo = { id: id };
@@ -907,8 +995,6 @@
     // ---------------------------------------------------------------------
 
     // One text field in a dialog. Resolves to the text, or "" when cancelled.
-    // o.more: an extra field the caller builds and reads itself afterwards
-    // (editMyName's motto) - what this resolves to is still the one text.
     C.askText = function ( o )
     {
         return new Promise( function ( resolve )
@@ -917,13 +1003,9 @@
                                       value: o.value || "" } );
             var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.accept" ) } } );
             var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
-            // Escape only while it is on top: the picture picker of o.more
-            // (editMyName) closes first.
             var d = NayiveUI.modal( { cls: "sheet--pack", title: o.title, escape: function () { done( "" ); },
                                       top: function () { return document.body.lastElementChild === d.back; } } );
-            [ o.top,
-              h( "div", { class: "field" }, h( "label", { attrs: { for: "askText" }, text: o.label || "" } ), input ),
-              o.more,
+            [ h( "div", { class: "field" }, h( "label", { attrs: { for: "askText" }, text: o.label || "" } ), input ),
               o.hint ? h( "p", { class: "hint", text: o.hint } ) : null,
               h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { if( n ) d.sheet.appendChild( n ); } );
             d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
@@ -931,26 +1013,17 @@
             ok.addEventListener( "click", function () { var v = input.value.trim(); if( v ) done( v ); else input.focus(); } );
             no.addEventListener( "click", function () { done( "" ); } );
             input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) ok.click(); } );
-            if( o.more )
-                o.more.querySelectorAll( "input" ).forEach( function ( el )
-                {
-                    el.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) ok.click(); } );
-                } );
             setTimeout( function () { input.focus(); input.select(); }, 30 );
         } );
     };
 
-    // Your name, your picture and your motto. The circle on top picks a
-    // picture (or the bin under it drops it); the motto is optional and shows
-    // under "Chat" in the bar. Nothing is sent until Accept.
-    C.editMyName = async function ()
+    // Settings › Your profile: your name and your picture, as the others
+    // see them. The circle on top picks a picture (or the bin under it
+    // drops it). Nothing is sent until the dialog's Save.
+    C.profilePane = function ()
     {
         var pick = null, drop = false, url = "";
-        var was   = S.motto || "";
-        var motto = h( "input", { attrs: { type: "text", id: "askMotto", maxlength: "100", autocomplete: "off",
-                                           placeholder: T( "chat.mottoPh" ) }, value: was } );
-        var mottoField = h( "div", { class: "field" },
-                            h( "label", { attrs: { for: "askMotto" }, text: T( "chat.motto" ) } ), motto );
+        var input = h( "input", { attrs: { type: "text", id: "myName", maxlength: "60", autocomplete: "off" }, value: S.owner || "" } );
         var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
         var bin = h( "button", { class: "text-btn ghost danger", attrs: { type: "button" },
@@ -985,18 +1058,82 @@
         }
         show();
 
-        var name = await C.askText( { title: T( "chat.yourProfile" ), label: T( "chat.name" ), value: S.owner, hint: T( "chat.myNameHint" ),
-                                      top: h( "div", { class: "face-pick" }, face, bin ), more: mottoField } );
-        if( url ) URL.revokeObjectURL( url );
-        if( ! name ) return;
-        var mot = motto.value.trim();
-        try
+        return {
+            el: h( "div", {},
+                   h( "div", { class: "face-pick" }, face, bin ),
+                   h( "div", { class: "field" }, h( "label", { attrs: { for: "myName" }, text: T( "chat.name" ) } ), input ),
+                   h( "p", { class: "hint", text: T( "chat.myNameHint" ) } ) ),
+            input: input,
+            focus: function () { input.focus(); input.select(); },
+            check: function () { return !! input.value.trim(); },
+            dispose: function () { if( url ) URL.revokeObjectURL( url ); url = ""; },
+            save: async function ()
+            {
+                var name = input.value.trim();
+                try
+                {
+                    if( pick ) await C.putPicture( "me/photo", pick );
+                    else if( drop ) await C.api( "DELETE", "me/photo" );
+                    if( name !== S.owner ) await C.api( "PUT", "me", { name: name } );
+                    if( pick || drop || name !== S.owner ) await C.loadSummary();
+                }
+                catch( e ) { C.fail( e ); }
+            }
+        };
+    };
+
+    // The list's gear: Settings, two tabs - Your profile, and Auto-delete
+    // (info.js autoDeletePane). One Save for both. tab: "autodel" opens on
+    // that one (a chat's Info line about it).
+    C.openSettings = function ( tab )
+    {
+        var prof = C.profilePane(), del = C.autoDeletePane();
+        var panes = { profile: prof, autodel: del };
+        var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.save" ) } } );
+        var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
+        var tabs = h( "div", { class: "set-tabs", attrs: { role: "tablist" } } );
+        // Escape only while it is on top: the picture picker closes first.
+        var d = NayiveUI.modal( { cls: "chat-settings", title: T( "ui.settings" ), escape: done,
+                                  top: function () { return document.body.lastElementChild === d.back; } } );
+        d.sheet.appendChild( tabs );
+        [ [ "profile", "chat.yourProfile" ], [ "autodel", "chat.autoDelete" ] ].forEach( function ( t )
         {
-            if( pick ) await C.putPicture( "me/photo", pick );
-            else if( drop ) await C.api( "DELETE", "me/photo" );
-            if( name !== S.owner || mot !== was ) await C.api( "PUT", "me", { name: name, motto: mot } );
-            if( pick || drop || name !== S.owner || mot !== was ) await C.loadSummary();
+            tabs.appendChild( h( "button", { class: "pill", attrs: { type: "button", role: "tab" }, data: { tab: t[ 0 ] },
+                                             on: { click: function () { show( t[ 0 ] ); } } }, T( t[ 1 ] ) ) );
+            panes[ t[ 0 ] ].el.dataset.pane = t[ 0 ];
+            d.sheet.appendChild( panes[ t[ 0 ] ].el );
+            panes[ t[ 0 ] ].input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
+        } );
+        d.sheet.appendChild( h( "div", { class: "sheet-actions" }, no, ok ) );
+        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
+
+        function show( key )
+        {
+            tabs.querySelectorAll( ".pill" ).forEach( function ( b )
+            {
+                var on = b.dataset.tab === key;
+                b.classList.toggle( "is-active", on );
+                b.setAttribute( "aria-selected", on ? "true" : "false" );
+            } );
+            for( var k in panes ) panes[ k ].el.hidden = k !== key;
         }
-        catch( e ) { C.fail( e ); }
+        show( tab === "autodel" ? "autodel" : "profile" );
+        setTimeout( function () { panes[ tab === "autodel" ? "autodel" : "profile" ].focus(); }, 30 );
+
+        var closed = false;
+        function done() { if( closed ) return; closed = true; prof.dispose(); d.close(); }
+        function save()
+        {
+            if( closed ) return;
+            for( var k in panes )
+                if( ! panes[ k ].check() ) { show( k ); panes[ k ].focus(); return; }
+            var delChanged = del.changed();
+            prof.save().then( function () { prof.dispose(); } );
+            closed = true;
+            d.close();
+            if( delChanged ) del.save();
+        }
+        ok.addEventListener( "click", save );
+        no.addEventListener( "click", done );
     };
 } )();

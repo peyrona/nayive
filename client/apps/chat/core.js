@@ -47,7 +47,6 @@
         user:     "",           // the owner's Nayive account (chat.js; C.scope)
         me:       "o",          // my participant id
         owner:    "",           // the owner's name, as people see it
-        motto:    "",           // the owner's own line under the app's name (optional)
         myName:   "",           // a person's own name (guest)
         people:   {},           // pid -> name
         convs:    [],           // the list, as the server sent it
@@ -182,7 +181,13 @@
         help:        '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
         home:        '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
         phone2:      '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
-        folder:      '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'
+        folder:      '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+        textfmt:     '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+        bold:        '<path d="M6 4h8a4 4 0 0 1 0 8H6z"/><path d="M6 12h9a4 4 0 0 1 0 8H6z"/>',
+        italic:      '<line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/>',
+        strike:      '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/>',
+        list:        '<line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/>' +
+                     '<circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/>'
     };
 
     C.icon = function ( name, cls )
@@ -473,18 +478,20 @@
     C.preview = function ( m, conv )
     {
         if( ! m ) return [ null, "" ];
-        if( m.deleted ) return [ "ban", C.T( m.from === C.me( conv ) ? "chat.youDeleted" : "chat.deleted" ) ];
         switch( m.kind )
         {
-            case "photo": return [ "camera", m.text || C.T( "chat.photo" ) ];
-            case "file":  return [ "file", m.text || ( m.file && m.file.name ) || C.T( "chat.file" ) ];
+            case "photo": return [ "camera", C.stripMarks( m.text ) || C.T( "chat.photo" ) ];
+            case "file":  return [ "file", C.stripMarks( m.text ) || ( m.file && m.file.name ) || C.T( "chat.file" ) ];
             case "loc":   return [ "pin-map", ( m.loc && m.loc.place ) || C.T( "chat.location" ) ];
             case "card":  return [ "user", ( m.card && m.card.name ) || C.T( "chat.contact" ) ];
             case "poll":  return [ "poll", ( m.poll && m.poll.q ) || C.T( "chat.poll" ) ];
             case "call":  return C.callPreview( m, conv );   // call.js
         }
-        return [ null, m.text || "" ];
+        return [ null, C.stripMarks( m.text ) ];
     };
+
+    // A text without its marks (marks.js), for one-line places.
+    C.stripMarks = function ( text ) { return text ? window.NayiveChatMarks.strip( text ) : ""; };
 
     C.convOf = function ( id )
     {

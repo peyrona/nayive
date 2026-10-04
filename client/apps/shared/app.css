@@ -280,6 +280,15 @@ a:hover            { text-decoration: underline; opacity: 0.85; }
 .app-title.nayive-home-link:hover    { text-decoration: underline; text-underline-offset: 3px; }
 .app-icon.nayive-home-link:hover     { opacity: 0.7; }
 
+/* Desktop mode: a window behind others (html[data-win-behind], set by the
+   desktop) shows its icon + name in the same colour, softer. */
+html[data-win-behind] .topbar .app-icon,
+html[data-win-behind] .header .app-icon,
+html[data-win-behind] .topbar h1,
+html[data-win-behind] .header h1,
+html[data-win-behind] .trip-header .app-icon,
+html[data-win-behind] .app-title     { opacity: 0.55; }
+
 /* Chat has unread messages (shared/ui.js, CHAT DOT): a red dot on the app
    icon's top-right corner, placed by JS. It lets the tap through to the icon.
    It blinks 5 times when a new message arrives - on purpose also with
@@ -541,8 +550,12 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 /* The group holding the field grows with it: the header's buttons stay at
    the right edge, the view bar's right after the field. */
 .topbar-actions:has(.search-fold.is-open),
+.header-actions:has(.search-fold.is-open),
 .tb-group:has(> .search-fold.is-open)       { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
 .tb-end:has(> .search-fold.is-open)         { flex: 1 1 auto; min-width: 0; }
+/* A card .header's title grows at rest (it pushes the buttons right); while
+   searching it keeps its width, as a .topbar's does, and the field gets the room. */
+.header.searching h1        { flex-grow: 0; }
 .search-tight .icon-btn:not(.search-fold .icon-btn),
 .search-tight .sep,
 .search-tight .tb-sep,
@@ -740,7 +753,8 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  *   query), plus (a compose bar).
  *
  * A dialog whose only action is "close" has NO bottom row - ui.js moves the
- * lone close button to the top-right corner as .sheet-close.
+ * lone close button to the top-right corner, on the title's line, as
+ * .sheet-close.
  * ---------------------------------------------------------------------------*/
 
 
@@ -842,8 +856,11 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
 }
 .sheet > p.dialog-text:last-of-type { margin-bottom: 4px; }
 
-/* A dialog header row: a title on the left, one small control on the right
- * (an "all day" switch, a step counter). */
+/* A dialog header row: a title on the left, small controls on the right (an
+ * "all day" switch, a step counter; .sheet-tool buttons, then the ×). The
+ * title takes the room, so a long one wraps instead of running under them.
+ * The × sits as near the corner as when it was pinned there, and its 32px
+ * disc does not make the line taller than the title. */
 .sheet-header
 {
     display: flex;
@@ -852,7 +869,12 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
     gap: 12px;
     margin: 2px 0 16px;
 }
-.sheet-header h2   { margin: 0; }
+.sheet-header h2   { margin: 0; flex: 1 1 auto; min-width: 0; }
+.sheet-header > .sheet-close,
+.sheet-header > .sheet-tool  { margin: -6px 0; }
+.sheet-header > .sheet-close:last-child { margin-right: -6px; }
+.sheet-header > .sheet-tool + .sheet-tool,
+.sheet-header > .sheet-tool + .sheet-close { margin-left: -8px; }
 
 /* SWITCH - an on / off slider: <label class="switch"><input type="checkbox">
  * <span class="track"></span></label>, or the same as a <span> inside a label.
@@ -1164,6 +1186,9 @@ input[type="range"]
     background: var(--accent);
     border-color: var(--accent);
 }
+/* A settings dialog's tabs: a row of .pill buttons over its panes
+   (Trips, Chat). */
+.set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
 
 .tag
 {
@@ -2113,7 +2138,10 @@ button { -webkit-touch-callout: none; }
  * ---------------------------------------------------------------------------*/
 /* The document name is an EDIT IN PLACE pair: .file-label (span, at rest) swaps
  * for .file-label-input (the box). Both carry the shared .field-edit-text /
- * .field-edit look - only the header layout is set here. */
+ * .field-edit look - only the header layout is set here. A name too long to fit
+ * loses its START ("...informe 2026.docx"): the end, with the extension, is what
+ * tells documents apart. rtl puts the ellipsis on the left; the name itself sits
+ * in a <bdi> so it still reads left to right. */
 .file-label
 {
     flex: 1 1 auto;
@@ -2122,6 +2150,8 @@ button { -webkit-touch-callout: none; }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    direction: rtl;
+    text-align: left;
 }
 .file-label-input        { flex: 1 1 auto; min-width: 0; }
 
@@ -2713,3 +2743,195 @@ html.nv-locked body { visibility: hidden; }
 }
 .lock-card input { flex: 1 1 0; min-width: 0; }
 .lock-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--danger); }
+
+
+/* -----------------------------------------------------------------------------
+ * ITEM BROWSER  (shared/browser.js)  -  docs/item-browser-plan.md
+ *
+ * One way to pick things in a list and act on them, in every list app:
+ * - .pick-tick: the round tick browser.js puts at the start of each row. With a
+ *   mouse it shows on hover (and on a picked row); on touch only while picking
+ *   (the list has .is-picking). A card grid places it itself (absolute corner).
+ * - .row-more: the row ⋮ browser.js adds at the end of a row (or the app's own
+ *   [data-more]). Always there on touch; with a mouse on hover / when picked.
+ * - .is-selected paints a picked row (.card-row already fills it with accent).
+ * - .sel-group: the header .tb-group of the selection (× count, Select all,
+ *   the main actions, ⋮). On a phone the app's other tools step aside while
+ *   something is picked.
+ * - .item-menu: the one popup menu (right-click = row ⋮ = header ⋮), the
+ *   .top-menu look plus a key column and greyed rows.
+ * - .ntree: the shared tree (side pane, "Move to…", the phone's slide-in
+ *   sheet: .tree-pane.tree-sheet + .tree-backdrop).
+ * - .drop-target / .drop-before / .drop-after / .dragging: drag and drop.
+ * ---------------------------------------------------------------------------*/
+.pick-tick
+{
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    border: 1.5px solid var(--text-faint);
+    border-radius: 50%;
+    background: transparent;
+    color: transparent;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--tr-fast);
+}
+.pick-tick svg                              { width: 13px; height: 13px; }
+.nb-list .is-selected .pick-tick,
+.nb-list.is-picking .pick-tick              { opacity: 1; }
+.nb-list .is-selected .pick-tick            { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.nb-list .card-row.is-selected .pick-tick   { background: var(--on-accent); border-color: var(--on-accent); color: var(--accent); }
+.nb-list.is-picking .pick-tick              { border-color: var(--text-dim); }
+
+/* A row's ⋮ sits at its end; the picked, accent-filled row keeps it legible. */
+.row-more                                   { flex: 0 0 auto; margin-left: auto; }
+.nb-list .is-selected .row-more,
+.ntree .tree-row.is-active > .row-more      { color: inherit; }
+
+@media (hover: hover) and (pointer: fine)
+{
+    .nb-list [aria-selected]:hover .pick-tick    { opacity: 1; }
+    .nb-list [aria-selected]:not(:hover):not(.is-selected):not(:focus-within) .row-more,
+    .ntree .tree-row:not(:hover):not(:focus-within) > .row-more { visibility: hidden; }
+}
+@media (hover: none), (pointer: coarse)
+{
+    .nb-list:not(.is-picking) .pick-tick         { display: none; }
+}
+
+/* The keyboard's row. */
+.nb-list [aria-selected]:focus               { outline: none; }
+.nb-list [aria-selected]:focus-visible       { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
+
+/* The selection group in the header: the count with its ×. */
+.icon-btn.sel-count
+{
+    width: auto;
+    gap: 4px;
+    padding: 0 10px 0 7px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.icon-btn.sel-count svg                      { width: 15px; height: 15px; }
+.icon-btn.sel-count:hover                    { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+@media (max-width: 640px)
+{
+    .has-selection > .tb-group:not(.sel-group),
+    .topbar:has(.has-selection) > .tb-modes,
+    .header:has(.has-selection) > .tb-modes      { display: none; }
+}
+
+/* The one popup menu. */
+.item-menu                                   { max-height: calc(100vh - 16px); overflow-y: auto; min-width: 220px; max-width: min(320px, calc(100vw - 16px)); }
+.item-menu .menu-item                        { padding: 8px 10px; font-size: 0.92rem; }
+.item-menu .menu-item[disabled]              { opacity: 0.42; cursor: default; background: none; }
+.item-menu .menu-item:focus-visible          { outline: 2px solid var(--accent); outline-offset: -2px; }
+.item-menu .mi-label                         { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-menu .mi-key                           { flex: 0 0 auto; padding-left: 18px; color: var(--text-dim); font-size: 0.78rem; }
+.item-menu .mi-noicon                        { width: 18px; flex: 0 0 auto; }
+@media (hover: none), (pointer: coarse)
+{
+    .item-menu .menu-item                    { padding: 11px 12px; font-size: 0.95rem; }
+    .item-menu .mi-key                       { display: none; }
+}
+
+/* The tree. */
+.ntree                                       { display: flex; flex-direction: column; gap: 1px; min-width: max-content; }
+.ntree .tree-row
+{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 30px;
+    padding: 4px 6px 4px calc(4px + var(--depth, 0) * 16px);
+    border-radius: var(--radius-s);
+    color: var(--text);
+    font-size: 0.87rem;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+.ntree .tree-row:hover                       { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.ntree .tree-row.is-active                   { background: var(--accent); color: var(--on-accent); }
+.ntree .tree-row:focus                       { outline: none; }
+.ntree .tree-row:focus-visible               { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
+.ntree .tree-row.is-off                      { opacity: 0.35; cursor: default; }
+.ntree .tree-row.is-off:hover                { background: none; }
+/* The arrow: a 24 px target (a finger on a tablet), the row no taller. */
+.ntree .twisty                               { display: inline-flex; width: 24px; height: 24px; margin: -4px -4px -4px -2px; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--text-dim); transition: transform var(--tr-fast); }
+.ntree .twisty svg                           { width: 14px; height: 14px; }
+.ntree .twisty.leaf                          { visibility: hidden; }
+.ntree .tree-row.is-open > .twisty           { transform: rotate(90deg); }
+.ntree .tree-ic                              { display: inline-flex; flex: 0 0 auto; color: var(--text-dim); }
+.ntree .tree-ic svg                          { width: 16px; height: 16px; }
+.ntree .tree-row.is-active .twisty,
+.ntree .tree-row.is-active .tree-ic          { color: inherit; }
+.ntree .tree-name                            { flex: 1 1 auto; }
+.ntree .tree-badge
+{
+    flex: 0 0 auto;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.ntree .tree-row.is-active .tree-badge       { background: color-mix(in srgb, var(--on-accent) 25%, transparent); }
+.ntree .row-more                             { width: 26px; height: 26px; margin-left: 4px; }
+
+/* "Move to…": the same tree in a dialog. */
+.pick-tree
+{
+    height: min(320px, 50vh);
+    overflow: auto;
+    margin-bottom: 12px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--bg);
+}
+
+/* Drag and drop. */
+.dragging                                    { opacity: 0.4; }
+.drop-target                                 { background: color-mix(in srgb, var(--accent) 30%, transparent) !important; outline: 2px solid var(--accent); outline-offset: -2px; }
+.drop-before                                 { box-shadow: inset 0 2px 0 var(--accent); }
+.drop-after                                  { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* The phone's slide-in tree. */
+.tree-backdrop                               { display: none; }
+@media (max-width: 640px)
+{
+    .tree-pane.tree-sheet
+    {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 95;
+        display: block;
+        width: 82vw;
+        max-width: 300px;
+        padding-top: 12px;
+        overflow: auto;
+        background: var(--bg);
+        transform: translateX(-100%);
+        transition: transform 0.18s ease;
+    }
+    .tree-pane.tree-sheet.open               { transform: none; box-shadow: 0 0 32px rgba(0, 0, 0, 0.45); }
+    .tree-backdrop.open                      { display: block; position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, 0.45); }
+    .tree-sheet .ntree                       { min-width: 0; }
+    .tree-sheet .ntree .tree-row             { min-height: 40px; }
+    .tree-sheet .ntree .tree-name            { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -79,29 +79,17 @@ let bigMode         = false;         // the "Biggest files" list is on screen (l
 let trashMode       = false;         // the "Papelera" view is open instead of the file tree
 let trashItems      = [];            // entries from GumApi.trashList() while trashMode is on
 let trashDays       = null;          // auto-delete period (days) shown in the Papelera bar
-let dragPaths       = null;          // paths being drag-moved inside Drive (null = not an internal drag)
-let kbdPane         = 'list';        // which pane the arrow keys drive: 'tree' (folders) | 'list' (files)
-let kbdTreePath     = null;          // tree row under the keyboard cursor while kbdPane === 'tree'
 
 // A search of any kind - the box's own, the advanced one, or the "Biggest
 // files" list - is on screen.
 function isSearching() { return !! searchQuery.trim() || !! advSearch || bigMode; }
 
-// Phone layout: the folder tree becomes a slide-in sheet, the search field
+// Phone layout: the folder tree becomes a slide-in sheet (the shared tree's
+// openSheet / closeSheet), the search field
 // collapses behind a magnifier, the app launchers are hidden (see @media ≤640px).
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 function isPhone() { return PHONE.matches; }
 
-function openTreeSheet()
-{
-    document.getElementById( 'treePane'     ).classList.add( 'open' );
-    document.getElementById( 'treeBackdrop' ).classList.add( 'open' );
-}
-function closeTreeSheet()
-{
-    document.getElementById( 'treePane'     ).classList.remove( 'open' );
-    document.getElementById( 'treeBackdrop' ).classList.remove( 'open' );
-}
 
 // Open a file / editor URL. On a phone there is no visible way back from a new
 // browser tab, so navigate in place — the browser's Back button returns to Drive.

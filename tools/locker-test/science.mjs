@@ -130,7 +130,7 @@ try
     ok( pics.split( "\n" ).length === 3 && ! /\[ \]/.test( pics ), "three picture sources, all ticked" );
     await shot( "settings" );
     // Untick SINC, save, and read it back from the server.
-    await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-check')].find(l=>/SINC/.test(l.textContent)).querySelector('input').click();document.querySelector('#salonSettings .sheet-actions .btn-primary').click();1` );
+    await p.evaluate( `[...document.querySelectorAll('#salonSettings .salon-check')].find(l=>/SINC/.test(l.textContent)).querySelector('input').click();document.querySelector('#salonSettings .sheet-close').click();1` );
     await sleep( 1500 );
     const saved = JSON.parse( await p.evaluate( `fetch('/api/files?file=data/science.json').then(r=>r.text())` ) );
     ok( saved.news && ! saved.news.includes( "sinc" ) && saved.news.includes( "tcEs" ) && saved.langs.join() === "es,en,pt", "saved per user in data/science.json" );

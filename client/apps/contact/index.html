@@ -36,17 +36,19 @@
     <script src="../shared/gum-api.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
+    <!-- The item browser: picking, the one menu, the keys, the groups tree. -->
+    <script src="../shared/browser.js" defer></script>
     <script>
     NayiveI18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
         NayiveUI.firstRun( {
             app:   'contact',
             title: 'Contacts',
-            lead:  T( 'contact.introLead' ),
+            lead:  [ T( 'contact.introLead' ), T( 'contact.introPick' ) ],
             buttons: [
                 { sel: '#dedupBtn',  text: T( 'contact.introDedup' ) },
                 { sel: '#settingsBtn', text: T( 'contact.introSettings' ) },
-                { sel: '#selectBtn', text: T( 'contact.introSelect' ) },
+                { sel: '#treeBtn',   text: T( 'contact.introGroups' ) },
                 { sel: '#addBtn',    text: T( 'contact.introAdd' ) },
                 { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
                   text: T( 'contact.introSync' ) }
@@ -71,24 +73,10 @@
            always the top-most thing on screen, above the detail card. */
         .sheet-backdrop[role="dialog"] { z-index: 120; }
 
-        /* Text inputs that sit outside a .field (search bar, multi-value rows) —
-           app.css styles the look; they only need their width set here. */
-        .search-input,
+        /* Text inputs that sit outside a .field (multi-value rows) — app.css
+           styles the look; they only need their width set here. */
         .multi-row input,
         .multi-row select { width: 100%; }
-
-        /* Search */
-        .search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-        .search-box { position: relative; flex: 1 1 auto; min-width: 0; }
-        .search-box > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
-        /* Look from app.css (FORM FIELD) like every other text field; only the
-           right padding is local, to clear the magnifier / clear button (44px:
-           the clear button is an .icon-btn.sm, 36px on a phone). */
-        .search-input { padding-right: 44px; }
-        /* The clear × is a shared .icon-btn.sm; only its place inside the field
-           and its hidden-until-you-type state are local. */
-        .search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; }
-        .search-clear.show { display: flex; }
 
 
         /* Contact list */
@@ -104,17 +92,30 @@
             text-transform: uppercase; letter-spacing: 0.04em;
             padding: 12px 2px 4px; border-bottom: 1px solid var(--line); margin-bottom: 2px;
         }
-        /* In a desktop window the title row is sticky too (shared/app.css), and
-           the search row pins right under it, so search is always one click
-           away. Padding, not margin, below it: rows slide under it unseen. The
-           letters pin under both; --win-search-h is measured on boot. */
-        html.is-windowed .search-row
+        /* In a desktop window the page does not scroll: .list-scroll does, so its
+           scroll bar runs from under the title row to the bottom, never over the
+           toolbar. It spans the card's side padding, so the bar sits on the
+           window's edge; the letters pin to its top. */
+        html.is-windowed,
+        html.is-windowed body { height: 100%; overflow: hidden; }
+        html.is-windowed .page > .page-inner > .card
         {
-            position: sticky; top: var(--win-head-h, 0px); z-index: 19;
-            background: var(--card);
-            margin-bottom: 0; padding-bottom: 16px;
+            display: flex; flex-direction: column;
+            height: 100vh; padding-bottom: 0;
         }
-        html.is-windowed .letter-head { top: calc(var(--win-head-h, 0px) + var(--win-search-h, 0px)); }
+        html.is-windowed .page > .page-inner > .card > .header { flex: 0 0 auto; margin-bottom: 0; }
+        html.is-windowed .list-scroll
+        {
+            flex: 1 1 auto; min-height: 0; overflow-y: auto;
+            margin: 0 -16px; padding: 0 16px 16px;
+        }
+        /* The gap under the title row scrolls away with the rows: as padding it
+           would leave a band where rows show above a pinned letter. */
+        html.is-windowed .list-scroll::before { content: ''; display: block; height: var(--space-4); }
+        html.is-windowed .letter-head { top: 0; }
+        /* The card fills the window: the rail hugs its right edge, clear of the scroll bar. */
+        html.is-windowed .az-rail   { right: 16px; }
+        html.is-windowed .az-bubble { right: 40px; }
 
         /* --- A-Z jump rail ---------------------------------------------------
            Fixed to the right edge of the *card*, not of the window: on a phone
@@ -177,30 +178,59 @@
         .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
         .face-pick-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
-        /* --- Pick-several mode (see MANUAL MERGE in the script) --------------
-           The duplicate scanner only finds what it can prove; two cards that
-           look the same to a human but share no phone / email never group. This
-           mode lets the eye do it: tick two rows in the list, then Merge - the
-           same preview sheet the Duplicates flow uses. */
-        .select-bar
-        {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
-            padding: 6px 8px 6px 4px;
-            background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-s);
-        }
-        .select-count { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; color: var(--text-dim); }
-
-        /* The tick is the same native checkbox the merge preview uses. */
-        .contact-row .pick
-        {
-            flex: 0 0 auto; width: 17px; height: 17px; margin-left: 2px;
-            accent-color: var(--accent); pointer-events: none;
-        }
-        .contact-row.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-
-        /* Long-pressing a row opens the mode; stop the phone from selecting the
-           name or popping its own copy callout while the finger is down. */
+        /* --- Picking (the shared item browser, see LIST in the script) ------
+           The round tick and the row ⋮ are the shared .pick-tick / .row-more
+           (app.css ITEM BROWSER); a picked row is tinted like a hover, only
+           stronger. A long-press picks: the phone must not select the name
+           or pop its own copy callout while the finger is down. */
         .contact-row { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+        .contact-row.is-selected,
+        .contact-row.is-selected:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+        .contact-row .pick-tick { margin-right: -4px; }
+        .ct-star { display: flex; flex: 0 0 auto; color: var(--warn); }
+        .ct-star svg { width: 15px; height: 15px; }
+
+        /* --- The groups tree (All contacts, Favourites, Groups) -------------
+           Above 640px the card widens and the tree sits left of the list; on a
+           phone it slides in from #treeBtn (the shared .tree-sheet, app.css).
+           The rail and its bubble follow the wider card's right edge. */
+        .ct-body { display: flex; align-items: flex-start; gap: 12px; }
+        .ct-body > .list-scroll { flex: 1 1 auto; min-width: 0; }
+        #tree.ntree { min-width: 0; }
+        #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .ct-where  { display: none; }
+        @media (min-width: 641px)
+        {
+            .page-inner { max-width: 700px; }
+            .tree-pane
+            {
+                flex: 0 0 auto; width: 190px;
+                position: sticky; top: calc(var(--win-head-h, 0px) + 8px);
+                max-height: calc(100vh - 100px); overflow: auto; padding-bottom: 12px;
+            }
+            .az-rail   { right: max(2px, calc(50% - 348px)); }
+            .az-bubble { right: max(24px, calc(50% - 326px)); }
+        }
+        @media (max-width: 640px)
+        {
+            /* The tree's button sits after the title, in the header (look LEFT). */
+            .header h1 { flex-grow: 0; }
+            .ct-where  { display: flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); }
+            #viewName  { min-width: 0; overflow-wrap: anywhere; }
+            /* The rows' ⋮ clear of the A-Z rail's catch area. */
+            .list-scroll:has(> .az-rail:not([hidden])) .contact-row { padding-right: 24px; }
+        }
+        /* In a desktop window the tree and the list each scroll on their own. */
+        html.is-windowed .ct-body { flex: 1 1 auto; min-height: 0; align-items: stretch; gap: 0; margin: 0 -16px; }
+        html.is-windowed .ct-body > .list-scroll { margin: 0; }
+        @media (min-width: 641px)
+        {
+            html.is-windowed .tree-pane
+            {
+                position: static; max-height: none;
+                padding: var(--space-4) 6px 12px 8px; border-right: 1px solid var(--line);
+            }
+        }
 
         .contact-meta { flex: 1 1 auto; min-width: 0; }
         .contact-name { font-size: 0.95rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -311,9 +341,26 @@
                         <line x1="14" y1="14" x2="18" y2="14"></line>
                     </svg>
                     <h1>Contacts</h1>
+                    <!-- Phones only (<= 640 px): the groups tree slides in; the
+                         name says which one is on screen (none for All contacts). -->
+                    <div class="ct-where">
+                        <button id="treeBtn" class="icon-btn" type="button" data-i18n-attr="title:contact.groups, aria-label:contact.groups">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9" y1="4" x2="9" y2="20"></line></svg>
+                        </button>
+                        <span id="viewName"></span>
+                    </div>
 
                     <div class="header-actions">
+                        <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+                        <div id="selActions" class="tb-group" hidden></div>
                         <div class="tb-group">
+                            <!-- The shared search fold (NayiveUI.searchFold, wireStaticUI). -->
+                            <div class="search-wrap">
+                                <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0, aria-label:ui.search">
+                            </div>
+                            <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            </button>
                             <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
                                 <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
@@ -335,27 +382,14 @@
                     </div>
                 </div>
 
-                <div class="search-row">
-                    <div class="search-box">
-                        <svg id="searchIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0">
-                        <button id="searchClear" class="icon-btn sm search-clear" data-i18n-attr="title:contact.clear">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        </button>
-                    </div>
-                    <button id="selectBtn" class="icon-btn" hidden data-i18n-attr="title:contact.selectMode">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6.2"></circle><circle cx="15" cy="12" r="6.2"></circle></svg>
-                    </button>
-                </div>
-
-                <div id="selectBar" class="select-bar" hidden>
-                    <button id="selectCancel" class="icon-btn" data-i18n-attr="title:ui.cancel">
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                    <span id="selectCount" class="select-count"></span>
-                    <button id="selectMergeBtn" class="text-btn" disabled></button>
-                </div>
-
+                <!-- The groups tree beside the list (on a phone it slides in from
+                     #treeBtn, in the header), then the list. In a desktop
+                     window both scroll on their own, under the toolbar. -->
+                <div class="ct-body">
+                <nav id="treePane" class="tree-pane" data-i18n-attr="aria-label:contact.groups">
+                    <div id="tree"></div>
+                </nav>
+                <div class="list-scroll">
                 <div id="contactList"></div>
 
                 <!-- A-Z jump rail + the drag bubble. Both are filled by render(). -->
@@ -371,6 +405,8 @@
                     </svg>
                     <p class="empty-title" id="emptyTitle"></p>
                     <p id="emptyBody"></p>
+                </div>
+                </div>
                 </div>
 
             </div>
@@ -624,23 +660,12 @@
             // in render(), which would repaint under a detail / edit / duplicates sheet.
             NayiveUI.wireRefresh( { store: store, read: loadContacts } );
 
-            // In a desktop window the search row is sticky (CSS above): its height
-            // tells the letter heads where to pin.
-            if( document.documentElement.classList.contains( 'is-windowed' ) && window.ResizeObserver )
-            {
-                const searchRow = document.querySelector( '.search-row' );
-                new ResizeObserver( () =>
-                    document.documentElement.style.setProperty( '--win-search-h', searchRow.offsetHeight + 'px' )
-                ).observe( searchRow );
-            }
-
             // Probe the API, then load. On a failed probe the shared helper bounces to the
             // sign-in page only when we are really online with nothing cached; otherwise it
             // opens on the local cache and the store syncs once the connection is back.
             NayiveUI.bootWithStore( store, async function( who )
             {
                 await loadContacts();
-                document.getElementById( 'searchInput' ).focus();   // ready to search straight away
             } );
         });
 
@@ -1742,8 +1767,14 @@
 
             listEl.innerHTML = '';
 
+            // The open group is gone (renamed or deleted elsewhere): all contacts.
+            if( view.indexOf( 'g:' ) === 0 && ! groupExists( view.slice( 2 ) ) ) view = 'all';
+            if( treeView ) treeView.render();
+            document.getElementById( 'viewName' ).textContent = view === 'all' ? '' : viewName( view );
+
             const matcher = buildMatcher( query );
-            const visible = matcher ? contacts.filter( matcher ) : contacts;
+            const shown   = view === 'all' ? contacts : contacts.filter( inView );
+            const visible = matcher ? shown.filter( matcher ) : shown;
 
             document.getElementById( 'searchInput' ).placeholder = '[' + contacts.length + '] ' + SEARCH_PLACEHOLDER();
 
@@ -1757,6 +1788,11 @@
                 {
                     document.getElementById( 'emptyTitle' ).textContent = T( 'contact.emptyTitle' );
                     document.getElementById( 'emptyBody' ).textContent  = T( 'contact.emptyBody' );
+                }
+                else if( ! shown.length )
+                {
+                    document.getElementById( 'emptyTitle' ).textContent = viewName( view );
+                    document.getElementById( 'emptyBody' ).textContent  = T( view === 'fav' ? 'contact.favEmpty' : 'contact.groupEmpty' );
                 }
                 else
                 {
@@ -1970,23 +2006,22 @@
         {
             const name = displayName( c );
 
+            // Clicks, keys and the tick / ⋮ are the item browser's (LIST below).
             const row = document.createElement( 'div' );
-            row.className = 'contact-row' + ( selectMode && picked.has( c.uid ) ? ' picked' : '' );
+            row.className = 'contact-row';
             row.dataset.uid = c.uid;
-            row.addEventListener( 'click', () => selectMode ? togglePick( c.uid ) : openDetail( c.uid ) );
-
-            if( selectMode )
-            {
-                const tick = document.createElement( 'input' );
-                tick.type    = 'checkbox';
-                tick.className = 'pick';
-                tick.checked = picked.has( c.uid );
-                tick.tabIndex = -1;                     // the row itself is the target
-                tick.setAttribute( 'aria-hidden', 'true' );
-                row.appendChild( tick );
-            }
 
             appendFace( row, c, name );
+
+            if( isFav( c ) )
+            {
+                const st = document.createElement( 'span' );
+                st.className = 'ct-star';
+                st.title = T( 'contact.favourites' );
+                st.innerHTML = NayiveUI.glyph( 'star' );
+                row.appendChild( st );
+            }
+
             return row;
         }
 
@@ -2020,127 +2055,471 @@
         }
 
         //------------------------------------------------------------------------//
-        // MANUAL MERGE - pick several rows in the list
-        //
-        // findDuplicateGroups() only groups what it can prove (same phone, same
-        // email, near-identical name). Two cards for the same person written in
-        // two different ways never meet. Here the user is the matcher: tick the
-        // rows, press Fusionar, and land in the very same merge preview the
-        // Duplicates sheet uses - nothing below openMergeFor() knows the
-        // difference.
+        // GROUPS  -  the card's own CATEGORIES line (vCard 3.0), the way phones
+        // and Google keep a contact's groups, so the .vcf carries them out and
+        // back. A favourite is the "starred" category (Google's mark for one).
+        // Contacts never modelled CATEGORIES: it is one of the lines a card
+        // keeps as it was read (c.src, see contactToVCard), so groups are read
+        // from those lines, and a change writes the card as the save would,
+        // with a new CATEGORIES line and a new REV, and reads it back
+        // (cardWithCats) - the reading and writing code is not touched.
 
-        let selectMode = false;
-        const picked   = new Set();     // uids, kept across searches
+        const STARRED     = 'starred';
+        const HIDDEN_CATS = new Set( [ STARRED, 'mycontacts' ] );   // system groups: never listed
 
-        /* The toggle lives in the search row and only shows when it is of use:
-           while a search is on (its whole point - pick two hits and merge), or
-           while pick-several mode is already running, so it never vanishes from
-           under a pick that started with a long press. */
-        function syncSelectBtn()
+        // Every category on the card, in its order, once each (case aside). A
+        // merged card can carry two CATEGORIES lines: both count.
+        function catsOf( c )
         {
-            document.getElementById( 'selectBtn' ).hidden = ! ( query || selectMode );
-        }
+            const out = [];
 
-        function setSelectMode( on )
-        {
-            if( selectMode === on ) return;
-
-            selectMode = on;
-            if( ! on ) picked.clear();
-
-            syncSelectBtn();
-
-            document.getElementById( 'selectBar' ).hidden = ! on;
-            updateSelectBar();
-            render();
-        }
-
-        function togglePick( uid )
-        {
-            if( picked.has( uid ) ) picked.delete( uid );
-            else                    picked.add( uid );
-
-            updateSelectBar();
-            render();
-        }
-
-        function updateSelectBar()
-        {
-            const n = picked.size;
-
-            document.getElementById( 'selectCount' ).textContent =
-                n < 2 ? T( 'contact.selectHint' ) : TF( 'contact.nSelected', { n: n } );
-
-            const btn = document.getElementById( 'selectMergeBtn' );
-            btn.textContent = T( 'contact.merge' );
-            btn.disabled    = n < 2;
-        }
-
-        function mergePicked()
-        {
-            const members = [ ...picked ].map( findContact ).filter( Boolean );
-
-            if( members.length < 2 )
+            for( const l of ( c.src ? c.src.lines : [] ) )
             {
-                flashToast( T( 'contact.selectHint' ) );
-                return;
+                if( l.name !== 'CATEGORIES' ) continue;
+
+                const [ left, raw ] = splitOnce( l.text, ':' );
+                if( left === null ) continue;
+
+                const value = decodeValue( raw, parseParams( splitOutsideQuotes( left, ';' ).slice( 1 ) ) );
+
+                for( const v of splitEscaped( value, ',' ).map( s => unescapeText( s ).trim() ) )
+                    if( v && ! out.some( x => x.toLowerCase() === v.toLowerCase() ) ) out.push( v );
             }
 
-            openMergeFor( members );
+            return out;
         }
 
-        // Long-press a row to open the mode with that row already ticked. The
-        // press rebuilds the list, so the click that follows the finger lifting
-        // would land on a brand-new row and untick it again - swallowClick eats
-        // exactly that one click.
-        function wireLongPress()
+        const sameCat  = ( a, b ) => a.toLowerCase() === b.toLowerCase();
+        const isFav    = c => catsOf( c ).some( x => sameCat( x, STARRED ) );
+        const groupsOf = c => catsOf( c ).filter( x => ! HIDDEN_CATS.has( x.toLowerCase() ) );
+        const inGroup  = ( c, g ) => groupsOf( c ).some( x => sameCat( x, g ) );
+
+        // The card as the save would write it, its CATEGORIES set to `cats` and
+        // a new REV (the other device's merge takes the newer one), read back.
+        // A card made here gains its lines that way. null: it did not read back.
+        function cardWithCats( c, cats )
         {
-            const list = document.getElementById( 'contactList' );
+            const out = [], stamp = 'REV:' + revStamp();
+            let   rev = false;
 
-            let timer = null, startX = 0, startY = 0, swallowClick = false;
-
-            const cancel = () => { clearTimeout( timer ); timer = null; };
-
-            list.addEventListener( 'pointerdown', function( e )
+            for( const cl of contentLines( contactToVCard( c ) ) )
             {
-                const row = e.target.closest( '.contact-row' );
-                if( ! row || selectMode ) return;
+                const left = splitOnce( cl.text, ':' )[ 0 ];
+                let   name = left === null ? '' : splitOutsideQuotes( left, ';' )[ 0 ];
+                name = name.slice( name.lastIndexOf( '.' ) + 1 ).trim().toUpperCase();
 
-                startX = e.clientX;
-                startY = e.clientY;
+                if( name === 'CATEGORIES' ) continue;
+                if( name === 'REV' ) { if( ! rev ) out.push( stamp ); rev = true; continue; }
 
-                timer = setTimeout( function()
+                if( cl.text.trim().toUpperCase() === 'END:VCARD' )
                 {
-                    timer        = null;
-                    swallowClick = true;
-                    setTimeout( () => swallowClick = false, 400 );   // in case no click follows
+                    if( cats.length ) out.push( foldLine( 'CATEGORIES:' + cats.map( escapeText ).join( ',' ) ) );
+                    if( ! rev ) out.push( stamp );
+                }
 
-                    picked.add( row.dataset.uid );
-                    setSelectMode( true );
-                }, 500 );
-            });
+                out.push( ...cl.phys );
+            }
 
-            list.addEventListener( 'pointermove', function( e )
+            const nc = vcfToContacts( out.join( '\r\n' ) + '\r\n' )[ 0 ];
+            if( ! nc || nc.uid !== c.uid ) return null;
+
+            nc.pos = c.pos;
+            return nc;
+        }
+
+        // Changes the categories of these cards (fn: the old list -> the new
+        // one) and saves. `msg`: the toast, whose Undo puts each card back as
+        // it was (undoCards: by uid, on the book as it is now).
+        function changeCats( uids, fn, msg )
+        {
+            if( ! canSave() ) return false;
+
+            const was = [], made = new Map();
+
+            for( const uid of uids )
             {
-                if( timer && ( Math.abs( e.clientX - startX ) > 8 || Math.abs( e.clientY - startY ) > 8 ) )
-                    cancel();
-            });
+                const i = contacts.findIndex( x => x.uid === uid );
+                if( i === -1 ) continue;
 
-            list.addEventListener( 'pointerup',     cancel );
-            list.addEventListener( 'pointercancel', cancel );   // a scroll lands here
-            list.addEventListener( 'pointerleave',  cancel );
+                const c = contacts[ i ], before = catsOf( c ), after = fn( before.slice() );
+                if( after.join( '\n' ) === before.join( '\n' ) ) continue;
 
-            list.addEventListener( 'click', function( e )
+                const nc = cardWithCats( c, after );
+                if( ! nc ) continue;
+
+                was.push( c );
+                contacts[ i ] = nc;
+                made.set( uid, contactToVCard( nc ) );
+            }
+
+            if( was.length )
             {
-                if( ! swallowClick ) return;
+                render();
+                saveContacts();
+                refreshDedupIfOpen();
+            }
 
-                swallowClick = false;
-                e.stopPropagation();
-                e.preventDefault();
-            }, true );
+            if( msg && was.length ) flashUndo( msg, function() { if( canSave() ) undoCards( was, made, [] ); } );
+            else if( msg )          flashToast( msg );
+            return true;
+        }
 
-            // Android raises its own context menu on a long press.
-            list.addEventListener( 'contextmenu', e => { if( e.target.closest( '.contact-row' ) ) e.preventDefault(); } );
+        const withCat    = g => cats => cats.some( x => sameCat( x, g ) ) ? cats : cats.concat( g );
+        const withoutCat = g => cats => cats.filter( x => ! sameCat( x, g ) );
+
+        // Groups made here that nobody is in yet: a group is only a word on its
+        // cards, so an empty one lives on this device until a card takes it.
+        const EMPTY_KEY = 'nayive-contact-empty-groups';
+        let   emptyGroups = [];
+        try { emptyGroups = JSON.parse( localStorage.getItem( EMPTY_KEY ) || '[]' ).filter( g => typeof g === 'string' && g ); } catch( _ ) {}
+
+        function setEmptyGroups( list )
+        {
+            emptyGroups = list;
+            try { localStorage.setItem( EMPTY_KEY, JSON.stringify( list ) ); } catch( _ ) {}
+        }
+
+        // [ { name, n } ] every group, by name: the cards' own, then the empty ones.
+        function allGroups()
+        {
+            const by = new Map();
+
+            for( const c of contacts )
+                for( const g of groupsOf( c ) )
+                {
+                    const k = g.toLowerCase();
+                    if( ! by.has( k ) ) by.set( k, { name: g, n: 0 } );
+                    by.get( k ).n++;
+                }
+
+            for( const g of emptyGroups )
+                if( ! by.has( g.toLowerCase() ) ) by.set( g.toLowerCase(), { name: g, n: 0 } );
+
+            return [ ...by.values() ].sort( ( a, b ) => a.name.localeCompare( b.name, NayiveUI.lang(), { sensitivity: 'base' } ) );
+        }
+
+        const groupExists = g => allGroups().some( x => sameCat( x.name, g ) );
+
+        function addToGroup( uids, g )
+        {
+            if( ! changeCats( uids, withCat( g ), TF( 'contact.addedTo', { g: g } ) ) ) return;
+            setEmptyGroups( emptyGroups.filter( x => ! sameCat( x, g ) ) );
+            render();
+        }
+
+        // "Add to group…": the groups in the same tree, and a new one on top.
+        async function addToGroupDialog( uids )
+        {
+            const NEW = '\u0000new';
+            const id  = await NayiveUI.pickNode( {
+                title:   T( 'contact.addToGroup' ),
+                okLabel: T( 'contact.addToGroup' ),
+                lit:     null,
+                roots:   () => [ { id: NEW, name: T( 'contact.newGroup' ) + '…', icon: 'plus' } ]
+                               .concat( allGroups().map( g => ( { id: 'g:' + g.name, name: g.name, icon: 'tag' } ) ) )
+            } );
+            if( id == null ) return;
+
+            const g = id === NEW ? await askGroupName( T( 'contact.newGroup' ), '' ) : id.slice( 2 );
+            if( g ) addToGroup( uids, g );
+        }
+
+        // A group's name, asked in a small dialog: -> Promise( name | null ).
+        // A name another group has is refused (a toast) and asked again.
+        function askGroupName( title, was )
+        {
+            return new Promise( function( resolve )
+            {
+                const d = NayiveUI.modal( { title: title, escape: () => finish( null ) } );
+                let   done = false;
+                const finish = v => { if( done ) return; done = true; d.close(); resolve( v ); };
+
+                const field = document.createElement( 'div' );
+                field.className = 'field';
+                const lbl = document.createElement( 'label' );
+                lbl.textContent = T( 'contact.groupName' );
+                const inp = document.createElement( 'input' );
+                inp.type = 'text';
+                inp.autocomplete = 'off';
+                inp.maxLength = 60;
+                inp.value = was || '';
+                inp.id = lbl.htmlFor = 'groupNameInput';
+                field.append( lbl, inp );
+                d.sheet.appendChild( field );
+
+                const row = document.createElement( 'div' );
+                row.className = 'sheet-actions';
+                const no = document.createElement( 'button' );
+                no.id = 'groupNameCancel';
+                no.setAttribute( 'data-act', 'close' );
+                no.title = T( 'ui.cancel' );
+                const ok = document.createElement( 'button' );
+                ok.id = 'groupNameOk';
+                ok.setAttribute( 'data-act', 'primary' );
+                ok.title = T( 'ui.save' );
+                row.append( no, ok );
+                d.sheet.appendChild( row );
+                NayiveUI.applySheetButtons( d.sheet );
+
+                const submit = () =>
+                {
+                    const v = inp.value.replace( /[\r\n]+/g, ' ' ).trim();
+                    if( ! v ) { inp.focus(); return; }
+                    if( was && sameCat( v, was ) && v === was ) { finish( null ); return; }
+                    if( HIDDEN_CATS.has( v.toLowerCase() ) || ( ! ( was && sameCat( v, was ) ) && groupExists( v ) ) )
+                    {
+                        flashToast( T( 'contact.groupTaken' ) );
+                        inp.select();
+                        return;
+                    }
+                    finish( v );
+                };
+                no.addEventListener( 'click', () => finish( null ) );
+                ok.addEventListener( 'click', submit );
+                inp.addEventListener( 'keydown', e => { if( e.key === 'Enter' && ! e.isComposing ) { e.preventDefault(); submit(); } } );
+
+                d.show();
+                setTimeout( () => { inp.focus(); inp.select(); }, 0 );
+            } );
+        }
+
+        async function newGroup()
+        {
+            const g = await askGroupName( T( 'contact.newGroup' ), '' );
+            if( ! g ) return;
+            setEmptyGroups( emptyGroups.concat( g ) );
+            render();
+        }
+
+        async function renameGroup( g )
+        {
+            const to = await askGroupName( T( 'contact.renameGroup' ), g );
+            if( ! to ) return;
+
+            const members = contacts.filter( c => inGroup( c, g ) ).map( c => c.uid );
+            setEmptyGroups( emptyGroups.map( x => sameCat( x, g ) ? to : x ) );
+            if( view === 'g:' + g ) view = 'g:' + to;
+
+            if( members.length ) changeCats( members, cats => cats.map( x => sameCat( x, g ) ? to : x ), T( 'contact.groupRenamed' ) );
+            else render();
+        }
+
+        // The group goes; its contacts stay (only the word leaves their cards).
+        function deleteGroup( g )
+        {
+            const members = contacts.filter( c => inGroup( c, g ) ).map( c => c.uid );
+            setEmptyGroups( emptyGroups.filter( x => ! sameCat( x, g ) ) );
+            if( view === 'g:' + g ) view = 'all';
+
+            if( members.length ) changeCats( members, withoutCat( g ), TF( 'contact.groupDeleted', { g: g } ) );
+            else { render(); flashToast( TF( 'contact.groupDeleted', { g: g } ) ); }
+        }
+
+        function toggleFav( uids )
+        {
+            const all = uids.every( u => { const c = findContact( u ); return c && isFav( c ); } );
+            changeCats( uids, all ? withoutCat( STARRED ) : withCat( STARRED ), null );
+        }
+
+        //------------------------------------------------------------------------//
+        // SHARE / EXPORT A FEW  -  the picked cards as one .vcf. Share is the
+        // device's own share sheet with the file (a phone); where the device
+        // can not share a file, the action is not offered.
+
+        let shareOk = null;
+        function canShareFiles()
+        {
+            if( shareOk === null )
+                try   { shareOk = !! ( navigator.canShare && navigator.canShare( { files: [ new File( [ '' ], 'c.vcf', { type: 'text/vcard' } ) ] } ) ); }
+                catch { shareOk = false; }
+            return shareOk;
+        }
+
+        function cardsFile( list )
+        {
+            const name = list.length === 1 ? ( displayName( list[ 0 ] ).replace( /[\\/:*?"<>|]+/g, ' ' ).trim() || 'contact' ) + '.vcf'
+                                           : T( 'contact.exportFile' );
+            return new File( [ list.map( contactToVCard ).join( '\r\n' ) + '\r\n' ], name, { type: 'text/vcard' } );
+        }
+
+        function shareCards( list, title )
+        {
+            if( ! list.length ) return;
+            navigator.share( { files: [ cardsFile( list ) ], title: title || '' } ).catch( function() { /* closed */ } );
+        }
+
+        function exportCards( list )
+        {
+            if( ! list.length ) return;
+            const f   = cardsFile( list );
+            const url = URL.createObjectURL( f );
+            const a   = document.getElementById( 'downloadAnchor' );
+            a.href     = url;
+            a.download = f.name;
+            a.click();
+            setTimeout( () => URL.revokeObjectURL( url ), 1000 );
+        }
+
+        // Every picked card goes at once; "Deleted [Undo]" puts them back by
+        // uid, each in its place in the file (undoCards: one gone is added again).
+        function deleteContacts( uids )
+        {
+            if( ! canSave() ) return;
+
+            const gone = new Set( uids );
+            const was  = contacts.filter( c => gone.has( c.uid ) );
+            if( ! was.length ) return;
+
+            contacts = contacts.filter( c => ! gone.has( c.uid ) );
+
+            render();
+            saveContacts();
+            refreshDedupIfOpen();
+
+            flashUndo( T( 'ui.toast.deleted' ), function()
+            {
+                if( canSave() ) undoCards( was, new Map(), [] );
+            } );
+        }
+
+        //------------------------------------------------------------------------//
+        // LIST  -  the shared item browser (shared/browser.js): a click picks, a
+        // double-click (a tap, Enter) opens the card; Ctrl / Shift pick more, a
+        // long-press picks on a phone. One action list feeds the header group,
+        // the menu (right-click = the row's ⋮ = the header's ⋮) and the keys.
+        // The tree on the left: All contacts, Favourites, Groups; contacts
+        // dropped on a group join it, on Favourites become favourites.
+
+        let browse     = null;     // the item browser on #contactList
+        let treeView   = null;     // the groups tree in #tree
+        let searchFold = null;
+        let view       = 'all';    // 'all' | 'fav' | 'groups' (in any group) | 'g:<name>'
+        let groupsOpen = true;
+
+        const one = ids => ids.length === 1;
+        const cardsOf = ids => ids.map( findContact ).filter( Boolean );
+
+        function viewName( v )
+        {
+            if( v === 'fav' )    return T( 'contact.favourites' );
+            if( v === 'groups' ) return T( 'contact.groups' );
+            if( v.indexOf( 'g:' ) === 0 ) return v.slice( 2 );
+            return T( 'contact.allContacts' );
+        }
+
+        function inView( c )
+        {
+            if( view === 'fav' )    return isFav( c );
+            if( view === 'groups' ) return groupsOf( c ).length > 0;
+            if( view.indexOf( 'g:' ) === 0 ) return inGroup( c, view.slice( 2 ) );
+            return true;
+        }
+
+        function setView( v )
+        {
+            view = v;
+            render();
+            window.scrollTo( 0, 0 );
+            document.querySelector( '.list-scroll' ).scrollTop = 0;
+        }
+
+        // Built once the dictionary is in (wireStaticUI runs after it).
+        function actionList() { return [
+            { id: 'open', label: T( 'ui.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
+              run: ids => openDetail( ids[ 0 ] ) },
+            { id: 'edit', label: T( 'contact.edit' ), icon: 'edit', key: 'F2', bar: 1, group: 0, when: one,
+              run: ids => openEditForExisting( ids[ 0 ] ) },
+            { id: 'fav', icon: 'star', key: 'S', bar: 2, group: 1,
+              label: ids => T( ids.length && cardsOf( ids ).every( isFav ) ? 'contact.unfavourite' : 'contact.favAdd' ),
+              run: toggleFav },
+            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tag', bar: 3, phone: 1, group: 1,
+              run: addToGroupDialog },
+            { id: 'ungroup', label: T( 'contact.ungroup' ), icon: 'x', group: 1,
+              where: () => view.indexOf( 'g:' ) === 0,
+              run: ids => changeCats( ids, withoutCat( view.slice( 2 ) ), TF( 'contact.removedFrom', { g: view.slice( 2 ) } ) ) },
+            { id: 'share', label: T( 'ui.share' ), icon: 'share', bar: 4, phone: 1, group: 2, where: canShareFiles,
+              run: ids => shareCards( cardsOf( ids ) ) },
+            { id: 'export', label: T( 'contact.exportVcf' ), icon: 'download', group: 2,
+              run: ids => exportCards( cardsOf( ids ) ) },
+            { id: 'merge', label: T( 'contact.merge' ), icon: 'merge', bar: 5, group: 2, when: ids => ids.length >= 2,
+              run: ids => openMergeFor( cardsOf( ids ) ) },
+            { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], bar: 9, phone: 1, group: 3, danger: true,
+              run: deleteContacts }
+        ]; }
+
+        function treeRoots()
+        {
+            return [
+                { id: 'all',    name: T( 'contact.allContacts' ), icon: 'users', badge: contacts.length || '', noMenu: true, noDrag: true },
+                { id: 'fav',    name: T( 'contact.favourites' ),  icon: 'star',  noMenu: true, noDrag: true },
+                { id: 'groups', name: T( 'contact.groups' ),      icon: 'tag',   noDrag: true,
+                  kids: allGroups().map( g => ( { id: 'g:' + g.name, name: g.name, icon: 'tag', badge: g.n || '', noDrag: true } ) ) }
+            ];
+        }
+
+        // A group's right-click / ⋮ / long-press: rename, share, delete; on
+        // "Groups": a new one.
+        function treeMenu( id, x, y, anchor )
+        {
+            let items = null;
+
+            if( id === 'groups' )
+                items = [ { id: 'newGroup', label: T( 'contact.newGroup' ), icon: 'plus', run: newGroup } ];
+            else if( id.indexOf( 'g:' ) === 0 )
+            {
+                const g = id.slice( 2 );
+                const members = () => contacts.filter( c => inGroup( c, g ) );
+                items = [
+                    { id: 'renameGroup', label: T( 'contact.renameGroup' ), icon: 'edit', run: () => renameGroup( g ) },
+                    { id: 'shareGroup',  label: T( 'contact.shareGroup' ),  icon: 'share', hidden: ! canShareFiles(),
+                      disabled: ! members().length, run: () => shareCards( members(), g ) },
+                    { sep: true },
+                    { id: 'deleteGroup', label: T( 'contact.deleteGroup' ), icon: 'trash', danger: true, run: () => deleteGroup( g ) }
+                ];
+            }
+
+            if( items ) NayiveUI.menuAt( x, y, items, { anchor: anchor } );
+        }
+
+        function treeCan( ids, id )
+        {
+            return id === 'fav' || id.indexOf( 'g:' ) === 0 ? 'inside' : false;
+        }
+
+        function treeDrop( ids, id )
+        {
+            if( id === 'fav' ) changeCats( ids, withCat( STARRED ), TF( 'contact.addedTo', { g: T( 'contact.favourites' ) } ) );
+            else if( id.indexOf( 'g:' ) === 0 ) addToGroup( ids, id.slice( 2 ) );
+        }
+
+        function wireList()
+        {
+            treeView = NayiveUI.tree( {
+                host:    document.getElementById( 'tree' ),
+                pane:    document.getElementById( 'treePane' ),
+                roots:   treeRoots,
+                isOpen:  id => id === 'groups' && groupsOpen,
+                setOpen: ( id, v ) => { if( id === 'groups' ) groupsOpen = v; },
+                current: () => view,
+                go:      id => setView( id ),
+                menu:    treeMenu,
+                drop:    { can: treeCan, drop: treeDrop }
+            } );
+
+            browse = NayiveUI.browser( {
+                list:    contactList(),
+                row:     '.contact-row',
+                idOf:    el => el.dataset.uid,
+                bar:     document.getElementById( 'selActions' ),
+                actions: actionList(),
+                area:    [ { id: 'new', label: T( 'contact.newContact' ), icon: 'plus', run: openEditForNew } ],
+                tree:    treeView,
+                open:    uid => openDetail( uid ),
+                search:  () => { if( searchFold ) searchFold.open(); },
+                drag:    { text: ids => cardsOf( ids ).map( displayName ).join( '\n' ) }
+            } );
+
+            document.getElementById( 'treeBtn' ).addEventListener( 'click', () => treeView.openSheet() );
         }
 
         //------------------------------------------------------------------------//
@@ -3115,7 +3494,7 @@
             contacts.push( merged );
 
             closeBackdrop( 'mergeBackdrop' );
-            setSelectMode( false );     // no-op unless the merge came from a manual pick
+            if( browse ) browse.clear();    // the picked rows were the members
             render();
             saveContacts();
 
@@ -3329,10 +3708,8 @@
         {
             document.getElementById( 'addBtn'    ).addEventListener( 'click', openEditForNew );
 
-            document.getElementById( 'selectBtn'      ).addEventListener( 'click', () => setSelectMode( ! selectMode ) );
-            document.getElementById( 'selectCancel'   ).addEventListener( 'click', () => setSelectMode( false ) );
-            document.getElementById( 'selectMergeBtn' ).addEventListener( 'click', mergePicked );
-            wireLongPress();
+            // First: its Escape must see an open sheet before the one below closes it.
+            wireList();
             wireAzRail();
 
             wireSettingsSheet();
@@ -3350,21 +3727,13 @@
             search.addEventListener( 'input', function()
             {
                 query = this.value;
-                document.getElementById( 'searchClear' ).classList.toggle( 'show', !! query );
-                document.getElementById( 'searchIcon' ).style.display = query ? 'none' : '';   // hide magnifier so it never overlaps the clear (x)
-                syncSelectBtn();
                 render();
             });
-            document.getElementById( 'searchClear' ).addEventListener( 'click', function()
-            {
-                search.value = '';
-                query = '';
-                this.classList.remove( 'show' );
-                document.getElementById( 'searchIcon' ).style.display = '';
-                syncSelectBtn();
-                render();
-                search.focus();
-            });
+            // The magnifier opens it; its × (or Escape) empties and folds it,
+            // which fires "input" above and drops the search.
+            searchFold = NayiveUI.searchFold( { box: search.parentElement, input: search,
+                                                toggle: document.getElementById( 'searchBtn' ),
+                                                bar: document.querySelector( '.header' ) } );
 
             document.getElementById( 'detailCloseBtn'  ).addEventListener( 'click', () => closeBackdrop( 'detailBackdrop' ) );
             document.getElementById( 'detailEditBtn'    ).addEventListener( 'click', function()
@@ -3413,8 +3782,7 @@
                         return;
                     }
                 }
-
-                setSelectMode( false );   // no sheet open: Escape leaves pick-several mode
+                // No sheet open: Escape clears the pick (shared/browser.js).
             });
         }
 

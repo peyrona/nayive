@@ -272,7 +272,8 @@ await c.until( "document.getElementById( 'composeView' ).hidden" );
 
 section( "I9 - AN UNDO THAT BROUGHT NOTHING BACK SAYS SO" );
 ok( await c.until( "[ ...document.querySelectorAll( '#list .mail-row' ) ].some( r => r.textContent.includes( 'Hello 3' ) )" ), "the Inbox shows 'Hello 3'" );
-await c.evaluate( "[ ...document.querySelectorAll( '#list .mail-row' ) ].find( r => r.textContent.includes( 'Hello 3' ) ).click(); true" );
+// the item browser: a click picks a row, a double-click opens it
+await c.evaluate( "[ ...document.querySelectorAll( '#list .mail-row' ) ].find( r => r.textContent.includes( 'Hello 3' ) ).dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
 ok( await c.until( "!! NayiveMail.S.open" ), "it opens" );
 await c.evaluate( "window.__toasts = []; document.getElementById( 'actDelete' ).click(); true" );
 ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "Delete: to the Trash, with Undo" );

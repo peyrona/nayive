@@ -353,7 +353,7 @@ function applySearchBuilder()
     setBackdrop( 'searchBuilderBackdrop', false );
 
     clearSearch();                      // the box's own search, and any earlier advanced one
-    selectedPaths.clear();
+    clearSel();
     if( ! spec ) { render(); return; }
 
     advSearch = { draft: JSON.parse( JSON.stringify( d ) ), spec: spec,

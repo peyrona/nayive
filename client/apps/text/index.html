@@ -86,7 +86,6 @@
                 { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
                 { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
                 { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
-                { sel: '#lockBtn',      text: NayiveUI.t( 'write.introLock' ) },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
                 { sel: '#mdViewBtn',    text: NayiveUI.t( 'text.introMdView' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
@@ -370,8 +369,10 @@
             <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
             </button>
-            <button id="lockBtn" class="tb-btn" data-i18n-attr="title:lock.title">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <!-- Text has no password of its own (Write and Calc only): the key shows
+                 just while an old locked file is open, so its lock can come off. -->
+            <button id="lockBtn" class="tb-btn" data-only-locked hidden data-i18n-attr="title:lock.title">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
             </button>
 
             <div class="tb-sep"></div>

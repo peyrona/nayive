@@ -62,7 +62,7 @@ async function confirmRename()
         step.moved = true;
         await NayiveMedia.remapPaths( [ [ oldPath, newPath ] ] );
         if( oldPath === currentFolder ) currentFolder = newPath;   // renamed the folder we're in — stay in it
-        selectedPaths.clear();
+        clearSel();
         await reload();
 
         if( canUndo )
@@ -359,7 +359,7 @@ async function applyDeepLink()
             expandTo( open );
             navigateTo( open );
 
-            const treeRow = document.querySelector( '#treePane .tree-row.selected' );
+            const treeRow = document.querySelector( '#treePane .tree-row.is-active' );
             if( treeRow ) treeRow.scrollIntoView( { block: 'nearest' } );
             return;
         }
@@ -389,13 +389,12 @@ async function applyDeepLink()
         return;
     }
 
-    selectedPaths = new Set( [ sel ] );
-    render();
+    setSel( [ sel ] );
 
-    const treeRow = document.querySelector( '#treePane .tree-row.selected' );
+    const treeRow = document.querySelector( '#treePane .tree-row.is-active' );
     if( treeRow ) treeRow.scrollIntoView( { block: 'nearest' } );
 
-    const row = document.querySelector( '#listing .row.selected' );
+    const row = document.querySelector( '#listing .row.is-selected' );
     if( row ) row.scrollIntoView( { block: 'center' } );
 }
 
@@ -416,57 +415,16 @@ function expandTo( path )
 //------------------------------------------------------------------------//
 // ACTIONS: DELETE
 
-let deleteTargets = [];   // paths the open confirm dialog will delete
+let deleteTargets = [];   // paths the next confirmDelete() sends to the bin
 
+// To the bin at once, folders too: the toast's Undo brings it all back (no
+// "Are you sure?" - the item-browser rule). Only what is picked: with
+// nothing picked, the open folder goes from its own menu in the tree.
 function openDeleteConfirm()
 {
-    let msg;
-
-    if( selectedPaths.size )
-    {
-        deleteTargets = Array.from( selectedPaths );
-
-        // Only files: no question - they go at once and the toast's Undo
-        // brings them back. A folder holds more than you see: it still asks.
-        if( deleteTargets.every( isFileRow ) ) { confirmDelete(); return; }
-
-        const names = deleteTargets.map( function( p ) { return p.split( '/' ).pop(); } );
-        msg = names.length === 1 ? TF( 'drive.trashOne', { name: names[0] } )
-                                  : TF( 'drive.trashN', { n: names.length } );
-    }
-    else if( currentFolder && currentFolder !== FS_ROOT )
-    {
-        deleteTargets = [ currentFolder ];
-        const count = curListing.nodes.length;   // the open folder's own listing
-        const name  = currentFolder.split( '/' ).pop();
-        msg = count === 0
-            ? TF( 'drive.trashFolderQ', { name: name } )
-            : TF( count === 1 ? 'drive.trashFolderOneQ' : 'drive.trashFolderNQ',
-                  { name: name, n: count } );
-    }
-    else return;
-
-    document.getElementById( 'deleteMsg' ).textContent = msg;
-
-    // No selection -> this deletes the folder you are viewing. Make that
-    // impossible to miss instead of letting it look like a normal delete.
-    const warn = document.getElementById( 'deleteFolderWarn' );
-    if( ! selectedPaths.size )
-    {
-        warn.textContent = T( 'drive.nothingSelected' );
-        warn.hidden = false;
-    }
-    else warn.hidden = true;
-
-    setBackdrop( 'deleteBackdrop', true );
-}
-
-// A file shown in the listing (or the search results). Anything not
-// found is taken for a folder, so it keeps its question.
-function isFileRow( path )
-{
-    const node = rowNode( path );
-    return !! node && ! isDir( node );
+    deleteTargets = actionTargets();
+    if( ! deleteTargets.length ) return;
+    confirmDelete();
 }
 
 let deleteBusy = false;   // a move to the bin is on its way: a held Del key must not send it twice
@@ -479,7 +437,6 @@ async function confirmDelete()
     deleteTargets = [];
     deleteBusy    = true;
 
-    setBackdrop( 'deleteBackdrop', false );
     setStatus( T( 'drive.movingToTrash' ) );
 
     const droppedCurrent = targets.indexOf( currentFolder ) !== -1;
@@ -488,7 +445,7 @@ async function confirmDelete()
     {
         const ids = await withBusy( GumApi.binPaths( targets ) );
         await NayiveMedia.purgePaths( targets );
-        selectedPaths.clear();
+        clearSel();
         deleteBusy = false;
 
         if( droppedCurrent )

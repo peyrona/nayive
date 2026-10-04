@@ -146,6 +146,7 @@
             transform-origin: 0 0;      /* Scale (see SCALE): a shrunk window is drawn from its top-left corner */
         }
         .win.focused { border-color: var(--desk-focus); box-shadow: 0 20px 52px var(--desk-shadow); }
+        .win.dragging { opacity: 0.9; }   /* moving or resizing: a hint see-through (app.css .dragging is 0.4, too much) */
         .win.max { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important;
                    border-radius: 0; border-width: 0; box-shadow: none; transform: none !important; }   /* maximised: always 1:1 */
 
@@ -159,9 +160,12 @@
         .win-title
         {
             flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            font-size: 0.9rem; font-weight: 600; color: var(--text-dim);
+            font-size: 0.9rem; font-weight: 600; color: var(--text);
         }
-        .win.focused .win-title { color: var(--text); }
+        /* A window behind: its icon + name keep their colour, softer. The app's own
+           title row gets the same (html[data-win-behind], see paint + app.css). */
+        .win:not(.focused) .win-bar > svg,
+        .win:not(.focused) .win-title { opacity: 0.55; }
         .win-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg);
                      border-radius: 0 0 var(--radius-m) var(--radius-m); }
         .win.max .win-frame { border-radius: 0; }
@@ -466,17 +470,9 @@
         <div class="menu" id="menu" hidden></div>
 
         <div class="top-menu" id="moreMenu" role="menu" hidden>
-            <!-- OPEN THE DESKTOP - Auto / Always / Never, on this device (set.mode;
-                 see OPEN THE DESKTOP). A label, so a change leaves the menu open. -->
-            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg><span data-i18n="desktop.openMode"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.openModeInfo"></span>
-                <select id="setMode">
-                    <option value="auto"   data-i18n="desktop.openAuto"></option>
-                    <option value="always" data-i18n="desktop.openAlways"></option>
-                    <option value="never"  data-i18n="desktop.openNever"></option>
-                </select></label>
             <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
                  (see WEATHER). A label, so flipping it leaves the menu open. -->
-            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="switch sm"><input type="checkbox" id="weatherBarChk"><span class="track"></span></span></label>
+            <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.weatherBarInfo"></span><span class="switch sm"><input type="checkbox" id="weatherBarChk"><span class="track"></span></span></label>
             <!-- WINDOWS - how the windows behave on the desk. -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.windowsLabel"></div>
@@ -633,6 +629,9 @@
     // Keyed by the app's folder.
 
     var APPS = {};     // "drive" -> { name, svg }
+    // A new window's widest (openApp): one-column apps, and Write - an A4 page
+    // at 100 % (794 + the engine's 2 x 24 gutter) + scrollbar + borders.
+    var NARROW = { contact: 560, write: 864 };
     var appsReady = fetch( '../index.html', { credentials: 'same-origin' } )
         .then( function ( r ) { return r.text(); } )
         .then( function ( html )
@@ -703,9 +702,10 @@
         }
         else
         {
-            // 70% x 82% of the desk, each new one 32px down-right of the last.
+            // 70% x 82% of the desk, each new one 32px down-right of the last;
+            // a one-column app (a list) no wider than it needs (NARROW).
             var r = deskRect();
-            var W = Math.min( 1100, Math.round( r.w * 0.7 ) ), H = Math.min( 780, Math.round( r.h * 0.82 ) );
+            var W = Math.min( NARROW[ app ] || 1100, Math.round( r.w * 0.7 ) ), H = Math.min( 780, Math.round( r.h * 0.82 ) );
             var n = wins.length % 6;
             g = { l: Math.max( 0, Math.round( ( r.w - W ) / 2 ) - 80 + n * 32 ), t: Math.max( 0, 24 + n * 32 ), w: W, h: H };
         }
@@ -836,6 +836,9 @@
         {
             var isFront = ( w === front && ! w.el.hidden );
             w.el.classList.toggle( 'focused', isFront );
+            // the app's own title row (chromeless) softens too - an attribute, not a
+            // class: Scale's watcher re-measures on class changes
+            try { w.frame.contentDocument.documentElement.toggleAttribute( 'data-win-behind', ! isFront ); } catch( e ) {}
             w.btn.classList.toggle( 'front', isFront );
             w.btn.classList.toggle( 'min', w.el.hidden );
             w.btn.classList.toggle( 'has-dialog', !! w.dialog && ! isFront );
@@ -1677,10 +1680,12 @@
 
     // OPEN THE DESKTOP - this device's choice (set.mode): auto (a big screen
     // with a mouse or touchpad), always (a big screen, mouse or not), never
-    // (the simple view). The launcher reads it before it sends a big screen
-    // here; wantDesk is ITS rule (../index.html, nayiveWantDesk), copied: this
-    // page must not wait for the launcher's. A choice that no longer wants the
-    // desktop leaves for the simple view at once.
+    // (the simple view). Set ONLY in My account (../index.html, #deskModeSel;
+    // one action, one knob), which also opens in a window here: we follow its
+    // change. The launcher reads it before it sends a big screen here; wantDesk
+    // is ITS rule (nayiveWantDesk), copied: this page must not wait for the
+    // launcher's. A choice that no longer wants the desktop leaves for the
+    // simple view at once.
     function wantDesk( mode )
     {
         function mq( q ) { return window.matchMedia( q ).matches; }
@@ -1689,13 +1694,14 @@
         return mq( '(min-width: 1024px) and (min-height: 600px) and (any-pointer: fine)' );
     }
     function toSimple() { location.replace( '../index.html' ); }
-    var modeSel = document.getElementById( 'setMode' );
     if( set.mode !== 'always' && set.mode !== 'never' ) set.mode = 'auto';
-    modeSel.value = set.mode;
-    modeSel.addEventListener( 'change', function ()
+    window.addEventListener( 'storage', function ( e )
     {
-        set.mode = modeSel.value;
-        saveSet();
+        if( e.key !== SET_KEY ) return;
+        var m = ( store( SET_KEY ) || {} ).mode;
+        if( m !== 'always' && m !== 'never' ) m = 'auto';
+        if( m === set.mode ) return;
+        set.mode = m;
         if( ! wantDesk( set.mode ) ) toSimple();
     } );
 

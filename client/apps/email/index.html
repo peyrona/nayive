@@ -38,26 +38,27 @@
     <div id="app" class="app" style="display: none;">
 
         <!-- List:      [icon] eMail ......... [search] [write] [select] [settings] [?] [plug]
+             Picked:    [icon] eMail ... [× 3] [all] [what can be done to them] [⋮] [search]...
+                        (the shared item browser draws that group: browse.js)
              Writing:   [←] [icon] eMail ...... [clip] [discard] [send] [?] [plug]
                         (the clip opens Chat's panel: this device, Nayive, gallery)
-             Selecting: [←] [icon] eMail 3 .... [what can be done to them] [?] [plug]
              Reading:   [←] [icon] eMail ...... [what can be done to it] [?] [plug]
-             The action buttons get their glyphs from core.js (data-icon); which of
-             them show depends on the tray (email.js, E.syncBar). -->
+             The reader's buttons get their glyphs from core.js (data-icon); which of
+             them show is the action list's own rules (browse.js, E.syncBar). -->
         <div class="topbar">
             <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.back, aria-label:mail.back">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
             </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><polyline points="22 6 12 13 2 6"></polyline></svg>
             <h1>eMail</h1>
-            <span id="selCount" class="mail-sel-count" hidden></span>
 
             <div class="topbar-actions">
-                <!-- What the open message, the picked ones or the message being
-                     written can do (actions.js, syncBar). -->
-                <div class="tb-group">
+                <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+                <div id="selActions" class="tb-group" hidden></div>
+                <!-- What the open message or the message being written can do
+                     (browse.js, syncBar). -->
+                <div id="msgTools" class="tb-group">
                     <div id="actions" class="mail-actions" hidden>
-                        <button id="actAll"     class="icon-btn" type="button" data-icon="selectAll" data-i18n-attr="title:mail.selectAll, aria-label:mail.selectAll"></button>
                         <button id="actReply"    class="icon-btn" type="button" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
                         <button id="actReplyAll" class="icon-btn" type="button" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
                         <button id="actForward"  class="icon-btn" type="button" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
@@ -89,7 +90,8 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
                     <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
-                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="select" data-i18n-attr="title:mail.select, aria-label:mail.select"></button>
+                    <!-- picks the rows that match some fields (the pick dialog) -->
+                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="selectAll" data-i18n-attr="title:mail.pickGo, aria-label:mail.pickGo"></button>
                 </div>
                 <div class="tb-group tb-sys">
                     <button id="setBtn" class="icon-btn mail-list-only" type="button" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
@@ -102,21 +104,13 @@
         </div>
 
         <div class="mail-body">
-            <!-- The account (a picker, only with two or more) and its five trays.
-                 A column on a wide screen, a row of pills on a phone. -->
-            <nav id="side" class="mail-side" hidden>
+            <!-- The account (a picker, only with two or more), then ONE tree: the
+                 five trays, and "Labels" with Nayive's own labels under it (the
+                 shared NayiveUI.tree, browse.js). A column on a wide screen; on a
+                 phone it slides in from the folder button over the list. -->
+            <nav id="side" class="mail-side tree-pane" hidden>
                 <select id="acctSel" class="tb-select" hidden data-i18n-attr="aria-label:mail.account"></select>
-                <div id="trays" class="mail-trays"></div>
-                <!-- Nayive's own labels, in a panel of their own that scrolls: a tap lists
-                     what carries one, from every account; its pencil (or a long press /
-                     right click) edits it; (+) makes one. -->
-                <div class="mail-labels-panel">
-                    <div class="mail-labels-head">
-                        <span class="section-label" data-i18n="mail.labels"></span>
-                        <button id="labelAddBtn" class="icon-btn sm" type="button" data-icon="plus" data-i18n-attr="title:mail.newLabel, aria-label:mail.newLabel"></button>
-                    </div>
-                    <div id="labelsSide" class="mail-trays mail-labels"></div>
-                </div>
+                <div id="tree" class="mail-tree"></div>
             </nav>
 
             <main class="mail-main">
@@ -130,6 +124,13 @@
 
                 <!-- A tray -->
                 <section id="listView" class="mail-list-view" hidden>
+                    <!-- a phone: the tray or label on screen, and the button that slides the tree in -->
+                    <div class="mail-where">
+                        <button id="treeBtn" class="icon-btn" type="button" data-i18n-attr="title:mail.labelsAndTrays, aria-label:mail.labelsAndTrays">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        </button>
+                        <span id="whereName" class="mail-where-name"></span>
+                    </div>
                     <div id="acctProblem" class="mail-problem" hidden></div>
                     <!-- The Trash (when it empties itself) and Spam: the button that
                          empties it now, for good (list.js sets the words). -->
@@ -142,7 +143,7 @@
                         <span id="advBarText" class="mail-adv-text"></span>
                         <button id="advOffBtn" class="pill" type="button" data-i18n="mail.advOff"></button>
                     </div>
-                    <div id="list" class="mail-list"></div>
+                    <div id="list" class="mail-list" role="listbox" aria-multiselectable="true"></div>
                     <div id="listEmpty" class="empty-state" hidden>
                         <p id="listEmptyText"></p>
                     </div>
@@ -258,9 +259,10 @@
         </div>
     </div>
 
-    <!-- PICK, from the select bar's tick-all button: All (bottom left) ticks every
-         row (all ticked: none); or the fields pick the rows that match ALL the
-         fields filled - the list's next pages are read first. -->
+    <!-- PICK, from the list's select button (or "Select…" on a right-click in
+         the list): All (bottom left) picks every row (all picked: none); or the
+         fields pick the rows that match ALL the fields filled - the list's next
+         pages are read first - and only those stay in sight until the pick ends. -->
     <div class="sheet-backdrop" id="pickSheet" role="dialog" aria-modal="true">
         <div class="sheet mail-pick-sheet">
             <h2 data-i18n="mail.pickGo"></h2>
@@ -500,9 +502,9 @@
         </div>
     </div>
 
-    <!-- ONE LABEL: its name and colour. New from the side panel's (+), edit from
-         a label's pencil; the bin (edit only) deletes it at once - and takes it
-         off every message. -->
+    <!-- ONE LABEL: its name and colour. New from the "Labels" row's menu, edit
+         from a label's menu (right-click, its ⋮, a long press); the bin (edit
+         only) deletes it at once, with Undo - and takes it off every message. -->
     <div class="sheet-backdrop" id="labelDlg" role="dialog" aria-modal="true">
         <div class="sheet">
             <h2 id="labelDlgTitle"></h2>
@@ -525,6 +527,7 @@
 
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
     <script src="core.js" defer></script>
     <script src="list.js" defer></script>
     <script src="read.js" defer></script>
@@ -532,6 +535,7 @@
     <script src="labels.js" defer></script>
     <script src="actions.js" defer></script>
     <script src="search.js" defer></script>
+    <script src="browse.js" defer></script>
     <script src="lib/dompurify_v3.4.16.min.js" defer></script>
     <script src="lib/squire_v2.4.9.js" defer></script>
     <script src="compose.js" defer></script>

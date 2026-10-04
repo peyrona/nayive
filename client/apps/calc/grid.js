@@ -1807,10 +1807,24 @@ function pointEditorOpened()
         new MutationObserver( syncFormulaPanel ).observe( ed.TEXTAREA_PARENT, { attributes: true, attributeFilter: [ 'class' ] } );
 }
 
+// True when one range covers every row and every column (corner or Ctrl+A).
+function allSelected()
+{
+    const all = table.getSelected();
+    if( ! all || all.length !== 1 ) return false;
+    const [ r1, c1, r2, c2 ] = all[ 0 ];
+    return Math.min( r1, r2 ) <= 0 && Math.min( c1, c2 ) <= 0
+        && Math.max( r1, r2 ) >= table.countRows() - 1 && Math.max( c1, c2 ) >= table.countCols() - 1;
+}
+
 function pointMouseDown( e, coords )
 {
     pointDrag = false;
-    if( coords.row < 0 && coords.col < 0 ) return;       // the corner stays "select all"
+    if( coords.row < 0 && coords.col < 0 )               // the corner: select all, or undo it when all is already picked
+    {
+        if( allSelected() ) { Handsontable.dom.stopImmediatePropagation( e ); e.preventDefault(); table.selectCell( 0, 0 ); }
+        return;
+    }
 
     const ed = formulaEditor();
     if( ! ed || ! canPoint( ed.TEXTAREA ) ) return;

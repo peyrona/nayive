@@ -321,13 +321,16 @@ button.sync-indicator:focus-visible { outline: 2px solid var(--accent); outline-
 
 /* Top-right corner close - used when a dialog's ONLY action is "close" (a
  * bottom .sheet-actions row is for dialogs that also have an Apply/Save/…).
- * NayiveUI.applySheetButtons() moves a lone close button here and pins its
- * position inline. Just the round-button look here; apps that still carry
- * their own .sheet-close in a flex header keep that local copy. */
-.sheet-close             { display: flex; align-items: center; justify-content: center;
+ * NayiveUI.applySheetButtons() moves a lone close button onto the title's line
+ * (.sheet-header), or pins it to the corner when there is no title. Just the
+ * round-button look here; apps that still carry their own .sheet-close in a
+ * flex header keep that local copy.
+ * .sheet-tool: the same look for a dialog's own icon button on that title
+ * line, left of the × (My account's colour schemes). */
+.sheet-close, .sheet-tool { display: flex; align-items: center; justify-content: center;
                            width: 32px; height: 32px; flex: 0 0 auto; padding: 0; z-index: 1;
                            border: none; border-radius: 50%; cursor: pointer;
                            background: transparent; color: var(--text-dim);
                            transition: background-color var(--tr-fast), color var(--tr-fast); }
-.sheet-close svg         { width: 18px; height: 18px; display: block; }
-.sheet-close:hover       { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.sheet-close svg, .sheet-tool svg     { width: 18px; height: 18px; display: block; }
+.sheet-close:hover, .sheet-tool:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }

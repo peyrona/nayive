@@ -29,7 +29,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-736129feebc5";
+var CACHE_VERSION = "nayive-e869529e239e";
 /* @end */
 
 /* @generated:precache */
@@ -64,6 +64,7 @@ var PRECACHE_SHELL = [
     "chat/guest.js",
     "chat/info.js",
     "chat/list.js",
+    "chat/marks.js",
     "chat/media.js",
     "chat/push-notice.js",
     "contact/icons/icon-192.png",
@@ -92,6 +93,7 @@ var PRECACHE_SHELL = [
     "drive/zip.js",
     "email/accounts.js",
     "email/actions.js",
+    "email/browse.js",
     "email/compose.js",
     "email/core.js",
     "email/email.css",
@@ -133,6 +135,7 @@ var PRECACHE_SHELL = [
     "share-target/index.html",
     "shared/app.css",
     "shared/basemap.js",
+    "shared/browser.js",
     "shared/crypt.js",
     "shared/gum-api.js",
     "shared/i18n.js",

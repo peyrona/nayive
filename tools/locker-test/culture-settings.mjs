@@ -39,7 +39,8 @@ try
     console.log( "default:", dflt );
     ok( dflt === "English,español,français,Deutsch,português", "by default all languages, the account's first" );
     // The rest of the test starts from es, en, pt.
-    await p.evaluate( "document.querySelector('#salonSettings .sheet-actions [data-act=close], #salonSettings .sheet-actions button').click();1" ); await sleep( 600 );
+    await p.evaluate( "document.querySelector('#salonSettings .sheet-close').click();1" ); await sleep( 600 );
+    ok( await p.evaluate( "fetch('/api/files?file=data/salon.json').then(r=>r.status)" ) === 404, "closed with no change: nothing written" );
     await p.evaluate( `fetch('/api/files?file=data/salon.json',{method:'PUT',body:JSON.stringify({langs:['es','en','pt']})}).then(r=>r.status)` );
     await p.evaluate( "document.getElementById('moreBtn').click();1" ); await sleep( 400 );
     await p.evaluate( "document.getElementById('salonBtn').click();1" ); await sleep( 2500 );
@@ -62,22 +63,23 @@ try
     await p.evaluate( "document.querySelector('.salon-tabs .pill:nth-child(3)').click();1" );
     await p.evaluate( `(()=>{var ls=[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-check')];['Musée du Louvre','Sculpture','1600–1750 (Baroque)'].forEach(n=>ls.find(l=>l.textContent===n).querySelector('input').click());return 1})()` );
     await shot( "art" );
-    // Look: a city, °F, 12 h, the clear letters, large, high contrast.
+    // Look (select 0 = who gives the weather): a city, °F, 12 h, the clear letters, large, high contrast.
     await p.evaluate( "document.querySelector('.salon-tabs .pill:nth-child(4)').click();1" );
     await p.evaluate( `(()=>{var pane=document.querySelector('.salon-pane:not([hidden])');var q=pane.querySelector('input[type=text]');q.value='Lisboa';pane.querySelector('.salon-row button').click();return 1})()` );
     await sleep( 2500 );
     const found = await p.evaluate( "[...document.querySelectorAll('.salon-pane:not([hidden]) .salon-note')].map(n=>n.textContent).join('|')" );
     console.log( "city:", found );
     ok( /Lisbo/.test( found ), "city found" );
-    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) select')];var set=(i,v)=>{ss[i].value=v;ss[i].dispatchEvent(new Event('change'))};set(0,'f');set(1,'12');set(2,'clear');set(3,'l');set(4,'high');return 1})()` );
+    await p.evaluate( `(()=>{var ss=[...document.querySelectorAll('.salon-pane:not([hidden]) select')];var set=(i,v)=>{ss[i].value=v;ss[i].dispatchEvent(new Event('change'))};set(1,'f');set(2,'12');set(3,'clear');set(4,'l');set(5,'high');return 1})()` );
     await sleep( 500 );
     await shot( "look" );
     ok( await p.evaluate( "getComputedStyle(document.querySelector('.salon-preview .big')).fontFamily.includes('Atkinson')" ), "the sample shows the chosen letters" );
 
-    // Save.
-    await p.evaluate( "document.querySelector('#salonSettings .sheet-actions .btn-primary').click();1" );
+    // Close-only (no ✓): Escape closes it, and closing saves.
+    ok( await p.evaluate( "!document.querySelector('#salonSettings .btn-primary') && !document.querySelector('#salonSettings .sheet-actions')" ), "no ✓, only the corner ×" );
+    await p.evaluate( "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));1" );
     await sleep( 1500 );
-    ok( await p.evaluate( "!document.querySelector('#salonSettings')" ), "dialog closed on save" );
+    ok( await p.evaluate( "!document.querySelector('#salonSettings')" ), "Escape closed it" );
     const saved = JSON.parse( await p.evaluate( "fetch('/api/files?file=data/salon.json').then(r=>r.text())" ) );
     console.log( JSON.stringify( saved ) );
     ok( saved.langs.join() === "es,en,fr,pt" && saved.cards.word.langs.join() === "es,fr,pt" && saved.cards.quote.on === false &&

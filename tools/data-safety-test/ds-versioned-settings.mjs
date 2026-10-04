@@ -31,7 +31,7 @@ await seed( CFG, JSON.stringify( { folder: "files/Album" } ) );
 const c = await browser( s, { width: 1280, height: 900 } );
 
 //----------------------------------------------------------------------------
-section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN ✓'S READ AND ITS WRITE" );
+section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN CLOSE'S READ AND ITS WRITE" );
 {
     ok( await c.open( "/nayive/desktop/index.html" ), "desktop page opens" );
     ok( await c.until( "typeof NayiveUI !== 'undefined' && typeof NayiveLock !== 'undefined' && typeof NayiveI18n !== 'undefined'" ), "ready" );
@@ -46,9 +46,11 @@ section( "F6 · LOCKER SETTINGS: THE PHONE SAVES BETWEEN ✓'S READ AND ITS WRIT
         const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === NayiveI18n.t( 'salon.contrast' ) );
         const sel = f.querySelector( 'select' ); sel.value = 'high'; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
     await arm( c, SALON, add( { units: "c" } ) );
-    await c.evaluate( "document.querySelector( '#salonSettings .sheet-actions .btn-primary' ).click(); true" );
+    // close-only (no ✓): closing saves
+    await c.evaluate( "document.querySelector( '#salonSettings [data-act=close], #salonSettings .sheet-close' ).click(); true" );
     ok( await raced( c ), "the phone set °C in between" );
-    ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "✓: saved and closed" );
+    ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
+    ok( await disk( () => ( json( SALON ) || {} ).contrast === "high" ), "the save landed" );
     const st = json( SALON );
     ok( st && st.contrast === "high", "this dialog's change is saved", st );
     ok( st && st.units === "c" && st.size === "l", "...and the phone's °C is not put back", st );

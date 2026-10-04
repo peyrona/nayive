@@ -8,9 +8,11 @@
      remembers in data/photos/config.json, asking for it once with
      NayiveUI.pickFolder. If that folder holds sub-folders (an album per trip,
      say) and no loose images, Photos first shows those sub-folders as an album
-     index; picking one re-opens the page at ?dir=<that album>. The crumb
-     re-opens the picker. Only a visitor who is NOT signed in falls back to the
-     small built-in example set (a Lisbon trip).
+     index; picking one re-opens the page at ?dir=<that album>. The albums
+     tree beside the photos (ITEM BROWSER + ALBUMS in the script) does the
+     same for every album, and the photos are picked and acted on there like
+     any list. The crumb re-opens the picker. Only a visitor who is NOT
+     signed in falls back to the small built-in example set (a Lisbon trip).
 
      Real folders: the image list + sizes come from GET /api/files?dir=<folder>
      (one level - files + sub-folders of just that folder, never the whole
@@ -55,6 +57,7 @@
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
     <script src="../shared/photo.js" defer></script>
     <script>
     NayiveI18n.ready.then( function () {
@@ -235,7 +238,7 @@
     .geo-dot
     {
         position: absolute;
-        top: 7px;
+        bottom: 7px;
         right: 7px;
         width: 7px;
         height: 7px;
@@ -409,9 +412,65 @@
         overflow-wrap: anywhere;
     }
 
-    /* grid marker: this photo has a comment (geo-dot sits top-right, this top-left) */
-    .note-mark { position: absolute; top: 6px; left: 6px; color: #fff; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.65)); }
+    /* grid marker: this photo has a comment (geo-dot sits bottom-right, this
+       bottom-left; the top corners hold the pick tick and the ⋮) */
+    .note-mark { position: absolute; bottom: 6px; left: 6px; color: #fff; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.65)); }
     .note-mark svg { width: 13px; height: 13px; display: block; }
+    /* the caption takes the bottom edge on hover: the two marks step aside */
+    body:not(.view-list) #grid .tile:hover .note-mark,
+    body:not(.view-list) #grid .tile:hover .geo-dot { opacity: 0; }
+    /* list view: the mark goes after the name (the names stay in one column), before the ⋮ */
+    body.view-list #grid .note-mark { position: static; flex: 0 0 auto; order: 1; color: var(--text-dim); filter: none; }
+    body.view-list #grid .tile .row-more { order: 2; }
+
+    /* ---------- picking (shared/browser.js) ----------
+     * A click picks a tile, a double-click / Enter / a tap opens it. The pick
+     * tick sits over the tile's top-left corner and the ⋮ over its top-right
+     * one (both drawn over the photo, so they carry their own dark disc); in
+     * the list view they are plain flex items at the row's two ends. */
+    #grid .tile { cursor: default; }
+    #grid .tile .ph { -webkit-touch-callout: none; user-select: none; }
+    #grid .tile .pick-tick,
+    #grid .tile .row-more { position: absolute; z-index: 2; }
+    #grid .tile .pick-tick { top: 6px; left: 6px; }
+    #grid .tile .row-more { top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%;
+                            background: rgba(0, 0, 0, 0.38); color: #fff; }
+    #grid .tile .row-more:hover { background: rgba(0, 0, 0, 0.55); }
+    #grid .tile:not(.is-selected) .pick-tick { background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.92); }
+    #grid .tile.is-selected .pick-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    body:not(.view-list) #grid .tile.is-selected::after,
+    body:not(.view-list) #grid .tile:focus-visible::after
+    {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        border-radius: inherit;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, var(--text));
+    }
+    body:not(.view-list) #grid .tile.is-selected::after
+    {
+        box-shadow: inset 0 0 0 3px var(--accent);
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    body.view-list #grid .tile .pick-tick,
+    body.view-list #grid .tile .row-more { position: static; }
+    body.view-list #grid .tile .row-more { background: none; color: var(--text-dim); }
+    body.view-list #grid .tile:not(.is-selected) .pick-tick { background: transparent; border-color: var(--text-faint); }
+    body.view-list #grid .tile.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+    /* ---------- the albums tree (shared .ntree) ----------
+     * PC + tablet: a pane beside the photos; a phone: it slides in from the
+     * folder button (#treeBtn) - the shared .tree-sheet. */
+    .body-row { flex: 1 1 auto; min-height: 0; display: flex; }
+    .body-row > .stage { min-width: 0; }
+    .tree-pane { width: var(--tree-w, 220px); flex: 0 0 auto; overflow: auto; padding: 6px 4px 16px; }
+    .tree-head { padding: 4px 6px 6px; }
+    .tree-head .section-label { margin: 0; }
+    #tree.ntree { min-width: 0; }
+    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    #treeBtn, #treeBtn[hidden] { display: none; }
 
     /* the comment, read-only, under the Pase caption */
     .pase-cap .c { margin-top: 8px; font-size: 0.9rem; line-height: 1.45; color: rgba(255, 255, 255, 0.9); max-width: 46ch; white-space: pre-wrap; }
@@ -476,6 +535,10 @@
 
     @media (max-width: 640px)
     {
+        #treeBtn:not([hidden]) { display: inline-flex; }
+        /* the tree button takes the app icon's place, so the header keeps two rows */
+        #treeBtn:not([hidden]) + .app-icon { display: none; }
+        .pane-resizer { display: none; }
         .pase-cap { left: 14px; bottom: 88px; max-width: 78%; }
         .pase-cap .t { font-size: 1.1rem; }
         .lb-nav.prev { left: 8px; }
@@ -490,9 +553,9 @@
 <body>
     <div class="app">
         <header class="topbar">
-            <!-- An album opened from the album index: the way back to it, before the title. -->
-            <button class="icon-btn" id="backBtn" type="button" hidden data-i18n-attr="title:photos.backToAlbums, aria-label:photos.backToAlbums">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <!-- A phone's way into the albums tree (it slides in from the left). -->
+            <button class="icon-btn" id="treeBtn" type="button" hidden data-i18n-attr="title:photos.albums, aria-label:photos.albums">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             </button>
             <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="16" height="16" rx="2"/><circle cx="12" cy="8" r="2"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/></svg>
             <h1>Photos</h1>
@@ -522,6 +585,8 @@
             <input type="file" id="addInput" accept="image/*" multiple hidden>
 
             <div class="topbar-actions">
+                <!-- The selection group (shared/browser.js draws it while photos are picked). -->
+                <div id="selActions" class="tb-group" hidden></div>
                 <div class="tb-group">
                     <div class="search-wrap">
                         <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
@@ -555,6 +620,14 @@
         </div>
 
         <div class="edit-hint" id="editHint" hidden data-i18n="photos.editHint"></div>
+
+        <div class="body-row">
+        <!-- The albums: the photo folder and its sub-folders (albums.* in the script). -->
+        <nav id="treePane" class="tree-pane" hidden data-i18n-attr="aria-label:photos.albums">
+            <div class="tree-head"><span class="section-label" data-i18n="photos.albums"></span></div>
+            <div id="tree"></div>
+        </nav>
+        <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" hidden data-i18n-attr="title:ui.dragResize"></div>
 
         <div class="stage">
             <div class="pane" id="grid"></div>
@@ -594,6 +667,7 @@
                     <button id="pSpeed" class="pase-speed" data-i18n-attr="title:photos.secondsPerPhoto, aria-label:photos.secondsPerPhoto">6 s</button>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -931,7 +1005,7 @@ function sceneInner( p, thumb )
 {
     if( ! realPhoto( p ) ) return "";
     const t = thumb ? thumbSrc( p ) : { src: srcFor( p ), stage: "full" };
-    return '<img class="ph" loading="lazy" decoding="async" alt="" src="' + esc( t.src ) + '"'
+    return '<img class="ph" loading="lazy" decoding="async" draggable="false" alt="" src="' + esc( t.src ) + '"'
          + ' data-id="' + esc( p.id ) + '" data-stage="' + t.stage + '">';
 }
 function sceneHtml( p, thumb )
@@ -1769,13 +1843,15 @@ function tileHtml( p )
 {
     const cap  = esc( tileCap( p ) );
     // .tmeta is shown only in list view (CSS); .cap only in grid view.
-    return '<button class="tile" data-id="' + esc( p.id ) + '" title="' + cap + '">'
+    // A <div>, not a <button>: the item browser puts its pick tick and ⋮
+    // (buttons) inside it.
+    return '<div class="tile" data-id="' + esc( p.id ) + '" title="' + cap + '">'
          + sceneHtml( p, true )
          + '<span class="geo-dot' + ( p.lat != null ? "" : " no" ) + '"></span>'
          + ( noteFor( p.id ) ? NOTE_MARK : "" )
          + '<span class="cap">' + cap + "</span>"
          + '<span class="tmeta"><b>' + esc( p.name ) + "</b><i>" + esc( tileBits( p ) ) + "</i></span>"
-         + "</button>";
+         + "</div>";
 }
 
 // A HEIC / HEIF: listed, so it is not just missing, but no browser here can
@@ -2252,6 +2328,8 @@ function setMode( m )
         return;
     }
     st.mode = m;
+    // The map and the slideshow pick nothing: a selection made on the grid ends.
+    if( browse && m !== "grid" && m !== "lista" && m !== "editar" ) browse.clear();
     // "grid" and "lista" are the same pane (#grid), just laid out differently;
     // "lista" adds body.view-list, which the #grid CSS keys off.
     const sheet = ( m === "grid" || m === "lista" || m === "editar" );
@@ -2304,15 +2382,14 @@ $( "#reloadBtn" ).addEventListener( "click", () =>
     loadFolder();
 } );
 
-// One delegated click for every grid tile, present and future (the grid fills
-// in batches as you scroll). Album-index cards carry their own handlers.
+// A HEIC / HEIF tile (not a photo the browser can pick: it has no data-id)
+// still answers one click. The photo tiles are the item browser's (see ITEM
+// BROWSER below): a click picks, a double-click / Enter / a tap opens.
+// Album-index cards carry their own handlers.
 $( "#grid" ).addEventListener( "click", e =>
 {
-    const el = e.target.closest( ".tile" );
-    if( ! el ) return;
-    if( el.dataset.heic ) { openUnshown( el.dataset.heic ); return; }
-    if( st.mode === "editar" && ! RO ) editPhoto( el.dataset.id );
-    else openLb( el.dataset.id, photos() );
+    const el = e.target.closest( ".tile[data-heic]" );
+    if( el ) openUnshown( el.dataset.heic );
 } );
 
 // The crumb changes the folder Photos remembers, then re-opens on it. In DEMO
@@ -2380,7 +2457,8 @@ document.addEventListener( "keydown", e =>
 {
     if( $( "#lb" ).classList.contains( "open" ) )
     {
-        if( e.key === "Escape" ) closeLb();
+        // preventDefault: the same Esc must not also clear the picked photos.
+        if( e.key === "Escape" ) { e.preventDefault(); closeLb(); }
         if( e.key === "ArrowLeft" ) lbStep( -1 );
         if( e.key === "ArrowRight" ) lbStep( 1 );
         return;
@@ -2393,6 +2471,606 @@ document.addEventListener( "keydown", e =>
         if( e.key === "ArrowRight" ) paseStep( 1 );
     }
 } );
+
+/* ---------------------------------------------------------------------------
+ * ITEM BROWSER + ALBUMS  (shared/browser.js, docs/item-browser-plan.md)
+ *
+ * The photo tiles are picked like any list: a click picks one, Ctrl / Shift
+ * add, a double-click / Enter / a tap opens it (the lightbox; in Editar mode
+ * the editor), a long-press starts picking on a phone. ONE action list
+ * (photoActions) feeds the header's selection group, the menu (right-click,
+ * a tile's ⋮, the header ⋮) and the keys.
+ *
+ * The albums are the photo folder (ROOT) and its sub-folders, in the shared
+ * tree. A click opens an album by opening this page again at ?dir= (&root=
+ * keeps the tree's top): the loads, scans and sweeps above all read DIR, so
+ * the folder is never swapped under one of them half-way. Photos dropped on
+ * an album move there; an album has its own menu (albumMenu).
+ *
+ * Moves, copies and the bin are Drive's own calls in Drive's order
+ * (drive/move-copy.js, drive/actions.js): GumApi.rename / the server's copy /
+ * GumApi.binPaths, then NayiveMedia.remapPaths / copyPaths / purgePaths, so
+ * the notes and the scan caches follow the photos. Moves and the bin have an
+ * Undo; when the open album itself moved or went, the page opens where it is
+ * now (or the album above) and the Undo comes along (carryUndo).
+ * -------------------------------------------------------------------------*/
+let browse   = null;          // NayiveUI.browser on #grid
+let treeView = null;          // NayiveUI.tree in #treePane
+let ROOT     = null;          // the tree's top folder (albumRoot)
+let ALBUMS   = null;          // ROOT's node of GumApi.dirTree(): { path, nodes }
+let albumIndexShown = false;  // #grid holds the album cards (renderAlbums)
+
+const TREE_OPEN_KEY = "photos-tree-open";        // localStorage: the open albums
+const CARRY_KEY     = "photos-carry-undo";       // sessionStorage: an Undo across a re-open
+const MAP_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+
+let treeOpen = new Set();
+try { treeOpen = new Set( JSON.parse( localStorage.getItem( TREE_OPEN_KEY ) || "[]" ) ); } catch( _ ) {}
+function saveTreeOpen() { try { localStorage.setItem( TREE_OPEN_KEY, JSON.stringify( [ ...treeOpen ] ) ); } catch( _ ) {} }
+
+// `path` is `top` or lives inside it.
+function under( path, top ) { return path === top || path.indexOf( top + "/" ) === 0; }
+
+// The tree's top: the &root= it was opened with, else the folder Photos
+// remembers (data/photos/config.json) - when the open album is inside it;
+// else the open album itself (opened from Drive on a folder of its own, or
+// an album someone shared with us).
+async function albumRoot()
+{
+    const asked = PARAMS.get( "root" );
+    if( asked && under( DIR, asked ) ) return asked;
+    if( RO ) return DIR;
+    try
+    {
+        const cfg = await GumApi.readJson( "data/photos/config.json" );
+        const f   = cfg && typeof cfg.folder === "string" ? ( cfg.folder.replace( /\/+$/, "" ) || "files" ) : "";
+        if( f && under( DIR, f ) ) return f;
+    }
+    catch( _ ) {}
+    return DIR;
+}
+
+// This page, opened on another album (the tree's top goes along).
+function albumUrl( path )
+{
+    return "?dir=" + encodeURIComponent( path ) + ( path !== ROOT ? "&root=" + encodeURIComponent( ROOT ) : "" );
+}
+
+function albumName( path ) { return path === "files" ? NayiveUI.t( "ui.filesRoot" ) : ( path === DIR && RO ? dirLabel() : baseName( path ) ); }
+
+// ROOT's node in the folders-only tree of the whole account (one call).
+function findDir( node, path )
+{
+    if( ! node ) return null;
+    if( node.path === path ) return node;
+    for( const n of node.nodes || [] )
+        if( Array.isArray( n.nodes ) && ( n.path === "" || under( path, n.path ) ) ) return findDir( n, path );
+    return null;
+}
+
+let albumsSeq = 0;
+async function loadAlbums()
+{
+    const my = ++albumsSeq;
+    let top = null;
+    try { top = findDir( await GumApi.dirTree(), ROOT ); } catch( _ ) { return; }
+    if( my !== albumsSeq || ! top ) return;
+    ALBUMS = top;
+    if( treeView ) treeView.render();
+}
+
+// The tree's rows: ROOT and its sub-folders, by name.
+function albumNodes()
+{
+    if( ! ALBUMS ) return [];
+    const byName = ( a, b ) => baseName( a.path ).localeCompare( baseName( b.path ), NayiveUI.lang(), { sensitivity: "base", numeric: true } );
+    const mk = ( n, top ) => ( {
+        id:     n.path,
+        name:   albumName( n.path ),
+        kids:   ( n.nodes || [] ).filter( k => Array.isArray( k.nodes ) ).sort( byName ).map( k => mk( k, false ) ),
+        noDrag: top || RO
+    } );
+    return [ mk( ALBUMS, true ) ];
+}
+
+// Items (photos or albums) may go into `dest`: not into themselves, not where
+// they already are, never into an album someone shared with us.
+function canDropOn( ids, dest )
+{
+    if( RO || DEMO || ! ids || ! ids.length || NayiveUI.isShared( dest ) ) return false;
+    return ids.every( p => ! under( dest, p ) && NayiveMedia.dirOf( p ) !== dest );
+}
+
+function wireTree()
+{
+    $( "#treePane" ).hidden = false;
+    $( "#paneResizer" ).hidden = false;
+    $( "#treeBtn" ).hidden = false;
+    // The open album shows, its albums above it open.
+    treeOpen.add( ROOT );
+    for( let p = DIR; p && p !== ROOT && under( p, ROOT ); p = NayiveMedia.dirOf( p ) ) treeOpen.add( NayiveMedia.dirOf( p ) );
+
+    treeView = NayiveUI.tree( {
+        host:    $( "#tree" ),
+        pane:    $( "#treePane" ),
+        roots:   albumNodes,
+        isOpen:  id => treeOpen.has( id ),
+        setOpen: ( id, v ) => { if( v ) treeOpen.add( id ); else treeOpen.delete( id ); saveTreeOpen(); },
+        current: () => DIR,
+        go:      id => { if( id !== DIR ) location.href = albumUrl( id ); },
+        menu:    ( id, x, y, anchor ) => NayiveUI.menuAt( x, y, albumMenu( id ), { anchor: anchor } ),
+        drag:    id => ( id === ROOT || RO || DEMO ) ? null : [ id ],
+        drop:    { can:  ( ids, dest ) => canDropOn( ids, dest ) ? "inside" : false,
+                   drop: ( ids, dest ) => { movePaths( ids, dest ); } }
+    } );
+    $( "#treeBtn" ).addEventListener( "click", () => treeView.openSheet() );
+    NayiveUI.paneResizer( $( "#paneResizer" ), $( "#treePane" ),
+    {
+        min: 150, max: 420, def: 220, key: "photos-tree-w", off: () => PHONE.matches,
+        set: w => document.documentElement.style.setProperty( "--tree-w", w + "px" )
+    } );
+}
+
+// An album's menu (right-click, its ⋮, a long-press in the tree). The top
+// album only makes new ones: it is the folder Photos is set to.
+function albumMenu( path )
+{
+    const off = RO || DEMO, top = path === ROOT;
+    return [
+        { id: "newAlbum", label: NayiveUI.t( "photos.newAlbum" ), icon: "folderplus", disabled: off, run: () => newAlbum( path ) },
+        { sep: true },
+        { id: "rename",   label: NayiveUI.t( "ui.rename" ),  icon: "edit",  disabled: off || top, run: () => renameAlbum( path ) },
+        { id: "move",     label: NayiveUI.t( "ui.moveTo" ),  icon: "move",  disabled: off || top, run: () => pickAlbumFor( [ path ], "move" ) },
+        { sep: true },
+        { id: "bin",      label: NayiveUI.t( "ui.toTrash" ), icon: "trash", disabled: off || top, danger: true, run: () => binPaths( [ path ] ) }
+    ];
+}
+
+// The photo actions: ONE list for the header group, the menu and the keys.
+function photoActions()
+{
+    const one  = ids => ids.length === 1;
+    const mine = () => ! RO && ! DEMO;
+    return [
+        { id: "open", label: NayiveUI.t( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
+          run: ids => openPhoto( ids[ 0 ] ) },
+        { id: "edit", label: NayiveUI.t( "photos.editInImage" ), icon: "edit", key: "E", bar: 4, group: 0, where: mine,
+          when: ids => one( ids ) && EDIT_EXT.indexOf( extOf( ids[ 0 ] ) ) !== -1, run: ids => editPhoto( ids[ 0 ] ) },
+        { id: "share", label: NayiveUI.t( "ui.share" ), icon: "share", bar: 1, phone: 1, group: 1, where: mine, when: one,
+          run: ids => NayiveUI.shareSheet( { path: ids[ 0 ], app: "file", title: baseName( ids[ 0 ] ), canAdd: false } ) },
+        { id: "download", label: NayiveUI.t( "ui.download" ), icon: "download", key: "Ctrl+D", bar: 2, group: 1,
+          where: () => ! DEMO, when: () => ! dlBusy, run: downloadPaths },
+        { id: "move", label: NayiveUI.t( "photos.moveToAlbum" ), icon: "move", bar: 3, phone: 1, group: 2, where: mine,
+          run: ids => pickAlbumFor( ids, "move" ) },
+        { id: "copyTo", label: NayiveUI.t( "photos.copyToAlbum" ), icon: "copy", group: 2, where: mine,
+          run: ids => pickAlbumFor( ids, "copy" ) },
+        { id: "map", label: NayiveUI.t( "photos.seeOnMap" ), icon: MAP_PIN, group: 2,
+          when: ids => ids.every( id => { const p = photoById( id ); return !! p && p.cluster != null; } ), run: showOnMap },
+        { id: "bin", label: NayiveUI.t( "ui.toTrash" ), icon: "trash", key: NayiveUI.isMac ? [ "Del", "Backspace" ] : "Del",
+          bar: 9, phone: 1, group: 3, danger: true, where: mine, run: ids => binPaths( ids ) }
+    ];
+}
+
+// Right-click on empty space: what you add here.
+function areaActions()
+{
+    return [
+        { id: "upload", label: NayiveUI.t( "photos.uploadHere" ), icon: "upload", where: () => ! $( "#addBtn" ).hidden,
+          run: () => $( "#addInput" ).click() },
+        { id: "newAlbum", label: NayiveUI.t( "photos.newAlbum" ), icon: "folderplus", where: () => ! RO && ! DEMO,
+          run: () => newAlbum( DIR ) }
+    ];
+}
+
+function wireBrowser()
+{
+    browse = NayiveUI.browser( {
+        list:    $( "#grid" ),
+        row:     ".tile[data-id]",
+        bar:     $( "#selActions" ),
+        actions: photoActions(),
+        area:    areaActions(),
+        tree:    treeView,
+        // Not while a photo is full screen, nor on the map or in the slideshow.
+        active:  () => ! $( "#lb" ).classList.contains( "open" ) && ( st.mode === "grid" || st.mode === "lista" || st.mode === "editar" ),
+        grid:    () => st.mode !== "lista",
+        open:    id => openPhoto( id ),
+        search:  () => $( "#searchToggle" ).click(),
+        drag:    { can: () => ! RO && ! DEMO, text: ids => ids.map( baseName ).join( "\n" ) }
+    } );
+}
+
+// Open: the lightbox - or, in Editar mode, the editor (as a tap there did).
+function openPhoto( id )
+{
+    if( st.mode === "editar" && ! RO ) editPhoto( id );
+    else openLb( id, photos() );
+}
+
+function showOnMap( ids )
+{
+    const p = photoById( ids[ 0 ] );
+    browse.clear();
+    setMode( "map" );
+    if( p && p.cluster != null ) openCluster( p.cluster );
+}
+
+// Download: the server sends it, one photo as it is, several as one .zip
+// (server/go/api_download.go) - the same call Drive's Download makes.
+let dlBusy = false;
+async function downloadPaths( paths )
+{
+    if( dlBusy || ! paths.length ) return;
+    dlBusy = true;
+    const q = new URLSearchParams();
+    paths.forEach( p => q.append( "paths", p ) );
+    try
+    {
+        const r = JSON.parse( await GumApi.fetchText( "/api/download?" + q.toString(), { method: "POST" } ) );
+        const a = document.createElement( "a" );
+        a.href     = "/api/download?id=" + encodeURIComponent( r.id );
+        a.download = r.name || "";
+        document.body.appendChild( a );
+        a.click();
+        a.remove();
+    }
+    catch( err ) { NayiveUI.toast( NayiveUI.t( err && err.status === 413 ? "drive.compressTooMany" : "drive.downloadFailed" ) ); }
+    finally { dlBusy = false; }
+}
+
+// A name for a new album or a rename: a small dialog. Resolves the trimmed
+// name, or null.
+function askName( title, value, okTitle )
+{
+    return new Promise( resolve =>
+    {
+        let done = false;
+        const d = NayiveUI.modal( { title: title, cls: "sheet--pack", escape: () => finish( null ) } );
+        function finish( v ) { if( done ) return; done = true; d.close(); resolve( v ); }
+
+        const field = document.createElement( "div" );
+        field.className = "field";
+        const input = document.createElement( "input" );
+        input.type = "text";
+        input.autocomplete = "off";
+        input.value = value || "";
+        input.placeholder = NayiveUI.t( "photos.albumName" );
+        input.setAttribute( "aria-label", NayiveUI.t( "photos.albumName" ) );
+        field.appendChild( input );
+        d.sheet.appendChild( field );
+
+        const row = document.createElement( "div" );
+        row.className = "sheet-actions";
+        const cancel = document.createElement( "button" );
+        cancel.type = "button";
+        cancel.setAttribute( "data-act", "close" );
+        cancel.title = NayiveUI.t( "ui.cancel" );
+        cancel.addEventListener( "click", () => finish( null ) );
+        const ok = document.createElement( "button" );
+        ok.type = "button";
+        ok.className = "name-ok";
+        ok.setAttribute( "data-act", "primary" );
+        ok.title = okTitle;
+        ok.addEventListener( "click", () => { const v = input.value.trim(); if( v ) finish( v ); } );
+        input.addEventListener( "keydown", e => { if( e.key === "Enter" ) { e.preventDefault(); ok.click(); } } );
+        row.appendChild( cancel );
+        row.appendChild( ok );
+        d.sheet.appendChild( row );
+        NayiveUI.applySheetButtons( d.sheet );
+        d.show();
+        input.focus();
+        input.select();
+    } );
+}
+function okName( name ) { return !! name && name !== "." && name !== ".." && ! /[\/\\]/.test( name ); }
+
+async function newAlbum( parent )
+{
+    if( RO || DEMO ) return;
+    const name = await askName( NayiveUI.t( "photos.newAlbum" ), "", NayiveUI.t( "photos.newAlbum" ) );
+    if( name == null ) return;
+    if( ! okName( name ) ) { NayiveUI.toast( NayiveUI.t( "drive.createFolderFailed" ) ); return; }
+    setSync( "saving" );
+    try { await GumApi.makeDir( parent, name ); }
+    catch( _ ) { setSync( "synced" ); NayiveUI.toast( NayiveUI.t( "drive.createFolderFailed" ) ); return; }
+    setSync( "synced" );
+    treeOpen.add( parent );
+    saveTreeOpen();
+    if( albumIndexShown && parent === DIR ) reloadView();
+    else loadAlbums();
+}
+
+// The names already in `dest` (one listing) - Drive's destNameSet. Empty on
+// failure: the server's own clash guard is the real backstop.
+async function destNameSet( dest )
+{
+    try
+    {
+        const r = await GumApi.listDir( dest );
+        return new Set( ( r.nodes || [] ).map( n => baseName( n.path ) ) );
+    }
+    catch( _ ) { return new Set(); }
+}
+
+// Where `path` is after the moves in `pairs` ([ old, new ]) - Drive's followPath.
+function followPath( path, pairs )
+{
+    for( const pr of pairs )
+    {
+        if( path === pr[ 0 ] )                    return pr[ 1 ];
+        if( path.indexOf( pr[ 0 ] + "/" ) === 0 ) return pr[ 1 ] + path.slice( pr[ 0 ].length );
+    }
+    return path;
+}
+
+// "Move to album…" / "Copy to album…" (and an album's "Move to…"): the shared
+// picker with the albums tree.
+async function pickAlbumFor( paths, mode )
+{
+    if( ! paths.length ) return;
+    const what = paths.length === 1 ? '"' + baseName( paths[ 0 ] ) + '"' : NayiveUI.tf( "drive.nItems", { n: paths.length } );
+    const dest = await NayiveUI.pickNode( {
+        title:    NayiveUI.t( mode === "move" ? "drive.moveTo" : "drive.copyTo" ),
+        okLabel:  NayiveUI.t( mode === "move" ? "drive.move" : "ui.copy" ),
+        roots:    albumNodes,
+        current:  DIR,
+        lit:      null,
+        disabled: id => mode === "move" ? ! canDropOn( paths, id ) : ( NayiveUI.isShared( id ) || paths.some( p => under( id, p ) ) ),
+        note:     lit => lit === null ? NayiveUI.tf( "drive.pickDest", { what: what } )
+                                      : NayiveUI.tf( mode === "move" ? "drive.moveWhatTo" : "drive.copyWhatTo", { what: what, dst: albumName( lit ) } )
+    } );
+    if( dest === null ) return;
+    if( mode === "move" ) await movePaths( paths, dest );
+    else                  await copyPaths( paths, dest );
+}
+
+// Move photos or albums into `dest` - Drive's doMove: the names already
+// there are found first, and Replace (theirs to the bin) or Skip is asked.
+let moveBusy = false;
+async function movePaths( paths, dest )
+{
+    if( moveBusy || ! paths.length ) return;
+    moveBusy = true;
+    try
+    {
+        const names = await destNameSet( dest );
+        const items = [];
+        let skipped = 0;
+        for( const p of paths )
+        {
+            if( NayiveMedia.dirOf( p ) === dest ) { skipped++; continue; }     // already there
+            items.push( { from: p, to: dest + "/" + baseName( p ), clash: names.has( baseName( p ) ) } );
+        }
+        const clashes = items.filter( it => it.clash );
+        let replace = false;
+        if( clashes.length )
+            replace = await NayiveUI.confirm( {
+                title:   NayiveUI.t( "drive.clashesTitle" ),
+                body:    ( clashes.length === 1 ? NayiveUI.tf( "drive.oneClashDest", { name: baseName( clashes[ 0 ].from ) } )
+                                                : NayiveUI.tf( "drive.nClashesDest", { n: clashes.length } ) ) +
+                         "\n\n" + NayiveUI.t( "drive.clashesHint" ),
+                confirm: NayiveUI.t( "drive.replace" ), cancel: NayiveUI.t( "drive.skip" ), danger: true } ) === true;
+        await runMoves( items, replace, skipped, null, "drive.moveFailed" );
+    }
+    finally { moveBusy = false; }
+}
+
+// Rename an album. A name already taken beside it is refused: the server
+// never renames onto an existing item.
+async function renameAlbum( path )
+{
+    if( RO || DEMO || path === ROOT ) return;
+    const old  = baseName( path );
+    const name = await askName( NayiveUI.t( "ui.rename" ), old, NayiveUI.t( "ui.rename" ) );
+    if( name == null || name === old ) return;
+    if( ! okName( name ) ) { NayiveUI.toast( NayiveUI.tf( "drive.renameFailed", { err: name } ) ); return; }
+    const parent = NayiveMedia.dirOf( path );
+    if( ( await destNameSet( parent ) ).has( name ) ) { NayiveUI.toast( NayiveUI.t( "drive.nameExistsTitle" ) ); return; }
+    if( moveBusy ) return;
+    moveBusy = true;
+    try { await runMoves( [ { from: path, to: parent + "/" + name, clash: false } ], false, 0, NayiveUI.t( "ui.toast.renamed" ), "drive.renameFailed" ); }
+    finally { moveBusy = false; }
+}
+
+// The moves themselves: `items` = [ { from, to, clash } ]. Drive's order: a
+// clash being replaced goes to the bin first, then GumApi.rename; whatever
+// did move takes its sidecars along (NayiveMedia.remapPaths) - after a
+// failure too. Each step is what the Undo walks back (runUndo).
+async function runMoves( items, replace, skipped, okMsg, failKey )
+{
+    setSync( "saving" );
+    const steps = [], remapped = [];
+    let moved = 0, canUndo = true, failed = null;
+    try
+    {
+        for( const it of items )
+        {
+            if( it.clash && ! replace ) { skipped++; continue; }
+            const step = { from: it.from, to: it.to, moved: false, bin: null };
+            steps.push( step );
+            if( it.clash )
+            {
+                step.bin = await GumApi.binPaths( [ it.to ] );     // the one in the way -> the bin
+                if( ! step.bin ) canUndo = false;                   // an old server: no way back
+            }
+            await GumApi.rename( it.from, it.to );
+            step.moved = true;
+            remapped.push( [ it.from, it.to ] );
+            moved++;
+        }
+    }
+    catch( err ) { failed = err; }
+    await NayiveMedia.remapPaths( remapped );          // best-effort, never throws
+    setSync( "synced" );
+
+    const done = steps.filter( s => s.moved || s.bin );
+    const undo = done.length && canUndo ? { kind: "moves", steps: done } : null;
+    const msg  = failed ? NayiveUI.tf( failKey, { err: failed && failed.message || failed } )
+               : okMsg || ( NayiveUI.tf( "drive.nMoved", { n: moved } ) + ( skipped ? " · " + NayiveUI.tf( "drive.nSkipped", { n: skipped } ) : "" ) );
+    settle( remapped.map( r => r[ 0 ] ), followPath( DIR, remapped ), msg, undo );
+}
+
+// Copy photos (or an album) into `dest` - Drive's doCopy: one server copy per
+// item, disk to disk, under a free name; the notes come along (copyPaths).
+async function copyPaths( paths, dest )
+{
+    setSync( "saving" );
+    const copied = [];
+    let files = 0, failed = null;
+    try
+    {
+        const taken = await destNameSet( dest );
+        for( const p of paths )
+        {
+            const name = NayiveUI.uniqueName( baseName( p ), taken );
+            taken.add( name );
+            const to  = dest + "/" + name;
+            const q   = new URLSearchParams( { from: p, "new": to } ).toString();
+            const res = JSON.parse( await GumApi.fetchText( GumApi.API_FILES + "?" + q, { method: "POST" } ) );
+            files += ( res && res.files ) || 0;
+            copied.push( [ p, to ] );
+        }
+    }
+    catch( err ) { failed = err; }
+    await NayiveMedia.copyPaths( copied );
+    setSync( "synced" );
+    if( failed ) NayiveUI.toast( failed.status === 507 ? NayiveUI.t( "ui.room.none" )
+                                                       : NayiveUI.tf( "drive.copyFailed", { err: failed && failed.message || failed } ) );
+    else NayiveUI.toast( NayiveUI.tf( "drive.nCopied", { n: files } ) );
+    if( copied.length && dest === DIR ) reloadView();
+    else if( copied.length ) loadAlbums();
+}
+
+// To the bin, at once (no question: the toast's Undo brings it back) -
+// Drive's confirmDelete: GumApi.binPaths, then NayiveMedia.purgePaths drops
+// the scan entries and thumbnails (the notes stay for a restore).
+let binBusy = false;
+async function binPaths( paths )
+{
+    if( binBusy || ! paths.length || RO || DEMO ) return;
+    binBusy = true;
+    setSync( "saving" );
+    let ids;
+    try
+    {
+        ids = await GumApi.binPaths( paths );
+        await NayiveMedia.purgePaths( paths );
+    }
+    catch( _ )
+    {
+        binBusy = false;
+        setSync( "synced" );
+        NayiveUI.toast( NayiveUI.t( "drive.trashFailed" ) );
+        return;
+    }
+    binBusy = false;
+    setSync( "synced" );
+    // The open album (or one it is in) went: the album above it opens.
+    const gone = paths.find( p => under( DIR, p ) );
+    settle( paths, gone ? NayiveMedia.dirOf( gone ) : DIR, NayiveUI.t( "ui.toast.binned" ), ids ? { kind: "bin", ids: ids } : null );
+}
+
+// After a move or the bin: show the truth. `next` is where the open album is
+// now - another place re-opens the page there, the Undo carried along.
+function settle( gone, next, msg, undo )
+{
+    if( next !== DIR ) { carryUndo( msg, undo ); location.href = albumUrl( next ); return; }
+    if( albumIndexShown ) reloadView();
+    else { dropPhotos( gone ); loadAlbums(); }
+    if( undo ) NayiveUI.undoToast( msg, () => { runUndo( undo ).then( () => reloadView() ); } );
+    else       NayiveUI.toast( msg );
+}
+
+// Photos that left this album: off the screen, without a reload (the scroll
+// stays where it is).
+function dropPhotos( paths )
+{
+    const gone = new Set( paths );
+    const before = PHOTOS.length + UNSHOWN.length;
+    PHOTOS  = PHOTOS.filter( p => ! gone.has( p.path ) );
+    UNSHOWN = UNSHOWN.filter( u => ! gone.has( u.path ) );
+    if( PHOTOS.length + UNSHOWN.length === before ) return;
+    browse.clear();
+    buildClusters();
+    if( ! PHOTOS.length && ! UNSHOWN.length ) setGridMsg( NayiveUI.t( "photos.noPhotosYet" ) );
+    else renderGrid( $( "#grid" ).scrollTop );
+    setCrumb();
+    updateNoGeoChip();
+    if( st.mode === "map" ) drawMap();
+}
+
+// The open album read again (after an Undo, a copy into it, a new album on
+// the album index). The page is opened again when the album changed kind
+// (album cards <-> photos): the toolbar is set for one or the other.
+async function reloadView()
+{
+    let folder = null;
+    try { folder = await GumApi.listDir( DIR ); } catch( _ ) {}
+    loadAlbums();
+    const kids  = ( folder && folder.nodes ) || [];
+    const subs  = kids.filter( n => Array.isArray( n.nodes ) );
+    const index = !! folder && subs.length > 0 && ! kids.some( n => n.nodes == null && IMG_EXT.indexOf( extOf( n.path ) ) !== -1 );
+    if( index !== albumIndexShown ) { location.reload(); return; }
+    if( index ) renderAlbums( subs );
+    else        await loadFolder( folder, true );       // a reload of our own change: no sweep
+}
+
+// The Undo of a move or of the bin - Drive's undoMoves / undoBin: moved
+// items go back (in reverse), their sidecars with them, BEFORE what a
+// "Replace" binned is restored (or it would land as "name (2)").
+async function runUndo( undo )
+{
+    setSync( "saving" );
+    let err = null, res = null;
+    if( undo.kind === "bin" )
+    {
+        try { res = await GumApi.trashRestore( undo.ids ); } catch( e ) { err = e; }
+    }
+    else
+    {
+        const back = [], ids = [];
+        for( const s of undo.steps.slice().reverse() )
+        {
+            if( s.moved )
+            {
+                try { await GumApi.rename( s.to, s.from ); }
+                catch( e ) { err = err || e; continue; }
+                back.push( [ s.to, s.from ] );
+            }
+            if( s.bin ) ids.push.apply( ids, s.bin );
+        }
+        await NayiveMedia.remapPaths( back );
+        if( ids.length )
+        {
+            try { res = await GumApi.trashRestore( ids ); } catch( e ) { err = err || e; }
+        }
+    }
+    setSync( "synced" );
+    if( err ) NayiveUI.toast( undo.kind === "bin" ? NayiveUI.t( "drive.restoreFailed" )
+                                                  : NayiveUI.tf( "drive.moveFailed", { err: err && err.message || err } ) );
+    else if( res && res.renamed && res.renamed.length ) NayiveUI.toast( NayiveUI.tf( "drive.restoredAs", { name: res.renamed[ 0 ] } ) );
+    else if( res ) NayiveUI.toast( NayiveUI.t( "drive.restored" ) );
+    return ! err;
+}
+
+// The open album moved or went: its Undo rides along to the page opened next
+// (sessionStorage: this tab only), shown there for a short while.
+function carryUndo( msg, undo )
+{
+    try { sessionStorage.setItem( CARRY_KEY, JSON.stringify( { msg: msg, undo: undo, back: DIR, ts: Date.now() } ) ); } catch( _ ) {}
+}
+function offerCarriedUndo()
+{
+    let c = null;
+    try { c = JSON.parse( sessionStorage.getItem( CARRY_KEY ) || "null" ); sessionStorage.removeItem( CARRY_KEY ); } catch( _ ) {}
+    if( ! c || typeof c.msg !== "string" || ! ( Date.now() - c.ts < 30000 ) ) return;
+    if( ! c.undo ) { NayiveUI.toast( c.msg ); return; }
+    NayiveUI.undoToast( c.msg, async () =>
+    {
+        if( await runUndo( c.undo ) && typeof c.back === "string" ) location.href = albumUrl( c.back );
+        else reloadView();
+    } );
+}
 
 /* ---------------------------------------------------------------------------
  * BOOT
@@ -2428,13 +3106,13 @@ async function boot()
 
     if( DEMO ) { buildDemo(); renderGrid(); return; }
 
-    // Opened from the album index (&up=): "←" before the title goes back to it.
-    const up = PARAMS.get( "up" );
-    if( up != null && up !== DIR )
-    {
-        $( "#backBtn" ).hidden = false;
-        $( "#backBtn" ).addEventListener( "click", () => { location.href = "?dir=" + encodeURIComponent( up ); } );
-    }
+    // The albums tree (its rows come in the background: the photos do not
+    // wait for them) and the item browser on the grid.
+    ROOT   = await albumRoot();
+    ALBUMS = { path: ROOT, nodes: [] };
+    wireTree();
+    wireBrowser();
+    loadAlbums();
 
     // Before the first loadFolder(), which decides what the toolbar shows.
     CAN_ADD = await NayiveUI.canAddTo( DIR );
@@ -2453,10 +3131,11 @@ async function boot()
     const kids = ( folder && folder.nodes ) || [];
     const subs = kids.filter( n => Array.isArray( n.nodes ) );
     const imgs = kids.filter( n => n.nodes == null && IMG_EXT.indexOf( extOf( n.path ) ) !== -1 );
-    if( subs.length && ! imgs.length ) { renderAlbums( subs ); return; }
+    if( subs.length && ! imgs.length ) { renderAlbums( subs ); offerCarriedUndo(); return; }
 
     await loadFolder( folder );
     GumApi.onFilesChanged( onFilesNews );        // Image saved a photo here, Drive changed the folder...
+    offerCarriedUndo();                          // the open album moved / went a moment ago: its Undo
 
     // ?photo=<path> (Chat's "Abrir en Fotos"): that photo, straight in the lightbox.
     const want = PARAMS.get( "photo" );
@@ -2479,6 +3158,7 @@ NayiveI18n.ready.then( () =>
  * -------------------------------------------------------------------------*/
 function renderAlbums( subs )
 {
+    albumIndexShown = true;
     $( ".tb-modes" ).hidden = true;                // no gallery modes on the album index
     $( ".topbar-actions .search-wrap" ).hidden = true;
     $( "#searchToggle" ).hidden = true;
@@ -2501,11 +3181,7 @@ function renderAlbums( subs )
             card.className = "album-card";
             card.innerHTML = FOLDER_SVG + '<span class="a-name"></span>';
             card.querySelector( ".a-name" ).textContent = baseName( n.path );
-            card.addEventListener( "click", () =>
-            {
-                // &up= : the index it came from, for the "←" before the title
-                location.href = "?dir=" + encodeURIComponent( n.path ) + "&up=" + encodeURIComponent( DIR );
-            } );
+            card.addEventListener( "click", () => { location.href = albumUrl( n.path ); } );
             box.appendChild( card );
         } );
 

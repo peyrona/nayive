@@ -153,6 +153,21 @@ function closeGroupPopups()  { groups.forEach( function( g ) { if( g ) g.close()
 // itself to the space left over and re-renders on resize either way.
 const fold = O.foldingToolbar( { toolbar: 'fmtToolbar', afterChange: function() { if( table ) table.refreshDimensions(); } } );
 
+// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
+// first in the toolbar on a PC, a .fmt-btn with the drop-down caret its
+// neighbours carry; in the header on a phone, because the toolbar folds away
+// while you type.
+function placeFileButton()
+{
+    const btn = document.getElementById( 'moreBtn' );
+    const sep = document.getElementById( 'fileSep' );
+
+    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
+    else                sep.parentNode.insertBefore( btn, sep );
+
+    btn.className = PHONE.matches ? 'icon-btn' : 'fmt-btn has-popup';
+}
+
 // Once at start-up and again whenever the phone is turned. The split
 // itself is pure CSS, so this only does what CSS cannot: move the "?",
 // close the menus, unfold.
@@ -166,6 +181,7 @@ function applyPhoneChrome()
     const headerHelp = PHONE.matches && ! CHROME.on();
 
     O.placeHelpButton( headerHelp, 'topActions', 'fmtToolbar', 'moreToolsBtn', 'savedAt' );
+    placeFileButton();
     fileMenu.close();
     if( helpMenu ) helpMenu.close();
     closeGroupPopups();
@@ -1265,7 +1281,8 @@ const MENUS =
         { key: 'ui.save',   run: function() { saveNow(); }, sc: 'save', icon: 'check' },
         { key: 'ui.saveAs', el:  'saveAsBtn' },
         { key: 'ui.importDevice', el: 'importBtn'  },
-        { key: 'write.restore',   el: 'restoreBtn' }
+        { key: 'write.restore',   el: 'restoreBtn' },
+        { key: 'lock.title',      el: 'lockBtn', checked: function() { return session.locked(); } }
     ]
 },
 {
@@ -1289,12 +1306,6 @@ const MENUS =
     key: 'ui.menu.view',
     items:
     [
-        { key: 'ui.chrome', sub:
-            [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); }, iconOf: '#chromeToolbarBtn',
-                checked: function() { return ! CHROME.on(); } },
-              { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); }, iconOf: '#chromeMenusBtn',
-                checked: function() { return CHROME.on(); } } ] },
-        { sep: true },
         { key: 'calc.freezeRows', el: 'fmtFreezeRowBtn',
           checked: function() { return !! table && table.getSettings().fixedRowsTop      > 0; } },
         { key: 'calc.freezeCols', el: 'fmtFreezeBtn',

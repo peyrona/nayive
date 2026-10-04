@@ -8,19 +8,17 @@ html, body { height: 100%; overflow: hidden; }
 /* The search field is the shared SEARCH FOLD (app.css): only the modes that
    put it away are eMail's (its magnifier is .mail-list-only). */
 body.reading .search-wrap,
-body.selecting .search-wrap,
 body.in-label .search-wrap,
 body.in-label #searchBtn { display: none; }
 
-/* The bar's modes: list-only buttons leave while reading or picking; the
-   message actions come (actions.js, syncBar). */
+/* The bar's modes: list-only buttons leave while reading or writing; the
+   message's buttons come (browse.js, syncBar). While rows are picked the
+   shared item browser draws its group first (#selActions). */
 body.reading .mail-list-only,
-body.selecting .mail-list-only,
 body.composing .mail-list-only,
 body.composing .search-wrap,
 body.composing #actions,
 body.reading #listTools,
-body.selecting #listTools,
 body.composing #listTools { display: none; }
 .icon-btn.mail-send  { color: var(--accent); }
 
@@ -61,40 +59,43 @@ body.composing #listTools { display: none; }
 .mail-sug.is-at,
 .mail-sug:hover      { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .mail-actions        { display: flex; align-items: center; gap: 2px; }
-.mail-sel-count      { margin: 0 8px 0 -4px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 #actStar.is-on       { color: var(--warn); }
 
 .mail-body { flex: 1 1 auto; display: flex; min-height: 0; }
 
-/* The trays: pills, stacked in a column on a wide screen. */
+/* The tree (browse.js: the shared NayiveUI.tree): the account picker on top,
+   then the trays and "Labels" with the labels, in a column that scrolls. On
+   a phone it is the shared slide-in sheet (.tree-pane.tree-sheet, app.css). */
 .mail-side
 {
-    flex: 0 0 200px;
+    flex: 0 0 210px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px 8px;
+    min-width: 0;
+    padding: 10px 6px;
     border-right: 1px solid var(--line);
-    overflow: hidden;              /* the labels' panel scrolls, not the column */
+    overflow: hidden;              /* the tree scrolls, not the column */
 }
 .mail-side .tb-select { width: 100%; }
-.mail-trays { display: flex; flex-direction: column; gap: 4px; }
-.mail-tray
-{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-align: left;
-    white-space: nowrap;
-}
-.mail-tray svg { width: 15px; height: 15px; flex: 0 0 auto; }
-.mail-tray-n   { margin-left: auto; padding-left: 6px; font-variant-numeric: tabular-nums; }
-.mail-tray-n b { font-weight: 400; }
-.mail-tray-n.has-new b { font-weight: 700; }
-.mail-tray-n small { font-size: inherit; opacity: 0.7; }
-.mail-tray.is-missing { opacity: 0.5; }
+.mail-tree         { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.mail-tree.ntree   { min-width: 0; }
+.mail-tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mail-tree .tree-row.is-missing { opacity: 0.5; }
+.mail-tree .mail-node-labels { margin-top: 8px; }
+
+/* A phone: what is on screen, and the button that slides the tree in. */
+.mail-where        { display: none; }
+.mail-where-name   { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mail-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+/* The list fills its pane: a click (or right-click) under the last row is
+   the list's empty space (clears the pick; New / Select…). */
+.mail-list-view            { display: flex; flex-direction: column; min-height: 100%; }
+.mail-list                 { flex: 1 0 auto; }
+.mail-list:empty           { flex: 0 0 auto; }
+.mail-list-view > .mail-problem,
+.mail-list-view > .mail-images-bar { flex: 0 0 auto; }
 
 /* SPLIT (read.js): a desktop window wide enough - the list at its width
    (the handle drags it), the open message on its right. Writing takes it all. */
@@ -116,54 +117,49 @@ body.composing #readRz         { display: none; }
     line-height: 1.4;
 }
 
-/* One row: who + when / subject + marks / the first words. Unread: bold,
-   with an accent edge on the left. */
+/* One row: [tick] who + when [⋮] / subject + marks / the first words.
+   Unread: bold, with an accent edge on the left. The round tick and the ⋮
+   are the shared item browser's (app.css ITEM BROWSER): the tick on hover
+   with a mouse, on every row while picking by touch; the ⋮ on hover (a
+   mouse) or always (touch). */
 .mail-row
 {
+    position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 2px 10px;
     width: 100%;
-    padding: 9px 14px 10px;
-    border: 0;
+    padding: 9px 4px 10px 12px;
     border-bottom: 1px solid var(--line);
-    background: transparent;
     color: var(--text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
+    cursor: default;
 }
 .mail-row:hover       { background: color-mix(in srgb, var(--text) 5%, transparent); }
-.mail-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .mail-row.unread      { box-shadow: inset 3px 0 0 var(--accent); }
+.mail-tickbox,
+.mail-morebox         { display: flex; align-items: center; grid-row: 1 / span 3; }
+.mail-tickbox         { grid-column: 1; }
+.mail-morebox         { grid-column: 4; }
 .mail-row .who,
 .mail-row .subj,
 .mail-row .snip       { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mail-row .who        { font-size: 0.92rem; }
-.mail-row .when       { font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; align-self: center; }
-.mail-row .subj       { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 0.88rem; }
+.mail-row .who        { grid-column: 2; font-size: 0.92rem; }
+.mail-row .when       { grid-column: 3; font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; align-self: center; }
+.mail-row .subj       { grid-column: 2 / 4; display: flex; align-items: center; gap: 6px; font-size: 0.88rem; }
 .mail-row .subj span  { overflow: hidden; text-overflow: ellipsis; }
 .mail-row .subj svg   { width: 14px; height: 14px; flex: 0 0 auto; color: var(--text-dim); }
 .mail-row .subj .star { color: var(--warn, #E0A800); }
-.mail-row .snip       { grid-column: 1 / -1; font-size: 0.82rem; color: var(--text-dim); }
-/* Picking several: a round tick at the row's start. */
-.mail-row             { position: relative; }
-.mail-tick
-{
-    display: none;
-    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-    width: 22px; height: 22px;
-    align-items: center; justify-content: center;
-    border: 2px solid color-mix(in srgb, var(--text) 35%, transparent);
-    border-radius: 50%;
-}
-.mail-tick svg        { width: 14px; height: 14px; visibility: hidden; }
-body.selecting .mail-row  { padding-left: 46px; }
-body.selecting .mail-tick { display: flex; }
+.mail-row .snip       { grid-column: 2 / 4; font-size: 0.82rem; color: var(--text-dim); }
+/* Picked (the browser's .is-selected) or open beside the list (split). */
 .mail-row.is-current,
-.mail-row.is-picked   { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.mail-row.is-picked .mail-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.mail-row.is-picked .mail-tick svg { visibility: visible; }
+.mail-row.is-selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mail-row.is-selected.is-current { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Touch, not picking: no tick column. */
+@media (hover: none), (pointer: coarse)
+{
+    .mail-list:not(.is-picking) .mail-tickbox { display: none; }
+    .mail-list:not(.is-picking) .mail-row     { padding-left: 4px; }
+}
 
 /* Labels: a coloured dot (--c), on a chip, a pill or a dialog row. */
 .mail-dot   { display: inline-block; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--accent)); }
@@ -174,21 +170,6 @@ body.selecting .mail-tick { display: flex; }
 }
 .mail-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
 .mail-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
-/* The labels' panel under the trays: its head (name + "+") stays, the list
-   scrolls on its own when there are many. */
-.mail-labels-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 6px; }
-.mail-labels-head  { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; }
-.mail-labels-head .section-label { margin: 0 4px; }
-.mail-labels       { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 4px; }
-.mail-label-line   { display: flex; align-items: center; gap: 2px; }
-.mail-label-line .pill { flex: 1 1 auto; min-width: 0; }
-.mail-label-line .pill span { overflow: hidden; text-overflow: ellipsis; }
-.mail-label-pen    { opacity: 0; }
-.mail-label-line:hover .mail-label-pen,
-.mail-label-line.is-active .mail-label-pen,
-.mail-label-pen:focus-visible { opacity: 1; }
-@media (hover: none) { .mail-label-pen { opacity: 1; } }
-
 /* Settings' tabs (as the desktop's) and a label's colours. */
 .mail-tabs     { display: flex; gap: 6px; margin: 0 0 16px; }
 .mail-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -332,29 +313,10 @@ body.selecting .mail-tick { display: flex; }
 
 .mail-add-status { margin: -4px 0 12px; font-size: 0.82rem; color: var(--text-dim); }
 
-/* A phone: the trays become a row of pills over the list; reading hides it. */
+/* A narrow screen: reading and writing take the whole width. */
 @media (max-width: 760px)
 {
-    .mail-body            { flex-direction: column; }
-    .mail-side
-    {
-        flex: 0 0 auto;
-        flex-direction: row;
-        align-items: center;
-        padding: 6px 8px;
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-        overflow-x: auto;
-        overflow-y: hidden;
-    }
-    .mail-side .tb-select { width: auto; max-width: 150px; }
-    .mail-trays           { flex-direction: row; }
-    .mail-labels-panel    { flex-direction: row; align-items: center; flex: 0 0 auto; margin: 0 0 0 6px; }
-    .mail-labels-head .section-label { display: none; }
-    .mail-labels-head     { order: 2; }                /* the (+) after the labels */
-    .mail-labels          { display: flex; flex-direction: row; gap: 4px; overflow: visible; padding: 0; }
-    .mail-label-pen       { display: none; }
-    .mail-label-line.is-active .mail-label-pen { display: flex; }
+    .mail-side            { flex-basis: 180px; }
     body.reading .mail-side,
     body.composing .mail-side { display: none; }
     .mail-compose         { padding: 10px 12px 16px; }
@@ -362,6 +324,13 @@ body.selecting .mail-tick { display: flex; }
     .mail-cfield label    { flex-basis: 48px; }
     .mail-read-view       { padding: 12px 12px 32px; }
     .field.mail-prov      { flex: 1 1 100%; }
+}
+/* A phone: the tree slides in (app.css .tree-sheet) from the folder button
+   over the list, beside the name of what is on screen. */
+@media (max-width: 640px)
+{
+    .mail-where           { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 4px; border-bottom: 1px solid var(--line); }
+    .mail-side.tree-sheet { padding: 12px 8px; border-right: 0; }
 }
 
 /* the clip's panel while writing (Chat's look, app.css .attach): under the

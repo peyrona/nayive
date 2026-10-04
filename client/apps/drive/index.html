@@ -37,6 +37,8 @@
     <script src="../shared/vcard.js" defer></script>
     <!-- Small shared UI helpers: backdrop open/close, toast, viewerTz. -->
     <script src="../shared/ui.js" defer></script>
+    <!-- The item browser: picking, the selection's buttons, the one menu, the tree. -->
+    <script src="../shared/browser.js" defer></script>
     <script src="../shared/photo.js" defer></script>
     <!-- The media apps' own module. Drive uses one block of it: the upkeep of
          their path-keyed sidecars when a file is moved, renamed, copied or
@@ -56,15 +58,17 @@
                 { sel: '#searchBuilderBtn', text: NayiveUI.t( 'drive.introSearchBuilder' ) },
                 { sel: '#newFolderBtn',    text: NayiveUI.t( 'drive.introNewFolder' ) },
                 { sel: '#uploadBtn',       text: NayiveUI.t( 'drive.introUpload' ) },
-                { sel: '#downloadBtn',     text: NayiveUI.t( 'drive.introDownload' ) },
-                { sel: '#renameBtn',       text: NayiveUI.t( 'drive.introRename' ) },
-                { sel: '#moveToBtn',       text: NayiveUI.t( 'drive.introMove' ) },
-                { sel: '#copyToBtn',       text: NayiveUI.t( 'drive.introCopy' ) },
-                { sel: '#copyLinkBtn',     text: NayiveUI.t( 'drive.introLink' ) },
-                { sel: '#shareBtn',        text: NayiveUI.t( 'drive.introShare' ) },
-                { sel: '#compressBtn',     text: NayiveUI.t( 'drive.introCompress' ) },
-                { sel: '#propsBtn',        text: NayiveUI.t( 'drive.introProps' ) },
-                { sel: '#deleteBtn',       text: NayiveUI.t( 'drive.introTrash' ) },
+                // The selection's buttons (shared/browser.js) come and go with
+                // what is picked, so their rows carry their own glyph and name.
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', name: NayiveUI.t( 'ui.download' ),      text: NayiveUI.t( 'drive.introDownload' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>', name: NayiveUI.t( 'ui.rename' ),        text: NayiveUI.t( 'drive.introRename' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg>', name: NayiveUI.t( 'drive.moveToDots' ), text: NayiveUI.t( 'drive.introMove' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>', name: NayiveUI.t( 'drive.copyToDots' ), text: NayiveUI.t( 'drive.introCopy' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>', name: NayiveUI.t( 'drive.copyLink' ),   text: NayiveUI.t( 'drive.introLink' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>', name: NayiveUI.t( 'ui.share' ),         text: NayiveUI.t( 'drive.introShare' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>', name: NayiveUI.t( 'drive.compress' ),   text: NayiveUI.t( 'drive.introCompress' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>', name: NayiveUI.t( 'drive.properties' ), text: NayiveUI.t( 'drive.introProps' ) },
+                { svg: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>', name: NayiveUI.t( 'ui.toTrash' ),       text: NayiveUI.t( 'drive.introTrash' ) },
                 // Fixed names: both tooltips turn into "Back to Drive" while
                 // their view is open (render in tree.js).
                 { sel: '#bigFilesBtn', name: NayiveUI.t( 'drive.bigTitle' ),
@@ -105,38 +109,11 @@
             <input type="file" id="uploadPhotoInput" accept="image/*" multiple style="display:none">
 
             <div class="topbar-actions">
-                <!-- WHAT YOU DO TO WHAT IS SELECTED: the ticked rows, or the
-                     folder open in the tree. The whole group leaves the bar
-                     only at the Drive root with nothing ticked; with just the
-                     open folder they all act on that folder. It is the first
-                     group, so the bar grows leftwards when it comes and the
-                     buttons after it never move (updateToolbarState in toolbar.js). -->
-                <div id="selActions" class="tb-group" hidden>
-                    <button id="renameBtn" class="icon-btn" disabled data-i18n-attr="title:ui.rename">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-                    </button>
-                    <button id="moveToBtn" class="icon-btn" data-i18n-attr="title:drive.moveToDots" disabled>
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg>
-                    </button>
-                    <button id="copyToBtn" class="icon-btn" data-i18n-attr="title:drive.copyToDots" disabled>
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    </button>
-                    <button id="copyLinkBtn" class="icon-btn" data-i18n-attr="title:drive.copyLink" disabled>
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                    </button>
-                    <button id="shareBtn" class="icon-btn" disabled data-i18n-attr="title:drive.shareWith">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>
-                    </button>
-                    <button id="compressBtn" class="icon-btn" disabled data-i18n-attr="title:drive.compress">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg>
-                    </button>
-                    <button id="propsBtn" class="icon-btn" disabled data-i18n-attr="title:drive.properties">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    </button>
-                    <button id="deleteBtn" class="icon-btn danger" disabled data-i18n-attr="title:ui.toTrash">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
-                </div>
+                <!-- WHAT YOU DO TO WHAT IS PICKED (shared/browser.js draws it):
+                     only while something is picked. It is the first group, so the
+                     bar grows leftwards when it comes and the buttons after it
+                     never move. -->
+                <div id="selActions" class="tb-group" hidden></div>
 
                 <div id="driveTools" class="tb-group">
                     <!-- The shared search fold (NayiveUI.searchFold): the magnifier after
@@ -161,9 +138,6 @@
                     <button id="uploadBtn" class="icon-btn" data-i18n-attr="title:drive.uploadTip">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                     </button>
-                    <button id="downloadBtn" class="icon-btn" disabled data-i18n-attr="title:drive.downloadFolderOrSel">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    </button>
                     <!-- "Biggest files" on/off, like the bin next to it: lit while the
                          list is open, and a second tap goes back (listing.js). -->
                     <button id="bigFilesBtn" class="icon-btn" data-i18n-attr="title:drive.bigTitle">
@@ -176,7 +150,7 @@
 
                 <div class="tb-group tb-sys">
                     <!-- Phone only: the buttons above that a phone reaches for least
-                         (see B6b in the phone block). Its entries are cloned from them. -->
+                         (see B6b in the phone block). Its rows stand for them (menus.js). -->
                     <button id="moreBtn" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
                     </button>
@@ -189,8 +163,7 @@
         </div>
 
         <div class="body-row">
-            <div id="treeBackdrop" class="tree-backdrop"></div>
-            <div id="treePane" class="tree-pane"></div>
+            <div id="treePane" class="tree-pane"><div id="tree"></div></div>
             <div id="paneResizer" class="pane-resizer" data-i18n-attr="title:ui.dragResize"></div>
 
             <div id="listPane" class="list-pane">
@@ -200,49 +173,6 @@
             </div>
         </div>
 
-    </div>
-
-    <!-- Per-item menu: desktop right-click, or the row's ⋮ button (touch). Acts on the selection. -->
-    <!-- The header's "⋮" (phone). Same component as the row menus below; its
-         entries are built in JS from the toolbar buttons they stand for. -->
-    <div id="topMenu" class="ctx-menu top-menu"></div>
-
-    <div id="ctxMenu" class="ctx-menu top-menu">
-        <button class="menu-item" id="ctxOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg><span data-i18n="drive.open"></span></button>
-        <button class="menu-item" id="ctxDownload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span data-i18n="ui.download"></span></button>
-        <button class="menu-item" id="ctxExtract" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="10" x2="12" y2="17"></line><polyline points="9 14 12 17 15 14"></polyline></svg><span data-i18n="drive.extractHere"></span></button>
-        <div class="menu-sep"></div>
-        <button class="menu-item" id="ctxCut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg><span data-i18n="ui.cut"></span></button>
-        <button class="menu-item" id="ctxClip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg><span data-i18n="ui.copy"></span></button>
-        <button class="menu-item" id="ctxMove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2"></path><path d="M2 13h11"></path><path d="m10 16 3-3-3-3"></path></svg><span data-i18n="drive.moveToDots"></span></button>
-        <button class="menu-item" id="ctxCopy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span data-i18n="drive.copyToDots"></span></button>
-        <div class="menu-sep"></div>
-        <button class="menu-item" id="ctxRename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg><span data-i18n="ui.rename"></span></button>
-        <button class="menu-item" id="ctxLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg><span data-i18n="drive.copyLink"></span></button>
-        <button class="menu-item" id="ctxShare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg><span data-i18n="ui.share"></span></button>
-        <button class="menu-item" id="ctxCompress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M11 3.5h1M10 6h1M11 8.5h1M10 11h1"></path><rect x="8.5" y="13.5" width="5" height="5" rx="1"></rect></svg><span data-i18n="drive.compress"></span></button>
-        <button class="menu-item" id="ctxProps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span data-i18n="drive.properties"></span></button>
-        <div class="menu-sep"></div>
-        <button class="menu-item danger" id="ctxDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg><span data-i18n="ui.toTrash"></span></button>
-    </div>
-
-    <!-- Desktop right-click on empty space in the listing -->
-    <div id="ctxAreaMenu" class="ctx-menu top-menu">
-        <button class="menu-item" id="ctxAreaNewFolder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg><span data-i18n="ui.newFolder"></span></button>
-        <button class="menu-item" id="ctxAreaPaste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg><span data-i18n="ui.paste"></span></button>
-    </div>
-
-    <!-- Folder chooser: destination for "Mover a…" / "Copiar a…" -->
-    <div id="pickFolderBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 id="pickFolderTitle" data-i18n="drive.moveTo"></h2>
-            <p id="pickFolderMsg"></p>
-            <div id="pickFolderTree" class="tree-picker"></div>
-            <div class="sheet-actions">
-                <button id="pickFolderCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="pickFolderConfirmBtn" data-act="primary" data-i18n-attr="title:drive.move"></button>
-            </div>
-        </div>
     </div>
 
     <!-- Upload dialog: drop hint + pick-with-a-dialog choices (file / folder) -->
@@ -370,19 +300,6 @@
             <dl id="propsBody" class="props"></dl>
             <div class="sheet-actions">
                 <button id="propsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Move-to-trash confirm dialog -->
-    <div id="deleteBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.toTrash"></h2>
-            <p id="deleteMsg"></p>
-            <p id="deleteFolderWarn" style="text-transform:uppercase;font-weight:700" hidden></p>
-            <div class="sheet-actions">
-                <button id="deleteCancelBtn"  data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="deleteConfirmBtn" data-act="primary:trash" data-i18n-attr="title:ui.toTrash"></button>
             </div>
         </div>
     </div>

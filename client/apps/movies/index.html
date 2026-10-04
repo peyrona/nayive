@@ -58,6 +58,7 @@
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
     <script>
     NayiveI18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -69,7 +70,7 @@
                 { sel: '#folderInfoBtn', text: NayiveUI.t( 'movies.introFolder' ) },
                 { sel: '#searchToggle', text: NayiveUI.t( 'movies.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'movies.introRescan' ) },
-                { sel: '#filterMovies', name: NayiveUI.t( 'movies.introGroupName' ), text: NayiveUI.t( 'movies.introGroup' ) },
+                { icon: 'folder',       name: NayiveUI.t( 'movies.library' ), text: NayiveUI.t( 'movies.introTree' ) },
                 { sel: '#postersBtn',   text: NayiveUI.t( 'movies.introPosters' ) }
             ]
         } );
@@ -89,7 +90,25 @@
     /* The header's toolbar (folder-? menu, .tb-modes, .topbar-actions groups)
        comes from shared/app.css (folder-backed viewers), search field included. */
 
-    /* ---- main row: just the library (no queue pane) ------------------ */
+    /* ---- main row: the tree and the library --------------------------- */
+    /* The tree: Films, Genres, Folders (the real folders under it). Its rows
+       are the shared tree (.ntree, app.css); on a phone it slides in from
+       #treeBtn (the shared .tree-sheet). */
+    .tree-pane  { flex: 0 0 auto; width: 200px; overflow: auto; padding: 14px 6px 16px;
+                  border-right: 1px solid var(--line); }
+    #tree.ntree { min-width: 0; }
+    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    #treeBtn    { display: none; }
+    .view-head  { margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+    .view-head small { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
+    @media (max-width: 640px)
+    {
+        #treeBtn { display: inline-flex; }
+        .tree-pane:not(.tree-sheet) { display: none; }     /* until the tree is made (boot) */
+        /* While picking, the selection group needs the whole bar. */
+        .topbar:has(.has-selection) :is(h1, #tools) { display: none; }
+    }
+
     .lib-pane   { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
 
     .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 24px 30px; }
@@ -118,8 +137,16 @@
     .poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
     .poster-card { display: flex; flex-direction: column; padding: 0; overflow: hidden;
                    background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m);
-                   cursor: pointer; text-align: left; font: inherit; color: inherit;
+                   cursor: default; text-align: left; font: inherit; color: inherit;
+                   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
                    transition: border-color var(--tr-fast), background-color var(--tr-fast); }
+    /* Picked (shared/browser.js): the accent frame and title strip. */
+    .poster-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+    .poster-card.is-selected .poster-body { background: var(--accent); }
+    .poster-card.is-selected :is(.poster-title, .poster-sub) { color: var(--on-accent); }
+    /* The browser's tick sits on the poster's top-left corner. */
+    .poster-art > .pick-tick { position: absolute; top: 8px; left: 8px; z-index: 2;
+                               background: color-mix(in srgb, #000 35%, transparent); border-color: rgba(255,255,255,.85); }
     .poster-card:hover     { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
     .poster-card.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
     .poster-art  { position: relative; width: 100%; aspect-ratio: 2 / 3;
@@ -129,13 +156,14 @@
     .poster-scrim{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                    background: color-mix(in srgb, #000 44%, transparent); opacity: 0; transition: opacity var(--tr-fast); }
     .poster-card:hover .poster-scrim { opacity: 1; }
-    .poster-seen { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%;
+    .poster-seen { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%;
                    background: color-mix(in srgb, var(--accent) 88%, #000); color: var(--on-accent);
                    display: flex; align-items: center; justify-content: center; }
     .poster-seen svg { width: 13px; height: 13px; }
     .poster-bar  { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, #000 45%, transparent); }
     .poster-bar > span { display: block; height: 100%; background: var(--accent); }
-    .poster-body { padding: 8px 10px 10px; }
+    .poster-body { display: flex; align-items: center; gap: 2px; padding: 8px 4px 10px 10px; }
+    .poster-text { flex: 1 1 auto; min-width: 0; }
     .poster-title{ font-size: 0.84rem; font-weight: 600; color: var(--text);
                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .poster-sub  { font-size: 0.74rem; color: var(--text-dim); margin-top: 1px; }
@@ -184,7 +212,7 @@
     /* ---- video stage - covers the library while a film plays ---------- */
     /* The playing video covers the library; the header's toolbar acts on the
        library, so it steps aside too (it was inside the covered pane before). */
-    body:has(#videoStage:not([hidden])) :is(#tools, [data-tools]) { display: none; }
+    body:has(#videoStage:not([hidden])) :is(#tools, [data-tools], #selActions, .tree-pane) { display: none; }
     .video-stage { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #0C0D10; }
     .stage-frame { flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .stage-frame video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
@@ -251,19 +279,14 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
             </button>
 
-            <div class="tb-modes">
-                <button class="icon-btn is-active" id="filterMovies" type="button" data-i18n-attr="title:movies.movies, aria-label:movies.movies">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
-                </button>
-                <button class="icon-btn" id="filterGenres" type="button" data-i18n-attr="title:movies.genres, aria-label:movies.genres">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                </button>
-                <button class="icon-btn" id="filterFolders" type="button" data-i18n-attr="title:movies.folders, aria-label:movies.folders">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
-                </button>
-            </div>
+            <!-- Phones only (<= 640 px): the tree (films, genres, folders) slides in. -->
+            <button class="icon-btn" id="treeBtn" type="button" data-i18n-attr="title:movies.library, aria-label:movies.library">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+            </button>
         </div>
         <div class="topbar-actions">
+            <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+            <div id="selActions" class="tb-group" hidden></div>
             <!-- Like #tools, shown once a folder is open. -->
             <div class="tb-group" data-tools hidden>
                 <div class="search-wrap">
@@ -295,6 +318,8 @@
     </div>
 
     <div class="main-row" id="mainRow" hidden>
+        <!-- The tree: Films, Genres, Folders (NayiveUI.tree, see BROWSER below). -->
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:movies.library"><div id="tree"></div></nav>
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
 
@@ -614,6 +639,7 @@ async function scan()
     loadSynopses();
     renderCollectionSummary();
     renderLibrary();
+    if( treeView ) treeView.render();      // the folders, scanned again
     loadDurations();
 }
 
@@ -780,13 +806,14 @@ function openTmdbKeySheet()
     $( "#tmdbKey" ).focus();
 }
 
-async function fetchPosters()
+// `only` (paths, optional): just these films ("Find poster" on a pick).
+async function fetchPosters( only )
 {
     if( ! await postersReady() ) return;
     if( ! st.posters.key ) { openTmdbKeySheet(); return; }
 
     var todo = st.movies.filter( function ( mv )
-    { return ! mv.poster && ! posterEntry( mv ); } );
+    { return ( ! only || only.indexOf( mv.path ) !== -1 ) && ! mv.poster && ! posterEntry( mv ); } );
 
     if( ! todo.length ) { NayiveUI.toast( NayiveUI.t( 'movies.allHavePosters' ) ); return; }
 
@@ -1088,17 +1115,20 @@ function posterCardHtml( mv )
                    ( mv.year && mv.duration ? " · " : "" ) +
                    ( mv.duration ? fmtRuntime( mv.duration ) : "" );
 
+    // A row of the shared item browser (BROWSER below): its tick on the
+    // poster's corner, its ⋮ beside the title.
     return '<div class="poster-card' + ( active ? ' is-active' : '' ) + '" data-open="' + esc( mv.path ) + '">' +
         '<span class="poster-art" ' + artStyle( mv.color, mv.poster ) + '>' +
+            NayiveUI.tickHtml() +
             ( mv.poster ? '' : FILM_ICON ) +
             ( isWatched( mv ) ? '<span class="poster-seen">' + CHECK_ICON + '</span>' : '' ) +
             '<span class="poster-scrim"><button class="transport-btn play-btn" data-play="' + esc( mv.path ) + '" data-i18n-attr="title:movies.watchNow, aria-label:movies.watchNow">' + PLAY_ICON + '</button></span>' +
             ( pct ? '<span class="poster-bar"><span style="width:' + pct + '%"></span></span>' : '' ) +
         '</span>' +
-        '<span class="poster-body">' +
+        '<span class="poster-body"><span class="poster-text">' +
             '<div class="poster-title">' + esc( mv.title ) + '</div>' +
             '<div class="poster-sub" data-runtime="' + esc( mv.path ) + '">' + esc( subLabel || "—" ) + '</div>' +
-        '</span>' +
+        '</span>' + NayiveUI.moreHtml() + '</span>' +
     '</div>';
 }
 
@@ -1208,14 +1238,13 @@ function renderLibrary()
         }
         else html += '<div class="empty-hint">' + GENRE_ICON + '<p data-i18n="movies.pickGenre"></p></div>';
     }
-    else // folders
+    else // folders: one folder of the tree, or none yet
     {
-        html += '<div class="folder-tree">' + NayiveMedia.folderTreeHtml( st.folderTree, st.selectedFolder ) + '</div>';
         if( st.selectedFolder )
         {
             var fm = moviesUnder( st.selectedFolder );
             var label = st.selectedFolder.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) || DIR.split( "/" ).pop();
-            html += scopeBarHtml( label + " · " + NayiveUI.tf( fm.length === 1 ? "movies.oneMovie" : "movies.nMovies", { n: fm.length } ) ) + posterGridHtml( fm );
+            html += '<h2 class="view-head">' + esc( label ) + '<small>' + esc( NayiveUI.tf( fm.length === 1 ? "movies.oneMovie" : "movies.nMovies", { n: fm.length } ) ) + '</small></h2>' + posterGridHtml( fm );
         }
         else html += '<div class="empty-hint">' + FOLDER_ICON + '<p data-i18n="movies.pickFolder"></p></div>';
     }
@@ -1231,16 +1260,12 @@ function renderRuntime( mv )
     $$( '.poster-sub[data-runtime="' + cssEsc( mv.path ) + '"]' ).forEach( function ( el ) { el.textContent = sub || "—"; } );
 }
 
+// The poster cards themselves are the item browser's (BROWSER below): a
+// click picks, a double-click / tap / Enter opens the film. Here: the ▶ on
+// a poster and the "Keep watching" cards, the detail's buttons, the genre
+// cards and the ← / × out of a view.
 function wireLibrary()
 {
-    $$( "#libContent [data-open]" ).forEach( function ( el )
-    {
-        el.addEventListener( "click", function ( e )
-        {
-            if( e.target.closest( "[data-play]" ) ) return;   // the ▶ button handles itself
-            openMovie( el.getAttribute( "data-open" ) );
-        } );
-    } );
     $$( "#libContent [data-play]" ).forEach( function ( btn )
     {
         btn.addEventListener( "click", function ( e )
@@ -1267,15 +1292,6 @@ function wireLibrary()
             renderLibrary();
         } );
     } );
-    $$( "#libContent [data-folder]" ).forEach( function ( btn )
-    {
-        btn.addEventListener( "click", function ()
-        {
-            var p = btn.getAttribute( "data-folder" );
-            st.selectedFolder = st.selectedFolder === p ? null : p;
-            renderLibrary();
-        } );
-    } );
     var clear = $( "#clearScopeBtn" );
     if( clear ) clear.addEventListener( "click", function ()
     {
@@ -1287,12 +1303,12 @@ function wireLibrary()
 function openMovie( path )
 {
     st.filter = "movies";
-    setFilterPills();
     st.selectedMovie = path;
     st.selectedGenre = st.selectedFolder = null;
     st.search = "";
     $( "#searchInput" ).value = "";
     renderLibrary();
+    if( treeView ) treeView.render();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1485,28 +1501,144 @@ function updateMediaSession( mv )
 function updatePositionState() { NayiveMedia.positionState( video ); }
 
 /* ---------------------------------------------------------------------------
- * STATIC WIRING
+ * BROWSER - the tree (Films, Genres, Folders with the real folders) and the
+ * poster cards as rows of the shared item browser (shared/browser.js): a
+ * click picks (Ctrl / Shift add), a double-click, Enter or a tap opens the
+ * film, a long-press picks on touch. One action list feeds the header group,
+ * the menu (right-click = the card's ⋮ = the header ⋮) and the keys.
  * -------------------------------------------------------------------------*/
-function setFilterPills()
+var treeView = null, browse = null;
+var treeOpen = {};                               // the open rows, this visit
+
+// The folders under a scanned folder, as tree rows ("f:<path>").
+function folderNodes( node )
 {
-    [ "Movies", "Genres", "Folders" ].forEach( function ( name )
-    { $( "#filter" + name ).classList.toggle( "is-active", name.toLowerCase() === st.filter ); } );
+    return ( node && node.nodes || [] )
+        .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
+        .map( function ( n ) { return { id: "f:" + n.path, name: baseName( n.path ), icon: FOLDER_ICON, noMenu: true, kids: folderNodes( n ) }; } );
 }
 
-function setFilter( f )
+function treeRoots()
+{
+    var T = NayiveUI.t;
+    return [
+        { id: "v:movies",  name: T( "movies.movies" ),  icon: FILM_ICON,   noMenu: true },
+        { id: "v:genres",  name: T( "movies.genres" ),  icon: GENRE_ICON,  noMenu: true },
+        { id: "v:folders", name: T( "movies.folders" ), icon: FOLDER_ICON, noMenu: true, kids: folderNodes( st.folderTree ) }
+    ];
+}
+
+function currentNode()
+{
+    if( st.filter === "folders" ) return st.selectedFolder ? "f:" + st.selectedFolder : "v:folders";
+    return "v:" + st.filter;
+}
+
+function goNode( id )
+{
+    if( id === "v:folders" ) treeOpen[ id ] = true;
+    if( id.indexOf( "v:" ) === 0 ) setFilter( id.slice( 2 ) );
+    else if( id.indexOf( "f:" ) === 0 ) setFilter( "folders", id.slice( 2 ) );
+}
+
+// Watched / not watched on a pick: each film through toggleWatched, as its
+// detail's button does. Their repaints wait for the end, and the Undos the
+// films that lost a resume point ask for become ONE Undo that runs them all.
+function setWatched( films )
+{
+    var on = films.some( function ( m ) { return ! isWatched( m ); } );
+    var change = films.filter( function ( m ) { return isWatched( m ) !== on; } );
+    if( change.length === 1 ) { toggleWatched( change[ 0 ] ); return; }
+    var undos = quietly( function () { change.forEach( toggleWatched ); } );
+    if( undos.length )
+        NayiveUI.undoToast( NayiveUI.t( 'movies.markedWatched' ), function ()
+        {
+            quietly( function () { undos.forEach( function ( u ) { u(); } ); } );
+        } );
+}
+
+// Runs fn with the library's repaint and the Undo toast held back; repaints
+// once after, and hands back the Undos asked for.
+function quietly( fn )
+{
+    var undos = [], toast = NayiveUI.undoToast, paint = renderLibrary;
+    NayiveUI.undoToast = function ( msg, u ) { undos.push( u ); };
+    renderLibrary = function () {};
+    try { fn(); }
+    finally { NayiveUI.undoToast = toast; renderLibrary = paint; }
+    renderLibrary();
+    return undos;
+}
+
+function needsPoster( mv ) { return !! mv && ! mv.poster && ! posterEntry( mv ); }
+
+// Drive, at the file (a new window on the desktop, a new tab elsewhere).
+function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
+
+// Built once the dictionary is in (boot).
+function movieActions()
+{
+    var T = NayiveUI.t;
+    function films( ids ) { return ids.map( findMovie ).filter( Boolean ); }
+    function one( ids ) { return ids.length === 1 && !! findMovie( ids[ 0 ] ); }
+    return [
+        { id: "open", label: T( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
+          run: function ( ids ) { openMovie( ids[ 0 ] ); } },
+        { id: "play", label: T( "media.play" ), icon: "play", bar: 1, phone: 1, group: 0, when: one,
+          run: function ( ids ) { playMovie( findMovie( ids[ 0 ] ) ); } },
+        { id: "watched", icon: "check", key: "W", bar: 2, phone: 1, group: 1,
+          label: function ( ids ) { var f = films( ids ); return T( f.length && f.every( isWatched ) ? "movies.markUnwatched" : "movies.markWatched" ); },
+          when: function ( ids ) { return films( ids ).length > 0; },
+          run: function ( ids ) { setWatched( films( ids ) ); } },
+        { id: "poster", label: T( "movies.findPoster" ), icon: "image", group: 1,
+          when: function ( ids ) { return films( ids ).some( needsPoster ); },
+          run: function ( ids ) { fetchPosters( ids ); } },
+        { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", group: 2, when: one,
+          run: function ( ids ) { showInDrive( ids[ 0 ] ); } }
+    ];
+}
+
+function wireBrowser()
+{
+    treeView = NayiveUI.tree( {
+        host:    $( "#tree" ),
+        pane:    $( "#treePane" ),
+        roots:   treeRoots,
+        isOpen:  function ( id ) { return !! treeOpen[ id ]; },
+        setOpen: function ( id, v ) { treeOpen[ id ] = v; },
+        current: currentNode,
+        go:      goNode
+    } );
+    browse = NayiveUI.browser( {
+        list:    $( "#libContent" ),
+        row:     ".poster-card",
+        idOf:    function ( el ) { return el.getAttribute( "data-open" ); },
+        bar:     $( "#selActions" ),
+        actions: movieActions(),
+        tree:    treeView,
+        grid:    function () { return true; },
+        active:  function () { return ! st.stageOpen; },
+        open:    function ( id ) { openMovie( id ); }
+    } );
+    $( "#treeBtn" ).addEventListener( "click", function () { treeView.openSheet(); } );
+}
+
+/* ---------------------------------------------------------------------------
+ * STATIC WIRING
+ * -------------------------------------------------------------------------*/
+// `folder`: the folder of the tree to show (filter "folders").
+function setFilter( f, folder )
 {
     st.filter = f;
-    st.selectedMovie = st.selectedGenre = st.selectedFolder = null;
-    setFilterPills();
+    st.selectedMovie = st.selectedGenre = null;
+    st.selectedFolder = folder || null;
+    $( "#libContent" ).scrollTop = 0;
     renderLibrary();
+    if( treeView ) treeView.render();
 }
 
 function wireStaticUI()
 {
-    $( "#filterMovies"  ).addEventListener( "click", function () { setFilter( "movies" ); } );
-    $( "#filterGenres"  ).addEventListener( "click", function () { setFilter( "genres" ); } );
-    $( "#filterFolders" ).addEventListener( "click", function () { setFilter( "folders" ); } );
-
     $( "#searchInput" ).addEventListener( "input", function ( e )
     {
         st.search = e.target.value;
@@ -1524,7 +1656,7 @@ function wireStaticUI()
         scan();
     } );
 
-    $( "#postersBtn" ).addEventListener( "click", fetchPosters );
+    $( "#postersBtn" ).addEventListener( "click", function () { fetchPosters(); } );
     $( "#tmdbCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "tmdbBackdrop", false ); } );
     $( "#tmdbSaveBtn" ).addEventListener( "click", async function ()
     {
@@ -1645,9 +1777,13 @@ function wireStaticUI()
         var tag = ( e.target && e.target.tagName ) || "";
         if( tag === "INPUT" || tag === "TEXTAREA" ) return;
         if( ! st.current ) return;
-        if( e.key === " " || e.key === "k" ) { e.preventDefault(); togglePlay(); }
-        else if( e.key === "ArrowLeft" )  skip( -10 );
-        else if( e.key === "ArrowRight" ) skip( 30 );
+        // With the video put away the library is on screen: the arrows move
+        // through the films (and Space picks one in the list) - the item
+        // browser's keys. On the video they are the player's.
+        var onList = ! st.stageOpen && ( $( "#libContent" ).contains( document.activeElement ) || $( "#tree" ).contains( document.activeElement ) );
+        if( ( e.key === " " && ! onList ) || e.key === "k" ) { e.preventDefault(); togglePlay(); }
+        else if( e.key === "ArrowLeft"  && st.stageOpen ) skip( -10 );
+        else if( e.key === "ArrowRight" && st.stageOpen ) skip( 30 );
         else if( e.key === "f" ) $( "#stageFullBtn" ).click();
         else if( e.key === "Escape" && st.stageOpen && ! document.fullscreenElement ) closeStage();
     } );
@@ -1686,6 +1822,7 @@ async function boot()
     $( "#mainRow" ).hidden   = false;
     $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
     $( "#playerBar" ).hidden = false;
+    wireBrowser();
 
     await loadProgress();
     await loadPosters();

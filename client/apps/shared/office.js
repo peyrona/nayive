@@ -136,7 +136,12 @@
         var label = byId( opts.labelId || "fileLabel" );
         var input = byId( opts.inputId || "fileNameInput" );
 
-        function set( text ) { label.textContent = text; }
+        function set( text )                     // <bdi>: see .file-label in app.css
+        {
+            var bdi = document.createElement( "bdi" );
+            bdi.textContent = text;
+            label.replaceChildren( bdi );
+        }
         function get()       { return label.textContent; }
 
         function start()
@@ -431,21 +436,26 @@
             box.hidden    = ! paths.length;
             if( ! paths.length ) return;
 
-            var head = document.createElement( "div" );
-            head.className   = "section-label";
-            head.textContent = t( "ui.recent" );
-            box.appendChild( head );
-
-            var ul = document.createElement( "ul" );
-            ul.className = "open-list";
+            // One drop-down, so the folder list below keeps the room. The first
+            // option only names the box; picking any other opens that file.
+            box.className = "field";
+            var sel = document.createElement( "select" );
+            var ph  = document.createElement( "option" );
+            ph.value       = "";
+            ph.textContent = t( "ui.recent" ) + "…";
+            ph.disabled    = true;
+            ph.selected    = true;
+            sel.appendChild( ph );
             paths.forEach( function ( p )
             {
-                var li = row( "doc", baseName( p ), false );
-                li.querySelector( ".open-nm" ).title = p;      // the folder it is in
-                li.addEventListener( "click", function () { pick( p ); } );
-                ul.appendChild( li );
+                var o = document.createElement( "option" );
+                o.value       = p;
+                o.textContent = baseName( p );
+                o.title       = p;                             // the folder it is in
+                sel.appendChild( o );
             } );
-            box.appendChild( ul );
+            sel.addEventListener( "change", function () { if( sel.value ) pick( sel.value ); } );
+            box.appendChild( sel );
         }
 
         function open( startDir )
@@ -1655,11 +1665,14 @@
             if( o.onChange ) o.onChange();
         }
 
-        // The toolbar padlock lit = what leaves this tab is encrypted.
+        // The toolbar key lit = what leaves this tab is encrypted. Text's key
+        // (data-only-locked) shows only on a document that is locked already.
         function showLock()
         {
             var btn = byId( "lockBtn" );
-            if( btn ) btn.classList.toggle( "is-active", !! saver.lock() );
+            if( ! btn ) return;
+            btn.classList.toggle( "is-active", !! saver.lock() );
+            if( btn.hasAttribute( "data-only-locked" ) ) btn.hidden = ! saver.lock();
         }
 
         function notReady()
@@ -2617,7 +2630,7 @@
                 body:      tf( "lock.pastBody", { name: baseName( path ) } ),
                 confirm:   t( "lock.cleanCopy" ),
                 other:     t( "lock.lockAnyway" ),
-                otherIcon: "lock" } );
+                otherIcon: "key" } );
 
             return r === true ? "clean" : ( r === "other" ? "lock" : null );
         }

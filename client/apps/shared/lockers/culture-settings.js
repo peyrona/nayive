@@ -18,7 +18,8 @@
  * Science has News (its sources) in place of Art, and its own Content.
  *
  * Saved PER USER (data/salon.json or data/science.json, every device the
- * same) with ✓; ✗ drops the changes. The locker reads them the next time it starts.
+ * same). Close-only, the GNOME way (no ✓): closing it - its × or Escape - keeps
+ * the changes, in one write. The locker reads them the next time it starts.
  */
 ( function ()
 {
@@ -103,21 +104,17 @@ function open( kind )
     bClose.type = "button";
     bClose.setAttribute( "data-act", "close" );
     bClose.title = t( "ui.close" );
-    var bSave = el( "button", null, null, actions );
-    bSave.type = "button";
-    bSave.setAttribute( "data-act", "primary" );
-    bSave.title = t( "ui.save" );
     bClose.addEventListener( "click", function () { ui.close(); } );
-    bSave.addEventListener( "click", save );
+    NayiveUI.onSheetClose( ui.back, save );
 
     ui.show( function () { NayiveUI.applySheetButtons( sheet ); } );
     show( "langs" );
     [].forEach.call( sheet.querySelectorAll( ".salon-pane" ), function ( p ) { el( "p", "salon-note", "…", p ); } );
 
-    // `base`: the settings as read, what ✓ compares with (save). A read that
-    // failed - no answer in time, a server error, signed out - shows what this
-    // device has, READ-ONLY, with ✓ off: saved, that stand-in would replace the
-    // real settings on every device (F6). Only a good read can be saved.
+    // `base`: the settings as read, what closing compares with (save). A read
+    // that failed - no answer in time, a server error, signed out - shows what
+    // this device has, READ-ONLY, never saved: saved, that stand-in would
+    // replace the real settings on every device (F6). Only a good read can be.
     var base = null, readOnly = false;
     A.readStrict().then( function ( s )
     {
@@ -131,7 +128,6 @@ function open( kind )
         drawAll();
         [].forEach.call( sheet.querySelectorAll( ".salon-pane input, .salon-pane select, .salon-pane button" ),
                          function ( x ) { x.disabled = true; } );
-        bSave.disabled = true;
         var msg = el( "p", "salon-note", t( "salon.readFail" ), null );
         msg.setAttribute( "role", "status" );
         sheet.insertBefore( msg, tabs );
@@ -505,18 +501,18 @@ function open( kind )
 
     //------------------------------------------------------------------------//
 
-    // ✓ writes only what THIS dialog changed, over the settings read again
-    // now: one changed on another device while the dialog was open (the
+    // Closing writes only what THIS dialog changed, over the settings read
+    // again now: one changed on another device while the dialog was open (the
     // phone's units, say) is not put back. Field by field; the boxes ("cards")
     // box by box. Version-checked (A.update): a save made elsewhere between
     // that read and this write makes it read again and lay these changes
-    // again. A read that fails now writes nothing: the dialog stays open,
-    // the changes kept, and ✓ can be pressed again.
+    // again. Nothing changed, nothing written. A read that fails now writes
+    // nothing, and says so: the dialog is gone, its changes with it.
     function save()
     {
         if( ! cfg || readOnly || ! base ) return;
-        bSave.disabled = true;
         var same = function ( a, b ) { return JSON.stringify( a ) === JSON.stringify( b ); };
+        if( same( cfg, base ) ) return;
         A.update( function ( now )
         {
             var out = JSON.parse( JSON.stringify( now ) );
@@ -532,19 +528,12 @@ function open( kind )
             return out;
         } ).then( function ()
         {
-            ui.close();
             NayiveUI.toast( t( "salon.saved" ) );
         }, function ( e )
         {
-            if( e && e.read )
-            {
-                bSave.disabled = false;
-                NayiveUI.toast( t( "salon.readFail" ) );
-                return;
-            }
-            // Kept on this device anyway (update keeps the local copy first).
-            ui.close();
-            NayiveUI.toast( t( "salon.saveFail" ) );
+            // Not read: nothing written. Otherwise kept on this device anyway
+            // (update keeps the local copy first).
+            NayiveUI.toast( t( e && e.read ? "salon.notSaved" : "salon.saveFail" ) );
         } );
     }
 }

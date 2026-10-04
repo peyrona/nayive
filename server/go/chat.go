@@ -1725,7 +1725,7 @@ func quoteText(m *ChatMsg) string {
 	if m.Deleted {
 		return ""
 	}
-	t := m.Text
+	t := stripMarks(m.Text)
 	switch m.Kind {
 	case "file":
 		if t == "" && m.File != nil {
@@ -1761,20 +1761,32 @@ func clip(s string, n int) string {
 // floor is the last message `pid` deleted the chat at (0: never).
 func (c *chatConv) floor(pid string) int64 { return c.st.Cleared[pid] }
 
-// hiddenFor: `pid` deleted this chat and nothing came in since.
+// hiddenFor: `pid` deleted this chat and nothing came in since (a message
+// deleted for everyone is nothing).
 func (c *chatConv) hiddenFor(pid string) bool {
 	f, ok := c.st.Cleared[pid]
 	if !ok {
 		return false
 	}
-	m := c.last()
+	m := c.lastShown()
 	return m == nil || m.ID <= f
 }
 
 // lastFor is the last message `pid` may still see, or nil.
 func (c *chatConv) lastFor(pid string) *ChatMsg {
-	if m := c.last(); m != nil && m.ID > c.floor(pid) {
+	if m := c.lastShown(); m != nil && m.ID > c.floor(pid) {
 		return m
+	}
+	return nil
+}
+
+// lastShown is the last message not deleted for everyone, or nil: a deleted
+// one leaves no trace, not even in the list's line (his call, 2026-10-04).
+func (c *chatConv) lastShown() *ChatMsg {
+	for i := len(c.msgs) - 1; i >= 0; i-- {
+		if !c.msgs[i].Deleted {
+			return c.msgs[i]
+		}
 	}
 	return nil
 }
@@ -2203,7 +2215,7 @@ func (h *ChatHub) pushBody(j chatPushJob) string {
 	var line string
 	switch m.Kind {
 	case "photo":
-		line = "📷 " + firstNonEmpty(clip(m.Text, 120), h.phrase(j.sub.Lang, "chat.photo", "Foto"))
+		line = "📷 " + firstNonEmpty(clip(stripMarks(m.Text), 120), h.phrase(j.sub.Lang, "chat.photo", "Foto"))
 	case "file":
 		line = "📄 " + quoteText(&m)
 	case "loc":
@@ -2213,7 +2225,7 @@ func (h *ChatHub) pushBody(j chatPushJob) string {
 	case "poll":
 		line = "📊 " + quoteText(&m)
 	default:
-		line = clip(m.Text, 180)
+		line = clip(stripMarks(m.Text), 180)
 	}
 	if j.group && j.from != "" {
 		return j.from + ": " + line

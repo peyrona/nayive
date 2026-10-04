@@ -52,6 +52,7 @@
     <script src="../shared/locker.js"></script>
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
     <script>
     NayiveI18n.ready.then( function () {
         if( ! window.NayiveUI ) return;
@@ -63,9 +64,8 @@
                 { sel: '#folderInfoBtn', text: NayiveUI.t( 'music.introFolder' ) },
                 { sel: '#searchToggle', text: NayiveUI.t( 'music.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'music.introRescan' ) },
-                { sel: '#filterSongs',  name: NayiveUI.t( 'music.introGroupName' ), text: NayiveUI.t( 'music.introGroup' ) },
+                { icon: 'folder',       name: NayiveUI.t( 'music.library' ), text: NayiveUI.t( 'music.introTree' ) },
                 { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ) },
-                { sel: '#loadListBtn',  text: NayiveUI.t( 'music.introLoadList' ) },
                 { sel: '#saveListBtn',  text: NayiveUI.t( 'music.introSaveList' ) },
                 { sel: '#clearQueueBtn', text: NayiveUI.t( 'music.introClear' ) }
             ]
@@ -94,7 +94,19 @@
                      transition: background-color var(--tr-fast); }
     .pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
 
-    .lib-pane   { flex: 1 1 auto; min-width: 420px; display: flex; flex-direction: column; overflow: hidden; }
+    .lib-pane   { flex: 1 1 auto; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ---- the tree: Library (songs, albums, artists, folders) and the
+       playlists. Its rows are the shared tree (.ntree, app.css); on a phone
+       it slides in from #treeBtn (the shared .tree-sheet). ---------------- */
+    .tree-pane  { flex: 0 0 auto; width: 210px; overflow: auto; padding: 14px 6px 16px;
+                  border-right: 1px solid var(--line); }
+    #tree.ntree { min-width: 0; }
+    #tree .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    #treeBtn    { display: none; }
+    .view-head  { margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; color: var(--text);
+                  overflow-wrap: anywhere; }
+    .view-head small { margin-left: 8px; font-size: 0.78rem; font-weight: 400; color: var(--text-dim); }
 
     .lib-content{ flex: 1 1 auto; overflow-y: auto; padding: 18px 20px 28px; }
 
@@ -127,11 +139,16 @@
 
     /* ---- library rows: one song (a shared .card-row), real drag source;
        a tap on its body plays it ------------------------------------------ */
-    .song-row { padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
-    .song-row:active { cursor: grabbing; }
+    .song-row { padding: 8px 10px; margin-bottom: 6px; cursor: default; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
     .song-row.is-playing { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
                             background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
     .song-row.is-playing .song-title { color: var(--accent); }
+    /* Picked (shared/browser.js): the shared accent fill, over "playing" too. */
+    .song-row.is-selected { background: var(--accent); border-color: var(--accent); }
+    .song-row.is-selected :is(.song-title, .song-sub, .song-dur) { color: var(--on-accent); }
+    /* A playlist's song that is no longer in the library. */
+    .song-row.is-missing .song-art   { background: var(--line) !important; }
+    .song-row.is-missing .song-title { color: var(--text-dim); }
     .song-art  { flex: 0 0 auto; width: 38px; height: 38px; border-radius: var(--radius-s);
                  display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.85); }
     .song-art svg { width: 18px; height: 18px; }
@@ -213,6 +230,14 @@
     .queue-sheet .queue-list   { padding: 12px 0 0; overflow: visible; }
     .queue-sheet .queue-row    { cursor: pointer; }
 
+    @media (max-width: 640px)
+    {
+        #treeBtn { display: inline-flex; }
+        .tree-pane:not(.tree-sheet) { display: none; }     /* until the tree is made (boot) */
+        /* While picking, the selection group needs the whole bar. */
+        .topbar:has(.has-selection) :is(h1, #tools) { display: none; }
+    }
+
     @media (max-width: 760px)
     {
         #mainRow > .queue-pane, .pane-resizer { display: none; }
@@ -240,22 +265,14 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
             </button>
 
-            <div class="tb-modes">
-                <button class="icon-btn is-active" id="filterSongs" data-i18n-attr="title:music.songs, aria-label:music.songs">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                </button>
-                <button class="icon-btn" id="filterAlbums" data-i18n-attr="title:music.albums, aria-label:music.albums">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-                <button class="icon-btn" id="filterArtists" data-i18n-attr="title:music.artists, aria-label:music.artists">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
-                </button>
-                <button class="icon-btn" id="filterFolders" data-i18n-attr="title:music.folders, aria-label:music.folders">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5C3 6.12 4.12 5 5.5 5h4l2 2h7C19.88 7 21 8.12 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
-                </button>
-            </div>
+            <!-- Phones only (<= 640 px): the tree (library + playlists) slides in. -->
+            <button class="icon-btn" id="treeBtn" type="button" data-i18n-attr="title:music.library, aria-label:music.library">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+            </button>
         </div>
         <div class="topbar-actions">
+            <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+            <div id="selActions" class="tb-group" hidden></div>
             <!-- Like #tools, shown once a folder is open. -->
             <div class="tb-group" data-tools hidden>
                 <div class="search-wrap">
@@ -289,6 +306,9 @@
 
     <div class="main-row" id="mainRow" hidden>
 
+        <!-- The tree: Library and the playlists (NayiveUI.tree, see TREE below). -->
+        <nav class="tree-pane" id="treePane" data-i18n-attr="aria-label:music.library"><div id="tree"></div></nav>
+
         <div class="lib-pane">
             <div class="lib-content" id="libContent"></div>
         </div>
@@ -312,9 +332,6 @@
                         </button>
                     </div>
                     <div class="queue-actions">
-                        <button class="icon-btn" id="loadListBtn" data-i18n-attr="title:music.loadSaved, aria-label:music.loadSaved">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 18h16"/></svg>
-                        </button>
                         <button class="icon-btn" id="saveListBtn" disabled data-i18n-attr="title:music.saveQueue, aria-label:music.saveQueue">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h11l3 3v11H5V5Z"/><path d="M8 5v5h7V5"/><path d="M8 14h8"/></svg>
                         </button>
@@ -382,10 +399,11 @@
         </div>
     </div>
 
-    <!-- SAVE PLAYLIST SHEET ------------------------------------------------- -->
+    <!-- SAVE PLAYLIST SHEET - also names a new playlist and renames one
+         (openNameSheet): the same name field. -------------------------------- -->
     <div class="sheet-backdrop" id="saveBackdrop">
         <div class="sheet">
-            <h2 data-i18n="music.saveList"></h2>
+            <h2 id="saveTitle" data-i18n="music.saveList"></h2>
             <p class="dialog-text" id="saveHint"></p>
             <div class="field">
                 <label for="playlistName" data-i18n="music.listName"></label>
@@ -394,17 +412,6 @@
             <div class="sheet-actions">
                 <button data-act="close" id="saveCancelBtn" data-i18n-attr="title:ui.cancel"></button>
                 <button data-act="primary" id="saveConfirmBtn" data-i18n-attr="title:ui.save"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- LOAD PLAYLIST SHEET ------------------------------------------------- -->
-    <div class="sheet-backdrop" id="loadBackdrop">
-        <div class="sheet">
-            <h2 data-i18n="music.loadList"></h2>
-            <div id="loadList"></div>
-            <div class="sheet-actions" id="loadActions" hidden>
-                <button data-act="close" id="loadCloseBtn" data-i18n-attr="title:ui.close"></button>
             </div>
         </div>
     </div>
@@ -441,7 +448,8 @@ var esc = NayiveMedia.esc, extOf = NayiveMedia.extOf, colorFor = NayiveMedia.col
 var st = {
     songs: [],              // every scanned audio file: {path, dirPath, title, artist, album, track, color, duration, durationKnown}
     folderTree: null,       // the recursive {path, nodes} scan result, rooted at DIR
-    filter: "songs",        // songs | albums | artists | folders
+    filter: "songs",        // songs | albums | artists | folders | playlist (the tree's node)
+    playlistId: null,       // the playlist shown (filter "playlist")
     search: "",
     selectedAlbum: null,    // "artist‡album" key
     selectedArtist: null,
@@ -455,7 +463,7 @@ var st = {
     history: [],            // shuffle: entries played before the current one, for "previous"
     playlists: [],          // [{id, name, paths:[...]}]
     playlistsBlocked: "",   // "unread" / "bad": not read at start-up (every change reads the file again)
-    dragPayload: null       // { type:'library', song } | { type:'queue', index }
+    dragPayload: null       // { type:'library', songs } | { type:'queue', index }
 };
 
 var audio = $( "#player" );
@@ -574,6 +582,7 @@ async function scan()
 
     renderCollectionSummary();
     renderLibrary();
+    if( treeView ) treeView.render();      // the folders, scanned again
     renderQueueList();
     updatePlayerBar();
     refineTags( gen );
@@ -904,20 +913,22 @@ function computeArtists( songs )
 var MUSIC_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
 
+// One song: a row of the shared item browser (BROWSER below), which adds
+// the tick before it and the ⋮ after it. `s.missing`: a playlist's song that
+// is no longer in the library (a stub, see playlistSongs).
 function songRowHtml( s )
 {
     var cur = st.queue[ st.playingIndex ];
     var playing = !! cur && cur.song === s;
-    return '<div class="card-row song-row' + ( playing ? ' is-playing' : '' ) + '" draggable="true" data-path="' + esc( s.path ) + '">' +
+    var sub = s.missing ? NayiveUI.t( 'music.notFound' )
+            : ( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + ( s.album || NayiveUI.t( 'music.unknownAlbum' ) );
+    return '<div class="card-row song-row' + ( playing ? ' is-playing' : '' ) + ( s.missing ? ' is-missing' : '' ) + '" data-path="' + esc( s.path ) + '">' +
         '<span class="song-art" style="background:' + s.color + '">' + MUSIC_NOTE_SVG + '</span>' +
         '<span class="song-meta">' +
             '<div class="song-title">' + esc( s.title ) + '</div>' +
-            '<div class="song-sub">' + esc( s.artist || NayiveUI.t( 'music.unknownArtist' ) ) + ' · ' + esc( s.album || NayiveUI.t( 'music.unknownAlbum' ) ) + '</div>' +
+            '<div class="song-sub">' + esc( sub ) + '</div>' +
         '</span>' +
-        '<span class="song-dur">' + ( s.duration != null ? fmtClock( s.duration ) : "…" ) + '</span>' +
-        '<button class="icon-btn sm" data-add="' + esc( s.path ) + '" data-i18n-attr="title:music.addToQueue, aria-label:music.addToQueue">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
-        '</button>' +
+        '<span class="song-dur">' + ( s.missing ? "" : s.duration != null ? fmtClock( s.duration ) : "…" ) + '</span>' +
     '</div>';
 }
 
@@ -999,14 +1010,27 @@ function renderLibrary()
         }
         else html += '<div class="empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><p data-i18n="music.pickArtist"></p></div>';
     }
-    else // folders
+    else if( st.filter === "playlist" )
     {
-        html += '<div class="folder-tree">' + NayiveMedia.folderTreeHtml( st.folderTree, st.selectedFolder ) + '</div>';
+        // A playlist, in its own order; a song gone from the library is
+        // still a row (dimmed), so it can be taken out of the list.
+        var pl = playlistById( st.playlistId );
+        var all = playlistSongs( pl );
+        var inPool = new Set( pool );
+        var shown = ! q ? all : all.filter( function ( s ) { return inPool.has( s ) || s.missing && s.title.toLowerCase().indexOf( q ) !== -1; } );
+        var gone = all.filter( function ( s ) { return s.missing; } ).length;
+        html += '<h2 class="view-head">' + esc( pl ? pl.name : "" ) + '<small>' + esc( NayiveUI.tf( "music.nSongs", { n: all.length } ) ) +
+                ( gone ? " · " + esc( NayiveUI.tf( gone === 1 ? "music.oneMissing" : "music.nMissing", { n: gone } ) ) : "" ) + '</small></h2>';
+        html += ! all.length ? '<div class="empty-hint">' + MUSIC_NOTE_SVG + '<p data-i18n="music.listEmpty"></p></div>'
+                             : songListHtml( shown, true );
+    }
+    else // folders: one folder of the tree, or none yet
+    {
         if( st.selectedFolder )
         {
             var prefix = st.selectedFolder;
             var songs3 = pool.filter( function ( s ) { return s.path.slice( 0, prefix.length + 1 ) === prefix + "/"; } );
-            html += scopeBarHtml( prefix.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) ) + songListHtml( songs3, true );
+            html += '<h2 class="view-head">' + esc( prefix.slice( DIR.length ).replace( /^\/+/, "" ).split( "/" ).join( " / " ) ) + '</h2>' + songListHtml( songs3, true );
         }
         else html += '<div class="empty-hint">' + FOLDER_SVG + '<p data-i18n="music.pickFolder"></p></div>';
     }
@@ -1023,30 +1047,11 @@ function renderLibraryDuration( song )
 
 function cssEsc( s ) { return String( s ).replace( /["\\]/g, "\\$&" ); }
 
+// The song rows themselves are the item browser's (BROWSER below): a click
+// picks, a double-click / tap / Enter plays. Here: the album and artist
+// cards, the scope chip and "Show more".
 function wireLibraryRows()
 {
-    $$( "#libContent .song-row" ).forEach( function ( row )
-    {
-        row.addEventListener( "dragstart", function ()
-        {
-            var song = findSong( row.getAttribute( "data-path" ) );
-            st.dragPayload = { type: "library", song: song };
-        } );
-        // The row's body plays it (its "+" only queues it).
-        row.addEventListener( "click", function ( e )
-        {
-            if( e.target.closest( "[data-add]" ) ) return;
-            playSong( findSong( row.getAttribute( "data-path" ) ) );
-        } );
-    } );
-    $$( "#libContent [data-add]" ).forEach( function ( btn )
-    {
-        btn.addEventListener( "click", function ( e )
-        {
-            e.stopPropagation();
-            addToQueue( findSong( btn.getAttribute( "data-add" ) ) );
-        } );
-    } );
     $$( "#libContent [data-album]" ).forEach( function ( btn )
     {
         btn.addEventListener( "click", function ()
@@ -1063,16 +1068,6 @@ function wireLibraryRows()
         {
             var name = btn.getAttribute( "data-artist" );
             st.selectedArtist = st.selectedArtist === name ? null : name;
-            listShown = LIST_PAGE;
-            renderLibrary();
-        } );
-    } );
-    $$( "#libContent [data-folder]" ).forEach( function ( btn )
-    {
-        btn.addEventListener( "click", function ()
-        {
-            var path = btn.getAttribute( "data-folder" );
-            st.selectedFolder = st.selectedFolder === path ? null : path;
             listShown = LIST_PAGE;
             renderLibrary();
         } );
@@ -1100,7 +1095,32 @@ function wireLibraryRows()
     }
 }
 
-function findSong( path ) { return st.songs.filter( function ( s ) { return s.path === path; } )[ 0 ] || null; }
+// By path, through a map made again whenever st.songs is a new list (scan).
+var songMap = null;
+function findSong( path )
+{
+    if( ! songMap || songMap.list !== st.songs )
+    {
+        songMap = { list: st.songs, by: new Map() };
+        st.songs.forEach( function ( s ) { songMap.by.set( s.path, s ); } );
+    }
+    return songMap.by.get( path ) || null;
+}
+
+// A saved playlist's songs, in its order, each once; a path no longer in
+// the library is a stub row (.is-missing) so it can still be taken out.
+function playlistSongs( pl )
+{
+    var seen = new Set(), out = [];
+    ( pl && pl.paths || [] ).forEach( function ( p )
+    {
+        if( seen.has( p ) ) return;
+        seen.add( p );
+        out.push( findSong( p ) || { path: p, title: NayiveMedia.baseName( p ).replace( /\.[a-z0-9]+$/i, "" ),
+                                     color: "", duration: null, missing: true } );
+    } );
+    return out;
+}
 
 /* ---------------------------------------------------------------------------
  * RENDER - QUEUE
@@ -1131,7 +1151,7 @@ function renderQueueList()
     if( ! st.queue.length )
     {
         host.innerHTML = '<div class="queue-empty">' + MUSIC_NOTE_SVG +
-            '<p data-i18n="music.queueEmpty"></p></div>';
+            '<p data-i18n="music.queueEmptyHint"></p></div>';
     }
     else
     {
@@ -1207,13 +1227,43 @@ function playSong( song )
     playIndex( at );
 }
 
-function addToQueue( song )
+// Songs at the end of the queue (Q, "Add to the queue"); with nothing
+// playing, the first of them starts.
+function addToQueue( songs )
 {
-    if( ! song ) return;
-    st.queue.push( { song: song } );
+    if( ! songs.length ) return;
+    var first = st.queue.length;
+    songs.forEach( function ( s ) { st.queue.push( { song: s } ); } );
     renderQueueList();
-    renderLibrary();
-    if( st.playingIndex === -1 ) playIndex( st.queue.length - 1 );
+    if( st.playingIndex === -1 ) playIndex( first );
+}
+
+// Songs right after the one playing ("Play next"); with nothing playing
+// they go first and the first of them starts.
+function playNext( songs )
+{
+    if( ! songs.length ) return;
+    var at = st.playingIndex >= 0 ? st.playingIndex + 1 : 0;
+    st.queue.splice.apply( st.queue, [ at, 0 ].concat( songs.map( function ( s ) { return { song: s }; } ) ) );
+    renderQueueList();
+    if( st.playingIndex === -1 ) playIndex( at );
+}
+
+// Several songs played at once (Play / Enter on a pick): they become the
+// queue, the first starts - as loading a playlist does - and the Undo brings
+// the old queue back.
+function playSongs( songs )
+{
+    if( ! songs.length ) return;
+    if( songs.length === 1 ) { playSong( songs[ 0 ] ); return; }
+    var snap = queueSnapshot();
+    var entries = songs.map( function ( s ) { return { song: s }; } );
+    st.queue = entries;
+    st.playingIndex = -1;
+    stopPlayback();
+    playIndex( 0 );
+    if( snap.queue.length )
+        NayiveUI.undoToast( NayiveUI.tf( 'music.playingN', { n: songs.length } ), function () { restoreQueue( snap, entries ); } );
 }
 
 function handleQueueDrop( targetIndex )
@@ -1234,8 +1284,12 @@ function handleQueueDrop( targetIndex )
     }
     else if( payload.type === "library" )
     {
-        st.queue.splice( Math.min( targetIndex, st.queue.length ), 0, { song: payload.song } );
-        if( st.playingIndex >= targetIndex ) st.playingIndex++;
+        // the dragged songs (every picked one when a picked row is dragged)
+        var add = payload.songs.map( function ( s ) { return { song: s }; } );
+        if( ! add.length ) return;
+        var at = Math.min( targetIndex, st.queue.length );
+        st.queue.splice.apply( st.queue, [ at, 0 ].concat( add ) );
+        if( st.playingIndex >= at ) st.playingIndex += add.length;
     }
     renderQueueList();
 }
@@ -1512,6 +1566,7 @@ function changePlaylists( apply )
         }
         st.playlistsBlocked = "";
         st.playlists = list || [];
+        refreshPlaylists();                  // the tree and an open playlist show it
     } );
     playlistsChain = run.catch( function () {} );
     return run;
@@ -1520,6 +1575,8 @@ function changePlaylists( apply )
 function openSaveSheet()
 {
     if( ! st.queue.length ) return;
+    nameSheet = null;                                   // the sheet saves the queue (confirmSave)
+    $( "#saveTitle" ).textContent = NayiveUI.t( "music.saveList" );
     $( "#saveHint" ).textContent = NayiveUI.tf( "music.saveHint", { n: st.queue.length } );
     $( "#playlistName" ).value = "";
     saveListId = "pl" + Date.now().toString( 36 );
@@ -1560,42 +1617,23 @@ async function confirmSave()
     NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) );
 }
 
-function renderLoadList()
+// The lists changed (a save, a delete, its Undo, a rename): the tree shows
+// them again, and so does the playlist on screen - or, when that one is gone,
+// the songs.
+function refreshPlaylists()
 {
-    var host = $( "#loadList" );
-    if( ! st.playlists.length )
-    {
-        host.innerHTML = '<p class="dialog-text" data-i18n="music.noLists"></p>';
-        setLoadActions( false );
-        return;
-    }
-    setLoadActions( true );
-    host.innerHTML = '<div class="saved-list">' + st.playlists.map( function ( pl )
-    {
-        return '<div class="saved-row">' +
-            '<span class="saved-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"/></svg></span>' +
-            '<span class="saved-row-meta"><div class="saved-row-name">' + esc( pl.name ) + '</div>' +
-            '<div class="saved-row-count">' + esc( NayiveUI.tf( "music.nSongs", { n: pl.paths.length } ) ) + '</div></span>' +
-            '<button class="icon-btn sm danger" data-del="' + esc( pl.id ) + '" data-i18n-attr="title:ui.delete, aria-label:ui.delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
-            '<button class="icon-btn sm" data-load="' + esc( pl.id ) + '" data-i18n-attr="title:music.loadIntoQueue, aria-label:music.loadIntoQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 18h16"/></svg></button>' +
-        '</div>';
-    } ).join( "" ) + '</div>';
-
-    $$( "#loadList [data-load]" ).forEach( function ( btn )
-    { btn.addEventListener( "click", function () { loadPlaylist( btn.getAttribute( "data-load" ) ); } ); } );
-    $$( "#loadList [data-del]" ).forEach( function ( btn )
-    { btn.addEventListener( "click", function () { deletePlaylist( btn.getAttribute( "data-del" ) ); } ); } );
+    if( st.filter === "playlist" && ! playlistById( st.playlistId ) ) { setFilter( "songs" ); return; }
+    if( treeView ) treeView.render();
+    if( st.filter === "playlist" ) renderLibrary();
 }
 
-// #loadActions holds a lone close button, which shared/ui.js moves to the
-// sheet's corner, removing the row: then there is nothing left to hide.
-function setLoadActions( hidden )
+function playlistById( id )
 {
-    var row = $( "#loadActions" );
-    if( row ) row.hidden = hidden;
+    return st.playlists.filter( function ( p ) { return p && p.id === id; } )[ 0 ] || null;
 }
 
-function loadPlaylist( id )
+// `shuffled`: Shuffle on the playlist's menu - the first song is any of them.
+function loadPlaylist( id, shuffled )
 {
     var pl = st.playlists.filter( function ( p ) { return p.id === id; } )[ 0 ];
     if( ! pl ) return;
@@ -1607,8 +1645,7 @@ function loadPlaylist( id )
     st.playingIndex = -1;
     stopPlayback();
     renderQueueList();
-    NayiveUI.setOpen( "loadBackdrop", false );
-    if( found.length ) playIndex( 0 );
+    if( found.length ) playIndex( shuffled ? Math.floor( Math.random() * found.length ) : 0 );
 
     // Undo puts the old queue back - only when there was one to lose.
     if( snap.queue.length )
@@ -1625,7 +1662,7 @@ async function deletePlaylist( id )
     if( at === -1 ) return;
     var pl = st.playlists[ at ];
     st.playlists = st.playlists.filter( function ( p ) { return p.id !== id; } );
-    renderLoadList();
+    refreshPlaylists();
 
     // Out of the file as it is now, by id: what the phone saved meanwhile stays.
     var saving = changePlaylists( function ( list )
@@ -1646,11 +1683,11 @@ async function deletePlaylist( id )
             } );
         }
         catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
-        renderLoadList();
+        refreshPlaylists();
     } );
     try { await saving; }
     catch( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); return; }
-    if( $( "#loadBackdrop" ).classList.contains( "open" ) ) renderLoadList();   // with the lists saved elsewhere
+    refreshPlaylists();                         // with the lists saved elsewhere
 }
 
 /* ---------------------------------------------------------------------------
@@ -1688,24 +1725,421 @@ function dockQueuePane()
 }
 
 /* ---------------------------------------------------------------------------
- * STATIC WIRING
+ * TREE - Library (its four views; Folders holds the real folders) and the
+ * saved playlists, in the shared tree (NayiveUI.tree, shared/browser.js).
+ * A click shows that view or playlist; songs dropped on a playlist go into
+ * it; a playlist's ⋮ / right-click plays, shuffles, renames or deletes it,
+ * the Playlists row's makes a new one. On a phone it slides in (#treeBtn).
  * -------------------------------------------------------------------------*/
-function setFilter( f )
+var treeView = null;
+var treeOpen = { lib: true, pls: true };       // the open rows, this visit
+
+var ICON = {
+    library: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M8 19V5"/><path d="M12 19 15 5"/><path d="m16 19 3-14"/></svg>',
+    albums:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>',
+    artists: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>',
+    list:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><path d="M17 18V9l4-1"/><circle cx="15.5" cy="18" r="1.5"/></svg>',
+    shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>',
+    next:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19 5 5"/><line x1="18" y1="5" x2="18" y2="19"/></svg>'
+};
+
+// The folders under a scanned folder, as tree rows ("f:<path>").
+function folderNodes( node )
 {
-    st.filter = f; st.selectedAlbum = st.selectedArtist = st.selectedFolder = null;
-    listShown = LIST_PAGE;
-    [ "Songs", "Albums", "Artists", "Folders" ].forEach( function ( name )
-    { $( "#filter" + name ).classList.toggle( "is-active", name.toLowerCase() === f ); } );
-    renderLibrary();
+    return ( node && node.nodes || [] )
+        .filter( function ( n ) { return n.nodes !== null && n.nodes !== undefined; } )
+        .map( function ( n ) { return { id: "f:" + n.path, name: NayiveMedia.baseName( n.path ), icon: FOLDER_SVG, noMenu: true, kids: folderNodes( n ) }; } );
 }
 
+function playlistNodes()
+{
+    return st.playlists.filter( function ( p ) { return p && p.id; } ).map( function ( p )
+    {
+        return { id: "pl:" + p.id, name: p.name, icon: ICON.list, badge: ( p.paths || [] ).length ? String( p.paths.length ) : "" };
+    } );
+}
+
+function treeRoots()
+{
+    var T = NayiveUI.t;
+    return [
+        { id: "lib", name: T( "music.library" ), icon: ICON.library, noMenu: true, group: true, kids: [
+            { id: "v:songs",   name: T( "music.songs" ),   icon: MUSIC_NOTE_SVG, noMenu: true },
+            { id: "v:albums",  name: T( "music.albums" ),  icon: ICON.albums,    noMenu: true },
+            { id: "v:artists", name: T( "music.artists" ), icon: ICON.artists,   noMenu: true },
+            { id: "v:folders", name: T( "music.folders" ), icon: FOLDER_SVG,     noMenu: true, kids: folderNodes( st.folderTree ) }
+        ] },
+        { id: "pls", name: T( "music.playlists" ), icon: ICON.list, group: true, kids: playlistNodes() }
+    ];
+}
+
+// The row lit for what the library shows.
+function currentNode()
+{
+    if( st.filter === "playlist" ) return "pl:" + st.playlistId;
+    if( st.filter === "folders" ) return st.selectedFolder ? "f:" + st.selectedFolder : "v:folders";
+    return "v:" + st.filter;
+}
+
+function goNode( id )
+{
+    // (The two roots are headings, group: true - a click only opens / closes them.)
+    if( id.indexOf( "v:" ) === 0 )
+    {
+        if( id === "v:folders" ) treeOpen[ id ] = true;
+        setFilter( id.slice( 2 ) );
+    }
+    else if( id.indexOf( "f:" ) === 0 ) setFilter( "folders", id.slice( 2 ) );
+    else if( id.indexOf( "pl:" ) === 0 ) { st.playlistId = id.slice( 3 ); setFilter( "playlist" ); }
+}
+
+// A playlist's menu (⋮, right-click, a long-press); the Playlists row's.
+function treeMenu( id, x, y, anchor )
+{
+    var T = NayiveUI.t, items = null;
+    if( id === "pls" )
+        items = [ { id: "newList", label: T( "music.newList" ), icon: "plus", run: function () { openNameSheet( { kind: "new", paths: [] } ); } } ];
+    else if( id.indexOf( "pl:" ) === 0 )
+    {
+        var pid = id.slice( 3 ), pl = playlistById( pid );
+        if( ! pl ) return;
+        var empty = ! ( pl.paths || [] ).length;
+        items = [
+            { id: "play",    label: T( "media.play" ),        icon: "play",       disabled: empty, run: function () { loadPlaylist( pid ); } },
+            { id: "shuffle", label: T( "music.playShuffle" ), icon: ICON.shuffle, disabled: empty, run: function () { setShuffle( true ); loadPlaylist( pid, true ); } },
+            { sep: true },
+            { id: "rename",  label: T( "music.renameList" ),  icon: "edit", key: "F2", run: function () { openNameSheet( { kind: "rename", id: pid } ); } },
+            { sep: true },
+            { id: "delete",  label: T( "music.deleteList" ),  icon: "trash", key: "Del", danger: true, run: function () { deletePlaylist( pid ); } }
+        ];
+    }
+    if( items ) NayiveUI.menuAt( x, y, items, { anchor: anchor } );
+}
+
+function setFilter( f, folder )
+{
+    st.filter = f; st.selectedAlbum = st.selectedArtist = null;
+    st.selectedFolder = folder || null;
+    listShown = LIST_PAGE;
+    $( "#libContent" ).scrollTop = 0;
+    renderLibrary();
+    if( treeView ) treeView.render();
+}
+
+function setShuffle( on )
+{
+    if( on && ! st.shuffle ) { st.played = new Set(); st.history = []; }   // a fresh round
+    st.shuffle = !! on;
+    $( "#shuffleBtn" ).classList.toggle( "is-active", st.shuffle );
+    $( "#seqBtn" ).classList.toggle( "is-active", ! st.shuffle );
+}
+
+/* ---------------------------------------------------------------------------
+ * PLAYLIST CHANGES - each one through changePlaylists (it reads the file
+ * again, changes only that list, by id, version-checked). Taking a song out
+ * of a list never touches the song's file.
+ * -------------------------------------------------------------------------*/
+function listToast( e ) { if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listUpdateFailed' ) ); }
+
+function findList( list, id ) { return list.filter( function ( p ) { return p && p.id === id; } )[ 0 ] || null; }
+
+// Songs at the end of a saved list; one already in it is not added twice.
+async function addToPlaylist( id, paths )
+{
+    paths = paths.filter( function ( p, i, a ) { return a.indexOf( p ) === i && findSong( p ); } );
+    if( ! paths.length ) return;
+    var added = 0, name = "", gone = false;
+    try
+    {
+        await changePlaylists( function ( list )
+        {
+            var pl = findList( list, id );
+            added = 0; gone = ! pl;
+            if( ! pl ) return false;
+            name = pl.name;
+            if( ! Array.isArray( pl.paths ) ) pl.paths = [];
+            paths.forEach( function ( p ) { if( pl.paths.indexOf( p ) === -1 ) { pl.paths.push( p ); added++; } } );
+            return added ? undefined : false;
+        } );
+    }
+    catch( e ) { listToast( e ); return; }
+    if( gone ) { listToast( null ); return; }
+    NayiveUI.toast( added ? NayiveUI.tf( 'music.addedTo', { n: added, name: name } ) : NayiveUI.tf( 'music.alreadyIn', { name: name } ) );
+}
+
+// Out of the playlist on screen, at once; the Undo puts each song back at
+// its place. Only the list changes: the files stay where they are.
+async function removeFromPlaylist( ids )
+{
+    var id = st.playlistId, drop = new Set( ids ), removed = [];
+    try
+    {
+        await changePlaylists( function ( list )
+        {
+            var pl = findList( list, id );
+            removed = [];
+            if( ! pl || ! Array.isArray( pl.paths ) ) return false;
+            var keep = [];
+            pl.paths.forEach( function ( p, i ) { if( drop.has( p ) ) removed.push( [ i, p ] ); else keep.push( p ); } );
+            if( ! removed.length ) return false;
+            pl.paths = keep;
+        } );
+    }
+    catch( e ) { listToast( e ); return; }
+    if( ! removed.length ) return;
+    var back = removed;
+    NayiveUI.undoToast( NayiveUI.t( 'ui.toast.removed' ), async function ()
+    {
+        try
+        {
+            await changePlaylists( function ( list )
+            {
+                var pl = findList( list, id );
+                if( ! pl ) return false;                 // the list was deleted since: nothing to put them in
+                var paths = Array.isArray( pl.paths ) ? pl.paths.slice() : [];
+                back.forEach( function ( r ) { paths.splice( Math.min( r[ 0 ], paths.length ), 0, r[ 1 ] ); } );
+                pl.paths = paths;
+            } );
+        }
+        catch( e ) { listToast( e ); }
+    } );
+}
+
+// The name sheet (#saveBackdrop) also names a new list and renames one.
+// null: it saves the queue (openSaveSheet / confirmSave, as before).
+// { kind: "new", paths, newId } | { kind: "rename", id }
+var nameSheet = null;
+
+function openNameSheet( o )
+{
+    var pl = o.kind === "rename" ? playlistById( o.id ) : null;
+    if( o.kind === "rename" && ! pl ) return;
+    // A new list's id is fixed here, as saveListId is: ✓ again after a
+    // failed save replaces its own list rather than adding a second one.
+    if( o.kind === "new" ) o.newId = "pl" + Date.now().toString( 36 );
+    nameSheet = o;
+    $( "#saveTitle" ).textContent = NayiveUI.t( o.kind === "rename" ? "music.renameList" : "music.newList" );
+    $( "#saveHint" ).textContent = o.kind === "new" && o.paths.length ? NayiveUI.tf( "music.newListHint", { n: o.paths.length } ) : "";
+    $( "#playlistName" ).value = pl ? pl.name : "";
+    NayiveUI.open( "saveBackdrop" );
+    $( "#playlistName" ).focus();
+    $( "#playlistName" ).select();
+}
+
+async function confirmName()
+{
+    if( ! nameSheet ) return confirmSave();
+    var o = nameSheet, name = $( "#playlistName" ).value.trim();
+    if( ! name ) { NayiveUI.toast( NayiveUI.t( 'music.needListName' ) ); return; }
+    if( savingList ) return;
+    var old = null;
+    savingList = true;
+    try
+    {
+        if( o.kind === "new" )
+        {
+            var pl = { id: o.newId, name: name, paths: o.paths.slice() };
+            await changePlaylists( function ( list )
+            {
+                for( var i = 0; i < list.length; i++ ) if( list[ i ] && list[ i ].id === pl.id ) { list[ i ] = pl; return; }
+                list.push( pl );
+            } );
+        }
+        else await changePlaylists( function ( list )
+        {
+            var p = findList( list, o.id );
+            if( ! p ) return false;
+            old = p.name;
+            if( p.name === name ) return false;
+            p.name = name;
+        } );
+    }
+    catch( e )
+    {
+        // Not saved: the sheet stays open with the name typed, ✓ tries again.
+        if( ! e || ! e.read ) NayiveUI.toast( NayiveUI.t( 'music.listSaveFailed' ) );
+        return;
+    }
+    finally { savingList = false; }
+    NayiveUI.setOpen( "saveBackdrop", false );
+    nameSheet = null;
+    if( o.kind === "new" )
+    {
+        if( o.paths.length ) NayiveUI.toast( NayiveUI.tf( 'music.addedTo', { n: o.paths.length, name: name } ) );
+        else { NayiveUI.toast( NayiveUI.t( 'music.listSaved' ) ); goNode( "pl:" + o.newId ); }
+    }
+    else if( old !== null && old !== name )
+        NayiveUI.undoToast( NayiveUI.t( 'ui.toast.renamed' ), async function ()
+        {
+            try
+            {
+                await changePlaylists( function ( list )
+                {
+                    var p = findList( list, o.id );
+                    if( ! p || p.name !== name ) return false;   // gone, or renamed again since
+                    p.name = old;
+                } );
+            }
+            catch( e ) { listToast( e ); }
+        } );
+}
+
+/* ---------------------------------------------------------------------------
+ * BROWSER - the song rows are the shared item browser's (shared/browser.js):
+ * a click picks (Ctrl / Shift add), a double-click, Enter or a tap plays, a
+ * long-press picks on touch. One action list feeds the header group, the
+ * menu (right-click = the row ⋮ = the header ⋮) and the keys.
+ * -------------------------------------------------------------------------*/
+var browse = null;
+
+// The picked paths in the order the list shows them.
+function inListOrder( ids )
+{
+    var want = new Set( ids ), seen = new Set(), out = [];
+    $$( "#libContent .song-row" ).forEach( function ( r )
+    {
+        var p = r.getAttribute( "data-path" );
+        if( want.has( p ) && ! seen.has( p ) ) { seen.add( p ); out.push( p ); }
+    } );
+    ids.forEach( function ( p ) { if( ! seen.has( p ) ) { seen.add( p ); out.push( p ); } } );
+    return out;
+}
+
+// ...as songs; a playlist's song gone from the library is left out.
+function songsOf( ids ) { return inListOrder( ids ).map( findSong ).filter( Boolean ); }
+
+// Double-click / tap / Enter: that song - or, on a row of a bigger pick
+// (Enter), every picked song.
+function openSong( id )
+{
+    var ids = browse.has( id ) && browse.ids().length > 1 ? browse.ids() : [ id ];
+    var songs = songsOf( ids );
+    if( ! songs.length ) { NayiveUI.toast( NayiveUI.tf( 'music.oneMissing', { n: 1 } ) ); return; }
+    playSongs( songs );
+}
+
+function goToAlbum( song )
+{
+    if( ! song ) return;
+    setFilter( "albums" );
+    st.selectedAlbum = albumKey( song );
+    renderLibrary();
+    var card = $( '#libContent [data-album="' + cssEsc( st.selectedAlbum ) + '"]' );
+    if( card ) card.scrollIntoView( { block: "nearest" } );
+    browse.set( [ song.path ] );
+    browse.focus( song.path );
+}
+
+// Drive, at the file (a new window on the desktop, a new tab elsewhere):
+// the music here goes on playing.
+function showInDrive( path ) { window.open( "../drive/index.html?sel=" + encodeURIComponent( path ), "_blank" ); }
+
+function pickPlaylist( ids )
+{
+    var paths = songsOf( ids ).map( function ( s ) { return s.path; } );
+    if( ! paths.length ) return;
+    var here = st.filter === "playlist" ? "pl:" + st.playlistId : null;
+    NayiveUI.pickNode( {
+        title:   NayiveUI.t( "music.addToPlaylist" ),
+        okLabel: NayiveUI.t( "music.addToPlaylist" ),
+        lit:     null,
+        roots:   function () { return [ { id: "new", name: NayiveUI.t( "music.newList" ), icon: "plus" } ].concat( playlistNodes() ); },
+        disabled: function ( id ) { return id === here; }
+    } ).then( function ( id )
+    {
+        if( ! id ) return;
+        if( id === "new" ) openNameSheet( { kind: "new", paths: paths } );
+        else addToPlaylist( id.slice( 3 ), paths );
+    } );
+}
+
+// Built once the dictionary is in (boot).
+function musicActions()
+{
+    var T = NayiveUI.t, tf = NayiveUI.tf;
+    function some( ids ) { return ids.some( function ( p ) { return !! findSong( p ); } ); }
+    function one( ids )  { return ids.length === 1 && !! findSong( ids[ 0 ] ); }
+    return [
+        { id: "play", label: T( "media.play" ), icon: "play", key: "Enter", bar: 1, phone: 1, group: 0, when: some,
+          run: function ( ids ) { playSongs( songsOf( ids ) ); } },
+        { id: "next", label: T( "music.playNext" ), icon: ICON.next, group: 0, when: some,
+          run: function ( ids ) { var s = songsOf( ids ); playNext( s ); NayiveUI.toast( tf( "music.nextN", { n: s.length } ) ); } },
+        { id: "queue", label: T( "music.addToQueue" ), icon: "queue", key: "Q", bar: 2, phone: 1, group: 0, when: some,
+          run: function ( ids ) { var s = songsOf( ids ); addToQueue( s ); NayiveUI.toast( tf( "music.queuedN", { n: s.length } ) ); } },
+        { id: "playlist", label: T( "music.addToPlaylist" ), icon: "plus", bar: 3, phone: 1, group: 1, when: some, run: pickPlaylist },
+        { id: "album", label: T( "music.goToAlbum" ), icon: ICON.albums, group: 1, when: one,
+          run: function ( ids ) { goToAlbum( findSong( ids[ 0 ] ) ); } },
+        { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", group: 1, when: one,
+          run: function ( ids ) { showInDrive( ids[ 0 ] ); } },
+        { id: "remove", label: T( "music.removeFromList" ), icon: "x", key: "Del", bar: 9, danger: true, group: 2,
+          where: function () { return st.filter === "playlist"; }, run: removeFromPlaylist }
+    ];
+}
+
+function wireBrowser()
+{
+    treeView = NayiveUI.tree( {
+        host:    $( "#tree" ),
+        pane:    $( "#treePane" ),
+        roots:   treeRoots,
+        isOpen:  function ( id ) { return !! treeOpen[ id ]; },
+        setOpen: function ( id, v ) { treeOpen[ id ] = v; },
+        current: currentNode,
+        go:      goNode,
+        menu:    treeMenu,
+        drop:    { can: function ( ids, id ) { return ids && ids.length && id.indexOf( "pl:" ) === 0 && id !== "pl:" + ( st.filter === "playlist" ? st.playlistId : "" ) ? "inside" : false; },
+                   drop: function ( ids, id ) { addToPlaylist( id.slice( 3 ), songsOf( ids ).map( function ( s ) { return s.path; } ) ); } }
+    } );
+
+    // Enter on a pick of several plays them all - also with no keyboard row
+    // yet (Ctrl+A on a fresh list), where the browser has no row to open.
+    document.addEventListener( "keydown", function ( e )
+    {
+        if( e.key !== "Enter" || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || ! browse ) return;
+        if( browse.ids().length < 2 || NayiveUI.menuOpen() || document.querySelector( ".sheet-backdrop.open" ) ) return;
+        var a = document.activeElement;
+        if( a && a !== document.body && ! $( "#libContent" ).contains( a ) ) return;   // a button, a field, the tree: theirs
+        e.preventDefault();
+        playSongs( songsOf( browse.ids() ) );
+    } );
+
+    browse = NayiveUI.browser( {
+        list:    $( "#libContent" ),
+        row:     ".song-row",
+        idOf:    function ( el ) { return el.getAttribute( "data-path" ); },
+        bar:     $( "#selActions" ),
+        actions: musicActions(),
+        tree:    treeView,
+        open:    openSong,
+        drag:    { text: function ( ids ) { return songsOf( ids ).map( function ( s ) { return s.title; } ).join( "\n" ); } }
+    } );
+
+    // A drag from the list may end on the queue (handleQueueDrop): it carries
+    // the dragged songs (every picked one when a picked row is dragged).
+    $( "#libContent" ).addEventListener( "dragstart", function ()
+    {
+        var ids = NayiveUI.dragIds();
+        st.dragPayload = ids ? { type: "library", songs: songsOf( ids ) } : null;
+    } );
+
+    // Del / F2 on a playlist's tree row, as on its menu.
+    $( "#tree" ).addEventListener( "keydown", function ( e )
+    {
+        var row = e.target.closest( ".tree-row" );
+        if( ! row || row.dataset.id.indexOf( "pl:" ) !== 0 || e.ctrlKey || e.metaKey || e.altKey ) return;
+        var pid = row.dataset.id.slice( 3 );
+        if( e.key === "Delete" ) { e.preventDefault(); deletePlaylist( pid ); }
+        else if( e.key === "F2" ) { e.preventDefault(); openNameSheet( { kind: "rename", id: pid } ); }
+    } );
+
+    $( "#treeBtn" ).addEventListener( "click", function () { treeView.openSheet(); } );
+}
+
+/* ---------------------------------------------------------------------------
+ * STATIC WIRING
+ * -------------------------------------------------------------------------*/
 function wireStaticUI()
 {
-    $( "#filterSongs"   ).addEventListener( "click", function () { setFilter( "songs" ); } );
-    $( "#filterAlbums"  ).addEventListener( "click", function () { setFilter( "albums" ); } );
-    $( "#filterArtists" ).addEventListener( "click", function () { setFilter( "artists" ); } );
-    $( "#filterFolders" ).addEventListener( "click", function () { setFilter( "folders" ); } );
-
     $( "#searchInput" ).addEventListener( "input", function ( e )
     { st.search = e.target.value; listShown = LIST_PAGE; renderLibrary(); } );
 
@@ -1719,13 +2153,8 @@ function wireStaticUI()
         scan();
     } );
 
-    $( "#seqBtn" ).addEventListener( "click", function ()
-    { st.shuffle = false; $( "#seqBtn" ).classList.add( "is-active" ); $( "#shuffleBtn" ).classList.remove( "is-active" ); } );
-    $( "#shuffleBtn" ).addEventListener( "click", function ()
-    {
-        if( ! st.shuffle ) { st.played = new Set(); st.history = []; }   // a fresh round
-        st.shuffle = true; $( "#shuffleBtn" ).classList.add( "is-active" ); $( "#seqBtn" ).classList.remove( "is-active" );
-    } );
+    $( "#seqBtn" ).addEventListener( "click", function () { setShuffle( false ); } );
+    $( "#shuffleBtn" ).addEventListener( "click", function () { setShuffle( true ); } );
 
     var rep = null;
     try { rep = localStorage.getItem( "music-repeat" ); } catch( e ) {}
@@ -1746,11 +2175,8 @@ function wireStaticUI()
 
     $( "#saveListBtn" ).addEventListener( "click", openSaveSheet );
     $( "#saveCancelBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "saveBackdrop", false ); } );
-    $( "#saveConfirmBtn" ).addEventListener( "click", confirmSave );
-    $( "#playlistName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) confirmSave(); } );
-
-    $( "#loadListBtn" ).addEventListener( "click", function () { renderLoadList(); NayiveUI.open( "loadBackdrop" ); } );
-    $( "#loadCloseBtn" ).addEventListener( "click", function () { NayiveUI.setOpen( "loadBackdrop", false ); } );
+    $( "#saveConfirmBtn" ).addEventListener( "click", confirmName );
+    $( "#playlistName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) confirmName(); } );
 
     $( "#prevBtn" ).addEventListener( "click", function () { advance( -1 ); } );
     $( "#nextBtn" ).addEventListener( "click", function () { advance( 1 ); } );
@@ -1842,8 +2268,10 @@ async function boot()
     $( "#mainRow"   ).hidden = false;
     $$( "#tools, [data-tools]" ).forEach( el => el.hidden = false );
     $( "#playerBar" ).hidden = false;
+    wireBrowser();
 
     await loadPlaylists();
+    treeView.render();
     await scan();
 }
 

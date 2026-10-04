@@ -1,12 +1,12 @@
 // SEALED - a user-data write path (docs/sealed-crud.md): announce a change, keep it minimal, then `node tools/data-safety-test/run.mjs` must be ALL GREEN.
 /*
- * actions.js - what can be done to messages, and picking several.
+ * actions.js - what can be done to messages, and the pick dialog.
  *
- * TARGETS: the message open (reading), or the rows ticked (picking). The
- * same buttons serve both, in the top bar; syncBar shows the ones that fit
- * where the targets are: Spam in the Spam tray becomes "Not spam", Delete in
- * the Trash becomes Restore + Delete for good. A label's list mixes trays and
- * accounts: every call goes per account, and the server sorts out the trays.
+ * TARGETS: each E.act.* takes the messages it acts on - the rows picked, or
+ * the message open (browse.js holds the one action list that calls these:
+ * the header group, the menu, the keys, the reader's buttons). A label's
+ * list mixes trays and accounts: every call goes per account, and the server
+ * sorts out the trays.
  *
  * Delete moves to the account's own Trash (its clock starts on the server,
  * mail_labels.go) and offers Undo, which puts it back where it was. Spam
@@ -14,8 +14,8 @@
  * hides the rows at once and offers Undo too: the server deletes them only
  * when the Undo is gone (or the page closes). Empty Trash asks once.
  *
- * THE PICK DIALOG's fields leave only the matching rows in sight, all ticked,
- * to untick the ones to spare before the action; leaving the picking (or the
+ * THE PICK DIALOG's fields leave only the matching rows in sight, all picked,
+ * to unpick the ones to spare before the action; ending the pick (or the
  * action) brings every row back.
  *
  * PARTLY DONE. Every call goes account by account, and a server may refuse
@@ -28,82 +28,21 @@
 
     var E = window.NayiveMail, S = E.S, h = E.h;
 
-    // ---------------------------------------------------------------------
-    // picking several
-    // ---------------------------------------------------------------------
-
-    // pick( m ): tick or untick a row; start: also start picking
-    E.pick = function ( m, start )
-    {
-        if( ! S.selecting ) E.startSelect();
-        if( S.sel.has( m ) && ! start ) S.sel.delete( m );
-        else S.sel.add( m );
-        if( m._row ) m._row.classList.toggle( "is-picked", S.sel.has( m ) );
-        E.syncBar();
-    };
-
-    E.startSelect = function ()
-    {
-        if( S.open ) E.closeMessage( true );
-        S.selecting = true;
-        document.body.classList.add( "selecting" );
-        E.syncBar();
-    };
-
-    E.endSelect = function ()
-    {
-        S.selecting = false;
-        S.sel.forEach( function ( m ) { if( m._row ) m._row.classList.remove( "is-picked" ); } );
-        S.sel.clear();
-        showOnly( null );
-        document.body.classList.remove( "selecting" );
-        E.syncBar();
-    };
-
+    // The messages these acts work on when none are given: the one open, or
+    // the rows picked.
     function targets()
     {
         if( S.open ) return [ S.open ];
-        if( S.selecting ) return Array.from( S.sel );
-        return [];
+        return E.picked ? E.picked() : [];
     }
 
-    // The bar for the targets: which buttons, and which way the star points.
-    E.syncBar = function ()
+    // The pick ends: nothing picked, every row in sight again.
+    E.endSelect = function ()
     {
-        var writing = E.isComposing && E.isComposing();
-        var reading = !! S.open && ! writing, picking = S.selecting && ! reading && ! writing;
-        var list = targets(), n = list.length;
-        E.$( "backBtn" ).hidden = ! ( reading && ! E.split ) && ! picking && ! writing;     // split: the list is there
-        E.$( "actions" ).hidden = ! reading && ! picking;
-        var count = E.$( "selCount" );
-        count.hidden = ! picking;
-        count.textContent = picking ? String( n ) : "";
-
-        var roles = new Set( list.map( E.roleOf ) );
-        var all = function ( r ) { return roles.size === 1 && roles.has( r ); };
-        var inTrash = all( "trash" ), inSpam = all( "spam" );
-        var flagged = n > 0 && list.every( function ( m ) { return m.flagged; } );
-        function show( id, on ) { E.$( id ).hidden = ! on; E.$( id ).disabled = n === 0; }
-        show( "actAll",      picking && S.items.length > 0 );
-        E.$( "actAll" ).disabled = false;
-        E.$( "actAll" ).classList.toggle( "is-on", picking && everyPicked() );
-        show( "actReply",    reading );
-        show( "actReplyAll", reading );
-        show( "actForward",  reading );
-        show( "actRead",    picking );
-        show( "actUnread",  true );
-        show( "actStar",    true );
-        show( "actLabel",   true );
-        show( "actSpam",    ! inTrash && ! inSpam );
-        show( "actNotSpam", inSpam );
-        show( "actDelete",  ! inTrash );
-        show( "actRestore", inTrash );
-        show( "actForget",  inTrash );
-        var star = E.$( "actStar" );
-        star.classList.toggle( "is-on", flagged );
-        star.title = E.T( flagged ? "mail.unstar" : "mail.star" );
-        star.setAttribute( "aria-label", star.title );
+        if( E.browse ) E.browse.clear();
+        showOnly( null );
     };
+    E.showAll = function () { showOnly( null ); };
 
     // ---------------------------------------------------------------------
     // the pick dialog (the tick-all button)
@@ -112,7 +51,11 @@
     // The rows in sight: the dialog's matches, or every one.
     function pool() { return S.only ? S.items.filter( function ( m ) { return S.only.has( m ); } ) : S.items; }
 
-    function everyPicked() { var p = pool(); return p.length > 0 && p.every( function ( m ) { return S.sel.has( m ); } ); }
+    function everyPicked()
+    {
+        var p = pool(), ids = E.browse ? E.browse.ids() : [];
+        return p.length > 0 && p.every( function ( m ) { return ids.indexOf( m._id ) >= 0; } );
+    }
 
     // showOnly( list ): only these rows in sight (null = every row again)
     function showOnly( list )
@@ -122,18 +65,15 @@
         S.items.forEach( function ( m ) { if( m._row ) m._row.hidden = !! S.only && ! S.only.has( m ); } );
     }
 
-    function setPicked( list )
+    // Every row in sight picked (the browser's Select all: on a phone the
+    // ticks come too), or none.
+    function pickAll( on )
     {
-        S.items.forEach( function ( m )
-        {
-            var on = list.indexOf( m ) >= 0;
-            if( on ) S.sel.add( m ); else S.sel.delete( m );
-            if( m._row ) m._row.classList.toggle( "is-picked", on );
-        } );
-        E.syncBar();
+        if( ! E.browse ) return;
+        if( on ) E.browse.selectAll(); else E.endSelect();
     }
 
-    function openPick()
+    E.openPick = function ()
     {
         var every = everyPicked();
         E.$( "pickAllBtn" ).textContent = E.T( every ? "mail.pickNone" : "mail.pickAll" );
@@ -201,16 +141,17 @@
         } );
         NayiveUI.toast( E.TF( "mail.pickedN", { n: list.length } ) );
         if( ! list.length ) return;
-        // only the matches in sight, all ticked: a tap unticks the ones to spare
+        // only the matches in sight, all picked: a tap unpicks the ones to spare
+        if( E.browse ) E.browse.clear();
         showOnly( list );
-        setPicked( list );
+        pickAll( true );
         E.$( "listView" ).parentNode.scrollTop = 0;
     }
 
     E.$( "pickAllBtn" ).addEventListener( "click", function ()
     {
         NayiveUI.close( "pickSheet" );
-        setPicked( everyPicked() ? [] : pool() );
+        pickAll( ! everyPicked() );
     } );
     E.$( "pickGoBtn" ).addEventListener( "click", pickMatching );
 
@@ -281,7 +222,6 @@
         if( S.open && list.indexOf( S.open ) >= 0 ) E.closeMessage( true );
         if( S.label ) { E.loadList( false ); return; }
         E.dropRows( list );
-        if( S.selecting ) E.endSelect();
     }
 
     function setFlags( list, change )
@@ -332,21 +272,19 @@
     }
 
     E.act = {
-        read:    function () { setFlags( targets(), { seen: true } ); },
-        unread:  function () { setFlags( targets(), { seen: false } ); },
-        star:    function ()
+        read:    function ( list ) { setFlags( list || targets(), { seen: true } ); },
+        unread:  function ( list ) { setFlags( list || targets(), { seen: false } ); },
+        star:    function ( list )
         {
-            var list = targets();
+            list = list || targets();
             setFlags( list, { flagged: ! list.every( function ( m ) { return m.flagged; } ) } );
         },
-        // picking: the dialog - All, or the rows that match some fields
-        all:     function () { openPick(); },
         // to Spam, with Undo: each back to the tray it came from, by the new
         // ref the server answered for it (a server that does not tell it - an
         // IMAP one without UIDPLUS - gets no Undo; "Not spam" still works)
-        spam:    function ()
+        spam:    function ( list )
         {
-            var list = targets();
+            list = list || targets();
             // whose each is and where from, taken now: a tray's rows do not
             // carry their account, and another may be on screen by the Undo
             var was = new Map( list.map( function ( m ) { return [ m, { acct: E.acctOf( m ), from: E.roleOf( m ) } ]; } ) );
@@ -363,8 +301,8 @@
                 tell( r );
             } );
         },
-        notSpam: function () { moveTo( targets(), "inbox", function () { NayiveUI.toast( E.T( "mail.movedInbox" ) ); } ); },
-        label:   function () { E.openLabelPicker( targets() ); },
+        notSpam: function ( list ) { moveTo( list || targets(), "inbox", function () { NayiveUI.toast( E.T( "mail.movedInbox" ) ); } ); },
+        label:   function ( list ) { E.openLabelPicker( list || targets() ); },
 
         // to the Trash, with Undo: back to where each came from, by Message-ID.
         // The server says how many it found and moved back ("restored"): one
@@ -372,9 +310,9 @@
         // the Trash meanwhile) stays in the Trash, and the purge deletes it
         // after N days - so the Undo says so instead of seeming to work
         // (data-safety I9, mail-chat #12).
-        del: function ()
+        del: function ( list )
         {
-            moveTo( targets(), "trash", function ( list )
+            moveTo( list || targets(), "trash", function ( list )
             {
                 NayiveUI.undoToast( E.TF( "mail.deletedN", { n: list.length } ), function ()
                 {
@@ -401,9 +339,9 @@
                 } );
             } );
         },
-        restore: function ()
+        restore: function ( list )
         {
-            var list = targets();
+            list = list || targets();
             run( async function ()
             {
                 var r = await perAccount( list, "restore" );
@@ -415,9 +353,9 @@
         // S.goneRows), deleted when the Undo is gone - a page closed before
         // that deletes them too. Each row's account is taken now: a tray's
         // rows do not carry it, and another may be on screen by then.
-        forget: function ()
+        forget: function ( list )
         {
-            var list = targets().filter( function ( m ) { return E.roleOf( m ) === "trash"; } );
+            list = ( list || targets() ).filter( function ( m ) { return E.roleOf( m ) === "trash"; } );
             if( ! list.length ) return;
             var pinned = list.map( function ( m ) { return { acct: E.acctOf( m ), ref: m.ref }; } );
             var keys = pinned.map( function ( p ) { return p.acct + "|" + p.ref; } );
@@ -426,7 +364,6 @@
             keys.forEach( function ( k ) { S.goneRows.add( k ); } );
             if( S.open ) E.closeMessage( true );
             E.dropRows( list );
-            if( S.selecting ) E.endSelect();
             NayiveUI.undoToast( E.T( "mail.forgotten" ), function ()
             {
                 keys.forEach( function ( k ) { S.goneRows.delete( k ); } );

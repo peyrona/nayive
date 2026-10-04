@@ -56,8 +56,9 @@ const row = subject => `[...document.querySelectorAll('#list .mail-row')].find( 
 async function saveToRoot()
 {
     await c.evaluate( "window.__toasts = []; document.querySelector('#readParts .mail-part-line .icon-btn').click(); true" );
-    if( ! await c.until( "document.querySelector('.sheet-backdrop.open .fp-row')" ) ) return false;
-    await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-row').click(); true" );
+    // The folder picker draws the shared tree (.fp-tree .tree-row); the first row is the Files root.
+    if( ! await c.until( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row')" ) ) return false;
+    await c.evaluate( "document.querySelector('.sheet-backdrop.open .fp-tree .tree-row').click(); true" );
     await c.until( "! document.querySelector('.sheet-backdrop.open .btn-primary').disabled" );
     await c.evaluate( "document.querySelector('.sheet-backdrop.open .btn-primary').click(); true" );
     return true;
@@ -70,7 +71,8 @@ section( "D5 · SAVE TO DRIVE ONTO A NAME THAT IS TAKEN" );
 
     await c.open( "/nayive/email/index.html" );
     ok( await c.until( "document.querySelectorAll( '#list .mail-row' ).length > 0 && NayiveMail.S.acct", 30000 ), "eMail is open" );
-    await c.evaluate( row( "With a file" ) + ".click(); true" );
+    // the item browser: a click picks a row, a double-click opens it
+    await c.evaluate( row( "With a file" ) + ".dispatchEvent( new MouseEvent( 'dblclick', { bubbles: true } ) ); true" );
     ok( await c.until( "document.querySelector('#readParts .mail-part-line')" ), "the mail with informe.pdf is open" );
 
     // The folder's listing fails (a 5xx, a hiccup): nothing is saved.

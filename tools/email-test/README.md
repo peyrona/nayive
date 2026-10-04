@@ -17,13 +17,16 @@ no internet, nothing of the real `store/` touched.
 - `run.mjs` drives headless Chromium over the DevTools protocol (`tools/cdp.mjs`).
 - Screenshots go to a temp folder, named at the end of the run.
 
-## What is covered (88 checks)
+## What is covered (110 checks)
 
-The trays (not read / all, on a phone too), the clip's panel (Chat's, three choices), the writer (the format bar: placeholder, bold, a list, a link, sent as HTML + plain text; a file added during a save, a failed save
+The tree of trays (not read in the badge, all in the tooltip; on a phone it slides in), the clip's panel (Chat's, three choices), the writer (the format bar: placeholder, bold, a list, a link, sent as HTML + plain text; a file added during a save, a failed save
 keeps the text, Discard + Undo, Bcc), the message frame (no allow-same-origin, sized by its own
 script, its own pictures as `data:`, nothing sent with the session cookie after "Show pictures",
 links in a new tab), the head (From/To/Date folded, the chevron after the subject, on a phone
 too), the picture button (shows, hides again), files (their real size, Save to Nayive), picking
-(select all, delete for good + Undo), settings (new password, pictures Hidden/Shown, the
+(the pick dialog's All / none, delete for good + Undo from the pick's header group), settings (new password, pictures Hidden/Shown, the
 signature), the signature in a new message and a reply (a message with only it keeps no draft),
-a start without the server, and sign-out by POST.
+the split view (a click picks and shows the mail
+on the right, Esc empties it, narrowed: the reader's own buttons), a start without the server, and
+sign-out by POST. The item browser itself (mouse, menu, keys, the tree's menus and drops, a phone)
+is `tools/browser-test/email.mjs`.

@@ -231,11 +231,12 @@
         } );
     };
 
-    C.setPref = async function ( pref )
+    // id: the chat (the open one by default; the list's menu names its own).
+    C.setPref = async function ( pref, id )
     {
         try
         {
-            await C.api( "POST", "conv/" + S.open + "/prefs", pref );
+            await C.api( "POST", "conv/" + ( id || S.open ) + "/prefs", pref );
             if( pref.mute !== undefined ) C.toast( pref.mute ? "chat.muted" : "chat.unmuted" );
             await C.loadSummary();
         }
@@ -246,20 +247,45 @@
     // loading
     // ---------------------------------------------------------------------
 
+    // True when a message left the screen (deleted, or too old).
     function ingest( r )
     {
+        var dropped = false;
         ( r.msgs || [] ).forEach( function ( m )
         {
             // a message of ours on its way comes back with its client id
             if( m.cid ) dropTempByCid( m.cid );
-            S.msgs.set( m.id, m );
+            if( keep( m ) ) dropped = true;
         } );
         S.openRev = Math.max( S.openRev, r.rev || 0 );
         S.read = r.read || S.read;
         var pruned = prune( r.gone || 0 );
         reorder();
-        return pruned;
+        return pruned || dropped;
     }
+
+    // A message from the server goes on the wall - unless it was deleted for
+    // everyone: then it leaves no trace at all, no "This message was deleted"
+    // (his call, 2026-10-04). True when one on screen went.
+    function keep( m )
+    {
+        if( ! m.deleted ) { S.msgs.set( m.id, m ); return false; }
+        var was = S.msgs.delete( m.id );
+        // a reply's quote, fetched before, still holds its words: gone too
+        S.msgs.forEach( function ( y ) { if( y.replyTo === m.id ) y.quote = null; } );
+        var el = S.els.get( m.id );
+        if( el ) el.remove();
+        S.els.delete( m.id );
+        return was;
+    }
+
+    // One deleted for everyone just now (compose.js deleteMsg): off the wall.
+    C.dropMsg = function ( m )
+    {
+        if( ! keep( m ) ) return;
+        reorder();
+        C.renderAll();
+    };
 
     // The server deleted every message up to `gone` for its age (the owner's
     // auto-delete): they leave the screen too. True when some did.
@@ -318,8 +344,9 @@
             var temps  = S.order.some( function ( x ) { return x < 0; } );
             var readBefore = JSON.stringify( S.read );
             var pruned = ingest( r );
-            var fresh = ( r.msgs || [] ).filter( function ( m ) { return ! known.has( m.id ); } );
-            var changed = ( r.msgs || [] ).filter( function ( m ) { return known.has( m.id ); } );
+            var shown = ( r.msgs || [] ).filter( function ( m ) { return S.msgs.has( m.id ); } );
+            var fresh = shown.filter( function ( m ) { return ! known.has( m.id ); } );
+            var changed = shown.filter( function ( m ) { return known.has( m.id ); } );
 
             if( pruned || ( fresh.length && temps ) ) C.renderAll();
             else
@@ -354,7 +381,7 @@
             var r = await C.api( "GET", "conv/" + id + "/messages?before=" + first );
             if( S.open !== id ) return;
             var h0 = wall.scrollHeight, t0 = wall.scrollTop;
-            ( r.msgs || [] ).forEach( function ( m ) { S.msgs.set( m.id, m ); } );
+            ( r.msgs || [] ).forEach( keep );
             S.more = !! r.more;
             reorder();
             C.renderAll();
@@ -371,7 +398,7 @@
         var id = S.open;
         var r = await C.api( "GET", "conv/" + id + "/messages?all=1" );
         if( S.open !== id ) return;
-        ( r.msgs || [] ).forEach( function ( m ) { S.msgs.set( m.id, m ); } );
+        ( r.msgs || [] ).forEach( keep );
         S.more = false;
         reorder();
         C.renderAll();
@@ -425,6 +452,19 @@
             if( c && c.unread ) { c.unread = 0; C.renderList(); }
             try { await C.api( "POST", "conv/" + S.open + "/read", { id: last } ); } catch( _ ) {}
         }, 250 );
+    };
+
+    // The list's "Mark read" (its menu): the same call, up to the chat's last
+    // message (the server keeps it within the chat).
+    C.markConvRead = async function ( id )
+    {
+        var c = C.convOf( id );
+        if( ! c || ! c.unread || ! c.last ) return;
+        var last = c.last.id;
+        if( id === S.open ) S.read[ C.me( id ) ] = Math.max( S.read[ C.me( id ) ] || 0, last );
+        c.unread = 0;
+        C.renderList();
+        try { await C.api( "POST", "conv/" + id + "/read", { id: last } ); } catch( _ ) {}
     };
 
     // ---------------------------------------------------------------------
@@ -579,22 +619,54 @@
     // one bubble
     // ---------------------------------------------------------------------
 
-    var URL_RE = /\bhttps?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'"]/gi;
-
-    // Text with its links made clickable, and a search hit marked.
+    // Text with its marks drawn (marks.js: bold, italic, strike, "- "
+    // lists), its links made clickable, and a search hit marked. Text nodes
+    // only, never HTML. No line break is kept just before or after a list:
+    // the list is a block already.
     C.textNodes = function ( el, text )
     {
         var q = S.searching && S.searching.q ? S.searching.q.toLowerCase() : "";
-        var last = 0, m;
-        URL_RE.lastIndex = 0;
-        while( ( m = URL_RE.exec( text ) ) )
+        window.NayiveChatMarks.parse( text ).forEach( function ( bl )
         {
-            plain( el, text.slice( last, m.index ), q );
-            el.appendChild( h( "a", { text: m[ 0 ], attrs: { href: m[ 0 ], target: "_blank", rel: "noopener noreferrer" } } ) );
-            last = m.index + m[ 0 ].length;
-        }
-        plain( el, text.slice( last ), q );
+            if( bl.list )
+            {
+                var ul = h( "ul" );
+                bl.lines.forEach( function ( ln ) { ul.appendChild( runs( h( "li" ), ln, ln.runs, q ) ); } );
+                el.appendChild( ul );
+                return;
+            }
+            bl.lines.forEach( function ( ln, i )
+            {
+                if( i ) el.appendChild( document.createTextNode( "\n" ) );
+                runs( el, ln, ln.runs, q );
+            } );
+        } );
     };
+
+    function runs( el, ln, list, q )
+    {
+        list.forEach( function ( r )
+        {
+            if( r.t === "text" ) leaf( el, ln, r.a, r.b, q );
+            else el.appendChild( runs( h( r.t ), ln, r.kids, q ) );
+        } );
+        return el;
+    }
+
+    // ln.s[a, b): its links (always whole inside one run), the rest plain.
+    function leaf( el, ln, a, b, q )
+    {
+        var at = a;
+        ln.links.forEach( function ( k )
+        {
+            if( k.a < a || k.b > b ) return;
+            var url = ln.s.slice( k.a, k.b );
+            plain( el, ln.s.slice( at, k.a ), q );
+            el.appendChild( h( "a", { text: url, attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } } ) );
+            at = k.b;
+        } );
+        plain( el, ln.s.slice( at, b ), q );
+    }
 
     // 1 to 3 emojis and nothing else (spaces aside): shown big, with no bubble.
     // One emoji is one grapheme, so a flag, a skin tone or a family counts once.
@@ -626,9 +698,9 @@
     function meta( m, onMedia )
     {
         var el = h( "span", { class: "meta" + ( onMedia ? " on-media" : "" ) } );
-        if( m.edited && ! m.deleted ) el.appendChild( h( "span", { class: "edited", text: T( "chat.edited" ) } ) );
+        if( m.edited ) el.appendChild( h( "span", { class: "edited", text: T( "chat.edited" ) } ) );
         el.appendChild( document.createTextNode( C.time( m.at ) ) );
-        if( m.from === C.me() && ! m.deleted )
+        if( m.from === C.me() )
         {
             var slot = h( "span", { class: "tick" } );
             slot.appendChild( C.tickEl( S.open, m ) );
@@ -640,9 +712,9 @@
     function quoteEl( m )
     {
         var orig = S.msgs.get( m.replyTo );
-        var q = orig ? { id: orig.id, from: orig.from, kind: orig.kind, text: C.preview( orig )[ 1 ], deleted: orig.deleted } : m.quote;
-        if( ! q ) return null;
-        var text = q.deleted ? T( "chat.deleted" ) : ( orig ? C.preview( orig )[ 1 ] : ( q.text || C.preview( q )[ 1 ] ) );
+        var q = orig || m.quote;
+        if( ! q || q.deleted ) return null;      // deleted for everyone: no trace (keep)
+        var text = orig ? C.preview( orig )[ 1 ] : ( C.stripMarks( q.text ) || C.preview( q )[ 1 ] );
         return h( "span", { class: "quote", data: { c: String( C.colorOf( q.from ) ) },
                             on: { click: function ( e ) { e.stopPropagation(); C.jumpTo( q.id ); } } },
                   h( "b", { text: C.nameOf( q.from ) } ), h( "span", { text: text } ) );
@@ -665,7 +737,7 @@
         var group = conv && conv.kind === "g";
         var tail  = ! prev || prev.from !== m.from;
         // "card" is app.css's page card: a contact card bubble is "vcard"
-        var kind  = m.deleted ? "gone" : m.kind === "card" ? "vcard" : m.kind;
+        var kind  = m.kind === "card" ? "vcard" : m.kind;
         var el = h( "div", { class: "msg " + ( mine ? "out" : "in" ) + ( tail ? " tail" : "" ) + " " + kind +
                                       ( m.failed ? " failed" : "" ),
                              data: { id: String( m.id ) } } );
@@ -674,15 +746,9 @@
         if( group && ! mine && tail )
             el.appendChild( h( "span", { class: "from", text: C.nameOf( m.from ), data: { c: String( C.colorOf( m.from ) ) } } ) );
 
-        if( m.deleted )
-        {
-            el.appendChild( C.ic( "ban" ) );
-            el.appendChild( document.createTextNode( T( mine ? "chat.youDeleted" : "chat.deleted" ) ) );
-            el.appendChild( meta( m ) );
-            return el;
-        }
         if( m.fwd ) el.appendChild( h( "span", { class: "fwd" }, C.ic( "forward" ), T( "chat.forwarded" ) ) );
-        if( m.replyTo ) el.appendChild( quoteEl( m ) );
+        var quote = m.replyTo ? quoteEl( m ) : null;
+        if( quote ) el.appendChild( quote );
 
         switch( m.kind )
         {

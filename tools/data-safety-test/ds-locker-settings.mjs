@@ -4,9 +4,10 @@
 // Real dialog in Chromium (desktop page), a second "device" over HTTP.
 //
 // F6 (store-core #11, list-apps #27): a read that FAILS (timeout, 5xx, 401 -
-//     anything but 404) opens the dialog read-only, ✓ off; ✓ re-reads the
-//     file and writes only the fields this dialog changed; a failed re-read
-//     writes nothing and keeps the dialog open.
+//     anything but 404) opens the dialog read-only, and closing it writes
+//     nothing; closing (the dialog is close-only: no ✓) re-reads the file and
+//     writes only the fields this dialog changed; a failed re-read writes
+//     nothing and says so.
 import fs from "node:fs";
 import path from "node:path";
 import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
@@ -40,73 +41,79 @@ ok( await c.evaluate( `( async () => {
     return !! window.NayiveSalonSettings; } )()` ), "locker scripts loaded" );
 const SETTLED = "window.__puts.on === window.__puts.off";
 
-const SAVE  = "document.querySelector( '#salonSettings .sheet-actions .btn-primary' )";
-const OPEN  = "!! document.querySelector( '#salonSettings.open' )";
+const NO_OK = "! document.querySelector( '#salonSettings .btn-primary' )";
 const DRAWN = "!! document.querySelector( '#salonSettings .salon-pane .salon-row' )";
-const close = () => c.evaluate( "( () => { const b = [ ...document.querySelectorAll( '#salonSettings .sheet-actions button' ) ].find( x => x._nayiveClose ); if( b ) b.click(); return true; } )()" );
+const close = () => c.evaluate( "( () => { const b = document.querySelector( '#salonSettings [data-act=close], #salonSettings .sheet-close' ); if( b ) b.click(); return !! b; } )()" );
 const setField = ( key, value ) => c.evaluate( `( () => {
     const f = [ ...document.querySelectorAll( '#salonSettings .field' ) ].find( x => x.querySelector( 'label' ) && x.querySelector( 'label' ).textContent === NayiveI18n.t( ${JSON.stringify( key )} ) );
     const sel = f.querySelector( 'select' ); sel.value = ${JSON.stringify( value )}; sel.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
 const readFailShown = "document.querySelector( '#salonSettings' ).textContent.indexOf( NayiveI18n.t( 'salon.readFail' ) ) !== -1";
+// The save runs after the dialog is gone (a read, then the PUT): wait for the disk.
+async function onDiskWhen( fn, ms = 10000 )
+{
+    for( const end = Date.now() + ms; Date.now() < end; await sleep( 100 ) ) if( fn() ) return true;
+    return fn();
+}
 
 //----------------------------------------------------------------------------
 section( "F6 - a failed read opens the dialog read-only" );
 
 await c.evaluate( "window.__failRead = 'salon.json'; NayiveSalonSettings.open(); true" );
 ok( await c.until( DRAWN ), "dialog drawn" );
-ok( await c.evaluate( SAVE + ".disabled" ) === true, "✓ is off: the stand-in can't be saved" );
+ok( await c.evaluate( NO_OK ), "close-only: no ✓" );
 ok( await c.evaluate( readFailShown ), "it says the settings could not be read" );
 ok( await c.evaluate( "[ ...document.querySelectorAll( '#salonSettings .salon-pane select, #salonSettings .salon-pane input' ) ].every( x => x.disabled )" ),
     "every control is read-only" );
-await c.evaluate( SAVE + ".click(); true" );
-ok( await c.until( SETTLED ), "every write that press started has landed" );
-ok( await c.evaluate( OPEN ), "✓ pressed anyway: nothing happens" );
-ok( onDisk( s, SALON ) === before, "the real settings are untouched" );
-await close();
+ok( await close(), "closed by its ×" );
 ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
+await sleep( 1500 );
+ok( await c.until( SETTLED ), "every write that close started has landed" );
+ok( onDisk( s, SALON ) === before, "the real settings are untouched" );
 
 // Science, never saved (404): it starts from Bellas artes' part - read as
 // strictly - so a failing salon.json makes it read-only too.
 await c.evaluate( "window.__failRead = 'salon.json'; NayiveSalonSettings.open( 'science' ); true" );
 ok( await c.until( DRAWN ), "Science dialog drawn" );
-ok( await c.evaluate( SAVE + ".disabled" ) === true && await c.evaluate( readFailShown ), "Science: read-only too (its 404 falls back on a FAILED salon read)" );
-await c.evaluate( SAVE + ".click(); true" );
-ok( await c.until( SETTLED ), "every write that press started has landed" );
-ok( json( SCI ) === null, "Science: nothing written" );
+ok( await c.evaluate( readFailShown ), "Science: read-only too (its 404 falls back on a FAILED salon read)" );
 await close();
 ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
+await sleep( 1500 );
+ok( await c.until( SETTLED ), "every write that close started has landed" );
+ok( json( SCI ) === null, "Science: nothing written" );
 
 //----------------------------------------------------------------------------
-section( "F6 - ✓ writes only what the dialog changed" );
+section( "F6 - closing writes only what the dialog changed" );
 
 await c.evaluate( "window.__failRead = ''; NayiveSalonSettings.open(); true" );
 ok( await c.until( DRAWN ), "dialog drawn (a good read)" );
-ok( await c.evaluate( SAVE + ".disabled" ) === false, "✓ is on" );
 // Meanwhile the phone changes the units.
 ok( ( await phone.put( SALON, JSON.stringify( { langs: [ "es", "en" ], units: "c", size: "l" } ) ) ).status === 200, "the phone sets °C" );
 await setField( "salon.contrast", "high" );
-await c.evaluate( SAVE + ".click(); true" );
-ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "✓: saved and closed" );
+await close();
+ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "closed" );
+ok( await onDiskWhen( () => ( json( SALON ) || {} ).contrast === "high" ), "this dialog's change is saved", json( SALON ) );
 let st = json( SALON );
-ok( st && st.contrast === "high", "this dialog's change is saved", st );
 ok( st && st.units === "c" && st.size === "l" && st.langs.join() === "es,en", "the phone's °C is not put back", st );
 
 //----------------------------------------------------------------------------
-section( "F6 - a failed re-read at ✓ writes nothing" );
+section( "F6 - a failed re-read at close writes nothing, and says so" );
 
 await c.evaluate( "NayiveSalonSettings.open(); true" );
 ok( await c.until( DRAWN ), "dialog drawn" );
 await setField( "salon.contrast", "normal" );
 const kept = onDisk( s, SALON );
-await c.evaluate( "window.__failRead = 'salon.json'; window.__toasts = []; " + SAVE + ".click(); true" );
-ok( await c.until( "( window.__toasts || [] ).some( x => x.indexOf( NayiveI18n.t( 'salon.readFail' ) ) !== -1 ) || ! document.querySelector( '#salonSettings' )" ),
-    "✓ answered" );
-ok( await c.until( SETTLED ), "every write that press started has landed" );
-ok( await c.evaluate( OPEN ) && await c.evaluate( SAVE + ".disabled" ) === false, "the dialog stays open, ✓ on again" );
+await c.evaluate( "window.__failRead = 'salon.json'; window.__toasts = []; true" );
+await close();
+ok( await c.until( "( window.__toasts || [] ).some( x => x.indexOf( NayiveI18n.t( 'salon.notSaved' ) ) !== -1 )" ),
+    "it says the changes were not saved" );
+ok( await c.until( SETTLED ), "every write that close started has landed" );
 ok( onDisk( s, SALON ) === kept, "nothing was written" );
-await c.evaluate( "window.__failRead = ''; " + SAVE + ".click(); true" );
-ok( await c.until( "! document.querySelector( '#salonSettings' )" ), "✓ again, with the server back: saved" );
+await c.evaluate( "window.__failRead = ''; NayiveSalonSettings.open(); true" );
+ok( await c.until( DRAWN ), "opened again, the server back" );
+await setField( "salon.contrast", "normal" );
+await close();
+ok( await onDiskWhen( () => ( json( SALON ) || {} ).contrast === "normal" ), "closed again: saved", json( SALON ) );
 st = json( SALON );
-ok( st && st.contrast === "normal" && st.units === "c", "saved over the fresh copy", st );
+ok( st && st.units === "c", "saved over the fresh copy", st );
 
 await done( c, s );

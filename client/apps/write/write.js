@@ -168,12 +168,27 @@ function applyPhoneChrome()
     // Never in the header in MENU mode, on a phone or not: the Ayuda menu is
     // right there, and one "?" in two places at once is one too many.
     NayiveOffice.placeHelpButton( PHONE.matches && ! CHROME.on(), 'topActions', 'writeTools', null, 'savedAt' );
+    placeFileButton();
     if( fileMenu ) fileMenu.close();
     if( helpMenu ) helpMenu.close();
     closeGroupPopups();
     setMoreTools( false );
     if( ! PHONE.matches ) setToolbarOpen( true );
 }
+// The File button (#moreBtn, the file menu) is the SAME button in both layouts:
+// first in the tool row on a PC, with the drop-down caret its neighbours carry;
+// in the header on a phone, because the row folds away while you type.
+function placeFileButton()
+{
+    const btn = document.getElementById( 'moreBtn' );
+    const sep = document.getElementById( 'fileSep' );
+
+    if( PHONE.matches ) document.getElementById( 'topActions' ).appendChild( btn );
+    else                sep.parentNode.insertBefore( btn, sep );
+
+    btn.classList.toggle( 'has-popup', ! PHONE.matches );
+}
+
 let ready         = false;   // a document is on screen; edits after this are the user's
 
 // A load() fires one 'change' of its own (revision 0) before it returns - not an
@@ -314,8 +329,6 @@ function wireStaticUI()
     restoreTbStyle();
 
     document.getElementById( 'settingsBtn'         ).addEventListener( 'click', openSettings );
-    document.getElementById( 'settingsCancelBtn'   ).addEventListener( 'click', function() { setBackdrop( 'settingsBackdrop', false ); } );
-    document.getElementById( 'settingsConfirmBtn'  ).addEventListener( 'click', confirmSettings );
     document.getElementById( 'pageSetupCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'pageSetupBackdrop', false ); } );
     document.getElementById( 'pageSetupConfirmBtn' ).addEventListener( 'click', confirmPageSetup );
     document.getElementById( 'psSize'              ).addEventListener( 'change', syncPageSizeRows );
@@ -458,12 +471,16 @@ function initEditor( who )
 
         locale   : NayiveUI.locale(),
         author   : ( who && ( who.user || who.name ) ) || NayiveUI.t( 'write.meAuthor' ),
-        mode     : 'edit'
+        mode     : 'edit',
+        zoomMode : fitMode()
     } );
 
     editor.on( 'change', onChange );
     editor.on( 'selectionChange', refreshToolbar );
     editor.on( 'error', function( e ) { console.error( 'Write: engine', e ); } );
+
+    // Crossing the phone width changes the fit's floor (fitMode).
+    PHONE.addEventListener( 'change', function() { if( ! zoomFixed() ) editor.setZoomMode( fitMode() ); } );
 
     // A click on a link shows what it points at (and open / edit / remove);
     // Ctrl+K asks for one. The engine draws the link, Write the sheet and menu.
@@ -598,29 +615,19 @@ function setDocMode( mode )
     refreshToolbar();          // read-only greys the buttons at once, not at the next caret move
 }
 
+// Settings (the File menu's entry, Ctrl+,) is no dialog any more: it opens the
+// Herramientas list. In menu mode that is the menu itself; with the toolbar it
+// hangs under the File button that held the entry.
 function openSettings()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    document.getElementById( 'setMode' ).value = docMode();
-    renderProofLangs();
-    document.getElementById( 'setAutocorrect' ).checked = autocorrectOn;
+    if( menusOn() ) { MENUBAR.openAt( MENUS.findIndex( function( m ) { return m.key === 'ui.menu.tools'; } ) ); return; }
 
-    setBackdrop( 'settingsBackdrop', true );
-}
-
-function confirmSettings()
-{
-    const lang = [ ...document.querySelectorAll( '#proofLangs input:checked' ) ]
-                     .map( function( i ) { return i.value; } ).join( ',' );
-
-    setBackdrop( 'settingsBackdrop', false );
-
-    setDocMode( document.getElementById( 'setMode' ).value );
-    setAutocorrect( document.getElementById( 'setAutocorrect' ).checked );
-
-    if( lang !== proofLangs.join( ',' ) ) changeProofLangs( lang );
-    focusEditor();
+    const btn = document.getElementById( 'moreBtn' );
+    // A rectangle, not the button: a press on the button then closes this list
+    // instead of opening the File menu over it.
+    setTimeout( function() { MENUBAR.openItems( toolsItems, btn.getBoundingClientRect() ); }, 0 );
 }
 
 //----------------------------------------------------------------------------//
@@ -642,29 +649,11 @@ function changeProofLangs( raw )
     if( spell ) spell.reset();
 }
 
-// One checkbox per vendored dictionary, built from proofing.js's own list so a
-// new .aff/.dic pair shows up here without touching this file.
-function renderProofLangs()
+// Herramientas ▸ one language on / off, the others kept (in proofing.js's order).
+function toggleProofLang( code )
 {
-    const box = document.getElementById( 'proofLangs' );
-    box.innerHTML = '';
-
-    for( const code of PROOF_LANGS )
-    {
-        const label = document.createElement( 'label' );
-
-        const box2 = document.createElement( 'input' );
-        box2.type    = 'checkbox';
-        box2.value   = code;
-        box2.checked = proofLangs.indexOf( code ) >= 0;
-
-        const txt = document.createElement( 'span' );
-        txt.textContent = NayiveUI.t( 'write.proof.' + code );
-
-        label.appendChild( box2 );
-        label.appendChild( txt );
-        box.appendChild( label );
-    }
+    const on = proofLangs.indexOf( code ) >= 0;
+    changeProofLangs( PROOF_LANGS.filter( function( c ) { return c === code ? ! on : proofLangs.indexOf( c ) >= 0; } ).join( ',' ) );
 }
 
 //----------------------------------------------------------------------------//
@@ -1721,13 +1710,20 @@ function tableCommand( rows, cols )
     return { type: 'insertTable', target: editor && editor.snapshot().selection, rows: rows, cols: cols };
 }
 
-// The zoom: a fixed percentage, or 'fit' - the engine's own fit to the width
-// (never below 50 %), which is what every document opens with.
+// The zoom: a fixed percentage, or 'fit' - the engine's own fit to the width,
+// which is what every document opens with. On a PC it never goes below 100 %
+// (a narrower window scrolls sideways instead) and grows with a wider window
+// up to 200 % (his call, 2026-10-04); on a phone it shrinks down to 50 %.
+function fitMode()
+{
+    return { type: 'fit', fit: 'pageWidth', minZoom: PHONE.matches ? 0.5 : 1, maxZoom: 2 };
+}
+
 function setZoom( z )
 {
     if( ! editor ) return;
 
-    const r = z === 'fit' ? editor.setZoomMode( 'auto' ) : editor.setZoom( z / 100 );
+    const r = z === 'fit' ? editor.setZoomMode( fitMode() ) : editor.setZoom( z / 100 );
     if( r && r.ok === false ) console.error( 'Write: zoom -', r.reason );
     focusEditor();
 }
@@ -2034,20 +2030,39 @@ function lineItems()
 
 // Rows and columns act on the cell the caret is in; merging and splitting are
 // greyed while the engine says it cannot yet (2.21.0: "not supported yet").
+// Write's own glyphs for the table rows (the engine ships none for these):
+// the cells as boxes, + where a row / column goes in, x what goes away.
+function lineIcon( d )
+{
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+}
+const TABLE_ICONS =
+{
+    rowAbove : lineIcon( '<rect x="3" y="12" width="18" height="9" rx="1.5"></rect><path d="M12 12v9M12 2v7M8.5 5.5h7"></path>' ),
+    rowBelow : lineIcon( '<rect x="3" y="3" width="18" height="9" rx="1.5"></rect><path d="M12 3v9M12 15v7M8.5 18.5h7"></path>' ),
+    rowDel   : lineIcon( '<rect x="3" y="7" width="18" height="10" rx="1.5"></rect><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"></path>' ),
+    colLeft  : lineIcon( '<rect x="12" y="3" width="9" height="18" rx="1.5"></rect><path d="M12 12h9M2 12h7M5.5 8.5v7"></path>' ),
+    colRight : lineIcon( '<rect x="3" y="3" width="9" height="18" rx="1.5"></rect><path d="M3 12h9M15 12h7M18.5 8.5v7"></path>' ),
+    colDel   : lineIcon( '<rect x="7" y="3" width="10" height="18" rx="1.5"></rect><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"></path>' ),
+    merge    : lineIcon( '<rect x="3" y="5" width="18" height="14" rx="1.5"></rect><path d="M5.5 12H10M8 9.5l2.5 2.5L8 14.5M18.5 12H14M16 9.5L13.5 12l2.5 2.5"></path>' ),
+    split    : lineIcon( '<rect x="3" y="5" width="18" height="14" rx="1.5"></rect><path d="M12 5v14M9.5 12H6M7.5 10l-2 2 2 2M14.5 12H18M16.5 10l2 2-2 2"></path>' ),
+    tableDel : lineIcon( '<rect x="2.5" y="2.5" width="13" height="13" rx="1.5"></rect><path d="M2.5 7h13M2.5 11h13M7 2.5v13M15.5 15.5l6 6M21.5 15.5l-6 6"></path>' )
+};
+
 const TABLE_EDIT_ITEMS =
 [
-    { key: 'write.tb.addRowBefore',    exec: { type: 'insertRow', where: 'above' } },
-    { key: 'write.tb.addRowAfter',     exec: { type: 'insertRow', where: 'below' } },
-    { key: 'write.tb.deleteRow',       exec: { type: 'deleteRow' } },
+    { key: 'write.tb.addRowBefore',    exec: { type: 'insertRow', where: 'above' },     icon: TABLE_ICONS.rowAbove },
+    { key: 'write.tb.addRowAfter',     exec: { type: 'insertRow', where: 'below' },     icon: TABLE_ICONS.rowBelow },
+    { key: 'write.tb.deleteRow',       exec: { type: 'deleteRow' },                     icon: TABLE_ICONS.rowDel   },
     { sep: true },
-    { key: 'write.tb.addColumnBefore', exec: { type: 'insertColumn', where: 'left'  } },
-    { key: 'write.tb.addColumnAfter',  exec: { type: 'insertColumn', where: 'right' } },
-    { key: 'write.tb.deleteColumn',    exec: { type: 'deleteColumn' } },
+    { key: 'write.tb.addColumnBefore', exec: { type: 'insertColumn', where: 'left'  }, icon: TABLE_ICONS.colLeft  },
+    { key: 'write.tb.addColumnAfter',  exec: { type: 'insertColumn', where: 'right' }, icon: TABLE_ICONS.colRight },
+    { key: 'write.tb.deleteColumn',    exec: { type: 'deleteColumn' },                  icon: TABLE_ICONS.colDel   },
     { sep: true },
-    { key: 'write.tb.mergeCells', exec: { type: 'mergeCells' } },
-    { key: 'write.tb.splitCell',  exec: { type: 'splitCell', rows: 1, cols: 2 } },
+    { key: 'write.tb.mergeCells', exec: { type: 'mergeCells' },                 icon: TABLE_ICONS.merge },
+    { key: 'write.tb.splitCell',  exec: { type: 'splitCell', rows: 1, cols: 2 }, icon: TABLE_ICONS.split },
     { sep: true },
-    { key: 'write.tb.deleteTable', exec: { type: 'deleteTable' } }
+    { key: 'write.tb.deleteTable', exec: { type: 'deleteTable' }, icon: TABLE_ICONS.tableDel }
 ];
 
 // Tabla > Relleno de celda: the selected cells (the caret's alone when none are).
@@ -2100,6 +2115,25 @@ const CLIP_ITEMS =
       enabled: function() { return canExec( { type: 'pasteWithoutFormatting', text: ' ' } ); } }
 ];
 
+// Herramientas - what the Settings dialog held (the editing mode is Ver ▸ Modo):
+// autocorrect, then one tick per vendored dictionary, from proofing.js's own
+// list so a new .aff/.dic pair shows up here without touching this file.
+// Settings (the File menu, Ctrl+,) opens this same list.
+function toolsItems()
+{
+    return [
+        { key: 'write.autocorrect', run: function() { setAutocorrect( ! autocorrectOn ); },
+          checked: function() { return autocorrectOn; }, info: 'write.autocorrectNote',
+          icon: lineIcon( '<path d="M3 17 7 6l4 11M4.5 13h5M13 15l3 3 6-7"></path>' ) },
+        { sep: true },
+        { label: 'write.proofLang' }
+    ].concat( PROOF_LANGS.map( function( code )
+    {
+        return { key: 'write.proof.' + code, checked: function() { return proofLangs.indexOf( code ) >= 0; },
+                 run: function() { toggleProofLang( code ); } };
+    } ) );
+}
+
 const MENUS = [
 {
     key: 'ui.menu.file',
@@ -2114,6 +2148,7 @@ const MENUS = [
         { key: 'ui.importDevice', el: 'importBtn' },
         { key: 'write.templates', el: 'tplBtn' },
         { key: 'write.restore', el: 'restoreBtn' },
+        { key: 'lock.title',    el: 'lockBtn', checked: function() { return session.locked(); } },
         { sep: true },
         { key: 'write.pageSetup', el: 'pageSetupBtn' },
         { key: 'write.print',   el: 'printBtn', sc: 'write.print' },
@@ -2136,12 +2171,6 @@ const MENUS = [
     key: 'ui.menu.view',
     items:
     [
-        { key: 'ui.chrome', sub:
-            [ { key: 'ui.chromeToolbar', run: function() { CHROME.set( 'toolbar' ); }, iconOf: '#chromeToolbarBtn',
-                checked: function() { return ! menusOn(); } },
-              { key: 'ui.chromeMenus',   run: function() { CHROME.set( 'menus'   ); }, iconOf: '#chromeMenusBtn',
-                checked: menusOn } ] },
-        { sep: true },
         { key: 'write.formattingMarks', slot: 'review.paragraphMarks', iconOf: '#marksBtn' },
         { sep: true },
         { key: 'write.header', el: 'headerBtn', checked: function() { return hfEditing() === 'header'; } },
@@ -2212,13 +2241,7 @@ const MENUS = [
 },
 {
     key: 'ui.menu.tools',
-    items:
-    [
-        { key: 'write.autocorrect', run: function() { setAutocorrect( ! autocorrectOn ); },
-          checked: function() { return autocorrectOn; } },
-        { sep: true },
-        { key: 'ui.settings', el: 'settingsBtn', sc: 'ui.settings' }
-    ]
+    items: toolsItems()
 },
 {
     key: 'ui.menu.help',

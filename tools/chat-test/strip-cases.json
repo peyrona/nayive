@@ -1,0 +1,18 @@
+[
+  [ "*hi*", "hi" ],
+  [ "plain words", "plain words" ],
+  [ "a*b*c", "a*b*c" ],
+  [ "file_name_v2", "file_name_v2" ],
+  [ "*bold _both_* ~no~", "bold both no" ],
+  [ "*open only", "*open only" ],
+  [ "**", "**" ],
+  [ "* x *", "* x *" ],
+  [ "**bold**", "*bold*" ],
+  [ "*see https://x.com*", "see https://x.com" ],
+  [ "go https://x.com/_p_/q now", "go https://x.com/_p_/q now" ],
+  [ "*😀*", "😀" ],
+  [ "- a\n- b", "• a\n• b" ],
+  [ "Buy:\n- *milk*\n-5 °C", "Buy:\n• milk\n-5 °C" ],
+  [ "  - indented", "• indented" ],
+  [ "x_y_ _z_", "x_y_ z" ]
+]

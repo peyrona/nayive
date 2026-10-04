@@ -12,7 +12,7 @@
     var C = window.NayiveChat;
     var S = C.S, h = C.h, T = C.T;
 
-    var ta, cbox, quoteSlot, sendBtn, laterBtn, composer, panel = null;
+    var ta, cbox, quoteSlot, sendBtn, laterBtn, composer, fmtBar, fmtBtn, panel = null;
     var laterSheet = null;     // the open list of scheduled texts: { render, close }
     var lastTyping = 0;
 
@@ -46,10 +46,28 @@
         sendBtn = h( "button", { class: "send", attrs: { type: "button", title: T( "chat.sendMsg" ), "aria-label": T( "chat.sendMsg" ) },
                                  on: { click: function () { send(); } } } );
         sendBtn.appendChild( C.ic( "send" ) );
-        composer = h( "div", { class: "composer", attrs: { id: "composer" } }, cbox, sendBtn );
+        fmtBar = buildFmtBar();
+        // The format bar waits behind a faint "T" on the box's left edge; a
+        // tap brings it up (and the focus to the box).
+        fmtBtn = C.btn( "textfmt", "chat.fmtName", function () { fmtBar.classList.add( "on" ); ta.focus(); }, "fmt-open" );
+        fmtBtn.id = "fmtBtn";
+        composer = h( "div", { class: "composer", attrs: { id: "composer" } }, fmtBtn, fmtBar, cbox, sendBtn );
         wireSendHold();
 
-        ta.addEventListener( "input", function ( e ) { smiley( e ); grow(); typing(); C.keepDraft(); } );
+        ta.addEventListener( "input", function ( e ) { if( ! marking ) smiley( e ); grow(); typing(); C.keepDraft(); } );
+        // Once up, the format bar stays while the focus is in the bar at the
+        // bottom (emoji, clip, Send give it back to the box).
+        composer.addEventListener( "focusout", function ( e )
+        {
+            if( ! composer.contains( e.relatedTarget ) ) fmtBar.classList.remove( "on" );
+        } );
+        // A new line after a "- " item starts the next item; after an empty
+        // one it ends the list (Shift+Enter with a mouse, Enter on a phone).
+        ta.addEventListener( "beforeinput", function ( e )
+        {
+            if( ( e.inputType === "insertLineBreak" || e.inputType === "insertParagraph" ) && ! e.isComposing && listEnter() )
+                e.preventDefault();
+        } );
         ta.addEventListener( "keydown", function ( e )
         {
             if( e.key === "Backspace" && unSmiley() ) { e.preventDefault(); grow(); return; }
@@ -66,6 +84,117 @@
         } );
         return composer;
     };
+
+    // ---------------------------------------------------------------------
+    // the format bar: *bold*, _italic_, ~strike~ and "- " lists (marks.js)
+    // ---------------------------------------------------------------------
+
+    var ITEM_RE = window.NayiveChatMarks.ITEM_RE;     // a "- " list line
+    var marking = false;       // a bar change is going in: no emoticon swap
+
+    function buildFmtBar()
+    {
+        var bar = h( "div", { class: "fmt-bar", attrs: { role: "toolbar", "aria-label": T( "chat.fmtName" ) } },
+            C.btn( "back",   "chat.back",      function () { bar.classList.remove( "on" ); }, "fmt-close" ),
+            C.btn( "bold",   "chat.fmtBold",   function () { wrap( "*" ); } ),
+            C.btn( "italic", "chat.fmtItalic", function () { wrap( "_" ); } ),
+            C.btn( "strike", "chat.fmtStrike", function () { wrap( "~" ); } ),
+            C.btn( "list",   "chat.fmtList",   listLines ) );
+        // A press must not take the focus (and the selection) from the box,
+        // or the bar would hide under the finger.
+        [ "pointerdown", "mousedown" ].forEach( function ( t )
+        {
+            bar.addEventListener( t, function ( e ) { e.preventDefault(); } );
+        } );
+        return bar;
+    }
+
+    // Replace ta[a, b) with `text` as typing would: Ctrl+Z undoes it, and
+    // the box's input work (size, "typing…", the kept draft) runs.
+    function edit( a, b, text )
+    {
+        ta.setSelectionRange( a, b );
+        marking = true;
+        var ok = false;
+        try { ok = document.execCommand( "insertText", false, text ); } catch( _ ) {}
+        if( ! ok )
+        {
+            ta.setRangeText( text, a, b, "end" );
+            ta.dispatchEvent( new Event( "input" ) );
+        }
+        marking = false;
+    }
+
+    // B / I / S: put the marks round each selected line (spaces left out),
+    // or take them away when all of them have them already. With nothing
+    // selected: the pair, the cursor inside (pressed again: the pair goes).
+    function wrap( mk )
+    {
+        ta.focus();
+        var v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
+        if( a === b )
+        {
+            if( v.charAt( a - 1 ) === mk && v.charAt( a ) === mk ) { edit( a - 1, a + 1, "" ); return; }
+            edit( a, a, mk + mk );
+            ta.setSelectionRange( a + 1, a + 1 );
+            return;
+        }
+        var sel = v.slice( a, b );
+        if( sel.indexOf( "\n" ) < 0 && v.charAt( a - 1 ) === mk && v.charAt( b ) === mk )
+        {
+            edit( a - 1, b + 1, sel );
+            ta.setSelectionRange( a - 1, b - 1 );
+            return;
+        }
+        var parts = sel.split( "\n" ).map( function ( l ) { return /^(\s*)(.*?)(\s*)$/.exec( l ); } );
+        var on = parts.some( function ( p ) { return p[ 2 ]; } ) && parts.every( function ( p )
+        {
+            return ! p[ 2 ] || ( p[ 2 ].length >= 2 && p[ 2 ].charAt( 0 ) === mk && p[ 2 ].slice( -1 ) === mk );
+        } );
+        var out = parts.map( function ( p )
+        {
+            return p[ 2 ] ? p[ 1 ] + ( on ? p[ 2 ].slice( 1, -1 ) : mk + p[ 2 ] + mk ) + p[ 3 ] : p[ 0 ];
+        } ).join( "\n" );
+        edit( a, b, out );
+        ta.setSelectionRange( a, a + out.length );
+    }
+
+    // List: "- " at the start of the cursor's line, or of every selected
+    // line (empty ones aside); taken away when all of them have it.
+    function listLines()
+    {
+        ta.focus();
+        var v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
+        var from = v.lastIndexOf( "\n", a - 1 ) + 1;
+        var to = v.indexOf( "\n", b > a && v.charAt( b - 1 ) === "\n" ? b - 1 : b );
+        if( to < 0 ) to = v.length;
+        var lines = v.slice( from, to ).split( "\n" );
+        var on = lines.some( function ( l ) { return ITEM_RE.test( l ); } ) &&
+                 lines.every( function ( l ) { return ITEM_RE.test( l ) || ! l.trim(); } );
+        var out = lines.map( function ( l )
+        {
+            if( on ) return l.replace( /^([ \t]*)- /, "$1" );
+            return ITEM_RE.test( l ) || ( lines.length > 1 && ! l.trim() ) ? l : "- " + l;
+        } ).join( "\n" );
+        edit( from, to, out );
+        if( a !== b ) { ta.setSelectionRange( from, from + out.length ); return; }
+        var c = Math.max( from, a + out.length - ( to - from ) );
+        ta.setSelectionRange( c, c );
+    }
+
+    // A new line typed in a "- " item: the next item, or the list's end.
+    function listEnter()
+    {
+        var v = ta.value, a = ta.selectionStart;
+        if( a !== ta.selectionEnd ) return false;
+        var from = v.lastIndexOf( "\n", a - 1 ) + 1, m = ITEM_RE.exec( v.slice( from, a ) );
+        if( ! m ) return false;
+        var end = v.indexOf( "\n", a );
+        if( end < 0 ) end = v.length;
+        if( v.slice( from + m[ 0 ].length, end ).trim() ) edit( a, a, "\n" + m[ 0 ] );
+        else { edit( from, end, "" ); ta.setSelectionRange( from, from ); }
+        return true;
+    }
 
     function grow()
     {
@@ -1067,7 +1196,7 @@
             C.api( "DELETE", "conv/" + conv + "/messages/" + m.id ).then( function ( out )
             {
                 hiding.delete( conv + ":" + m.id );
-                if( S.open === conv ) { S.msgs.set( out.id, out ); C.redraw( out.id ); }
+                if( S.open === conv ) C.dropMsg( out );
             }, function ( e ) { unhideMsg( conv, m.id ); C.fail( e ); } );
         } } );
     };

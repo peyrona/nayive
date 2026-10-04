@@ -92,7 +92,7 @@
         // The owner changes it from here too.
         if( w.deleteAfter > 0 )
             wallEl.appendChild( h( "div", { class: "info-sec" },
-                row( "clock", C.TF( "chat.ttlTitle", { n: w.deleteAfter } ), null, owner ? function () { C.openAutoDelete(); } : null ) ) );
+                row( "clock", C.TF( "chat.ttlTitle", { n: w.deleteAfter } ), null, owner ? function () { C.openSettings( "autodel" ); } : null ) ) );
 
         // What this chat holds, one icon per kind, with how many. Only what the
         // messages already carry - nothing new is stored for it. A tap shows
@@ -121,7 +121,6 @@
     }
 
     var VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|avi|3gp|mpe?g|wmv)$/i;
-    var URL_RE    = /\bhttps?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'"]/gi;
 
     // The kinds a chat's messages carry. A video is a file a camera made (it
     // was sent as a file: only its name tells); a link sits inside a text.
@@ -132,7 +131,7 @@
         var of = function ( kind ) { return msgs.filter( function ( m ) { return m.kind === kind; } ); };
         var files = of( "file" );
         var links = [];
-        msgs.forEach( function ( m ) { ( String( m.text || "" ).match( URL_RE ) || [] ).forEach( function ( u ) { links.push( { m: m, url: u } ); } ); } );
+        msgs.forEach( function ( m ) { window.NayiveChatMarks.urls( m.text ).forEach( function ( u ) { links.push( { m: m, url: u } ); } ); } );
         return [
             { key: "chat.kPhotos",   icon: "image",   kind: "photo", items: of( "photo" ) },
             { key: "chat.kVideos",   icon: "video",   kind: "file",  items: files.filter( function ( m ) { return VIDEO_EXT.test( m.file.name ); } ) },
@@ -248,7 +247,7 @@
         sh = C.sheet( T( "chat.delete" ) + " · " + c.name, body );
     };
 
-    // The list's ⋮ -> Auto-delete (the owner): one number of days for every
+    // Settings › Auto-delete (the owner): one number of days for every
     // chat. The server applies it at once, then every hour; 0 = never.
     C.pendingTtl = null;       // { days } saved, not sent yet (its "Undo" on show)
 
@@ -270,24 +269,19 @@
         return ! k ? T( "chat.autoDeleteNone" ) : k === 1 ? T( "chat.autoDeleteCountOne" ) : C.TF( "chat.autoDeleteCount", { count: fmtCount( k ) } );
     }
 
-    C.openAutoDelete = function ()
+    // Settings › Auto-delete (list.js openSettings): the number, what it
+    // would delete now, and save() for the dialog's Save.
+    C.autoDeletePane = function ()
     {
         var input = h( "input", { attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
                                   value: String( S.deleteAfter || 0 ) } );
-        var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.save" ) } } );
-        var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
         var countEl = h( "p", { class: "days-count", attrs: { "aria-live": "polite" } } );
-        var d = NayiveUI.modal( { cls: "sheet--pack", title: T( "chat.autoDelete" ), escape: done,
-                                  top: function () { return document.body.lastElementChild === d.back; } } );
-        [ h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
-          // the number, then what it counts - one row
-          h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
-          countEl,
-          h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ),
-          h( "div", { class: "sheet-actions" }, no, ok ) ].forEach( function ( n ) { d.sheet.appendChild( n ); } );
-        d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
-        var closed = false, saving = false;
-        function done() { closed = true; d.close(); }
+        var el = h( "div", {},
+            h( "p", { class: "dialog-text", text: T( "chat.autoDeleteLead" ) } ),
+            // the number, then what it counts - one row
+            h( "label", { class: "days-field", attrs: { for: "autoDelDays" } }, input, h( "span", { text: T( "chat.autoDeleteDays" ) } ) ),
+            countEl,
+            h( "p", { class: "hint", text: T( "chat.autoDeleteHint" ) } ) );
 
         // How many messages the number typed would delete NOW, in every chat,
         // asked as it is typed (J7): a typo - 1 for 10 - reads "deletes
@@ -317,45 +311,52 @@
         }
         input.addEventListener( "input", function () { clearTimeout( timer ); countEl.textContent = ""; timer = setTimeout( showCount, 250 ); } );
         showCount();
-        // The server deletes the old messages (for everyone) the moment it
-        // hears: so it hears when the "Undo" is gone (the shared undoToast:
-        // 6 s, the next toast, the page closing). Until then the new number
-        // shows here only (C.pendingTtl: a summary read meanwhile keeps it).
-        async function save()
-        {
-            var n = Number( input.value );
-            if( input.value.trim() === "" || ! Number.isInteger( n ) || n < 0 || n > 3650 ) { input.focus(); input.select(); return; }
-            if( saving ) return;
-            saving = true;
-            clearTimeout( timer );
-            // The toast with the Undo says it too (the count, when known).
-            var k = n ? await countOf( n ) : null;
-            if( closed ) return;          // cancelled while it was counted
-            done();
-            var old  = S.deleteAfter || 0;
-            var mine = C.pendingTtl = { days: n };
-            showTtl( n );
-            NayiveUI.undoToast( ! n ? T( "chat.autoDeleteOff" ) :
-                                k ? C.TF( "chat.autoDeleteOnCount", { n: n, count: fmtCount( k ) } ) : C.TF( "chat.autoDeleteOn", { n: n } ), function ()
+
+        function value() { return Number( input.value ); }
+        return {
+            el: el,
+            input: input,
+            focus: function () { input.focus(); input.select(); },
+            // A whole number of days, 0 to 3650.
+            check: function ()
             {
-                if( C.pendingTtl === mine ) C.pendingTtl = null;
-                showTtl( old );
-            }, { onExpire: function ()
+                var n = value();
+                return input.value.trim() !== "" && Number.isInteger( n ) && n >= 0 && n <= 3650;
+            },
+            changed: function () { return value() !== ( S.deleteAfter || 0 ); },
+            // The server deletes the old messages (for everyone) the moment
+            // it hears: so it hears when the "Undo" is gone (the shared
+            // undoToast: 6 s, the next toast, the page closing). Until then
+            // the new number shows here only (C.pendingTtl: a summary read
+            // meanwhile keeps it). The dialog is closed by now.
+            save: async function ()
             {
-                C.api( "PUT", "autodelete", { days: n } ).then( function ()
+                var n = value();
+                clearTimeout( timer );
+                var old  = S.deleteAfter || 0;
+                var mine = C.pendingTtl = { days: n };
+                showTtl( n );
+                // The toast with the Undo says it too (the count, when known).
+                var k = n ? await countOf( n ) : null;
+                if( C.pendingTtl !== mine ) return;
+                NayiveUI.undoToast( ! n ? T( "chat.autoDeleteOff" ) :
+                                    k ? C.TF( "chat.autoDeleteOnCount", { n: n, count: fmtCount( k ) } ) : C.TF( "chat.autoDeleteOn", { n: n } ), function ()
                 {
                     if( C.pendingTtl === mine ) C.pendingTtl = null;
-                }, function ( e )
+                    showTtl( old );
+                }, { onExpire: function ()
                 {
-                    if( C.pendingTtl === mine ) { C.pendingTtl = null; showTtl( old ); }
-                    C.fail( e );
-                } );
-            } } );
-        }
-        ok.addEventListener( "click", save );
-        no.addEventListener( "click", done );
-        input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
-        setTimeout( function () { input.focus(); input.select(); }, 30 );
+                    C.api( "PUT", "autodelete", { days: n } ).then( function ()
+                    {
+                        if( C.pendingTtl === mine ) C.pendingTtl = null;
+                    }, function ( e )
+                    {
+                        if( C.pendingTtl === mine ) { C.pendingTtl = null; showTtl( old ); }
+                        C.fail( e );
+                    } );
+                } } );
+            }
+        };
     };
 
     C.showLink = function ( ct )
@@ -457,8 +458,7 @@
         if( owner )
         {
             rows.push( { sel: "#newChatBtn", name: T( "chat.newChat" ), text: T( "chat.helpNewChat" ) } );
-            rows.push( { sel: "#profileBtn", name: T( "chat.editProfile" ), text: T( "chat.helpProfile" ) } );
-            rows.push( { sel: "#autoDelBtn", name: T( "chat.autoDelete" ), text: T( "chat.helpAutoDelete" ) } );
+            rows.push( { sel: "#settingsBtn", name: T( "ui.settings" ), text: T( "chat.helpSettings" ) } );
         }
         else
         {
@@ -482,6 +482,7 @@
             rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ) } );
         } );
         rows.push( { sel: "#emojiBtn", text: T( "chat.helpEmoji" ) } );
+        rows.push( { sel: "#fmtBtn", text: T( "chat.helpFmt" ) } );
         rows.push( { sel: "#composer .later-btn:not([hidden])", text: T( "chat.helpLater" ) } );
         rows.push( { sel: "#attachBtn", text: T( "chat.helpAttach" ) } );
         rows.push( { sel: "#cameraBtn", text: T( "chat.helpCamera" ) } );

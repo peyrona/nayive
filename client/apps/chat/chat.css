@@ -114,27 +114,19 @@ body       { overflow: hidden; }
    buttons and the plug in .topbar-actions. Only the search-in-the-bar is ours. */
 .list-head             { flex-wrap: nowrap; overflow: visible; min-height: 53px; }
 .list-head .app-icon   { width: 20px; height: 20px; }
-/* Brand block (the owner): the icon + "Chat" on one row, and the motto - the
-   optional line from "Your profile" - in small print under both. It may shrink
-   so the buttons keep their room: the name wraps no further than its own width
-   (app.css), and a long motto is cut with an ellipsis (its title has it whole). */
+/* Brand block (the owner): the icon + "Chat" on one row. It may shrink so the
+   buttons keep their room: the name wraps no further than its own width (app.css). */
 .list-head .brand      { display: inline-flex; flex-direction: column; align-items: stretch;
                          flex: 0 1 auto; min-width: 0; margin-right: 10px; }
 .list-head .brand-row  { display: flex; align-items: center; }
 .list-head .brand .app-title { margin-right: 0; }
-.list-head .app-motto  { max-width: 34ch; margin-top: 1px; font-size: 0.78rem; line-height: 1.2;
-                         color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A person's page: the same title, but not a link to the launcher (ui.js only
    turns .app-title into one - a person has no Nayive to go back to). */
 .list-head .app-title-guest { margin: 0 10px 0 4px; font-size: 1.1rem; font-weight: 700; color: var(--accent); }
 .list-head .sync-indicator  { margin-left: 4px; }
-/* The search field is the shared SEARCH FOLD (app.css); here only: when it
-   is too narrow and the buttons step aside, the motto goes with them. */
-.list-head.search-tight .app-motto { display: none; }
-/* The owner's bar holds six buttons: when the list is narrow (a small phone,
-   or dragged thin on a desktop) the word "Chat" steps aside (its icon stays),
-   and the motto with it. */
-@container side (max-width: 339px) { .list-head .app-title, .list-head .app-motto { display: none; } }
+/* When the list is narrow (a small phone, or dragged thin on a desktop) the
+   word "Chat" steps aside (its icon stays). */
+@container side (max-width: 339px) { .list-head .app-title { display: none; } }
 /* In a desktop window (html.is-windowed, desktop/index.html) this header is the
    window's title bar (the desktop puts its three dots at its start), so it spans
    the whole window: taken out of the list's column and laid across the top, both
@@ -206,6 +198,34 @@ button.who { cursor: pointer; }
 .row:hover          { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .row:focus-visible  { outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.is-open        { background: color-mix(in srgb, var(--text) 10%, transparent); }
+/* The owner's list on the item browser (shared/browser.js, app.css ITEM
+   BROWSER). A row has no room for a column of ticks: the tick sits on the
+   picture's corner, and with a mouse the ⋮ floats over the row's end only
+   while the pointer is on it. On touch the ⋮ is always there, in the row. */
+#rows .row                          { position: relative; }
+#rows .row.is-selected              { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+#rows .row > .pick-tick             { position: absolute; left: 8px; bottom: 6px; z-index: 1; background: var(--head); }
+#rows .row.is-selected > .pick-tick { background: var(--accent); }
+/* The list's pane is phone-narrow even on a PC: while chats are picked the
+   selection group takes its header, as on a phone (the title, the search and
+   the tools step aside until the × or Esc). A phone shows three actions
+   only, so its title stays. */
+#listHead .has-selection > .tb-group:not(.sel-group) { display: none; }
+@media (min-width: 641px)
+{
+    #listHead:has(.has-selection) > .brand           { display: none; }
+    #listHead:has(.has-selection) > .topbar-actions  { margin-left: auto; }
+}
+@media (hover: hover) and (pointer: fine)
+{
+    #rows .row > .row-more              { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: var(--head); }
+    #rows .row:not(:hover) > .row-more  { visibility: hidden; }
+}
+@media (hover: none), (pointer: coarse)
+{
+    #rows .row                          { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    #rows .row > .row-more              { margin-right: -8px; }
+}
 .row .body          { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row .l1, .row .l2  { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .row .name          { flex: 1 1 auto; min-width: 0; font-size: 0.98rem; font-weight: 600;
@@ -330,6 +350,9 @@ button.who { cursor: pointer; }
 .msg.failed           { opacity: 0.75; }
 .msg mark             { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 2px; }
 .msg a                { color: var(--link); text-decoration: underline; }
+/* a "- " list (marks.js); its text keeps the bubble's colour */
+.msg ul               { margin: 0; padding-left: 1.25em; }
+.msg li + li          { margin-top: 2px; }
 .msg .caret
 {
     position: absolute; top: 2px; right: 2px; width: 26px; height: 26px;
@@ -390,8 +413,6 @@ button.who { cursor: pointer; }
 }
 .msg.out .reac { left: auto; right: 10px; }
 
-.msg.gone      { color: var(--text-dim); font-style: italic; }
-.msg.gone svg.ic { width: 15px; height: 15px; vertical-align: -3px; margin-right: 4px; }
 
 /* photo */
 .msg.photo        { padding: 3px; }
@@ -511,10 +532,44 @@ button.who { cursor: pointer; }
 }
 .cbox
 {
+    position: relative; z-index: 4;   /* over the format bar, which hides behind it */
     flex: 1 1 auto; min-width: 0;
     display: flex; flex-direction: column;
     border-radius: 23px; background: var(--head); box-shadow: 0 1px 1px var(--shadow);
 }
+/* the faint "T" over the box's left edge; a tap raises the format bar in
+   its place */
+.composer .fmt-open
+{
+    position: absolute; left: 10px; bottom: calc(100% - 4px); z-index: 3;
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
+    background-color: color-mix(in srgb, var(--head) 30%, transparent);
+    color: color-mix(in srgb, var(--text) 55%, transparent);
+    transition: opacity .18s ease;
+}
+.composer .fmt-open svg { width: 14px; height: 14px; }
+.composer .fmt-open:hover, .composer .fmt-open:focus-visible { color: var(--text); background-color: var(--head); }
+.composer:has(.fmt-bar.on) .fmt-open { opacity: 0; pointer-events: none; }
+/* the format bar (B I S list): the "T" raises it from behind the box; it
+   goes when the focus leaves; the clip's and the emoji panels open over it */
+.fmt-bar
+{
+    position: absolute; left: 8px; bottom: 100%; z-index: 4;
+    display: flex; gap: 2px; padding: 3px;
+    border: 1px solid var(--line); border-radius: var(--radius-pill);
+    background: var(--head); box-shadow: var(--elev-card);
+    transform: translateY(calc(100% + 8px)); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: transform .18s ease, opacity .18s ease, visibility 0s linear .18s;
+}
+.fmt-bar.on
+{
+    transform: none; opacity: 1; visibility: visible; pointer-events: auto;
+    transition: transform .18s ease, opacity .18s ease, visibility 0s;
+}
+/* its "←" (back to the "T"): smaller than the format buttons */
+.fmt-bar .fmt-close     { width: 28px; height: 28px; align-self: center; }
+.fmt-bar .fmt-close svg { width: 15px; height: 15px; }
 .cbox .row1       { display: flex; align-items: flex-end; min-height: 46px; padding: 0 2px; }
 .cbox .icon-btn   { width: 42px; height: 42px; margin: 2px 0; }
 .cbox .icon-btn svg { width: 22px; height: 22px; }
@@ -543,6 +598,10 @@ button.who { cursor: pointer; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
 .composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
+
+/* Settings: one width for both tabs, so it does not jump when they switch;
+   no pack - its long hints would stretch it to the full 460px */
+.sheet.chat-settings    { width: min(340px, calc(100vw - 32px)); }
 
 /* "Schedule message": one date field and a short hint - no need for the full 460px */
 .sheet.later-sheet      { max-width: 280px; }

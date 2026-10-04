@@ -377,8 +377,6 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 #printRoot .pr-map .leaflet-tile-pane { filter: grayscale(0.92) contrast(0.9) brightness(1.05); }
 #printRoot .pr-map .leaflet-tooltip { font-size: 10px; padding: 1px 5px; }
 
-/* Settings: the Location / General tabs (route.js openSettings), as eMail's. */
-.set-tabs { display: flex; gap: 6px; margin: 0 0 16px; }
 /* Settings › Location: the one on / off for sending your location, boxed -
    a red border while off, accent while on (my-location.js masterRow). */
 .loc-master { margin: 16px 0 0; padding: 14px 16px; border: 2px solid var(--danger); border-radius: var(--radius-m);

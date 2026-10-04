@@ -37,6 +37,8 @@
  *   { run: fn }               call it
  *   { sub: [...] | fn }       a submenu (a function is called at open time)
  *   { sep: true }             a hairline
+ *   { label: 'key' }          a small heading over the rows below it (not a row)
+ *   { info: 'key' }           ... on a row: an (i) at its end that shows that text
  *   { checked: fn }           tick when fn() says so
  *   { enabled: fn }           grey out when fn() says no
  *   { sc:'ui.openDoc' }       show that shortcut's key combo on the right
@@ -193,6 +195,14 @@ const NayiveMenus = ( function ()
                 return d;
             }
 
+            if( it.label )
+            {
+                const d = document.createElement( 'div' );
+                d.className   = 'menu-label';
+                d.textContent = NayiveUI.t( it.label );
+                return d;
+            }
+
             const b = document.createElement( 'button' );
             b.type        = 'button';
             b.className   = 'menu-item';
@@ -240,6 +250,17 @@ const NayiveMenus = ( function ()
                 b.appendChild( k );
             }
 
+            // Not a <button>: this row already is one. shared/ui.js wires it.
+            if( it.info )
+            {
+                const d = document.createElement( 'span' );
+                d.className = 'info-dot';
+                d.tabIndex  = 0;
+                d.setAttribute( 'role', 'button' );
+                d.setAttribute( 'data-info', NayiveUI.t( it.info ) );
+                b.appendChild( d );
+            }
+
             if( itemChecked( it ) ) b.classList.add( 'is-active' );
             if( ! it.sub && ! itemEnabled( it ) ) b.disabled = true;
 
@@ -252,7 +273,7 @@ const NayiveMenus = ( function ()
         {
             panel.innerHTML = '';
 
-            const glyphs = items.map( function ( it ) { return it.sep ? null : iconNode( it ); } );
+            const glyphs = items.map( function ( it ) { return it.sep || it.label ? null : iconNode( it ); } );
             const slot   = glyphs.some( Boolean );
 
             items.forEach( function ( it, i ) { panel.appendChild( menuItemNode( it, i, slot ? glyphs[ i ] : undefined ) ); } );
@@ -479,6 +500,8 @@ const NayiveMenus = ( function ()
 
             panel.addEventListener( 'click', function ( e )
             {
+                if( e.target.closest( '.info-dot' ) ) return;     // its text, not the row
+
                 const row = e.target.closest( '.menu-item' );
                 if( ! row || row.disabled ) return;
 
@@ -494,6 +517,8 @@ const NayiveMenus = ( function ()
 
             sub.addEventListener( 'click', function ( e )
             {
+                if( e.target.closest( '.info-dot' ) ) return;
+
                 const row = e.target.closest( '.menu-item' );
                 if( ! row || row.disabled ) return;
 
@@ -505,6 +530,7 @@ const NayiveMenus = ( function ()
             {
                 if( openIdx === -1 ) return;
                 if( bar.contains( e.target ) || panel.contains( e.target ) || sub.contains( e.target ) ) return;
+                if( e.target.closest( '.info-popup' ) ) return;           // reading a row's (i)
                 if( trigger && trigger.contains( e.target ) ) return;     // its own click toggles it
 
                 close();

@@ -207,20 +207,20 @@ try
     await device( { fine: true, coarse: false } );
     check( "No mode saved, PC with a mouse: the desktop (as before)", atDesk( await landsOn( LAUNCHER ) ) );
 
-    // The desktop's "⋮": the choice shows, and Never leaves at once.
+    // The desktop's "⋮" no longer holds the choice (one knob: My account), and
+    // the desktop follows a change made in My account inside one of its windows.
     await device( { fine: true, coarse: true, mode: "auto" } );
     await go( "/nayive/desktop/index.html" );
     await deskReady( 0 );
-    check( "⋮ menu: Open the desktop shows Auto", await ev( "document.getElementById( 'setMode' ).value" ) === "auto" );
-    check( "⋮ menu: its row is in the menu", await ev( "!! document.getElementById( 'setMode' ).closest( '#moreMenu .menu-item' )" ) === true );
-    await ev( "( function () { var s = document.getElementById( 'setMode' ); s.value = 'always'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
+    check( "⋮ menu: no Open the desktop row", await ev( "! document.getElementById( 'setMode' )" ) === true );
+    const myAccountSets = m => ev( "( function () { var c = JSON.parse( localStorage.getItem( 'balata-desktop' ) || '{}' ); c.mode = '" + m + "'; localStorage.setItem( 'balata-desktop', JSON.stringify( c ) ); window.dispatchEvent( new StorageEvent( 'storage', { key: 'balata-desktop' } ) ); return true; } )()" );
+    await myAccountSets( "always" );
     await sleep( 400 );
-    check( "⋮ menu: Always keeps the desktop", atDesk( await path_() ) && await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "always" );
-    await ev( "( function () { var s = document.getElementById( 'setMode' ); s.value = 'never'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
+    check( "Desktop: Always (from My account) keeps the desktop", atDesk( await path_() ) );
+    await myAccountSets( "never" );
     await sleep( 1500 );
-    check( "⋮ menu: Never goes to the simple view, and stays", await path_() === LAUNCHER, await path_() );
-    check( "⋮ menu: Never is stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "never" );
-    check( "⋮ menu: the other settings are kept", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).bar" ) === "bottom" );
+    check( "Desktop: Never (from My account) goes to the simple view, and stays", await path_() === LAUNCHER, await path_() );
+    check( "Desktop: Never is stored for this device", await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "never" );
 
     // My account (the simple view): the same choice; Always goes to the desktop.
     await waitFor( "window.NayiveUI && document.documentElement.style.visibility !== 'hidden'", 8000, "launcher ready" );
@@ -232,14 +232,19 @@ try
     await ev( "( function () { var s = document.getElementById( 'deskModeSel' ); s.value = 'always'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()" );
     await sleep( 1500 );
     check( "My account: Always goes to the desktop", atDesk( await path_() ), await path_() );
-    // In the desktop's own menu the row is hidden (its "⋮" has it).
+    // In the desktop's own menu the row shows (the only place for it); a change
+    // there is stored, and the menu's page does not turn into a desktop.
     await deskReady( 0 );
     await ev( "NayiveDesktop.menu(); true" );
     const md = "document.querySelector( '.menu iframe' ).contentDocument";
     await waitFor( `( function () { try { return ${md}.documentElement.classList.contains( 'in-desktop' ) && !! ${md}.defaultView.NayiveUI; } catch( e ) { return false; } } )()`, 10000, "launcher in the menu" );
     await ev( `${md}.getElementById( 'accountBtn' ).click(); true` );
     await waitFor( `${md}.getElementById( 'pwBackdrop' ).classList.contains( 'open' )`, 5000, "My account open in the menu" );
-    check( "My account in the desktop's menu: no Open the desktop row", await ev( `${md}.getElementById( 'deskModeWrap' ).hidden` ) === true );
+    check( "My account in the desktop's menu: Open the desktop shows", await ev( `${md}.getElementById( 'deskModeWrap' ).hidden` ) === false );
+    await ev( `( function () { var s = ${md}.getElementById( 'deskModeSel' ); s.value = 'auto'; s.dispatchEvent( new Event( 'change' ) ); return true; } )()` );
+    await sleep( 600 );
+    check( "My account in the desktop's menu: Auto is stored, the desktop stays", atDesk( await path_() ) && await ev( "JSON.parse( localStorage.getItem( 'balata-desktop' ) ).mode" ) === "auto" );
+    check( "My account in the desktop's menu: its page stays the launcher", await ev( `! /desktop\\//.test( ${md}.defaultView.location.pathname )` ) === true );
     await ev( `${md}.defaultView.NayiveUI.close( 'pwBackdrop' ); true` );
     await settle();
 

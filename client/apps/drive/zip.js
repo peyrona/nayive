@@ -117,11 +117,12 @@ function extractFromDialog()
     if( path ) extractZip( path );
 }
 
-// Right-click -> "Extract here": straight to the server, no list.
+// The menu's "Extract here": straight to the server, no list.
 function extractSelectedZip()
 {
-    if( selectedPaths.size !== 1 ) return;
-    extractZip( Array.from( selectedPaths )[0] );
+    const t = actionTargets();
+    if( t.length !== 1 ) return;
+    extractZip( t[0] );
 }
 
 // POST /api/zip -> { path, files, skipped }. The new folder is selected when
@@ -158,9 +159,8 @@ async function extractZip( path )
 function selectIfListed( path )
 {
     if( ! ( curListing.nodes || [] ).some( function( n ) { return n.path === path; } ) ) return;
-    selectedPaths = new Set( [ path ] );
-    render();
-    const row = document.querySelector( '#listing .row.selected' );
+    setSel( [ path ] );
+    const row = document.querySelector( '#listing .row.is-selected' );
     if( row ) row.scrollIntoView( { block: 'nearest' } );
 }
 

@@ -1,13 +1,14 @@
 /*
- * input.js - Bookmarks: every click, key, long-press and drag. The header and
- * its "⋮", the tree, the cards, the item menu, the selection bar, search, the
- * sheets' buttons, drag and drop and the pane resizer.
+ * input.js - Bookmarks: every click, key and drag. The header and its "⋮",
+ * the tree, the cards, search, the sheets' buttons, drag and drop and the
+ * pane resizer. Picking, the item menu, the selection's header buttons and
+ * the list keys are the shared item browser (shared/browser.js): this file
+ * only gives it the action list.
  */
 "use strict";
 
-let dragIds    = null;    // what a mouse drag is carrying
-let menuAt     = 0;       // when the item menu last opened (a long-press also fires contextmenu)
-let swallowTap = false;   // eat the click a long-press leaves behind
+let browse      = null;   // the shared item browser on #items
+let treeView    = null;   // the shared tree in #tree
 let searchTimer = null;
 
 function $( id ) { return document.getElementById( id ); }
@@ -18,15 +19,13 @@ function wireAll()
     wireTopMenu();
     wireTree();
     wireItems();
-    wireItemMenu();
-    wireSelectBar();
     wireSearch();
     wireSheets();
     wireDragDrop();
     wireResizer();
     wireKeys();
 
-    window.addEventListener( 'resize', function() { closeItemMenu(); renderCrumbs(); } );
+    window.addEventListener( 'resize', function() { renderCrumbs(); } );
 }
 
 //------------------------------------------------------------------------//
@@ -40,10 +39,8 @@ function wireHeader()
     $( 'listBtn' ).addEventListener( 'click', function() { setMode( 'list' ); } );
 
     // Icons the markup leaves empty: one glyph per meaning, from ui.js.
-    $( 'selectLeave' ).innerHTML   = NayiveUI.icon( 'back' );
-    $( 'upBtn' ).innerHTML         = NayiveUI.icon( 'back' );
-    $( 'selectMoveBtn' ).innerHTML = SVG.move;
-    $( 'selectDeleteBtn' ).innerHTML = NayiveUI.icon( 'trash' );
+    $( 'upBtn' ).innerHTML = NayiveUI.icon( 'back' );
+    $( 'treeBtn' ).addEventListener( 'click', function() { treeView.openSheet(); } );
 }
 
 function setMode( m ) { ui.mode = m; saveUi(); render(); }
@@ -55,7 +52,7 @@ function focusSearch()
     $( 'searchInput' ).select();
 }
 
-// The "⋮": Import, Export, Find duplicates, the sort order, Select - and on
+// The "⋮": Import, Export, Find duplicates, the sort order - and on
 // a phone the grid / list switch, which leaves the header there.
 const SORTS = [ [ 'saved', 'bookmarks.sortSaved' ], [ 'az', 'bookmarks.sortAz' ], [ 'za', 'bookmarks.sortZa' ],
                 [ 'new', 'bookmarks.sortNew' ], [ 'old', 'bookmarks.sortOld' ] ];
@@ -71,7 +68,6 @@ function wireTopMenu()
         item( 'export', SVG.exportI, T( 'bookmarks.export' ) ) +
         item( 'dupes',  SVG.dupes,   T( 'bookmarks.findDupes' ) ) +
         item( 'bmlet',  SVG.bookmark, T( 'bookmarks.bookmarklet' ) ) +
-        item( 'select', SVG.select,  T( 'bookmarks.select' ) ) +
         '<div class="menu-sep"></div>' +
         '<div class="menu-caption">' + SVG.sort + '<span>' + esc( T( 'bookmarks.sort' ) ) + '</span></div>' +
         SORTS.map( function( s ) { return item( 'sort:' + s[ 0 ], check, T( s[ 1 ] ) ); } ).join( '' ) +
@@ -86,7 +82,6 @@ function wireTopMenu()
         else if( act === 'export' ) NayiveUI.open( 'exportBackdrop' );
         else if( act === 'dupes' ) openDupSheet();
         else if( act === 'bmlet' ) NayiveUI.open( 'bmletBackdrop' );
-        else if( act === 'select' ) setSelecting( true );
         else if( act.indexOf( 'sort:' ) === 0 ) { ui.sort = act.slice( 5 ); saveUi(); render(); }
         else if( act.indexOf( 'mode:' ) === 0 ) setMode( act.slice( 5 ) );
     } } );
@@ -101,69 +96,26 @@ function wireTopMenu()
 }
 
 //------------------------------------------------------------------------//
-// TREE
+// TREE  -  the shared tree (NayiveUI.tree): the arrow opens and closes, a
+// click opens the folder, right-click / ⋮ / long-press give the folder the
+// same menu it has as a card, keys as in a file tree. Folders drag; the top
+// or bottom edge of a row puts a folder before / after it (a line shows
+// where), its middle puts it inside. On a phone it slides in from #treeBtn.
 
 function wireTree()
 {
-    const tree = $( 'tree' );
-    tree.addEventListener( 'click', function( e )
-    {
-        if( swallowTap ) return;
-        const row = e.target.closest( '.tree-row' );
-        if( ! row ) return;
-        const id = row.dataset.id;
-        if( e.target.closest( '[data-twisty]' ) && id !== ROOT )
-        {
-            toggleOpen( id );
-            renderTree();
-            return;
-        }
-        goFolder( id );
-        if( e.detail === 0 ) focusTreeRow( id );      // Enter / Space: the keys stay in the tree
+    treeView = NayiveUI.tree( {
+        host:    $( 'tree' ),
+        pane:    $( 'treePane' ),
+        roots:   treeRoots,
+        isOpen:  function( id ) { return ui.open.indexOf( id ) >= 0; },
+        setOpen: function( id, v ) { toggleOpen( id, v ); },
+        current: function() { return filter === 'all' && ! query ? curFolder : null; },
+        go:      function( id ) { goFolder( id ); },
+        menu:    function( id, x, y, anchor ) { NayiveUI.menuAt( x, y, browse.items( [ id ] ), { anchor: anchor } ); },
+        drag:    function( id ) { return [ id ]; },
+        drop:    { can: treeCan, drop: dropInto }
     } );
-
-    // Keys, as in a file tree: ↑ ↓ move, → opens (then goes in), ← closes
-    // (then goes up), Home / End. Enter opens the folder.
-    tree.addEventListener( 'keydown', function( e )
-    {
-        const row = e.target.closest( '.tree-row' );
-        if( ! row || e.altKey || e.ctrlKey || e.metaKey ) return;
-        const rows = Array.from( tree.querySelectorAll( '.tree-row' ) );
-        const i = rows.indexOf( row ), id = row.dataset.id;
-        const kids = childrenOf( id ).filter( isFolder );
-        const open = id === ROOT || ui.open.indexOf( id ) >= 0;
-        switch( e.key )
-        {
-            case 'ArrowDown': if( rows[ i + 1 ] ) rows[ i + 1 ].focus(); break;
-            case 'ArrowUp':   if( rows[ i - 1 ] ) rows[ i - 1 ].focus(); break;
-            case 'Home':      rows[ 0 ].focus(); break;
-            case 'End':       rows[ rows.length - 1 ].focus(); break;
-            case 'ArrowRight':
-                if( ! kids.length ) break;
-                if( open ) focusTreeRow( kids[ 0 ].id );
-                else { toggleOpen( id, true ); renderTree(); focusTreeRow( id ); }
-                break;
-            case 'ArrowLeft':
-                if( open && kids.length && id !== ROOT ) { toggleOpen( id, false ); renderTree(); focusTreeRow( id ); }
-                else if( node( id ) && node( id ).parentId ) focusTreeRow( node( id ).parentId );
-                break;
-            default: return;
-        }
-        e.preventDefault();
-    } );
-    tree.addEventListener( 'dblclick', function( e )
-    {
-        const row = e.target.closest( '.tree-row' );
-        if( row && row.dataset.id !== ROOT && ! e.target.closest( '[data-twisty]' ) ) { toggleOpen( row.dataset.id ); renderTree(); }
-    } );
-    tree.addEventListener( 'contextmenu', function( e )
-    {
-        const row = e.target.closest( '.tree-row' );
-        if( ! row ) return;
-        e.preventDefault();
-        openItemMenu( row.dataset.id, e.clientX, e.clientY, true );
-    } );
-    wireLongPress( tree, '.tree-row', true );
 
     $( 'expandAllBtn' ).addEventListener( 'click', function()
     {
@@ -173,62 +125,77 @@ function wireTree()
     $( 'collapseAllBtn' ).addEventListener( 'click', function() { ui.open = []; saveUi(); renderTree(); } );
 }
 
+// Keys back on a tree row (the tree is drawn anew on each change).
+function focusTreeRow( id ) { treeView.focus( id ); }
+
 //------------------------------------------------------------------------//
-// ITEMS  -  the card body opens the link (a folder: goes in). A tag chip
-// searches that tag. The row "⋮" opens the item menu. In selection mode a
-// tap picks.
+// ITEMS  -  the shared item browser: a click picks, a double-click (a tap)
+// opens the link or goes into the folder. A tag chip searches that tag.
+// Every action, once: the header group, the menu (right-click, the card's
+// ⋮, the header ⋮) and the keys read this one list.
+
+function bmOnly( ids ) { return ids.every( function( id ) { return node( id ) && ! isFolder( node( id ) ); } ); }
+function one( ids )    { return ids.length === 1; }
+
+function openItem( id )
+{
+    if( isFolder( node( id ) ) ) goFolder( id ); else openLink( id );
+}
+
+// Built once the dictionary is in (wireAll runs after it).
+function actionList() { return [
+    { id: 'open', label: T( 'ui.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
+      run: function( ids ) { openItem( ids[ 0 ] ); } },
+    { id: 'openAll', label: T( 'bookmarks.openAll' ), icon: 'external', group: 0,
+      when: function( ids ) { return ids.length > 1 && bmOnly( ids ); },
+      run: function( ids ) { ids.forEach( openLink ); } },
+    { id: 'edit', label: T( 'bookmarks.edit' ), icon: 'edit', key: 'F2', bar: 1, group: 1, when: one,
+      run: function( ids ) { if( isFolder( node( ids[ 0 ] ) ) ) openFolderSheet( ids[ 0 ] ); else openBookmarkSheet( ids[ 0 ] ); } },
+    { id: 'fav', icon: 'star', key: 'S', bar: 2, phone: 1, group: 1, when: bmOnly,
+      label: function( ids ) { return T( ids.length && ids.every( function( id ) { return node( id ) && node( id ).favorite; } ) ? 'bookmarks.unfavourite' : 'bookmarks.favAdd' ); },
+      run: setFavourite },
+    { id: 'link', label: T( 'bookmarks.copyLink' ), icon: 'link', bar: 3, group: 1,
+      when: function( ids ) { return one( ids ) && bmOnly( ids ); },
+      run: function( ids ) { copyLink( ids[ 0 ] ); } },
+    { id: 'move', label: T( 'bookmarks.moveTo' ), icon: 'move', bar: 4, phone: 1, group: 2,
+      run: openMoveSheet },
+    { id: 'subfolder', label: T( 'bookmarks.newSubfolder' ), icon: 'folderplus', group: 2,
+      when: function( ids ) { return one( ids ) && isFolder( node( ids[ 0 ] ) ); },
+      run: function( ids ) { openFolderSheet( null, ids[ 0 ] ); } },
+    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], bar: 9, phone: 1, group: 3, danger: true,
+      run: deleteNodes }
+]; }
+
+// Right-click on empty space: what you make here.
+function areaList() { return [
+    { id: 'add', label: T( 'bookmarks.newBookmark' ), icon: 'plus', run: function() { openBookmarkSheet( null ); } },
+    { id: 'newFolder', label: T( 'ui.newFolder' ), icon: 'folderplus', key: 'Alt+N', run: function() { openFolderSheet( null ); } }
+]; }
 
 function wireItems()
 {
     const items = $( 'items' );
 
+    browse = NayiveUI.browser( {
+        list:    items,
+        row:     '.bm-item',
+        bar:     $( 'selActions' ),
+        actions: actionList(),
+        area:    areaList(),
+        tree:    treeView,
+        open:    openItem,
+        openMiddle: function( id ) { if( ! isFolder( node( id ) ) ) openLink( id ); },
+        grid:    function() { return ui.mode !== 'list'; },
+        search:  focusSearch,
+        drag:    { text: function( ids ) { const b = node( ids[ 0 ] ); return b ? ( b.url || b.title ) : ''; } }
+    } );
+
+    // A tag chip searches that tag (its own button: the browser leaves it).
     items.addEventListener( 'click', function( e )
     {
-        if( swallowTap ) { e.preventDefault(); return; }
-        const card = e.target.closest( '.bm-item' );
-        if( ! card ) return;
-        const id = card.dataset.id;
-
-        if( e.target.closest( '.row-menu' ) )
-        {
-            const r = e.target.closest( '.row-menu' ).getBoundingClientRect();
-            openItemMenu( id, r.right, r.bottom, false );
-            return;
-        }
-        if( selecting ) { togglePick( id ); return; }
-
         const tag = e.target.closest( '.bm-tag' );
-        if( tag ) { setQuery( '#' + tag.dataset.tag, tag.dataset.tag ); return; }
-        if( e.target.closest( 'button' ) ) return;
-
-        if( isFolder( node( id ) ) ) goFolder( id ); else openLink( id );
+        if( tag ) setQuery( '#' + tag.dataset.tag, tag.dataset.tag );
     } );
-
-    // Middle click opens the link too, as a link would.
-    items.addEventListener( 'auxclick', function( e )
-    {
-        if( e.button !== 1 ) return;
-        const card = e.target.closest( '.bm-item' );
-        if( card && ! isFolder( node( card.dataset.id ) ) ) { e.preventDefault(); openLink( card.dataset.id ); }
-    } );
-
-    items.addEventListener( 'keydown', function( e )
-    {
-        if( e.key !== 'Enter' && e.key !== ' ' ) return;
-        const card = e.target.closest( '.bm-item' );
-        if( ! card || e.target !== card ) return;
-        e.preventDefault();
-        card.click();
-    } );
-
-    items.addEventListener( 'contextmenu', function( e )
-    {
-        const card = e.target.closest( '.bm-item' );
-        if( ! card ) return;
-        e.preventDefault();
-        openItemMenu( card.dataset.id, e.clientX, e.clientY, false );
-    } );
-    wireLongPress( items, '.bm-item', false );
 
     // A site's icon, once it is in, covers the initial (and is shown at once
     // on the next render).
@@ -280,143 +247,6 @@ function wireItems()
     } );
 }
 
-// The tree is drawn anew on each change: put the keyboard back on a row.
-function focusTreeRow( id )
-{
-    const row = document.querySelector( '#tree .tree-row[data-id="' + CSS.escape( id ) + '"]' );
-    if( row ) row.focus();
-}
-
-// Touch: a long-press opens the item menu (the pointer stays where it is).
-function wireLongPress( host, sel, fromTree )
-{
-    let timer = null, x = 0, y = 0;
-    host.addEventListener( 'touchstart', function( e )
-    {
-        if( e.touches.length !== 1 || e.target.closest( '.row-menu' ) ) return;
-        const el = e.target.closest( sel );
-        if( ! el ) return;
-        x = e.touches[ 0 ].clientX; y = e.touches[ 0 ].clientY;
-        timer = setTimeout( function()
-        {
-            timer = null;
-            swallowTap = true;
-            setTimeout( function() { swallowTap = false; }, 700 );
-            openItemMenu( el.dataset.id, x, y, fromTree );
-        }, 500 );
-    }, { passive: true } );
-    host.addEventListener( 'touchmove', function( e )
-    {
-        if( ! timer ) return;
-        const t = e.touches[ 0 ];
-        if( Math.abs( t.clientX - x ) > 10 || Math.abs( t.clientY - y ) > 10 ) { clearTimeout( timer ); timer = null; }
-    }, { passive: true } );
-    host.addEventListener( 'touchend', function() { if( timer ) { clearTimeout( timer ); timer = null; } } );
-    host.addEventListener( 'touchcancel', function() { if( timer ) { clearTimeout( timer ); timer = null; } } );
-}
-
-function togglePick( id )
-{
-    if( selected.has( id ) ) selected.delete( id ); else selected.add( id );
-    render();
-}
-
-//------------------------------------------------------------------------//
-// THE ITEM MENU  -  right-click, long-press or the row "⋮". Built for the
-// item it is about; the shared .top-menu look, placed at the pointer.
-
-let menuFor = null;
-
-function openItemMenu( id, x, y, fromTree )
-{
-    const n = node( id );
-    if( ! n ) return;
-    if( Date.now() - menuAt < 600 && menuFor === id ) return;   // the contextmenu a long-press also fires
-    menuFor = id;
-    menuAt  = Date.now();
-
-    const I = function( act, icon, label, danger )
-    {
-        return '<button type="button" class="menu-item' + ( danger ? ' danger' : '' ) + '" role="menuitem" data-act="' + act + '">' + icon + '<span>' + esc( label ) + '</span></button>';
-    };
-    let html;
-    if( id === ROOT )
-        html = I( 'subfolder', NayiveUI.icon( 'folderplus' ), T( 'bookmarks.newSubfolder' ) );
-    else if( isFolder( n ) )
-        html = I( 'subfolder', NayiveUI.icon( 'folderplus' ), T( 'bookmarks.newSubfolder' ) ) +
-               I( 'rename', NayiveUI.icon( 'edit' ), T( 'ui.rename' ) ) +
-               I( 'move', SVG.move, T( 'bookmarks.moveTo' ) ) +
-               ( fromTree ? '' : I( 'select', SVG.select, T( 'bookmarks.select' ) ) ) +
-               '<div class="menu-sep"></div>' +
-               I( 'delete', NayiveUI.icon( 'trash' ), T( 'ui.delete' ), true );
-    else
-        html = I( 'edit', NayiveUI.icon( 'edit' ), T( 'bookmarks.edit' ) ) +
-               I( 'fav', n.favorite ? SVG.starOff : SVG.star, T( n.favorite ? 'bookmarks.unfavourite' : 'bookmarks.favAdd' ) ) +
-               I( 'copy', SVG.link, T( 'bookmarks.copyLink' ) ) +
-               I( 'move', SVG.move, T( 'bookmarks.moveTo' ) ) +
-               I( 'select', SVG.select, T( 'bookmarks.select' ) ) +
-               '<div class="menu-sep"></div>' +
-               I( 'delete', NayiveUI.icon( 'trash' ), T( 'ui.delete' ), true );
-
-    const m = $( 'ctxMenu' );
-    m.innerHTML = html;
-    m.hidden = false;
-    const w = m.offsetWidth, h = m.offsetHeight;
-    m.style.right = 'auto';
-    m.style.left = Math.max( 6, Math.min( x, window.innerWidth  - w - 8 ) ) + 'px';
-    m.style.top  = Math.max( 6, Math.min( y, window.innerHeight - h - 8 ) ) + 'px';
-}
-
-function closeItemMenu() { $( 'ctxMenu' ).hidden = true; }
-
-function wireItemMenu()
-{
-    const m = $( 'ctxMenu' );
-    m.addEventListener( 'click', function( e )
-    {
-        const b = e.target.closest( '.menu-item' );
-        if( ! b ) return;
-        const id = menuFor;
-        closeItemMenu();
-        // In selection mode an action on a picked item acts on the whole pick.
-        const many = selecting && selected.has( id ) && selected.size > 1 ? Array.from( selected ) : [ id ];
-        switch( b.dataset.act )
-        {
-            case 'edit':      openBookmarkSheet( id ); break;
-            case 'fav':       toggleFavourite( id ); break;
-            case 'copy':      copyLink( id ); break;
-            case 'move':      openMoveSheet( many ); break;
-            case 'select':    selecting = true; selected.add( id ); render(); break;
-            case 'delete':    deleteNodes( many ); break;
-            case 'rename':    openFolderSheet( id ); break;
-            case 'subfolder': openFolderSheet( null, id ); break;
-        }
-    } );
-    document.addEventListener( 'click', function( e )
-    {
-        if( m.hidden || Date.now() - menuAt < 300 ) return;
-        if( ! m.contains( e.target ) ) closeItemMenu();
-    }, true );
-    document.addEventListener( 'scroll', closeItemMenu, true );
-}
-
-//------------------------------------------------------------------------//
-// SELECTION BAR
-
-function wireSelectBar()
-{
-    $( 'selectLeave' ).addEventListener( 'click', function() { setSelecting( false ); } );
-    $( 'selectAllBtn' ).addEventListener( 'click', function()
-    {
-        const all = visibleItems().items.map( function( n ) { return n.id; } );
-        const every = all.length && all.every( function( id ) { return selected.has( id ); } );
-        if( every ) selected.clear(); else all.forEach( function( id ) { selected.add( id ); } );
-        render();
-    } );
-    $( 'selectMoveBtn' ).addEventListener( 'click', function() { openMoveSheet( Array.from( selected ) ); } );
-    $( 'selectDeleteBtn' ).addEventListener( 'click', function() { deleteNodes( Array.from( selected ) ); } );
-}
-
 //------------------------------------------------------------------------//
 // SEARCH
 
@@ -449,17 +279,16 @@ function wireSearch()
 }
 
 //------------------------------------------------------------------------//
-// KEYS  -  Ctrl+/ (Cmd+/) goes to the search box; Esc clears the search or
-// leaves selection mode when nothing else is open.
+// KEYS  -  the list's own keys are the browser's (shared/browser.js). Here:
+// Ctrl+/ (Cmd+/) goes to the search box too; Esc clears the search when
+// nothing is picked and nothing else is open.
 
 function wireKeys()
 {
     document.addEventListener( 'keydown', function( e )
     {
         if( ( e.ctrlKey || e.metaKey ) && e.key === '/' ) { e.preventDefault(); focusSearch(); return; }
-        if( e.key !== 'Escape' || document.querySelector( '.sheet-backdrop.open' ) ) return;
-        if( ! $( 'ctxMenu' ).hidden ) { closeItemMenu(); return; }
-        if( selecting ) { setSelecting( false ); return; }
+        if( e.key !== 'Escape' || e.defaultPrevented || document.querySelector( '.sheet-backdrop.open' ) || NayiveUI.menuOpen() ) return;
         if( query ) setQuery( '' );
     } );
 }
@@ -490,11 +319,6 @@ function wireSheets()
     const bmlet = $( 'bmletLink' );
     bmlet.href = bookmarkletHref();
     bmlet.addEventListener( 'click', function( e ) { e.preventDefault(); } );
-
-    $( 'moveOkBtn' ).addEventListener( 'click', function()
-    {
-        if( doMove( moveIds, $( 'moveFolder' ).value || ROOT ) ) NayiveUI.close( 'moveBackdrop' );
-    } );
 
     $( 'importDeviceBtn' ).addEventListener( 'click', importFromDevice );
     $( 'importNayiveBtn' ).addEventListener( 'click', importFromNayive );
@@ -531,15 +355,12 @@ function enterSubmits( backId, fn )
 }
 
 //------------------------------------------------------------------------//
-// DRAG AND DROP (mouse)  -  cards and tree rows onto tree rows, folder cards
-// and crumb parts. A LINK dragged in from another tab or the address bar
-// opens the new-bookmark sheet with it (into the folder it was dropped on). In the tree, folders also REORDER: the top or bottom edge
-// of a row puts them before / after it (a line shows where); its middle puts
-// them inside, as everywhere else. A folder onto itself or below itself: an error toast and
-// nothing moves. Dragging a picked card carries the whole pick. Touch has no
-// HTML5 drag: "Move to…" in the menus does the same job there.
-
-const DROP_SEL = '.tree-row, .bm-item.is-folder, .crumb-seg';
+// DRAG AND DROP (mouse)  -  cards and tree rows carry their ids (the shared
+// browser / tree start the drag; a picked card carries the whole pick) onto
+// tree rows, folder cards and crumb parts. A folder onto itself or below
+// itself: an error toast and nothing moves. A LINK dragged in from another
+// tab or the address bar opens the new-bookmark sheet with it (into the
+// folder it was dropped on). Touch has no HTML5 drag: "Move to…" does it.
 
 // Which part of a tree row the pointer is over: 'before' / 'after' (the top
 // and bottom 30 %) or 'inside'. Only folders reorder; a card always goes
@@ -552,95 +373,59 @@ function treeZone( row, e, ids )
     return y < r.height * 0.3 ? 'before' : y > r.height * 0.7 ? 'after' : 'inside';
 }
 
-function clearDropMarks( keep )
+// The tree's and the list's verdict: a zone (lit), or refused (no mark, but
+// the drop still comes and says why), or not a target at all.
+function treeCan( ids, id, el, e )
 {
-    document.querySelectorAll( '.drop-target, .drop-before, .drop-after' ).forEach( function( el )
-    {
-        if( el !== keep ) el.classList.remove( 'drop-target', 'drop-before', 'drop-after' );
-    } );
+    if( ! isFolder( node( id ) ) ) return false;
+    const zone = treeZone( el, e, ids );
+    const good = zone === 'inside' ? canMove( ids, id ) : !! placeSpot( ids, id, zone );
+    return good ? zone : { zone: zone, ok: false };
 }
+
+function dropInto( ids, id, zone )
+{
+    if( zone === 'inside' && ids.indexOf( id ) >= 0 ) return;        // a folder nudged onto itself
+    if( zone === 'inside' ) doMove( ids, id );
+    else if( ids.indexOf( id ) < 0 ) doPlace( ids, id, zone );       // onto its own edge: nothing to do
+}
+
+const DROP_SEL = '.tree-row, .bm-item.is-folder, .crumb-seg';
 
 function wireDragDrop()
 {
-    document.addEventListener( 'dragstart', function( e )
-    {
-        const el = e.target.closest && e.target.closest( '.bm-item, .tree-row' );
-        if( ! el || el.dataset.id === ROOT ) return;
-        const id = el.dataset.id;
-        dragIds = selecting && selected.has( id ) ? Array.from( selected ) : [ id ];
-        closeItemMenu();
-        e.dataTransfer.effectAllowed = 'move';
-        const b = node( id );
-        e.dataTransfer.setData( 'text/plain', b && b.url ? b.url : ( b ? b.title : '' ) );
-        el.classList.add( 'dragging' );
+    // Folder cards and crumbs take dropped items as the tree does.
+    NayiveUI.dropZone( $( 'listPane' ), {
+        sel: '.bm-item.is-folder, .crumb-seg', target: function( el ) { return el.dataset.id; },
+        can: treeCan, drop: dropInto
     } );
-    // A link dragged back out of the window leaves no mark behind.
-    document.addEventListener( 'dragleave', function( e ) { if( ! dragIds && ! e.relatedTarget ) clearDropMarks( null ); } );
-    document.addEventListener( 'dragend', function()
+
+    // A link from outside the page: mark the folder under it, then the sheet.
+    const marks = function( keep )
     {
-        dragIds = null;
-        document.querySelectorAll( '.dragging' ).forEach( function( el ) { el.classList.remove( 'dragging' ); } );
-        clearDropMarks( null );
-    } );
+        document.querySelectorAll( '.drop-target' ).forEach( function( el ) { if( el !== keep ) el.classList.remove( 'drop-target' ); } );
+    };
+    document.addEventListener( 'dragleave', function( e ) { if( ! NayiveUI.dragIds() && ! e.relatedTarget ) marks( null ); } );
     document.addEventListener( 'dragover', function( e )
     {
-        if( ! dragIds )
-        {
-            if( ! linkDrag( e ) ) return;
-            const f = e.target.closest && e.target.closest( DROP_SEL );
-            clearDropMarks( f );
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            if( f && isFolder( node( f.dataset.id ) ) ) f.classList.add( 'drop-target' );
-            return;
-        }
-        const t = e.target.closest && e.target.closest( DROP_SEL );
-        clearDropMarks( t );
-        if( ! t || ! isFolder( node( t.dataset.id ) ) ) return;
+        if( NayiveUI.dragIds() || ! linkDrag( e ) ) return;
+        const f = e.target.closest && e.target.closest( DROP_SEL );
+        marks( f );
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const zone = treeZone( t, e, dragIds );
-        const good = zone === 'inside' ? canMove( dragIds, t.dataset.id ) : !! placeSpot( dragIds, t.dataset.id, zone );
-        t.classList.toggle( 'drop-target', good && zone === 'inside' );
-        t.classList.toggle( 'drop-before', good && zone === 'before' );
-        t.classList.toggle( 'drop-after',  good && zone === 'after' );
+        e.dataTransfer.dropEffect = 'copy';
+        if( f && isFolder( node( f.dataset.id ) ) ) f.classList.add( 'drop-target' );
     } );
     document.addEventListener( 'drop', function( e )
     {
-        if( ! dragIds )
-        {
-            if( ! linkDrag( e ) ) return;
-            e.preventDefault();
-            clearDropMarks( null );
-            const f = e.target.closest && e.target.closest( DROP_SEL );
-            const link = droppedLink( e.dataTransfer );
-            if( link && ! document.querySelector( '.sheet-backdrop.open' ) )
-                openBookmarkSheet( null, { url: link.url, title: link.title,
-                                           folder: f && isFolder( node( f.dataset.id ) ) ? f.dataset.id : null } );
-            return;
-        }
-        const t = e.target.closest && e.target.closest( DROP_SEL );
-        if( ! t || ! isFolder( node( t.dataset.id ) ) ) return;
+        if( NayiveUI.dragIds() || ! linkDrag( e ) ) return;
         e.preventDefault();
-        const ids = dragIds;
-        const zone = treeZone( t, e, ids );
-        dragIds = null;
-        clearDropMarks( null );
-        if( zone === 'inside' && ids.indexOf( t.dataset.id ) >= 0 ) return;        // a folder nudged onto itself
-        if( zone === 'inside' ) doMove( ids, t.dataset.id );
-        else if( ids.indexOf( t.dataset.id ) < 0 ) doPlace( ids, t.dataset.id, zone );   // onto its own edge: nothing to do
+        marks( null );
+        const f = e.target.closest && e.target.closest( DROP_SEL );
+        const link = droppedLink( e.dataTransfer );
+        if( link && ! document.querySelector( '.sheet-backdrop.open' ) )
+            openBookmarkSheet( null, { url: link.url, title: link.title,
+                                       folder: f && isFolder( node( f.dataset.id ) ) ? f.dataset.id : null } );
     } );
-
-    // Mark what can be dragged, after each render. Only with a mouse: a
-    // draggable card would fight a finger's scroll on some tablets.
-    const mouse = window.matchMedia( '(hover: hover) and (pointer: fine)' );
-    const mark = function()
-    {
-        const on = mouse.matches;
-        document.querySelectorAll( '.bm-item, .tree-row' ).forEach( function( el ) { el.draggable = on && el.dataset.id !== ROOT; } );
-    };
-    new MutationObserver( mark ).observe( $( 'items' ), { childList: true } );
-    new MutationObserver( mark ).observe( $( 'tree' ), { childList: true } );
 }
 
 // A drag from outside this page that carries a link.

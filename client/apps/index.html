@@ -491,7 +491,7 @@
            at a share of the row instead, so the label always gets one line. */
         #tzSel { max-width: min( 190px, 55% ); }
         /* My account: narrower than the shared 460px sheet (his call, 2026-10-02). */
-        #pwBackdrop .sheet { max-width: 380px; }
+        #pwBackdrop .sheet, #pwChangeBackdrop .sheet { max-width: 380px; }
     </style>
 </head>
 
@@ -646,20 +646,28 @@
     <!-- "Mi cuenta" dialog - opened by the account button in the settings row. -->
     <div class="sheet-backdrop" id="pwBackdrop">
         <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:ui.account">
-            <h2 data-i18n="ui.account"></h2>
-
-            <div class="pw-wrap">
-                <input class="scm-input" id="pwCurrent" type="password"
-                       autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword">
-                <button type="button" class="pw-eye" data-eye="pwCurrent" data-i18n-attr="aria-label:ui.showPassword"></button>
+            <!-- The title line: the title, colour schemes, then the × (shared/ui.js
+                 moves the lone × of the bottom row here, after the palette). -->
+            <div class="sheet-header">
+                <h2 data-i18n="ui.account"></h2>
+                <button class="sheet-tool" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                        <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                        <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
+                        <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
+                        <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
+                    </svg>
+                </button>
             </div>
-            <div class="pw-wrap">
-                <input class="scm-input" id="pwNew" type="password"
-                       autocomplete="new-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.newPassword">
-                <button type="button" class="pw-eye" data-eye="pwNew" data-i18n-attr="aria-label:ui.showPassword"></button>
-            </div>
 
-            <p class="scm-msg" id="pwMsg" hidden></p>
+            <!-- Close-only, the GNOME way (docs/audit/dialogs.md): every row saves
+                 itself on change, so the dialog has just its ×. The password,
+                 the one thing that needs a ✓, has its own small dialog below. -->
+            <div class="scm-assign">
+                <span data-i18n="lock.password"></span>
+                <button id="pwChangeBtn" type="button" class="text-btn ghost small" data-i18n="acct.changePwBtn"></button>
+            </div>
 
             <label class="scm-assign" for="langSel">
                 <span data-i18n="acct.languagePrompt"></span>
@@ -697,10 +705,10 @@
             <p class="scm-msg" id="autoThemeMsg" hidden></p>
 
             <!-- Open the desktop: Auto / Always / Never - DEVICE state too (see the
-                 <head>). Only on a big screen, and not in the desktop's own menu:
-                 its "⋮" holds the same choice, and the desktop keeps it in memory. -->
+                 <head>). The ONLY place for it (one action, one knob): a big screen,
+                 or inside the desktop (it follows the change, see its OPEN THE DESKTOP). -->
             <label class="scm-assign" for="deskModeSel" id="deskModeWrap" hidden>
-                <span data-i18n="desktop.openMode"></span>
+                <span><span data-i18n="desktop.openMode"></span> <button class="info-dot" type="button" data-i18n-attr="data-info:desktop.openModeInfo"></button></span>
                 <select id="deskModeSel">
                     <option value="auto"   data-i18n="desktop.openAuto"></option>
                     <option value="always" data-i18n="desktop.openAlways"></option>
@@ -724,19 +732,31 @@
             </div>
 
             <div class="sheet-actions">
-                <!-- Colour schemes (2026-09-19; was in the settings row). A round
-                     .btn disc like the rest of the row, pinned to the left. -->
-                <div class="sheet-actions-left">
-                    <button class="btn btn-secondary" id="schemesBtn" type="button" data-i18n-attr="title:ui.colorSchemes, aria-label:ui.colorSchemes">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                            <circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                            <circle cx="8.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"></circle>
-                            <circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"></circle>
-                            <path d="M12 2.5C6.75 2.5 2.5 6.75 2.5 12S6.75 21.5 12 21.5c1 0 1.7-.8 1.7-1.75 0-.45-.18-.85-.45-1.15-.28-.3-.45-.68-.45-1.1a1.7 1.7 0 0 1 1.7-1.7h2C19.5 14.6 21.5 12.6 21.5 10 21.5 5.9 17.3 2.5 12 2.5Z"></path>
-                        </svg>
-                    </button>
-                </div>
+                <button id="acctClose" type="button" data-act="close" data-i18n-attr="title:ui.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change password - opened from "My account", or on its own for a
+         brand-new user with a blank password (no × then, no current field). -->
+    <div class="sheet-backdrop" id="pwChangeBackdrop">
+        <div class="sheet" role="dialog" aria-modal="true" data-i18n-attr="aria-label:acct.changePw">
+            <h2 id="pwChangeTitle" data-i18n="acct.changePw"></h2>
+
+            <div class="pw-wrap">
+                <input class="scm-input" id="pwCurrent" type="password"
+                       autocomplete="current-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.currentPassword">
+                <button type="button" class="pw-eye" data-eye="pwCurrent" data-i18n-attr="aria-label:ui.showPassword"></button>
+            </div>
+            <div class="pw-wrap">
+                <input class="scm-input" id="pwNew" type="password"
+                       autocomplete="new-password" spellcheck="false" autocapitalize="none" data-i18n-attr="placeholder:acct.newPassword">
+                <button type="button" class="pw-eye" data-eye="pwNew" data-i18n-attr="aria-label:ui.showPassword"></button>
+            </div>
+
+            <p class="scm-msg" id="pwMsg" hidden></p>
+
+            <div class="sheet-actions">
                 <button id="pwCancel" type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button id="pwSave"   type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
             </div>
@@ -1332,7 +1352,8 @@
         ( function ()
         {
             var openBtn = document.getElementById( 'accountBtn' );
-            var back    = document.getElementById( 'pwBackdrop' );
+            var back    = document.getElementById( 'pwBackdrop' );        // My account
+            var pwBack  = document.getElementById( 'pwChangeBackdrop' );  // Change password
             var curEl   = document.getElementById( 'pwCurrent' );
             var newEl   = document.getElementById( 'pwNew' );
             var msgEl   = document.getElementById( 'pwMsg' );
@@ -1351,7 +1372,7 @@
             if( ! openBtn || ! back ) return;
 
             // "mandatory" = a brand-new user who signed in with a blank password.
-            // They must pick one here before the dialog will close.
+            // They must pick one in Change password before it will close.
             var mandatory = false;
 
             // Set just before the language change reloads the page; the boot
@@ -1372,52 +1393,49 @@
                 // dialog opens the boot probe has already copied the account's
                 // language down here, so this shows the account's answer.
                 langSel.value = NayiveI18n.saved() || '';
-                langSel.addEventListener( 'change', function ()
-                {
-                    var code = langSel.value;
-                    langSel.disabled = true;
-                    say( langMsg, '' );
+            }
 
-                    // The SERVER first. Switch this device on a save that
-                    // failed and the next boot reads the old value back from
-                    // /api/whoami and silently undoes the choice - the user
-                    // would see their language revert with no explanation.
-                    fetch( '/api/lang?value=' + encodeURIComponent( code ),
-                           { method: 'POST', credentials: 'same-origin' } )
-                        .then( function ( r ) { if( ! r.ok ) throw new Error( 'lang' ); } )
-                        .then( function ()
-                        {
-                            langSel.disabled = false;
+            // The SERVER first (NayiveUI.autoSave: the box is off while it
+            // saves, and back on the old value with langMsg on a failure).
+            // Switch this device on a save that failed and the next boot reads
+            // the old value back from /api/whoami and silently undoes the
+            // choice - the user would see their language revert with no
+            // explanation.
+            function saveLang( code )
+            {
+                return fetch( '/api/lang?value=' + encodeURIComponent( code ),
+                              { method: 'POST', credentials: 'same-origin' } )
+                    .then( function ( r ) { if( ! r.ok ) throw new Error( 'lang' ); } );
+            }
 
-                            // setLang() reloads, so this dialog would vanish and
-                            // the user would have to dig it out again to change
-                            // anything else. Leave a note for the boot script to
-                            // reopen it (per TAB, so another tab is unaffected),
-                            // and take the note back if nothing is reloading
-                            // after all - it would pop the dialog open on some
-                            // unrelated reload later.
-                            try { sessionStorage.setItem( REOPEN_KEY, '1' ); } catch ( e ) {}
-                            if( ! NayiveI18n.setLang( code ) )
-                                try { sessionStorage.removeItem( REOPEN_KEY ); } catch ( e ) {}
-                        } )
-                        .catch( function ()
-                        {
-                            langSel.disabled = false;
-                            langSel.value = NayiveI18n.saved() || '';
-                            say( langMsg, NayiveUI.t( 'acct.langFailed' ), false );
-                        } );
-                } );
+            function langSaved( code )
+            {
+                // setLang() reloads, so this dialog would vanish and the user
+                // would have to dig it out again to change anything else.
+                // Leave a note for the boot script to reopen it (per TAB, so
+                // another tab is unaffected), and take the note back if nothing
+                // is reloading after all - it would pop the dialog open on some
+                // unrelated reload later.
+                try { sessionStorage.setItem( REOPEN_KEY, '1' ); } catch ( e ) {}
+                if( ! NayiveI18n.setLang( code ) )
+                    try { sessionStorage.removeItem( REOPEN_KEY ); } catch ( e ) {}
             }
 
             // The eyes on the two password fields (shared/ui.js, deferred: at
             // DOMContentLoaded it is there).
             document.addEventListener( 'DOMContentLoaded', function ()
             {
-                back.querySelectorAll( '.pw-eye' ).forEach( function ( btn )
+                pwBack.querySelectorAll( '.pw-eye' ).forEach( function ( btn )
                 {
                     var input = document.getElementById( btn.dataset.eye );
                     if( input ) NayiveUI.pwEye( btn, input );
                 } );
+
+                // Language and time zone save themselves (shared/ui.js is
+                // deferred: here it is there).
+                if( langSel && window.NayiveI18n )
+                    NayiveUI.autoSave( langSel, saveLang, { msg: langMsg, fail: 'acct.langFailed', done: langSaved } );
+                tzCtl = NayiveUI.autoSave( tzSel, saveTz, { msg: tzMsg, fail: 'acct.tzFailed', done: tzDone } );
             } );
 
             // One row's message line under its setting: hidden when empty,
@@ -1436,6 +1454,7 @@
             // zone follows the person to every device - and is picked from a
             // list, never typed, so an unknown zone can't be saved.
             var tzSaved = null;            // last value confirmed by the server
+            var tzCtl   = null;            // its NayiveUI.autoSave
 
             // Every zone the browser knows (NayiveUI.timeZones; ancient browsers
             // get a short list) plus, below, whatever is already saved, which is
@@ -1470,23 +1489,26 @@
                 }
                 catch ( e ) { /* keep whatever we had */ }
                 fillZones( tzSaved || NayiveUI.viewerTz() );
+                if( tzCtl ) tzCtl.saved( tzSel.value );
             }
 
-            tzSel.addEventListener( 'change', async function ()
+            // NayiveUI.autoSave runs it on change; a failure puts the box back
+            // and says acct.tzFailed in tzMsg.
+            async function saveTz( z )
             {
-                var z = tzSel.value;
-                tzSel.disabled = true;
-                try
-                {
-                    var r = await fetch( '/api/tz?value=' + encodeURIComponent( z ),
-                                         { method: 'POST', credentials: 'same-origin' } );
-                    var d = await r.json().catch( function (){ return {}; } );
-                    if( r.ok ) { tzSaved = d.tz || ''; tzSel.value = tzSaved; say( tzMsg, '' ); }
-                    else { fillZones( tzSaved ); say( tzMsg, NayiveUI.t( 'acct.tzFailed' ) ); }
-                }
-                catch ( e ) { fillZones( tzSaved ); say( tzMsg, NayiveUI.t( 'login.noServer' ) ); }
-                tzSel.disabled = false;
-            } );
+                var r = await fetch( '/api/tz?value=' + encodeURIComponent( z ),
+                                     { method: 'POST', credentials: 'same-origin' } );
+                var d = await r.json().catch( function (){ return {}; } );
+                if( ! r.ok ) throw new Error( 'tz' );
+                tzSaved = d.tz || '';
+            }
+
+            // The server's spelling of the zone wins.
+            function tzDone()
+            {
+                tzSel.value = tzSaved;
+                tzCtl.saved( tzSaved );
+            }
 
             // --- automatic light / dark ------------------------------------ //
             // shared/theme.js does the sun arithmetic and owns the storage; all
@@ -1875,7 +1897,7 @@
             {
                 var big = window.matchMedia( '(min-width: 1024px) and (min-height: 600px)' ).matches ||
                           window.matchMedia( '(min-width: 600px) and (min-height: 1024px)' ).matches;
-                document.getElementById( 'deskModeWrap' ).hidden = window.top !== window || ! big;
+                document.getElementById( 'deskModeWrap' ).hidden = window.top === window && ! big;
                 deskSel.value = nayiveDeskMode();
             }
             deskSel.addEventListener( 'change', function ()
@@ -1884,77 +1906,78 @@
                 try { cur = JSON.parse( localStorage.getItem( 'balata-desktop' ) || 'null' ) || {}; } catch( e ) {}
                 cur.mode = deskSel.value;
                 try { localStorage.setItem( 'balata-desktop', JSON.stringify( cur ) ); } catch( e ) {}
-                if( nayiveWantDesk( cur.mode ) ) location.replace( 'desktop/' );
+                if( window.top === window && nayiveWantDesk( cur.mode ) ) location.replace( 'desktop/' );
             } );
 
+            // My account. Close-only: every row saves itself, its × just closes.
+            // A brand-new user with no password gets Change password alone.
             function open( opts )
             {
-                mandatory = !!( opts && opts.mandatory === true );
-                curEl.value = ''; newEl.value = '';
-                say( msgEl, mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
-
-                // No current password to confirm, and no way out until it's set.
-                curWrap.hidden = mandatory;
-                cancel.hidden  = mandatory;
+                if( opts && opts.mandatory === true ) { openPw( true ); return; }
 
                 loadTz();
                 loadAuto();
                 loadDeskMode();
-                // Until it has a password the server refuses this account every
-                // other API (trip days, notifications, phones): those rows wait.
-                accountRows( ! mandatory );
+                loadPush();
+                if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
 
                 NayiveUI.open( 'pwBackdrop' );
 
-                // Normally the password field, the top of the dialog. Reopened
-                // after a language change it is the language box instead: that
-                // is where the user was, and landing on a password field would
-                // pop the keyboard up on a phone for no reason. Right here, in
-                // the same turn as open(): shared/ui.js then leaves this focus
-                // alone instead of putting the caret in the first field.
-                var asked   = ( opts && opts.focus ) || null;
-                var focusEl = mandatory ? newEl : asked || curEl;
-                focusEl.focus();
+                // Reopened after a language change: the language box, where the
+                // user was. Right here, in the same turn as open(): shared/ui.js
+                // then leaves this focus alone instead of putting the caret in
+                // the first field.
+                var asked = ( opts && opts.focus ) || null;
+                if( asked ) focusOnce( asked, back );
+                // Only for a field asked for by name - the dialog scrolls.
+                if( asked && asked.scrollIntoView ) asked.scrollIntoView( { block: 'center' } );
+            }
+
+            // Change password. `must`: a new user's first one - no current
+            // password to confirm, and no way out until it is set.
+            function openPw( must )
+            {
+                mandatory = !! must;
+                curEl.value = ''; newEl.value = '';
+                say( msgEl, mandatory ? NayiveUI.t( 'acct.mustSet' ) : '', mandatory );
+                // The key too: shared/i18n.js may paint the page after this.
+                var title = document.getElementById( 'pwChangeTitle' );
+                title.setAttribute( 'data-i18n', mandatory ? 'acct.createPw' : 'acct.changePw' );
+                title.textContent = NayiveUI.t( title.getAttribute( 'data-i18n' ) );
+                curWrap.hidden = mandatory;
+                cancel.hidden  = mandatory;
+
+                NayiveUI.open( 'pwChangeBackdrop' );
+                focusOnce( mandatory ? newEl : curEl, pwBack );
+            }
+
+            function focusOnce( el, sheetBack )
+            {
+                el.focus();
                 // Opened at boot the page may still be hidden until its words
                 // are in (shared/i18n.js), and a hidden field takes no focus:
                 // give it once the page shows.
-                if( document.activeElement !== focusEl && window.NayiveI18n && NayiveI18n.ready )
+                if( document.activeElement !== el && window.NayiveI18n && NayiveI18n.ready )
                     NayiveI18n.ready.then( function ()
                     {
-                        if( back.classList.contains( 'open' ) && ! back.contains( document.activeElement ) )
-                            focusEl.focus();
+                        if( sheetBack.classList.contains( 'open' ) && ! sheetBack.contains( document.activeElement ) )
+                            el.focus();
                     } );
-                // Only for a field asked for by name - the dialog scrolls,
-                // and the two default targets are at the top anyway.
-                if( ! mandatory && asked && asked.scrollIntoView )
-                    asked.scrollIntoView( { block: 'center' } );
             }
+
             function close()
             {
                 if( mandatory ) return;          // can't leave without a password
-                NayiveUI.close( 'pwBackdrop' );
+                NayiveUI.close( 'pwChangeBackdrop' );
             }
 
-            // The rows that need a password first: shown and loaded, or hidden.
-            function accountRows( on )
-            {
-                if( ! on )
-                {
-                    if( pushWrap ) pushWrap.hidden = true;
-                    document.getElementById( 'devWrap' ).hidden = true;
-                    return;
-                }
-                loadPush();
-                if( window.NayiveDevices ) NayiveDevices.loadAccount();   // the phones with the app
-            }
-
-            // Escape closes the top dialog (shared/ui.js) - never this one while
-            // it is mandatory. Capture phase: ahead of ui.js's own listener.
+            // Escape closes the top dialog (shared/ui.js) - never Change password
+            // while it is mandatory. Capture phase: ahead of ui.js's own listener.
             document.addEventListener( 'keydown', function ( e )
             {
                 if( e.key !== 'Escape' || ! mandatory ) return;
                 var open = document.querySelectorAll( '.sheet-backdrop.open' );
-                if( open.length && open[ open.length - 1 ] === back ) e.preventDefault();
+                if( open.length && open[ open.length - 1 ] === pwBack ) e.preventDefault();
             }, true );
 
             // Let the whoami check (further down) force this open for a new user,
@@ -2090,57 +2113,48 @@
             };
 
             openBtn.addEventListener( 'click', function (){ open(); } );
+            document.getElementById( 'pwChangeBtn' ).addEventListener( 'click', function (){ openPw( false ); } );
             cancel.addEventListener( 'click', close );
 
             saveBtn.addEventListener( 'click', async function ()
             {
-                // The trash / trip periods and the notification settings all
-                // save themselves on change. Guardar only commits the password
-                // (when both fields are filled in).
+                // The only ✓ left in My account: everything else saves itself.
                 saveBtn.disabled = true;
 
-                var wantPw = mandatory || curEl.value || newEl.value;
-
-                if( wantPw )
+                if( ! mandatory && ! curEl.value )
+                    { say( msgEl, NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                if( ! newEl.value )
+                    { say( msgEl, mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
+                if( newEl.value.length < 4 )
+                    { say( msgEl, NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
+                try
                 {
-                    if( ! mandatory && ! curEl.value )
-                        { say( msgEl, NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
-                    if( ! newEl.value )
-                        { say( msgEl, mandatory ? NayiveUI.t( 'acct.typePassword' ) : NayiveUI.t( 'acct.fillBoth' ) ); saveBtn.disabled = false; return; }
-                    if( newEl.value.length < 4 )
-                        { say( msgEl, NayiveUI.t( 'acct.tooShort' ) ); saveBtn.disabled = false; return; }
-                    try
+                    var res = await fetch( '/api/password',
                     {
-                        var res = await fetch( '/api/password',
-                        {
-                            method:      'POST',
-                            headers:     { 'Content-Type': 'application/json' },
-                            credentials: 'same-origin',
-                            body: JSON.stringify( { current: curEl.value, new: newEl.value } )
-                        } );
-                        var data = await res.json().catch( function (){ return {}; } );
-                        if( res.ok )
-                        {
-                            if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
-                            // Mandatory lock lifted: restore the normal dialog,
-                            // and a big screen may start on the desktop again.
-                            if( mandatory )
-                                try { sessionStorage.removeItem( 'nayive-must-set' ); } catch ( e ) {}
-                            mandatory = false;
-                            curWrap.hidden = false;
-                            cancel.hidden  = false;
-                        }
-                        else
-                        {
-                            // The server's own words are Spanish: say it in the user's language.
-                            say( msgEl, NayiveUI.t( res.status === 401 ? 'acct.curWrong'
-                                           : res.status === 400 ? 'acct.tooShort' : 'acct.changeFailed' ) );
-                            saveBtn.disabled = false;
-                            return;
-                        }
+                        method:      'POST',
+                        headers:     { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify( { current: curEl.value, new: newEl.value } )
+                    } );
+                    await res.json().catch( function (){ return {}; } );
+                    if( ! res.ok )
+                    {
+                        // The server's own words are Spanish: say it in the user's language.
+                        say( msgEl, NayiveUI.t( res.status === 401 ? 'acct.curWrong'
+                                       : res.status === 400 ? 'acct.tooShort' : 'acct.changeFailed' ) );
+                        saveBtn.disabled = false;
+                        return;
                     }
-                    catch ( e ) { say( msgEl, NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
+                    if( window.NayiveUI ) NayiveUI.toast( mandatory ? NayiveUI.t( 'acct.created' ) : NayiveUI.t( 'acct.updated' ) );
+                    // Mandatory lock lifted: a big screen may start on the
+                    // desktop again.
+                    if( mandatory )
+                        try { sessionStorage.removeItem( 'nayive-must-set' ); } catch ( e ) {}
+                    mandatory = false;
+                    curWrap.hidden = false;
+                    cancel.hidden  = false;
                 }
+                catch ( e ) { say( msgEl, NayiveUI.t( 'login.noServer' ) ); saveBtn.disabled = false; return; }
 
                 saveBtn.disabled = false;
                 close();

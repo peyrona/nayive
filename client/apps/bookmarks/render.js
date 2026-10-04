@@ -1,14 +1,14 @@
 /*
  * render.js - Bookmarks: what is on screen. The tree pane, the filter pills,
- * the crumbs, the cards / rows, the selection bar and the empty screens.
+ * the crumbs, the cards / rows and the empty screens. Picking and the
+ * selection's header buttons are the shared item browser (input.js wires
+ * it, shared/browser.js does it).
  */
 "use strict";
 
 let curFolder = ROOT;          // the folder being browsed
 let filter    = 'all';         // 'all' (browse) | 'fav' | 'recent'
 let query     = '';            // the search box
-let selecting = false;         // selection mode
-let selected  = new Set();     // ids picked in selection mode
 let chipTag   = null;          // the tag a chip searched: matched whole while the box still says "#tag"
 
 const ICON_API = window.location.origin + '/api/bookmarks/icon?host=';
@@ -17,13 +17,7 @@ const iconOk   = new Set();    // hosts whose icon loaded on this page: shown at
 
 const SVG = {
     folder:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>',
-    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>',
     star:    '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="12 2.8 14.9 8.7 21.4 9.6 16.7 14.2 17.8 20.6 12 17.6 6.2 20.6 7.3 14.2 2.6 9.6 9.1 8.7 12 2.8"></polygon></svg>',
-    starOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="12 2.8 14.9 8.7 21.4 9.6 16.7 14.2 17.8 20.6 12 17.6 6.2 20.6 7.3 14.2 2.6 9.6 9.1 8.7 12 2.8"></polygon></svg>',
-    dots:    '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>',
-    move:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><polyline points="12 10 15 13 12 16"></polyline><line x1="8" y1="13" x2="15" y2="13"></line></svg>',
-    link:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
-    select:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><polyline points="8 12 11 15 16 9"></polyline></svg>',
     bookmark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>',
     importI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
     exportI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>',
@@ -39,7 +33,6 @@ function isPhone() { return window.matchMedia( '(max-width: 640px)' ).matches; }
 function pruneState()
 {
     if( ! isFolder( node( curFolder ) ) ) curFolder = ROOT;
-    for( const id of Array.from( selected ) ) if( ! node( id ) ) selected.delete( id );
 }
 
 //------------------------------------------------------------------------//
@@ -50,7 +43,6 @@ function render()
     renderFilters();
     renderCrumbs();
     renderItems();
-    renderSelectBar();
 
     document.getElementById( 'gridBtn' ).classList.toggle( 'is-active', ui.mode === 'grid' );
     document.getElementById( 'listBtn' ).classList.toggle( 'is-active', ui.mode === 'list' );
@@ -59,31 +51,15 @@ function render()
 //------------------------------------------------------------------------//
 // TREE
 
-function renderTree()
+// The shared tree (input.js makes it: NayiveUI.tree). No row for the root:
+// its folders start the tree. The "All" pill and the crumbs lead back to it.
+function treeRoots()
 {
-    const host = document.getElementById( 'tree' );
-    const open = new Set( ui.open );
-    const lit  = filter === 'all' && ! query ? curFolder : null;
-    let html = '';
-
-    // No row for the root: its folders start the tree. The "All" pill and
-    // the crumbs lead back to it.
-    function row( f, depth )
-    {
-        const kids = childrenOf( f.id ).filter( isFolder );
-        const isOpen = open.has( f.id );
-        html += '<div class="tree-node">' +
-                '<button type="button" class="folder-row tree-row' + ( f.id === lit ? ' is-active' : '' ) + '" data-id="' + esc( f.id ) + '" style="padding-left:' + ( 4 + depth * 16 ) + 'px">' +
-                '<span class="twisty' + ( kids.length ? ( isOpen ? ' open' : '' ) : ' leaf' ) + '" data-twisty="1">' + SVG.chevron + '</span>' +
-                SVG.folder +
-                '<span class="tree-name">' + esc( folderName( f ) ) + '</span></button>';
-        if( kids.length && isOpen ) for( const k of kids ) row( k, depth + 1 );
-        html += '</div>';
-    }
-    for( const f of childrenOf( ROOT ).filter( isFolder ) ) row( f, 0 );
-
-    host.innerHTML = html;
+    function mk( f ) { return { id: f.id, name: folderName( f ), kids: childrenOf( f.id ).filter( isFolder ).map( mk ) }; }
+    return childrenOf( ROOT ).filter( isFolder ).map( mk );
 }
+
+function renderTree() { if( treeView ) treeView.render(); }
 
 function toggleOpen( id, force )
 {
@@ -144,7 +120,7 @@ function renderCrumbs()
         } );
     }
     host.innerHTML = html;
-    host.parentElement.hidden = ! html;
+    host.parentElement.hidden = ! html && ! isPhone();     // a phone keeps the row: the folder button opens the tree
 
     // ← goes up one level: a phone has no tree to do it with.
     up.hidden = ! ( isPhone() && ! query && filter === 'all' && curFolder !== ROOT );
@@ -193,24 +169,25 @@ function renderItems()
     const host = document.getElementById( 'items' );
     const vis  = visibleItems();
 
-    host.className = 'items ' + ( ui.mode === 'list' ? 'is-list' : 'is-grid' ) + ( selecting ? ' is-selecting' : '' );
+    host.classList.toggle( 'is-list', ui.mode === 'list' );
+    host.classList.toggle( 'is-grid', ui.mode !== 'list' );
     host.innerHTML = vis.items.map( function( n ) { return itemHtml( n, vis.withPath ); } ).join( '' );
     renderEmpty( vis.items.length );
 }
 
 function itemHtml( n, withPath )
 {
-    const picked = selecting && selected.has( n.id );
-    const cls = 'card-row bm-item' + ( isFolder( n ) ? ' is-folder' : '' ) + ( picked ? ' is-selected' : '' );
-    const menu = '<button type="button" class="icon-btn sm row-menu" data-menu="1" title="' + esc( T( 'ui.actions' ) ) +
-                 '" aria-label="' + esc( T( 'ui.actions' ) ) + '">' + SVG.dots + '</button>';
+    // The shared browser paints .is-selected; the tick and the ⋮ are its own.
+    const cls = 'card-row bm-item' + ( isFolder( n ) ? ' is-folder' : '' ) + ( browse && browse.has( n.id ) ? ' is-selected' : '' );
+    const tick = NayiveUI.tickHtml();
+    const menu = NayiveUI.moreHtml();
     const where = withPath ? '<div class="bm-path">' + SVG.folder + '<span>' + esc( pathText( n.parentId ) || T( 'bookmarks.all' ) ) + '</span></div>' : '';
 
     if( isFolder( n ) )
     {
         const c = countIn( n.id );
-        return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="button" tabindex="0">' +
-               '<div class="bm-top"><span class="bm-ic is-folder">' + SVG.folder + '</span>' +
+        return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="option" tabindex="-1">' +
+               '<div class="bm-top">' + tick + '<span class="bm-ic is-folder">' + SVG.folder + '</span>' +
                '<div class="bm-head"><div class="bm-title">' + esc( folderName( n ) ) + '</div>' +
                '<div class="bm-domain">' + esc( c.bookmarks === 1 ? T( 'bookmarks.folderCountOne' ) : TF( 'bookmarks.folderCount', { n: c.bookmarks } ) ) + '</div></div>' + menu + '</div>' +
                where + '</div>';
@@ -224,8 +201,8 @@ function itemHtml( n, withPath )
     const tags = n.tags.length
                ? '<div class="bm-tags">' + n.tags.map( function( t ) { return '<button type="button" class="pill bm-tag" data-tag="' + esc( t ) + '">#' + esc( t ) + '</button>'; } ).join( '' ) + '</div>'
                : '';
-    return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="link" tabindex="0" title="' + esc( n.url ) + '">' +
-           '<div class="bm-top"><span class="bm-ic" style="--hue:' + hueOf( domainOf( n.url ) || n.title ) + '">' + esc( initialOf( n ) ) + img + '</span>' +
+    return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="option" tabindex="-1" title="' + esc( n.url ) + '">' +
+           '<div class="bm-top">' + tick + '<span class="bm-ic" style="--hue:' + hueOf( domainOf( n.url ) || n.title ) + '">' + esc( initialOf( n ) ) + img + '</span>' +
            '<div class="bm-head"><div class="bm-title">' + esc( n.title || domainOf( n.url ) || n.url ) + '</div>' +
            '<div class="bm-domain">' + esc( domainOf( n.url ) || n.url ) + '</div></div>' +
            ( n.favorite ? '<span class="bm-star" title="' + esc( T( 'bookmarks.favourite' ) ) + '">' + SVG.star + '</span>' : '' ) +
@@ -268,25 +245,4 @@ function renderEmpty( count )
             return '<button type="button" class="text-btn' + ( i ? ' ghost' : '' ) + '" data-empty="' + b[ 0 ] + '">' + esc( b[ 1 ] ) + '</button>';
         } ).join( '' ) + '</div>' : '' );
     box.hidden = false;
-}
-
-//------------------------------------------------------------------------//
-// SELECTION BAR
-
-function renderSelectBar()
-{
-    const bar = document.getElementById( 'selectBar' );
-    bar.hidden = ! selecting;
-    document.getElementById( 'filterRow' ).hidden = selecting;
-    if( ! selecting ) return;
-    document.getElementById( 'selectCount' ).textContent = TF( 'bookmarks.selectedN', { n: selected.size } );
-    document.getElementById( 'selectMoveBtn' ).disabled   = ! selected.size;
-    document.getElementById( 'selectDeleteBtn' ).disabled = ! selected.size;
-}
-
-function setSelecting( on )
-{
-    selecting = on;
-    if( ! on ) selected.clear();
-    render();
 }

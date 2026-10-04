@@ -6,9 +6,8 @@
  * Search: the words go to the mail server (Enter), which looks in the
  * senders, subjects and texts of this tray.
  *
- * PICKING SEVERAL (actions.js does the rest): a long press on a row, a right
- * click, Ctrl/Cmd + click, or the "select" button, and then a tap ticks or
- * unticks. A plain tap otherwise opens the message.
+ * PICKING AND OPENING is the shared item browser (browse.js): a click picks,
+ * a double-click (a tap) opens. The rows here carry a stable id (m._id) for it.
  */
 ( function ()
 {
@@ -31,6 +30,8 @@
         return S.accounts;
     };
 
+    // The account picker, the tree (trays + labels: browse.js) and, on a
+    // phone, the name of what is on screen beside the tree's button.
     E.renderSide = function ()
     {
         var sel = E.$( "acctSel" );
@@ -43,58 +44,13 @@
             sel.appendChild( o );
         } );
 
-        var box = E.$( "trays" );
-        box.textContent = "";
-        ROLES.forEach( function ( role )
-        {
-            var t = S.trays.filter( function ( x ) { return x.role === role; } )[ 0 ] || { role: role };
-            // not read / all of them, on every tray ("3/7", "0/0")
-            var unread = t.unread || 0, total = t.total || 0;
-            var b = h( "button", { class: "pill mail-tray" + ( ! S.label && role === S.tray ? " is-active" : "" ) + ( t.missing ? " is-missing" : "" ),
-                                   attrs: { type: "button", "data-tray": role,
-                                            title: t.missing ? E.T( "mail.missingTray" ) : E.TF( "mail.trayCount", { unread: unread, total: total } ) },
-                                   html: E.icon( role ),
-                                   on: { click: function () { E.openTray( role ); } } },
-                       h( "span", { text: E.T( "mail.tray." + role ) } ),
-                       h( "span", { class: "mail-tray-n" + ( unread ? " has-new" : "" ) },
-                          h( "b", { text: count( unread ) } ), h( "small", { text: "/" + count( total ) } ) ) );
-            box.appendChild( b );
-        } );
-
-        // the labels' panel: each a pill, and a pencil to edit it (a long press
-        // or a right click on the pill does the same)
-        var lab = E.$( "labelsSide" );
-        lab.textContent = "";
-        S.labels.forEach( function ( l )
-        {
-            var pill = h( "button", { class: "pill mail-tray mail-label" + ( S.label === l.id ? " is-active" : "" ),
-                                      attrs: { type: "button", "data-label": l.id } },
-                          h( "i", { class: "mail-dot" } ), h( "span", { text: l.name } ) );
-            pill.firstChild.style.setProperty( "--c", l.color );
-            wireLabelPress( pill, l );
-            var pen = h( "button", { class: "icon-btn sm mail-label-pen", html: NayiveUI.icon( "edit" ),
-                                     attrs: { type: "button", title: E.T( "mail.editLabel" ), "aria-label": E.T( "mail.editLabel" ) },
-                                     on: { click: function () { E.openLabelDialog( l ); } } } );
-            lab.appendChild( h( "div", { class: "mail-label-line" + ( S.label === l.id ? " is-active" : "" ) }, pill, pen ) );
-        } );
+        if( E.renderTree ) E.renderTree();
+        var l = S.label && E.labelById( S.label );
+        E.$( "whereName" ).textContent = l ? l.name : E.T( "mail.tray." + S.tray );
     };
 
     // a tray's number, short, rounded down: 999, 9700 -> 9K
-    function count( n ) { return n < 1000 ? String( n ) : Math.floor( n / 1000 ) + "K"; }
-
-    function wireLabelPress( el, l )
-    {
-        var timer = 0, long = false;
-        el.addEventListener( "pointerdown", function ( e )
-        {
-            if( e.pointerType === "mouse" ) return;
-            long = false;
-            timer = setTimeout( function () { long = true; E.openLabelDialog( l ); }, 500 );
-        } );
-        [ "pointerup", "pointercancel", "pointerleave", "pointermove" ].forEach( function ( ev ) { el.addEventListener( ev, function () { clearTimeout( timer ); } ); } );
-        el.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); if( ! long ) E.openLabelDialog( l ); } );
-        el.addEventListener( "click", function () { if( long ) { long = false; return; } E.openLabel( l.id ); } );
-    }
+    E.count = function ( n ) { return n < 1000 ? String( n ) : Math.floor( n / 1000 ) + "K"; };
 
     E.loadTrays = async function ()
     {
@@ -121,7 +77,7 @@
     {
         if( E.isComposing() ) E.closeCompose( true );
         if( S.open ) E.closeMessage( true );
-        if( S.selecting ) E.endSelect();
+        E.endSelect();
     }
 
     E.openTray = function ( role )
@@ -170,7 +126,6 @@
         {
             S.items = [];
             S.next = "";
-            S.sel.clear();
             S.only = null;
             E.$( "list" ).textContent = "";
             E.$( "listEmpty" ).hidden = true;
@@ -207,6 +162,8 @@
             // split: the message open beside the list keeps its object (the
             // reader and the bar hold it), with what the list says now
             if( S.open ) items = items.map( function ( m ) { return E.acctOf( m ) === E.acctOf( S.open ) && m.ref === S.open.ref ? Object.assign( S.open, m ) : m; } );
+            // each row's id for the item browser (the message open keeps its own)
+            items.forEach( function ( m ) { if( ! m._id ) m._id = "m" + ( ++rowSeq ); } );
             S.items = S.items.concat( items );
             E.showProblem( null );
             E.plug( "synced" );
@@ -229,7 +186,7 @@
                 E.showEmpty();
                 if( S.next && E.advPaused() ) pauseMore();
                 else if( S.next ) watchMore();
-                if( S.selecting ) E.syncBar();
+                E.syncBar();
             }
         }
     };
@@ -248,6 +205,8 @@
         E.$( "listEmpty" ).hidden = ! empty;
         E.$( "listEmptyText" ).textContent = E.T( S.label ? "mail.labelEmpty" : S.query || S.adv ? "mail.noResults" : "mail.empty" );
     };
+
+    var rowSeq = 0;
 
     function appendRows( items )
     {
@@ -269,16 +228,17 @@
         if( m.flagged ) subj.insertAdjacentHTML( "beforeend", E.icon( "star", "star" ) );
         subj.appendChild( E.chips( m.labels ) );
 
-        var el = h( "button", { class: "mail-row" + ( m.seen ? "" : " unread" ) + ( S.sel.has( m ) ? " is-picked" : "" ) +
-                                       ( E.split && S.open === m ? " is-current" : "" ),
-                                attrs: { type: "button", "data-ref": m.ref } },
-                    h( "i", { class: "mail-tick", html: NayiveUI.icon( "check" ) } ),
+        // the round tick and the ⋮ are the item browser's (drawn here: the grid places them)
+        var el = h( "div", { class: "mail-row" + ( m.seen ? "" : " unread" ) +
+                                    ( E.split && S.open === m ? " is-current" : "" ),
+                             attrs: { "data-id": m._id, "data-ref": m.ref, role: "option" } },
+                    h( "span", { class: "mail-tickbox", html: NayiveUI.tickHtml() } ),
                     h( "div", { class: "who", text: who } ),
                     h( "div", { class: "when", text: E.shortDate( m.date ), attrs: { title: E.longDate( m.date ) } } ),
                     subj,
-                    m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null );
+                    m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null,
+                    h( "span", { class: "mail-morebox", html: NayiveUI.moreHtml() } ) );
         if( S.only && ! S.only.has( m ) ) el.hidden = true;
-        wirePress( el, m );
         m._row = el;
         return el;
     }
@@ -294,41 +254,10 @@
     // Rows that left this list (moved, deleted): gone from it at once.
     E.dropRows = function ( items )
     {
-        items.forEach( function ( m )
-        {
-            if( m._row ) m._row.remove();
-            S.sel.delete( m );
-        } );
+        items.forEach( function ( m ) { if( m._row ) m._row.remove(); } );
         S.items = S.items.filter( function ( m ) { return items.indexOf( m ) < 0; } );
         E.showEmpty();
     };
-
-    // tap = open (or tick, while picking); long press / right click / Ctrl-click = start picking
-    function wirePress( el, m )
-    {
-        var timer = 0, startX = 0, startY = 0, long = false;
-        el.addEventListener( "pointerdown", function ( e )
-        {
-            if( e.pointerType === "mouse" ) return;
-            long = false;
-            startX = e.clientX; startY = e.clientY;
-            clearTimeout( timer );
-            timer = setTimeout( function () { long = true; E.pick( m, true ); }, 500 );
-        } );
-        el.addEventListener( "pointermove", function ( e )
-        {
-            if( Math.abs( e.clientX - startX ) > 10 || Math.abs( e.clientY - startY ) > 10 ) clearTimeout( timer );
-        } );
-        [ "pointerup", "pointercancel", "pointerleave" ].forEach( function ( ev ) { el.addEventListener( ev, function () { clearTimeout( timer ); } ); } );
-        el.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); if( ! long ) E.pick( m, true ); } );
-        el.addEventListener( "click", function ( e )
-        {
-            if( long ) { long = false; return; }
-            if( S.selecting || e.ctrlKey || e.metaKey ) E.pick( m );
-            else if( E.roleOf( m ) === "drafts" ) E.openDraft( m );     // a draft opens to go on writing it
-            else E.openMessage( m );
-        } );
-    }
 
     // A message was opened: its row turns read, the tray's count follows.
     E.markRowSeen = function ( m )

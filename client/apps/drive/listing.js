@@ -61,7 +61,7 @@ function openBigFiles()
 {
     if( trashMode ) { trashMode = false; trashItems = []; }
     clearSearch();
-    selectedPaths.clear();
+    clearSel();
     bigMode = true;
     driveSearch.close( true );          // fold the box; the list below replaces the search
     render();                           // "Buscando…" until the server answers
@@ -300,23 +300,13 @@ function buildListRow( node, showPath )
     const dir = isDir( node );
     const name = displayName( node );
 
+    // Picking, opening, the row's tick and ⋮, its drag and the drop onto a
+    // folder row are the shared item browser's (menus.js wires it): the row
+    // is only what it shows.
     const row = document.createElement( 'div' );
-    row.className     = 'row' + (selectedPaths.has( node.path ) ? ' selected' : '');
+    row.className     = 'row' + (selectedPaths.has( node.path ) ? ' is-selected' : '');
     row.dataset.path  = node.path;
-
-    // Phone: a visible ⋮ that opens the same per-item menu as a long-press.
-    const menuBtn = document.createElement( 'button' );
-    menuBtn.className = 'icon-btn sm row-menu';
-    menuBtn.title     = T( 'ui.actions' );
-    menuBtn.setAttribute( 'aria-label', T( 'ui.actions' ) );
-    menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
-    menuBtn.addEventListener( 'click', function( e )
-    {
-        e.stopPropagation();
-        const r = menuBtn.getBoundingClientRect();
-        openMenuFor( row, r.right, r.bottom );
-    });
-    row.appendChild( menuBtn );
+    if( dir ) row.dataset.dir = '1';
 
     // One icon, always: the app (or file type) that opens this row. Inside
     // "Compartido conmigo" it doubles as the "who lent me this" tooltip —
@@ -373,53 +363,6 @@ function buildListRow( node, showPath )
     row.appendChild( meta );
     paintConvertBadge( row );
 
-    // Plain click selects one (file or folder alike); Ctrl/⌘-click toggles
-    // the selection; double-click opens — a folder navigates in, a file
-    // routes to its viewer / editor. Selection highlight is repainted in
-    // place so a fast double-click keeps its target row.
-    //
-    // Touch has no double-click: on a phone a tap still opens folders the
-    // way it always has (a tap on a file selects it; long-press opens it).
-    row.addEventListener( 'click', function( e )
-    {
-        // Phone: a tap goes into a folder (there is no double-click). On a
-        // shared album / trip openNode() sends it to its app instead.
-        if( isPhone() && isDir( node ) && ! e.ctrlKey && ! e.metaKey ) { openNode( node ); return; }
-
-        if( e.ctrlKey || e.metaKey )
-            selectedPaths.has( node.path ) ? selectedPaths.delete( node.path ) : selectedPaths.add( node.path );
-        else
-            { selectedPaths.clear(); selectedPaths.add( node.path ); }
-
-        paintSelection();
-        updateToolbarState();
-    });
-
-    // Suppress the browser's native word-selection on the second click of
-    // a double-click before it starts.
-    row.addEventListener( 'mousedown', function( e ) { if( e.detail > 1 ) e.preventDefault(); } );
-
-    row.addEventListener( 'dblclick', function( e )
-    {
-        e.preventDefault();
-        e.stopPropagation();
-        const sel = window.getSelection();
-        if( sel ) sel.removeAllRanges();
-        openNode( node );
-    });
-
-    makeDraggable( row, node );
-    if( dir ) makeDropTarget( row, function() { return node.path; } );
-
     return row;
 }
 
-// Sync the .selected class of every visible row to selectedPaths, without
-// rebuilding the list (keeps row elements alive across a click/dblclick).
-function paintSelection()
-{
-    document.querySelectorAll( '#listing .row' ).forEach( function( r )
-    {
-        r.classList.toggle( 'selected', selectedPaths.has( r.dataset.path ) );
-    });
-}

@@ -58,9 +58,12 @@
  * build dialogs dynamically call NayiveUI.applySheetButtons( sheetEl ) after.
  *
  * UIX rule: when a dialog's whole action row is just a "close" button, that
- * button is moved to the sheet's top-right corner (class `.sheet-close`, styled
- * in shared/theme.css) and the empty row is dropped - a bottom row is only for
+ * button is moved to the sheet's top-right corner, on the title's line (class
+ * `.sheet-close`, styled in shared/theme.css) and the empty row is dropped - a bottom row is only for
  * dialogs that also have a primary / danger action.
+ *
+ * A SETTINGS dialog has no ✓ at all: every change is kept (on change, or when
+ * it closes) and its × just closes - see CLOSE-ONLY DIALOGS below.
  *
  * ---------------------------------------------------------------------------
  * THE ONE ICON PER MEANING RULE  (whole Nayive UI, dialogs and toolbars alike)
@@ -575,6 +578,8 @@
         bolt:     [ 2, '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon>' ],
         // "Solo lectura" - a closed padlock. Drawn blue in .ro-badge (see app.css).
         lock:     [ 2, '<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>' ],
+        // A document's password (Write / Calc) - the Passwords app's key.
+        key:      [ 2, '<circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path>' ],
         // Cortar / Copiar / Pegar - the same three glyphs Drive's context menu
         // draws. Write's and Calc's Edición menus use them (shared/menubar.js).
         cut:      [ 2, '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>' ],
@@ -923,8 +928,11 @@
             cornerLoneClose( rows[ j ] );
     }
 
-    // If `row` holds nothing but a close button, move it to the sheet's corner
-    // as a .sheet-close and remove the now-empty row.
+    // If `row` holds nothing but a close button, move it to the sheet's top-right
+    // corner as a .sheet-close and remove the now-empty row. With a title, the ×
+    // goes on the title's own line (a .sheet-header: the title, then any
+    // .sheet-tool buttons, then the ×), so a long title wraps instead of
+    // running under it. With none, it is pinned to the corner.
     function cornerLoneClose( row )
     {
         var kids = row.children;
@@ -936,6 +944,15 @@
 
         b.classList.remove( "btn", "btn-secondary" );
         b.classList.add( "sheet-close" );
+
+        var head = titleRow( sheet );
+        if( head )
+        {
+            head.appendChild( b );
+            row.parentNode.removeChild( row );
+            return;
+        }
+
         b.style.position = "absolute";
         b.style.top      = "10px";
         b.style.right    = "10px";
@@ -944,6 +961,22 @@
 
         if( getComputedStyle( sheet ).position === "static" )
             sheet.style.position = "relative";
+    }
+
+    // The sheet's title line: its .sheet-header, or its <h2> wrapped in one now.
+    function titleRow( sheet )
+    {
+        var head = sheet.querySelector( ":scope > .sheet-header" );
+        if( head ) return head;
+
+        var h2 = sheet.querySelector( ":scope > h2" );
+        if( ! h2 ) return null;
+
+        head = document.createElement( "div" );
+        head.className = "sheet-header";
+        sheet.insertBefore( head, h2 );
+        head.appendChild( h2 );
+        return head;
     }
 
     //------------------------------------------------------------------------//
@@ -2518,7 +2551,27 @@
             .catch( function () {} );
     }
 
-    // Its look (.fp-*) is in shared/app.css, beside .folder-pick.
+    // The shared tree lives in browser.js, which only the list apps load: the
+    // picker fetches it on first use from beside this file, like media.js.
+    var BROWSER_JS = MEDIA_JS.replace( /media\.js$/, "browser.js" );
+    var browserLoad = null;
+
+    function loadBrowser()
+    {
+        if( window.NayiveUI && window.NayiveUI.tree ) return Promise.resolve();
+        if( ! browserLoad )
+            browserLoad = new Promise( function ( resolve )
+            {
+                var s = document.createElement( "script" );
+                s.src     = BROWSER_JS;
+                s.onload  = resolve;
+                s.onerror = function () { browserLoad = null; resolve(); };
+                document.head.appendChild( s );
+            } );
+        return browserLoad;
+    }
+
+    // Its look (.fp-*, and the shared tree's .ntree) is in shared/app.css.
     function pickFolder( opts )
     {
         opts = opts || {};
@@ -2567,57 +2620,17 @@
             }
 
             // The tree from GumApi.dirTree() is folders-only, so every node here
-            // is a folder; a folder with no sub-folders just has nodes:[].
-            function appendNode( host, node, depth )
+            // is a folder; a folder with no sub-folders just has nodes:[]. It is
+            // drawn by the shared tree (shared/browser.js, NayiveUI.tree), the
+            // same one every "Move to…" and side pane uses: the arrow opens and
+            // closes, a click lights a folder, a double-click / Enter chooses it.
+            function treeNodes( nodes )
             {
-                if( ! Array.isArray( node.nodes ) ) return;
-                host.appendChild( fpRow( node, depth ) );
-                if( expanded[ node.path ] )
-                    sortNodes( node.nodes ).forEach( function ( c ) { appendNode( host, c, depth + 1 ); } );
-            }
-
-            function fpRow( node, depth, label )
-            {
-                var kids = Array.isArray( node.nodes ) && node.nodes.length > 0;
-
-                var row = document.createElement( "div" );
-                row.className = "fp-row" + ( selected === node.path ? " sel" : "" );
-                row.style.paddingLeft = ( 8 + depth * 16 ) + "px";
-                row.setAttribute( "role", "option" );
-                row.setAttribute( "aria-selected", selected === node.path ? "true" : "false" );
-
-                // The caret is the only expand/collapse control; a tap anywhere
-                // else on the row just selects the folder.
-                var caret = document.createElement( "span" );
-                caret.className   = "fp-caret" + ( kids ? " has" : "" );
-                caret.textContent = kids ? ( expanded[ node.path ] ? "▾" : "▸" ) : "";
-                if( kids )
-                    caret.addEventListener( "click", function ( e )
+                return sortNodes( nodes || [] ).filter( function ( n ) { return Array.isArray( n.nodes ); } )
+                    .map( function ( n )
                     {
-                        e.stopPropagation();
-                        expanded[ node.path ] = ! expanded[ node.path ];
-                        render();
+                        return { id: n.path, name: String( n.path ).split( "/" ).pop(), kids: treeNodes( n.nodes ) };
                     } );
-                row.appendChild( caret );
-
-                var ic = document.createElement( "span" );
-                ic.className = "fp-ic";
-                ic.innerHTML = icon( "folder" );
-                row.appendChild( ic );
-
-                var name = document.createElement( "span" );
-                name.className   = "fp-name";
-                name.textContent = label || String( node.path ).split( "/" ).pop();
-                row.appendChild( name );
-
-                row.addEventListener( "click", function ()
-                {
-                    if( busy ) return;
-                    selected = node.path;
-                    render();
-                } );
-
-                return row;
             }
 
             // One of the three bottom-left folder buttons.
@@ -2798,6 +2811,7 @@
                 // Keep the tree scrolled where it was across the rebuild.
                 var prevBox    = sheet.querySelector( ".fp-tree" );
                 var prevScroll = prevBox ? prevBox.scrollTop : 0;
+                var hadFocus   = !! prevBox && prevBox.contains( document.activeElement );
 
                 sheet.innerHTML = "";
 
@@ -2829,18 +2843,38 @@
                     box.appendChild( fpMsg( t( "ui.fp.loadError" ) ) );
                 else if( filesNode === null )
                     box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
+                else if( ! window.NayiveUI.tree )
+                {
+                    box.appendChild( fpMsg( t( "ui.fp.loading" ) ) );
+                    loadBrowser().then( function () { if( ! done ) render(); } );
+                }
                 else
                 {
-                    var kids = sortNodes( filesNode.nodes || [] );
+                    var kids  = treeNodes( filesNode.nodes );
+                    var roots = opts.allowRoot
+                              ? [ { id: filesNode.path, name: opts.rootLabel || t( "ui.fp.allFiles" ), kids: kids } ]
+                              : kids;
+                    if( opts.allowRoot ) expanded[ filesNode.path ] = expanded[ filesNode.path ] !== false;
 
-                    if( opts.allowRoot )
-                        box.appendChild( fpRow( { path: filesNode.path, nodes: [] }, 0,
-                                                opts.rootLabel || t( "ui.fp.allFiles" ) ) );
-
-                    if( ! kids.length && ! opts.allowRoot )
+                    if( ! roots.length )
                         box.appendChild( fpMsg( t( "ui.fp.noFolders" ) ) );
                     else
-                        kids.forEach( function ( k ) { appendNode( box, k, opts.allowRoot ? 1 : 0 ); } );
+                    {
+                        var host = document.createElement( "div" );
+                        box.appendChild( host );
+                        var tr = window.NayiveUI.tree( {
+                            host:     host,
+                            pick:     true,
+                            roots:    function () { return roots; },
+                            isOpen:   function ( id ) { return !! expanded[ id ]; },
+                            setOpen:  function ( id, v ) { expanded[ id ] = v; },
+                            current:  function () { return selected; },
+                            disabled: function () { return busy; },
+                            go:       function ( id ) { selected = id; render(); },
+                            confirm:  function ( id ) { if( ! busy && ! nameMode ) finish( id ); }
+                        } );
+                        if( hadFocus ) tr.focus( selected );     // the keys stay in the tree across a redraw
+                    }
                 }
 
                 box.scrollTop = prevScroll;
@@ -4819,12 +4853,13 @@
     // opts.onVisible]; window focus -> maybeRefresh( false, "focus" ), throttled to
     // once per opts.throttleMs (20 s) - a window that never leaves the screen (a
     // second monitor, a Planner pane) never fires visibilitychange; the
-    // #syncIndicator click -> refreshNow; and window.nayiveRefresh = refreshNow for
-    // Planner's single plug.
+    // #syncIndicator click -> refreshNow; window.nayiveRefresh = refreshNow for
+    // Planner's single plug; while the store is "offline", a retry ("retry", 5 s
+    // up to 1 min) and "online" -> maybeRefresh( true, "online" ).
     //
     // `guard( force, why )` returns true while a re-read must NOT happen (a sheet is
     // open, text is being typed); the default is "any .sheet-backdrop is open".
-    // `why` is "visible" / "focus" / "plug", so an app can tell a DELIBERATE refresh
+    // `why` is "visible" / "focus" / "plug" / "retry" / "online", so an app can tell a DELIBERATE refresh
     // from an automatic one - Trips lets the plug re-read from any screen but keeps
     // the automatic paths on the trip list, where re-rendering costs nothing.
     function wireRefresh( opts )
@@ -4876,6 +4911,50 @@
             if( held ) waiting = true;
             else       maybeRefresh( false, "focus" );
         } );
+
+        // RETRY (2026-10-03) - a read that failed for want of the network leaves
+        // the plug "offline" (gold), and nothing above tries again until a focus,
+        // a tab switch or a tap. The PWA starts at sign-in, often before the
+        // network is up: a window nobody clicks (a Planner pane, a desktop
+        // window behind) stayed gold for hours. So while the store says
+        // "offline" the read is tried again by itself: 5 s, doubling up to
+        // 1 min. One at a time; a read's own "loading" does not reset the wait.
+        // "online": the store only sends what is queued and turns green, so the
+        // data on screen is re-read too.
+        if( opts.store && opts.store.onState )
+        {
+            var retryT = 0, retryMs = 5000, retrying = false;
+
+            var armRetry = function ()
+            {
+                if( retryT || retrying ) return;
+                retryT = setTimeout( async function ()
+                {
+                    retryT   = 0;
+                    retrying = true;
+                    try { if( navigator.onLine ) await maybeRefresh( true, "retry" ); }
+                    catch ( e ) {}
+                    retrying = false;
+                    retryMs  = Math.min( retryMs * 2, 60000 );
+                    if( opts.store.state === "offline" ) armRetry();   // still out, or the guard said no
+                }, retryMs );
+            };
+
+            var onStore = function ( s )
+            {
+                if( s === "offline" ) armRetry();
+                else if( s !== "loading" && s !== "saving" )
+                {
+                    clearTimeout( retryT );
+                    retryT  = 0;
+                    retryMs = 5000;
+                }
+            };
+
+            opts.store.onState( onStore );
+            onStore( opts.store.state );       // a read that failed before this ran
+            window.addEventListener( "online", function () { maybeRefresh( true, "online" ); } );
+        }
 
         var dot = byId( opts.indicatorId || "syncIndicator" );
         if( dot && dot.tagName === "BUTTON" ) dot.addEventListener( "click", refreshNow );
@@ -5069,6 +5148,94 @@
         window.addEventListener( "resize", close );
 
         return { open: open, close: close, isOpen: isOpen };
+    }
+
+    //------------------------------------------------------------------------//
+    // CLOSE-ONLY DIALOGS  -  the GNOME way (docs/audit/dialogs.md): a settings
+    // dialog has only its ×, and every change is kept. × = Escape = close =
+    // KEEP. Two helpers, so no dialog writes this by hand again:
+    //
+    //   NayiveUI.autoSave( field, save, o )
+    //       Saves one field on its own: a select / tick-box / switch on
+    //       "change"; a text box also while typing, o.wait ms after the last
+    //       key (default 700), and at once when it loses the focus.
+    //       save( value ) does the work and returns a promise (or nothing).
+    //       While it runs a select / tick-box is disabled (a text box is not:
+    //       that would take the caret away). A failure puts a select /
+    //       tick-box back to the last saved value (a text box keeps what was
+    //       typed - the next change tries again) and o.msg (a <p>) says the
+    //       i18n key o.fail, or "Could not save.". o.done( value ) after a
+    //       good save. Callable before the page's words are in (keys, not text).
+    //       Returns { saved( v ) }: tell it the value loaded from outside.
+    //
+    //   NayiveUI.onSheetClose( back, fn )
+    //       fn() every time the .sheet-backdrop `back` (element or id) closes,
+    //       by any road: its ×, Escape, the app's own code. For what is kept
+    //       only when the dialog goes: a costly re-check, or one server write
+    //       for the whole dialog instead of one per change.
+
+    function autoSave( field, save, o )
+    {
+        o = o || {};
+        var box   = field.type === "checkbox";
+        var typed = field.tagName === "TEXTAREA" ||
+                    ( field.tagName === "INPUT" && ! box && field.type !== "radio" );
+        var good  = get();
+        var timer = 0;
+        var queue = Promise.resolve();     // one save at a time, in order
+
+        function get()      { return box ? field.checked : field.value; }
+        function put( v )   { if( box ) field.checked = v; else field.value = v; }
+        function say( txt ) { if( o.msg ) { o.msg.textContent = txt || ""; o.msg.hidden = ! txt; } }
+
+        function run()
+        {
+            clearTimeout( timer );
+            timer = 0;
+            queue = queue.then( function ()
+            {
+                var v = get();
+                if( v === good ) return;
+                if( ! typed ) field.disabled = true;
+                say( "" );
+                return Promise.resolve()
+                    .then( function () { return save( v ); } )
+                    .then( function ()
+                    {
+                        good = v;
+                        if( o.done ) o.done( v );
+                    }, function ()
+                    {
+                        if( ! typed ) put( good );
+                        say( t( o.fail || "ui.saveFailed" ) );
+                    } )
+                    .then( function () { field.disabled = false; } );
+            } );
+        }
+
+        field.addEventListener( "change", run );
+        if( typed )
+            field.addEventListener( "input", function ()
+            {
+                clearTimeout( timer );
+                timer = setTimeout( run, o.wait || 700 );
+            } );
+
+        return { saved: function ( v ) { good = v; } };
+    }
+
+    function onSheetClose( back, fn )
+    {
+        if( typeof back === "string" ) back = byId( back );
+        if( ! back ) return;
+
+        var was = back.classList.contains( "open" );
+        new MutationObserver( function ()
+        {
+            var now = back.classList.contains( "open" );
+            if( was && ! now ) fn();
+            was = now;
+        } ).observe( back, { attributes: true, attributeFilter: [ "class" ] } );
     }
 
     //------------------------------------------------------------------------//
@@ -5328,6 +5495,8 @@
         pwEye:    pwEye,            // show / hide a password field's text
         searchFold: searchFold,     // a toolbar search field folded behind a magnifier
         modal:    modal,            // a dialog built on the fly: backdrop, sheet, Escape, close
+        autoSave: autoSave,         // close-only dialogs: one field saves itself on change
+        onSheetClose: onSheetClose, // close-only dialogs: run something when a sheet closes
         open:     open,
         close:    close,
         toast:    toast,

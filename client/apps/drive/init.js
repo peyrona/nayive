@@ -58,12 +58,6 @@ function wireStaticUI()
     document.getElementById( 'uploadInput'       ).addEventListener( 'change', onUploadInputChange );
     document.getElementById( 'uploadDirInput'    ).addEventListener( 'change', onUploadInputChange );
     document.getElementById( 'uploadPhotoInput'  ).addEventListener( 'change', onUploadInputChange );
-    document.getElementById( 'renameBtn'         ).addEventListener( 'click', openRename );
-    document.getElementById( 'copyLinkBtn'       ).addEventListener( 'click', copySelectionLink );
-    document.getElementById( 'compressBtn'       ).addEventListener( 'click', compressSelection );
-    document.getElementById( 'propsBtn'          ).addEventListener( 'click', openProperties );
-    document.getElementById( 'downloadBtn'       ).addEventListener( 'click', downloadSelection );
-    document.getElementById( 'deleteBtn'         ).addEventListener( 'click', openDeleteConfirm );
     // New documents are created in the folder currently open in Drive
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );
@@ -83,7 +77,7 @@ function wireStaticUI()
     {
         searchQuery = e.target.value;
         bigMode     = false;                   // typing a name ends the "Biggest files" list
-        selectedPaths.clear();
+        clearSel();
         if( searchTimer ) clearTimeout( searchTimer );
 
         if( ! searchQuery.trim() )
@@ -106,7 +100,7 @@ function wireStaticUI()
         {
             e.preventDefault();
             e.target.blur();
-            focusPane( 'list' );
+            browse.focus();
         }
     });
 
@@ -117,7 +111,7 @@ function wireStaticUI()
         input:     document.getElementById( 'searchInput' ),
         toggle:    document.getElementById( 'searchToggleBtn' ),
         filterBtn: document.getElementById( 'searchBuilderBtn' ),
-        onClose:   function() { clearSearch(); selectedPaths.clear(); render(); }
+        onClose:   function() { clearSearch(); clearSel(); render(); }
     } );
 
     // The magnifier inside the box: the advanced search dialog (advsearch.js).
@@ -138,8 +132,7 @@ function wireStaticUI()
     document.getElementById( 'sbFrom'      ).addEventListener( 'input', onBuilderDate );
     document.getElementById( 'sbTo'        ).addEventListener( 'input', onBuilderDate );
 
-    document.getElementById( 'treeBackdrop' ).addEventListener( 'click', closeTreeSheet );
-    PHONE.addEventListener( 'change', function() { closeTreeSheet(); render(); } );
+    PHONE.addEventListener( 'change', function() { treeView.closeSheet(); render(); } );
 
 
     document.getElementById( 'newFolderCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'newFolderBackdrop', false ); } );
@@ -152,8 +145,6 @@ function wireStaticUI()
     document.getElementById( 'renameConfirmBtn' ).addEventListener( 'click', confirmRename );
     document.getElementById( 'renameName'       ).addEventListener( 'keydown', function( e ) { if( e.key === 'Enter' ) confirmRename(); } );
 
-    document.getElementById( 'deleteCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'deleteBackdrop', false ); } );
-    document.getElementById( 'deleteConfirmBtn' ).addEventListener( 'click', confirmDelete );
 
     document.getElementById( 'replaceCancelBtn'  ).addEventListener( 'click', function() { settleReplace( 'cancel' ); } );
     document.getElementById( 'replaceConfirmBtn' ).addEventListener( 'click', function()
@@ -190,19 +181,8 @@ function wireStaticUI()
     });
     document.addEventListener( 'keydown', function( e )
     {
+        // (The menu and the phone's tree sheet close themselves on Escape.)
         if( e.key !== 'Escape' ) return;
-
-        if( anyCtxMenuOpen() )
-        {
-            closeCtxMenus();
-            return;
-        }
-
-        if( isPhone() && document.getElementById( 'treePane' ).classList.contains( 'open' ) )
-        {
-            closeTreeSheet();
-            return;
-        }
 
         if( document.getElementById( 'viewerBackdrop' ).classList.contains( 'open' ) )
         {
@@ -239,16 +219,10 @@ function wireStaticUI()
         setBackdrop( open.id, false );
     });
 
-    document.addEventListener( 'keydown', onNavKey );
     document.addEventListener( 'keydown', onShortcutKey );
 
-    // A click anywhere in a pane makes it the keyboard-focused one. (Just
-    // flips the flag — no re-render here, so the row's own click still lands.)
-    document.getElementById( 'treePane' ).addEventListener( 'mousedown', function() { kbdPane = 'tree'; paintKbdPane(); } );
-    document.getElementById( 'listing'  ).addEventListener( 'mousedown', function() { kbdPane = 'list'; paintKbdPane(); } );
-
     const listPane = document.getElementById( 'listPane' );
-    listPane.addEventListener( 'dragover', function( e ) { if( dragPaths ) return; e.preventDefault(); listPane.classList.add( 'drag-over' ); } );
+    listPane.addEventListener( 'dragover', function( e ) { if( NayiveUI.dragIds() ) return; e.preventDefault(); listPane.classList.add( 'drag-over' ); } );
     listPane.addEventListener( 'dragleave', function( e )
     {
         // Crossing into a child row fires dragleave on the pane too; only a
@@ -258,24 +232,6 @@ function wireStaticUI()
     } );
     listPane.addEventListener( 'drop', onDrop );
 
-    document.getElementById( 'moveToBtn' ).addEventListener( 'click', function() { openFolderPicker( 'move' ); } );
-    document.getElementById( 'copyToBtn' ).addEventListener( 'click', function() { openFolderPicker( 'copy' ); } );
-    document.getElementById( 'shareBtn' ).addEventListener( 'click', function()
-    {
-        const tg = actionTargets();
-        if( tg.length !== 1 ) return;
-        const node = rowNode( tg[ 0 ] );
-        NayiveUI.shareSheet( {
-            path:   tg[ 0 ],
-            app:    (node && isDir( node )) ? 'folder' : 'file',
-            title:  tg[ 0 ].split( '/' ).pop(),
-            canAdd: !! (node && isDir( node ))   // only a folder can be added to
-        } );
-    } );
-
-    document.getElementById( 'pickFolderCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'pickFolderBackdrop', false ); } );
-    document.getElementById( 'pickFolderConfirmBtn' ).addEventListener( 'click', confirmFolderPicker );
-
-    wireContextMenu();
+    wireBrowser();      // picking, the actions, the menu and the tree (menus.js)
     wireZip();          // the .zip list and "Extract here" (zip.js)
 }

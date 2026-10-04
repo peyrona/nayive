@@ -33,6 +33,7 @@
 
     <script src="../shared/gum-api.js" defer></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/browser.js" defer></script>
     <script src="../shared/store.js" defer></script>
 
     <!-- The app: classic deferred files sharing one scope, in this order, then
@@ -66,6 +67,8 @@
             </div>
 
             <div class="topbar-actions">
+                <!-- The selection's buttons (shared/browser.js): only while something is picked. -->
+                <div id="selActions" class="tb-group" hidden></div>
                 <div class="tb-group">
                     <!-- The shared search fold (NayiveUI.searchFold, input.js). -->
                     <div class="search-wrap">
@@ -95,11 +98,9 @@
 
         <!-- The header "⋮". Filled by input.js (wireTopMenu). -->
         <div id="topMenu" class="top-menu" role="menu" hidden></div>
-        <!-- The long-press / right-click / row "⋮" menu. Filled per item. -->
-        <div id="ctxMenu" class="top-menu" role="menu" hidden></div>
 
         <div class="body-row">
-            <!-- The folder tree (PC + tablet; hidden on a phone). -->
+            <!-- The folder tree (PC + tablet; on a phone it slides in from the folder button). -->
             <nav id="treePane" class="tree-pane" data-i18n-attr="aria-label:bookmarks.folders">
                 <div class="tree-head">
                     <span class="section-label" data-i18n="bookmarks.folders"></span>
@@ -115,17 +116,6 @@
             <div id="paneResizer" class="pane-resizer" role="separator" aria-orientation="vertical" data-i18n-attr="title:ui.dragResize"></div>
 
             <main id="listPane" class="list-pane">
-                <!-- Selection mode: ← leaves it. -->
-                <div id="selectBar" class="select-bar" hidden>
-                    <button id="selectLeave" class="icon-btn" type="button" data-i18n-attr="title:bookmarks.selectLeave, aria-label:bookmarks.selectLeave"></button>
-                    <span id="selectCount" class="select-count"></span>
-                    <button id="selectAllBtn" class="icon-btn" type="button" data-i18n-attr="title:bookmarks.selectAll, aria-label:bookmarks.selectAll">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><polyline points="8 12 11 15 16 9"></polyline></svg>
-                    </button>
-                    <button id="selectMoveBtn" class="icon-btn" type="button" data-i18n-attr="title:bookmarks.moveTo, aria-label:bookmarks.moveTo"></button>
-                    <button id="selectDeleteBtn" class="icon-btn danger" type="button" data-i18n-attr="title:ui.delete, aria-label:ui.delete"></button>
-                </div>
-
                 <div id="filterRow" class="filter-row">
                     <button class="pill" type="button" data-filter="all"></button>
                     <button class="pill" type="button" data-filter="fav"></button>
@@ -133,6 +123,9 @@
                 </div>
 
                 <div class="crumb-row">
+                    <button id="treeBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.folders, aria-label:ui.folders">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    </button>
                     <button id="upBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:bookmarks.up, aria-label:bookmarks.up"></button>
                     <div id="crumbs" class="open-crumb"></div>
                 </div>
@@ -193,21 +186,6 @@
             <div class="sheet-actions">
                 <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button id="folderSaveBtn" type="button" data-act="primary" data-i18n-attr="title:ui.save"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Move to… -->
-    <div id="moveBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 id="moveTitle"></h2>
-            <div class="field">
-                <label for="moveFolder" data-i18n="ui.folder"></label>
-                <select id="moveFolder"></select>
-            </div>
-            <div class="sheet-actions">
-                <button type="button" data-act="close" data-i18n-attr="title:ui.cancel"></button>
-                <button id="moveOkBtn" type="button" data-act="primary" data-i18n-attr="title:bookmarks.moveHere"></button>
             </div>
         </div>
     </div>

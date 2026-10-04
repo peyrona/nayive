@@ -3,86 +3,23 @@
  */
 "use strict";
 
-// The paths a toolbar action (rename / move / copy / link / delete)
-// works on: the listing selection if there is one, otherwise the folder
-// you are viewing — which is the one shown selected in the tree. The
-// Drive root itself is never a target. Delete has always used this
-// fallback; rename / move / copy / link use it too, so the tree stays
-// actionable without first selecting a row in the right pane.
-function actionTargets()
-{
-    if( selectedPaths.size ) return Array.from( selectedPaths );
-    if( currentFolder && currentFolder !== FS_ROOT ) return [ currentFolder ];
-    return [];
-}
-
+// What a picked item can do lives in ONE place: the action list in
+// menus.js (the selection group, the menu and the keys read it). Here: the
+// header's own tools, and a nudge to the browser to re-read those rules
+// when Drive's state changed (a download started, a grant arrived).
 function updateToolbarState()
 {
-    const n  = selectedPaths.size;
-    const nT = actionTargets().length;
-
-    // Anything under shared/ belongs to somebody else. The server refuses
-    // every write on it (resolve_path returns writable=false), so the
-    // buttons that would write are simply turned off here - a shared item
-    // can be opened, downloaded and copied out, never changed.
-    const targets = actionTargets();
-    const roSel   = readOnlySel();        // same rule the context menus use
-    const roHere  = readOnlyHere();
-
-    document.getElementById( 'renameBtn'   ).disabled = (nT !== 1) || roSel;
-    document.getElementById( 'moveToBtn'   ).disabled = (nT === 0) || roSel;
-    document.getElementById( 'copyToBtn'   ).disabled = (nT === 0);   // copying OUT is fine
+    // Both write into the open folder. Anything under shared/ belongs to
+    // somebody else and the server refuses every write on it. Upload is the
+    // ONE thing an "add" share opens up: a folder somebody shared with us,
+    // having ticked "pueden añadir archivos" (canAddHere).
+    const roHere = readOnlyHere();
     document.getElementById( 'newFolderBtn' ).disabled = roHere;
-    // Upload is the ONE thing an "add" share opens up: a folder somebody
-    // shared with us, having ticked "pueden añadir archivos". Everything
-    // else on this row stays off there — see canAddHere.
     document.getElementById( 'uploadBtn'    ).disabled = roHere && ! canAddHere;
 
-    // Compartir: exactly one thing, mine, and not a whole virtual root.
-    const shOne  = (targets.length === 1) ? targets[ 0 ] : '';
-    const shareBtn = document.getElementById( 'shareBtn' );
-    shareBtn.disabled = ! shOne || NayiveUI.isShared( shOne )
-                        || shOne === 'files' || shOne === 'data';
-    shareBtn.title    = shOne && ! shareBtn.disabled
-                      ? TF( 'drive.shareOne', { name: shOne.split( '/' ).pop() } )
-                      : T( 'drive.shareHint' );
+    if( browse ) browse.redraw();
 
-    // Delete acts on the checked items, or (nothing checked) on the current
-    // folder — disabled only at the root with no selection. A non-empty
-    // current folder gets an extra confirmation (see openDeleteConfirm).
-    const delBtn = document.getElementById( 'deleteBtn' );
-    delBtn.disabled = (nT === 0) || roSel;
-    delBtn.title    = (n > 0) ? T( 'drive.trashSelection' ) : T( 'drive.trashFolder' );
-
-    // Copy-link acts on the one checked item, or (nothing checked) on the
-    // folder selected in the tree — disabled only at the root with no selection.
-    const clBtn = document.getElementById( 'copyLinkBtn' );
-    clBtn.disabled = (nT !== 1);
-    clBtn.title    = (n === 1) ? T( 'drive.linkItem' ) : T( 'drive.linkFolder' );
-
-    // Compress packs the checked items (or the open folder) into one .zip
-    // beside them (zip.js).
-    document.getElementById( 'compressBtn' ).disabled = (nT === 0) || roSel;
-
-    // Properties shows the details of the checked items, or the open folder.
-    document.getElementById( 'propsBtn' ).disabled = (nT === 0);
-
-    // Download acts on the checked items, or (nothing checked) on the current
-    // folder - one at a time, so it is off while one runs (actions.js).
-    const dlBtn = document.getElementById( 'downloadBtn' );
-    dlBtn.disabled = (nT === 0) || !! dlJob;
-    dlBtn.title    = (n > 0) ? T( 'drive.downloadSelection' ) : T( 'drive.downloadFolder' );
-
-
-    // The eight above act on WHAT IS SELECTED: the ticked rows, or (nothing
-    // ticked) the folder open in the tree. So the group - its line included,
-    // see #selActions in index.html - leaves the bar only when
-    // there is no target at all (the Drive root, nothing ticked). A folder
-    // clicked in the tree shows the same buttons as one right-clicked there.
-    document.getElementById( 'selActions' ).hidden = ! nT;
-
-    // Several of the titles above were just rewritten from scratch, so the
-    // "· Ctrl+D" hints go back on last.
+    // The "· Alt+N" hints go back on last.
     applyKeyHints();
 }
 
@@ -198,7 +135,7 @@ async function reload()
         if( ! findNode( currentFolder ) )
             currentFolder = FS_ROOT;
 
-        selectedPaths.clear();
+        clearSel();
         await loadListing( currentFolder );      // refetch the open folder + render
         if( isSearching() ) runSearch();         // keep an active search live
         setSyncStatus( true );
@@ -269,9 +206,7 @@ async function applyNews()
         if( seq !== listingSeq || path !== currentFolder || trashMode ) return;
 
         curListing = { path: path, nodes: pruneNodes( r.nodes || [] ) };
-        const alive = new Set( curListing.nodes.map( function( n ) { return n.path; } ) );
-        selectedPaths.forEach( function( p ) { if( ! alive.has( p ) ) selectedPaths.delete( p ); } );
-        render();
+        render();                  // picks that are gone drop out on their own (the browser)
         if( isSearching() ) runSearch();
     }
     catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up

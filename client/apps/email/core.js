@@ -7,7 +7,10 @@
  *     read.js      one message (header, attachments, the body frame)
  *     accounts.js  the accounts dialog (add, remove)
  *     labels.js    Nayive's labels: the picker, the settings dialog
- *     actions.js   picking several, and what can be done to messages
+ *     actions.js   what can be done to messages, the pick dialog
+ *     search.js    the advanced search
+ *     browse.js    the shared item browser on the list, the tree of trays
+ *                  and labels, the one action list
  *     email.js     start()
  *
  * All classic scripts (defer), one global: window.NayiveMail (below: E). A
@@ -41,8 +44,6 @@
         labels:   [],      // [{ id, name, color }] - Nayive's own, every account's
         colors:   [],      // the eight a label can have
         settings: { trashDays: 30, showImages: false, signature: "" },
-        selecting: false,  // picking several (actions.js)
-        sel:      new Set(),  // the rows picked (items of S.items)
         only:     null,       // the pick dialog's matches: the rest out of sight (null = every row)
         // out of sight while their Undo is on show - a re-read never brings
         // them back: accounts being removed (accounts.js), labels being
@@ -240,7 +241,6 @@
         tag:    '<path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r="1"></circle>',
         restore:'<path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>',
         forget: '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><line x1="10" y1="11" x2="14" y2="16"></line><line x1="14" y1="11" x2="10" y2="16"></line><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>',
-        select: '<polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>',
         selectAll:'<rect x="3" y="3" width="18" height="18" rx="2"></rect><polyline points="7 12 10.5 15.5 17 9"></polyline>',
         compose:'<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path>',
         reply:  '<polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>',

@@ -16,7 +16,7 @@ async function openTrash()
         try { trashDays = ( await GumApi.trashDays() ).days; }
         catch( _e ) { trashDays = null; }
         trashMode  = true;
-        selectedPaths.clear();
+        clearSel();
         clearSearch();
         render();
         setStatus( '' );

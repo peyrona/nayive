@@ -12,132 +12,44 @@
 // (POST ?from=&new=, server/go/copy.go): the bytes go disk to
 // disk, never through the browser, so a big video cannot fill the tab.
 
-let pickerMode     = null;              // 'move' | 'copy'
-let pickerDest     = null;              // chosen folder path (FS_ROOT = Drive root); null = nothing chosen
-let pickerExpanded = new Set();
-
-function openFolderPicker( mode )
+// The chooser is the shared "Move to…" (NayiveUI.pickNode): the same tree
+// as the side pane, Drive's own folders only (nothing moves or copies INTO
+// "Shared with me"). The paths are read once, before it opens.
+async function openFolderPicker( mode )
 {
-    closeCtxMenus();
-    if( ! actionTargets().length ) return;
-
-    pickerMode     = mode;
-    pickerDest     = null;
-    pickerExpanded = new Set( [ FS_ROOT ] );
-
-    let acc = '';
-    for( const seg of splitPath( currentFolder ) ) { acc = acc ? acc + '/' + seg : seg; pickerExpanded.add( acc ); }
-
-    document.getElementById( 'pickFolderTitle' ).textContent = (mode === 'move') ? T( 'drive.moveTo' ) : T( 'drive.copyTo' );
-
-    const cb = document.getElementById( 'pickFolderConfirmBtn' );
-    cb.title = (mode === 'move') ? T( 'drive.move' ) : NayiveUI.t( 'ui.copy' );
-    cb.setAttribute( 'aria-label', cb.title );
-
-    renderFolderPicker();
-    updatePickerConfirm();
-    setBackdrop( 'pickFolderBackdrop', true );
-}
-
-function renderFolderPicker()
-{
-    const host = document.getElementById( 'pickFolderTree' );
-    host.innerHTML = '';
-    host.appendChild( buildPickerNode( findNode( FS_ROOT ) || dirTreeRoot, 0 ) );
-}
-
-// A folder is not a valid destination if it is one of the selected
-// folders itself, or lives inside one (you cannot move/copy a folder
-// into its own subtree).
-function isBadDest( path )
-{
-    for( const p of actionTargets() )
-    {
-        const n = findNode( p );
-        if( n && isDir( n ) && (path === p || path.indexOf( p + '/' ) === 0) ) return true;
-    }
-    return false;
-}
-
-function buildPickerNode( node, depth )
-{
-    const wrap = document.createElement( 'div' );
-    wrap.className = 'tree-node';
-
-    const subDirs = (node.nodes || []).filter( isDir );
-    const isOpen  = pickerExpanded.has( node.path );
-    const bad     = isBadDest( node.path );
-
-    const row = document.createElement( 'div' );
-    row.className = 'tree-row' + (node.path === pickerDest ? ' selected' : '') + (bad ? ' bad' : '');
-
-    const twisty = document.createElement( 'span' );
-    twisty.className = 'twisty' + (subDirs.length ? (isOpen ? ' open' : '') : ' leaf');
-    twisty.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-    twisty.addEventListener( 'click', function( e )
-    {
-        e.stopPropagation();
-        if( ! subDirs.length ) return;
-        if( isOpen ) pickerExpanded.delete( node.path ); else pickerExpanded.add( node.path );
-        renderFolderPicker();
-    });
-
-    const folderIc = document.createElement( 'span' );
-    folderIc.className = 'folder-ic';
-    folderIc.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
-
-    const label = document.createElement( 'span' );
-    label.className   = 'tree-name';
-    label.textContent = depth === 0 ? 'Drive' : nameOf( node );
-
-    row.appendChild( twisty );
-    row.appendChild( folderIc );
-    row.appendChild( label );
-
-    if( ! bad )
-        row.addEventListener( 'click', function()
-        {
-            pickerDest = node.path;
-            pickerExpanded.add( node.path );
-            renderFolderPicker();
-            updatePickerConfirm();
-        });
-
-    wrap.appendChild( row );
-
-    const childrenHost = document.createElement( 'div' );
-    childrenHost.className = 'tree-children' + (isOpen ? ' open' : '');
-    subDirs.forEach( function( c ) { childrenHost.appendChild( buildPickerNode( c, depth + 1 ) ); } );
-    wrap.appendChild( childrenHost );
-
-    return wrap;
-}
-
-function updatePickerConfirm()
-{
-    document.getElementById( 'pickFolderConfirmBtn' ).disabled = (pickerDest === null);
-
-    const tgts = actionTargets();
-    const what = tgts.length === 1
-        ? ('"' + tgts[0].split( '/' ).pop() + '"')
-        : TF( 'drive.nItems', { n: tgts.length } );
-
-    const dst = pickerDest === FS_ROOT ? 'Drive' : (pickerDest || '').split( '/' ).pop();
-
-    document.getElementById( 'pickFolderMsg' ).textContent = (pickerDest === null)
-        ? TF( 'drive.pickDest', { what: what } )
-        : TF( pickerMode === 'move' ? 'drive.moveWhatTo' : 'drive.copyWhatTo', { what: what, dst: dst } );
-}
-
-async function confirmFolderPicker()
-{
-    if( pickerDest === null ) return;
-
-    const dest  = pickerDest;
-    const mode  = pickerMode;
     const paths = actionTargets();
+    if( ! paths.length ) return;
 
-    setBackdrop( 'pickFolderBackdrop', false );
+    // A folder is not a valid destination if it is one of the selected
+    // folders itself, or lives inside one (you cannot move/copy a folder
+    // into its own subtree).
+    const isBadDest = function( path )
+    {
+        return paths.some( function( p )
+        {
+            const n = findNode( p );
+            return n && isDir( n ) && (path === p || path.indexOf( p + '/' ) === 0);
+        } );
+    };
+    const what = paths.length === 1
+        ? ('"' + paths[0].split( '/' ).pop() + '"')
+        : TF( 'drive.nItems', { n: paths.length } );
+
+    const dest = await NayiveUI.pickNode( {
+        title:    mode === 'move' ? T( 'drive.moveTo' ) : T( 'drive.copyTo' ),
+        okLabel:  mode === 'move' ? T( 'drive.move' ) : T( 'ui.copy' ),
+        roots:    function() { return treeRoots().slice( 0, 1 ); },
+        current:  currentFolder,
+        lit:      null,
+        disabled: isBadDest,
+        note:     function( lit )
+        {
+            if( lit === null ) return TF( 'drive.pickDest', { what: what } );
+            const dst = lit === FS_ROOT ? 'Drive' : lit.split( '/' ).pop();
+            return TF( mode === 'move' ? 'drive.moveWhatTo' : 'drive.copyWhatTo', { what: what, dst: dst } );
+        }
+    } );
+    if( dest === null ) return;
 
     if( mode === 'move' ) await doMove( paths, dest );
     else                  await doCopy( paths, dest );
@@ -218,7 +130,7 @@ async function doMove( paths, dest )
         await NayiveMedia.remapPaths( remapped );
         const movedCur = remapped.find( function( r ) { return r[0] === currentFolder; } );
         if( movedCur ) currentFolder = movedCur[1];   // moved the folder we're in — follow it
-        selectedPaths.clear();
+        clearSel();
         await reload();
 
         const msg = TF( 'drive.nMoved', { n: moved } )
@@ -336,7 +248,7 @@ async function doCopy( paths, dest )
         }
 
         await NayiveMedia.copyPaths( copied );
-        selectedPaths.clear();
+        clearSel();
         await reload();
         flashStatus( TF( 'drive.nCopied', { n: files } ) );
     }

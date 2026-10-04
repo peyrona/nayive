@@ -3,17 +3,19 @@
  * labels.js - Nayive's own labels, and the settings dialog.
  *
  * Labels belong to Nayive, not to the mail server (server/go/mail_labels.go):
- * the same for every provider, several per message, and a tap on one in the
- * side panel lists what carries it, from every account.
+ * the same for every provider, several per message, and a click on one in the
+ * tree lists what carries it, from every account. Mail dropped on a label in
+ * the tree gets it (E.labelAdd).
  *
  * THE PICKER (the tag button): every label, ticked when all the targets have
  * it, a dash when some do. A tap puts it on all of them, or - when all had
  * it - takes it off all of them. At once, no "Save". A new label can be made
  * there and goes on them straight away.
  *
- * ONE LABEL (the side panel's + makes one, a label's pencil edits it): its
- * name and one of eight colours; the bin deletes it, and off every message
- * (with Undo: out of sight at once, deleted when the Undo is gone).
+ * ONE LABEL ("New label" in the menu of the tree's "Labels" row makes one,
+ * "Edit label" in a label's menu edits it): its name and one of eight
+ * colours; the bin (or "Delete label" in its menu) deletes it, and off every
+ * message (with Undo: out of sight at once, deleted when the Undo is gone).
  */
 ( function ()
 {
@@ -123,6 +125,17 @@
         if( changed.length ) { renderPicker(); E.labelsChanged( changed ); }
     }
 
+    // Mail dropped on a label in the tree: it goes on all of them (the
+    // picker's own call). -> how many took it.
+    E.labelAdd = async function ( list, l )
+    {
+        picking = list.slice();
+        if( ! picking.length ) return 0;
+        var had = picking.filter( function ( m ) { return ( m.labels || [] ).indexOf( l.id ) >= 0; } ).length;
+        await toggle( l, true );
+        return picking.filter( function ( m ) { return ( m.labels || [] ).indexOf( l.id ) >= 0; } ).length - had;
+    };
+
     async function newFromPicker()
     {
         var l = await createLabel( E.$( "labelNew" ) );
@@ -130,7 +143,7 @@
     }
 
     // ---------------------------------------------------------------------
-    // one label: new (the side panel's +) or edit (its pencil)
+    // one label: new or edit (the tree's menus)
     // ---------------------------------------------------------------------
 
     var editing = null, colour = "";
@@ -191,6 +204,13 @@
         catch( e ) { err.textContent = labelError( e ); err.hidden = false; }
     }
 
+    // A label's menu in the tree: "Delete label", at once (with Undo).
+    E.deleteLabel = function ( l )
+    {
+        editing = l;
+        deleteLabel();
+    };
+
     // The bin (the dialog is the question): out of sight at once, with Undo.
     // The server deletes it, and off every message, only when the Undo is
     // gone - a page closed meanwhile deletes it too. Hidden, its chips go
@@ -226,7 +246,7 @@
         }
         NayiveUI.undoToast( E.T( "ui.toast.deleted" ), function ()
         {
-            var here = ! S.label && S.tray === "inbox" && E.listShown() && ! S.selecting && ! E.isComposing();
+            var here = ! S.label && S.tray === "inbox" && E.listShown() && ! E.picking() && ! E.isComposing();
             back();
             if( wasOn && here ) E.openLabel( l.id );      // still where it sent us: back to its list
         }, { onExpire: function ()
@@ -251,7 +271,6 @@
     {
         E.$( "labelNewBtn" ).addEventListener( "click", newFromPicker );
         E.$( "labelNew" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); newFromPicker(); } } );
-        E.$( "labelAddBtn" ).addEventListener( "click", function () { E.openLabelDialog( null ); } );
         E.$( "labelSaveBtn" ).addEventListener( "click", saveLabel );
         E.$( "labelDelBtn" ).addEventListener( "click", deleteLabel );
         E.$( "labelName" ).addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); saveLabel(); } } );

@@ -37,7 +37,7 @@
     E.refresh = async function ( force )
     {
         if( ! S.accounts.length && ! force && ! S.bootFailed ) return;
-        if( S.selecting || E.isComposing() ) return;    // never under the user's ticks or pen
+        if( E.picking() || E.isComposing() ) return;    // never under the user's picks or pen
         try
         {
             var before = S.acct;
@@ -71,16 +71,16 @@
             title: "eMail",
             lead:  T( "mail.introLead" ),
             buttons: [
-                { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTrays" ) },
-                { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introRead" ) },
+                { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTree" ) },
+                { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introOpen" ) },
                 { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ) },
                 { sel: "#composeBtn", text: T( "mail.introCompose" ) },
                 { icon: "back", name: T( "mail.reply" ) + " \u00b7 " + T( "mail.forward" ), text: T( "mail.introReply" ) },
                 { sel: "#fBold", name: T( "mail.format" ), text: T( "mail.introFormat" ) },
-                { sel: "#selectBtn", text: T( "mail.introSelect" ) },
+                { sel: "#selectBtn", text: T( "mail.introPick" ) },
                 { sel: "#actDelete", text: T( "mail.introDelete" ) },
                 { sel: "#actLabel", text: T( "mail.introLabels" ) },
-                { sel: "#labelAddBtn", text: T( "mail.introLabelAdd" ) },
+                { svg: E.icon( "tag" ), name: T( "mail.labels" ), text: T( "mail.introLabelMenu" ) },
                 { sel: "#setBtn", text: T( "mail.introSettings" ) },
                 { sel: "#syncIndicator", name: T( "ui.syncName" ), text: T( "mail.introSync" ) }
             ]
@@ -96,18 +96,11 @@
         {
             if( E.isComposing() ) E.closeCompose( true );
             else if( S.open ) E.closeMessage( true );
-            else if( S.selecting ) E.endSelect();
         } );
-        E.$( "selectBtn" ).addEventListener( "click", function () { if( S.selecting ) E.endSelect(); else E.startSelect(); } );
+        E.$( "selectBtn" ).addEventListener( "click", function () { E.openPick(); } );
         E.$( "setBtn" ).addEventListener( "click", function () { E.openSettings( "accounts" ); } );
         E.$( "emptyTrashBtn" ).addEventListener( "click", function () { E.act.emptyTray(); } );
-        [ [ "actAll", "all" ], [ "actRead", "read" ], [ "actUnread", "unread" ], [ "actStar", "star" ], [ "actLabel", "label" ],
-          [ "actSpam", "spam" ], [ "actNotSpam", "notSpam" ], [ "actDelete", "del" ], [ "actRestore", "restore" ],
-          [ "actForget", "forget" ] ].forEach( function ( b ) { E.$( b[ 0 ] ).addEventListener( "click", function () { E.act[ b[ 1 ] ](); } ); } );
-        document.addEventListener( "keydown", function ( e )
-        {
-            if( e.key === "Escape" && S.selecting && ! document.querySelector( ".sheet-backdrop.open" ) ) E.endSelect();
-        } );
+        E.wireBrowse();                 // browse.js: the list's picking, the tree, the one action list
         E.$( "noAcctAdd" ).addEventListener( "click", function () { E.openSettings( "accounts" ); } );
         E.$( "addBtn" ).addEventListener( "click", E.addAccount );
         E.$( "imagesBtn" ).addEventListener( "click", E.showImages );

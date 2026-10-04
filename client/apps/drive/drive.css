@@ -87,32 +87,9 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     width: var(--tree-w, 250px); flex: 0 0 auto; overflow: auto;
     padding: 8px 4px;
 }
-/* The inner tree grows to its widest row so .tree-pane can scroll it sideways. */
-#treePane > .tree-node { min-width: max-content; }
-
-/* The drag handle (.pane-resizer) between the tree and the file list is in app.css. */
-
-.tree-node .tree-row
-{
-    display: flex; align-items: center; gap: 4px; padding: 6px 6px; border-radius: 6px;
-    cursor: pointer; font-size: 0.87rem; white-space: nowrap; user-select: none;
-}
-.tree-node .tree-row:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
-.tree-node .tree-row.selected { background: var(--accent); color: var(--on-accent); }
-.tree-node .tree-row.selected .tree-name { color: var(--on-accent); }
-.tree-node .tree-row .twisty { width: 14px; height: 14px; flex: 0 0 auto; color: var(--text-dim); transition: transform .12s ease; }
-.tree-node .tree-row.selected .twisty { color: var(--on-accent); }
-.tree-node .tree-row .twisty.open { transform: rotate(90deg); }
-.tree-node .tree-row .twisty.leaf { visibility: hidden; }
-.tree-node .tree-row svg.folder-ic { flex: 0 0 auto; }
-.tree-node .tree-name { flex: 0 0 auto; white-space: nowrap; }
-.tree-children { margin-left: 16px; display: none; }
-.tree-children.open { display: block; }
-/* ⋮ actions button on a folder row — a shared .icon-btn.sm, shown on touch
-   only (see the phone @media). The selected row is accent-filled, so there
-   its glyph takes --on-accent. */
-.tree-node .tree-row .row-menu { display: none; margin-left: auto; }
-.tree-node .tree-row.selected .row-menu { color: var(--on-accent); }
+/* The tree is the shared one (.ntree, app.css): it grows to its widest row
+   so .tree-pane scrolls it sideways. The drag handle (.pane-resizer) between
+   the tree and the file list is in app.css too. */
 
 /* Right pane */
 .list-pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -150,8 +127,9 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
     border-bottom: 1px solid color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer;
 }
 .row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.row.selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.row .row-menu { display: none; }   /* a shared .icon-btn.sm, shown on touch only (phone @media) */
+.row.is-selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.row .row-more { margin-left: 4px; }      /* the meta before it already takes the free room */
+/* The tick and the ⋮ are the item browser's (app.css .pick-tick / .row-more). */
 .row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
 /* File-type icon colours. The dark set is pastel for the dark ground; the
    light set is deepened so it stays legible on the grey light background. */
@@ -210,26 +188,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 }
 .list-pane.drag-over .drop-cover { display: flex; }
 
-/* Internal drag-and-drop: move files / folders onto a folder */
-.row.dragging, .tree-row.dragging { opacity: 0.4; }
-.row.drop-target
-{
-    background: color-mix(in srgb, var(--accent) 30%, transparent);
-    outline: 2px solid var(--accent); outline-offset: -2px;
-}
-.tree-row.drop-target
-{
-    background: color-mix(in srgb, var(--accent) 30%, transparent);
-    outline: 2px solid var(--accent); outline-offset: -2px;
-}
-
-/* Keyboard navigation: arrow keys move a cursor, Left/Right swap panes */
-.tree-node .tree-row.kbd:not(.selected)
-{
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    box-shadow: inset 2px 0 0 var(--accent);
-}
-body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+/* Internal drag-and-drop: the shared marks (app.css .dragging / .drop-target). */
 
 /* Dialogs: .sheet-backdrop / .sheet / .field / inputs from app.css. */
 .sheet p { font-size: 0.9rem; color: var(--text-dim); margin: 0 0 14px; }
@@ -358,23 +317,6 @@ body.kbd-tree .tree-pane, body.kbd-list .list-pane { box-shadow: inset 0 0 0 2px
     100% { left: 100%; }
 }
 
-/* Context menu on a listing row (desktop right-click; touch: the row's ⋮ button).
-   The look is the shared .top-menu / .menu-item; .ctx-menu only adds the
-   closed state (openCtxMenu adds .open) and the greyed-out rows. */
-.ctx-menu { display: none; }
-.ctx-menu.open { display: flex; }
-.ctx-menu .menu-item[hidden] { display: none; }   /* .menu-item's display would otherwise beat [hidden]'s UA style */
-.ctx-menu .menu-item:disabled { opacity: 0.34; cursor: default; background: none; }
-
-/* Folder chooser (Mover a… / Copiar a…) */
-.tree-picker
-{
-    max-height: 46vh; overflow-y: auto; overflow-x: hidden;
-    border: 1px solid var(--line); border-radius: var(--radius-s); padding: 6px 4px; margin-bottom: 14px;
-}
-.tree-picker .tree-row.bad { opacity: 0.32; cursor: default; }
-.tree-picker .tree-row.bad:hover { background: none; }
-
 /* Properties dialog: a label / value grid. The dimmed label reads like a
    .field label (app.css); the exact byte count goes under its own value
    in small type, the way every file manager writes it. */
@@ -420,7 +362,6 @@ body.trash-mode .tree-pane { display: none; }
 
 /* --- Responsive: phone layout (≤640px). New elements below are hidden here
        and only revealed inside the @media block, so desktop is untouched. --- */
-.tree-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90; display: none; }
 
 @media (max-width: 640px)
 {
@@ -443,17 +384,7 @@ body.trash-mode .tree-pane { display: none; }
     .sb-rule select { width: 128px; }
     .search-wrap .search-ends .icon-btn.sm { width: 32px; height: 32px; }
 
-    /* B4 — the folder tree becomes a slide-in sheet */
-    .tree-pane
-    {
-        position: fixed; top: 0; bottom: 0; left: 0; z-index: 95;
-        width: 82vw; max-width: 300px; background: var(--bg);
-        transform: translateX(-100%); transition: transform .18s ease;
-        box-shadow: 0 0 32px rgba(0,0,0,0.45); padding-top: 12px;
-    }
-    .tree-pane.open { transform: translateX(0); }
-    .tree-backdrop.open { display: block; }
-    .tree-node .tree-row { padding: 9px 8px; }
+    /* B4 — the folder tree becomes a slide-in sheet (app.css .tree-sheet) */
 
     .breadcrumb .crumb-root
     {
@@ -462,24 +393,19 @@ body.trash-mode .tree-pane { display: none; }
     }
     .breadcrumb .crumb-root::after { content: " ▾"; color: var(--text-dim); }
 
-    /* B6 — per-file actions come from the row's ⋮ menu; keep Download */
-    #renameBtn, #moveToBtn, #copyToBtn, #copyLinkBtn, #compressBtn, #propsBtn, #deleteBtn { display: none; }
+    /* B6 — the selection group shows only its phone actions (browser.js)
+       and the other tools step aside while something is picked (app.css).
 
-    /* B6b — of what is left, the ones a phone reaches for LEAST move
-       into the header's own "⋮" (#topMenu, built in wireTopMenu from
-       these very buttons). Compartir is here because it is the one
-       per-file action the row menu does not carry; la papelera and
-       "Biggest files" are once-in-a-while. What stays is what you came to Drive to do:
-       buscar, nueva carpeta, subir, descargar — six buttons, one row,
-       even with something selected. */
-    #shareBtn, #bigFilesBtn, #trashViewBtn { display: none; }
+       B6b — the header tools a phone reaches for LEAST move into the
+       header's own "⋮" (wireTopMenu): la papelera and "Biggest files" are
+       once-in-a-while. What stays is what you came to Drive to do:
+       buscar, nueva carpeta, subir. */
+    #bigFilesBtn, #trashViewBtn { display: none; }
     #moreBtn { display: flex; }
     .search-tight #moreBtn { display: none; }   /* the search fold (app.css) sends it aside with the rest */
 
     /* B7 — roomier rows, ⋮ action button, no size/date column */
     .row { padding: 11px 12px 11px 6px; gap: 8px; }
-    .row .row-menu { display: flex; }
-    .tree-node .tree-row .row-menu { display: flex; }
     .row .row-meta { display: none; }
     .row .row-meta.row-meta--big { display: block; padding-left: 8px; }   /* "Biggest files": the size stays */
     .row .row-meta--big .row-where { display: none; }
@@ -489,8 +415,6 @@ body.trash-mode .tree-pane { display: none; }
     /* B8 — no sideways scrolling on a phone: names truncate as before. */
     .pane-resizer { display: none; }
     .tree-pane { overflow-x: hidden; }
-    #treePane > .tree-node { min-width: 0; }
-    .tree-node .tree-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .listing { overflow-x: hidden; }
     .list-rows { width: auto; min-width: 0; }
     .row .row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
