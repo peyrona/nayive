@@ -579,9 +579,11 @@
         const WRAP_KEY   = 'gum_text_wrap';
         const INDENT_KEY = 'gum_text_indent';
         const INDENTS    = [ '4', '2', 'tab' ];
-        const storedWrap = localStorage.getItem( WRAP_KEY );   // '0' is a real answer, so no `||` here
+        // A browser that blocks storage throws on the read: start as a first run.
+        const readPref   = function( k ) { try { return localStorage.getItem( k ); } catch( _ ) { return null; } };
+        const storedWrap = readPref( WRAP_KEY );   // '0' is a real answer, so no `||` here
         let   lineWrap   = ( storedWrap === null ? window.matchMedia( '( max-width: 640px )' ).matches : storedWrap === '1' );
-        const storedIdt  = localStorage.getItem( INDENT_KEY );
+        const storedIdt  = readPref( INDENT_KEY );
         const indentPref = ( INDENTS.includes( storedIdt ) ? storedIdt : '4' );   // a stale value must never reach setIndent()
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
@@ -597,14 +599,14 @@
         const FONT_KEY = 'gum_text_font_size';
         const FONT_MIN = 9;
         const FONT_MAX = 30;
-        let   fontSize = ( parseInt( localStorage.getItem( FONT_KEY ), 10 ) || 13 );
+        let   fontSize = ( parseInt( readPref( FONT_KEY ), 10 ) || 13 );
 
         // Right margin: the guide line the toolbar spinner moves, in columns of the
         // monospace grid. 132 is the wide-terminal width this editor is written to.
         const MARGIN_KEY = 'gum_text_margin';
         const MARGIN_MIN = 20;
         const MARGIN_MAX = 500;
-        let   marginCols = ( parseInt( localStorage.getItem( MARGIN_KEY ), 10 ) || 132 );
+        let   marginCols = ( parseInt( readPref( MARGIN_KEY ), 10 ) || 132 );
 
         // The Open browser: a shared widget, this app only says what it lists.
         // The open document - its path, whether it is someone else's, its name,
