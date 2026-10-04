@@ -96,17 +96,11 @@
             padding: 9px 16px; color: var(--on-accent); background: var(--accent);
         }
 
-        /* password field with an inline show/hide eye (same as login.html) */
-        .pw-wrap { position: relative; }
+        /* password field with an inline show/hide eye: app.css PASSWORD EYE;
+           here only what differs */
         .pw-wrap input { padding-right: 42px; }
-        .pw-eye
-        {
-            position: absolute; top: 0; right: 0; height: 100%;
-            width: 38px; display: flex; align-items: center; justify-content: center;
-            border: none; background: none; padding: 0; margin: 0; cursor: pointer;
-            color: var(--text-dim); border-radius: 0;
-        }
-        .pw-eye:hover { color: var(--text); filter: none; }
+        .pw-eye { margin: 0; border-radius: 0; }
+        .pw-eye:hover { filter: none; }
         .pw-eye svg { width: 17px; height: 17px; }
         /* a user row's in-field trash: removes the password on Save */
         .pw-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
@@ -328,14 +322,6 @@
         } );
     }
 
-    function humanSize( n )
-    {
-        if ( !n ) return '0 B';
-        var u = [ 'B', 'KB', 'MB', 'GB', 'TB' ], i = 0;
-        while ( n >= 1024 && i < u.length - 1 ) { n /= 1024; i++; }
-        return ( n < 10 && i > 0 ? n.toFixed( 1 ) : Math.round( n ) ) + ' ' + u[ i ];
-    }
-
     var GIB = 1024 * 1024 * 1024;
 
     // Fill a "Uso" cell: bytes used, and - when the user has a quota - how much
@@ -346,13 +332,13 @@
         var q = ( quota === null || quota === undefined || quota === '' ) ? null : Number( quota );
         if ( !q )
         {
-            td.textContent = humanSize( usage );
+            td.textContent = NayiveUI.fmtBytes( usage );
             return;
         }
         var qBytes = q * GIB;
         var pct    = usage / qBytes * 100;
         var over   = usage > qBytes;
-        td.innerHTML = humanSize( usage ) + ' / ' + humanSize( qBytes ) +
+        td.innerHTML = NayiveUI.fmtBytes( usage ) + ' / ' + NayiveUI.fmtBytes( qBytes ) +
             '<span class="pct' + ( over ? ' over' : '' ) + '">' +
             ( pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed( pct < 10 ? 1 : 0 ) ) + '%</span>';
     }
@@ -768,64 +754,71 @@
         if ( ctl.tr.parentNode ) ctl.tr.parentNode.removeChild( ctl.tr );
     }
 
+    // One user row's cells, the same for a saved user and a new one: name,
+    // quota, photo limit, usage, password and the action button (`act`, its
+    // `title`). The caller fills in the values and the placeholders.
+    function userCells( act, title )
+    {
+        function cell( cls, child )
+        {
+            var td = document.createElement( 'td' );
+            td.className = cls;
+            if ( child ) td.appendChild( child );
+            tr.appendChild( td );
+            return td;
+        }
+        function input( type ) { var i = document.createElement( 'input' ); i.type = type; return i; }
+
+        var tr = document.createElement( 'tr' );
+
+        var n = input( 'text' );
+        n.autocapitalize = 'none'; n.spellcheck = false;
+        n.setAttribute( 'autocorrect', 'off' );   // not a real IDL property
+        cell( 'col-user', n );
+
+        var q = input( 'number' );
+        q.min = '0'; q.step = '0.5'; q.placeholder = '—';
+        cell( 'col-quota', q );
+
+        var m = input( 'number' );
+        m.min = '200'; m.max = '20000'; m.step = '1';
+        m.title = 'Longest side, in pixels. Empty = keep the originals.';
+        cell( 'col-photo', m );
+
+        var tdU = cell( 'col-use' );
+
+        var p = input( 'text' );
+        var tdP = cell( 'col-pass', p );
+
+        var acts = document.createElement( 'div' );
+        acts.className = 'row-acts';
+        var btn = document.createElement( 'button' );
+        btn.setAttribute( 'data-act', act );
+        btn.title = title;
+        acts.appendChild( btn );
+        var tdA = cell( 'col-act', acts );
+        if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
+
+        return { tr: tr, n: n, q: q, m: m, tdU: tdU, p: p, tdP: tdP, btn: btn };
+    }
+
     // "+" next to the Users heading: one empty row per click, saved by the
     // page-wide Save button. Its (x) throws the row away again.
     function addNewRow()
     {
-        var tr = document.createElement( 'tr' );
+        var c = userCells( 'close', 'Discard this row' );
+        c.n.placeholder = 'new';
+        c.m.placeholder = '2048';
+        c.tdU.textContent = '—';
+        c.p.placeholder = 'blank = user sets it';
+        $( 'newRows' ).appendChild( c.tr );
 
-        var tdName = document.createElement( 'td' );
-        tdName.className = 'col-user';
-        var n = document.createElement( 'input' );
-        n.type = 'text'; n.placeholder = 'new';
-        n.autocapitalize = 'none'; n.spellcheck = false;
-        n.setAttribute( 'autocorrect', 'off' );
-        tdName.appendChild( n );
-
-        var tdQ = document.createElement( 'td' );
-        tdQ.className = 'col-quota';
-        var q = document.createElement( 'input' );
-        q.type = 'number'; q.min = '0'; q.step = '0.5'; q.placeholder = '—';
-        tdQ.appendChild( q );
-
-        var tdM = document.createElement( 'td' );
-        tdM.className = 'col-photo';
-        var m = document.createElement( 'input' );
-        m.type = 'number'; m.min = '200'; m.max = '20000'; m.step = '1'; m.placeholder = '2048';
-        m.title = 'Longest side, in pixels. Empty = keep the originals.';
-        tdM.appendChild( m );
-
-        var tdU = document.createElement( 'td' );
-        tdU.className = 'col-use';
-        tdU.textContent = '—';
-
-        var tdP = document.createElement( 'td' );
-        tdP.className = 'col-pass';
-        var p = document.createElement( 'input' );
-        p.type = 'text'; p.placeholder = 'blank = user sets it';
-        tdP.appendChild( p );
-
-        var tdA = document.createElement( 'td' );
-        tdA.className = 'col-act';
-        var acts = document.createElement( 'div' );
-        acts.className = 'row-acts';
-        var drop = document.createElement( 'button' );
-        drop.setAttribute( 'data-act', 'close' );
-        drop.title = 'Discard this row';
-        acts.appendChild( drop );
-        tdA.appendChild( acts );
-        if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
-
-        tr.appendChild( tdName ); tr.appendChild( tdQ ); tr.appendChild( tdM );
-        tr.appendChild( tdU ); tr.appendChild( tdP ); tr.appendChild( tdA );
-        $( 'newRows' ).appendChild( tr );
-
-        var ctl = { tr: tr, nameIn: n, quota: q, photo: m, pass: p };
+        var ctl = { tr: c.tr, nameIn: c.n, quota: c.q, photo: c.m, pass: c.p };
         NEW_CTLS.push( ctl );
-        drop.addEventListener( 'click', function () { dropNewRow( ctl ); } );
+        c.btn.addEventListener( 'click', function () { dropNewRow( ctl ); } );
 
-        n.focus();
-        if ( tr.scrollIntoView ) tr.scrollIntoView( { block: 'nearest' } );
+        c.n.focus();
+        if ( c.tr.scrollIntoView ) c.tr.scrollIntoView( { block: 'nearest' } );
     }
     $( 'addUser' ).addEventListener( 'click', addNewRow );
 
@@ -841,43 +834,15 @@
         }
         users.forEach( function ( u )
         {
-            var tr = document.createElement( 'tr' );
-
-            var tdName = document.createElement( 'td' );
-            tdName.className = 'col-user';
-            var n = document.createElement( 'input' );
-            n.type = 'text';
+            var c = userCells( 'danger', 'Delete' );
+            var tr = c.tr, n = c.n, q = c.q, m = c.m, p = c.p, tdP = c.tdP, del = c.btn;
             n.value = u.name;
-            n.autocapitalize = 'none'; n.spellcheck = false;
-            n.setAttribute( 'autocorrect', 'off' );   // not a real IDL property
             n.title = 'Renaming signs this user out; they sign back in with the new name.';
-            tdName.appendChild( n );
-
-            var tdQ = document.createElement( 'td' );
-            tdQ.className = 'col-quota';
-            var q = document.createElement( 'input' );
-            q.type = 'number'; q.min = '0'; q.step = '0.5'; q.placeholder = '—';
             q.value = ( u.quota === null || u.quota === undefined ) ? '' : u.quota;
-            tdQ.appendChild( q );
-
-            var tdM = document.createElement( 'td' );
-            tdM.className = 'col-photo';
-            var m = document.createElement( 'input' );
-            m.type = 'number'; m.min = '200'; m.max = '20000'; m.step = '1'; m.placeholder = '—';
-            m.title = 'Longest side, in pixels. Empty = keep the originals.';
+            m.placeholder = '—';
             m.value = ( u.photo_max === null || u.photo_max === undefined ) ? '' : u.photo_max;
-            tdM.appendChild( m );
-
-            var tdU = document.createElement( 'td' );
-            tdU.className = 'col-use';
-            fillUsage( tdU, u.usage, u.quota );
-
-            var tdP = document.createElement( 'td' );
-            tdP.className = 'col-pass';
-            var p = document.createElement( 'input' );
-            p.type = 'text';
+            fillUsage( c.tdU, u.usage, u.quota );
             p.placeholder = u.has_password ? 'new password' : 'not set — user will pick it';
-            tdP.appendChild( p );
 
             // Trash inside the field: remove the password on Save, so the user
             // must pick a new one at next sign-in. Typing a password undoes it.
@@ -896,17 +861,6 @@
                 clr.innerHTML = NayiveUI.icon( 'trash' );
                 pw.appendChild( clr );
             }
-
-            var tdA = document.createElement( 'td' );
-            tdA.className = 'col-act';
-            var acts = document.createElement( 'div' );
-            acts.className = 'row-acts';
-            var del = document.createElement( 'button' );
-            del.setAttribute( 'data-act', 'danger' );
-            del.title = 'Delete';
-            acts.appendChild( del );
-            tdA.appendChild( acts );
-            if ( window.NayiveUI ) NayiveUI.applySheetButtons( tdA );
 
             // Recorded before the delete handler, so that handler can read
             // ctl.name - the name the server currently knows this row by, which
@@ -951,8 +905,6 @@
                 refresh();
             } );
 
-            tr.appendChild( tdName ); tr.appendChild( tdQ ); tr.appendChild( tdM );
-            tr.appendChild( tdU ); tr.appendChild( tdP ); tr.appendChild( tdA );
             tb.appendChild( tr );
         } );
     }

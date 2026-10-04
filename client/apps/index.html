@@ -403,8 +403,9 @@
             :root:not(.in-desktop) .find-btn { right: 12px; }
         }
 
-        /* ---- eye toggle inside a password field (Mi cuenta dialog) ---- */
-        .pw-wrap { position: relative; margin: 10px 0; }
+        /* ---- eye toggle inside a password field (Mi cuenta dialog; the eye:
+           app.css PASSWORD EYE) ---- */
+        .pw-wrap { margin: 10px 0; }
         .pw-wrap .scm-input { margin: 0; padding-right: 42px; }
         /* An on / off row: text · (i) · the shared .switch at the end. */
         .scm-check-row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
@@ -412,14 +413,6 @@
         .scm-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; cursor: pointer; }
         .scm-check-row .scm-check { margin: 0; }
         .scm-check-row > .switch { margin-left: auto; }
-        .pw-eye
-        {
-            position: absolute; top: 0; right: 0; height: 100%;
-            width: 38px; display: flex; align-items: center; justify-content: center;
-            border: none; background: none; padding: 0; cursor: pointer; color: var(--text-dim);
-        }
-        .pw-eye:hover { color: var(--text); }
-        .pw-eye svg { width: 18px; height: 18px; }
 
         /* ---- The three dialogs (Esquemas de color, Mi cuenta, Buscar mi móvil) ----
            The shared shell: app.css .sheet-backdrop / .sheet, opened and closed with

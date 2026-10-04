@@ -959,6 +959,20 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
     line-height: 1.35;
 }
 
+/* PASSWORD EYE: a password box with a show / hide eye inside its right end
+ * (login.html, admin.html, the launcher's My account). Each page adds only
+ * what differs: the eye's width, the icon size, the field's room and margins. */
+.pw-wrap           { position: relative; }
+.pw-eye
+{
+    position: absolute; top: 0; right: 0; height: 100%;
+    width: 38px; display: flex; align-items: center; justify-content: center;
+    border: none; background: none; padding: 0; cursor: pointer;
+    color: var(--text-dim);
+}
+.pw-eye:hover      { color: var(--text); }
+.pw-eye svg        { width: 18px; height: 18px; }
+
 /* A field's control fills the row. Scoped to .field so it never stretches a
  * toolbar / search input that lives outside a form. */
 .field input,

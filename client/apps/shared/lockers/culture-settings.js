@@ -28,14 +28,7 @@
 var S;                                       // window.NayiveSalon, when open() runs
 function t( k ) { return window.NayiveI18n ? NayiveI18n.t( k ) : k; }
 
-function el( tag, cls, text, parent )
-{
-    var e = document.createElement( tag );
-    if( cls ) e.className = cls;
-    if( text != null ) e.textContent = text;
-    if( parent ) parent.appendChild( e );
-    return e;
-}
+function el( tag, cls, text, parent ) { return S.engine.el( tag, cls, text, parent ); }   // only once open() has S
 
 // Layout only: every control is a shared one (select, input, .switch,
 // .icon-btn, .pill, the browser's own tick-box).
