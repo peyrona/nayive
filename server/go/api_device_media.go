@@ -336,6 +336,53 @@ func (s *Server) sweepMediaParts(owner string, root *os.Root) {
 	}
 }
 
+// mediaRowOf is the phone's MediaStore row in the app's id,
+// "<_ID>-<DATE_ADDED>[-<rev>]"; "" for any other id.
+func mediaRowOf(id string) string {
+	p := strings.Split(id, "-")
+	if len(p) < 2 || len(p) > 3 {
+		return ""
+	}
+	for _, n := range p {
+		if n == "" || strings.Trim(n, "0123456789") != "" {
+			return ""
+		}
+	}
+	return p[0] + "-" + p[1]
+}
+
+// dropOlderMediaParts: a file edited on the phone comes again under a new id
+// (its rev). The same phone's part of the same row under another id goes now,
+// or it would count against the quota until the sweep. Under lockPath.
+func (s *Server) dropOlderMediaParts(dev *deviceRow, root *os.Root, phoneID string) {
+	row := mediaRowOf(phoneID)
+	if row == "" {
+		return
+	}
+	dir := filepath.Join("data", mediaPartDir)
+	f, err := root.Open(dir)
+	if err != nil {
+		return
+	}
+	entries, _ := f.ReadDir(-1)
+	f.Close()
+	for _, e := range entries {
+		upload, isMeta := strings.CutSuffix(e.Name(), ".json")
+		if !isMeta || !validUploadID(upload) {
+			continue
+		}
+		p, ok := readMediaPart(root, filepath.Join(dir, e.Name()))
+		if !ok || p.Device != dev.ID || p.Phone == phoneID || mediaRowOf(p.Phone) != row {
+			continue
+		}
+		partRel := filepath.Join(dir, upload+".part")
+		if info, err := root.Stat(partRel); err == nil && root.Remove(partRel) == nil {
+			s.users.AdjustUsage(dev.Owner, -info.Size())
+		}
+		root.Remove(filepath.Join(dir, e.Name()))
+	}
+}
+
 func (s *Server) mediaStart(w http.ResponseWriter, r *http.Request, dev *deviceRow) {
 	var body struct {
 		ID    string   `json:"id"`
@@ -405,6 +452,7 @@ func (s *Server) mediaStart(w http.ResponseWriter, r *http.Request, dev *deviceR
 		}
 	}
 	if offset == 0 {
+		s.dropOlderMediaParts(dev, root, body.ID)
 		if info, err := root.Stat(partRel); err == nil {
 			s.users.AdjustUsage(dev.Owner, -info.Size())
 		}

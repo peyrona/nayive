@@ -3,7 +3,9 @@
      never reaches the server, so it is never logged. The page keeps it in this
      browser and goes on to the launcher at once; the launcher hands it to
      POST /api/device/enrol once somebody is signed in (after the login, if
-     needed - the login does not carry a URL through, localStorage does).
+     needed - the login does not carry a URL through, localStorage does) AND
+     has said yes to "Add phone '<n>' to your account?": anyone can send this
+     link, so a token kept here is never enrolled silently.
      Public: it must work before the sign-in. -->
 <!doctype html>
 <html lang="es">

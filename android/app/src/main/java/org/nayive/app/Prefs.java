@@ -31,8 +31,11 @@ final class Prefs {
 
     /** Revoked on the server: forget the old token, the next one is enrolled anew. */
     static synchronized void newToken(Context c) {
-        sp(c).edit().putString("token", freshToken()).putBoolean("enrolled", false).apply();
+        sp(c).edit().putString("token", freshToken()).putBoolean("enrolled", false).putBoolean("revoked", true).apply();
     }
+
+    /** A token that worked was refused (revoked): asking again can wait long. Off once enrolled anew. */
+    static boolean revoked(Context c) { return sp(c).getBoolean("revoked", false); }
 
     private static String freshToken() {
         byte[] b = new byte[32];
@@ -43,7 +46,9 @@ final class Prefs {
     /** The server has answered this token at least once. */
     static boolean enrolled(Context c) { return sp(c).getBoolean("enrolled", false); }
 
-    static void setEnrolled(Context c, boolean on) { sp(c).edit().putBoolean("enrolled", on).apply(); }
+    static void setEnrolled(Context c, boolean on) {
+        sp(c).edit().putBoolean("enrolled", on).putBoolean("revoked", false).apply();
+    }
 
     /** The permissions screen has been through once. */
     static boolean setupDone(Context c) { return sp(c).getBoolean("setup", false); }
@@ -59,6 +64,11 @@ final class Prefs {
     static long mediaLastId(Context c) { return sp(c).getLong("mediaLastId", 0); }
 
     static void setMediaLastId(Context c, long id) { sp(c).edit().putLong("mediaLastId", id).commit(); }
+
+    /** When the camera's files were last looked at (unix s): the look back reaches a day before it. */
+    static long mediaScanned(Context c) { return sp(c).getLong("mediaScanned", 0); }
+
+    static void setMediaScanned(Context c, long s) { sp(c).edit().putLong("mediaScanned", s).apply(); }
 
     /** Upload runs in a row that sent nothing: MediaJob waits longer each time. */
     static int mediaFails(Context c) { return sp(c).getInt("mediaFails", 0); }
