@@ -111,11 +111,11 @@ ok( await c.until( "/ningún mensaje/.test( document.querySelector( '.days-count
     "1000 days: none", await c.evaluate( "document.querySelector( '.days-count' )?.textContent" ) );
 await c.evaluate( `( () => { const i = document.getElementById( 'autoDelDays' ); i.value = '1'; i.dispatchEvent( new InputEvent( 'input' ) ); return true; } )()` );
 await c.until( "/3 mensajes/.test( document.querySelector( '.days-count' )?.textContent || '' )" );
-const SAVE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-actions .btn-primary' )";
-ok( await c.until( SAVE ), "its Save button" );
+const SAVE = "document.getElementById( 'autoDelDays' )?.closest( '.sheet' )?.querySelector( '.sheet-close' )";
+ok( await c.until( SAVE ), "its × (close keeps)" );
 await c.evaluate( SAVE + ".click(), true" );
 ok( await c.until( "/3 ahora/.test( document.getElementById( 'toast' ).textContent )" ),
-    "Save: the toast says it too", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
+    "×: the toast says it too", await c.evaluate( "document.getElementById( 'toast' ).textContent" ) );
 await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(), true" );
 const after = await json( phone.call( "GET", "/api/chat/autodelete?days=1" ) );
 const sum = await json( phone.call( "GET", "/api/chat" ) );

@@ -228,7 +228,7 @@
         if( m.flagged ) subj.insertAdjacentHTML( "beforeend", E.icon( "star", "star" ) );
         subj.appendChild( E.chips( m.labels ) );
 
-        // the round tick and the ⋮ are the item browser's (drawn here: the grid places them)
+        // the round tick is the item browser's (drawn here: the grid places it)
         var el = h( "div", { class: "mail-row" + ( m.seen ? "" : " unread" ) +
                                     ( E.split && S.open === m ? " is-current" : "" ),
                              attrs: { "data-id": m._id, "data-ref": m.ref, role: "option" } },
@@ -236,8 +236,7 @@
                     h( "div", { class: "who", text: who } ),
                     h( "div", { class: "when", text: E.shortDate( m.date ), attrs: { title: E.longDate( m.date ) } } ),
                     subj,
-                    m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null,
-                    h( "span", { class: "mail-morebox", html: NayiveUI.moreHtml() } ) );
+                    m.snippet ? h( "div", { class: "snip", text: m.snippet } ) : null );
         if( S.only && ! S.only.has( m ) ) el.hidden = true;
         m._row = el;
         return el;

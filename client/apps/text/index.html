@@ -9,7 +9,7 @@
          dictionary is in, and every inline script below may call it. -->
     <script src="../shared/i18n.js"></script>
     <title>Text</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='16 18 22 12 16 6'%3E%3C/polyline%3E%3Cpolyline points='8 6 2 12 8 18'%3E%3C/polyline%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='16 18 22 12 16 6'%3E%3C/polyline%3E%3Cpolyline points='8 6 2 12 8 18'%3E%3C/polyline%3E%3Cline x1='14' y1='4' x2='10' y2='20'%3E%3C/line%3E%3C/svg%3E">
 
     <!-- Shared colour scheme (light default, opt-in dark). The toggle lives in the launcher; this page just follows the saved choice. -->
     <meta name="theme-color" content="#1E1F23">
@@ -22,7 +22,6 @@
     <!-- Vendored libs (all pinned, no build step). Order matters: CodeMirror core first,
          then modes and add-ons, then the deferred module script below. -->
     <link rel="stylesheet" href="lib/codemirror-5.65.21/codemirror.min.css">
-    <link rel="stylesheet" href="lib/codemirror-5.65.21/theme/dracula.min.css">
     <link rel="stylesheet" href="lib/codemirror-5.65.21/addon/dialog/dialog.min.css">
     <link rel="stylesheet" href="lib/codemirror-5.65.21/addon/fold/foldgutter.min.css">
 
@@ -59,7 +58,7 @@
     <script src="lib/codemirror-5.65.21/addon/search/jump-to-line.min.js"></script>
     <script src="lib/codemirror-5.65.21/addon/display/placeholder.min.js"></script>
 
-    <!-- Markdown renderer for the read-only preview (marked v15.0.12, MIT). Classic
+    <!-- Markdown renderer for the preview pane (marked v15.0.12, MIT). Classic
          UMD build: it only sets window.marked, like every other lib on this page. -->
     <script src="lib/marked-15.0.12/marked.min.js"></script>
 
@@ -81,13 +80,14 @@
             title: 'Text',
             lead:  NayiveUI.t( 'text.introLead' ),
             buttons: [
+                { sel: '#moreBtn',      text: NayiveUI.t( 'text.introFileMenu' ) },
                 { sel: '#newBtn',       text: NayiveUI.t( 'write.introNew' ) },
                 { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ) },
                 { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
                 { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
                 { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
-                { sel: '#mdViewBtn',    text: NayiveUI.t( 'text.introMdView' ) },
+                { sel: '#previewBtn',   text: NayiveUI.t( 'text.introPreview' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
                 { sel: '#indentSelect', text: NayiveUI.t( 'text.introIndent' ) },
                 { sel: '#marginInput',  text: NayiveUI.t( 'text.introMargin' ) },
@@ -104,7 +104,12 @@
            scroll and adds the editor chrome + its own toolbar. */
         html, body { height: 100%; overflow: hidden; }
 
-
+        /* The file name keeps its own width (as in Write and Calc), so the rest of
+           the header is free space to grab a desktop window by. The save floppy
+           and the plug hug the right edge: whichever of them is on show first. */
+        .topbar .file-label { flex: 0 1 auto; }
+        #savedAt,
+        #savedAt:not([data-state]) + #syncIndicator { margin-left: auto; }
 
         /* Sync-status dot, top-right of the top bar: blue while a request is in flight, green once synced, red on error. */
         .sync-indicator { margin-left: 4px; }   /* base rule + states in ../shared/theme.css */
@@ -122,79 +127,71 @@
         }
         .tb-btn.active,
         .tb-btn.is-active { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
+        .tb-btn:disabled  { opacity: 0.4; cursor: default; background: transparent; }
         /* .tb-select and the right-margin spinner .tb-num are shared - see TOOLBAR
            SELECT in app.css. Nothing local. */
 
-        /* Editor host */
-        #editorHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        /* Editor host. The sheet is Write's paper in both themes (dimmed ivory on
+           the dark chrome, warm off-white on the light one), so the caret, the
+           selection and the text on it stay dark even when the chrome is. */
+        #editorHost { flex: 1 1 0; min-width: 120px; min-height: 0; overflow: hidden; color-scheme: light; color: #1a1a1a; }
 
-        /* MARKDOWN PREVIEW
-           A .md file opens rendered and read-only; #mdViewBtn swaps this pane for
-           the editor and back. The two are never up at once, so they share the slot
-           under the toolbar - hence the [hidden] rule (both are flex children, and
-           a flex child ignores the UA's own display:none for [hidden]). */
-        #editorHost[hidden],
-        #preview[hidden] { display: none; }
-
+        /* MARKDOWN PREVIEW. The text on the left, the document as it reads on the
+           right (read-only), the shared .pane-resizer between them. The preview's
+           width is --md-w (dragged, kept on this device); none yet = half. */
+        #panes { flex: 1 1 auto; min-height: 0; display: flex; }
         #preview
         {
-            flex: 1 1 auto; min-height: 0; overflow: auto;
-            padding: 26px 22px 72px;
-            background: var(--bg); color: var(--text);
+            flex: 0 0 var(--md-w, 50%); min-width: 120px; max-width: calc(100% - 125px);
+            overflow: auto; padding: 26px 22px 72px;
+            background: #C9C5BC; color: #1a1a1a; color-scheme: light;
             font-family: var(--font-sans); font-size: 15px; line-height: 1.65;
         }
+        :root[data-theme="light"] #preview { background: #EBE4D6; }
         /* One readable column, centred - a full-width line of prose is unreadable. */
         #preview .md-doc { max-width: 74ch; margin: 0 auto; }
 
         #preview h1, #preview h2, #preview h3,
         #preview h4, #preview h5, #preview h6 { line-height: 1.25; margin: 1.6em 0 0.5em; font-weight: 700; }
         #preview > .md-doc > :first-child { margin-top: 0; }
-        #preview h1 { font-size: 1.9em; color: var(--accent); }
-        #preview h2 { font-size: 1.5em; border-bottom: 1px solid var(--line); padding-bottom: 0.2em; }
+        #preview h1 { font-size: 1.9em; }
+        #preview h2 { font-size: 1.5em; border-bottom: 1px solid rgba(0, 0, 0, .18); padding-bottom: 0.2em; }
         #preview h3 { font-size: 1.25em; }
-        #preview h4, #preview h5, #preview h6 { font-size: 1em; color: var(--text-dim); }
+        #preview h4, #preview h5, #preview h6 { font-size: 1em; color: #5E5A52; }
         #preview p, #preview ul, #preview ol, #preview blockquote, #preview pre, #preview table { margin: 0 0 1em; }
         #preview ul, #preview ol { padding-left: 1.6em; }
         #preview li { margin: 0.25em 0; }
         #preview li > input[type="checkbox"] { margin-right: 0.45em; }   /* GFM task list */
-        #preview a { color: var(--accent); }
+        #preview a { color: #1B5FA6; }
         #preview blockquote
         {
-            border-left: 3px solid var(--accent); margin-left: 0;
-            padding: 0.1em 0 0.1em 1em; color: var(--text-dim);
+            border-left: 3px solid rgba(0, 0, 0, .3); margin-left: 0;
+            padding: 0.1em 0 0.1em 1em; color: #5E5A52;
         }
-        #preview hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
+        #preview hr { border: none; border-top: 1px solid rgba(0, 0, 0, .18); margin: 2em 0; }
         #preview img { max-width: 100%; height: auto; border-radius: var(--radius-s); }
-        /* An image the reader does not load (remote, or not beside the file): its alt text. */
+        /* An image the preview does not load (remote, or not beside the file): its alt text. */
         #preview .md-img-off
         {
-            display: inline-block; padding: 0.1em 0.5em; font-size: 0.9em; color: var(--text-dim);
-            border: 1px dashed var(--line); border-radius: var(--radius-s);
+            display: inline-block; padding: 0.1em 0.5em; font-size: 0.9em; color: #5E5A52;
+            border: 1px dashed rgba(0, 0, 0, .3); border-radius: var(--radius-s);
         }
-        /* Code keeps the editor's face; the block is a raised surface like a card. */
+        /* Code keeps the editor's face, on a slightly darker patch of the paper. */
         #preview code
         {
             font-family: var(--font-mono); font-size: 0.88em;
-            background: var(--card); border: 1px solid var(--line);
+            background: rgba(0, 0, 0, .06); border: 1px solid rgba(0, 0, 0, .12);
             border-radius: var(--radius-s); padding: 0.1em 0.35em;
         }
         #preview pre
         {
-            background: var(--card); border: 1px solid var(--line);
+            background: rgba(0, 0, 0, .06); border: 1px solid rgba(0, 0, 0, .12);
             border-radius: var(--radius-m); padding: 12px 14px; overflow-x: auto;
         }
         #preview pre code { background: none; border: none; padding: 0; font-size: 0.86em; }
         #preview table { border-collapse: collapse; width: 100%; font-size: 0.94em; }
-        #preview th, #preview td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
-        #preview th { background: var(--card); }
-
-        /* Which glyph is on show follows .active (set by syncMdUI). It is a CSS rule
-           rather than a hidden attribute on purpose: the help card clones this button's
-           first <svg> (ui.js, introGlyph), and a cloned hidden="" would leave that row
-           iconless. Out of the button the rule cannot reach the clone, so it always
-           shows the pencil - the right stand-in for "write in the document". */
-        #mdViewBtn:not(.active) .md-ic-edit,
-        #mdViewBtn.active       .md-ic-read { display: none; }
+        #preview th, #preview td { border: 1px solid rgba(0, 0, 0, .18); padding: 6px 10px; text-align: left; }
+        #preview th { background: rgba(0, 0, 0, .06); }
 
         /* Phone (see TWO LAYOUT MODES in shared/app.css): the toolbar wraps onto
            more rows instead of scrolling sideways - a scrolling bar hides half its
@@ -212,41 +209,34 @@
             font-family: var(--font-mono);
             font-size: 13px; line-height: 1.5;
         }
-        /* Editor chrome is token-driven (cmThemeName() in JS picks dracula in dark,
-           default in light, and swaps them on balata:themechange). Scoped under
-           #editorHost so it outranks the theme stylesheets' own .cm-s-* rules -
-           except dracula's own background, which is !important and therefore wins:
-           in dark the sheet stays dracula's #282A36, a shade ABOVE the page. That
-           raised look is wanted, so light has to say it out loud: the 'default'
-           theme paints no background of its own, so without the rule below the
-           sheet would fall through to --bg and melt into the toolbar. --card2 is
-           the "text you type into" surface (it is Write's paper too), not white. */
-        #editorHost .CodeMirror { background: var(--bg); color: var(--text); }
-        #editorHost .CodeMirror-gutters { background: var(--bg); border-right: 1px solid var(--line); }
+        /* CodeMirror's built-in light 'default' theme in both colour schemes - it is
+           paper. Scoped under #editorHost so it outranks the theme's own .cm-s-* rules. */
+        #editorHost .CodeMirror,
+        #editorHost .CodeMirror-gutters { background: #C9C5BC; color: #1a1a1a; }
         :root[data-theme="light"] #editorHost .CodeMirror,
-        :root[data-theme="light"] #editorHost .CodeMirror-gutters { background: var(--card2); }
-        #editorHost .CodeMirror-linenumber { color: var(--text-dim); }
-        #editorHost .CodeMirror-activeline-background { background: color-mix(in srgb, var(--text) 5%, transparent); }
+        :root[data-theme="light"] #editorHost .CodeMirror-gutters { background: #EBE4D6; }
+        #editorHost .CodeMirror-gutters { border-right: 1px solid rgba(0, 0, 0, .15); }
+        #editorHost .CodeMirror-linenumber { color: #5E5A52; }
+        #editorHost .CodeMirror-activeline-background { background: rgba(0, 0, 0, .05); }
         #editorHost .CodeMirror-foldgutter-open:after,
-        #editorHost .CodeMirror-foldgutter-folded:after { color: var(--text-dim); }
-        #editorHost .CodeMirror-cursor { border-left-color: var(--text); }
+        #editorHost .CodeMirror-foldgutter-folded:after { color: #5E5A52; }
+        #editorHost .CodeMirror-cursor { border-left-color: #1a1a1a; }
         /* Right-margin guide (drawn by updateRuler(), the rulers add-on is not vendored).
            pointer-events off so the line never eats a click meant for the text. */
         .CodeMirror-rulers { position: absolute; left: 0; right: 0; top: -50px; bottom: 0; overflow: hidden; pointer-events: none; }
-        /* A fine dotted hairline, half the weight of --line: it has to be findable at a
-           glance and invisible while reading, so it is never a solid rule. */
-        .CodeMirror-ruler  { position: absolute; top: 0; bottom: 0; border-left: 1px dotted color-mix( in srgb, var(--line) 55%, transparent ); }
+        /* A fine dotted hairline: it has to be findable at a glance and invisible
+           while reading, so it is never a solid rule. */
+        .CodeMirror-ruler  { position: absolute; top: 0; bottom: 0; border-left: 1px dotted rgba(0, 0, 0, .25); }
         .cm-trailingspace { background: color-mix(in srgb, var(--danger) 28%, transparent); }
         .cm-searching { background: color-mix(in srgb, var(--accent) 35%, transparent) !important; }
 
-        /* Light mode uses CodeMirror's built-in 'default' theme; darken its faintest tokens
-           so they stay legible on the warm off-white (--card2) editor sheet. */
-        :root[data-theme="light"] .cm-s-default .cm-comment { color: #4E5259; }
-        :root[data-theme="light"] .cm-s-default .cm-meta    { color: #5A4A00; }
-        :root[data-theme="light"] .cm-s-default .cm-keyword { color: #7A1FA2; }
-        :root[data-theme="light"] .cm-s-default .cm-string  { color: #9A1414; }
-        :root[data-theme="light"] .cm-s-default .cm-number,
-        :root[data-theme="light"] .cm-s-default .cm-atom    { color: #1B5FA6; }
+        /* Darken the 'default' theme's faintest tokens so they stay legible on the paper. */
+        .cm-s-default .cm-comment { color: #4E5259; }
+        .cm-s-default .cm-meta    { color: #5A4A00; }
+        .cm-s-default .cm-keyword { color: #7A1FA2; }
+        .cm-s-default .cm-string  { color: #9A1414; }
+        .cm-s-default .cm-number,
+        .cm-s-default .cm-atom    { color: #1B5FA6; }
 
         /* Search / jump-to-line dialog */
         .CodeMirror-dialog
@@ -266,7 +256,7 @@
     <div id="app" class="app" style="display: none;">
 
         <div class="topbar">
-            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <svg class="app-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></svg>
             <h1>Text</h1>
             <span id="fileLabel" class="file-label field-edit-text is-editable" data-i18n="ui.untitled" data-i18n-attr="title:text.clickRename"></span>
             <input id="fileNameInput" class="file-label-input field-edit" type="text" style="display:none" autocomplete="off">
@@ -278,6 +268,14 @@
         </div>
 
         <div id="toolbar">
+            <!-- FILE, first as in Write and Calc: the menu (#topMenu) is built from
+                 the hidden #fileTools buttons below (shared/office.js, fileMenu). -->
+            <button id="moreBtn" class="tb-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.file, aria-label:ui.menu.file">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
+            </button>
+
+            <div class="tb-sep"></div>
+
             <select id="langSelect" class="tb-select" data-i18n-attr="title:text.langSelect">
                 <option value="text/plain" data-i18n="text.plainText"></option>
                 <option value="text/html">HTML</option>
@@ -294,37 +292,33 @@
                 <option value="text/x-properties" data-i18n="text.iniProps"></option>
             </select>
 
-            <!-- Markdown only: swaps the rendered document for the editor. Hidden for
-                 every other language (see syncMdUI). The eye is "read it", the pencil
-                 "write it": the glyph on show is always the view it takes you to. -->
-            <button id="mdViewBtn" class="tb-btn" type="button" hidden>
-                <svg class="md-ic-edit" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
-                <svg class="md-ic-read" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <!-- Markdown only (disabled for every other language, see syncPreview):
+                 the document as it reads, in a pane beside the text. -->
+            <button id="previewBtn" class="tb-btn" type="button" disabled data-i18n-attr="title:text.preview, aria-label:text.preview">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line><line x1="6" y1="9" x2="9" y2="9"></line><line x1="6" y1="13" x2="9" y2="13"></line><line x1="15" y1="9" x2="18" y2="9"></line><line x1="15" y1="13" x2="18" y2="13"></line></svg>
             </button>
 
-            <!-- edit-only like the group it opens: with wrap / indent / margin away,
-                 this one would sit right against the next divider. -->
-            <div class="tb-sep edit-only"></div>
+            <div class="tb-sep"></div>
 
             <!-- Cut / copy / paste. The keys already do this (CodeMirror's own);
                  these are the same three for a phone or a tablet, where there is
                  no Ctrl to hold. Glyphs are the shared ones (NayiveUI.icon), so
                  they match the entries Write and Calc carry in their Edicion menu. -->
-            <button id="cutBtn"   class="tb-btn edit-only" data-i18n-attr="title:ui.cut"></button>
-            <button id="copyBtn"  class="tb-btn edit-only" data-i18n-attr="title:ui.copy"></button>
-            <button id="pasteBtn" class="tb-btn edit-only" data-i18n-attr="title:ui.paste"></button>
+            <button id="cutBtn"   class="tb-btn" data-i18n-attr="title:ui.cut"></button>
+            <button id="copyBtn"  class="tb-btn" data-i18n-attr="title:ui.copy"></button>
+            <button id="pasteBtn" class="tb-btn" data-i18n-attr="title:ui.paste"></button>
 
-            <div class="tb-sep edit-only"></div>
+            <div class="tb-sep"></div>
 
-            <button id="wrapBtn" class="tb-btn edit-only" data-i18n-attr="title:text.wrap">
+            <button id="wrapBtn" class="tb-btn" data-i18n-attr="title:text.wrap">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="18 9 21 12 18 15"></polyline><line x1="3" y1="18" x2="12" y2="18"></line></svg>
             </button>
-            <select id="indentSelect" class="tb-select edit-only" data-i18n-attr="title:text.indent">
+            <select id="indentSelect" class="tb-select" data-i18n-attr="title:text.indent">
                 <option value="4" selected data-i18n="text.indent4"></option>
                 <option value="2" data-i18n="text.indent2"></option>
                 <option value="tab" data-i18n="text.indentTab"></option>
             </select>
-            <input id="marginInput" class="tb-num edit-only" type="number" min="20" max="500" step="1" inputmode="numeric"
+            <input id="marginInput" class="tb-num" type="number" min="20" max="500" step="1" inputmode="numeric"
                    autocomplete="off" data-i18n-attr="title:text.margin">
 
             <div class="tb-sep"></div>
@@ -338,35 +332,39 @@
 
             <div class="tb-sep"></div>
 
-            <button id="newBtn" class="tb-btn" data-i18n-attr="title:write.newDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-            </button>
-            <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-            </button>
-            <button id="importBtn" class="tb-btn" data-i18n-attr="title:ui.importDevice">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
-            <input id="importInput" type="file" style="display:none">
-            <button id="saveAsBtn" class="tb-btn" data-i18n-attr="title:ui.saveAs">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
-            </button>
-            <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
-            </button>
-            <!-- Text has no password of its own (Write and Calc only): the key shows
-                 just while an old locked file is open, so its lock can come off. -->
-            <button id="lockBtn" class="tb-btn" data-only-locked hidden data-i18n-attr="title:lock.title">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
-            </button>
-
-            <div class="tb-sep"></div>
-
             <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                  guide card: the card is one of the three entries. -->
             <button id="helpBtn" class="tb-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </button>
+
+            <!-- FILE: new, open, import, "guardar como", restore and the lock. Off
+                 the bar, like Write's and Calc's #fileTools: the File menu is built
+                 FROM these buttons (glyph and title cloned) and an entry clicks the
+                 one it came from, so there is one set of handlers. -->
+            <div id="fileTools" hidden>
+                <button id="newBtn" class="tb-btn" data-i18n-attr="title:write.newDoc">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button id="openBtn" class="tb-btn" data-i18n-attr="title:ui.openDoc">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                </button>
+                <button id="importBtn" class="tb-btn" data-i18n-attr="title:ui.importDevice">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </button>
+                <input id="importInput" type="file" style="display:none">
+                <button id="saveAsBtn" class="tb-btn" data-i18n-attr="title:ui.saveAs">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 14 10 18 17 9" stroke-width="2.5"></polyline><line x1="12" y1="1" x2="12" y2="7" stroke-width="2.4"></line><line x1="9" y1="4" x2="15" y2="4" stroke-width="2.4"></line></svg>
+                </button>
+                <button id="restoreBtn" class="tb-btn" data-i18n-attr="title:write.restore">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                </button>
+                <!-- Text has no password of its own (Write and Calc only): the key shows
+                     just while an old locked file is open, so its lock can come off. -->
+                <button id="lockBtn" class="tb-btn" data-only-locked hidden data-i18n-attr="title:lock.title">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
+                </button>
+            </div>
 
             <!-- AYUDA: the three entries, none of which has a button of its own
                  on the bar. Hidden, like Write's and Calc's #fileTools: the menu
@@ -391,9 +389,15 @@
              "?" at open time wherever it sits in the source. -->
         <div id="helpMenu" class="top-menu" hidden></div>
 
-        <div id="editorHost"><textarea id="editor"></textarea></div>
-        <!-- The rendered Markdown. Filled by renderPreview(); empty for every other language. -->
-        <article id="preview" hidden><div class="md-doc"></div></article>
+        <!-- File menu - built by wireStaticUI() from #fileTools above. -->
+        <div id="topMenu" class="top-menu" hidden></div>
+
+        <div id="panes">
+            <div id="editorHost"><textarea id="editor"></textarea></div>
+            <!-- The preview pane (Markdown only): rendered by renderPreview(). -->
+            <div id="mdResizer" class="pane-resizer" hidden data-i18n-attr="title:ui.dragResize"></div>
+            <article id="preview" hidden><div class="md-doc"></div></article>
+        </div>
 
     </div>
 
@@ -494,14 +498,16 @@
         const indentPref = ( INDENTS.includes( storedIdt ) ? storedIdt : '4' );   // a stale value must never reach setIndent()
         let suppressChange = false;   // true while the editor is being loaded programmatically
 
-        // MARKDOWN READER (see that section below). Declared here with the rest of
-        // the state: wireStaticUI() reads both before the section's own lines run.
-        const MD_MIME   = 'text/x-markdown';
-        let   mdReading = false;   // true = the rendered pane is up, the editor is away
+        // MARKDOWN PREVIEW (see that section below). Declared here with the rest of
+        // the state: start-up can reach the section before its own lines run.
+        const MD_MIME     = 'text/x-markdown';
+        const PREVIEW_KEY = 'gum_text_md_preview';
+        let   mdPreview   = readPref( PREVIEW_KEY ) === '1';
+        let   mdTimer     = 0;
         // Which .md the preview's relative links are read beside. The session only
         // knows a file's path after loadText has put it on screen, so while a file
         // is arriving loadText says which one it is (null: ask the session).
-        let   mdOpening = null;
+        let   mdOpening   = null;
 
         const FONT_KEY = 'gum_text_font_size';
         const FONT_MIN = 9;
@@ -552,7 +558,7 @@
             },
             sameNameRefused: function( name ) { return tooBig ? tooBigText( name ) : NayiveUI.tf( 'text.notUtf8', { name: name } ); },   // "Guardar como" onto the blocked file itself
             onChange   : function() { if( editor ) autoDetectLanguage(); },   // the name says the language
-            focus      : function() { if( editor && ! mdReading ) editor.focus(); }
+            focus      : function() { if( editor ) editor.focus(); }
         } );
 
         //------------------------------------------------------------------------//
@@ -563,12 +569,6 @@
         NayiveUI.bootWithStore( store, async function()
         {
             initEditor();
-
-            // Swap CodeMirror's syntax theme when the shared colour scheme is toggled.
-            window.addEventListener( 'balata:themechange', function()
-            {
-                if( editor ) editor.setOption( 'theme', cmThemeName() );
-            } );
 
             syncCfg();   // deliberately NOT awaited: the device's answer is already on screen
 
@@ -586,7 +586,7 @@
             // ?file= / ?import= / the untitled document kept on this device - or a blank one.
             await session.boot();
 
-            if( ! mdReading ) editor.focus();   // caret in the text area on every startup path that shows one
+            editor.focus();   // caret in the text area on every startup path
         } );
 
         function wireStaticUI()
@@ -595,19 +595,39 @@
             // (shared/office.js); the dialogs' × buttons and Escape once for every
             // app by shared/ui.js.
 
-            // Picking Markdown by hand always lands in the editor: it is chosen
-            // while writing, so it can never answer by hiding what was written.
-            document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); setPreview( false ); editor.focus(); } );
-            document.getElementById( 'mdViewBtn'  ).addEventListener( 'click',  function()    { setPreview( ! mdReading ); } );
+            document.getElementById( 'langSelect' ).addEventListener( 'change', function( e ) { setLanguage( e.target.value ); editor.focus(); } );
+            document.getElementById( 'previewBtn' ).addEventListener( 'click',  togglePreview );
             document.getElementById( 'preview'    ).addEventListener( 'click',  mdAnchorClick );
+            // Drag the bar to share the width; double-click: half and half again.
+            NayiveUI.paneResizer( document.getElementById( 'mdResizer' ), document.getElementById( 'preview' ),
+            {
+                key: 'gum_text_md_width', min: 120, max: 4000, def: null, right: true,
+                set: function( w )
+                {
+                    const pane = document.getElementById( 'panes' );
+                    if( w == null ) { pane.style.removeProperty( '--md-w' ); try { localStorage.removeItem( 'gum_text_md_width' ); } catch( _ ) {} }
+                    else            pane.style.setProperty( '--md-w', w + 'px' );
+                    if( editor ) editor.refresh();
+                }
+            } );
             document.getElementById( 'indentSelect' ).addEventListener( 'change', function( e ) { setIndent( e.target.value ); textCfg.write( { indent: e.target.value } ); editor.focus(); } );
             document.getElementById( 'wrapBtn'      ).addEventListener( 'click', toggleWrap );
             wireClipboard();
             document.getElementById( 'wrapBtn'      ).classList.toggle( 'active', lineWrap );   // reflect the remembered choice
             document.getElementById( 'indentSelect' ).value = indentPref;                        // ditto (overrides the option's `selected`)
-            syncMdUI();   // the button starts hidden: nothing is open yet
             document.getElementById( 'zoomOutBtn'   ).addEventListener( 'click', function() { bumpFontSize( -1 ); } );
             document.getElementById( 'zoomInBtn'    ).addEventListener( 'click', function() { bumpFontSize(  1 ); } );
+
+            // File, the first button on the bar: a menu built from the hidden
+            // #fileTools buttons, as in Write and Calc. The key shows only on a
+            // locked file (shared/office.js, showLock), so its entry follows it.
+            O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
+                          ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn' ] } );
+            const lockBtn  = document.getElementById( 'lockBtn' );
+            const lockItem = document.querySelector( '#topMenu [data-menu="lockBtn"]' );
+            const syncLock = function() { lockItem.hidden = lockBtn.hidden; };
+            syncLock();
+            new MutationObserver( syncLock ).observe( lockBtn, { attributes: true, attributeFilter: [ 'hidden' ] } );
 
             // Ayuda (see AYUDA below): the "?" opens a three-entry menu built
             // from the three hidden #helpTools buttons (the guide card is the third).
@@ -625,7 +645,7 @@
             marginInput.addEventListener( 'change',  function( e ) { e.target.value = String( marginCols ); } );
 
             // Ctrl+S is CodeMirror's (extraKeys) while the text has the keys. Anywhere
-            // else - the Markdown reader above all - it still saves, and never opens
+            // else it still saves, and never opens
             // the browser's own "Save page"; over a dialog it just does nothing.
             document.addEventListener( 'keydown', function( e )
             {
@@ -778,13 +798,6 @@
         //------------------------------------------------------------------------//
         // EDITOR
 
-        // Syntax theme follows the shared colour scheme: dracula on dark, CodeMirror's
-        // built-in light 'default' on light. The editor chrome is token-driven in CSS.
-        function cmThemeName()
-        {
-            return document.documentElement.dataset.theme === 'light' ? 'default' : 'dracula';
-        }
-
         // The find / replace / go-to bars speak the interface language (CodeMirror's
         // own words are English).
         function cmPhrases()
@@ -810,7 +823,7 @@
         {
             editor = CodeMirror.fromTextArea( document.getElementById( 'editor' ),
             {
-                theme            : cmThemeName(),
+                theme            : 'default',   // paper in both colour schemes (see the CSS)
                 mode              : null,
                 lineNumbers       : true,
                 lineWrapping      : lineWrap,
@@ -849,6 +862,7 @@
             });
 
             editor.on( 'change', scheduleAutosave );
+            editor.on( 'change', schedulePreview );
             // Every redraw that can move the text grid - a zoom, a resize, the first
             // paint, a theme swap - ends in a refresh, so the guide line is redrawn
             // from one place instead of from each of them.
@@ -864,10 +878,6 @@
         {
             editor.getWrapperElement().style.fontSize = fontSize + 'px';
             editor.refresh();
-
-            // The reader shares the zoom buttons. Prose wants a little more room than
-            // code at the same setting, so it sits two points above the editor.
-            document.getElementById( 'preview' ).style.fontSize = ( fontSize + 2 ) + 'px';
 
             try { localStorage.setItem( FONT_KEY, String( fontSize ) ); } catch( _ ) {}
         }
@@ -986,13 +996,7 @@
             const m = SELECT_MIMES.includes( mime ) ? mime : 'text/plain';
             editor.setOption( 'mode', m === 'text/plain' ? null : m );   // null = plain, avoids CM's "no mode" warning
             document.getElementById( 'langSelect' ).value = m;
-
-            // Leaving Markdown behind can never leave the reader up; entering it
-            // does NOT open the reader by itself - only a file arriving does
-            // (loadText). Renaming "notas" to "notas.md" while typing comes
-            // through here, and must not snatch the text away mid-sentence.
-            if( m !== MD_MIME ) setPreview( false );
-            else                syncMdUI();
+            syncPreview();
         }
 
         function autoDetectLanguage()
@@ -1038,54 +1042,50 @@
         }
 
         //------------------------------------------------------------------------//
-        // MARKDOWN READER
+        // MARKDOWN PREVIEW
         //
-        // Markdown is the one language Text can show the way it is meant to be read,
-        // so a .md file opens rendered and read-only and #mdViewBtn is what lets you
-        // write in it. Nothing is re-rendered while you type: the pane is only built
-        // on the way into it, which also keeps a long document from re-parsing on
-        // every keystroke.
+        // For a Markdown file the toolbar's preview button splits the writing area:
+        // the text on the left (where you write), the document as it reads on the
+        // right (read-only), the shared pane resizer between them. The pane follows
+        // the typing a moment after it stops. On or off is remembered on this
+        // device; any other language has the button disabled and no pane.
 
         function isMarkdown()
         {
             return document.getElementById( 'langSelect' ).value === MD_MIME;
         }
 
-        // The only door between the two views. `on` is a request - it is granted
-        // only while the document really is Markdown.
-        function setPreview( on )
+        function previewOn() { return mdPreview && isMarkdown(); }
+
+        // The button, the pane and the bar follow the language and the choice.
+        function syncPreview()
         {
-            mdReading = !! on && isMarkdown();
+            const md = isMarkdown(), on = previewOn();
+            const btn = document.getElementById( 'previewBtn' );
 
-            document.getElementById( 'editorHost' ).hidden = mdReading;
-            document.getElementById( 'preview'    ).hidden = ! mdReading;
+            btn.disabled = ! md;
+            btn.classList.toggle( 'active', on );
+            document.getElementById( 'preview'   ).hidden = ! on;
+            document.getElementById( 'mdResizer' ).hidden = ! on;
 
-            if( mdReading )
-            {
-                renderPreview();
-            }
-            else if( editor )
-            {
-                editor.refresh();   // it was display:none - CodeMirror measured nothing
-                editor.focus();
-            }
-
-            syncMdUI();
+            if( on ) renderPreview();
+            if( editor ) editor.refresh();   // its width just changed
         }
 
-        // The toolbar follows the view: the button appears for Markdown only, its
-        // glyph shows where it takes you, and the controls that act on the source
-        // (wrap, indent, right margin) step aside while the document is being read.
-        function syncMdUI()
+        function togglePreview()
         {
-            const md  = isMarkdown();
-            const btn = document.getElementById( 'mdViewBtn' );
+            mdPreview = ! mdPreview;
+            try { localStorage.setItem( PREVIEW_KEY, mdPreview ? '1' : '0' ); } catch( _ ) {}
+            syncPreview();
+            editor.focus();
+        }
 
-            btn.hidden = ! md;
-            btn.classList.toggle( 'active', mdReading );
-            btn.title  = T( mdReading ? 'text.mdEdit' : 'text.mdRead' );
-
-            document.querySelectorAll( '#toolbar .edit-only' ).forEach( function( el ) { el.hidden = mdReading; } );
+        // Every edit: render again once the typing pauses, not on each key.
+        function schedulePreview()
+        {
+            if( ! previewOn() ) return;
+            clearTimeout( mdTimer );
+            mdTimer = setTimeout( renderPreview, 250 );
         }
 
         // marked hands raw HTML straight through, and a .md can arrive from an
@@ -1322,6 +1322,9 @@
 
         function renderPreview()
         {
+            clearTimeout( mdTimer );
+            if( ! previewOn() ) return;
+
             const pane = document.getElementById( 'preview' );
             const doc  = pane.querySelector( '.md-doc' );
 
@@ -1335,8 +1338,9 @@
             mdAnchors( tpl.content );
 
             doc.replaceChildren( tpl.content );
-            pane.scrollTop = 0;
 
+            // A file arriving starts at the top; typing keeps the place.
+            if( mdOpening !== null ) pane.scrollTop = 0;
             // Opened from another .md's "other.md#part" link: straight to the part.
             if( mdOpening && location.hash ) mdScrollTo( location.hash );
         }
@@ -1369,7 +1373,7 @@
         // A body on screen: text from the store or the device draft, bytes from
         // an import or the .bak copy. `name` is the document's path or file name -
         // the session only sets session.path() after this returns, so the language
-        // (and with it the Markdown reader) is decided from the name it hands over.
+        // is decided from the name it hands over.
         // Throws, with nothing on screen changed, for a file that is not text.
         async function loadText( body, name, how )
         {
@@ -1410,9 +1414,8 @@
             }
 
             setEditorText( text );
-            setLanguage( detectMime( name || '' ) );
             mdOpening = ( how === 'open' || how === 'restore' ) ? name : '';   // an import or a draft is nowhere yet
-            try     { setPreview( isMarkdown() ); }   // a .md file opens as a document, not as source
+            try     { setLanguage( detectMime( name || '' ) ); }
             finally { mdOpening = null; }
 
             // Too big to autosave: every save sends the whole text again (a 300 MB

@@ -8,6 +8,8 @@
  *
  *   const patch = createPatcher( { unzipSync, zipSync, strFromU8, strToU8, blank } );
  *   bytes = patch.withHeadingStyles( bytes );   // the same bytes when nothing was missing
+ *   const sp = patch.styleSpacing( bytes, 'Heading1' );          // { beforePt, afterPt }
+ *   bytes = patch.withStyles( bytes, { Heading1: { sizePt: 18, color: 'C00000' } } );
  *   const l = patch.listInfo( bytes, paraId );  // the numbered list that paragraph is in
  *   bytes = patch.withListFormat( bytes, l, level, 'lowerRoman' );
  */
@@ -112,6 +114,236 @@ export function createPatcher( z )
             }
         }
         return blankStyles[ n ] || null;
+    }
+
+    //---- CHANGING A STYLE ----------------------------------------------------
+    //
+    // Normal and Heading 1-3 changed where Word keeps them: their w:style in
+    // word/styles.xml. The engine has no command for it (2.21.0). A style is
+    // asked for by Write's key ("Normal", "Heading1") and found by that id or by
+    // its BUILT-IN NAME, as above - "Ttulo1" in a Spanish file.
+    //
+    //   changes = { Heading1: { font, sizePt, bold, italic, color, beforePt, afterPt }, ... }
+    //
+    // Only the fields given are written; color is six hex digits or 'auto'. An
+    // explicit font or colour drops the theme's one, which would win over it, and
+    // "not bold" is written as <w:b w:val="0"/>, since the style it is based on
+    // may be bold. Runs on what the engine saved, so the prefix is "w:".
+
+    const STYLE_RE = /<w:style\b[^>]*>[\s\S]*?<\/w:style>/g;
+
+    // Schema order of the children Write may add (the rest keep their place).
+    const RPR_ORDER = [ 'rStyle', 'rFonts', 'b', 'bCs', 'i', 'iCs', 'caps', 'smallCaps', 'strike', 'dstrike',
+                        'outline', 'shadow', 'emboss', 'imprint', 'noProof', 'snapToGrid', 'vanish', 'webHidden',
+                        'color', 'spacing', 'w', 'kern', 'position', 'sz', 'szCs', 'highlight', 'u', 'effect',
+                        'bdr', 'shd', 'fitText', 'vertAlign', 'rtl', 'cs', 'em', 'lang', 'eastAsianLayout',
+                        'specVanish', 'oMath', 'rPrChange' ];
+    const PPR_ORDER = [ 'pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl', 'numPr',
+                        'suppressLineNumbers', 'pBdr', 'shd', 'tabs', 'suppressAutoHyphens', 'kinsoku', 'wordWrap',
+                        'overflowPunct', 'topLinePunct', 'autoSpaceDE', 'autoSpaceDN', 'bidi', 'adjustRightInd',
+                        'snapToGrid', 'spacing', 'ind', 'contextualSpacing', 'mirrorIndents', 'suppressOverlap',
+                        'jc', 'textDirection', 'textAlignment', 'textboxTightWrap', 'outlineLvl', 'divId',
+                        'cnfStyle', 'rPr', 'sectPr', 'pPrChange' ];
+    // What may follow w:pPr / w:rPr inside a w:style.
+    const AFTER_PPR = [ 'rPr', 'tblPr', 'trPr', 'tcPr', 'tblStylePr' ];
+    const AFTER_RPR = [ 'tblPr', 'trPr', 'tcPr', 'tblStylePr' ];
+
+    function stylesXml( bytes )
+    {
+        const part = parts( bytes, [ 'word/styles.xml' ] )[ 'word/styles.xml' ];
+        return part ? z.strFromU8( part ) : null;
+    }
+
+    // The paragraph style Write calls `key`: { xml, at, id } or null.
+    function findStyle( xml, key )
+    {
+        const name = key === 'Normal' ? 'normal' : key.replace( /^Heading(\d)$/, 'heading $1' );
+        const all  = [];
+        let m;
+        STYLE_RE.lastIndex = 0;
+        while( ( m = STYLE_RE.exec( xml ) ) )
+        {
+            const head = /^<w:style\b[^>]*>/.exec( m[ 0 ] )[ 0 ];
+            if( attrIn( head, 'type' ) !== 'paragraph' ) continue;
+            all.push( { xml: m[ 0 ], at: m.index, id: attrIn( head, 'styleId' ),
+                        name: String( attrOf( m[ 0 ], 'name' ) || '' ).toLowerCase() } );
+        }
+        return all.find( function( s ) { return s.id === key; } ) ||
+               all.find( function( s ) { return s.name === name; } ) || null;
+    }
+
+    // Space before / after of a style in points: its own, else the style it is
+    // based on, else the document's default; 0 when nobody says.
+    //   { beforePt, afterPt }  or null when the style is not there
+    function styleSpacing( bytes, key )
+    {
+        const xml = stylesXml( bytes );
+        const s   = xml && findStyle( xml, key );
+        if( ! s ) return null;
+
+        const out  = { beforePt: null, afterPt: null };
+        const take = function( block )
+        {
+            const sp = block && /<w:spacing\b[^>]*\/?>/.exec( block );
+            if( ! sp ) return;
+            const b = attrIn( sp[ 0 ], 'before' ), a = attrIn( sp[ 0 ], 'after' );
+            if( out.beforePt === null && b !== null ) out.beforePt = Number( b ) / 20;
+            if( out.afterPt  === null && a !== null ) out.afterPt  = Number( a ) / 20;
+        };
+
+        const seen = new Set();
+        for( let cur = s; cur && ! seen.has( cur.id ); )
+        {
+            seen.add( cur.id );
+            take( ( /<w:pPr>[\s\S]*?<\/w:pPr>/.exec( cur.xml ) || [] )[ 0 ] );
+            const base = attrOf( cur.xml, 'basedOn' );
+            cur = base ? findById( xml, base ) : null;
+        }
+
+        take( ( /<w:pPrDefault>[\s\S]*?<\/w:pPrDefault>/.exec( xml ) || [] )[ 0 ] );
+
+        return { beforePt: out.beforePt || 0, afterPt: out.afterPt || 0 };
+    }
+
+    function findById( xml, id )
+    {
+        const m = new RegExp( '<w:style\\b[^>]*w:styleId="' + id.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) + '"[^>]*>[\\s\\S]*?</w:style>' ).exec( xml );
+        return m ? { xml: m[ 0 ], at: m.index, id: id } : null;
+    }
+
+    // The bytes with the styles changed, or null when one of them is not in
+    // the file (nothing is changed then).
+    function withStyles( bytes, changes )
+    {
+        let xml = stylesXml( bytes );
+        if( ! xml ) return null;
+
+        for( const key of Object.keys( changes ) )
+        {
+            const s = findStyle( xml, key );
+            // A style with a tracked change inside (w:rPrChange / w:pPrChange) is
+            // left alone: its old copy holds the same tags.
+            if( ! s || /<w:(?:rPrChange|pPrChange)\b/.test( s.xml ) ) return null;
+            xml = xml.slice( 0, s.at ) + patchStyle( s.xml, changes[ key ] ) + xml.slice( s.at + s.xml.length );
+        }
+
+        const files = z.unzipSync( bytes );
+        files[ 'word/styles.xml' ] = z.strToU8( xml );
+        return rezip( files );
+    }
+
+    function patchStyle( style, c )
+    {
+        const has = function( k ) { return c[ k ] !== undefined && c[ k ] !== null; };
+
+        if( has( 'beforePt' ) || has( 'afterPt' ) )
+        {
+            style = withBlock( style, 'pPr', AFTER_PPR, function( p )
+            {
+                const old = /<w:spacing\b[^>]*\/>/.exec( p );
+                // beforeLines / auto spacing would win over a value in points: dropped.
+                let sp = old ? old[ 0 ].replace( /\s+w:(?:beforeLines|afterLines|beforeAutospacing|afterAutospacing)="[^"]*"/g, '' )
+                             : '<w:spacing/>';
+                if( has( 'beforePt' ) ) sp = setAttr( sp, 'before', String( Math.round( c.beforePt * 20 ) ) );
+                if( has( 'afterPt'  ) ) sp = setAttr( sp, 'after',  String( Math.round( c.afterPt  * 20 ) ) );
+                return putChild( p, 'spacing', sp, PPR_ORDER );
+            } );
+        }
+
+        if( has( 'font' ) || has( 'sizePt' ) || has( 'bold' ) || has( 'italic' ) || has( 'color' ) )
+        {
+            style = withBlock( style, 'rPr', AFTER_RPR, function( r )
+            {
+                if( has( 'font' ) )
+                {
+                    const old  = ( /<w:rFonts\b[^>]*\/>/.exec( r ) || [ '<w:rFonts/>' ] )[ 0 ];
+                    const keep = old.replace( /\s+w:(?:ascii|hAnsi|cs|asciiTheme|hAnsiTheme|cstheme)="[^"]*"/g, '' );
+                    const f    = escAttr( c.font );
+                    r = putChild( r, 'rFonts', keep.replace( /^<w:rFonts/, '<w:rFonts w:ascii="' + f + '" w:hAnsi="' + f + '" w:cs="' + f + '"' ), RPR_ORDER );
+                }
+                if( has( 'bold' ) )
+                {
+                    r = putChild( r, 'b',   c.bold ? '<w:b/>'   : '<w:b w:val="0"/>',   RPR_ORDER );
+                    r = putChild( r, 'bCs', c.bold ? '<w:bCs/>' : '<w:bCs w:val="0"/>', RPR_ORDER );
+                }
+                if( has( 'italic' ) )
+                {
+                    r = putChild( r, 'i',   c.italic ? '<w:i/>'   : '<w:i w:val="0"/>',   RPR_ORDER );
+                    r = putChild( r, 'iCs', c.italic ? '<w:iCs/>' : '<w:iCs w:val="0"/>', RPR_ORDER );
+                }
+                if( has( 'color' ) ) r = putChild( r, 'color', '<w:color w:val="' + escAttr( c.color ) + '"/>', RPR_ORDER );
+                if( has( 'sizePt' ) )
+                {
+                    const hp = String( Math.max( 2, Math.round( c.sizePt * 2 ) ) );
+                    r = putChild( r, 'sz',   '<w:sz w:val="'   + hp + '"/>', RPR_ORDER );
+                    r = putChild( r, 'szCs', '<w:szCs w:val="' + hp + '"/>', RPR_ORDER );
+                }
+                return r;
+            } );
+        }
+
+        return style;
+    }
+
+    // The style's w:pPr or w:rPr run through `edit` - made first when the
+    // style has none, in its schema place (before any of `after`).
+    function withBlock( style, tag, after, edit )
+    {
+        const re  = new RegExp( '<w:' + tag + '\\s*/>|<w:' + tag + '>[\\s\\S]*?</w:' + tag + '>' );
+        const old = re.exec( style );
+        const empty = '<w:' + tag + '></w:' + tag + '>';
+        if( old ) return style.slice( 0, old.index ) + edit( old[ 0 ].endsWith( '/>' ) ? empty : old[ 0 ] ) + style.slice( old.index + old[ 0 ].length );
+
+        const block = edit( empty );
+        const at    = firstOf( style, after );
+        return at < 0 ? style.replace( /<\/w:style>$/, block + '</w:style>' )
+                      : style.slice( 0, at ) + block + style.slice( at );
+    }
+
+    // `el` in place of the block's own w:<tag>, or added where the schema wants it.
+    function putChild( block, tag, el, order )
+    {
+        const close = block.lastIndexOf( '</' );
+        const inner = block.slice( 0, close );
+
+        const re  = new RegExp( '<w:' + tag + '(?=[\\s/>])[^>]*?(?:/>|>[\\s\\S]*?</w:' + tag + '>)' );
+        const old = re.exec( inner );
+        if( old ) return block.slice( 0, old.index ) + el + block.slice( old.index + old[ 0 ].length );
+
+        const at = firstOf( inner, order.slice( order.indexOf( tag ) + 1 ) );
+        const to = at < 0 ? close : at;
+        return block.slice( 0, to ) + el + block.slice( to );
+    }
+
+    // Where the first of these elements starts, or -1.
+    function firstOf( xml, tags )
+    {
+        let best = -1;
+        for( const t of tags )
+        {
+            const i = xml.search( new RegExp( '<w:' + t + '(?=[\\s/>])' ) );
+            if( i >= 0 && ( best < 0 || i < best ) ) best = i;
+        }
+        return best;
+    }
+
+    function setAttr( el, name, value )
+    {
+        const re = new RegExp( '\\sw:' + name + '="[^"]*"' );
+        return re.test( el ) ? el.replace( re, ' w:' + name + '="' + value + '"' )
+                             : el.replace( /\s*\/>$/, ' w:' + name + '="' + value + '"/>' );
+    }
+
+    // An attribute in an element's start tag: w:<name>="..." or null.
+    function attrIn( head, name )
+    {
+        const m = new RegExp( '\\sw:' + name + '="([^"]*)"' ).exec( head );
+        return m ? m[ 1 ] : null;
+    }
+
+    function escAttr( v )
+    {
+        return String( v ).replace( /&/g, '&amp;' ).replace( /"/g, '&quot;' ).replace( /</g, '&lt;' );
     }
 
     //---- LIST NUMBER FORMAT --------------------------------------------------
@@ -306,5 +538,6 @@ export function createPatcher( z )
         return z.zipSync( out );
     }
 
-    return { withHeadingStyles: withHeadingStyles, listInfo: listInfo, withListFormat: withListFormat };
+    return { withHeadingStyles: withHeadingStyles, styleSpacing: styleSpacing, withStyles: withStyles,
+             listInfo: listInfo, withListFormat: withListFormat };
 }

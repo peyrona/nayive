@@ -59,7 +59,7 @@
         var w = C.W( c );
         infoView.textContent = "";
 
-        // (A person's link, a new link and Delete live in the chat's "⋮".)
+        // (A person's link, a new link and Delete live in the chat's bar.)
         infoView.appendChild( h( "div", { class: "bar" }, C.btn( "back", "chat.back", C.back ),
                                  h( "div", { class: "who" }, h( "b", { text: T( "chat.chatOptions" ) } ) ) ) );
 
@@ -270,7 +270,7 @@
     }
 
     // Settings › Auto-delete (list.js openSettings): the number, what it
-    // would delete now, and save() for the dialog's Save.
+    // would delete now, and save() for when the dialog closes.
     C.autoDeletePane = function ()
     {
         var input = h( "input", { attrs: { type: "number", id: "autoDelDays", min: "0", max: "3650", step: "1", inputmode: "numeric" },
@@ -312,17 +312,20 @@
         input.addEventListener( "input", function () { clearTimeout( timer ); countEl.textContent = ""; timer = setTimeout( showCount, 250 ); } );
         showCount();
 
-        function value() { return Number( input.value ); }
+        // Always a whole number of days, 0 to 3650: a number out of range
+        // goes to the nearest end, an empty box back to the saved one.
+        function value()
+        {
+            var raw = input.value.trim(), n = Number( raw );
+            n = raw === "" || ! isFinite( n ) ? ( S.deleteAfter || 0 ) : Math.min( 3650, Math.max( 0, Math.round( n ) ) );
+            if( input.value !== String( n ) ) { input.value = String( n ); showCount(); }
+            return n;
+        }
+        input.addEventListener( "change", value );
         return {
             el: el,
             input: input,
             focus: function () { input.focus(); input.select(); },
-            // A whole number of days, 0 to 3650.
-            check: function ()
-            {
-                var n = value();
-                return input.value.trim() !== "" && Number.isInteger( n ) && n >= 0 && n <= 3650;
-            },
             changed: function () { return value() !== ( S.deleteAfter || 0 ); },
             // The server deletes the old messages (for everyone) the moment
             // it hears: so it hears when the "Undo" is gone (the shared
@@ -469,14 +472,18 @@
         NayiveUI.showIntro( { app: "chat", title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), buttons: rows } );
     };
 
-    // The ⋮'s rows are read off the menu itself (conv.js gives each item its
-    // line), so the help always shows exactly the items this chat has. A
-    // button not on screen (a group has no phone) is skipped by showIntro.
+    // The rows are read off the bar's buttons and the ⋮ menu themselves
+    // (conv.js gives each its line), so the help always shows exactly what
+    // this chat has. A button that did not fit the bar (fitBar) is in the ⋮.
     C.showConvHelp = function ()
     {
         var rows = [];
-        rows.push( { sel: "#convCallBtn", text: T( "chat.helpVoiceCall" ) } );
-        rows.push( { sel: "#convVideoBtn", text: T( "chat.helpVideoCall" ) } );
+        [].forEach.call( document.querySelectorAll( "#convBar button[id]" ), function ( b )
+        {
+            if( ! b._help ) return;
+            var name = b.getAttribute( "aria-label" ) || b.title;
+            rows.push( { sel: "#" + b.id, name: b.classList.contains( "fit-out" ) ? "⋮ → " + name : name, text: T( b._help ) } );
+        } );
         [].forEach.call( document.querySelectorAll( "#convMenu .menu-item" ), function ( b, i )
         {
             rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ) } );

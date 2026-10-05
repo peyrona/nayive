@@ -1,7 +1,7 @@
 // drive.mjs - Drive on the shared item browser: a mouse picks, a double-click
 // opens, one menu, the keys, the tree, "Move to…", drag, the bin with Undo
 // and no question; then a phone: tap opens, long-press picks.
-import { server, browser, ok, section, done, sleep, where, mouse, key, finger, drag, menuRows, seed, exists } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, where, mouse, key, finger, drag, menuRows, seed, exists, fitState } from "./lib.mjs";
 
 const s = await server();
 seed( s, { "files/Docs/a.txt": "a", "files/Docs/b.txt": "b", "files/Docs/c.md": "c", "files/Docs/Work": null,
@@ -37,12 +37,10 @@ ok( rows && rows.some( r => r.act === "bin" ) && rows.some( r => r.act === "move
 ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'F2' )" ), "…and its key beside it" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-await mouse( c, ROW( "files/Docs/b.txt" ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "rename" ), "the row ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "rename" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#listing [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+let fs = await fitState( c );
+ok( fs.acts.join() === "download,move,copyTo,rename,link,share,compress,props,bin" && ! fs.out.length && ! fs.more && ! fs.crowded,
+    "wide: every action is a button, in menu order (no cut / copy, no Extract on a .txt); no ⋮", fs );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#listing", { dx: 40, button: "right" } );
 rows = await menuRows( c );
@@ -148,13 +146,32 @@ ok( await c.until( "currentFolder === 'files/Docs'" ), "a tap opens a folder" );
 await c.until( "! listingLoading && document.querySelectorAll('#listing .row[data-path]').length >= 1" );
 await finger( c, ROW( "files/Docs/Work" ), 700 );
 ok( await c.until( "browse.ids().join() === 'files/Docs/Work'" ) && await c.evaluate( "document.getElementById('listing').classList.contains('is-picking') && currentFolder === 'files/Docs'" ), "a long-press picks (ticks on), it does not open" );
-ok( await c.evaluate( "document.querySelectorAll('#selActions [data-sel-act]').length === 3 && getComputedStyle( document.getElementById('driveTools') ).display === 'none'" ), "phone header: × count, Select all, three actions, ⋮; the tools step aside",
-    await c.evaluate( "[ document.querySelectorAll('#selActions [data-sel-act]').length, getComputedStyle( document.getElementById('driveTools') ).display ]" ) );
+fs = await fitState( c );
+ok( ! fs.crowded && fs.more && [ "move", "share", "bin" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "trashViewBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
+ok( fs.rows.slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === [ "download", "copyTo", "rename", "link", "share", "compress", "props" ].filter( a => fs.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden actions in toolbar order, then the hidden tools", fs );
+await mouse( c, "#moreBtn" );
+let mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "trashViewBtn" ), "the ⋮ opens with them", mrows );
+await key( c, "Escape" );
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('listing').classList.contains('is-picking')" ), "the × stops picking" );
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 300, height: 800, deviceScaleFactor: 1, mobile: true } );
+await sleep( 250 );
+fs = await fitState( c );
+ok( fs.tools.includes( "searchToggleBtn" ) && ! fs.crowded, "nothing picked, 300 px: Search stays in the bar", fs );
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true } );
+await sleep( 250 );
 await finger( c, ".breadcrumb .crumb-root" );
 ok( await c.until( "document.getElementById('treePane').classList.contains('open')" ), "the Drive crumb slides the tree in" );
 await c.evaluate( "treeView.closeSheet(); true" );
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
+await c.until( "!! document.querySelector('#listing .row[data-path]')" );
+await c.evaluate( "browse.set( [ document.querySelector('#listing .row[data-path]').dataset.path ] ); true" );
+await sleep( 200 );
+fs = await fitState( c );
+ok( ! fs.out.length && ! fs.more && fs.tools.includes( "trashViewBtn" ), "back to 1400 px: everything is a button again, no ⋮", fs );
 
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );

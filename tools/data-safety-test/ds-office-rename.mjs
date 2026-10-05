@@ -214,12 +214,12 @@ section( "K2 · A SAVE KEPT ONLY IN THIS PAGE IS SAID, NEVER \"SAVED\"" );
         window.__fail[ 'files/k2.txt' ] = 503; return true; } )()` );
     await type( "only here\n" );
     await save();
-    ok( await c.until( "document.getElementById('savedAt').textContent === NayiveUI.t( 'write.pageOnlyAt' )", 10000 ),
-        "the screen says it is only in this page", await c.evaluate( "document.getElementById('savedAt').textContent" ) );
-    ok( await c.evaluate( "document.getElementById('savedAt').textContent.indexOf( NayiveUI.tf( 'write.savedAt', { time: '' } ).trim() ) === -1" ), "...not \"Saved\"" );
+    ok( await c.until( "document.getElementById('savedAt').title.indexOf( NayiveUI.t( 'write.pageOnlyAt' ) ) === 0", 10000 ),
+        "the screen says it is only in this page", await c.evaluate( "document.getElementById('savedAt').title" ) );
+    ok( await c.evaluate( "document.getElementById('savedAt').dataset.state === 'unsaved'" ), "...not \"Saved\" (red floppy)" );
     await c.evaluate( "IDBDatabase.prototype.transaction = window.__realTx; window.__fail = {}; window.dispatchEvent( new Event( 'online' ) ); true" );
     ok( await untilDisk( "files/k2.txt", "only here\nbase\n" ), "storage and network back: it goes up" );
-    ok( await c.until( "document.getElementById('savedAt').textContent !== NayiveUI.t( 'write.pageOnlyAt' )" ), "...and the screen stops saying \"only in this page\"" );
+    ok( await c.until( "document.getElementById('savedAt').title.indexOf( NayiveUI.t( 'write.pageOnlyAt' ) ) !== 0" ), "...and the screen stops saying \"only in this page\"" );
 }
 
 //----------------------------------------------------------------------------//

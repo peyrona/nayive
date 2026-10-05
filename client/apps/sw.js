@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-8355ab304d0f";
+var CACHE_VERSION = "nayive-89501ebb7e75";
 /* @end */
 
 /* @generated:precache */
@@ -53,6 +53,7 @@ var PRECACHE_SHELL = [
     "calc/format.js",
     "calc/grid.js",
     "calc/index.html",
+    "calc/refs.js",
     "calendar/icons/icon-192.png",
     "calendar/icons/icon-512.png",
     "calendar/index.html",

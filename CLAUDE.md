@@ -10,7 +10,7 @@ Before changing a sealed file:
 1. Say so first, and why.
 2. Keep the change minimal.
 3. Afterwards run `node tools/data-safety-test/run.mjs` - it must end ALL GREEN.
-   (`deploy.sh` runs it too, through tools/prebuild.sh.)
+   (`deploy.sh --all-tests` runs it too; plain `deploy.sh` skips it.)
 
 New code that writes user data goes through the sealed helpers
 (shared/store.js, shared/gum-api.js, shared/office.js; server upload.go,

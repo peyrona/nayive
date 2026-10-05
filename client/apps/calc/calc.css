@@ -201,21 +201,52 @@ html, body { height: 100%; overflow: hidden; }
    still selects and edits the cell, which is what a spreadsheet must do. */
 #gridHost td.has-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
-/* The cells a formula being typed points at (POINTING in the script).
+/* The cells a formula being edited points at, each reference in its own
+   colour (refs.js; the same colour paints its text in the cell editor).
    Inset shadows, because the renderer owns the inline background and
-   borders - a shadow sits on top of both without touching either. */
-#gridHost td.pt
+   borders - a shadow sits on top of both without touching either. The
+   renderer sets --rf to one of the eight below. */
+:root
 {
-    box-shadow: inset 0 var(--pt-t, 0px) 0 var(--accent),
-                inset calc(-1 * var(--pt-r, 0px)) 0 0 var(--accent),
-                inset 0 calc(-1 * var(--pt-b, 0px)) 0 var(--accent),
-                inset var(--pt-l, 0px) 0 0 var(--accent),
-                inset 0 0 0 999px color-mix(in srgb, var(--accent) 12%, transparent);
+    --rf-0: #6AA9FF; --rf-1: #FF6B6B; --rf-2: #C792EA; --rf-3: #5FD38D;
+    --rf-4: #FFB454; --rf-5: #4DD0E1; --rf-6: #F78FB3; --rf-7: #D4C95A;
 }
-#gridHost td.pt-t { --pt-t: 2px; }
-#gridHost td.pt-b { --pt-b: 2px; }
-#gridHost td.pt-l { --pt-l: 2px; }
-#gridHost td.pt-r { --pt-r: 2px; }
+:root[data-theme="light"]
+{
+    --rf-0: #1F5FD1; --rf-1: #C62828; --rf-2: #7B3FB0; --rf-3: #1E8A4A;
+    --rf-4: #B85C00; --rf-5: #00838F; --rf-6: #C2185B; --rf-7: #7A6A00;
+}
+#gridHost td.rf
+{
+    box-shadow: inset 0 var(--rf-t, 0px) 0 var(--rf),
+                inset calc(-1 * var(--rf-r, 0px)) 0 0 var(--rf),
+                inset 0 calc(-1 * var(--rf-b, 0px)) 0 var(--rf),
+                inset var(--rf-l, 0px) 0 0 var(--rf),
+                inset 0 0 0 999px color-mix(in srgb, var(--rf) 12%, transparent);
+}
+#gridHost td.rf-t { --rf-t: 2px; }
+#gridHost td.rf-b { --rf-b: 2px; }
+#gridHost td.rf-l { --rf-l: 2px; }
+#gridHost td.rf-r { --rf-r: 2px; }
+
+/* The cell editor while it holds a formula: the textarea keeps caret,
+   selection and keys, and the coloured copy under it (.rf-mirror, the
+   same box and type, set by refs.js) shows the text. */
+#gridHost .handsontableInput.rf-on
+{
+    position: relative; z-index: 1;
+    color: transparent !important; background-color: transparent !important;
+    caret-color: var(--text);
+}
+#gridHost .handsontableInput.rf-on::selection { color: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+/* The format painter is on (format.js): the cells say "drop the look here". */
+body.calc-painting #gridHost .htCore td { cursor: copy; }
+
+#gridHost .rf-mirror
+{
+    position: absolute; z-index: 0; margin: 0; border-style: solid; border-color: transparent;
+    overflow: hidden; pointer-events: none;
+}
 
 /* Grid host */
 #gridHost { flex: 1 1 auto; min-height: 0; overflow: hidden; }   /* Handsontable virtualizes its own scroll */

@@ -246,6 +246,7 @@
         var box = h( "div", { class: "search-wrap" }, search );
         var searchBtn = C.btn( "search", "chat.search", null );
         searchBtn.id = "listSearch";
+        searchBtn.dataset.rank = 20;      // what leaves the bar first: tools after the picked chats' actions (fitBar)
         var moreBtn = C.btn( "more", "chat.menu", null );
         moreBtn.id = "listMore";
 
@@ -253,13 +254,14 @@
         var tools = h( "div", { class: "tb-group" }, box, searchBtn );
         var sys = h( "div", { class: "tb-group tb-sys" } );
         if( owner )
-            [ [ "plus", "chat.newChat", function () { C.openNewChat(); }, "newChatBtn" ],
-              [ "gear", "ui.settings", function () { C.openSettings(); }, "settingsBtn" ],
-              [ "help", "chat.help", function () { C.showHelp(); }, "helpBtn" ]
+            [ [ "plus", "chat.newChat", function () { C.openNewChat(); }, "newChatBtn", 21 ],
+              [ "gear", "ui.settings", function () { C.openSettings(); }, "settingsBtn", 30 ],
+              [ "help", "chat.help", function () { C.showHelp(); }, "helpBtn", 31 ]
             ].forEach( function ( b )
             {
                 var el = C.btn( b[ 0 ], b[ 1 ], b[ 2 ] );
                 el.id = b[ 3 ];
+                el.dataset.rank = b[ 4 ];
                 ( b[ 0 ] === "plus" ? tools : sys ).appendChild( el );
             } );
         else sys.appendChild( moreBtn );
@@ -312,8 +314,9 @@
 
     // ---------------------------------------------------------------------
     // the item browser (shared/browser.js, the owner's page): pick chats and
-    // act on them - right-click, the row's ⋮, a long-press, the header group.
-    // Each action calls what the open chat's ⋮ calls (conv.js, list.js).
+    // act on them - right-click, a long-press, the header group (what does
+    // not fit it goes into the header's one ⋮, shared/browser.js fitBar).
+    // Each action calls what the open chat's bar calls (conv.js, list.js).
     // ---------------------------------------------------------------------
 
     // Side by side (wider than a phone) a click on a chat still opens it, as
@@ -360,20 +363,20 @@
             { id: "open", label: T( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
               run: function ( ids ) { C.openConv( ids[ 0 ] ); } },
             // A toggle: Pin when one of them is not pinned (then all are), else Unpin.
-            { id: "pin", icon: "pin", bar: 1, phone: 1, group: 1,
+            { id: "pin", icon: "pin", rank: 2, group: 1,
               label: function ( ids ) { return T( anyNot( ids, "pin" ) ? "chat.pin" : "chat.unpin" ); },
               run: function ( ids ) { eachPref( ids, { pin: anyNot( ids, "pin" ) } ); } },
-            { id: "mute", bar: 2, phone: 1, group: 1,
+            { id: "mute", rank: 3, group: 1,
               icon: function ( ids ) { return anyNot( ids, "mute" ) ? "bellOff" : C.ic( "bell" ).outerHTML; },
               label: function ( ids ) { return T( anyNot( ids, "mute" ) ? "chat.mute" : "chat.unmute" ); },
               run: function ( ids ) { eachPref( ids, { mute: anyNot( ids, "mute" ) } ); } },
-            { id: "read", label: T( "chat.markRead" ), icon: "mailOpen", bar: 3, group: 1,
+            { id: "read", label: T( "chat.markRead" ), icon: "mailOpen", rank: 5, group: 1,
               when: function ( ids ) { return chatsOf( ids ).some( function ( c ) { return c.unread; } ); },
               run: function ( ids ) { ids.forEach( function ( id ) { C.markConvRead( id ); } ); } },
-            // The chat's ⋮ -> Delete -> Delete chat (info.js): for me only,
+            // The chat's Delete -> Delete chat (info.js): for me only,
             // with Undo, so no question. One chat at a time: the shared Undo
             // holds one delete, and a second toast makes the first final.
-            { id: "del", label: T( "chat.deleteChat" ), icon: "trash", key: "Del", bar: 9, phone: 1, danger: true, group: 2,
+            { id: "del", label: T( "chat.deleteChat" ), icon: "trash", key: "Del", rank: 1, danger: true, group: 2,
               when: one,
               run: function ( ids ) { var c = C.convOf( ids[ 0 ] ); if( c ) C.clearChat( c ); } }
         ];
@@ -387,9 +390,10 @@
             idOf:    function ( el ) { return el.dataset.conv; },
             bar:     bar,
             // No round tick on the avatar: acting on several chats is rare, and
-            // it only confused. Right-click, the row ⋮, long-press and
+            // it only confused. Right-click, long-press and
             // Ctrl/Shift+click still pick.
             ticks:   false,
+            count:   false,                 // no "× N" chip (his call, 2026-10-04)
             actions: actionList(),
             area:    [ { id: "newChat", label: T( "chat.newChat" ), icon: "plus", run: function () { C.openNewChat(); } } ],
             active:  listOn,
@@ -759,11 +763,11 @@
         var pick = null, url = ""; // a picture chosen here (a Blob and its URL)
         var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
-        var bin = h( "button", { class: "text-btn ghost danger", attrs: { type: "button" },
-                                 on: { click: function () { pick = null; showFace(); } } }, C.ic( "trash" ), T( "chat.removePhoto" ) );
+        var bin = h( "button", { class: "face-bin", attrs: { type: "button", title: T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
+                                 on: { click: function () { pick = null; showFace(); } } }, C.ic( "trash" ) );
         var cards = h( "div", { class: "rows book-rows" } );
         var form = h( "div", {},
-            h( "div", { class: "face-pick" }, face, bin ),
+            h( "div", { class: "face-pick" }, h( "span", { class: "face-box" }, face, bin ) ),
             h( "div", { class: "field" }, h( "label", { attrs: { for: "npName" }, text: T( "chat.name" ) } ), input ),
             h( "p", { class: "hint", text: T( "chat.nameSeen" ) } ),
             create,
@@ -1007,16 +1011,17 @@
     };
 
     // Settings › Your profile: your name and your picture, as the others
-    // see them. The circle on top picks a picture (or the bin under it
-    // drops it). Nothing is sent until the dialog's Save.
+    // see them. The circle on top picks a picture (or the red bin on its
+    // lower-left corner drops it). Nothing is sent until the dialog closes. An empty name
+    // is saved as "No name".
     C.profilePane = function ()
     {
         var pick = null, drop = false, url = "";
         var input = h( "input", { attrs: { type: "text", id: "myName", maxlength: "60", autocomplete: "off" }, value: S.owner || "" } );
         var face = h( "button", { class: "face", attrs: { type: "button", title: T( "chat.changePhoto" ), "aria-label": T( "chat.changePhoto" ) },
                                   on: { click: choose } } );
-        var bin = h( "button", { class: "text-btn ghost danger", attrs: { type: "button" },
-                                 on: { click: function () { pick = null; drop = true; show(); } } }, C.ic( "trash" ), T( "chat.removePhoto" ) );
+        var bin = h( "button", { class: "face-bin", attrs: { type: "button", title: T( "chat.removePhoto" ), "aria-label": T( "chat.removePhoto" ) },
+                                 on: { click: function () { pick = null; drop = true; show(); } } }, C.ic( "trash" ) );
         function show()
         {
             var av = C.avatar( "o", S.owner, "xl", null );
@@ -1049,16 +1054,15 @@
 
         return {
             el: h( "div", {},
-                   h( "div", { class: "face-pick" }, face, bin ),
+                   h( "div", { class: "face-pick" }, h( "span", { class: "face-box" }, face, bin ) ),
                    h( "div", { class: "field" }, h( "label", { attrs: { for: "myName" }, text: T( "chat.name" ) } ), input ),
                    h( "p", { class: "hint", text: T( "chat.myNameHint" ) } ) ),
             input: input,
             focus: function () { input.focus(); input.select(); },
-            check: function () { return !! input.value.trim(); },
             dispose: function () { if( url ) URL.revokeObjectURL( url ); url = ""; },
             save: async function ()
             {
-                var name = input.value.trim();
+                var name = input.value.trim() || T( "chat.noName" );
                 try
                 {
                     if( pick ) await C.putPicture( "me/photo", pick );
@@ -1072,17 +1076,17 @@
     };
 
     // The list's gear: Settings, two tabs - Your profile, and Auto-delete
-    // (info.js autoDeletePane). One Save for both. tab: "autodel" opens on
-    // that one (a chat's Info line about it).
+    // (info.js autoDeletePane). Close-only: its × (or Escape, or Enter)
+    // keeps the changes of both. tab: "autodel" opens on that one (a chat's
+    // Info line about it).
     C.openSettings = function ( tab )
     {
         var prof = C.profilePane(), del = C.autoDeletePane();
         var panes = { profile: prof, autodel: del };
-        var ok = h( "button", { attrs: { type: "button", "data-act": "primary", title: T( "ui.save" ) } } );
-        var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.cancel" ) } } );
+        var no = h( "button", { attrs: { type: "button", "data-act": "close", title: T( "ui.close" ) } } );
         var tabs = h( "div", { class: "set-tabs", attrs: { role: "tablist" } } );
         // Escape only while it is on top: the picture picker closes first.
-        var d = NayiveUI.modal( { cls: "chat-settings", title: T( "ui.settings" ), escape: done,
+        var d = NayiveUI.modal( { cls: "chat-settings", title: T( "ui.settings" ), escape: save,
                                   top: function () { return document.body.lastElementChild === d.back; } } );
         d.sheet.appendChild( tabs );
         [ [ "profile", "chat.yourProfile" ], [ "autodel", "chat.autoDelete" ] ].forEach( function ( t )
@@ -1093,7 +1097,7 @@
             d.sheet.appendChild( panes[ t[ 0 ] ].el );
             panes[ t[ 0 ] ].input.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) { e.preventDefault(); save(); } } );
         } );
-        d.sheet.appendChild( h( "div", { class: "sheet-actions" }, no, ok ) );
+        d.sheet.appendChild( h( "div", { class: "sheet-actions" }, no ) );
         d.show( function () { NayiveUI.applySheetButtons( d.back ); } );
 
         function show( key )
@@ -1110,19 +1114,15 @@
         setTimeout( function () { panes[ tab === "autodel" ? "autodel" : "profile" ].focus(); }, 30 );
 
         var closed = false;
-        function done() { if( closed ) return; closed = true; prof.dispose(); d.close(); }
         function save()
         {
             if( closed ) return;
-            for( var k in panes )
-                if( ! panes[ k ].check() ) { show( k ); panes[ k ].focus(); return; }
             var delChanged = del.changed();
             prof.save().then( function () { prof.dispose(); } );
             closed = true;
             d.close();
             if( delChanged ) del.save();
         }
-        ok.addEventListener( "click", save );
-        no.addEventListener( "click", done );
+        no.addEventListener( "click", save );
     };
 } )();

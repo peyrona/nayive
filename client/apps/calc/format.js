@@ -341,6 +341,74 @@ function clearSelectionStyle()
     scheduleAutosave();
 }
 
+//------------------------------------------------------------------------//
+// FORMAT PAINTER
+//
+// "Copiar formato", as in Write: the button takes the look of the selected
+// cells, and the next cells selected get it - all of it, number format and
+// borders included, in place of what they had - then it goes off. A block
+// painted over a bigger one repeats, as in Excel. A second press of the
+// button, or Escape, gives up. One Ctrl+Z takes the paint back off.
+
+const PAINT_MAX = 10000;     // cells copied at most: a whole-column pick is mostly empty rows
+
+let painter = null;          // { looks: [[style|null]], h, w } while it is on
+
+// Also from grid.js with nothing (New, Open): the painter goes off.
+function setPainter( p )
+{
+    painter = p || null;
+    document.getElementById( 'fmtPainterBtn' ).classList.toggle( 'active', !! p );
+    document.body.classList.toggle( 'calc-painting', !! p );    // the grid's className is reset on New / Open
+}
+
+function togglePainter()
+{
+    if( painter || ! lastSelection ) { setPainter( null ); return; }
+
+    const s = lastSelection;
+    const w = Math.min( s.c2 - s.c1 + 1, PAINT_MAX );
+    const h = Math.max( 1, Math.min( s.r2 - s.r1 + 1, Math.floor( PAINT_MAX / w ) ) );
+    const looks = [];
+
+    for( let r = 0; r < h; r++ )
+    {
+        const row = [];
+        for( let c = 0; c < w; c++ )
+        {
+            const st = styleOf( activeSheet, s.r1 + r, s.c1 + c );
+            row.push( st ? JSON.parse( JSON.stringify( st ) ) : null );
+        }
+        looks.push( row );
+    }
+
+    setPainter( { looks: looks, h: h, w: w } );
+}
+
+// From grid.js, on every selection made: when the painter is on, this one
+// gets the look.
+function paintFormat()
+{
+    if( ! painter || ! lastSelection ) return;
+
+    const p   = painter;
+    const sel = lastSelection;
+    setPainter( null );
+
+    // Along a whole line (r or c NaN, see changeLook) the block's first row
+    // or column is what repeats.
+    const at = function( i, from, n ) { return isNaN( i ) ? 0 : ( ( i - from ) % n + n ) % n; };
+
+    restyle( null, function( st, r, c )
+    {
+        const look = p.looks[ at( r, sel.r1, p.h ) ][ at( c, sel.c1, p.w ) ];
+        for( const k of Object.keys( st ) ) delete st[ k ];
+        if( look ) Object.assign( st, JSON.parse( JSON.stringify( look ) ) );
+    } );
+}
+
+document.addEventListener( 'keydown', function( e ) { if( painter && e.key === 'Escape' ) setPainter( null ); }, true );
+
 // Like setStyleField, but an empty/null value clears the field instead of storing
 // it — used by the select-based controls (font, size, number format) whose first
 // option means "back to default", not a literal value to persist.
@@ -385,6 +453,8 @@ function updateToolbarActiveState()
     document.getElementById( 'fmtFontFamily' ).value = ( style && style.fontFamily ) || '';
     document.getElementById( 'fmtFontSize'   ).value = ( style && style.size )        || '';
     document.getElementById( 'fmtNumFormat'  ).value = numFmtCategory( style && style.numFmt );
+
+    document.getElementById( 'fmtSplitBtn'     ).disabled = ! mergesInSelection().length;
 
     document.getElementById( 'fmtFreezeBtn'    ).classList.toggle( 'active', table.getSettings().fixedColumnsStart > 0 );
     document.getElementById( 'fmtFreezeRowBtn' ).classList.toggle( 'active', table.getSettings().fixedRowsTop      > 0 );
@@ -437,20 +507,45 @@ function gridColors()
     return ink;
 }
 
-// Merged range membership has no direct query API, so the anchor cell's
-// address is looked up in the same activeSheet.merges list save/load already tracks.
-function toggleMergeSelection()
+// Two buttons, one job each: Merge joins the selection into one cell, Split
+// takes apart every merged block the selection touches. Merged blocks are
+// looked up in activeSheet.merges, the list save/load already tracks
+// (Handsontable has no "all merges" call).
+function mergesInSelection()
+{
+    const s = lastSelection;
+    if( ! s ) return [];
+
+    return activeSheet.merges.filter( function( m )
+    {
+        return m.row <= s.r2 && m.row + m.rowspan - 1 >= s.r1 && m.col <= s.c2 && m.col + m.colspan - 1 >= s.c1;
+    } );
+}
+
+function mergeSelection()
 {
     if( ! lastSelection ) return;
+    if( lastSelection.r1 === lastSelection.r2 && lastSelection.c1 === lastSelection.c2 ) return;   // one cell: nothing to join
 
-    const plugin  = table.getPlugin( 'mergeCells' );
-    const already = activeSheet.merges.some( function( m ) { return m.row === lastSelection.r1 && m.col === lastSelection.c1; } );
+    // No args: the grid's own current selection, which still matches
+    // `lastSelection` here since toolbar buttons never blur it.
+    table.getPlugin( 'mergeCells' ).mergeSelection();
+    updateToolbarActiveState();
+    scheduleAutosave();
+}
 
-    // No args: both methods default to the grid's own current selection, which
-    // still matches `lastSelection` here since toolbar buttons never blur it.
-    if( already ) plugin.unmergeSelection();
-    else           plugin.mergeSelection();
+function splitSelection()
+{
+    const plugin = table.getPlugin( 'mergeCells' );
+    const list   = mergesInSelection();
+    if( ! list.length ) return;
 
+    // One block at a time: unmerging a range only takes the blocks wholly inside it.
+    list.slice().forEach( function( m )
+    {
+        plugin.unmerge( m.row, m.col, m.row + m.rowspan - 1, m.col + m.colspan - 1 );
+    } );
+    updateToolbarActiveState();
     scheduleAutosave();
 }
 
@@ -716,7 +811,7 @@ function cancelNumFmt()
 export
 {
     toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
-    updateToolbarActiveState, toggleMergeSelection, toggleFreezeColumns, toggleFreezeRows,
+    updateToolbarActiveState, mergeSelection, splitSelection, mergesInSelection, toggleFreezeColumns, toggleFreezeRows,
     openBorderPopup, closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
-    updateNumFmtPreview, confirmNumFmt, cancelNumFmt
+    updateNumFmtPreview, confirmNumFmt, cancelNumFmt, gridColors, togglePainter, paintFormat, setPainter
 };

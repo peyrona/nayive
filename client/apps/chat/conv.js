@@ -46,12 +46,17 @@
 
         wall.addEventListener( "scroll", onScroll, { passive: true } );
 
-        // The chat's "⋮" menu: built once and wired once (the bar is redrawn
-        // often; its items are refilled by renderConvHead).
-        convMenu = h( "div", { class: "top-menu", attrs: { id: "convMenu", hidden: true } } );
-        document.body.appendChild( convMenu );
+        // The chat's "⋮": built once and wired once (the bar is redrawn often).
+        // The owner's page: the chat's actions are buttons in the bar and the
+        // ⋮ holds only the ones that do not fit (NayiveUI.fitBar). Fitted
+        // while the bar is still empty, so it watches the bar itself. A
+        // person's page has no browser.js: its ⋮ keeps the menu, refilled by
+        // renderConvHead.
         convMore = C.btn( "more", "chat.menu", null );
         convMore.id = "convMoreBtn";
+        if( NayiveUI.fitBar ) { NayiveUI.fitBar( head, { btn: convMore } ); return; }
+        convMenu = h( "div", { class: "top-menu", attrs: { id: "convMenu", hidden: true } } );
+        document.body.appendChild( convMenu );
         NayiveUI.wireMenu( { btn: convMore, menu: convMenu, onPick: function ( item ) { if( item._act ) item._act(); } } );
     };
 
@@ -192,43 +197,53 @@
                                          on: { click: function () { C.openInfo(); } } },
             h( "span", { class: "who-top" }, h( "b", { text: c.name } ) ),
             sub[ 1 ] ? h( "small", { class: sub[ 0 ], text: sub[ 1 ] } ) : null ) );
-        // [phone] [video] | [⋮] [?] - search, options, mute, pin, a person's link
-        // and delete live in the menu. Calls are one to one (call.js): a group
-        // has no phone, and neither does a server without coturn. This "?"
-        // explains this side only; the list's help explains the list (his
-        // call, 2026-09-21).
-        // The two groups of every header (shared/app.css HEADER).
+        // [phone] [video] | [search] [info] [mute] [pin] [their link] [new link]
+        // [delete] | [⋮] [?]. Each button has a rank (1 = the last to leave):
+        // what does not fit goes into the ⋮ (fitBar, built in buildMain); a
+        // person's page keeps all but the calls in the ⋮. Calls are one to
+        // one (call.js): a group has no phone, and neither does a server
+        // without coturn. This "?" explains this side only; the list's help
+        // explains the list (his call, 2026-09-21).
+        // The groups of every header (shared/app.css HEADER).
+        var fits = !! head._fitBar;
         var calls = h( "div", { class: "tb-group" } );
+        var acts  = h( "div", { class: "tb-group" } );
+        var ct = C.owns( c ) && c.kind === "d" ? C.contactOf( C.otherOf( c ) ) : null;
+        // [id, icon, label, action, its line in the "?" help, rank, class]
+        var list = [ [ "convSearchBtn", "search", "chat.searchIn", function () { C.startSearch(); }, "chat.helpSearchIn", 5 ],
+                     [ "convInfoBtn", "info", "chat.chatOptions", function () { C.openInfo(); }, C.owns( c ) ? "chat.helpInfo" : "chat.helpInfoGuest", 6 ],
+                     [ "convMuteBtn", c.mute ? "bell" : "bell-off", c.mute ? "chat.unmute" : "chat.mute", function () { C.setPref( { mute: ! c.mute } ); }, "chat.helpMute", 3 ],
+                     [ "convPinBtn", "pin", c.pin ? "chat.unpin" : "chat.pin", function () { C.setPref( { pin: ! c.pin } ); }, "chat.helpPin", 4 ] ]
+            .concat( ct && ! ct.user ? [ [ "convLinkBtn", "link", "chat.theirLink", function () { C.showLink( ct ); }, "chat.helpTheirLink", 8 ],   // a Nayive user has no link
+                                         [ "convNewLinkBtn", "refresh", "chat.newLink", function () { C.newLink( ct ); }, "chat.helpNewLink", 9 ] ] : [],
+                     [ [ "convDeleteBtn", "trash", "chat.delete", function () { C.deleteDialog( c, ct ); },
+                         C.owns( c ) ? "chat.helpDelete" : "chat.deleteChatAsk", 7, "danger" ] ] );
         if( c.kind === "d" && S.callsOn )
+            list.unshift( [ "convCallBtn", "phone", "chat.voiceCall", function () { C.startCall( false ); }, "chat.helpVoiceCall", 1 ],
+                          [ "convVideoBtn", "video", "chat.videoCall", function () { C.startCall( true ); }, "chat.helpVideoCall", 2 ] );
+        if( ! fits ) convMenu.textContent = "";
+        list.forEach( function ( it )
         {
-            var call  = C.btn( "phone", "chat.voiceCall", function () { C.startCall( false ); } );
-            call.id = "convCallBtn";
-            var video = C.btn( "video", "chat.videoCall", function () { C.startCall( true ); } );
-            video.id = "convVideoBtn";
-            calls.appendChild( call );
-            calls.appendChild( video );
-        }
+            var call = it[ 0 ] === "convCallBtn" || it[ 0 ] === "convVideoBtn";
+            if( fits || call )
+            {
+                var b = C.btn( it[ 1 ], it[ 2 ], it[ 3 ], it[ 6 ] );
+                b.id = it[ 0 ];
+                b._help = it[ 4 ];
+                if( fits ) b.dataset.rank = it[ 5 ];
+                ( call ? calls : acts ).appendChild( b );
+                return;
+            }
+            var m = h( "button", { class: "menu-item" + ( it[ 6 ] ? " " + it[ 6 ] : "" ), attrs: { type: "button" } }, C.ic( it[ 1 ] ), T( it[ 2 ] ) );
+            m._act = it[ 3 ];
+            m._help = it[ 4 ];
+            convMenu.appendChild( m );
+        } );
         var help = C.btn( "help", "chat.help", function () { C.showConvHelp(); } );
         help.id = "convHelpBtn";
-        head.appendChild( h( "div", { class: "topbar-actions" }, calls, h( "div", { class: "tb-group tb-sys" }, convMore, help ) ) );
-
-        // [icon, label, action, its line in the "?" help, class]
-        convMenu.textContent = "";
-        var ct = C.owns( c ) && c.kind === "d" ? C.contactOf( C.otherOf( c ) ) : null;
-        [ [ "search", "chat.searchIn", function () { C.startSearch(); }, "chat.helpSearchIn" ],
-          [ "info", "chat.chatOptions", function () { C.openInfo(); }, C.owns( c ) ? "chat.helpInfo" : "chat.helpInfoGuest" ],
-          [ c.mute ? "bell" : "bell-off", c.mute ? "chat.unmute" : "chat.mute", function () { C.setPref( { mute: ! c.mute } ); }, "chat.helpMute" ],
-          [ "pin", c.pin ? "chat.unpin" : "chat.pin", function () { C.setPref( { pin: ! c.pin } ); }, "chat.helpPin" ]
-        ].concat( ct && ! ct.user ? [ [ "link", "chat.theirLink", function () { C.showLink( ct ); }, "chat.helpTheirLink" ],   // a Nayive user has no link
-                                      [ "refresh", "chat.newLink", function () { C.newLink( ct ); }, "chat.helpNewLink" ] ] : [],
-                  [ [ "trash", "chat.delete", function () { C.deleteDialog( c, ct ); },
-                      C.owns( c ) ? "chat.helpDelete" : "chat.deleteChatAsk", "danger" ] ] ).forEach( function ( it )
-        {
-            var b = h( "button", { class: "menu-item" + ( it[ 4 ] ? " " + it[ 4 ] : "" ), attrs: { type: "button" } }, C.ic( it[ 0 ] ), T( it[ 1 ] ) );
-            b._act = it[ 2 ];
-            b._help = it[ 3 ];
-            convMenu.appendChild( b );
-        } );
+        if( fits ) help.dataset.rank = 31;
+        head.appendChild( h( "div", { class: "topbar-actions" }, calls, acts, h( "div", { class: "tb-group tb-sys" }, convMore, help ) ) );
+        if( fits ) head._fitBar.fit();
     };
 
     // id: the chat (the open one by default; the list's menu names its own).

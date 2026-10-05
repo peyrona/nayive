@@ -1,6 +1,6 @@
 /* bookmarks.css - Bookmarks' own layout. Every control wears the shared look
    from ../shared/app.css (.icon-btn, .ntree, .card-row, .pill, .sheet,
-   .field, .top-menu, .open-crumb, .empty-hint, .pane-resizer, .text-btn);
+   .field, .open-crumb, .empty-hint, .pane-resizer, .text-btn);
    only placement and the few things no other app has live here. */
 
 /* A tool shell (like Drive): the header stays, the tree and the list scroll
@@ -94,11 +94,6 @@ html, body { height: 100%; overflow: hidden; }
 .empty-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
 .empty-btns .text-btn { margin-top: 0; }
 
-/* --- Menus ---------------------------------------------------------------- */
-.menu-caption { display: flex; align-items: center; gap: 10px; padding: 6px 12px 2px; font-size: 0.78rem; color: var(--text-dim); }
-.menu-caption svg { width: 16px; height: 16px; }
-/* The phone-only rows (grid / list) are shown by app.css under 641px. */
-
 /* --- Sheets --------------------------------------------------------------- */
 .sheet-lead    { margin: -6px 0 14px; font-size: 0.85rem; line-height: 1.4; color: var(--text-dim); }
 .field-caption { display: block; margin-bottom: 5px; font-size: 0.8rem; color: var(--text-dim); }
@@ -123,7 +118,8 @@ html, body { height: 100%; overflow: hidden; }
    The tree slides in from the folder button (the shared .tree-sheet);
    folders are still the rows at the top of the list, the crumbs say where
    you are and ← goes up. The grid / list switch leaves the header (it is in
-   the "⋮"); the search field takes the room left on its row. */
+   the "⋮", input.js topMenuItems); the search field takes the room left on
+   its row. */
 @media (max-width: 640px)
 {
     .pane-resizer { display: none; }

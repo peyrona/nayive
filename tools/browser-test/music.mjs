@@ -3,7 +3,7 @@
 // playlists (drop songs on one; its own menu), "Remove from playlist" with
 // Undo and no question (checked on disk), "Add to playlist…" with the same
 // tree; then a phone: tap plays, long-press picks, the tree slides in.
-import { server, browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows, seed, onDisk } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows, seed, onDisk, fitState } from "./lib.mjs";
 
 // A real, tiny sound: half a second of 8 kHz 8-bit mono silence.
 function wav()
@@ -62,12 +62,10 @@ ok( await sel() === TWO && rows && [ "play", "next", "queue", "playlist", "album
 ok( rows && ! rows.some( r => r.act === "remove" ), "…no Remove from playlist outside a playlist" );
 ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'Q' )" ), "…keys beside them (Q)" );
 await key( c, "Escape" );
-await mouse( c, ROW( TWO ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "queue" ), "the row ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "queue" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#libContent [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+let fs = await fitState( c );
+ok( fs.acts.join() === "play,next,queue,playlist,album,drive" && ! fs.out.length && ! fs.more && ! fs.crowded,
+    "wide: every action is a button, in menu order (no Remove outside a playlist); no ⋮", fs );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#libContent", { dx: 30, button: "right" } );
 rows = await menuRows( c );
@@ -145,7 +143,16 @@ await finger( c, ROW( THREE ), 700 );
 ok( await c.until( "browse.ids().join() === " + JSON.stringify( THREE ) ) && await c.evaluate( "document.getElementById('libContent').classList.contains('is-picking')" ), "a long-press picks (ticks on)" );
 await finger( c, ROW( FOUR ) );
 ok( ( await sel() ).split( "," ).length === 2, "…then a tap adds one" );
-ok( await c.evaluate( "document.querySelectorAll('#selActions [data-sel-act]').length === 3" ), "phone header: three actions" );
+fs = await fitState( c );
+ok( ! fs.crowded && fs.more && [ "play", "queue", "playlist" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "reloadBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
+ok( fs.out.length && fs.rows.filter( r => fs.out.includes( r ) ).join() === fs.out.join() && fs.out.join() === [ "play", "next", "queue", "playlist", "album", "drive" ].filter( a => fs.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden buttons in toolbar order (the left tools, the actions, the right tools)", fs );
+await finger( c, ".topbar .fit-more" );
+const mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "reloadBtn" ), "the ⋮ opens with them", mrows );
+await finger( c, ".topbar .fit-more" );
+ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('libContent').classList.contains('is-picking')" ), "the × stops picking" );
 await finger( c, "#treeBtn" );

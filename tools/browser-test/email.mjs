@@ -12,7 +12,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows } from "./lib.mjs";
+import { browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows, fitState } from "./lib.mjs";
 import { client, REPO } from "../data-safety-test/lib.mjs";
 
 const GO = process.env.GO || ( fs.existsSync( os.homedir() + "/sdk/go1.27.1/bin/go" ) ? os.homedir() + "/sdk/go1.27.1/bin/go" : "go" );
@@ -69,7 +69,7 @@ const EMPTY = () => c.evaluate( "( () => { const r = document.getElementById('li
 const shown = subj => c.evaluate( `[ ...document.querySelectorAll( '#list .mail-row' ) ].some( r => r.querySelector( '.subj span' ).textContent === ${JSON.stringify( subj )} )` );
 
 section( "EMAIL · MOUSE" );
-ok( await openPage(), "eMail opens the Inbox" );
+ok( await openPage(), "eMail opens the Inbox", c.logs.slice( -15 ) );
 await at( "Hello 1" );
 ok( await picked() === "Hello 1", "a click picks one row", await picked() );
 ok( await c.evaluate( "! NayiveMail.S.open && document.getElementById('readView').hidden" ), "…it does not open it" );
@@ -100,13 +100,15 @@ await shot( "e02-menu" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
 await at( "Hello 3", { mods: 2 } );
-await c.evaluate( "document.querySelectorAll('#list .mail-row.is-selected [data-more]')[0].click(); true" );
+await at( "Hello 3", { button: "right" } );
 rows = await menuRows( c );
-ok( act( "reply", true ) && act( "del" ), "two picked: the row ⋮ menu greys Reply, keeps Delete", rows );
+ok( await picked() === "Hello 2,Hello 3" && act( "reply", true ) && act( "del" ), "two picked, right-click on one: the menu greys Reply, keeps Delete", rows );
 await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "label" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#list [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+let ft = await fitState( c );
+ok( ft.acts.join() === "reply,replyAll,forward,read,star,label,spam,del" && ! ft.out.length && ! ft.more && ! ft.crowded,
+    "wide: every action is a button, in menu order (Inbox: no Not spam, Restore, Delete for good); no ⋮", ft );
+ok( await c.evaluate( "document.querySelector('#selActions [data-sel-act=reply]').disabled && ! document.querySelector('#selActions [data-sel-act=del]').disabled" ), "…Reply greyed for two, Delete not" );
 await key( c, "Escape" );
 await mouse( c, await EMPTY(), { button: "right" } );
 rows = await menuRows( c );
@@ -130,6 +132,9 @@ await key( c, "Enter" );
 ok( await c.until( "NayiveMail.S.open && NayiveMail.S.open.subject === 'Hello 1' && ! document.getElementById('readView').hidden" ), "Enter opens it" );
 ok( await c.evaluate( "!document.getElementById('actReply').hidden && !document.getElementById('actDelete').hidden && document.getElementById('actRestore').hidden && document.getElementById('selActions').hidden" ),
     "the reader's own buttons (no Restore in the Inbox); no pick group" );
+ft = await fitState( c );
+ok( [ "actReply", "actReplyAll", "actForward", "actStar", "actLabel", "actSpam", "actDelete" ].every( b => ft.tools.includes( b ) ) && ! ft.tools.includes( "actRestore" ) && ! ft.more && ! ft.crowded,
+    "…all of them buttons when wide, no ⋮", ft );
 await key( c, "s" );
 ok( await c.until( "NayiveMail.S.open && NayiveMail.S.open.flagged" ) && ( await inTray( "inbox", "Hello 1" ) )?.flagged === true, "S in the reader stars the mail open" );
 await key( c, "s" );
@@ -171,7 +176,6 @@ rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "editLabel" ) && rows.some( r => r.act === "deleteLabel" ), "a label's menu: Edit, Delete", rows );
 await shot( "e03-tree-menu" );
 await key( c, "Escape" );
-ok( await c.evaluate( `! document.querySelector( '${TR( "inbox" )} [data-more]' ) && !! document.querySelector( '${TR( "trash" )} [data-more]' )` ), "a ⋮ only on nodes that have a menu" );
 // drop on a label: it is added
 await at( "Hello 5" );
 await c.evaluate( "window.__toasts = []; true" );
@@ -229,12 +233,24 @@ await key( c, "Escape" );
 ok( await c.until( "NayiveMail.picked().length === 0 && [ ...document.querySelectorAll('#list .mail-row') ].every( r => ! r.hidden )" ), "Esc: every row in sight again" );
 
 section( "EMAIL · PHONE" );
-await c.send( "Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true } );
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 360, height: 800, deviceScaleFactor: 1, mobile: true } );
 await c.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 } );
 ok( await openPage(), "eMail on a phone" );
 ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth && getComputedStyle( document.getElementById('treeBtn') ).display !== 'none'" ), "no side scroll; the tree's button shows" );
 await finger( c, ROW, 60, await I( "Hello 1" ) );
 ok( await c.until( "NayiveMail.S.open && NayiveMail.S.open.subject === 'Hello 1' && ! document.getElementById('backBtn').hidden" ), "a tap opens the mail" );
+await sleep( 200 );
+ft = await fitState( c );
+const READ_ORDER = [ "actReply", "actReplyAll", "actForward", "actRead", "actUnread", "actStar", "actLabel", "actSpam", "actDelete" ];
+ok( ! ft.crowded && ft.more && ft.tools.includes( "actDelete" ) && ! ft.tools.includes( "actReplyAll" ),
+    "phone reader: one row; Delete stays, Reply all leaves first, the ⋮ shows", ft );
+const rr = ft.rows.filter( b => READ_ORDER.includes( b ) );
+ok( rr.join() === ft.rows.slice( 0, rr.length ).join() && rr.join() === READ_ORDER.filter( b => rr.includes( b ) ).join() && rr.includes( "actReplyAll" ),
+    "…its ⋮ lists the hidden buttons in toolbar order", ft );
+await mouse( c, "#moreBtn" );
+const rrows = await menuRows( c );
+ok( rrows && rrows.some( r => r.act === "actReplyAll" ), "the ⋮ opens with them", rrows );
+await key( c, "Escape" );
 await shot( "e05-phone-read" );
 await finger( c, "#backBtn" );
 await c.until( "! NayiveMail.S.open" );
@@ -242,8 +258,17 @@ await finger( c, ROW, 700, await I( "Hello 2" ) );
 ok( await c.until( "NayiveMail.picked().map( m => m.subject ).join() === 'Hello 2'" ) && await c.evaluate( "document.getElementById('list').classList.contains('is-picking') && ! NayiveMail.S.open" ), "a long-press picks (ticks on), it does not open" );
 await finger( c, ROW, 60, await I( "Hello 3" ) );
 ok( await c.until( "NayiveMail.picked().length === 2" ), "a tap then adds one" );
-ok( await c.evaluate( "document.querySelectorAll('#selActions [data-sel-act]').length === 3 && getComputedStyle( document.getElementById('listTools') ).display === 'none'" ), "phone header: × count, Select all, three actions, ⋮; the tools step aside",
-    await c.evaluate( "[ document.querySelectorAll('#selActions [data-sel-act]').length, getComputedStyle( document.getElementById('listTools') ).display ]" ) );
+ft = await fitState( c );
+ok( ! ft.crowded && ft.more && [ "del", "read" ].every( a => ft.acts.includes( a ) ) && ! ft.tools.includes( "selectBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", ft );
+const ORDER = [ "reply", "replyAll", "forward", "read", "star", "label", "spam", "del" ];
+ok( ft.rows.filter( a => ORDER.includes( a ) ).join() === ft.out.join() && ft.out.join() === ORDER.filter( a => ft.out.includes( a ) ).join() && ft.out.includes( "spam" ) &&
+    ft.rows.indexOf( ft.out[ ft.out.length - 1 ] ) < ft.rows.indexOf( "searchBtn" ),
+    "…its ⋮ lists the hidden actions in toolbar order, then the hidden tools", ft );
+await mouse( c, "#moreBtn" );
+const mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === ft.out[ 0 ] ), "the ⋮ opens with them", mrows );
+await key( c, "Escape" );
 ok( await c.evaluate( "document.documentElement.scrollWidth <= innerWidth && document.querySelector('.topbar').getBoundingClientRect().right <= innerWidth" ), "…and it fits" );
 await shot( "e06-phone-picking" );
 await finger( c, "#selActions [data-sel=clear]" );
@@ -254,6 +279,13 @@ await sleep( 300 );
 await shot( "e07-phone-tree" );
 await finger( c, TR( "sent" ) );
 ok( await c.until( "NayiveMail.S.tray === 'sent' && ! document.getElementById('side').classList.contains('open')" ) && await c.evaluate( "document.getElementById('whereName').textContent === NayiveUI.t('mail.tray.sent')" ), "a tap on Sent opens it and the tree slides away" );
+await c.send( "Emulation.setDeviceMetricsOverride", { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false } );
+await mouse( c, TR( "inbox" ), { dx: 40 } );
+await c.until( "NayiveMail.S.tray === 'inbox' && !! document.querySelector('#list .mail-row') && ! NayiveMail.S.loading" );
+await c.evaluate( "NayiveMail.browse.set( [ document.querySelector('#list .mail-row').dataset.id ] ); true" );
+await sleep( 200 );
+ft = await fitState( c );
+ok( ! ft.out.length && ! ft.more && ft.tools.includes( "selectBtn" ) && ! ft.crowded, "back to 1400 px: everything is a button again, no ⋮", ft );
 
 const errs = c.logs.filter( l => /EXCEPTION/.test( l ) );
 ok( ! errs.length, "no page exceptions", errs );

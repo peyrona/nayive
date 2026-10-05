@@ -1,19 +1,22 @@
 # Nayive
 
 Personal web apps you host yourself: Drive, Planner (calendar, tasks and habits),
-Contacts, Write, Calc, Text, Photos, Music, Movies, Trips, Split and Games.
+eMail, Chat (with calls), Office (Write, Calc, Text), Records (Contacts, Bookmarks,
+Passwords), Photos, Music, Movies, Trips, Split and Games.
 
-<p align="center"><img src=".github/launcher.png" alt="The Nayive launcher" width="313"></p>
+<p align="center"><img src=".github/launcher.png" alt="The Nayive launcher" width="340"></p>
 
 - One static Go binary (`server/go/`) serves the apps and a small JSON file API.
 - Multi-user. Each user's data is plain files (`.ics`, `.vcf`, `.json`) in their own folder.
 - No database, no framework, no build step for the apps.
 - Installable as a PWA, with native notifications (Web Push).
+- A desktop mode on big screens: windows, a task bar, tiling.
+- An Android app (`android/`) for location sharing and photo upload.
 
 ## Install
 
 ```sh
-./pack.sh                 # builds nayive.zip (needs Go 1.24+ and zip)
+./pack.sh                 # builds nayive.zip (needs Go 1.27+ and zip)
 unzip nayive.zip -d nayive
 cd nayive
 ./install.sh              # writes store/config/server.json and a systemd unit

@@ -38,13 +38,15 @@
     <div id="app" class="app" style="display: none;">
 
         <!-- List:      [icon] eMail ......... [search] [write] [select] [settings] [?] [plug]
-             Picked:    [icon] eMail ... [× 3] [all] [what can be done to them] [⋮] [search]...
+             Picked:    [icon] eMail ... [× 3] [all] [what can be done to them] [search]... [⋮]
                         (the shared item browser draws that group: browse.js)
              Writing:   [←] [icon] eMail ...... [clip] [discard] [send] [?] [plug]
                         (the clip opens Chat's panel: this device, Nayive, gallery)
              Reading:   [←] [icon] eMail ...... [what can be done to it] [?] [plug]
              The reader's buttons get their glyphs from core.js (data-icon); which of
-             them show is the action list's own rules (browse.js, E.syncBar). -->
+             them show is the action list's own rules (browse.js, E.syncBar).
+             data-rank (1 = the last to leave, as the action list's rank): what
+             does not fit the row goes into the ⋮ before the gear (NayiveUI.fitBar). -->
         <div class="topbar">
             <button id="backBtn" class="icon-btn" type="button" hidden data-i18n-attr="title:mail.back, aria-label:mail.back">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
@@ -59,18 +61,18 @@
                      (browse.js, syncBar). -->
                 <div id="msgTools" class="tb-group">
                     <div id="actions" class="mail-actions" hidden>
-                        <button id="actReply"    class="icon-btn" type="button" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
-                        <button id="actReplyAll" class="icon-btn" type="button" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
-                        <button id="actForward"  class="icon-btn" type="button" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
-                        <button id="actRead"    class="icon-btn" type="button" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
-                        <button id="actUnread"  class="icon-btn" type="button" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
-                        <button id="actStar"    class="icon-btn" type="button" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
-                        <button id="actLabel"   class="icon-btn" type="button" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
-                        <button id="actSpam"    class="icon-btn" type="button" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
-                        <button id="actNotSpam" class="icon-btn" type="button" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
-                        <button id="actRestore" class="icon-btn" type="button" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
-                        <button id="actDelete"  class="icon-btn" type="button" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
-                        <button id="actForget"  class="icon-btn danger" type="button" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
+                        <button id="actReply"    class="icon-btn" type="button" data-rank="5" data-icon="reply"    data-i18n-attr="title:mail.reply, aria-label:mail.reply"></button>
+                        <button id="actReplyAll" class="icon-btn" type="button" data-rank="8" data-icon="replyAll" data-i18n-attr="title:mail.replyAll, aria-label:mail.replyAll"></button>
+                        <button id="actForward"  class="icon-btn" type="button" data-rank="7" data-icon="forward"  data-i18n-attr="title:mail.forward, aria-label:mail.forward"></button>
+                        <button id="actRead"    class="icon-btn" type="button" data-rank="2" data-icon="read"    data-i18n-attr="title:mail.markRead, aria-label:mail.markRead"></button>
+                        <button id="actUnread"  class="icon-btn" type="button" data-rank="2" data-icon="unread"  data-i18n-attr="title:mail.markUnread, aria-label:mail.markUnread"></button>
+                        <button id="actStar"    class="icon-btn" type="button" data-rank="6" data-icon="star"    data-i18n-attr="title:mail.star, aria-label:mail.star"></button>
+                        <button id="actLabel"   class="icon-btn" type="button" data-rank="3" data-icon="tag"     data-i18n-attr="title:mail.labelsBtn, aria-label:mail.labelsBtn"></button>
+                        <button id="actSpam"    class="icon-btn" type="button" data-rank="9" data-icon="spam"    data-i18n-attr="title:mail.toSpam, aria-label:mail.toSpam"></button>
+                        <button id="actNotSpam" class="icon-btn" type="button" data-rank="3" data-icon="inbox"   data-i18n-attr="title:mail.notSpam, aria-label:mail.notSpam"></button>
+                        <button id="actRestore" class="icon-btn" type="button" data-rank="2" data-icon="restore" data-i18n-attr="title:mail.restore, aria-label:mail.restore"></button>
+                        <button id="actDelete"  class="icon-btn" type="button" data-rank="1" data-icon="trash"   data-i18n-attr="title:mail.delete, aria-label:mail.delete"></button>
+                        <button id="actForget"  class="icon-btn danger" type="button" data-rank="3" data-icon="forget" data-i18n-attr="title:mail.forget, aria-label:mail.forget"></button>
                     </div>
                     <!-- Writing: what a message being written can do. -->
                     <div id="writeActions" class="mail-actions" hidden>
@@ -86,16 +88,21 @@
                     <div id="searchWrap" class="search-wrap">
                         <input id="searchInput" class="topbar-search" type="text" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:mail.search, aria-label:mail.search">
                     </div>
-                    <button id="searchBtn" class="icon-btn mail-list-only" type="button" data-i18n-attr="title:mail.search, aria-label:mail.search">
+                    <button id="searchBtn" class="icon-btn mail-list-only" type="button" data-rank="20" data-i18n-attr="title:mail.search, aria-label:mail.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
-                    <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
+                    <button id="composeBtn" class="icon-btn mail-list-only" type="button" data-rank="21" data-icon="compose" data-i18n-attr="title:mail.compose, aria-label:mail.compose"></button>
                     <!-- picks the rows that match some fields (the pick dialog) -->
-                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-icon="selectAll" data-i18n-attr="title:mail.pickGo, aria-label:mail.pickGo"></button>
+                    <button id="selectBtn" class="icon-btn mail-list-only" type="button" data-rank="22" data-icon="selectAll" data-i18n-attr="title:mail.pickGo, aria-label:mail.pickGo"></button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button id="setBtn" class="icon-btn mail-list-only" type="button" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <!-- The buttons that do not fit the header (NayiveUI.fitBar, browse.js);
+                         hidden while everything fits. -->
+                    <button id="moreBtn" class="icon-btn" type="button" hidden aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.moreOptions, aria-label:ui.moreOptions">
+                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="12" cy="19" r="1.9"></circle></svg>
+                    </button>
+                    <button id="setBtn" class="icon-btn mail-list-only" type="button" data-rank="30" data-icon="gear" data-i18n-attr="title:mail.settings, aria-label:mail.settings"></button>
+                    <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </button>
                 </div>

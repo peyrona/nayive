@@ -3,7 +3,7 @@
 // groups (the cards' CATEGORIES line, checked on disk), drag onto the tree,
 // delete with Undo and no question; then a phone: tap opens, long-press
 // picks, the tree slides in.
-import { server, browser, ok, section, done, sleep, onDisk, mouse, key, finger, drag, menuRows, seed } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, onDisk, mouse, key, finger, drag, menuRows, seed, fitState } from "./lib.mjs";
 
 const F = "data/contacts.vcf";
 const card = ( uid, fn, n, extra = [] ) => [ "BEGIN:VCARD", "VERSION:3.0", "UID:" + uid, "FN:" + fn, "N:" + n, ...extra, "END:VCARD" ].join( "\r\n" );
@@ -68,12 +68,16 @@ ok( rows && rows.find( r => r.act === "fav" ).label.includes( "Remove from favou
 ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].some( k => k.textContent === 'F2' )" ), "…and the keys beside them" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-await mouse( c, ROW( "b" ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "edit" ), "the row ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "edit" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#contactList [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no row ⋮, no tree ⋮, no ⋮ in the selection group" );
+// Share is there only where the browser can share files (headless may not).
+const SHARE = await c.evaluate( "canShareFiles()" );
+let fs = await fitState( c );
+ok( fs.acts.join() === [ "edit", "fav", "group", SHARE && "share", "export", "delete" ].filter( Boolean ).join() && ! fs.out.length && ! fs.more && ! fs.crowded,
+    "wide: every action is a button, in menu order (no Merge for one, no Remove from group outside one); no ⋮", fs );
+await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
+fs = await fitState( c );
+ok( fs.acts.includes( "merge" ) && ! fs.out.length && ! fs.more, "…two picked: Merge shows too", fs );
+await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#contactList .letter-head", { dx: 40, button: "right" } );
 rows = await menuRows( c );
@@ -184,8 +188,17 @@ ok( await c.until( "browse.ids().join() === 'd'" ) && await c.evaluate( "documen
 await sleep( 600 );                     // the long-press's own click is eaten for 700 ms
 await finger( c, ROW( "e" ) );
 ok( await sel() === "d,e", "…then a tap adds one", await sel() );
-ok( await c.evaluate( "document.querySelectorAll('#selActions [data-sel-act]').length <= 3 && getComputedStyle( document.getElementById('addBtn').closest('.tb-group') ).display === 'none'" ), "phone header: × count, Select all, at most three actions, ⋮; the tools step aside",
-    await c.evaluate( "[ document.querySelectorAll('#selActions [data-sel-act]').length, getComputedStyle( document.getElementById('addBtn').closest('.tb-group') ).display ]" ) );
+fs = await fitState( c );
+ok( ! fs.crowded && fs.more && [ "group", "delete" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "addBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
+const ORDER = [ "edit", "fav", "group", "share", "export", "merge", "delete" ];
+ok( fs.out.length && fs.rows.filter( r => r !== "all" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === ORDER.filter( a => fs.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fs );
+await finger( c, ".header .fit-more" );
+let mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "addBtn" ), "the ⋮ opens with them", mrows );
+await finger( c, ".header .fit-more" );
+ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "browse.ids().length === 0 && ! document.getElementById('contactList').classList.contains('is-picking')" ), "the × stops picking" );
 await finger( c, "#treeBtn" );

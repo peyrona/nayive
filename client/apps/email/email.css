@@ -117,29 +117,25 @@ body.composing #readRz         { display: none; }
     line-height: 1.4;
 }
 
-/* One row: [tick] who + when [⋮] / subject + marks / the first words.
-   Unread: bold, with an accent edge on the left. The round tick and the ⋮
-   are the shared item browser's (app.css ITEM BROWSER): the tick on hover
-   with a mouse, on every row while picking by touch; the ⋮ on hover (a
-   mouse) or always (touch). */
+/* One row: [tick] who + when / subject + marks / the first words.
+   Unread: bold, with an accent edge on the left. The round tick is the
+   shared item browser's (app.css ITEM BROWSER): on hover with a mouse, on
+   every row while picking by touch. */
 .mail-row
 {
     position: relative;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 2px 10px;
     width: 100%;
-    padding: 9px 4px 10px 12px;
+    padding: 9px 12px 10px 12px;
     border-bottom: 1px solid var(--line);
     color: var(--text);
     cursor: default;
 }
 .mail-row:hover       { background: color-mix(in srgb, var(--text) 5%, transparent); }
 .mail-row.unread      { box-shadow: inset 3px 0 0 var(--accent); }
-.mail-tickbox,
-.mail-morebox         { display: flex; align-items: center; grid-row: 1 / span 3; }
-.mail-tickbox         { grid-column: 1; }
-.mail-morebox         { grid-column: 4; }
+.mail-tickbox         { display: flex; align-items: center; grid-row: 1 / span 3; grid-column: 1; }
 .mail-row .who,
 .mail-row .subj,
 .mail-row .snip       { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

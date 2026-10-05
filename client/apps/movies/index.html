@@ -102,8 +102,6 @@
     {
         #treeBtn { display: inline-flex; }
         .tree-pane:not(.tree-sheet) { display: none; }     /* until the tree is made (boot) */
-        /* While picking, the selection group needs the whole bar. */
-        .topbar:has(.has-selection) :is(h1, #tools) { display: none; }
     }
 
     .lib-pane   { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
@@ -159,7 +157,7 @@
     .poster-seen svg { width: 13px; height: 13px; }
     .poster-bar  { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, #000 45%, transparent); }
     .poster-bar > span { display: block; height: 100%; background: var(--accent); }
-    .poster-body { display: flex; align-items: center; gap: 2px; padding: 8px 4px 10px 10px; }
+    .poster-body { display: flex; align-items: center; gap: 2px; padding: 8px 10px 10px; }
     .poster-text { flex: 1 1 auto; min-width: 0; }
     .poster-title{ font-size: 0.84rem; font-weight: 600; color: var(--text);
                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -264,12 +262,12 @@
         <h1>Movies</h1>
         <!-- The toolbar, shown once a folder is open (display: contents). -->
         <div class="tb-tools" id="tools" hidden>
-            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
+            <button class="icon-btn has-popup" id="folderInfoBtn" type="button" data-rank="22" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
             <!-- Phones only (<= 640 px): the tree (films, genres, folders) slides in. -->
-            <button class="icon-btn" id="treeBtn" type="button" data-i18n-attr="title:movies.library, aria-label:movies.library">
+            <button class="icon-btn" id="treeBtn" type="button" data-rank="23" data-i18n-attr="title:movies.library, aria-label:movies.library">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
             </button>
         </div>
@@ -281,18 +279,18 @@
                 <div class="search-wrap">
                     <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:movies.searchPh">
                 </div>
-                <button class="icon-btn" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                <button class="icon-btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="title:ui.search, aria-label:ui.search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
-                <button class="icon-btn" id="postersBtn" type="button" data-i18n-attr="title:movies.findPostersTip, aria-label:movies.findPosters">
+                <button class="icon-btn" id="postersBtn" type="button" data-rank="24" data-i18n-attr="title:movies.findPostersTip, aria-label:movies.findPosters">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21"/></svg>
                 </button>
-                <button class="icon-btn" id="reloadBtn" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                <button class="icon-btn" id="reloadBtn" data-rank="25" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                 </button>
             </div>
             <div class="tb-group tb-sys" data-tools hidden>
-                <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 </button>
             </div>
@@ -1103,7 +1101,7 @@ function posterCardHtml( mv )
                    ( mv.duration ? fmtRuntime( mv.duration ) : "" );
 
     // A row of the shared item browser (BROWSER below): its tick on the
-    // poster's corner, its ⋮ beside the title.
+    // poster's corner.
     return '<div class="poster-card' + ( active ? ' is-active' : '' ) + '" data-open="' + esc( mv.path ) + '">' +
         '<span class="poster-art" ' + artStyle( mv.color, mv.poster ) + '>' +
             NayiveUI.tickHtml() +
@@ -1115,7 +1113,7 @@ function posterCardHtml( mv )
         '<span class="poster-body"><span class="poster-text">' +
             '<div class="poster-title">' + esc( mv.title ) + '</div>' +
             '<div class="poster-sub" data-runtime="' + esc( mv.path ) + '">' + esc( subLabel || "—" ) + '</div>' +
-        '</span>' + NayiveUI.moreHtml() + '</span>' +
+        '</span></span>' +
     '</div>';
 }
 
@@ -1490,7 +1488,8 @@ function updatePositionState() { NayiveMedia.positionState( video ); }
  * poster cards as rows of the shared item browser (shared/browser.js): a
  * click picks (Ctrl / Shift add), a double-click, Enter or a tap opens the
  * film, a long-press picks on touch. One action list feeds the header group,
- * the menu (right-click = the card's ⋮ = the header ⋮) and the keys.
+ * the menu (right-click) and the keys; what does not fit the header goes
+ * into its one ⋮ (NayiveUI.fitBar).
  * -------------------------------------------------------------------------*/
 var treeView = null, browse = null;
 var treeOpen = {};                               // the open rows, this visit
@@ -1558,16 +1557,16 @@ function movieActions()
     return [
         { id: "open", label: T( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
           run: function ( ids ) { openMovie( ids[ 0 ] ); } },
-        { id: "play", label: T( "media.play" ), icon: "play", bar: 1, phone: 1, group: 0, when: one,
+        { id: "play", label: T( "media.play" ), icon: "play", rank: 1, group: 0, when: one,
           run: function ( ids ) { playMovie( findMovie( ids[ 0 ] ) ); } },
-        { id: "watched", icon: "check", key: "W", bar: 2, phone: 1, group: 1,
+        { id: "watched", icon: "check", key: "W", rank: 2, group: 1,
           label: function ( ids ) { var f = films( ids ); return T( f.length && f.every( isWatched ) ? "movies.markUnwatched" : "movies.markWatched" ); },
           when: function ( ids ) { return films( ids ).length > 0; },
           run: function ( ids ) { setWatched( films( ids ) ); } },
-        { id: "poster", label: T( "movies.findPoster" ), icon: "image", group: 1,
+        { id: "poster", label: T( "movies.findPoster" ), icon: "image", rank: 3, hideOff: true, group: 1,
           when: function ( ids ) { return films( ids ).some( needsPoster ); },
           run: function ( ids ) { fetchPosters( ids ); } },
-        { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", group: 2, when: one,
+        { id: "drive", label: T( "ui.showInDrive" ), icon: "folder", rank: 5, group: 2, when: one,
           run: function ( ids ) { NayiveMedia.showInDrive( ids[ 0 ] ); } }
     ];
 }

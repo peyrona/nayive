@@ -21,8 +21,7 @@ const SVG = {
     bookmark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>',
     importI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
     exportI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>',
-    dupes:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"></rect><path d="M4 16V5a2 2 0 0 1 2-2h11"></path></svg>',
-    sort:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="14" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="8" y2="18"></line><polyline points="15 15 18 18 21 15"></polyline><line x1="18" y1="6" x2="18" y2="18"></line></svg>'
+    dupes:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"></rect><path d="M4 16V5a2 2 0 0 1 2-2h11"></path></svg>'
 };
 
 function esc( s ) { return NayiveUI.escapeHtml( s == null ? '' : String( s ) ); }
@@ -177,10 +176,9 @@ function renderItems()
 
 function itemHtml( n, withPath )
 {
-    // The shared browser paints .is-selected; the tick and the ⋮ are its own.
+    // The shared browser paints .is-selected; the tick is its own.
     const cls = 'card-row bm-item' + ( isFolder( n ) ? ' is-folder' : '' ) + ( browse && browse.has( n.id ) ? ' is-selected' : '' );
     const tick = NayiveUI.tickHtml();
-    const menu = NayiveUI.moreHtml();
     const where = withPath ? '<div class="bm-path">' + SVG.folder + '<span>' + esc( pathText( n.parentId ) || T( 'bookmarks.all' ) ) + '</span></div>' : '';
 
     if( isFolder( n ) )
@@ -189,7 +187,7 @@ function itemHtml( n, withPath )
         return '<div class="' + cls + '" data-id="' + esc( n.id ) + '" role="option" tabindex="-1">' +
                '<div class="bm-top">' + tick + '<span class="bm-ic is-folder">' + SVG.folder + '</span>' +
                '<div class="bm-head"><div class="bm-title">' + esc( folderName( n ) ) + '</div>' +
-               '<div class="bm-domain">' + esc( c.bookmarks === 1 ? T( 'bookmarks.folderCountOne' ) : TF( 'bookmarks.folderCount', { n: c.bookmarks } ) ) + '</div></div>' + menu + '</div>' +
+               '<div class="bm-domain">' + esc( c.bookmarks === 1 ? T( 'bookmarks.folderCountOne' ) : TF( 'bookmarks.folderCount', { n: c.bookmarks } ) ) + '</div></div></div>' +
                where + '</div>';
     }
 
@@ -205,8 +203,7 @@ function itemHtml( n, withPath )
            '<div class="bm-top">' + tick + '<span class="bm-ic" style="--hue:' + hueOf( domainOf( n.url ) || n.title ) + '">' + esc( initialOf( n ) ) + img + '</span>' +
            '<div class="bm-head"><div class="bm-title">' + esc( n.title || domainOf( n.url ) || n.url ) + '</div>' +
            '<div class="bm-domain">' + esc( domainOf( n.url ) || n.url ) + '</div></div>' +
-           ( n.favorite ? '<span class="bm-star" title="' + esc( T( 'bookmarks.favourite' ) ) + '">' + SVG.star + '</span>' : '' ) +
-           menu + '</div>' +
+           ( n.favorite ? '<span class="bm-star" title="' + esc( T( 'bookmarks.favourite' ) ) + '">' + SVG.star + '</span>' : '' ) + '</div>' +
            ( n.notes ? '<div class="bm-notes">' + esc( n.notes ) + '</div>' : '' ) +
            tags + where + '</div>';
 }

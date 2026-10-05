@@ -1,6 +1,6 @@
 /*
- * input.js - Bookmarks: every click, key and drag. The header and its "⋮",
- * the tree, the cards, search, the sheets' buttons, drag and drop and the
+ * input.js - Bookmarks: every click, key and drag. The header and its "⋮"
+ * (the shared NayiveUI.fitBar: what does not fit, then Bookmarks' own), the tree, the cards, search, the sheets' buttons, drag and drop and the
  * pane resizer. Picking, the item menu, the selection's header buttons and
  * the list keys are the shared item browser (shared/browser.js): this file
  * only gives it the action list.
@@ -16,7 +16,6 @@ function $( id ) { return document.getElementById( id ); }
 function wireAll()
 {
     wireHeader();
-    wireTopMenu();
     wireTree();
     wireItems();
     wireSearch();
@@ -52,52 +51,42 @@ function focusSearch()
     $( 'searchInput' ).select();
 }
 
-// The "⋮": Import, Export, Find duplicates, the sort order - and on
+// The "⋮" (NayiveUI.fitBar, wireItems): after the buttons that did not fit,
+// Import, Export, Find duplicates, the bookmarklet, the sort order - and on
 // a phone the grid / list switch, which leaves the header there.
 const SORTS = [ [ 'saved', 'bookmarks.sortSaved' ], [ 'az', 'bookmarks.sortAz' ], [ 'za', 'bookmarks.sortZa' ],
                 [ 'new', 'bookmarks.sortNew' ], [ 'old', 'bookmarks.sortOld' ] ];
 
-function wireTopMenu()
+// Rows in the NayiveUI.menuAt format, built anew each time the ⋮ opens (so
+// the ticks follow the current sort and view).
+function topMenuItems()
 {
-    const menu = $( 'topMenu' );
-    const check = '<svg class="mi-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    const item = function( act, icon, label, extra ) { return '<button type="button" class="menu-item' + ( extra || '' ) + '" role="menuitem" data-act="' + act + '">' + icon + '<span>' + esc( label ) + '</span></button>'; };
-
-    menu.innerHTML =
-        item( 'import', SVG.importI, T( 'bookmarks.import' ) ) +
-        item( 'export', SVG.exportI, T( 'bookmarks.export' ) ) +
-        item( 'dupes',  SVG.dupes,   T( 'bookmarks.findDupes' ) ) +
-        item( 'bmlet',  SVG.bookmark, T( 'bookmarks.bookmarklet' ) ) +
-        '<div class="menu-sep"></div>' +
-        '<div class="menu-caption">' + SVG.sort + '<span>' + esc( T( 'bookmarks.sort' ) ) + '</span></div>' +
-        SORTS.map( function( s ) { return item( 'sort:' + s[ 0 ], check, T( s[ 1 ] ) ); } ).join( '' ) +
-        '<div class="menu-sep mi-phone"></div>' +
-        item( 'mode:grid', $( 'gridBtn' ).innerHTML, T( 'bookmarks.viewGrid' ), ' mi-phone' ) +
-        item( 'mode:list', $( 'listBtn' ).innerHTML, T( 'bookmarks.viewList' ), ' mi-phone' );
-
-    const m = NayiveUI.wireMenu( { btn: 'moreBtn', menu: 'topMenu', onPick: function( b )
+    const phone = isPhone();
+    const mode  = function( m, btn, label )
     {
-        const act = b.dataset.act || '';
-        if( act === 'import' ) NayiveUI.open( 'importBackdrop' );
-        else if( act === 'export' ) NayiveUI.open( 'exportBackdrop' );
-        else if( act === 'dupes' ) openDupSheet();
-        else if( act === 'bmlet' ) NayiveUI.open( 'bmletBackdrop' );
-        else if( act.indexOf( 'sort:' ) === 0 ) { ui.sort = act.slice( 5 ); saveUi(); render(); }
-        else if( act.indexOf( 'mode:' ) === 0 ) setMode( act.slice( 5 ) );
-    } } );
-
-    // The ticks follow the current sort each time it opens.
-    $( 'moreBtn' ).addEventListener( 'click', function()
+        return { id: 'mode:' + m, label: T( label ), icon: $( btn ).innerHTML, checked: ( ui.mode === 'list' ) === ( m === 'list' ),
+                 hidden: ! phone, run: function() { setMode( m ); } };
+    };
+    return [
+        { id: 'import', label: T( 'bookmarks.import' ),      icon: SVG.importI,  run: function() { NayiveUI.open( 'importBackdrop' ); } },
+        { id: 'export', label: T( 'bookmarks.export' ),      icon: SVG.exportI,  run: function() { NayiveUI.open( 'exportBackdrop' ); } },
+        { id: 'dupes',  label: T( 'bookmarks.findDupes' ),   icon: SVG.dupes,    run: openDupSheet },
+        { id: 'bmlet',  label: T( 'bookmarks.bookmarklet' ), icon: SVG.bookmark, run: function() { NayiveUI.open( 'bmletBackdrop' ); } },
+        { sep: true },
+        { caption: T( 'bookmarks.sort' ) }
+    ].concat( SORTS.map( function( s )
     {
-        menu.querySelectorAll( '[data-act^="sort:"]' ).forEach( function( b ) { b.classList.toggle( 'is-active', b.dataset.act === 'sort:' + ui.sort ); } );
-        menu.querySelectorAll( '[data-act^="mode:"]' ).forEach( function( b ) { b.classList.toggle( 'is-active', b.dataset.act === 'mode:' + ui.mode ); } );
-    }, true );
-    return m;
+        return { id: 'sort:' + s[ 0 ], label: T( s[ 1 ] ), checked: ui.sort === s[ 0 ], run: function() { ui.sort = s[ 0 ]; saveUi(); render(); } };
+    } ) ).concat( [
+        { sep: true, hidden: ! phone },
+        mode( 'grid', 'gridBtn', 'bookmarks.viewGrid' ),
+        mode( 'list', 'listBtn', 'bookmarks.viewList' )
+    ] );
 }
 
 //------------------------------------------------------------------------//
 // TREE  -  the shared tree (NayiveUI.tree): the arrow opens and closes, a
-// click opens the folder, right-click / ⋮ / long-press give the folder the
+// click opens the folder, right-click / long-press give the folder the
 // same menu it has as a card, keys as in a file tree. Folders drag; the top
 // or bottom edge of a row puts a folder before / after it (a line shows
 // where), its middle puts it inside. On a phone it slides in from #treeBtn.
@@ -131,8 +120,9 @@ function focusTreeRow( id ) { treeView.focus( id ); }
 //------------------------------------------------------------------------//
 // ITEMS  -  the shared item browser: a click picks, a double-click (a tap)
 // opens the link or goes into the folder. A tag chip searches that tag.
-// Every action, once: the header group, the menu (right-click, the card's
-// ⋮, the header ⋮) and the keys read this one list.
+// Every action, once: the header group (what does not fit goes into the
+// header's ⋮), the menu (right-click, long-press) and the keys read this one
+// list. rank: 1 = the last button to leave a narrow header (Select all is 4).
 
 function bmOnly( ids ) { return ids.every( function( id ) { return node( id ) && ! isFolder( node( id ) ); } ); }
 function one( ids )    { return ids.length === 1; }
@@ -146,23 +136,23 @@ function openItem( id )
 function actionList() { return [
     { id: 'open', label: T( 'ui.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
       run: function( ids ) { openItem( ids[ 0 ] ); } },
-    { id: 'openAll', label: T( 'bookmarks.openAll' ), icon: 'external', group: 0,
+    { id: 'openAll', label: T( 'bookmarks.openAll' ), icon: 'external', rank: 7, hideOff: true, group: 0,
       when: function( ids ) { return ids.length > 1 && bmOnly( ids ); },
       run: function( ids ) { ids.forEach( openLink ); } },
-    { id: 'edit', label: T( 'bookmarks.edit' ), icon: 'edit', key: 'F2', bar: 1, group: 1, when: one,
+    { id: 'edit', label: T( 'bookmarks.edit' ), icon: 'edit', key: 'F2', rank: 5, group: 1, when: one,
       run: function( ids ) { if( isFolder( node( ids[ 0 ] ) ) ) openFolderSheet( ids[ 0 ] ); else openBookmarkSheet( ids[ 0 ] ); } },
-    { id: 'fav', icon: 'star', key: 'S', bar: 2, phone: 1, group: 1, when: bmOnly,
+    { id: 'fav', icon: 'star', key: 'S', rank: 2, group: 1, when: bmOnly,
       label: function( ids ) { return T( ids.length && ids.every( function( id ) { return node( id ) && node( id ).favorite; } ) ? 'bookmarks.unfavourite' : 'bookmarks.favAdd' ); },
       run: setFavourite },
-    { id: 'link', label: T( 'bookmarks.copyLink' ), icon: 'link', bar: 3, group: 1,
+    { id: 'link', label: T( 'bookmarks.copyLink' ), icon: 'link', rank: 6, group: 1,
       when: function( ids ) { return one( ids ) && bmOnly( ids ); },
       run: function( ids ) { copyLink( ids[ 0 ] ); } },
-    { id: 'move', label: T( 'bookmarks.moveTo' ), icon: 'move', bar: 4, phone: 1, group: 2,
+    { id: 'move', label: T( 'bookmarks.moveTo' ), icon: 'move', rank: 3, group: 2,
       run: openMoveSheet },
-    { id: 'subfolder', label: T( 'bookmarks.newSubfolder' ), icon: 'folderplus', group: 2,
+    { id: 'subfolder', label: T( 'bookmarks.newSubfolder' ), icon: 'folderplus', rank: 8, hideOff: true, group: 2,
       when: function( ids ) { return one( ids ) && isFolder( node( ids[ 0 ] ) ); },
       run: function( ids ) { openFolderSheet( null, ids[ 0 ] ); } },
-    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], bar: 9, phone: 1, group: 3, danger: true,
+    { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], rank: 1, group: 3, danger: true,
       run: deleteNodes }
 ]; }
 
@@ -175,6 +165,10 @@ function areaList() { return [
 function wireItems()
 {
     const items = $( 'items' );
+
+    // The header keeps to one row: what does not fit goes into its ⋮, above
+    // Bookmarks' own rows.
+    NayiveUI.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn', more: topMenuItems } );
 
     browse = NayiveUI.browser( {
         list:    items,

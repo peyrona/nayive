@@ -11,15 +11,17 @@
  * clears the pick: the reader has its own buttons (#actions).
  *
  * ONE ACTION LIST (actionList): the header group while something is picked,
- * the menu (right-click = a row's ⋮ = the header's ⋮), the keys, and the
- * reader's buttons all read it. `where` hides an action in a tray where it
+ * the menu (right-click, a long press), the keys, and the reader's buttons
+ * all read it. `rank` (1 = the last to leave) says which buttons a narrow
+ * header keeps; the rest go into its one ⋮ (NayiveUI.fitBar) - the reader's
+ * #actions carry the same ranks (index.html). `where` hides an action in a tray where it
  * never applies (Not spam outside Spam); `when` greys it for this pick (Reply
  * needs one mail). Each runs the app's own call (actions.js, labels.js,
  * compose.js); nothing here writes on its own.
  *
  * THE TREE. The five trays, then "Labels" with the labels under it. A click
  * opens a tray / a label's list; the badge is how many are not read.
- * Right-click (⋮, a long press) gives a node its own menu: Trash and Spam
+ * Right-click (a long press) gives a node its own menu: Trash and Spam
  * empty themselves (asked once: no way back), "Labels" makes one, a label is
  * edited or deleted (with Undo). Mail dropped on a label gets that label;
  * on Trash it is deleted (Undo), on Spam it goes there, from Spam onto the
@@ -118,43 +120,43 @@
         return [
             { id: "open", label: T( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
               run: function ( ids ) { openItem( ids[ 0 ] ); } },
-            { id: "reply", label: T( "mail.reply" ), icon: E.icon( "reply" ), key: "R", bar: 1, group: 0, where: notDrafts,
+            { id: "reply", label: T( "mail.reply" ), icon: E.icon( "reply" ), key: "R", rank: 5, group: 0, where: notDrafts,
               when: function ( ids ) { return one( ids ) && ! roleIs( ids, "drafts" ); },
               run: function ( ids ) { replyTo( itemOf( ids[ 0 ] ), "reply" ); } },
-            { id: "replyAll", label: T( "mail.replyAll" ), icon: E.icon( "replyAll" ), key: "Shift+R", group: 0, where: notDrafts,
+            { id: "replyAll", label: T( "mail.replyAll" ), icon: E.icon( "replyAll" ), key: "Shift+R", rank: 8, group: 0, where: notDrafts,
               when: function ( ids ) { return one( ids ) && ! roleIs( ids, "drafts" ); },
               run: function ( ids ) { replyTo( itemOf( ids[ 0 ] ), "all" ); } },
-            { id: "forward", label: T( "mail.forward" ), icon: E.icon( "forward" ), key: "F", bar: 2, group: 0, where: notDrafts,
+            { id: "forward", label: T( "mail.forward" ), icon: E.icon( "forward" ), key: "F", rank: 7, group: 0, where: notDrafts,
               when: function ( ids ) { return one( ids ) && ! roleIs( ids, "drafts" ); },
               run: function ( ids ) { replyTo( itemOf( ids[ 0 ] ), "fwd" ); } },
             // one key, both ways: some not read -> read; all read -> not read
-            { id: "read", icon: E.icon( "unread" ), key: "U", bar: 3, phone: 1, group: 1,
+            { id: "read", icon: E.icon( "unread" ), key: "U", rank: 2, group: 1,
               label: function ( ids ) { return T( anyUnread( ids ) ? "mail.markRead" : "mail.markUnread" ); },
               run: function ( ids ) { var ms = itemsOf( ids ); if( anyUnread( ids ) ) E.act.read( ms ); else E.act.unread( ms ); } },
-            { id: "star", icon: E.icon( "star" ), key: "S", bar: 4, group: 1,
+            { id: "star", icon: E.icon( "star" ), key: "S", rank: 6, group: 1,
               label: function ( ids ) { return T( allStarred( ids ) ? "mail.unstar" : "mail.star" ); },
               run: function ( ids ) { E.act.star( itemsOf( ids ) ); } },
-            { id: "label", label: T( "mail.labelsBtn" ), icon: E.icon( "tag" ), key: "L", bar: 5, phone: 1, group: 1,
+            { id: "label", label: T( "mail.labelsBtn" ), icon: E.icon( "tag" ), key: "L", rank: 3, group: 1,
               run: function ( ids ) { E.act.label( itemsOf( ids ) ); } },
-            { id: "spam", label: T( "mail.toSpam" ), icon: E.icon( "spam" ), bar: 6, group: 2,
+            { id: "spam", label: T( "mail.toSpam" ), icon: E.icon( "spam" ), rank: 9, group: 2,
               where: function () { return ! inTray( "spam" ) && ! inTray( "trash" ); },
               when: function ( ids ) { return ! roleIs( ids, "spam" ) && ! roleIs( ids, "trash" ); },
               run: function ( ids ) { E.act.spam( itemsOf( ids ) ); } },
-            { id: "notSpam", label: T( "mail.notSpam" ), icon: E.icon( "inbox" ), bar: 6, group: 2,
+            { id: "notSpam", label: T( "mail.notSpam" ), icon: E.icon( "inbox" ), rank: 3, group: 2,
               where: function () { return S.label || S.tray === "spam"; },
               when: function ( ids ) { return roleIs( ids, "spam" ); },
               run: function ( ids ) { E.act.notSpam( itemsOf( ids ) ); } },
-            { id: "restore", label: T( "mail.restore" ), icon: E.icon( "restore" ), bar: 7, group: 2,
+            { id: "restore", label: T( "mail.restore" ), icon: E.icon( "restore" ), rank: 2, group: 2,
               where: function () { return S.label || S.tray === "trash"; },
               when: function ( ids ) { return roleIs( ids, "trash" ); },
               run: function ( ids ) { E.act.restore( itemsOf( ids ) ); } },
             // to the Trash, with Undo; in the Trash: for good, with Undo (it
             // goes only when the Undo is gone)
-            { id: "del", label: T( "mail.delete" ), icon: E.icon( "trash" ), key: [ "Del", "Backspace" ], bar: 8, phone: 1, group: 3, danger: true,
+            { id: "del", label: T( "mail.delete" ), icon: E.icon( "trash" ), key: [ "Del", "Backspace" ], rank: 1, group: 3, danger: true,
               where: function () { return ! inTray( "trash" ); },
               when: function ( ids ) { return ! roleIs( ids, "trash" ); },
               run: function ( ids ) { E.act.del( itemsOf( ids ) ); } },
-            { id: "forget", label: T( "mail.forget" ), icon: E.icon( "forget" ), key: "Shift+Del", bar: 9, group: 3, danger: true,
+            { id: "forget", label: T( "mail.forget" ), icon: E.icon( "forget" ), key: "Shift+Del", rank: 3, group: 3, danger: true,
               where: function () { return S.label || S.tray === "trash"; },
               when: function ( ids ) { return roleIs( ids, "trash" ); },
               run: function ( ids ) { E.act.forget( itemsOf( ids ) ); } }
@@ -383,6 +385,10 @@
             menu:    nodeMenu,
             drop:    { can: function ( ids, id ) { return dropVerb( ids, id ) ? "inside" : false; }, drop: function ( ids, id ) { dropOn( ids, id ); } }
         } );
+        // The header keeps to one row: what does not fit (the pick's buttons,
+        // the reader's, the tools) goes into its ⋮. Made here, not on the first
+        // pick: a mail opened with nothing picked needs it too.
+        NayiveUI.fitBar( E.$( "selActions" ).closest( ".topbar" ), { btn: "#moreBtn" } );
         E.browse = browse = NayiveUI.browser( {
             list:     E.$( "list" ),
             row:      ".mail-row",

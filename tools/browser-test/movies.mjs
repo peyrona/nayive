@@ -3,7 +3,7 @@
 // pick with ONE Undo (checked in progress.json), "Find poster" on a pick
 // only (posters.json), the tree (Films, Genres, Folders); then a phone: tap
 // opens, long-press picks, the tree slides in.
-import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows, seed, onDisk } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows, seed, onDisk, fitState } from "./lib.mjs";
 
 const D = "files/Movies";
 const UNO = `${D}/Drama/Uno (2001).mp4`, DOS = `${D}/Drama/Dos (2002).mp4`, TRES = `${D}/Comedy/Tres (2003).mp4`;
@@ -47,12 +47,9 @@ await mouse( c, CARD( DOS ) + " .poster-title", { button: "right" } );
 let rows = await menuRows( c );
 ok( await sel() === DOS && rows && [ "open", "play", "watched", "poster", "drive" ].every( a => rows.some( r => r.act === a && ! r.off ) ), "right-click: Open, Play, Mark watched, Find poster, Show in Drive", rows );
 await key( c, "Escape" );
-await mouse( c, CARD( DOS ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "watched" ), "the card's ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "watched" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#libContent [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no card ⋮, no tree ⋮, no ⋮ in the selection group" );
+let fs = await fitState( c );
+ok( fs.acts.join() === "play,watched,poster,drive" && ! fs.out.length && ! fs.more && ! fs.crowded, "wide: every action is a button, in menu order; no ⋮", fs );
 
 section( "MOVIES · WATCHED, ONE UNDO" );
 await mouse( c, CARD( UNO ) + " .poster-title" );
@@ -105,7 +102,16 @@ await c.evaluate( "browse.clear(); setFilter( 'movies' ); true" );
 await c.until( "document.querySelectorAll('#libContent .poster-grid .poster-card').length === 3" );
 await finger( c, CARD( UNO ) + " .poster-title", 700 );
 ok( await c.until( "browse.ids().join() === " + JSON.stringify( UNO ) ) && await c.evaluate( "document.getElementById('libContent').classList.contains('is-picking') && ! document.querySelector('.movie-detail')" ), "a long-press picks (ticks on), it does not open" );
-ok( await c.evaluate( "document.querySelectorAll('#selActions [data-sel-act]').length === 2" ), "phone header: its two actions" );
+fs = await fitState( c );
+ok( ! fs.crowded && fs.more && [ "play", "watched" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "reloadBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fs );
+ok( fs.rows.filter( r => fs.out.includes( r ) ).join() === fs.out.join() && fs.out.join() === [ "play", "watched", "poster", "drive" ].filter( a => fs.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden buttons in toolbar order (the left tools, the actions, the right tools)", fs );
+await finger( c, ".topbar .fit-more" );
+const mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === "reloadBtn" ), "the ⋮ opens with them", mrows );
+await finger( c, ".topbar .fit-more" );
+ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "browse.ids().length === 0" ), "the × stops picking" );
 await c.evaluate( "document.querySelector('" + CARD( DOS ).replace( /"/g, '\\"' ) + "').scrollIntoView( { block: 'center' } ); true" );

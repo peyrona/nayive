@@ -2,6 +2,13 @@
 # ==============================================================================
 # deploy — Nayive (personal cloud apps), GO server
 # ==============================================================================
+# Quick usage (./deploy.sh --help prints the same):
+#   ./deploy.sh              pre-build + build + copy to the VPS. Skips the slow
+#                            data-safety suite (tools/data-safety-test/run.mjs).
+#   ./deploy.sh --all-tests  the same, plus the data-safety suite.
+#   ./deploy.sh -n           dry run: only list what would change on the VPS.
+#   ./deploy.sh -h | -? | --help   this list.
+# ==============================================================================
 # Pushes three things to the VPS:
 #
 #   1. the server         server/go/  -> built here into ONE static Linux binary
@@ -63,19 +70,23 @@
 # — the server serves them as static files.
 #
 # Before anything is copied, the Go code must pass gofmt, go vet and its whole
-# test suite; any failure aborts the deploy. A few generated app files
+# test suite; any failure aborts the deploy. The data-safety suite
+# (tools/data-safety-test/run.mjs, ~50 browser tests) is slow, so it runs only
+# with --all-tests; run it by hand after changing a sealed file (CLAUDE.md). A few generated app files
 # (apps/sw.js's precache list, the .gz sidecars) are refreshed too. All of it is
 # in tools/prebuild.sh, which pack.sh runs too — add any new must-run step
 # there; only the Android app's step is deploy's own (PRE-BUILD below).
 #
-# Usage:
-#   ./deploy.sh          Pre-build + build + rsync. No questions.
-#   ./deploy.sh -y       The same thing (kept so an old habit still works).
-#   ./deploy.sh -n       Dry run: pre-build + build here, then only LIST what
-#                        rsync would send/delete on the VPS. Nothing is copied,
-#                        nothing restarted. (Pre-build still refreshes sw.js,
-#                        the .gz files and the APK locally.)
-#   ./deploy.sh --help   Print this header.
+# Usage (options can be combined, e.g. ./deploy.sh -n --all-tests):
+#   ./deploy.sh              Pre-build + build + rsync. No questions. No
+#                            data-safety suite.
+#   ./deploy.sh --all-tests  The same, plus the data-safety suite.
+#   ./deploy.sh -y           The same as no option (kept for an old habit).
+#   ./deploy.sh -n           Dry run: pre-build + build here, then only LIST what
+#                            rsync would send/delete on the VPS. Nothing is copied,
+#                            nothing restarted. (Pre-build still refreshes sw.js,
+#                            the .gz files and the APK locally.)
+#   ./deploy.sh -h|-?|--help Print the options.
 #
 # Needs Go 1.27.1 or newer: ~/sdk/go1.27.1 is used when present, else `go` on the
 # PATH (Ubuntu's apt golang is 1.18 — too old, never use it).
@@ -122,14 +133,32 @@ RSYNC_RSH="ssh -p $REMOTE_PORT -o StrictHostKeyChecking=accept-new"
 # No confirmation prompt: running this script IS the confirmation. `-y` / `--yes`
 # are still accepted so an old habit or an alias does not fail, but they change
 # nothing.
+usage() {
+    cat <<'USAGE'
+Usage: ./deploy.sh [options]
+
+Builds Nayive here and copies it to the VPS (server binary, apps, Android app).
+
+Options (can be combined):
+  (none)          Pre-build checks + build + copy. Skips the data-safety suite.
+  --all-tests     Also run the data-safety suite (slow: ~50 browser tests).
+  -n, --dry-run   Only list what would change on the VPS; copy nothing.
+  -y, --yes       Same as no option (kept for an old habit).
+  -h, -?, --help  Show this list.
+USAGE
+}
+
 DRY_RUN=0
-case "${1:-}" in
-    -y|--yes)  ;;
-    "")        ;;
-    -n|--dry-run) DRY_RUN=1 ;;
-    -h|--help) grep -E '^# ' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *)         echo "Unknown option: $1 (use -y | -n | --dry-run | --help)" >&2; exit 2 ;;
-esac
+ALL_TESTS=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes)      ;;
+        -n|--dry-run)  DRY_RUN=1 ;;
+        --all-tests)   ALL_TESTS=1 ;;
+        -h|-\?|--help) usage; exit 0 ;;
+        *)             echo "Unknown option: $arg" >&2; usage >&2; exit 2 ;;
+    esac
+done
 
 # In a dry run every rsync gets -n: it lists the changes and writes nothing.
 DRY=()
@@ -162,7 +191,8 @@ if command -v git >/dev/null 2>&1 &&
 fi
 
 # ------------------------------------------------------------------------------
-# PRE-BUILD — everything that MUST pass or run on every deploy.
+# PRE-BUILD — everything that MUST pass or run on every deploy (the
+# data-safety suite only with --all-tests).
 # Each entry is run from $SCRIPT_DIR; a non-zero exit aborts the deploy.
 # The shared steps (gofmt, vet, tests, checks, sw.js, .gz) are in
 # tools/prebuild.sh, which pack.sh runs too; add a further step there.
@@ -174,6 +204,10 @@ PREBUILD_STEPS+=(
 )
 
 for step in "${PREBUILD_STEPS[@]}"; do
+    if [ "$ALL_TESTS" = 0 ] && [[ "$step" == *data-safety-test/run.mjs* ]]; then
+        echo "==> pre-build: SKIPPED $step (use --all-tests)"
+        continue
+    fi
     echo "==> pre-build: $step"
     ( cd "$SCRIPT_DIR" && eval "$step" ) || { echo "ERROR: pre-build step failed: $step" >&2; exit 1; }
 done

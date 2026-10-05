@@ -79,19 +79,6 @@ function applyKeyHints()
     }
 }
 
-// The tooltip a shortcut button carries is also what the phone's ⋮ menu
-// labels its row with (wireTopMenu); strip the hint there in case
-// a desktop window was just narrowed into the phone layout.
-function stripKeyHint( title )
-{
-    for( const s of SHORTCUTS )
-    {
-        const hint = HINT_SEP + s.label();
-        if( title.slice( -hint.length ) === hint ) return title.slice( 0, -hint.length );
-    }
-    return title;
-}
-
 function onShortcutKey( e )
 {
     const s = SHORTCUTS.find( function( x ) { return x.match( e ); } );

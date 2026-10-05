@@ -128,8 +128,7 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 }
 .row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .row.is-selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.row .row-more { margin-left: 4px; }      /* the meta before it already takes the free room */
-/* The tick and the ⋮ are the item browser's (app.css .pick-tick / .row-more). */
+/* The tick is the item browser's (app.css .pick-tick). */
 .row .row-ic { flex: 0 0 auto; color: var(--text-dim); }
 /* File-type icon colours. The dark set is pastel for the dark ground; the
    light set is deepened so it stays legible on the grey light background. */
@@ -334,7 +333,6 @@ html.is-windowed .brand     { margin-right: 1.5rem; }
 
 /* Trash view ("Papelera"). A flat listing of trashed items; the file-tree
    toolbar buttons are hidden while it is open. */
-#moreBtn { display: none; }   /* phone only — see B6b in the phone block */
 body.trash-mode .search-wrap,
 body.trash-mode #searchToggleBtn,
 body.trash-mode #newFolderBtn, body.trash-mode #uploadBtn,
@@ -393,18 +391,9 @@ body.trash-mode .tree-pane { display: none; }
     }
     .breadcrumb .crumb-root::after { content: " ▾"; color: var(--text-dim); }
 
-    /* B6 — the selection group shows only its phone actions (browser.js)
-       and the other tools step aside while something is picked (app.css).
+    /* B6 — the header keeps what fits; the rest is in its ⋮ (NayiveUI.fitBar). */
 
-       B6b — the header tools a phone reaches for LEAST move into the
-       header's own "⋮" (wireTopMenu): la papelera and "Biggest files" are
-       once-in-a-while. What stays is what you came to Drive to do:
-       buscar, nueva carpeta, subir. */
-    #bigFilesBtn, #trashViewBtn { display: none; }
-    #moreBtn { display: flex; }
-    .search-tight #moreBtn { display: none; }   /* the search fold (app.css) sends it aside with the rest */
-
-    /* B7 — roomier rows, ⋮ action button, no size/date column */
+    /* B7 — roomier rows, no size/date column */
     .row { padding: 11px 12px 11px 6px; gap: 8px; }
     .row .row-meta { display: none; }
     .row .row-meta.row-meta--big { display: block; padding-left: 8px; }   /* "Biggest files": the size stays */

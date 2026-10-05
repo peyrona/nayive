@@ -219,6 +219,9 @@ a:hover            { text-decoration: underline; opacity: 0.85; }
  *   while there is one), then the search magnifier, + new, the app's other
  *   tools, then .tb-sys: more (...), settings, help (?). A thin line between
  *   two groups that show, drawn here - never a hand-placed .sep.
+ *   Buttons with data-rank leave when the bar runs out of room (highest rank
+ *   first, .fit-out) and the ONE ⋮ in .tb-sys lists them (NayiveUI.fitBar in
+ *   shared/browser.js): the bar stays on the title's line.
  *   A selection group that comes and goes grows the bar leftwards, so the
  *   buttons after it never move.
  * - .topbar is the tool-shell header. It is ONE row while everything fits; when
@@ -388,8 +391,8 @@ html.is-windowed .sync-indicator { display: none; }
    and the line before a group only draws when a group before it shows. */
 .tb-group                                   { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .tb-group[hidden],
-.tb-group:not(:has(> :not([hidden])))       { display: none; }
-:is(.topbar-actions, .header-actions) > .tb-group:not([hidden]):has(> :not([hidden])) ~ .tb-group::before
+.tb-group:not(:has(> :not([hidden]):not(.fit-out)))   { display: none; }
+:is(.topbar-actions, .header-actions) > .tb-group:not([hidden]):has(> :not([hidden]):not(.fit-out)) ~ .tb-group::before
 {
     content: "";
     align-self: stretch;
@@ -2198,12 +2201,15 @@ button { -webkit-touch-callout: none; }
 #moreToolsBtn[aria-expanded="true"],
 #toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 
-/* "Guardado 12:04" / "Borrador 12:04" before the sync plug (NayiveOffice.autosave)
- * - a quiet readout, not a control. Its own element: the plug's title is
- * rewritten on every store state change. Hidden on a phone, where the top bar
- * has no room to spare. */
-.saved-at                { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; margin-left: 6px; }
-@media (max-width: 640px) { .saved-at { display: none; } }
+/* The save floppy before the sync plug (NayiveOffice.autosave): a readout, not
+ * a control, in the plug's colours - red not saved yet, blue saving, green
+ * saved. Its title says "Guardado 12:04" / "Borrador 12:04". Empty (no state)
+ * until a document is open. */
+.saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); }
+.saved-at:not([data-state]) { display: none; }
+.saved-at svg            { width: 18px; height: 18px; }
+.saved-at[data-state="saving"] { color: var(--busy); }
+.saved-at[data-state="saved"]  { color: var(--ok); }
 
 .open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
                            font-size: 0.85rem; color: var(--text-dim); }
@@ -2725,7 +2731,8 @@ input[type=range]:disabled           { opacity: 0.5; }
 /* A PICTURE YOU CAN CHANGE (.face): a round picture as a button, a small
    camera badge on its corner - Chat's people and profile, Contacts' cards.
    .face.sm: the badge for a list row's small circle. .face-pick: the circle
-   on top of a dialog, a "remove" button under it. */
+   on top of a dialog; inside it a .face-box can hold a .face-bin, a red
+   trash badge on the lower-left corner, the camera's twin (Chat, Contacts). */
 .face { position: relative; flex: 0 0 auto; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
 .face .cam
 {
@@ -2739,6 +2746,15 @@ input[type=range]:disabled           { opacity: 0.5; }
 .face.sm .cam svg { width: 10px; height: 10px; }
 .face-pick        { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 14px; }
 .face-pick .face .cam { border-color: var(--card); }
+.face-box         { position: relative; display: inline-flex; }
+.face-bin
+{
+    position: absolute; left: 2px; bottom: 2px; width: 30px; height: 30px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    color: var(--on-solid); background: var(--danger); border: 2px solid var(--card);
+}
+.face-bin svg   { width: 15px; height: 15px; }
+.face-bin:hover { filter: brightness(0.92); }
 
 
 /* SCREEN LOCKER (shared/locker.js). html.nv-locked hides the page from its
@@ -2776,14 +2792,12 @@ html.nv-locked body { visibility: hidden; }
  * - .pick-tick: the round tick browser.js puts at the start of each row. With a
  *   mouse it shows on hover (and on a picked row); on touch only while picking
  *   (the list has .is-picking). A card grid places it itself (absolute corner).
- * - .row-more: the row ⋮ browser.js adds at the end of a row (or the app's own
- *   [data-more]). Always there on touch; with a mouse on hover / when picked.
  * - .is-selected paints a picked row (.card-row already fills it with accent).
  * - .sel-group: the header .tb-group of the selection (× count, Select all,
- *   the main actions, ⋮). On a phone the app's other tools step aside while
- *   something is picked.
- * - .item-menu: the one popup menu (right-click = row ⋮ = header ⋮), the
- *   .top-menu look plus a key column and greyed rows.
+ *   every action; .sel-gap starts a new menu section). What does not fit
+ *   leaves (.fit-out) into the toolbar's one ⋮ (.fit-more).
+ * - .item-menu: the one popup menu (right-click, long-press, the toolbar ⋮),
+ *   the .top-menu look plus a key column and greyed rows.
  * - .ntree: the shared tree (side pane, "Move to…", the phone's slide-in
  *   sheet: .tree-pane.tree-sheet + .tree-backdrop).
  * - .drop-target / .drop-before / .drop-after / .dragging: drag and drop.
@@ -2813,16 +2827,9 @@ html.nv-locked body { visibility: hidden; }
 .nb-list .card-row.is-selected .pick-tick   { background: var(--on-accent); border-color: var(--on-accent); color: var(--accent); }
 .nb-list.is-picking .pick-tick              { border-color: var(--text-dim); }
 
-/* A row's ⋮ sits at its end; the picked, accent-filled row keeps it legible. */
-.row-more                                   { flex: 0 0 auto; margin-left: auto; }
-.nb-list .is-selected .row-more,
-.ntree .tree-row.is-active > .row-more      { color: inherit; }
-
 @media (hover: hover) and (pointer: fine)
 {
     .nb-list [aria-selected]:hover .pick-tick    { opacity: 1; }
-    .nb-list [aria-selected]:not(:hover):not(.is-selected):not(:focus-within) .row-more,
-    .ntree .tree-row:not(:hover):not(:focus-within) > .row-more { visibility: hidden; }
 }
 @media (hover: none), (pointer: coarse)
 {
@@ -2848,9 +2855,11 @@ html.nv-locked body { visibility: hidden; }
 }
 .icon-btn.sel-count svg                      { width: 15px; height: 15px; }
 .icon-btn.sel-count:hover                    { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+/* A button that did not fit (fitBar); a gap between two menu sections. */
+.fit-out                                     { display: none !important; }
+.sel-group > .sel-gap:not(:first-child)      { margin-left: 6px; }
 @media (max-width: 640px)
 {
-    .has-selection > .tb-group:not(.sel-group),
     .topbar:has(.has-selection) > .tb-modes,
     .header:has(.has-selection) > .tb-modes      { display: none; }
 }
@@ -2918,7 +2927,6 @@ html.nv-locked body { visibility: hidden; }
     font-variant-numeric: tabular-nums;
 }
 .ntree .tree-row.is-active .tree-badge       { background: color-mix(in srgb, var(--on-accent) 25%, transparent); }
-.ntree .row-more                             { width: 26px; height: 26px; margin-left: 4px; }
 
 /* "Move to…": the same tree in a dialog. */
 .pick-tree

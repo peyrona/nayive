@@ -8,7 +8,7 @@
 //   SHOTS=<dir> node tools/browser-test/photos.mjs    also saves screenshots
 import fs from "node:fs";
 import path from "node:path";
-import { server, browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows, seed, exists, onDisk } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, mouse, key, finger, drag, menuRows, seed, exists, onDisk, fitState } from "./lib.mjs";
 import { REPO } from "../data-safety-test/lib.mjs";
 
 // Real pictures: the app icon (a valid PNG, no EXIF / GPS, so nothing asks
@@ -90,12 +90,10 @@ ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].so
 await shot( "desktop-menu" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-await mouse( c, TILE( "Lisbon/c.png" ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "move" ), "the tile ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "move" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector('#grid [data-more], #tree [data-more], #selActions [data-sel=menu]')" ), "no tile ⋮, no tree ⋮, no ⋮ in the selection group" );
+let fb = await fitState( c );
+ok( fb.acts.join() === "edit,share,download,move,copyTo,bin" && ! fb.out.length && ! fb.more && ! fb.crowded,
+    "wide: every action is a button, in menu order (no See on map without a place); no ⋮", fb );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#grid", { dx: 20, button: "right" } );
 rows = await menuRows( c );
@@ -221,9 +219,16 @@ ok( await c.until( "browse.ids().join() === " + JSON.stringify( L( "a.png" ) ) )
     "a long-press picks (ticks on), it does not open" );
 await finger( c, TILE( "Lisbon/c.png" ) );
 ok( await sel() === [ "a.png", "c.png" ].map( L ).join(), "…then a tap adds", await sel() );
-ok( await c.evaluate( "document.querySelectorAll( '#selActions [data-sel-act]' ).length === 3 && getComputedStyle( document.querySelector( '.topbar-actions > .tb-group:not(.sel-group)' ) ).display === 'none'" ),
-    "phone header: × count, Select all, three actions, ⋮; the tools step aside",
-    await c.evaluate( "[ document.querySelectorAll( '#selActions [data-sel-act]' ).length, getComputedStyle( document.querySelector( '.topbar-actions > .tb-group:not(.sel-group)' ) ).display ]" ) );
+fb = await fitState( c );
+ok( ! fb.crowded && fb.more && [ "share", "bin" ].every( a => fb.acts.includes( a ) ) && ! fb.tools.includes( "reloadBtn" ),
+    "phone header: one row; the top ranks stay, the tools leave first, the ⋮ shows", fb );
+ok( fb.out.length && fb.rows.filter( r => r !== "all" ).slice( 0, fb.out.length ).join() === fb.out.join() && fb.out.join() === [ "edit", "share", "download", "move", "copyTo", "bin" ].filter( a => fb.out.includes( a ) ).join(),
+    "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fb );
+await finger( c, ".topbar .fit-more" );
+const mrows = await menuRows( c );
+ok( mrows && mrows.some( r => r.act === fb.out[ 0 ] ) && mrows.some( r => r.act === "reloadBtn" ), "the ⋮ opens with them", mrows );
+await finger( c, ".topbar .fit-more" );
+ok( await c.until( "document.querySelector('.item-menu').hidden" ), "…and closes again" );
 await shot( "phone-picking" );
 await finger( c, "#selActions [data-sel=clear]" );
 ok( await c.until( "browse.ids().length === 0 && ! document.getElementById( 'grid' ).classList.contains( 'is-picking' )" ), "the × stops picking" );

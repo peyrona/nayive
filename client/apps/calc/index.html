@@ -128,8 +128,8 @@
         <div id="menuBar" role="menubar" hidden></div>
 
         <!-- Same left-to-right order as Write's toolbar, so a button shared by the
-             two apps sits in the same place: font, letters, colours, table, insert,
-             alignment + clear, undo / redo, help.
+             two apps sits in the same place: font, letters + colours + alignment +
+             number format + painter + clear, table, insert, undo / redo, help.
 
              Four runs of near-identical buttons sit in .popup cards below this
              file instead of on the bar - rows/columns, sort, alignment and
@@ -175,7 +175,6 @@
             <button id="fmtUnderlineBtn" class="fmt-btn" data-i18n-attr="title:calc.underline">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M16 5c.6 0 1 .4 1 1v5.5a4 4 0 0 1-.4 1.8l-1 1.4a5.3 5.3 0 0 1-5.5 1 5 5 0 0 1-1.6-1c-.5-.4-.8-.9-1.1-1.4a4 4 0 0 1-.4-1.8V6c0-.6.4-1 1-1s1 .4 1 1v5.5c0 .3 0 .6.2 1l.6.7a3.3 3.3 0 0 0 2.2.8 3.4 3.4 0 0 0 2.2-.8c.3-.2.4-.5.6-.8l.2-.9V6c0-.6.4-1 1-1ZM8 17h8c.6 0 1 .4 1 1s-.4 1-1 1H8a1 1 0 0 1 0-2Z"/></svg>
             </button>
-            <div class="fmt-sep"></div>
             <label class="fmt-color-btn" style="--fmt-bar:#E7E7E8" data-i18n-attr="title:calc.fontColor">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><g fill-rule="evenodd"><path class="fmt-color-bar" d="M3 18h18v3H3z"/><path d="M8.7 16h-.8a.5.5 0 0 1-.5-.6l2.7-9c.1-.3.3-.4.5-.4h2.8c.2 0 .4.1.5.4l2.7 9a.5.5 0 0 1-.5.6h-.8a.5.5 0 0 1-.4-.4l-.7-2.2c0-.3-.3-.4-.5-.4h-3.4c-.2 0-.4.1-.5.4l-.7 2.2c0 .3-.2.4-.4.4Zm2.6-7.6-.6 2a.5.5 0 0 0 .5.6h1.6a.5.5 0 0 0 .5-.6l-.6-2c0-.3-.3-.4-.5-.4h-.4c-.2 0-.4.1-.5.4Z"/></g></svg>
                 <input id="fmtFontColor" type="color" value="#e7e7e8">
@@ -185,26 +184,8 @@
                 <input id="fmtFillColor" type="color" value="#202124">
             </label>
             <div class="fmt-sep"></div>
-            <button id="fmtTableBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpTable, aria-label:calc.grpTable">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
-            </button>
-            <button id="fmtMergeBtn" class="fmt-btn" data-i18n-attr="title:calc.mergeCells">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
-            </button>
-            <button id="fmtBorderBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:calc.borders">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
-            </button>
-            <div class="fmt-sep"></div>
-            <button id="fxBtn" class="fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="title:calc.insertFx">&sum;</button>
-            <button id="fmtSortBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpSort, aria-label:calc.grpSort">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
-            </button>
-            <div class="fmt-sep"></div>
             <button id="fmtAlignBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpAlign, aria-label:calc.grpAlign">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5 5h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 4h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 1 1 0-2Zm0 8h8c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Zm0-4h14c.6 0 1 .4 1 1s-.4 1-1 1H5a1 1 0 0 1 0-2Z"/></svg>
-            </button>
-            <button id="fmtFreezeGrpBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpFreeze, aria-label:calc.grpFreeze">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
             </button>
             <select id="fmtNumFormat" class="tb-select fmt-select-numfmt fmt-keep" data-i18n-attr="title:calc.numFormat">
                 <option value="general" data-i18n="calc.nfGeneral"></option>
@@ -213,8 +194,32 @@
                 <option value="porcentaje" data-i18n="calc.nfPercent"></option>
                 <option value="fecha" data-i18n="calc.nfDate"></option>
             </select>
+            <button id="fmtPainterBtn" class="fmt-btn" data-i18n-attr="title:write.tb.copyFormat, aria-label:write.tb.copyFormat">
+                <svg width="17" height="17" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-80q-33 0-56.5-23.5T360-160v-160H240q-33 0-56.5-23.5T160-400v-280q0-66 47-113t113-47h480v440q0 33-23.5 56.5T720-320H600v160q0 33-23.5 56.5T520-80h-80ZM240-560h480v-200h-40v160h-80v-160h-40v80h-80v-80H320q-33 0-56.5 23.5T240-680v120Zm0 160h480v-80H240v80Zm0 0v-80 80Z"></path></svg>
+            </button>
             <button id="fmtClearBtn" class="fmt-btn" data-i18n-attr="title:calc.clearFormat">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path><line x1="5" y1="19" x2="19" y2="5"></line></svg>
+            </button>
+            <div class="fmt-sep"></div>
+            <button id="fmtTableBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpTable, aria-label:calc.grpTable">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="nonzero" d="M12 13c.5 0 1 .4 1 .9V16h2a1 1 0 0 1 .1 2H13v2a1 1 0 0 1-2 .1V18H9a1 1 0 0 1-.1-2H11v-2c0-.6.4-1 1-1Zm6 7a1 1 0 0 1 0-2h1v-6H5v6h1a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V6c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v13c0 .5-.4 1-.9 1H18ZM11 6H5v4h6V6Zm8 0h-6v4h6V6Z"/></svg>
+            </button>
+            <button id="fmtMergeBtn" class="fmt-btn" data-i18n-attr="title:calc.mergeCells">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8"></rect><rect x="13" y="3" width="8" height="8"></rect><rect x="3" y="13" width="18" height="8"></rect></svg>
+            </button>
+            <button id="fmtSplitBtn" class="fmt-btn" data-i18n-attr="title:calc.splitCells, aria-label:calc.splitCells">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16"></rect><line x1="12" y1="4" x2="12" y2="20"></line><polyline points="8 9.5 5.5 12 8 14.5"></polyline><polyline points="16 9.5 18.5 12 16 14.5"></polyline></svg>
+            </button>
+            <button id="fmtBorderBtn" class="fmt-btn fmt-keep has-popup" data-i18n-attr="title:calc.borders">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+            </button>
+            <div class="fmt-sep"></div>
+            <button id="fxBtn" class="fmt-btn fmt-keep" style="font-size: 1.05rem;" data-i18n-attr="title:calc.insertFx">&sum;</button>
+            <button id="fmtSortBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpSort, aria-label:calc.grpSort">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="11" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line><polyline points="17 8 20 5 20 19"></polyline><polyline points="17 8 20 5 23 8"></polyline></svg>
+            </button>
+            <button id="fmtFreezeGrpBtn" class="fmt-btn has-popup" type="button" data-i18n-attr="title:calc.grpFreeze, aria-label:calc.grpFreeze">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><line x1="9" y1="3" x2="9" y2="21" stroke-width="3"></line></svg>
             </button>
             <div class="fmt-sep"></div>
             <button id="undoBtn" class="fmt-btn fmt-keep" data-i18n-attr="title:ui.undo">

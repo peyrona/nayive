@@ -179,8 +179,8 @@
         .face-pick-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
         /* --- Picking (the shared item browser, see LIST in the script) ------
-           The round tick and the row ⋮ are the shared .pick-tick / .row-more
-           (app.css ITEM BROWSER); a picked row is tinted like a hover, only
+           The round tick is the shared .pick-tick (app.css ITEM BROWSER);
+           a picked row is tinted like a hover, only
            stronger. A long-press picks: the phone must not select the name
            or pop its own copy callout while the finger is down. */
         .contact-row { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -216,7 +216,7 @@
             .header h1 { flex-grow: 0; }
             .ct-where  { display: flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); }
             #viewName  { min-width: 0; overflow-wrap: anywhere; }
-            /* The rows' ⋮ clear of the A-Z rail's catch area. */
+            /* The rows clear of the A-Z rail's catch area. */
             .list-scroll:has(> .az-rail:not([hidden])) .contact-row { padding-right: 24px; }
         }
         /* In a desktop window the tree and the list each scroll on their own. */
@@ -357,23 +357,23 @@
                             <div class="search-wrap">
                                 <input id="searchInput" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:contact.searchPh0, aria-label:ui.search">
                             </div>
-                            <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                            <button id="searchBtn" class="icon-btn" type="button" data-rank="20" data-i18n-attr="title:ui.search, aria-label:ui.search">
                                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             </button>
-                            <button id="addBtn" class="icon-btn" data-i18n-attr="title:contact.newContact">
+                            <button id="addBtn" class="icon-btn" data-rank="21" data-i18n-attr="title:contact.newContact">
                                 <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
-                            <button id="dedupBtn" class="icon-btn" data-i18n-attr="title:contact.findDupes">
+                            <button id="dedupBtn" class="icon-btn" data-rank="22" data-i18n-attr="title:contact.findDupes">
                                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                             </button>
                         </div>
                         <div class="tb-group tb-sys">
                             <!-- Settings: sync with phones (CardDAV) + import / export .vcf.
                                  The launcher's gear glyph, so "settings" looks the same everywhere. -->
-                            <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                            <button id="settingsBtn" class="icon-btn" data-rank="30" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
                                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             </button>
-                            <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                            <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                             </button>
                         </div>
@@ -439,15 +439,17 @@
             <h2 id="editTitle" data-i18n="contact.newContact"></h2>
 
             <!-- The card's picture: the circle takes one from this device; Nayive's
-                 files and "remove" sit under it (see PICTURE in the script). -->
+                 files sit under it, a red bin on its corner removes it (see PICTURE in the script). -->
             <div class="face-pick">
+                <span class="face-box">
                 <button id="fPhotoBtn" class="face" type="button" data-i18n-attr="title:contact.changePhoto, aria-label:contact.changePhoto">
                     <span id="fPhotoAv" class="avatar xl"></span>
                     <span class="cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
                 </button>
+                <button id="fPhotoDrop" class="face-bin" type="button" data-i18n-attr="title:contact.removePhoto, aria-label:contact.removePhoto"></button>
+                </span>
                 <div class="face-pick-btns">
                     <button id="fPhotoNayive" class="text-btn ghost" type="button"></button>
-                    <button id="fPhotoDrop" class="text-btn ghost danger" type="button"></button>
                 </div>
                 <input type="file" id="fPhotoInput" accept="image/*" style="display:none;">
             </div>
@@ -2004,7 +2006,7 @@
         {
             const name = displayName( c );
 
-            // Clicks, keys and the tick / ⋮ are the item browser's (LIST below).
+            // Clicks, keys and the tick are the item browser's (LIST below).
             const row = document.createElement( 'div' );
             row.className = 'contact-row';
             row.dataset.uid = c.uid;
@@ -2341,7 +2343,8 @@
         // LIST  -  the shared item browser (shared/browser.js): a click picks, a
         // double-click (a tap, Enter) opens the card; Ctrl / Shift pick more, a
         // long-press picks on a phone. One action list feeds the header group,
-        // the menu (right-click = the row's ⋮ = the header's ⋮) and the keys.
+        // the menu (right-click, long-press) and the keys; what does not fit
+        // the header goes into its one ⋮ (NayiveUI.fitBar).
         // The tree on the left: All contacts, Favourites, Groups; contacts
         // dropped on a group join it, on Favourites become favourites.
 
@@ -2382,23 +2385,23 @@
         function actionList() { return [
             { id: 'open', label: T( 'ui.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
               run: ids => openDetail( ids[ 0 ] ) },
-            { id: 'edit', label: T( 'contact.edit' ), icon: 'edit', key: 'F2', bar: 1, group: 0, when: one,
+            { id: 'edit', label: T( 'contact.edit' ), icon: 'edit', key: 'F2', rank: 5, group: 0, when: one,
               run: ids => openEditForExisting( ids[ 0 ] ) },
-            { id: 'fav', icon: 'star', key: 'S', bar: 2, group: 1,
+            { id: 'fav', icon: 'star', key: 'S', rank: 6, group: 1,
               label: ids => T( ids.length && cardsOf( ids ).every( isFav ) ? 'contact.unfavourite' : 'contact.favAdd' ),
               run: toggleFav },
-            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tag', bar: 3, phone: 1, group: 1,
+            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tag', rank: 2, group: 1,
               run: addToGroupDialog },
-            { id: 'ungroup', label: T( 'contact.ungroup' ), icon: 'x', group: 1,
+            { id: 'ungroup', label: T( 'contact.ungroup' ), icon: 'x', rank: 9, group: 1,
               where: () => view.indexOf( 'g:' ) === 0,
               run: ids => changeCats( ids, withoutCat( view.slice( 2 ) ), TF( 'contact.removedFrom', { g: view.slice( 2 ) } ) ) },
-            { id: 'share', label: T( 'ui.share' ), icon: 'share', bar: 4, phone: 1, group: 2, where: canShareFiles,
+            { id: 'share', label: T( 'ui.share' ), icon: 'share', rank: 3, group: 2, where: canShareFiles,
               run: ids => shareCards( cardsOf( ids ) ) },
-            { id: 'export', label: T( 'contact.exportVcf' ), icon: 'download', group: 2,
+            { id: 'export', label: T( 'contact.exportVcf' ), icon: 'download', rank: 8, group: 2,
               run: ids => exportCards( cardsOf( ids ) ) },
-            { id: 'merge', label: T( 'contact.merge' ), icon: 'merge', bar: 5, group: 2, when: ids => ids.length >= 2,
+            { id: 'merge', label: T( 'contact.merge' ), icon: 'merge', rank: 7, hideOff: true, group: 2, when: ids => ids.length >= 2,
               run: ids => openMergeFor( cardsOf( ids ) ) },
-            { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], bar: 9, phone: 1, group: 3, danger: true,
+            { id: 'delete', label: T( 'ui.delete' ), icon: 'trash', key: [ 'Del', 'Backspace' ], rank: 1, group: 3, danger: true,
               run: deleteContacts }
         ]; }
 
@@ -2412,7 +2415,7 @@
             ];
         }
 
-        // A group's right-click / ⋮ / long-press: rename, share, delete; on
+        // A group's right-click / long-press: rename, share, delete; on
         // "Groups": a new one.
         function treeMenu( id, x, y, anchor )
         {
@@ -2699,7 +2702,6 @@
             nay.innerHTML  = NayiveUI.icon( 'folder' );
             nay.append( T( 'contact.fromNayive' ) );
             drop.innerHTML = NayiveUI.icon( 'trash' );
-            drop.append( T( 'contact.removePhoto' ) );
 
             document.getElementById( 'fPhotoBtn' ).addEventListener( 'click', () => input.click() );
             input.addEventListener( 'change', () =>

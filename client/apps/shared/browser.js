@@ -10,6 +10,7 @@
  * The parts (each usable on its own):
  *
  *   NayiveUI.browser( cfg )   select + header group + menu + keys + drag, on one list
+ *   NayiveUI.fitBar( header, opts )   the toolbar shows what fits; ONE ⋮ holds the rest
  *   NayiveUI.menuAt( x, y, items, opts )   the one popup menu (.top-menu.item-menu)
  *   NayiveUI.tree( cfg )      a folder tree: arrow, open, menu, drop, keys, phone sheet
  *   NayiveUI.pickNode( cfg )  "Move to…": a dialog with the same tree, -> Promise(id | null)
@@ -24,20 +25,26 @@
  *   Touch: tap opens. Long-press starts picking: ticks show on every row and
  *   each tap adds / removes. The × in the header or Esc stops.
  *   Header: while something is picked, the selection group (cfg.bar) shows
- *   the count with ×, Select all, the main actions and a ⋮ with all of them.
- *   Right-click, the row ⋮ and the header ⋮ open the same menu. Right-click on
- *   a row that is not picked picks only that row first; on empty space it
- *   gives the area actions (New, Paste, Select all).
+ *   the count with ×, Select all, then EVERY action as a button, in the menu's
+ *   order. What does not fit goes into the toolbar's one ⋮ (fitBar), least
+ *   important (highest rank) first; the order never changes.
+ *   Right-click (long-press on touch) opens the full menu. Right-click on a
+ *   row that is not picked picks only that row first; on empty space it
+ *   gives the area actions (New, Paste, Select all). Rows have no ⋮.
  *
  * ONE RULE PER ACTION
- *   { id, label, icon, key, bar, phone, group, danger, where, when, run }
+ *   { id, label, icon, key, rank, noBar, hideOff, group, danger, where, when, run }
  *   - label: a string or fn( ids ) (a toggle: "Star" / "Unstar")
  *   - icon:  a NayiveUI.icon name, or an SVG string
  *   - key:   "Del", "F2", "Ctrl+C", "Shift+Del", "R" ... (or an array: the first
  *            is shown). The browser runs the action on that key.
- *   - bar:   its place in the header group (none = menu only)
- *   - phone: also in the header group on a phone (at most three)
- *   - group: menu section; a line goes between two sections
+ *   - rank:  how important its header button is: 1 is the last to leave when
+ *            the toolbar runs out of room (Select all is 4, tools 20+)
+ *   - noBar: menu and key only, no header button (Drive's cut / copy: they
+ *            repeat "Move to" / "Copy to")
+ *   - hideOff: hidden from the header, not greyed, when `when` says no
+ *            (an action for one kind of item: Extract, Merge...)
+ *   - group: menu section; a line goes between two sections (a gap in the header)
  *   - where(): false HIDES it here (Spam vs Not spam: never applies here)
  *   - when( ids ): false GREYS it for this selection (one item, a .zip ...)
  *   - run( ids, ev ): does it. The app's own data calls stay where they are.
@@ -341,7 +348,7 @@
             fired = false;
             if( e.touches.length !== 1 ) return;
             var el = e.target.closest( sel );
-            if( ! el || ! host.contains( el ) || e.target.closest( "[data-more], .row-more, input, textarea" ) ) return;
+            if( ! el || ! host.contains( el ) || e.target.closest( "input, textarea" ) ) return;
             x = e.touches[ 0 ].clientX; y = e.touches[ 0 ].clientY;
             timer = setTimeout( function ()
             {
@@ -475,6 +482,227 @@
     }
 
     //------------------------------------------------------------------------//
+    // THE TOOLBAR FITS  -  NayiveUI.fitBar( header, { more, btn } )
+    //
+    // Every button that may leave the toolbar carries data-rank (1 = the last
+    // to leave). While the header's buttons do not fit on the title's line,
+    // the highest rank hides (.fit-out; equal ranks: the later one first) and
+    // ONE ⋮ in .tb-sys lists the hidden ones, in toolbar order, then the
+    // app's own items (opts.more: () => menu rows). No hidden button and no
+    // own items: no ⋮. The order never changes; the rest close up.
+    //   header: the .topbar / .header (or any bar that must stay one row)
+    //   btn:    the app's own ⋮ button to use (else one is made in .tb-sys)
+    // A button the app hides itself ([hidden], display: none) is not ours: it
+    // never goes into the ⋮. Calling it again on the same header updates opts.
+    // Search (rank 20 in every app) never leaves while nothing is picked: it
+    // stays in the same place. While picking, the actions get the room.
+
+    function fitBar( header, opts )
+    {
+        header = $( header );
+        if( ! header ) return null;
+        opts = opts || {};
+        if( header._fitBar ) { header._fitBar.set( opts ); return header._fitBar; }
+
+        var holder = header.querySelector( ".topbar-actions, .header-actions" ) || header;
+        var btn = null, made = false;
+
+        // The ⋮: the app's own button, else one made at the start of .tb-sys.
+        // An app that passes its own later (after the browser made one) swaps it in.
+        function adopt( b )
+        {
+            if( btn && b === btn ) return;
+            if( made && btn ) btn.remove();
+            made = ! b;
+            if( ! b )
+            {
+                var sys = holder.querySelector( ".tb-sys" );
+                if( ! sys )
+                {
+                    sys = document.createElement( "div" );
+                    sys.className = "tb-group tb-sys";
+                    holder.insertBefore( sys, holder.querySelector( ":scope > .sync-indicator" ) );
+                }
+                b = document.createElement( "button" );
+                b.type = "button";
+                b.className = "icon-btn";
+                b.innerHTML = G.dots;
+                sys.insertBefore( b, sys.firstChild );
+            }
+            btn = b;
+            btn.classList.add( "fit-more" );
+            btn.setAttribute( "aria-haspopup", "menu" );
+            btn.title = t( "ui.moreOptions" );
+            btn.setAttribute( "aria-label", t( "ui.moreOptions" ) );
+            btn.hidden = true;
+            btn.addEventListener( "click", function ( e )
+            {
+                if( btn !== e.currentTarget ) return;
+                e.stopPropagation();
+                if( menuOpen() && menuState.anchor === btn ) { closeMenu(); return; }
+                menuAt( 0, 0, items(), { anchor: btn, keyboard: e.detail === 0 } );
+            } );
+        }
+
+        var fitting = false, queued = false, lastW = -1, lastH = -1;
+
+        function ranked() { return Array.prototype.slice.call( header.querySelectorAll( "[data-rank]" ) ); }
+        // Shown, were it not for us: the app has not hidden it or a box around it.
+        function shown( el ) { return ! el.classList.contains( "fit-out" ) && el.getClientRects().length > 0; }
+        function picking() { return header.classList.contains( "has-selection" ) || !! header.querySelector( ".has-selection" ); }
+        function pinned( el )
+        {
+            if( el.dataset.rank === "20" && ! picking() ) return true;
+            return !! ( el._fitPin || el.matches( ".search-fold.is-open" ) || el.querySelector( ".search-fold.is-open" ) );
+        }
+        function ownItems()
+        {
+            var m = opts.more ? opts.more() || [] : [];
+            return m.filter( function ( it ) { return it && ! it.hidden; } );
+        }
+
+        // Off the title's line: a direct child of the header starts below the
+        // bottom of the topmost one (the bar wrapped), or the header scrolls.
+        function crowded()
+        {
+            if( header.scrollWidth > header.clientWidth + 1 ) return true;
+            if( holder !== header && holder.scrollWidth > holder.clientWidth + 1 ) return true;
+            var rs = [];
+            Array.prototype.forEach.call( header.children, function ( k )
+            {
+                if( ! k.getClientRects().length ) return;
+                var pos = getComputedStyle( k ).position;
+                if( pos === "absolute" || pos === "fixed" ) return;
+                var r = k.getBoundingClientRect();
+                if( r.width || r.height ) rs.push( r );
+            } );
+            if( rs.length < 2 ) return false;
+            var top = rs[ 0 ];
+            rs.forEach( function ( r ) { if( r.top < top.top ) top = r; } );
+            return rs.some( function ( r ) { return r.top >= top.bottom - 1; } );
+        }
+
+        function fit()
+        {
+            if( fitting ) return;
+            fitting = true;
+            var all = ranked();
+            all.forEach( function ( el ) { el.classList.remove( "fit-out" ); } );
+            var own = ownItems().length > 0;
+            btn.hidden = ! own;
+            var order = all.filter( function ( el ) { return shown( el ) && ! pinned( el ); } )
+                           .map( function ( el, i ) { return { el: el, r: +el.dataset.rank || 99, i: i }; } )
+                           .sort( function ( a, b ) { return b.r - a.r || b.i - a.i; } );
+            var n = 0;
+            while( n < order.length && crowded() )
+            {
+                if( btn.hidden ) { btn.hidden = false; continue; }
+                order[ n++ ].el.classList.add( "fit-out" );
+            }
+            if( ! n && ! own ) btn.hidden = true;
+            lastW = header.clientWidth;
+            lastH = header.offsetHeight;
+            mo.takeRecords();
+            fitting = false;
+        }
+
+        function later()
+        {
+            if( queued ) return;
+            queued = true;
+            requestAnimationFrame( function () { queued = false; fit(); } );
+        }
+
+        // The menu row for a hidden button: a selection action is the
+        // browser's own menu row; any other copies the button.
+        function itemFor( el )
+        {
+            var b = el.matches( "button" ) ? el : el.querySelector( "button:not([hidden])" );
+            if( ! b ) return null;
+            var grp = b.closest( ".sel-group" );
+            if( grp && grp._nbRow && b.dataset.selAct ) return grp._nbRow( b.dataset.selAct );
+            var label = ( b.getAttribute( "aria-label" ) || b.title || b.textContent || "" ).replace( /\s*[(·][^()]*\)?\s*$/, "" ).trim();
+            var svg = b.querySelector( "svg" );
+            var toggle = b.hasAttribute( "aria-pressed" ) || b.classList.contains( "is-active" );
+            return { id: b.id || b.dataset.sel || "", label: label, icon: svg ? svg.outerHTML : "", danger: b.classList.contains( "danger" ),
+                     disabled: !! b.disabled, checked: toggle ? ( b.classList.contains( "is-active" ) || b.getAttribute( "aria-pressed" ) === "true" ) : null,
+                     run: function () { press( el, b ); } };
+        }
+
+        // A hidden tool runs from the ⋮: it comes back while it is in use (a
+        // menu or a field it opens sits under it), until the next press elsewhere.
+        function press( el, b )
+        {
+            el._fitPin = true;
+            fit();
+            b.click();
+            setTimeout( function ()
+            {
+                document.addEventListener( "pointerdown", function free( e )
+                {
+                    if( el.contains( e.target ) || ( menuEl && menuEl.contains( e.target ) ) ) return;
+                    document.removeEventListener( "pointerdown", free, true );
+                    el._fitPin = false;
+                    later();
+                }, true );
+            }, 0 );
+        }
+
+        function items()
+        {
+            var out = [], last = null;
+            ranked().forEach( function ( el )
+            {
+                if( ! el.classList.contains( "fit-out" ) ) return;
+                el.classList.remove( "fit-out" );
+                var ok = el.getClientRects().length > 0 || el.closest( ".sel-group" );
+                el.classList.add( "fit-out" );
+                if( ! ok ) return;
+                var it = itemFor( el );
+                if( ! it ) return;
+                var g = el.closest( ".tb-group" );
+                var key = ( g && g.classList.contains( "sel-group" ) ? "s" + ( el.dataset.group || "" ) : g ) || null;
+                if( last !== null && key !== last ) out.push( { sep: true } );
+                last = key;
+                out.push( it );
+            } );
+            var own = ownItems();
+            if( out.length && own.length ) out.push( { sep: true } );
+            return out.concat( own );
+        }
+
+        // Refit when the header changes size other than by our own fit (a
+        // wider window; a status text on the left that pushed the bar down),
+        // and when the buttons change: the app shows / hides one, the
+        // selection group redraws, the search fold opens. A text changing
+        // on the left (an upload's status) is left to the size check.
+        new ResizeObserver( function ()
+        {
+            if( ! fitting && ( header.clientWidth !== lastW || header.offsetHeight !== lastH ) ) later();
+        } ).observe( header );
+        var mo = new MutationObserver( function ( recs )
+        {
+            if( fitting ) return;
+            if( recs.some( function ( r ) { return holder.contains( r.target ) || r.target === header || ( r.type === "attributes" && r.target.parentNode === header ); } ) ) later();
+        } );
+        mo.observe( header, { childList: true, subtree: true, attributes: true, attributeFilter: [ "hidden", "class" ] } );
+        if( document.fonts && document.fonts.ready ) document.fonts.ready.then( later );
+
+        var api = {
+            fit: fit,
+            later: later,
+            set: function ( o ) { for( var k in o ) if( k !== "btn" ) opts[ k ] = o[ k ]; if( o.btn ) adopt( $( o.btn ) ); fit(); },
+            items: items,
+            crowded: crowded,
+            get button() { return btn; }
+        };
+        adopt( opts.btn ? $( opts.btn ) : null );
+        header._fitBar = api;
+        fit();
+        return api;
+    }
+
+    //------------------------------------------------------------------------//
     // THE BROWSER  -  NayiveUI.browser( cfg )
     //
     //   list:    the element the rows live in (events are delegated to it)
@@ -493,6 +721,7 @@
     //   tree:    a NayiveUI.tree, for Tab between the two
     //   search:  () => {}          Ctrl+F
     //   pickable:( id ) => bool    a row that can not be picked (a header row)
+    //   count:   false             no "× N" chip in the selection group (Chat)
 
     function browser( cfg )
     {
@@ -578,7 +807,7 @@
         }
 
         // The rows on screen changed (a re-render): forget picks that are
-        // gone, put the ticks and ⋮ back, repaint.
+        // gone, put the ticks back, repaint.
         function refresh()
         {
             var shown = idsShown();
@@ -619,24 +848,12 @@
                     tk.innerHTML = G.tick;
                     el.insertBefore( tk, el.firstChild );
                 }
-                if( cfg.more !== false && ! el.querySelector( "[data-more]" ) )
-                {
-                    var mb = document.createElement( "button" );
-                    mb.type = "button";
-                    mb.className = "icon-btn sm row-more";
-                    mb.setAttribute( "data-more", "" );
-                    mb.title = t( "ui.actions" );
-                    mb.setAttribute( "aria-label", t( "ui.actions" ) );
-                    mb.setAttribute( "aria-haspopup", "menu" );
-                    mb.innerHTML = G.dots;
-                    el.appendChild( mb );
-                }
                 if( cfg.drag ) el.draggable = MQ_MOUSE.matches && ( ! cfg.drag.can || cfg.drag.can( id ) );
             } );
             painting = false;
         }
 
-        // A re-render of the list puts the ticks, ⋮ and classes back on its own.
+        // A re-render of the list puts the ticks and classes back on its own.
         var pending = false;
         new MutationObserver( function ()
         {
@@ -701,33 +918,44 @@
         {
             if( ! bar ) return;
             var n = sel.length;
+            var head = bar.closest( ".topbar, .header" ) || bar.parentNode;
             var holder = bar.closest( ".topbar-actions, .header-actions, .topbar, .header" );
             if( holder ) holder.classList.toggle( "has-selection", n > 0 );
             document.body.classList.toggle( "nb-has-selection", n > 0 );
             bar.classList.add( "sel-group" );
-            if( ! n ) { bar.hidden = true; bar.innerHTML = ""; return; }
+            var fitter = fitBar( head );
+            if( ! n ) { bar.hidden = true; bar.innerHTML = ""; if( fitter ) fitter.fit(); return; }
 
-            var phone = isPhone();
             var ids = sel.slice();
-            var shown = actions.filter( function ( a ) { return a.bar && here( a ) && ( ! phone || a.phone ); } )
-                               .sort( function ( a, b ) { return a.bar - b.bar; } );
-
-            var html = '<button type="button" class="icon-btn sel-count" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
-                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + "<span>" + n + "</span></button>" +
-                       '<button type="button" class="icon-btn" data-sel="all" title="' + esc( t( "ui.selectAll" ) + " (" + keyLabel( "Ctrl+A" ) + ")" ) +
+            var html = ( cfg.count === false ? "" :
+                       '<button type="button" class="icon-btn sel-count" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
+                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + "<span>" + n + "</span></button>" ) +
+                       '<button type="button" class="icon-btn" data-sel="all" data-rank="4" title="' + esc( t( "ui.selectAll" ) + " (" + keyLabel( "Ctrl+A" ) + ")" ) +
                        '" aria-label="' + esc( t( "ui.selectAll" ) ) + '">' + G.checkAll + "</button>";
-            shown.forEach( function ( a )
+            var g = null;
+            actions.map( function ( a, i ) { return { a: a, i: i }; } )
+                   .filter( function ( x ) { var a = x.a; return a.id !== "open" && ! a.noBar && here( a ) && ! ( a.hideOff && ! enabled( a, ids ) ); } )
+                   .sort( function ( x, y ) { return ( x.a.group || 0 ) - ( y.a.group || 0 ) || x.i - y.i; } )
+                   .forEach( function ( x )
             {
-                var l = labelOf( a, ids );
-                html += '<button type="button" class="icon-btn' + ( a.danger ? " danger" : "" ) + '" data-sel-act="' + esc( a.id ) +
+                var a = x.a, l = labelOf( a, ids );
+                var gap = g !== null && ( a.group || 0 ) !== g;
+                g = a.group || 0;
+                html += '<button type="button" class="icon-btn' + ( a.danger ? " danger" : "" ) + ( gap ? " sel-gap" : "" ) + '" data-sel-act="' + esc( a.id ) +
+                        '" data-rank="' + ( a.rank || 40 + x.i ) + '" data-group="' + g +
                         '" title="' + esc( l + ( a.key ? " (" + keyLabel( a.key ) + ")" : "" ) ) + '" aria-label="' + esc( l ) + '"' +
                         ( enabled( a, ids ) ? "" : " disabled" ) + ">" + glyph( typeof a.icon === "function" ? a.icon( ids ) : a.icon ) + "</button>";
             } );
-            html += '<button type="button" class="icon-btn" data-sel="menu" aria-haspopup="menu" title="' + esc( t( "ui.actions" ) ) +
-                    '" aria-label="' + esc( t( "ui.actions" ) ) + '">' + G.dots + "</button>";
             bar.innerHTML = html;
             bar.hidden = false;
+            if( fitter ) fitter.fit();
         }
+
+        // The ⋮'s row for a selection button that did not fit.
+        if( bar ) bar._nbRow = function ( id )
+        {
+            return actionItems( sel.slice() ).filter( function ( it ) { return it.id === id; } )[ 0 ] || null;
+        };
 
         if( bar ) bar.addEventListener( "click", function ( e )
         {
@@ -735,18 +963,12 @@
             if( ! b || b.disabled ) return;
             if( b.dataset.sel === "clear" ) clear();
             else if( b.dataset.sel === "all" ) selectAll();
-            else if( b.dataset.sel === "menu" )
-            {
-                if( menuOpen() && menuState.anchor === b ) { closeMenu(); return; }
-                openMenu( 0, 0, { anchor: b, keyboard: e.detail === 0 } );
-            }
             else if( b.dataset.selAct )
             {
                 var a = actions.filter( function ( x ) { return x.id === b.dataset.selAct; } )[ 0 ];
                 if( a ) run( a, sel.slice(), e );
             }
         } );
-        MQ_PHONE.addEventListener( "change", drawBar );
 
         //---- pointer ----------------------------------------------------//
 
@@ -766,7 +988,7 @@
         function ownControl( e, el )
         {
             var c = e.target.closest( "button, a[href], input, select, textarea, label, [data-no-pick]" );
-            return !! c && el.contains( c ) && c !== el && ! c.hasAttribute( "data-tick" ) && ! c.hasAttribute( "data-more" );
+            return !! c && el.contains( c ) && c !== el && ! c.hasAttribute( "data-tick" );
         }
 
         list.addEventListener( "mousedown", function ( e )
@@ -790,15 +1012,6 @@
             }
             var id = idOf( el );
 
-            if( e.target.closest( "[data-more]" ) )
-            {
-                e.preventDefault();
-                var mb = e.target.closest( "[data-more]" );
-                if( menuOpen() && menuState.anchor === mb ) { closeMenu(); return; }
-                if( ! has( id ) ) set( [ id ] );
-                openMenu( 0, 0, { anchor: mb } );
-                return;
-            }
             if( e.target.closest( "[data-tick]" ) )
             {
                 e.preventDefault();
@@ -830,7 +1043,7 @@
         list.addEventListener( "dblclick", function ( e )
         {
             var el = rowFrom( e );
-            if( ! el || touchLike() || ownControl( e, el ) || e.target.closest( "[data-tick], [data-more]" ) ) return;
+            if( ! el || touchLike() || ownControl( e, el ) || e.target.closest( "[data-tick]" ) ) return;
             e.preventDefault();
             var s = window.getSelection();
             if( s ) s.removeAllRanges();
@@ -1081,7 +1294,8 @@
     //   isOpen:   id => bool,  setOpen: ( id, bool ) => {}   (the app keeps it)
     //   current:  () => id         the lit row (the open folder / tray)
     //   go:       ( id, e ) => {}  a click: open that folder
-    //   menu:     ( id, x, y, anchor ) => {}   right-click, ⋮ (no menu: leave it out)
+    //   menu:     ( id, x, y, anchor ) => {}   right-click, long-press, the
+    //             ContextMenu key (no menu: leave it out). Tree rows have no ⋮.
     //   drop:     { can, drop }    see dropZone: items dropped on a folder
     //   drag:     id => ids | null   a tree row dragged (a folder moves)
     //   pane:     the pane element that becomes a slide-in sheet on a phone
@@ -1128,8 +1342,6 @@
                             '<span class="tree-ic">' + glyph( n.icon || "folder" ) + "</span>" +
                             '<span class="tree-name">' + esc( n.name ) + "</span>" +
                             ( n.badge ? '<span class="tree-badge">' + esc( n.badge ) + "</span>" : "" ) +
-                            ( cfg.menu && ! n.noMenu && ! cfg.pick ? '<button type="button" class="icon-btn sm row-more" data-more tabindex="-1" title="' +
-                              esc( t( "ui.actions" ) ) + '" aria-label="' + esc( t( "ui.actions" ) ) + '">' + G.dots + "</button>" : "" ) +
                             "</div>";
                     if( open ) walk( n.kids, depth + 1, n.id );
                 } );
@@ -1185,14 +1397,6 @@
             var row = e.target.closest( ".tree-row" );
             if( ! row ) return;
             var id = row.dataset.id;
-            if( e.target.closest( "[data-more]" ) )
-            {
-                var b = e.target.closest( "[data-more]" );
-                if( menuOpen() && menuState.anchor === b ) { closeMenu(); return; }
-                var r = b.getBoundingClientRect();
-                cfg.menu( id, r.right, r.bottom, b );
-                return;
-            }
             if( e.target.closest( "[data-twisty]" ) ) { toggleOpen( id ); kbd = id; focus( id ); return; }
             kbd = id;
             choose( id, e );
@@ -1200,7 +1404,7 @@
         host.addEventListener( "dblclick", function ( e )
         {
             var row = e.target.closest( ".tree-row" );
-            if( ! row || e.target.closest( "[data-twisty], [data-more]" ) ) return;
+            if( ! row || e.target.closest( "[data-twisty]" ) ) return;
             if( cfg.pick ) { if( ! ( cfg.disabled && cfg.disabled( row.dataset.id ) ) && cfg.confirm ) cfg.confirm( row.dataset.id ); return; }
             toggleOpen( row.dataset.id );
         } );
@@ -1256,7 +1460,7 @@
                     if( host.contains( document.activeElement ) ) return;   // no row took it (empty list): the browser's Tab goes on
                     break;
                 case "ContextMenu":
-                    if( ! cfg.menu ) return;
+                    if( ! cfg.menu || cfg.pick || ( n && n.noMenu ) ) return;
                     var r = row.getBoundingClientRect();
                     cfg.menu( id, r.left + 24, r.bottom, null );
                     break;
@@ -1427,6 +1631,7 @@
     UI.browser   = browser;
     UI.tree      = tree;
     UI.pickNode  = pickNode;
+    UI.fitBar    = fitBar;
     UI.menuAt    = menuAt;
     UI.closeMenu = closeMenu;
     UI.menuOpen  = menuOpen;
@@ -1436,7 +1641,6 @@
     UI.keyMatches = keyMatches;
     UI.glyph     = glyph;
     UI.tickHtml  = function () { return '<button type="button" class="pick-tick" data-tick tabindex="-1" title="' + esc( t( "ui.pick" ) ) + '" aria-label="' + esc( t( "ui.pick" ) ) + '">' + G.tick + "</button>"; };
-    UI.moreHtml  = function () { return '<button type="button" class="icon-btn sm row-more" data-more aria-haspopup="menu" title="' + esc( t( "ui.actions" ) ) + '" aria-label="' + esc( t( "ui.actions" ) ) + '">' + G.dots + "</button>"; };
     UI.isTouch   = touchLike;
     UI.dragIds   = function () { return drag.ids; };
 } )();

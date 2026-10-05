@@ -323,8 +323,8 @@ function flashStatus( text )
 
 // The papelera's own "done": it gulps twice (see .bin-gulp in drive.css) for
 // the three seconds a status message would have lasted, so a move to the bin
-// is answered where the files went instead of in words. On a phone the bin
-// button hides inside the header's "⋮", so that one gulps in its place.
+// is answered where the files went instead of in words. When the bin
+// button did not fit the header, it is in the "⋮", so that one gulps instead.
 let binGulpTimer = null;
 
 function flashBin()

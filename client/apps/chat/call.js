@@ -767,7 +767,13 @@
             btns.appendChild( C.btn( call.video ? "video" : "phone", "chat.answer", C.answerCall, lg + " solid-ok" ) );
             return;
         }
-        if( small ) { btns.appendChild( C.btn( "phone-off", "chat.hangUp", function () { hangUp(); }, "solid-danger" ) ); return; }
+        if( small )
+        {
+            // The way back to the whole screen first (a tap on the box does it too).
+            btns.appendChild( C.btn( "maximize", "chat.growCall", function () { setSmall( false ); } ) );
+            btns.appendChild( C.btn( "phone-off", "chat.hangUp", function () { hangUp(); }, "solid-danger" ) );
+            return;
+        }
         var mic = C.btn( call.mic ? "mic" : "mic-off", call.mic ? "chat.muteMic" : "chat.unmuteMic", toggleMic, "lg" + ( call.mic ? "" : " is-active" ) );
         mic.disabled = ! call.local;
         btns.appendChild( mic );

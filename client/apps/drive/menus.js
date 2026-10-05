@@ -65,25 +65,26 @@ function driveActions()
     return [
         { id: 'open', label: T( 'drive.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
           run: function( p ) { const n = rowNode( p[ 0 ] ); if( n ) openNode( n ); } },
-        { id: 'download', label: T( 'ui.download' ), icon: 'download', key: 'Ctrl+D', bar: 1, group: 0,
+        { id: 'download', label: T( 'ui.download' ), icon: 'download', key: 'Ctrl+D', rank: 5, group: 0,
           when: function() { return ! dlJob; }, run: act( downloadSelection ) },
-        { id: 'extract', label: T( 'drive.extractHere' ), icon: 'unzip', group: 0,
+        { id: 'extract', label: T( 'drive.extractHere' ), icon: 'unzip', rank: 14, hideOff: true, group: 0,
           when: function( p ) { return one( p ) && rw( p ) && isZipNode( rowNode( p[ 0 ] ) ); }, run: act( extractSelectedZip ) },
-        { id: 'cut', label: T( 'ui.cut' ), icon: 'cut', key: 'Ctrl+X', group: 1, when: rw,
+        // Cut / copy: no header button - "Move to" / "Copy to" are that knob.
+        { id: 'cut', label: T( 'ui.cut' ), icon: 'cut', key: 'Ctrl+X', noBar: true, group: 1, when: rw,
           run: function( p ) { setClipboard( 'move', p ); } },
-        { id: 'copy', label: T( 'ui.copy' ), icon: 'copy', key: 'Ctrl+C', group: 1,
+        { id: 'copy', label: T( 'ui.copy' ), icon: 'copy', key: 'Ctrl+C', noBar: true, group: 1,
           run: function( p ) { setClipboard( 'copy', p ); } },
-        { id: 'move', label: T( 'drive.moveToDots' ), icon: 'move', bar: 3, phone: 1, group: 1, when: rw,
+        { id: 'move', label: T( 'drive.moveToDots' ), icon: 'move', rank: 2, group: 1, when: rw,
           run: act( function() { openFolderPicker( 'move' ); } ) },
-        { id: 'copyTo', label: T( 'drive.copyToDots' ), icon: 'copy', bar: 4, group: 1,
+        { id: 'copyTo', label: T( 'drive.copyToDots' ), icon: 'copy', rank: 8, group: 1,
           run: act( function() { openFolderPicker( 'copy' ); } ) },
-        { id: 'rename', label: T( 'ui.rename' ), icon: 'edit', key: 'F2', bar: 2, group: 2,
+        { id: 'rename', label: T( 'ui.rename' ), icon: 'edit', key: 'F2', rank: 6, group: 2,
           when: function( p ) { return one( p ) && rw( p ); }, run: act( openRename ) },
-        { id: 'link', label: T( 'drive.copyLink' ), icon: 'link', bar: 5, group: 2, when: one, run: act( copySelectionLink ) },
-        { id: 'share', label: T( 'ui.share' ), icon: 'share', bar: 6, phone: 1, group: 2, when: canShare, run: sharePaths },
-        { id: 'compress', label: T( 'drive.compress' ), icon: SVG_ZIP, bar: 7, group: 2, when: rw, run: act( compressSelection ) },
-        { id: 'props', label: T( 'drive.properties' ), icon: 'info', key: 'Alt+Enter', bar: 8, group: 2, run: act( openProperties ) },
-        { id: 'bin', label: T( 'ui.toTrash' ), icon: 'trash', key: IS_MAC ? [ 'Del', 'Backspace' ] : 'Del', bar: 9, phone: 1, group: 3,
+        { id: 'link', label: T( 'drive.copyLink' ), icon: 'link', rank: 9, group: 2, when: one, run: act( copySelectionLink ) },
+        { id: 'share', label: T( 'ui.share' ), icon: 'share', rank: 3, group: 2, when: canShare, run: sharePaths },
+        { id: 'compress', label: T( 'drive.compress' ), icon: SVG_ZIP, rank: 10, group: 2, when: rw, run: act( compressSelection ) },
+        { id: 'props', label: T( 'drive.properties' ), icon: 'info', key: 'Alt+Enter', rank: 7, group: 2, run: act( openProperties ) },
+        { id: 'bin', label: T( 'ui.toTrash' ), icon: 'trash', key: IS_MAC ? [ 'Del', 'Backspace' ] : 'Del', rank: 1, group: 3,
           danger: true, when: rw, run: act( openDeleteConfirm ) }
     ];
 }
@@ -152,6 +153,9 @@ function wireBrowser()
                    drop: function( ids, dest ) { doMove( ids, dest ); } }
     } );
 
+    // The header keeps to one row: what does not fit goes into its ⋮.
+    NayiveUI.fitBar( document.querySelector( '.topbar' ), { btn: '#moreBtn' } );
+
     browse = NayiveUI.browser( {
         list:     document.getElementById( 'listing' ),
         row:      '.row[data-path]',
@@ -179,41 +183,6 @@ function wireBrowser()
         target: function( el ) { return el.dataset.path; },
         can:    function( ids, dest ) { return canDropInto( dest, ids ) ? 'inside' : false; },
         drop:   function( ids, dest ) { doMove( ids, dest ); }
-    } );
-}
-
-//--------------------------------------------------------------------//
-// HEADER "⋮"  (phone only — see B6b in the phone block)
-//
-// The header buttons a phone reaches for least are hidden there and come
-// back in this menu. Each row is built from the button it stands for - same
-// glyph, same title - and clicking it clicks that button, so there is still
-// one handler and one title per button.
-
-const TOP_MENU_BTNS = [ 'bigFilesBtn', 'trashViewBtn' ];
-
-function wireTopMenu()
-{
-    const btn = document.getElementById( 'moreBtn' );
-    btn.addEventListener( 'click', function( e )
-    {
-        e.stopPropagation();
-        if( NayiveUI.menuOpen() ) { NayiveUI.closeMenu(); return; }
-        const trash = document.body.classList.contains( 'trash-mode' );
-        const items = TOP_MENU_BTNS.map( function( id )
-        {
-            const src = document.getElementById( id );
-            const svg = src.querySelector( 'svg' );
-            // stripKeyHint: a desktop window narrowed into the phone layout
-            // can still carry a "· Ctrl+U" in the title.
-            const t   = stripKeyHint( src.getAttribute( 'title' ) || '' );
-            return { id: id, label: t, icon: svg ? svg.outerHTML : '', disabled: !! src.disabled,
-                     // Trash mode takes most of the toolbar away; the menu must
-                     // not offer what the bar itself has just hidden.
-                     hidden: trash && id !== 'trashViewBtn',
-                     run: function() { src.click(); } };
-        } );
-        NayiveUI.menuAt( 0, 0, items, { anchor: btn, keyboard: e.detail === 0 } );
     } );
 }
 

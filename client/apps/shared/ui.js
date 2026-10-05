@@ -5764,6 +5764,74 @@
                      { attributes: true, attributeFilter: [ "class" ], subtree: true } );
     }
 
+    //------------------------------------------------------------------------//
+    // LOW BATTERY (2026-10-04) - where the browser tells the battery level
+    // (navigator.getBattery: Chrome, Edge, Android; not Firefox, Safari or the
+    // iPhone), a dialog in the middle of the screen, in front of all, says it
+    // is low: 15% or less and not charging. Whatever the desktop's "Show
+    // battery" switch says. The top page only, the pages quotaPage() allows
+    // (the desktop, or the app on a phone; never a desktop window's frame).
+    // Once per drop: "nayive-batt-warned" is set when shown and cleared when
+    // charging starts or the level climbs back, so going from app to app on
+    // a phone does not ask again. Plugging in closes it. Reads only.
+
+    var BATT_LOW = 0.15, BATT_KEY = "nayive-batt-warned";
+    var battDlg = null, battWarned = false;
+
+    function battFlag( on )                 // no `on`: shown already in this drop?
+    {
+        if( on === undefined )
+        {
+            try { return battWarned || !! localStorage.getItem( BATT_KEY ); } catch ( _ ) { return battWarned; }
+        }
+        battWarned = on;
+        try { if( on ) localStorage.setItem( BATT_KEY, "1" ); else localStorage.removeItem( BATT_KEY ); } catch ( _ ) {}
+    }
+
+    function battShow( level )
+    {
+        var d = modal( { title: t( "ui.battLowTitle" ) } );
+        d.back.style.zIndex = "200000";                // in front of everything, the desktop's menus too
+        var p = document.createElement( "p" );
+        p.className = "dialog-text";
+        p.textContent = tf( "ui.battLowBody", { n: Math.round( level * 100 ) } );
+        d.sheet.appendChild( p );
+        var row = document.createElement( "div" );
+        row.className = "sheet-actions";
+        var ok = document.createElement( "button" );
+        ok.setAttribute( "data-act", "close" );        // lone close -> corner "x"
+        ok.title = t( "ui.close" );
+        row.appendChild( ok );
+        d.sheet.appendChild( row );
+        ok.addEventListener( "click", function () { d.close(); } );
+        d.show( function () { applySheetButtons( d.sheet ); } );
+        ok.focus();
+        return d;
+    }
+
+    function battWatch()
+    {
+        if( ! quotaPage() || ! navigator.getBattery ) return;
+        navigator.getBattery().then( function ( b )
+        {
+            function check()
+            {
+                if( b.charging || b.level > BATT_LOW )
+                {
+                    battFlag( false );
+                    if( battDlg ) { battDlg.close(); battDlg = null; }
+                    return;
+                }
+                if( battFlag() ) return;
+                battFlag( true );
+                i18nReady.then( function () { battDlg = battShow( b.level ); } );
+            }
+            b.addEventListener( "chargingchange", check );
+            b.addEventListener( "levelchange", check );
+            check();
+        }, function () {} );
+    }
+
     function uiInit()
     {
         applyI18n();
@@ -5784,6 +5852,7 @@
 
         pingSwUpdate();
         scheduleQuotaCheck( false, 3000 );
+        battWatch();
         document.addEventListener( "visibilitychange", function ()
         {
             if( document.visibilityState !== "visible" ) return;

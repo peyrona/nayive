@@ -916,12 +916,25 @@
             return p;
         }
 
-        function stamp( key, at, note )
+        // #savedAt is a floppy in the sync plug's colours: red "unsaved", blue
+        // "saving", green "saved". Its title says what and when.
+        function disk( state, title )
         {
             var el = byId( o.savedAtId || "savedAt" );
             if( ! el ) return;
-            el.textContent = key ? tf( key, { time: hhmm( at ) } ) : "";
-            el.title       = note || "";
+            if( ! el.firstChild ) el.innerHTML = NayiveUI.icon( "save" );
+            el.dataset.state = state;
+            el.title = title || t( state === "saving" ? "write.savingTip" : state === "saved" ? "ui.saved" : "write.unsavedTip" );
+            el.setAttribute( "aria-label", el.title );
+        }
+
+        // Only "Guardado 12:04" is on the server; a device draft or a page-only
+        // copy is not saved yet. No key: saved unless edits are waiting.
+        function stamp( key, at, note )
+        {
+            var text = key ? tf( key, { time: hhmm( at ) } ) : "";
+            disk( key ? ( key === "write.savedAt" ? "saved" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
+                  note ? text + " - " + note : text );
         }
 
         // The timer: SAVE_DELAY_MS after the last edit, but never later than
@@ -946,6 +959,7 @@
         function edited()
         {
             dirty = true;
+            disk( "unsaved" );
 
             if( writable() )
             {
@@ -1076,6 +1090,7 @@
             try
             {
                 sync( "saving" );
+                disk( "saving" );
 
                 var body;
                 try { body = await sealed( await o.encode( p ) ); }
@@ -1085,6 +1100,7 @@
                     {
                         failed = true;
                         sync( "error" );
+                        disk( "unsaved" );
                         NayiveUI.toast( t( lock ? "lock.failed" : ( o.failKey || "ui.saveFailed" ) ) );
                     }
                     return null;
@@ -1105,6 +1121,7 @@
                 if( res.conflict )
                 {
                     failed = true;
+                    disk( "unsaved" );
                     offerCopy( p );
                     return res;
                 }
@@ -1115,6 +1132,7 @@
                 // in this page (the browser's storage failed) or one that
                 // vanished before it was sent: neither is "Saved" (K2, K5).
                 failed = res.ok === false && ! res.offline && ! res.needsAuth && ! res.otherAccount;
+                if( failed ) disk( "unsaved" );
                 if( res.forbidden ) NayiveUI.toast( t( "ui.saveFailed" ) );
                 if( res.pageOnly )
                 {
@@ -1736,7 +1754,28 @@
             label.set( path ? relLabel( path, o.appDir, o.openRoot ) + ( readOnly ? t( "text.readOnlySuffix" ) : "" )
                             : ( pending || t( "ui.untitled" ) ) );
             showLock();
+            showAddress();
             if( o.onChange ) o.onChange();
+        }
+
+        // The page's address names the open document (?file=), so a window the
+        // desktop brings back after a close opens it again - not only one Drive
+        // opened. An untitled one has none: its device draft comes back instead.
+        // ?import= is done with once anything is on screen. The desktop hears
+        // of it by "nayive-address" (it reads the address only on a load).
+        function showAddress()
+        {
+            try
+            {
+                var u = new URL( location.href );
+                if( path ) u.searchParams.set( "file", path ); else u.searchParams.delete( "file" );
+                u.searchParams.delete( "import" );
+                var to = u.pathname + u.search + u.hash;
+                if( to === location.pathname + location.search + location.hash ) return;
+                history.replaceState( history.state, "", to );
+                window.dispatchEvent( new Event( "nayive-address" ) );
+            }
+            catch ( e ) {}
         }
 
         // The toolbar key lit = what leaves this tab is encrypted. Text's key

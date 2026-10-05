@@ -26,8 +26,8 @@ import
 from './grid.js';
 import
 {
-    toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
-    updateToolbarActiveState, toggleMergeSelection, toggleFreezeColumns, toggleFreezeRows, openBorderPopup,
+    toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar, togglePainter,
+    updateToolbarActiveState, mergeSelection, splitSelection, mergesInSelection, toggleFreezeColumns, toggleFreezeRows, openBorderPopup,
     closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
     updateNumFmtPreview, confirmNumFmt, cancelNumFmt
 }
@@ -356,6 +356,7 @@ function wireStaticUI()
     document.getElementById( 'fmtValignMiddleBtn').addEventListener( 'click', function() { setStyleField( 'valign', 'middle' ); } );
     document.getElementById( 'fmtValignBottomBtn').addEventListener( 'click', function() { setStyleField( 'valign', 'bottom' ); } );
     document.getElementById( 'fmtWrapBtn'        ).addEventListener( 'click', function() { toggleStyleField( 'wrap' ); } );
+    document.getElementById( 'fmtPainterBtn'     ).addEventListener( 'click', togglePainter );
     document.getElementById( 'fmtClearBtn'       ).addEventListener( 'click', clearSelectionStyle );
     document.getElementById( 'fmtFontColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'color', e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
     document.getElementById( 'fmtFillColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'bg',    e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
@@ -365,7 +366,8 @@ function wireStaticUI()
         else                               openNumFmtDialog( e.target.value );
     });
 
-    document.getElementById( 'fmtMergeBtn' ).addEventListener( 'click', toggleMergeSelection );
+    document.getElementById( 'fmtMergeBtn' ).addEventListener( 'click', mergeSelection );
+    document.getElementById( 'fmtSplitBtn' ).addEventListener( 'click', splitSelection );
     document.getElementById( 'nameBox' ).addEventListener( 'keydown', function( e )
     {
         if( e.key === 'Enter' )  { e.preventDefault(); gotoReference( e.target.value ); }
@@ -1242,6 +1244,7 @@ const MENUS =
         { sep: true },
         { key: 'calc.selectAll', run: function() { table.selectAll(); } },
         { sep: true },
+        { key: 'write.tb.copyFormat', el: 'fmtPainterBtn' },
         { key: 'calc.clearFormat', el: 'fmtClearBtn' }
     ]
 },
@@ -1296,7 +1299,8 @@ const MENUS =
         { key: 'calc.borders',   el:  'fmtBorderBtn', checked: styleOn( 'border' ) },
         { key: 'calc.numFormat', sub: selectItems( 'fmtNumFormat' ) },
         { sep: true },
-        { key: 'calc.mergeCells', el: 'fmtMergeBtn' }
+        { key: 'calc.mergeCells', el: 'fmtMergeBtn' },
+        { key: 'calc.splitCells', el: 'fmtSplitBtn', enabled: function() { return mergesInSelection().length > 0; } }
     ]
 },
 {

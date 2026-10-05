@@ -273,6 +273,9 @@ function wireStaticUI()
     document.getElementById( 'paraBtn'          ).addEventListener( 'click', openParagraph );
     document.getElementById( 'paraCancelBtn'    ).addEventListener( 'click', function() { setBackdrop( 'paraBackdrop', false ); } );
     document.getElementById( 'paraConfirmBtn'   ).addEventListener( 'click', confirmParagraph );
+    document.getElementById( 'stylesCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'stylesBackdrop', false ); } );
+    document.getElementById( 'stylesConfirmBtn' ).addEventListener( 'click', confirmStyles );
+    wireStyles();
 
     // Any change in the dialog marks its GROUP, so Apply only touches what the
     // user actually changed (see PARRAFO).
@@ -1369,6 +1372,198 @@ async function applyListFormat()
 }
 
 //----------------------------------------------------------------------------//
+// ESTILOS  (Formato > Estilos > Cambiar estilos...)
+//
+// Normal and Heading 1-3 of THIS document: font, size, colour, bold, italic and
+// the space before / after. The engine has no command for it (2.21.0), so it is
+// done as the list format is: the style patched in styles.xml (docx-patch.js),
+// the document loaded again - which starts a fresh undo history (the dialog
+// says so). "Also for new documents" keeps the four as they stand in the dialog
+// in data/write/config.json (`styles`); New starts from them. A template or an
+// opened file keeps its own.
+
+const ST_KEYS   = [ 'Normal', 'Heading1', 'Heading2', 'Heading3' ];
+const ST_FIELDS = { stFont: 'font', stSize: 'sizePt', stColor: 'color', stBold: 'bold', stItalic: 'italic',
+                    stBefore: 'beforePt', stAfter: 'afterPt' };
+
+let stVals    = {};     // key -> { font, sizePt, color, bold, italic, beforePt, afterPt } as the dialog holds them
+let stTouched = {};     // key -> Set of the fields changed
+let stShown   = 'Normal';
+
+// The defaults, read once per visit, at the first New; it waits for them 1,5 s
+// at most (offline: a plain blank).
+let styleDefaults = null;
+
+async function withDefaultStyles( bytes )
+{
+    if( ! styleDefaults ) styleDefaults = writeCfg.read().then( function( c ) { return c.styles || null; } ).catch( function() { styleDefaults = null; return null; } );
+    const s = await Promise.race( [ styleDefaults, new Promise( function( r ) { setTimeout( r, 1500, null ); } ) ] );
+    if( ! s ) return bytes;
+    try { return patcher.withStyles( bytes, s ) || bytes; }
+    catch( e ) { console.error( 'Write: default styles -', e ); return bytes; }
+}
+
+function wireStyles()
+{
+    const sel = function( id, list ) { const el = document.getElementById( id ); for( const o of list ) el.add( new Option( o[1], o[0] ) ); };
+
+    sel( 'stFont', MENU_FONTS.map( function( f ) { return [ f, f ]; } ) );
+    sel( 'stSize', MENU_SIZES.map( function( n ) { return [ n, n ]; } ) );
+
+    document.getElementById( 'stStyle' ).addEventListener( 'change', function( e ) { showStyle( e.target.value ); } );
+
+    for( const id in ST_FIELDS )
+        document.getElementById( id ).addEventListener( 'change', function()
+        {
+            const v = readStyleField( id );
+            if( v === null ) return;                 // an unreadable number: nothing changes
+            stVals[ stShown ][ ST_FIELDS[ id ] ] = v;
+            stTouched[ stShown ].add( ST_FIELDS[ id ] );
+        } );
+}
+
+function readStyleField( id )
+{
+    const el = document.getElementById( id );
+    if( el.type === 'checkbox' ) return el.checked;
+    if( id === 'stSize' ) { const n = parseFloat( el.value ); return Number.isFinite( n ) ? n : null; }
+    if( id === 'stBefore' || id === 'stAfter' ) { const n = parseNum( el.value ); return n === null || n < 0 ? null : n; }
+    return el.value;
+}
+
+async function openStyles()
+{
+    if( ! ready || ! editor ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
+
+    let list = [], bytes = null;
+    try
+    {
+        list  = editor.getDocumentStyles();
+        bytes = lastGood || new Uint8Array( await editor.save() );   // the styles never change without a load
+    }
+    catch( _ ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+
+    // The colour list: Automatic, then the menu's own colours (labelled now,
+    // so they follow the language).
+    const col = document.getElementById( 'stColor' );
+    col.length = 0;
+    col.add( new Option( NayiveUI.t( 'write.stAuto' ), 'auto' ) );
+    for( const c of NayiveMenus.COLORS ) col.add( new Option( NayiveUI.t( 'ui.color.' + c[1] ), c[0].slice( 1 ) ) );
+
+    stVals = {}; stTouched = {};
+    for( const key of ST_KEYS )
+    {
+        const id = styleIdFor( key );
+        const st = id && list.find( function( s ) { return s.styleId === id; } );
+        const p  = ( st && st.preview ) || {};
+        const sp = id ? patcher.styleSpacing( bytes, key ) : null;
+
+        stVals[ key ]    = { font: p.fontFamily || null, sizePt: p.fontSizePt || null,
+                             color: p.color ? String( p.color ).toUpperCase() : 'auto',
+                             bold: !! p.bold, italic: !! p.italic,
+                             beforePt: sp ? sp.beforePt : 0, afterPt: sp ? sp.afterPt : 0 };
+        stTouched[ key ] = new Set();
+        document.querySelector( '#stStyle option[value="' + key + '"]' ).disabled = ! id;
+    }
+
+    document.getElementById( 'stDefault' ).checked = false;
+    document.getElementById( 'stStyle' ).value = 'Normal';
+    showStyle( 'Normal' );
+    setBackdrop( 'stylesBackdrop', true );
+}
+
+// The fields show one style. A value the lists do not name (Aptos, 10,5 pt, a
+// colour of the file's own) is added for the moment, as the line spacing is.
+function showStyle( key )
+{
+    stShown = key;
+    const v = stVals[ key ];
+
+    const pick = function( id, value, label )
+    {
+        const el = document.getElementById( id );
+        const extra = el.querySelector( 'option[data-extra]' );
+        if( extra ) extra.remove();
+        if( value === null ) { el.value = ''; return; }
+
+        if( ! [ ...el.options ].some( function( o ) { return o.value === String( value ); } ) )
+        {
+            const op = new Option( label, String( value ) );
+            op.dataset.extra = '1';
+            el.add( op, 0 );
+        }
+        el.value = String( value );
+    };
+
+    pick( 'stFont',  v.font, v.font );
+    pick( 'stSize',  v.sizePt === null ? null : String( v.sizePt ), v.sizePt === null ? '' : fmtNum( v.sizePt ) );
+    pick( 'stColor', v.color, '#' + v.color );
+    document.getElementById( 'stBold'   ).checked = v.bold;
+    document.getElementById( 'stItalic' ).checked = v.italic;
+    document.getElementById( 'stBefore' ).value   = fmtNum( v.beforePt );
+    document.getElementById( 'stAfter'  ).value   = fmtNum( v.afterPt );
+}
+
+async function confirmStyles()
+{
+    setBackdrop( 'stylesBackdrop', false );
+    if( ! ready || ! editor ) return;
+
+    // A number typed and the dialog closed with Enter, without a 'change' yet.
+    for( const id of [ 'stBefore', 'stAfter' ] )
+    {
+        const v = readStyleField( id );
+        if( v !== null && v !== stVals[ stShown ][ ST_FIELDS[ id ] ] ) { stVals[ stShown ][ ST_FIELDS[ id ] ] = v; stTouched[ stShown ].add( ST_FIELDS[ id ] ); }
+    }
+
+    if( document.getElementById( 'stDefault' ).checked )
+    {
+        const keep = {};
+        for( const key of ST_KEYS )
+        {
+            if( ! styleIdFor( key ) ) continue;
+            keep[ key ] = {};
+            for( const f in stVals[ key ] ) if( stVals[ key ][ f ] !== null ) keep[ key ][ f ] = stVals[ key ][ f ];
+        }
+        if( await writeCfg.write( { styles: keep } ) ) styleDefaults = Promise.resolve( keep );
+    }
+
+    const changes = {};
+    for( const key of ST_KEYS )
+    {
+        if( ! stTouched[ key ].size ) continue;
+        changes[ key ] = {};
+        for( const f of stTouched[ key ] ) changes[ key ][ f ] = stVals[ key ][ f ];
+    }
+    if( ! Object.keys( changes ).length ) { focusEditor(); return; }
+
+    const scroller = document.getElementById( 'editor' );
+    const top      = scroller.scrollTop;
+    let   paraId   = null;
+    try { const sel = editor.snapshot().selection; paraId = sel && sel.from && sel.from.paraId; } catch( _ ) {}
+
+    try
+    {
+        await session.flush();          // a pending autosave goes now, not in the middle of the load
+
+        const bytes = patcher.withStyles( new Uint8Array( await editor.save() ), changes );
+        if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
+
+        await loadIntoEditor( bytes );
+
+        if( paraId ) editor.exec( { type: 'setSelection', anchor: { paraId: paraId } } );
+        scroller.scrollTop = top;
+        session.edited();
+        focusEditor();
+    }
+    catch( e )
+    {
+        console.error( 'Write: styles -', e );
+        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
+    }
+}
+
+//----------------------------------------------------------------------------//
 // ESTADISTICAS  (word count)
 //
 // Read when the dialog opens, not live. The body's paragraphs, one by one (so
@@ -1952,7 +2147,9 @@ function styleItems()
         const id = styleIdFor( k[0] );
         return { key: k[1], slot: 'styles.style', value: id || k[0], sc: k[1],
                  enabled: function() { return !! id && slotState( 'styles.style' ).enabled === true; } };
-    } );
+    } ).concat( [ { sep: true },
+                  { key: 'write.editStyles', run: openStyles,
+                    enabled: function() { return slotState( 'styles.style' ).enabled === true; } } ] );
 }
 
 // The Ctrl+Alt+0..3 shortcuts: the same lookup.
@@ -2968,7 +3165,7 @@ async function loadBlank()
         blankBytes = new Uint8Array( await editor.save() );
     }
 
-    await loadIntoEditor( blankBytes );
+    await loadIntoEditor( await withDefaultStyles( blankBytes ) );
 }
 
 async function toBytes( body )

@@ -114,10 +114,10 @@ body       { overflow: hidden; }
    buttons and the plug in .topbar-actions. Only the search-in-the-bar is ours. */
 .list-head             { flex-wrap: nowrap; overflow: visible; min-height: 53px; }
 .list-head .app-icon   { width: 20px; height: 20px; }
-/* Brand block (the owner): the icon + "Chat" on one row. It may shrink so the
-   buttons keep their room: the name wraps no further than its own width (app.css). */
+/* Brand block (the owner): the icon + "Chat" on one row. It keeps its width:
+   the buttons that do not fit leave into the header's ⋮ instead (list.js, fitBar). */
 .list-head .brand      { display: inline-flex; flex-direction: column; align-items: stretch;
-                         flex: 0 1 auto; min-width: 0; margin-right: 10px; }
+                         flex: 0 0 auto; min-width: max-content; margin-right: 10px; }
 .list-head .brand-row  { display: flex; align-items: center; }
 .list-head .brand .app-title { margin-right: 0; }
 /* A person's page: the same title, but not a link to the launcher (ui.js only
@@ -164,6 +164,8 @@ button.who { cursor: pointer; }
 .who-top   { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .who small { font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who small.typing { color: var(--accent); }
+/* An open chat's name keeps some room: the bar's buttons leave into its ⋮ first (conv.js, fitBar). */
+#convBar:has(.fit-more) .who { min-width: 6em; }
 .bar .search-in { flex: 1 1 auto; min-width: 0; }
 /* WhatsApp on a PC has no "back" on the open chat: the list is right there. */
 @media (min-width: 641px) { #convBar .back-btn { display: none; } #convBar .av { margin-left: 8px; } }
@@ -200,31 +202,18 @@ button.who { cursor: pointer; }
 .row.is-open        { background: color-mix(in srgb, var(--text) 10%, transparent); }
 /* The owner's list on the item browser (shared/browser.js, app.css ITEM
    BROWSER). A row has no room for a column of ticks: the tick sits on the
-   picture's corner, and with a mouse the ⋮ floats over the row's end only
-   while the pointer is on it. On touch the ⋮ is always there, in the row. */
+   picture's corner. No ⋮ on the row: right-click or a long-press opens the menu. */
 #rows .row                          { position: relative; }
 #rows .row.is-selected              { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 #rows .row > .pick-tick             { position: absolute; left: 8px; bottom: 6px; z-index: 1; background: var(--head); }
 #rows .row.is-selected > .pick-tick { background: var(--accent); }
-/* The list's pane is phone-narrow even on a PC: while chats are picked the
-   selection group takes its header, as on a phone (the title, the search and
-   the tools step aside until the × or Esc). A phone shows three actions
-   only, so its title stays. */
-#listHead .has-selection > .tb-group:not(.sel-group) { display: none; }
-@media (min-width: 641px)
-{
-    #listHead:has(.has-selection) > .brand           { display: none; }
-    #listHead:has(.has-selection) > .topbar-actions  { margin-left: auto; }
-}
-@media (hover: hover) and (pointer: fine)
-{
-    #rows .row > .row-more              { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: var(--head); }
-    #rows .row:not(:hover) > .row-more  { visibility: hidden; }
-}
+/* While chats are picked the selection group joins the header; the search
+   and the tools leave only when there is no room (NayiveUI.fitBar: tools
+   rank after the actions), into the header's one ⋮. The icon + "Chat" stay;
+   no "× N" chip (list.js count: false). */
 @media (hover: none), (pointer: coarse)
 {
     #rows .row                          { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-    #rows .row > .row-more              { margin-right: -8px; }
 }
 .row .body          { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row .l1, .row .l2  { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -945,11 +934,11 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
     /* On the button, not the ::before: clip-path would cut the shadow off. */
     filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
-/* Yellow with a dark rim: seen over any picture, light or dark. */
+/* Soft yellow with a dark rim: seen over any picture, light or dark. */
 .call-screen .call-corner::before
 {
     content: ""; position: absolute; width: 24px; height: 24px;
-    background: rgba(255, 224, 130, 0.75);
+    background: rgba(255, 240, 190, 0.55);
 }
 .call-screen .call-corner.tl { left: 0;  top: 0; }
 .call-screen .call-corner.tr { right: 0; top: 0; }

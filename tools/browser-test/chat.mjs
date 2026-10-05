@@ -1,9 +1,10 @@
 // chat.mjs - the Chat list on the shared item browser (no tree): a mouse
 // picks, side by side a click still opens the chat, one menu (pin, mute,
 // mark read, delete), the keys, Delete with Undo and no question (the server
-// keeps the chat until the Undo is gone); a window as narrow as a phone
+// keeps the chat until the Undo is gone); the open chat's bar (its actions
+// as buttons, one ⋮ for what does not fit); a window as narrow as a phone
 // (click picks, double-click opens); then a phone: tap opens, long-press picks.
-import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows } from "./lib.mjs";
+import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows, fitState } from "./lib.mjs";
 
 const s = await server();
 const phone = await s.client();       // the owner on another device: the server's view
@@ -38,7 +39,7 @@ ok( await c.evaluate( `!! document.querySelector( '${ROW( CA )}.unread .badge' )
 await mouse( c, ROW( JA ), { dx: 160 } );
 ok( await sel() === JA && await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )} && ! document.getElementById( 'vConv' ).hidden` ),
     "side by side, a click picks the chat AND opens it beside the list" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && document.querySelector('#selActions .sel-count').textContent.trim() === '1'" ), "the header group shows, count 1" );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && ! document.querySelector('#selActions .sel-count')" ), "the header group shows, no count chip" );
 await mouse( c, ROW( LU ), { dx: 160, mods: 2 } );
 ok( await sel() === JA + "," + LU && await opened() === JA, "Ctrl+click adds one, and does not open it", [ await sel(), await opened() ] );
 ok( await c.evaluate( "document.querySelectorAll( '#rows .row.is-selected' ).length === 2" ), "the picked rows are painted" );
@@ -70,12 +71,12 @@ ok( await c.evaluate( "[ ...document.querySelectorAll('.item-menu .mi-key') ].ma
 ok( await opened() === JA, "(a right-click does not open the chat)" );
 await key( c, "Escape" );
 ok( await c.evaluate( "document.querySelector('.item-menu').hidden" ), "Esc closes the menu" );
-await mouse( c, ROW( CA ) + " [data-more]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "pin" ), "the row ⋮ opens the same menu" );
-await key( c, "Escape" );
-await mouse( c, "#selActions [data-sel=menu]" );
-ok( ( await menuRows( c ) )?.some( r => r.act === "pin" ), "the header ⋮ opens the same menu" );
-await key( c, "Escape" );
+ok( await c.evaluate( "! document.querySelector( '#rows [data-more], #selActions [data-sel=menu]' )" ), "no row ⋮, no ⋮ in the selection group" );
+let fs = await fitState( c, "#listHead" );
+ok( fs.acts.join() === "pin,mute,read,del" && ! fs.crowded && fs.out.length === 0, "the list's header: every action is a button, in menu order, on one row", fs );
+ok( await c.evaluate( "[ ...document.querySelectorAll( '#listHead [data-rank]:not([data-sel-act])' ) ].every( b => b.getClientRects().length || b.classList.contains( 'fit-out' ) )" ),
+    "…the tools do not step aside for the pick, they leave only for want of room" );
+ok( ! fs.more || fs.rows.every( r => [ "listSearch", "newChatBtn", "settingsBtn", "helpBtn" ].includes( r ) ), "…the narrow list's ⋮ holds only the tools that did not fit", fs );
 await mouse( c, "#rows", { button: "right" } );
 rows = await menuRows( c );
 ok( rows && rows.map( r => r.act ).join() === "newChat,selectAll" && await sel() === "", "right-click on empty space: New chat, Select all", rows );
@@ -121,6 +122,22 @@ await mouse( c, ROW( CA ), { dx: 160, mods: 2 } );
 ok( await sel() === LU, "one left" );
 await key( c, "Enter" );
 ok( await c.until( `NayiveChat.S.open === ${JSON.stringify( LU )}` ), "Enter opens it" );
+
+section( "CHAT · THE OPEN CHAT'S BAR" );
+const CONV_BTNS = [ "convSearchBtn", "convInfoBtn", "convMuteBtn", "convPinBtn", "convLinkBtn", "convNewLinkBtn", "convDeleteBtn", "convHelpBtn" ];
+const convBar = async () => { const f = await fitState( c, "#convBar" ); f.tools = f.tools.filter( t => CONV_BTNS.includes( t ) ); return f; };
+fs = await convBar();
+ok( fs.tools.join() === CONV_BTNS.join() && ! fs.more && ! fs.crowded, "wide: search, info, mute, pin, their link, new link, delete, ? are buttons in the bar; no ⋮", fs );
+ok( await c.evaluate( "! document.getElementById( 'convMenu' )" ), "…and no old ⋮ menu behind it" );
+await mouse( c, "#convMuteBtn" );
+ok( await waitFor( async () => ( await conv( LU ) ).mute === true ), "the bar's Mute: muted on the server" );
+ok( await c.until( "document.getElementById( 'convMuteBtn' )?.title.startsWith( 'Unmute' )" ), "…the button now reads Unmute" );
+await mouse( c, "#convMuteBtn" );
+ok( await waitFor( async () => ! ( await conv( LU ) ).mute ), "…and Unmute" );
+await mouse( c, "#convHelpBtn" );
+ok( await c.until( "[ ...document.querySelectorAll( '.intro-btns b' ) ].some( b => b.textContent === 'Their link' )" ), "the bar's ? explains its buttons", await c.evaluate( "[ ...document.querySelectorAll( '.intro-btns b' ) ].map( b => b.textContent )" ) );
+await key( c, "Escape" );
+await c.until( "! document.querySelector( '.intro-btns' )?.offsetParent" );
 
 section( "CHAT · DELETE: AT ONCE, UNDO, NO QUESTION" );
 ok( ( await onServer( JA ) ).includes( "para borrar" ), "Javi's chat has its message on the server" );
@@ -169,19 +186,37 @@ await c.open( "/nayive/chat/index.html" );
 await c.until( "document.querySelectorAll( '#rows .row[data-conv]' ).length === 2 && !! window.NayiveChat.browse" );
 await finger( c, ROW( LU ) );
 ok( await c.until( `NayiveChat.S.open === ${JSON.stringify( LU )} && document.getElementById( 'chat' ).classList.contains( 'in-main' )` ), "a tap opens the chat" );
+await sleep( 200 );
+fs = await convBar();
+ok( ! fs.crowded && fs.more && [ "convMuteBtn", "convPinBtn" ].every( t => fs.tools.includes( t ) ) && fs.tools.length < CONV_BTNS.length,
+    "the open chat's bar on a phone: one row; Mute and Pin stay, the rest go into its ⋮", fs );
+ok( fs.rows.join() === CONV_BTNS.filter( t => ! fs.tools.includes( t ) ).join(), "…the ⋮ lists them in bar order", fs );
+await finger( c, "#convMoreBtn" );
+let mrows = await menuRows( c );
+ok( mrows && mrows.map( r => r.act ).join() === fs.rows.join() && mrows.find( r => r.act === "convDeleteBtn" ), "the ⋮ opens with them (Delete among them)", mrows );
+await c.evaluate( "document.querySelector( '.item-menu [data-act=convInfoBtn]' )?.click(); true" );
+ok( await c.until( "document.getElementById( 'vConv' ).hidden && !! document.querySelector( '.main .info-wall' )" ), "…a row runs its button (Info)" );
+await c.evaluate( "NayiveChat.back(); true" );
+await c.until( "! document.getElementById( 'vConv' ).hidden" );
 await c.evaluate( "NayiveChat.back(); true" );
 ok( await c.until( "! document.getElementById( 'chat' ).classList.contains( 'in-main' )" ), "back to the list" );
 await sleep( 300 );
 await finger( c, ROW( CA ), 700 );
 ok( await c.until( `NayiveChat.browse.ids().join() === ${JSON.stringify( CA )}` ) && await c.evaluate( "document.getElementById( 'rows' ).classList.contains( 'is-picking' ) && ! document.getElementById( 'chat' ).classList.contains( 'in-main' )" ),
     "a long-press picks (ticks on), it does not open" );
-ok( await c.evaluate( "[ ...document.querySelectorAll('#selActions [data-sel-act]') ].map( b => b.dataset.selAct ).join() === 'pin,mute,del' && getComputedStyle( document.querySelector( '#listHead .tb-group:not(.sel-group)' ) ).display === 'none'" ),
-    "phone header: × count, Select all, Pin, Mute, Delete, ⋮; the tools step aside",
-    await c.evaluate( "[ [ ...document.querySelectorAll('#selActions [data-sel-act]') ].map( b => b.dataset.selAct ).join(), getComputedStyle( document.querySelector( '#listHead .tb-group:not(.sel-group)' ) ).display ]" ) );
+fs = await fitState( c, "#listHead" );
+ok( ! fs.crowded && fs.more && [ "pin", "mute", "del" ].every( a => fs.acts.includes( a ) ) && ! fs.tools.includes( "settingsBtn" ),
+    "phone header: one row with the icon + Chat; the top ranks (Delete, Pin, Mute) stay, the tools leave first, the ⋮ shows", fs );
+ok( fs.rows.slice( 0, fs.out.length ).join() === fs.out.join() && fs.rows.includes( "settingsBtn" ), "…its ⋮ lists the hidden actions in toolbar order, then the hidden tools", fs );
+await finger( c, "#listHead .fit-more" );
+mrows = await menuRows( c );
+ok( mrows && mrows.map( r => r.act ).join() === fs.rows.join(), "the ⋮ opens with them", mrows );
+await key( c, "Escape" );
 await finger( c, ROW( LU ) );
 ok( await sel() === CA + "," + LU && ! await opened(), "while picking, a tap adds", await sel() );
-await finger( c, "#selActions [data-sel=clear]" );
-ok( await c.until( "NayiveChat.browse.ids().length === 0 && ! document.getElementById( 'rows' ).classList.contains( 'is-picking' )" ), "the × stops picking" );
+await finger( c, ROW( CA ) );
+await finger( c, ROW( LU ) );
+ok( await c.until( "NayiveChat.browse.ids().length === 0 && ! document.getElementById( 'rows' ).classList.contains( 'is-picking' )" ), "tapping both again stops picking (no × chip in Chat, his call)" );
 
 section( "CHAT · THE 'N UNREAD' LINE WHEN THE FIRST UNREAD ONE IS DELETED (AA5, bugs-2)" );
 {

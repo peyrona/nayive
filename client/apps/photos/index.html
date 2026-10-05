@@ -413,29 +413,23 @@
     }
 
     /* grid marker: this photo has a comment (geo-dot sits bottom-right, this
-       bottom-left; the top corners hold the pick tick and the ⋮) */
+       bottom-left; the top-left corner holds the pick tick) */
     .note-mark { position: absolute; bottom: 6px; left: 6px; color: #fff; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.65)); }
     .note-mark svg { width: 13px; height: 13px; display: block; }
     /* the caption takes the bottom edge on hover: the two marks step aside */
     body:not(.view-list) #grid .tile:hover .note-mark,
     body:not(.view-list) #grid .tile:hover .geo-dot { opacity: 0; }
-    /* list view: the mark goes after the name (the names stay in one column), before the ⋮ */
+    /* list view: the mark goes after the name (the names stay in one column) */
     body.view-list #grid .note-mark { position: static; flex: 0 0 auto; order: 1; color: var(--text-dim); filter: none; }
-    body.view-list #grid .tile .row-more { order: 2; }
 
     /* ---------- picking (shared/browser.js) ----------
      * A click picks a tile, a double-click / Enter / a tap opens it. The pick
-     * tick sits over the tile's top-left corner and the ⋮ over its top-right
-     * one (both drawn over the photo, so they carry their own dark disc); in
-     * the list view they are plain flex items at the row's two ends. */
+     * tick sits over the tile's top-left corner (drawn over the photo, so it
+     * carries its own dark disc); in the list view it is a plain flex item at
+     * the row's start. */
     #grid .tile { cursor: default; }
     #grid .tile .ph { -webkit-touch-callout: none; user-select: none; }
-    #grid .tile .pick-tick,
-    #grid .tile .row-more { position: absolute; z-index: 2; }
-    #grid .tile .pick-tick { top: 6px; left: 6px; }
-    #grid .tile .row-more { top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%;
-                            background: rgba(0, 0, 0, 0.38); color: #fff; }
-    #grid .tile .row-more:hover { background: rgba(0, 0, 0, 0.55); }
+    #grid .tile .pick-tick { position: absolute; z-index: 2; top: 6px; left: 6px; }
     #grid .tile:not(.is-selected) .pick-tick { background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.92); }
     #grid .tile.is-selected .pick-tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
     body:not(.view-list) #grid .tile.is-selected::after,
@@ -454,9 +448,7 @@
         box-shadow: inset 0 0 0 3px var(--accent);
         background: color-mix(in srgb, var(--accent) 22%, transparent);
     }
-    body.view-list #grid .tile .pick-tick,
-    body.view-list #grid .tile .row-more { position: static; }
-    body.view-list #grid .tile .row-more { background: none; color: var(--text-dim); }
+    body.view-list #grid .tile .pick-tick { position: static; }
     body.view-list #grid .tile:not(.is-selected) .pick-tick { background: transparent; border-color: var(--text-faint); }
     body.view-list #grid .tile.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 
@@ -531,7 +523,7 @@
             <h1>Photos</h1>
 
             <button class="icon-btn has-popup" id="folderInfoBtn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:ui.folderInfo, aria-label:ui.folderInfo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M10 11.2a2 2 0 1 1 2.9 1.8c-.6.3-.9.7-.9 1.3"/><line x1="12" y1="17.3" x2="12.01" y2="17.3"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="10.5" x2="12.01" y2="10.5"/><line x1="12" y1="13.5" x2="12" y2="17.5"/></svg>
             </button>
 
             <div class="tb-modes" role="tablist" data-i18n-attr="aria-label:photos.galleryMode">
@@ -561,21 +553,21 @@
                     <div class="search-wrap">
                         <input type="search" class="topbar-search" id="searchInput" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:photos.searchByNamePh">
                     </div>
-                    <button class="icon-btn" id="searchToggle" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                    <button class="icon-btn" id="searchToggle" type="button" data-rank="20" data-i18n-attr="title:ui.search, aria-label:ui.search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </button>
-                    <button class="icon-btn" id="addBtn" type="button" hidden data-i18n-attr="title:photos.uploadHere, aria-label:photos.uploadHere">
+                    <button class="icon-btn" id="addBtn" type="button" hidden data-rank="21" data-i18n-attr="title:photos.uploadHere, aria-label:photos.uploadHere">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     </button>
-                    <button class="icon-btn" id="shareBtn" type="button" hidden data-i18n-attr="title:photos.shareAlbumTip, aria-label:photos.shareAlbum">
+                    <button class="icon-btn" id="shareBtn" type="button" hidden data-rank="22" data-i18n-attr="title:photos.shareAlbumTip, aria-label:photos.shareAlbum">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
                     </button>
-                    <button class="icon-btn" id="reloadBtn" type="button" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
+                    <button class="icon-btn" id="reloadBtn" type="button" data-rank="23" data-i18n-attr="title:ui.rescanFolder, aria-label:ui.rescanFolder">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                     </button>
                 </div>
                 <div class="tb-group tb-sys">
-                    <button class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
+                    <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     </button>
                 </div>
@@ -1704,8 +1696,8 @@ function tileHtml( p )
 {
     const cap  = esc( tileCap( p ) );
     // .tmeta is shown only in list view (CSS); .cap only in grid view.
-    // A <div>, not a <button>: the item browser puts its pick tick and ⋮
-    // (buttons) inside it.
+    // A <div>, not a <button>: the item browser puts its pick tick (a
+    // button) inside it.
     return '<div class="tile" data-id="' + esc( p.id ) + '" title="' + cap + '">'
          + sceneHtml( p, true )
          + '<span class="geo-dot' + ( p.lat != null ? "" : " no" ) + '"></span>'
@@ -2340,7 +2332,8 @@ document.addEventListener( "keydown", e =>
  * add, a double-click / Enter / a tap opens it (the lightbox; in Editar mode
  * the editor), a long-press starts picking on a phone. ONE action list
  * (photoActions) feeds the header's selection group, the menu (right-click,
- * a tile's ⋮, the header ⋮) and the keys.
+ * a long-press) and the keys; what does not fit the header goes into its
+ * one ⋮ (NayiveUI.fitBar).
  *
  * The albums are the photo folder (ROOT) and its sub-folders, in the shared
  * tree. A click opens an album by opening this page again at ?dir= (&root=
@@ -2472,7 +2465,7 @@ function wireTree()
     } );
 }
 
-// An album's menu (right-click, its ⋮, a long-press in the tree). The top
+// An album's menu (right-click, a long-press in the tree). The top
 // album only makes new ones: it is the folder Photos is set to.
 function albumMenu( path )
 {
@@ -2495,20 +2488,20 @@ function photoActions()
     return [
         { id: "open", label: NayiveUI.t( "ui.open" ), icon: "external", key: "Enter", group: 0, when: one,
           run: ids => openPhoto( ids[ 0 ] ) },
-        { id: "edit", label: NayiveUI.t( "photos.editInImage" ), icon: "edit", key: "E", bar: 4, group: 0, where: mine,
+        { id: "edit", label: NayiveUI.t( "photos.editInImage" ), icon: "edit", key: "E", rank: 6, group: 0, where: mine,
           when: ids => one( ids ) && EDIT_EXT.indexOf( extOf( ids[ 0 ] ) ) !== -1, run: ids => editPhoto( ids[ 0 ] ) },
-        { id: "share", label: NayiveUI.t( "ui.share" ), icon: "share", bar: 1, phone: 1, group: 1, where: mine, when: one,
+        { id: "share", label: NayiveUI.t( "ui.share" ), icon: "share", rank: 2, group: 1, where: mine, when: one,
           run: ids => NayiveUI.shareSheet( { path: ids[ 0 ], app: "file", title: baseName( ids[ 0 ] ), canAdd: false } ) },
-        { id: "download", label: NayiveUI.t( "ui.download" ), icon: "download", key: "Ctrl+D", bar: 2, group: 1,
+        { id: "download", label: NayiveUI.t( "ui.download" ), icon: "download", key: "Ctrl+D", rank: 5, group: 1,
           where: () => ! DEMO, when: () => ! dlBusy, run: downloadPaths },
-        { id: "move", label: NayiveUI.t( "photos.moveToAlbum" ), icon: "move", bar: 3, phone: 1, group: 2, where: mine,
+        { id: "move", label: NayiveUI.t( "photos.moveToAlbum" ), icon: "move", rank: 3, group: 2, where: mine,
           run: ids => pickAlbumFor( ids, "move" ) },
-        { id: "copyTo", label: NayiveUI.t( "photos.copyToAlbum" ), icon: "copy", group: 2, where: mine,
+        { id: "copyTo", label: NayiveUI.t( "photos.copyToAlbum" ), icon: "copy", rank: 7, group: 2, where: mine,
           run: ids => pickAlbumFor( ids, "copy" ) },
-        { id: "map", label: NayiveUI.t( "photos.seeOnMap" ), icon: MAP_PIN, group: 2,
+        { id: "map", label: NayiveUI.t( "photos.seeOnMap" ), icon: MAP_PIN, rank: 8, hideOff: true, group: 2,
           when: ids => ids.every( id => { const p = photoById( id ); return !! p && p.cluster != null; } ), run: showOnMap },
         { id: "bin", label: NayiveUI.t( "ui.toTrash" ), icon: "trash", key: NayiveUI.isMac ? [ "Del", "Backspace" ] : "Del",
-          bar: 9, phone: 1, group: 3, danger: true, where: mine, run: ids => binPaths( ids ) }
+          rank: 1, group: 3, danger: true, where: mine, run: ids => binPaths( ids ) }
     ];
 }
 

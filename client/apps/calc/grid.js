@@ -20,9 +20,14 @@ import
 from './calc.js';
 import
 {
-    updateToolbarActiveState
+    updateToolbarActiveState, gridColors, paintFormat, setPainter
 }
 from './format.js';
+import
+{
+    syncRefs, resetRefs, refAt
+}
+from './refs.js';
 import
 {
     DEFAULT_COL_PX, stashActiveSheet, formulaEngine, registerSheetsInEngine
@@ -1116,6 +1121,8 @@ function initGrid( d )
 
     lastSelection = null;
     point         = null;
+    resetRefs();
+    setPainter( null );      // a look copied from the last file is not this one's
     removedStash  = [];      // a new grid starts a new undo history
     typedFormats  = {};
 
@@ -1249,6 +1256,7 @@ function initGrid( d )
         beforeMergeCells  : function( cellRange, auto ) { mergeMove = auto ? null : mergedContents( cellRange ); mergeWas = auto ? null : sourceBlock( cellRange ); },
         afterMergeCells   : function( cellRange, mergeParent, auto ) { if( ! auto ) { moveMergedLook(); fixMergeUndo( cellRange ); } trackMerge( mergeParent ); scheduleAutosave(); },
         afterUnmergeCells : function( cellRange ) { untrackMerge( cellRange ); scheduleAutosave(); },
+        beforeRender      : readInk,
         afterRender       : function()
         {
             // Tooltip for the corner "select all" glyph (styled in the <style> block).
@@ -1267,6 +1275,7 @@ function initGrid( d )
                               lines: ! hs ? null : hs.isSelectedByCorner()       ? 'all'
                                                  : hs.isSelectedByRowHeader()    ? 'rows'
                                                  : hs.isSelectedByColumnHeader() ? 'cols' : null };
+            paintFormat();           // the format painter lands here, when it is on (format.js)
             updateToolbarActiveState();
             refreshNameBox();
             refreshFormulaBar();
@@ -1567,6 +1576,84 @@ function sameValues( a, b )
     return true;
 }
 
+//------------------------------------------------------------------------//
+// READABLE COLOURS
+//
+// A file's colours were picked on white paper. Where a cell sets only ONE
+// of its two colours, the other is the theme's - and on the dark theme that
+// pairing is often unreadable: the theme's light text on a pale yellow
+// fill, a file's black or navy text on the dark paper. So, on screen only
+// (the file keeps its colours):
+//   - a fill with no text colour: the theme's text if it reads on it, else
+//     black or white, whichever reads better (what LibreOffice calls
+//     "automatic");
+//   - a text colour with no fill, on dark paper, that does not read on it:
+//     the same hue at the opposite lightness (navy turns light blue), or
+//     the theme's text for a grey or black;
+//   - both set: the file's pair, as it made them.
+// On the light paper a file's text shows as the file has it, as in Excel.
+
+let inkNow  = null;          // gridColors() for this render: { text, paper }
+let inkDark = false;         // the paper is dark
+let inkMemo = new Map();     // "fg|bg" -> what to draw, for this paper
+
+function readInk()
+{
+    const ink = gridColors();
+    if( inkNow && ink.text === inkNow.text && ink.paper === inkNow.paper ) return;
+
+    inkNow  = ink;
+    inkDark = luminance( ink.paper ) < 0.18;
+    inkMemo = new Map();
+}
+
+function rgbOf( hex ) { return [ 0, 2, 4 ].map( function( i ) { return parseInt( hex.substr( i, 2 ), 16 ) / 255; } ); }
+function hexOf( rgb ) { return rgb.map( function( v ) { return ( '0' + Math.round( Math.min( 1, Math.max( 0, v ) ) * 255 ).toString( 16 ) ).slice( -2 ); } ).join( '' ).toUpperCase(); }
+
+// WCAG's relative luminance and contrast ratio (1 to 21).
+function luminance( hex )
+{
+    const w = [ 0.2126, 0.7152, 0.0722 ];
+    return rgbOf( hex ).reduce( function( s, v, i ) { return s + w[ i ] * ( v <= 0.03928 ? v / 12.92 : Math.pow( ( v + 0.055 ) / 1.055, 2.4 ) ); }, 0 );
+}
+
+function contrast( a, b )
+{
+    const x = luminance( a ), y = luminance( b );
+    return ( Math.max( x, y ) + 0.05 ) / ( Math.min( x, y ) + 0.05 );
+}
+
+// The text colour a cell is drawn in, as "RRGGBB", or null for the theme's.
+function readableInk( style )
+{
+    const fg = style && style.color;
+    const bg = style && style.bg;
+    if( ! fg && ! bg ) return null;
+    if( fg && bg )     return fg;
+
+    if( ! inkNow ) readInk();       // otherwise once per render (beforeRender)
+    const key = ( fg || '' ) + '|' + ( bg || '' );
+    if( inkMemo.has( key ) ) return inkMemo.get( key );
+
+    let out = fg || null;
+
+    if( bg && contrast( inkNow.text, bg ) < 4.5 )
+        out = contrast( '000000', bg ) >= contrast( 'FFFFFF', bg ) ? '000000' : 'FFFFFF';
+
+    if( fg && inkDark && contrast( fg, inkNow.paper ) < 3 )
+    {
+        // Same hue and saturation, lightness L -> 1 - L: in HSL that is
+        // every channel moved by 1 - max - min.
+        const rgb  = rgbOf( fg );
+        const hi   = Math.max.apply( null, rgb ), lo = Math.min.apply( null, rgb );
+        const flip = hexOf( rgb.map( function( v ) { return v + 1 - hi - lo; } ) );
+        out = ( hi - lo >= 0.08 && contrast( flip, inkNow.paper ) >= 3 ) ? flip : null;
+    }
+
+    inkMemo.set( key, out );
+    return out;
+}
+
 // Delegates to Handsontable's own text renderer, then paints the style this app
 // tracks in `activeSheet.cellStyles` — cells are recycled DOM nodes, so unset properties must be
 // explicitly cleared or they'd leak onto whatever cell is rendered into that node next.
@@ -1579,7 +1666,8 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
     td.style.fontWeight      = ( style && style.bold )      ? 'bold'      : '';
     td.style.fontStyle       = ( style && style.italic )    ? 'italic'    : '';
     td.style.textDecoration  = ( style && style.underline ) ? 'underline' : '';
-    td.style.color           = ( style && style.color )      ? '#' + style.color : '';
+    const ink                = readableInk( style );    // see READABLE COLOURS
+    td.style.color           = ink                           ? '#' + ink         : '';
     td.style.backgroundColor = ( style && style.bg )         ? '#' + style.bg    : '';
     td.style.textAlign       = ( style && style.align )      ? style.align       : '';
     td.style.verticalAlign   = ( style && style.valign )     ? style.valign      : '';
@@ -1617,14 +1705,16 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
     const tip = tips.join( '\n' );
     if( td.title !== tip ) td.title = tip;
 
-    // The cells a formula being typed points at (see POINTING below).
-    const pb = pointedBounds();
-    const pt = !! pb && row >= pb.r1 && row <= pb.r2 && col >= pb.c1 && col <= pb.c2;
-    td.classList.toggle( 'pt',   pt );
-    td.classList.toggle( 'pt-t', pt && row === pb.r1 );
-    td.classList.toggle( 'pt-b', pt && row === pb.r2 );
-    td.classList.toggle( 'pt-l', pt && col === pb.c1 );
-    td.classList.toggle( 'pt-r', pt && col === pb.c2 );
+    // The cells the formula being edited points at, framed in the colour
+    // of their reference (refs.js) - pointed at or typed alike.
+    const rf = refAt( row, col );
+    td.classList.toggle( 'rf',   !! rf );
+    td.classList.toggle( 'rf-t', !! rf && rf.t );
+    td.classList.toggle( 'rf-b', !! rf && rf.b );
+    td.classList.toggle( 'rf-l', !! rf && rf.l );
+    td.classList.toggle( 'rf-r', !! rf && rf.r );
+    if( rf ) td.style.setProperty( '--rf', 'var(--rf-' + rf.color + ')' );
+    else     td.style.removeProperty( '--rf' );
 }
 
 // Ctrl/Cmd-click on a linked cell follows the link. Plain click is left
@@ -1756,26 +1846,14 @@ function putPoint( ed, anchor, head )
     pointWriting = true;
     ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
     pointWriting = false;
-
-    table.render();                                  // styledRenderer outlines the cells
 }
 
+// The frame round the pointed cells follows the formula's text (refs.js),
+// so nothing is redrawn here.
 function clearPoint()
 {
     pointDrag = false;
-    if( ! point ) return;
-
-    point = null;
-    if( table ) table.render();
-}
-
-// What styledRenderer outlines: the live reference, while its editor is open.
-function pointedBounds()
-{
-    if( ! point ) return null;
-
-    const ed = table.getActiveEditor();
-    return ed && ed.isOpened() ? point.bounds : null;
+    point     = null;
 }
 
 // Typing anything after the reference (or moving the caret off it) ends
@@ -1783,6 +1861,7 @@ function pointedBounds()
 function pointEditorOpened()
 {
     clearPoint();
+    syncRefs();
 
     const ed = table.getActiveEditor();
     const ta = ed && ed.TEXTAREA;
@@ -1796,6 +1875,11 @@ function pointEditorOpened()
     // FORMULA BAR above). The synthetic 'input' a pointed reference fires
     // counts as one: the formula did change.
     ta.addEventListener( 'input', mirrorEditorToBar );
+
+    // The references' colours too (refs.js), and they go when it closes.
+    ta.addEventListener( 'input', syncRefs );
+    if( ed.TEXTAREA_PARENT )
+        new MutationObserver( syncRefs ).observe( ed.TEXTAREA_PARENT, { attributes: true, attributeFilter: [ 'class' ] } );
 
     // So does the formula editor (see FORMULA EDITOR below): what is
     // typed, where the caret goes, and the editor closing - its holder

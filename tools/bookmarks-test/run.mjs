@@ -160,9 +160,9 @@ try
     ok( await c.evaluate( "!document.getElementById('bmUrlError').hidden && document.getElementById('bmBackdrop').classList.contains('open')" ), "javascript: refused" );
     await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
 
-    // Edit through the row ⋮ menu.
-    await c.evaluate( "document.querySelector('.bm-item [data-more]').click(); true" );
-    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=edit]')" ), "row ⋮ opens the item menu" );
+    // Edit through the row's right-click menu (no row ⋮ since 2026-10-05).
+    await c.evaluate( "( () => { const r = document.querySelector('.bm-item').getBoundingClientRect(); document.querySelector('.bm-item .bm-title').dispatchEvent( new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 60, clientY: r.top + 10 }) ); } )(); true" );
+    ok( await c.evaluate( "!document.querySelector('.item-menu').hidden && !!document.querySelector('.item-menu [data-act=edit]')" ), "right-click opens the item menu" );
     ok( await c.evaluate( "document.querySelector('.bm-item').classList.contains('is-selected') && !document.getElementById('selActions').hidden" ), "…on that row, picked (the header group shows)" );
     await c.evaluate( "document.querySelector('.item-menu [data-act=edit]').click(); document.getElementById('bmFav').checked = true; document.getElementById('bmSaveBtn').click(); true" );
     ok( await c.evaluate( "allBookmarks()[0].favorite === true" ), "edit: favourite set" );
@@ -551,7 +551,7 @@ try
     ok( await waitFor( c, "document.getElementById('bmBackdrop').classList.contains('open') && document.getElementById('bmUrl').value === 'https://from-bookmarklet.example/x' && document.getElementById('bmName').value === 'Hi there' && location.search === ''" ),
         "#29 ?add= opens the sheet with that page" );
     await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );
-    ok( await c.evaluate( "/^javascript:.*\\?add=/.test( document.getElementById('bmletLink').getAttribute('href') ) && [ ...document.querySelectorAll('#topMenu [data-act=bmlet]') ].length === 1" ),
+    ok( await c.evaluate( "/^javascript:.*\\?add=/.test( document.getElementById('bmletLink').getAttribute('href') ) && topMenuItems().filter( i => i.id === 'bmlet' ).length === 1" ),
         "#29 …which the 'Save from any page' button (⋮) sends" );
     ok( await c.evaluate( "( () => { const dt = new DataTransfer(); dt.setData( 'text/uri-list', 'https://dropped.example/' ); dt.setData( 'text/html', '<a href=\"https://dropped.example/\">Dropped page</a>' ); const t = document.getElementById('items'); t.dispatchEvent( new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }) ); t.dispatchEvent( new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }) ); return document.getElementById('bmBackdrop').classList.contains('open') && document.getElementById('bmUrl').value === 'https://dropped.example/' && document.getElementById('bmName').value === 'Dropped page'; } )()" ),
         "#29 a link dropped from another tab opens the sheet with it" );
@@ -591,7 +591,7 @@ try
     await openApp( c );
     await c.evaluate( "document.getElementById('moreBtn').click(); true" );
     await shot( c, "07-phone-menu-light" );
-    ok( await c.evaluate( "getComputedStyle( document.querySelector('#topMenu [data-act=\"mode:list\"]') ).display !== 'none'" ), "phone: grid/list in the ⋮" );
+    ok( await c.evaluate( "!! document.querySelector('.item-menu:not([hidden]) [data-act=\"mode:list\"]')" ), "phone: grid/list in the ⋮" );
     await c.evaluate( "document.body.click(); openBookmarkSheet( allBookmarks()[0].id ); true" );
     await shot( c, "08-phone-edit-sheet-light" );
     await c.evaluate( "NayiveUI.close('bmBackdrop'); true" );

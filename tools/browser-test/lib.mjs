@@ -66,6 +66,18 @@ export async function drag( c, from, to )
         return lit; } )()` );
 }
 
+// The header's fit (NayiveUI.fitBar): the selection buttons shown and the ones
+// that left, the ⋮ (shown?) and its rows, and whether the bar is off its row.
+export async function fitState( c, head = ".topbar, .header" )
+{
+    return c.evaluate( `( () => { const h = document.querySelector( ${JSON.stringify( head )} ); const f = h && h._fitBar;
+        const vis = e => e.getClientRects().length > 0;
+        const acts = [ ...h.querySelectorAll( '[data-sel-act]' ) ];
+        return { acts: acts.filter( vis ).map( b => b.dataset.selAct ), out: acts.filter( b => b.classList.contains( 'fit-out' ) ).map( b => b.dataset.selAct ),
+                 tools: [ ...h.querySelectorAll( '[data-rank]:not([data-sel-act])' ) ].filter( vis ).map( b => b.id || b.dataset.sel || b.className ),
+                 more: !! f && vis( f.button ), rows: f ? f.items().filter( i => ! i.sep ).map( i => i.id ) : [], crowded: !! f && f.crowded() }; } )()` );
+}
+
 // The menu's rows: [ { act, label, off } ] while it is open, else null.
 export async function menuRows( c )
 {

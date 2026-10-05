@@ -345,6 +345,20 @@
                       font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
         #clock b    { font-weight: 500; font-variant-numeric: tabular-nums; }
 
+        /* The battery: an icon filled to its level and "80%" (red when low, green
+           while charging). Shows only: no press. Greyed menu row with no battery. */
+        #batt       { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; flex: 0 0 auto;
+                      font-size: 0.9rem; font-weight: 500; white-space: nowrap; cursor: default; }
+        #batt[hidden] { display: none; }
+        #batt svg   { width: 22px; height: 22px; }
+        #batt b     { font-weight: 500; font-variant-numeric: tabular-nums; }
+        #batt.low   { color: var(--danger); }
+        #batt.chg .batt-fill { fill: #2e9d4f; }
+        #moreMenu .menu-item[disabled] { cursor: default; }
+        #moreMenu .menu-item[disabled]:hover { background: none; }
+        #moreMenu .menu-item[disabled] > svg,
+        #moreMenu .menu-item[disabled] > [data-i18n] { opacity: 0.42; }
+
         /* A running countdown, just before the clock: its time left, in the accent (its
            text shows only once time is up). A press on it (not on its small buttons) opens the dialog. */
         #cdChip       { gap: 6px; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 10px; flex: 0 1 auto; min-width: 0;
@@ -406,6 +420,7 @@
         body.bar-side  .task.front { flex-direction: column; height: auto; padding: 6px 0; gap: 4px; }
         body.bar-side  .task.front > svg { margin: 0; }
         body.bar-side  .task > .task-ctl { flex-direction: column; margin: 0; }
+        body.bar-side  #batt    { flex-direction: column; gap: 0; padding: 4px 0; font-size: 0.75rem; }
         body.bar-side  #clock,
         body.bar-side  #cdChip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
                                   padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
@@ -457,6 +472,8 @@
             <button id="cdChip" class="text-btn ghost" type="button" hidden><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button>
             <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
             <button id="wxBtn" class="icon-btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
+            <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
+            <span id="batt" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
             <button id="clock" class="text-btn ghost" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
@@ -471,6 +488,9 @@
         <div class="menu" id="menu" hidden></div>
 
         <div class="top-menu" id="moreMenu" role="menu" hidden>
+            <!-- BATTERY ON THE BAR - set.battBar (2026-10-04): the #batt on the bar (see
+                 BATTERY). Always the first row; greyed with no battery or no browser API. -->
+            <label class="menu-item" id="battRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="11" x2="6" y2="13"></line><line x1="10" y1="11" x2="10" y2="13"></line></svg><span data-i18n="desktop.battBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.battBarInfo"></span><span class="switch sm"><input type="checkbox" id="battBarChk" disabled><span class="track"></span></span></label>
             <!-- WEATHER ON THE BAR - set.weatherBar (2026-10-02): the #wxBtn on the bar
                  (see WEATHER). A label, so flipping it leaves the menu open. -->
             <label class="menu-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span data-i18n="desktop.weatherBar"></span><span class="info-dot" role="button" tabindex="0" data-i18n-attr="data-info:desktop.weatherBarInfo"></span><span class="switch sm"><input type="checkbox" id="weatherBarChk"><span class="track"></span></span></label>
@@ -898,6 +918,8 @@
             if( /\/login\.html$/.test( cw.location.pathname ) ) { location.href = cw.location.href; return; }
             // kept without the origin: a site moved to https still finds its windows
             if( cw.location.href !== 'about:blank' ) { w.url = cw.location.pathname + cw.location.search + cw.location.hash; saveWins(); }
+            // an editor puts the document it opens in its address (shared/office.js, showAddress)
+            cw.addEventListener( 'nayive-address', function () { w.url = cw.location.pathname + cw.location.search + cw.location.hash; saveWins(); } );
             w.el.classList.remove( 'chromeless' );
             cw.addEventListener( 'pointerdown', function () { closeMenu(); closeMore(); if( front !== w ) focus( w ); }, true );
             hookAlt( cw );
@@ -1965,6 +1987,49 @@
     // A press inside a window's frame never reaches this document: it takes the focus.
     window.addEventListener( 'blur', function () { if( wxMenu ) wxMenu.close(); } );
 
+    //------------------------------------------------------------------------//
+    // BATTERY - this device's choice (set.battBar, the first row of the "⋮"
+    // menu): the level on the bar, an icon and "80%". Only where the browser
+    // tells it (navigator.getBattery: Chrome, Edge; not Firefox or Safari) and
+    // there is a battery; else the switch is greyed and the bar shows nothing.
+    // A PC without one reports "charging, full, no time left" - and so does a
+    // full laptop on its charger: greyed too, until it is unplugged. The
+    // low-battery dialog is shared/ui.js's (every page, this switch or not).
+
+    var battEl = document.getElementById( 'batt' ), battChk = document.getElementById( 'battBarChk' ),
+        battRow = document.getElementById( 'battRow' ), batt = null;
+
+    function battNone( b )
+    {
+        return ! b || ( b.charging && b.level >= 1 && b.chargingTime === 0 && b.dischargingTime === Infinity );
+    }
+
+    function battApply()
+    {
+        var none = battNone( batt );
+        battChk.checked  = !! set.battBar;
+        battChk.disabled = none;
+        battRow.toggleAttribute( 'disabled', none );
+        battEl.hidden = none || ! set.battBar;
+        if( battEl.hidden ) return;
+        var n = Math.round( batt.level * 100 );
+        battEl.classList.toggle( 'low', ! batt.charging && batt.level <= 0.15 );
+        battEl.classList.toggle( 'chg', batt.charging );
+        battEl.querySelector( '.batt-fill' ).setAttribute( 'width', Math.max( 1, 14 * batt.level ).toFixed( 1 ) );
+        battEl.querySelector( 'b' ).textContent = n + '%';
+        battEl.title = t( 'desktop.battery' ) + ': ' + n + '%' + ( batt.charging ? ' · ' + t( 'desktop.battCharging' ) : '' );
+        battEl.setAttribute( 'aria-label', battEl.title );
+    }
+    battChk.addEventListener( 'change', function () { set.battBar = battChk.checked; saveSet(); battApply(); placeMore(); } );
+    battApply();
+    if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( battApply );     // the tooltip's words
+    if( navigator.getBattery ) navigator.getBattery().then( function ( b )
+    {
+        batt = b;
+        [ 'chargingchange', 'levelchange', 'chargingtimechange', 'dischargingtimechange' ].forEach( function ( ev ) { b.addEventListener( ev, battApply ); } );
+        battApply();
+    }, function () {} );
+
     // A window by its place on the bar (0, 1...), its app's folder ("drive"), or itself.
     function winOf( which )
     {
@@ -2737,6 +2802,7 @@
                 { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ) },
                 { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ) },
                 { svg: wxSvg( 1, true ), name: t( 'desktop.weather' ), text: t( 'desktop.helpWeather' ) },   // listed even while off: it says where to turn it on
+                { svg: battEl.querySelector( 'svg' ).outerHTML, name: t( 'desktop.battery' ), text: t( 'desktop.helpBattery' ) },   // the same
                 { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
                 { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) },
                 { sel: '#syncIndicator:not([hidden])', text: t( 'desktop.helpSync' ) }

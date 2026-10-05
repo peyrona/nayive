@@ -66,8 +66,6 @@ function wireStaticUI()
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );
     document.getElementById( 'bigFilesBtn'       ).addEventListener( 'click', function() { bigMode ? endAdvSearch() : openBigFiles(); } );
 
-    wireTopMenu();      // the header's ⋮ (phone) — see B6b in the phone block
-
     // The "space almost full" card (shared/ui.js) asks for the list here
     // instead of reloading Drive with ?big=1.
     document.addEventListener( 'nayive:bigfiles', function( e ) { e.preventDefault(); openBigFiles(); } );
