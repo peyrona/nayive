@@ -227,10 +227,17 @@
         wallEl.appendChild( sec );
     }
 
-    // The chat's ⋮ -> Delete: the ways to delete, each with what it deletes.
-    // Picking one does it at once - the dialog is the question (no second one).
-    C.deleteDialog = function ( c, ct )
+    // The whole chat can go: the owner's person (d-) or group (g-).
+    // A guest's chats, or one with nobody left in Contacts, only clear.
+    function contactOfConv( c ) { return C.owns( c ) && c.kind === "d" ? C.contactOf( C.otherOf( c ) ) : null; }
+    C.canDeleteConv = function ( c ) { return !! contactOfConv( c ) || ( C.owns( c ) && c.kind === "g" ); };
+
+    // The list's Delete chat: says what goes - the chat, its messages and
+    // the person (or the group). Its button does it at once - the dialog is
+    // the question (no second one); Undo follows.
+    C.deleteDialog = function ( c )
     {
+        var ct = contactOfConv( c );
         var body = h( "div" );
         var sh = null;
         function choice( label, what, act )
@@ -239,12 +246,12 @@
             b.addEventListener( "click", function () { sh.close(); act(); } );
             body.appendChild( h( "div", { class: "del-opt" }, b, h( "p", { class: "hint", text: what } ) ) );
         }
-        choice( T( "chat.deleteChat" ), T( "chat.deleteChatAsk" ), function () { C.clearChat( c ); } );
         if( ct ) choice( C.TF( "chat.deletePerson", { name: ct.name } ), T( ct.user ? "chat.deleteUserAsk" : "chat.deletePersonAsk" ),
                          function () { deletePerson( ct ); } );
-        if( C.owns( c ) && c.kind === "g" )
+        else if( C.owns( c ) && c.kind === "g" )
             choice( T( "chat.deleteGroup" ), T( "chat.deleteGroupAsk" ), function () { deleteGroup( c ); } );
-        sh = C.sheet( T( "chat.delete" ) + " · " + c.name, body );
+        else return;
+        sh = C.sheet( T( "chat.deleteChat" ) + " · " + c.name, body );
     };
 
     // Settings › Auto-delete (the owner): one number of days for every
@@ -462,6 +469,7 @@
         {
             rows.push( { sel: "#newChatBtn", name: T( "chat.newChat" ), text: T( "chat.helpNewChat" ) } );
             rows.push( { sel: "#settingsBtn", name: T( "ui.settings" ), text: T( "chat.helpSettings" ) } );
+            rows.push( { icon: "check", name: T( "chat.pickName" ), text: T( "chat.helpPick" ) } );
         }
         else
         {

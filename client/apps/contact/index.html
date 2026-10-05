@@ -47,7 +47,7 @@
             lead:  [ T( 'contact.introLead' ), T( 'contact.introPick' ) ],
             buttons: [
                 { sel: '#dedupBtn',  text: T( 'contact.introDedup' ) },
-                { sel: '#settingsBtn', text: T( 'contact.introSettings' ) },
+                { sel: '.header .fit-more', text: T( 'contact.introSettings' ) },
                 { sel: '#treeBtn',   text: T( 'contact.introGroups' ) },
                 { sel: '#addBtn',    text: T( 'contact.introAdd' ) },
                 { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
@@ -368,11 +368,6 @@
                             </button>
                         </div>
                         <div class="tb-group tb-sys">
-                            <!-- Settings: sync with phones (CardDAV) + import / export .vcf.
-                                 The launcher's gear glyph, so "settings" looks the same everywhere. -->
-                            <button id="settingsBtn" class="icon-btn" data-rank="30" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
-                                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            </button>
                             <button class="icon-btn" data-intro-open data-rank="31" type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                             </button>
@@ -549,33 +544,6 @@
             <div id="dedupList"></div>
             <div class="sheet-actions">
                 <button id="dedupCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Settings: vCard files (import / export). -->
-    <div id="settingsBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <h2 data-i18n="ui.settings"></h2>
-
-            <div class="share-sect share-link">
-                <p class="share-head" data-i18n="contact.set.filesHead"></p>
-                <div class="share-row">
-                    <span class="share-link-url" data-i18n="contact.set.importRow"></span>
-                    <button id="setImportBtn" class="share-drop" type="button" data-i18n-attr="title:contact.importVcf, aria-label:contact.importVcf">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 9 12 4 17 9"></polyline><line x1="12" y1="4" x2="12" y2="16"></line></svg>
-                    </button>
-                </div>
-                <div class="share-row share-link-app">
-                    <span class="share-link-url" data-i18n="contact.set.exportRow"></span>
-                    <button id="setExportBtn" class="share-drop" type="button" data-i18n-attr="title:contact.exportVcf, aria-label:contact.exportVcf">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    </button>
-                </div>
-            </div>
-
-            <div class="sheet-actions">
-                <button id="settingsCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
             </div>
         </div>
     </div>
@@ -2385,12 +2353,12 @@
         function actionList() { return [
             { id: 'open', label: T( 'ui.open' ), icon: 'external', key: 'Enter', group: 0, when: one,
               run: ids => openDetail( ids[ 0 ] ) },
-            { id: 'edit', label: T( 'contact.edit' ), icon: 'edit', key: 'F2', rank: 5, group: 0, when: one,
+            { id: 'edit', label: T( 'contact.edit' ), icon: 'edit', key: 'F2', rank: 5, hideOff: true, group: 0, when: one,
               run: ids => openEditForExisting( ids[ 0 ] ) },
             { id: 'fav', icon: 'star', key: 'S', rank: 6, group: 1,
               label: ids => T( ids.length && cardsOf( ids ).every( isFav ) ? 'contact.unfavourite' : 'contact.favAdd' ),
               run: toggleFav },
-            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tag', rank: 2, group: 1,
+            { id: 'group', label: T( 'contact.addToGroup' ), icon: 'tagPlus', rank: 2, group: 1,
               run: addToGroupDialog },
             { id: 'ungroup', label: T( 'contact.ungroup' ), icon: 'x', rank: 9, group: 1,
               where: () => view.indexOf( 'g:' ) === 0,
@@ -2476,6 +2444,7 @@
                 search:  () => { if( searchFold ) searchFold.open(); },
                 drag:    { text: ids => cardsOf( ids ).map( displayName ).join( '\n' ) }
             } );
+            NayiveUI.fitBar( document.querySelector( '#app .header' ), { more: topMenuItems } );
 
             document.getElementById( 'treeBtn' ).addEventListener( 'click', () => treeView.openSheet() );
         }
@@ -3008,20 +2977,17 @@
         let mergeModel = null;   // union preview backing the merge sheet
 
         //------------------------------------------------------------------------//
-        // SETTINGS SHEET  -  vCard files (import / export).
+        // THE ⋮  -  after the buttons that did not fit: Import / Export .vcf.
 
-        function wireSettingsSheet()
+        function topMenuItems()
         {
-            document.getElementById( 'settingsBtn'      ).addEventListener( 'click', () => openBackdrop( 'settingsBackdrop' ) );
-            document.getElementById( 'settingsCloseBtn' ).addEventListener( 'click', () => closeBackdrop( 'settingsBackdrop' ) );
-
-            document.getElementById( 'setExportBtn' ).addEventListener( 'click', exportVcf );
-            document.getElementById( 'setImportBtn' ).addEventListener( 'click', () =>
-            {
-                if( ! canSave() ) return;
-                closeBackdrop( 'settingsBackdrop' );     // the import's own result shows on the list
-                document.getElementById( 'importInput' ).click();
-            });
+            return [
+                { id: 'import', label: T( 'contact.importVcf' ), icon: 'upload', disabled: ! canSave(),
+                  run: () => { if( canSave() ) document.getElementById( 'importInput' ).click(); } },
+                // While picking, the selection's own Export (the picked cards) stands for it.
+                { id: 'export', label: T( 'contact.exportVcf' ), icon: 'download', run: exportVcf,
+                  hidden: !! ( browse && browse.ids().length ) }
+            ];
         }
 
         // `groups`: already found (an import just looked), so not scanned again.
@@ -3124,7 +3090,7 @@
                     rm.type = 'button';
                     rm.className = 'icon-btn sm danger';
                     rm.title = T( 'contact.removeFromGroup' );
-                    rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>';
+                    rm.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
                     rm.addEventListener( 'click', e =>
                     {
                         e.stopPropagation();
@@ -3661,7 +3627,6 @@
             wireList();
             wireAzRail();
 
-            wireSettingsSheet();
             wireFormPhoto();
 
             document.getElementById( 'importInput' ).addEventListener( 'change', function()

@@ -116,7 +116,10 @@
             var errBox = document.getElementById( 'error' );
             var submit = document.getElementById( 'submit' );
 
-            document.getElementById( 'user' ).focus();
+            // i18n.js hides the page until the dictionary is in, and a hidden
+            // field cannot take focus: focus once the page is shown.
+            var focusUser = function () { document.getElementById( 'user' ).focus(); };
+            NayiveI18n.ready.then( focusUser, focusUser );
 
             // Eye toggle: show / hide the password text.
             ( function ()

@@ -2203,13 +2203,17 @@ button { -webkit-touch-callout: none; }
 
 /* The save floppy before the sync plug (NayiveOffice.autosave): a readout, not
  * a control, in the plug's colours - red not saved yet, blue saving, green
- * saved. Its title says "Guardado 12:04" / "Borrador 12:04". Empty (no state)
- * until a document is open. */
-.saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); }
+ * saved; "here" = green with a blue dot: saved on this device, not sent yet
+ * (store.js PARKED SAVES). Its title says "Guardado 12:04" / "Borrador
+ * 12:04". Empty (no state) until a document is open. */
+.saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); position: relative; }
 .saved-at:not([data-state]) { display: none; }
 .saved-at svg            { width: 18px; height: 18px; }
 .saved-at[data-state="saving"] { color: var(--busy); }
-.saved-at[data-state="saved"]  { color: var(--ok); }
+.saved-at[data-state="saved"],
+.saved-at[data-state="here"]   { color: var(--ok); }
+.saved-at[data-state="here"]::after { content: ""; position: absolute; top: -1px; right: -3px; width: 7px; height: 7px;
+                                      border-radius: 50%; background: var(--busy); }
 
 .open-crumb              { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px;
                            font-size: 0.85rem; color: var(--text-dim); }

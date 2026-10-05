@@ -9,7 +9,7 @@ full list with functions and tests is docs/sealed-crud.md, kept local).
 Before changing a sealed file:
 1. Say so first, and why.
 2. Keep the change minimal.
-3. Afterwards run `node tools/data-safety-test/run.mjs` - it must end ALL GREEN.
+3. Afterwards ASK him, then run `node tools/data-safety-test/run.mjs` - it must end ALL GREEN.
    (`deploy.sh --all-tests` runs it too; plain `deploy.sh` skips it.)
 
 New code that writes user data goes through the sealed helpers

@@ -630,6 +630,7 @@ button.who { cursor: pointer; }
 }
 .ctx.out   { align-items: flex-end; }
 .ctx.in    { align-items: flex-start; }
+.ctx.at .ctx-box { position: absolute; }     /* right-click: placed at the pointer (compose.js openCtx) */
 .ctx-box   { display: flex; flex-direction: column; gap: 8px; max-width: min(92vw, 420px); }
 .ctx.out .ctx-box { align-items: flex-end; }
 .ctx .msg  { max-width: 100%; max-height: 40vh; overflow: hidden; pointer-events: none; }

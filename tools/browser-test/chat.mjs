@@ -1,7 +1,7 @@
-// chat.mjs - the Chat list on the shared item browser (no tree): a mouse
-// picks, side by side a click still opens the chat, one menu (pin, mute,
-// mark read, delete), the keys, Delete with Undo and no question (the server
-// keeps the chat until the Undo is gone); the open chat's bar (its actions
+// chat.mjs - the Chat list on the shared item browser (no tree): side by
+// side a click only opens the chat (Ctrl/Shift+click pick), one menu (pin, mute,
+// mark read, delete), the keys, Delete chat (one dialog, then Undo) and the
+// open chat's Delete all messages (Undo, no question); the open chat's bar (its actions
 // as buttons, one ⋮ for what does not fit); a window as narrow as a phone
 // (click picks, double-click opens); then a phone: tap opens, long-press picks.
 import { server, browser, ok, section, done, sleep, mouse, key, finger, menuRows, fitState } from "./lib.mjs";
@@ -37,11 +37,13 @@ ok( await c.evaluate( "document.querySelector( '#listHead .topbar-actions' ).fir
     "the list's header starts with the (hidden) selection group" );
 ok( await c.evaluate( `!! document.querySelector( '${ROW( CA )}.unread .badge' )` ), "Carmen's row shows its unread count" );
 await mouse( c, ROW( JA ), { dx: 160 } );
-ok( await sel() === JA && await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )} && ! document.getElementById( 'vConv' ).hidden` ),
-    "side by side, a click picks the chat AND opens it beside the list" );
-ok( await c.evaluate( "!document.getElementById('selActions').hidden && ! document.querySelector('#selActions .sel-count')" ), "the header group shows, no count chip" );
+ok( await sel() === "" && await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )} && ! document.getElementById( 'vConv' ).hidden` ),
+    "side by side, a click only opens the chat beside the list (picks nothing)" );
+ok( await c.evaluate( "document.getElementById('selActions').hidden" ), "…so the header shows no chat buttons (the open chat's bar has them)" );
 await mouse( c, ROW( LU ), { dx: 160, mods: 2 } );
-ok( await sel() === JA + "," + LU && await opened() === JA, "Ctrl+click adds one, and does not open it", [ await sel(), await opened() ] );
+ok( await c.evaluate( "!document.getElementById('selActions').hidden && ! document.querySelector('#selActions .sel-count')" ), "Ctrl+click picks: the header group shows, no count chip" );
+await mouse( c, ROW( JA ), { dx: 160, mods: 2 } );
+ok( await sel() === LU + "," + JA && await opened() === JA, "Ctrl+click adds one, and does not open it", [ await sel(), await opened() ] );
 ok( await c.evaluate( "document.querySelectorAll( '#rows .row.is-selected' ).length === 2" ), "the picked rows are painted" );
 await key( c, "Escape" );
 ok( await sel() === "" && await c.evaluate( "document.getElementById('selActions').hidden" ), "Esc clears; the group goes" );
@@ -139,26 +141,45 @@ ok( await c.until( "[ ...document.querySelectorAll( '.intro-btns b' ) ].some( b 
 await key( c, "Escape" );
 await c.until( "! document.querySelector( '.intro-btns' )?.offsetParent" );
 
-section( "CHAT · DELETE: AT ONCE, UNDO, NO QUESTION" );
+section( "CHAT · DELETE CHAT (LIST) vs DELETE ALL MESSAGES (OPEN CHAT)" );
+const sheetOn = "!! document.querySelector( '.sheet-backdrop.open' )";
+const pickDel = "document.querySelector( '.sheet-backdrop.open .del-opt button' ).click(); true";
 ok( ( await onServer( JA ) ).includes( "para borrar" ), "Javi's chat has its message on the server" );
 await c.evaluate( "NayiveChat.browse.clear(); true" );
 await mouse( c, ROW( JA ), { dx: 160, mods: 2 } );
 await key( c, "Delete" );
-ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ), "Del: the chat leaves the list at once" );
-ok( await opened() === LU && await c.evaluate( "! document.getElementById( 'vConv' ).hidden" ), "…and the chat open beside the list stays open", await opened() );
-ok( await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "…no question, an Undo" );
-ok( ( await onServer( JA ) ).includes( "para borrar" ), "…the server still has it while the Undo shows" );
-await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
-ok( await c.until( `!! document.querySelector( '${ROW( JA )}' )` ) && ( await onServer( JA ) ).includes( "para borrar" ), "Undo brings it back, nothing lost" );
-await sleep( 300 );
-ok( ( await onServer( JA ) ).includes( "para borrar" ) && ! ( await conv( JA ) ).hidden, "…and the server never cleared it" );
+ok( await c.until( sheetOn ) && await c.evaluate( "document.querySelectorAll( '.sheet-backdrop.open .del-opt' ).length === 1 && /messages/.test( document.querySelector( '.sheet-backdrop.open .del-opt .hint' ).textContent )" ),
+    "Del: a dialog with one choice that says the messages go too" );
+await key( c, "Escape" );
+ok( await c.until( "! document.querySelector( '.sheet-backdrop.open' )" ) && await c.evaluate( `!! document.querySelector( '${ROW( JA )}' )` ), "…Esc closes it, nothing gone" );
 await mouse( c, ROW( JA ), { dx: 160, button: "right" } );
 await c.evaluate( "document.querySelector('.item-menu [data-act=del]').click(); true" );
-ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ), "the menu's Delete chat: gone from the list" );
+ok( await c.until( sheetOn ), "the menu's Delete chat: the same dialog" );
+await c.evaluate( pickDel );
+ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ), "…its button: the chat leaves the list at once" );
+ok( await opened() === LU && await c.evaluate( "! document.getElementById( 'vConv' ).hidden" ), "…and the chat open beside the list stays open", await opened() );
+ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ), "…an Undo" );
+ok( ( await conv( JA ) ).id === JA, "…the server still has the chat while the Undo shows" );
+await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+ok( await c.until( `!! document.querySelector( '${ROW( JA )}' )` ) && ( await onServer( JA ) ).includes( "para borrar" ), "Undo brings it back, nothing lost" );
+await mouse( c, ROW( JA ), { dx: 160 } );
+await c.until( `NayiveChat.S.open === ${JSON.stringify( JA )}` );
+ok( await c.evaluate( "document.getElementById( 'convDeleteBtn' ).title === 'Delete all messages'" ), "the open chat's trash: \"Delete all messages\"" );
+await c.evaluate( "document.getElementById( 'convDeleteBtn' ).click(); true" );
+ok( await c.until( `! document.querySelector( '${ROW( JA )}' )` ) && await c.evaluate( "! document.querySelector( '.sheet-backdrop.open' )" ), "…clears at once, no question" );
+ok( await c.until( "!! document.querySelector( '#toast .toast-undo' )" ) && ( await onServer( JA ) ).includes( "para borrar" ), "…an Undo; the server still has the message" );
+await c.evaluate( "document.querySelector( '#toast .toast-undo' ).click(); true" );
+ok( await c.until( `!! document.querySelector( '${ROW( JA )}' )` ), "Undo brings it back" );
+await sleep( 300 );
+ok( ( await onServer( JA ) ).includes( "para borrar" ) && ! ( await conv( JA ) ).hidden, "…and the server never cleared it" );
+await c.evaluate( "NayiveChat.browse.clear(); true" );
+await mouse( c, ROW( JA ), { dx: 160, mods: 2 } );
+await key( c, "Delete" );
+await c.until( sheetOn );
+await c.evaluate( pickDel );
 await c.until( "!! document.querySelector( '#toast .toast-undo' )" );
 await c.evaluate( "NayiveUI.undoSettle(); true" );
-ok( await waitFor( async () => ! ( await onServer( JA ) ).includes( "para borrar" ) ), "the Undo gone: cleared on the server (for me only)", await onServer( JA ) );
-ok( await waitFor( async () => ( await conv( JA ) ).hidden === true ), "…the chat is hidden for me until somebody writes" );
+ok( await waitFor( async () => ! ( await conv( JA ) ).id ), "the Undo gone: Javi and his chat are gone on the server" );
 
 section( "CHAT · A PERSON'S PAGE (BY LINK): UNCHANGED" );
 const g = await c.tab( "/c/" + carmen.token + "/" );

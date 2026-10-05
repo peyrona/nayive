@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-89501ebb7e75";
+var CACHE_VERSION = "nayive-01a6586ecdb0";
 /* @end */
 
 /* @generated:precache */
@@ -169,6 +169,7 @@ var PRECACHE_SHELL = [
     "shared/menubar.js",
     "shared/office.js",
     "shared/photo.js",
+    "shared/play-on.js",
     "shared/store.js",
     "shared/theme.css",
     "shared/theme.js",

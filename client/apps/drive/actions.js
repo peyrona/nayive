@@ -5,6 +5,35 @@
 "use strict";
 
 //------------------------------------------------------------------------//
+// CHANGES STILL ON A DEVICE  (shared/store.js PARKED SAVES)
+//
+// Before Drive deletes, moves or renames: a document with changes saved on
+// ANOTHER device and not sent yet is asked about - going on tells that
+// device to drop them (it never brings the file or its old name back);
+// "Forget the warning" does too, and does nothing here. Changes parked on
+// THIS device go up first, so they travel with the file - to the bin or to
+// its new place. False = stop.
+async function parkedFirst( paths )
+{
+    if( ! window.NayiveStore || ! NayiveStore.pendingElsewhere ) return true;
+    let list = [];
+    try { list = await NayiveStore.pendingElsewhere( paths ); } catch( e ) {}
+    if( list.length )
+    {
+        const one = paths.length === 1 && list.every( function( m ) { return m.path === paths[0]; } );
+        const r = await NayiveUI.confirm( {
+            title: T( 'ui.park.title' ),
+            body: TF( 'ui.park.body', { name: one ? paths[0].split( '/' ).pop() : TF( 'drive.nItems', { n: paths.length } ),
+                                        list: NayiveStore.pendingText( list ) } ),
+            confirm: T( 'ui.park.goOn' ), other: T( 'ui.park.forget' ), otherIcon: 'eyeoff' } );
+        if( r === true || r === 'other' ) try { await NayiveStore.dismissPending( paths ); } catch( e ) {}
+        if( r !== true ) return false;
+    }
+    try { await withBusy( appStore().unpark( paths ) ); } catch( e ) {}
+    return true;
+}
+
+//------------------------------------------------------------------------//
 // ACTIONS: RENAME
 
 // The item the open dialog renames, kept as it opened: the picks may change
@@ -33,10 +62,11 @@ async function confirmRename()
     renameTarget = null;
 
     setBackdrop( 'renameBackdrop', false );
-    setStatus( T( 'drive.renaming' ) );
 
     const parent  = NayiveMedia.dirOf( oldPath );
     const newPath = joinPath( parent, newName );
+    if( newPath !== oldPath && ! await parkedFirst( [ oldPath ] ) ) return;
+    setStatus( T( 'drive.renaming' ) );
 
     // What the Undo walks back (undoMoves, move-copy.js): the rename, and
     // the bin ids of the item a "Replace" moved out of the way.
@@ -443,6 +473,7 @@ async function confirmDelete()
     deleteTargets = [];
     deleteBusy    = true;
 
+    if( ! await parkedFirst( targets ) ) { deleteBusy = false; return; }
     setStatus( T( 'drive.movingToTrash' ) );
 
     // `sent`: the paths asked so far that (may) have gone - counted the

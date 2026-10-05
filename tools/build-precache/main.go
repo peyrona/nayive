@@ -49,7 +49,7 @@ var appGlobs = []string{"*.html", "manifest.json", "*.js", "*.css", "lib/**/*", 
 
 var shared = []string{"shared/theme.css", "shared/app.css", "shared/theme.js", "shared/store.js",
 	"shared/gum-api.js", "shared/i18n.js", "shared/ui.js", "shared/desk-rule.js", "shared/menubar.js",
-	"shared/ical.js", "shared/media.js", "shared/vcard.js",
+	"shared/ical.js", "shared/media.js", "shared/play-on.js", "shared/vcard.js",
 	"shared/photo.js", "shared/office.js", "shared/crypt.js", "shared/basemap.js", "shared/tz-geo.json",
 	"shared/locker.js", "shared/lockers/clock.js", "shared/lockers/matrix.js", "shared/lockers/life.js", "shared/lockers/culture.js", "shared/lockers/culture-settings.js", "shared/lockers/science.js",
 	"shared/lib/ical_v2.2.1.esm.min.js",

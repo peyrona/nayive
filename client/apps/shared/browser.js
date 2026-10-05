@@ -81,6 +81,7 @@
         star:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2.8 14.9 8.7 21.4 9.6 16.7 14.2 17.8 20.6 12 17.6 6.2 20.6 7.3 14.2 2.6 9.6 9.1 8.7 12 2.8"></polygon></svg>',
         external:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>',
         tag:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>',
+        tagPlus:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 8l-6-6H2v8l6 6"></path><line x1="6.5" y1="6.5" x2="6.51" y2="6.5"></line><line x1="18" y1="13" x2="18" y2="21"></line><line x1="14" y1="17" x2="22" y2="17"></line></svg>',
         users:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
         pin:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"></path></svg>',
         bellOff:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.89 17.89 0 0 1 18 8"></path><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"></path><path d="M18 8a6 6 0 0 0-9.33-5"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>',
@@ -714,6 +715,9 @@
     //            Select all is added at the end on its own.
     //   open:    ( id, ev ) => {}  double-click, Enter, a tap
     //   preview: ( id ) => {}      a plain click on one row (eMail's wide view)
+    //   clickOpens: ( id, ev ) => bool   true: a plain mouse click opens the
+    //            row (cfg.open) and picks nothing, as a tap does - Chat side
+    //            by side, whose open chat has its own bar (no doubled buttons)
     //   onSelect:( ids ) => {}     after every change of the selection
     //   active:  () => bool        false: the keys are not ours now (a sub-view)
     //   grid:    () => bool        rows flow in a grid (← → move too)
@@ -797,6 +801,13 @@
             sel = [];
             anchor = null;
             changed();
+        }
+
+        // Every row on screen picked: "Select all" turns into "Unselect all".
+        function allPicked()
+        {
+            var shown = idsShown();
+            return shown.length > 0 && shown.every( function ( id ) { return sel.indexOf( id ) >= 0; } );
         }
 
         function selectAll()
@@ -926,12 +937,13 @@
             var fitter = fitBar( head );
             if( ! n ) { bar.hidden = true; bar.innerHTML = ""; if( fitter ) fitter.fit(); return; }
 
-            var ids = sel.slice();
+            var ids = sel.slice(), all = allPicked();
+            var allLbl = all ? "ui.unselectAll" : "ui.selectAll";     // the button toggles
             var html = ( cfg.count === false ? "" :
                        '<button type="button" class="icon-btn sel-count" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
                        '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + "<span>" + n + "</span></button>" ) +
-                       '<button type="button" class="icon-btn" data-sel="all" data-rank="4" title="' + esc( t( "ui.selectAll" ) + " (" + keyLabel( "Ctrl+A" ) + ")" ) +
-                       '" aria-label="' + esc( t( "ui.selectAll" ) ) + '">' + G.checkAll + "</button>";
+                       '<button type="button" class="icon-btn" data-sel="all" data-rank="4" title="' + esc( t( allLbl ) + " (" + keyLabel( all ? "Esc" : "Ctrl+A" ) + ")" ) +
+                       '" aria-label="' + esc( t( allLbl ) ) + '">' + G.checkAll + "</button>";
             var g = null;
             actions.map( function ( a, i ) { return { a: a, i: i }; } )
                    .filter( function ( x ) { var a = x.a; return a.id !== "open" && ! a.noBar && here( a ) && ! ( a.hideOff && ! enabled( a, ids ) ); } )
@@ -962,7 +974,7 @@
             var b = e.target.closest( "button" );
             if( ! b || b.disabled ) return;
             if( b.dataset.sel === "clear" ) clear();
-            else if( b.dataset.sel === "all" ) selectAll();
+            else if( b.dataset.sel === "all" ) { if( allPicked() ) clear(); else selectAll(); }
             else if( b.dataset.selAct )
             {
                 var a = actions.filter( function ( x ) { return x.id === b.dataset.selAct; } )[ 0 ];
@@ -1033,6 +1045,12 @@
             var mod = UI.isMac ? e.metaKey : e.ctrlKey;
             if( e.shiftKey ) range( id, mod );
             else if( mod ) toggle( id );
+            else if( cfg.clickOpens && cfg.clickOpens( id, e ) )
+            {
+                if( sel.length ) { sel = []; changed(); }
+                cursor = anchor = id;          // a Shift+click next picks from here
+                if( cfg.open ) cfg.open( id, e );
+            }
             else
             {
                 set( [ id ] );

@@ -189,6 +189,7 @@
         head.appendChild( C.btn( "back", "chat.back", C.back, "back-btn" ) );
         var av = C.ringIfOnline( C.avatar( c.id, c.name ), c.id );
         av.style.cursor = "pointer";
+        av.title = T( "chat.chatOptions" );
         av.addEventListener( "click", function () { C.openInfo(); } );   // the picture opens Info too, like the name
         head.appendChild( av );
         // (Auto-delete - one number for every chat - sits on the list's
@@ -216,8 +217,7 @@
                      [ "convPinBtn", "pin", c.pin ? "chat.unpin" : "chat.pin", function () { C.setPref( { pin: ! c.pin } ); }, "chat.helpPin", 4 ] ]
             .concat( ct && ! ct.user ? [ [ "convLinkBtn", "link", "chat.theirLink", function () { C.showLink( ct ); }, "chat.helpTheirLink", 8 ],   // a Nayive user has no link
                                          [ "convNewLinkBtn", "refresh", "chat.newLink", function () { C.newLink( ct ); }, "chat.helpNewLink", 9 ] ] : [],
-                     [ [ "convDeleteBtn", "trash", "chat.delete", function () { C.deleteDialog( c, ct ); },
-                         C.owns( c ) ? "chat.helpDelete" : "chat.deleteChatAsk", 7, "danger" ] ] );
+                     [ [ "convDeleteBtn", "trash", "chat.clearMsgs", function () { C.clearChat( c ); }, "chat.deleteChatAsk", 7, "danger" ] ] );
         if( c.kind === "d" && S.callsOn )
             list.unshift( [ "convCallBtn", "phone", "chat.voiceCall", function () { C.startCall( false ); }, "chat.helpVoiceCall", 1 ],
                           [ "convVideoBtn", "video", "chat.videoCall", function () { C.startCall( true ); }, "chat.helpVideoCall", 2 ] );

@@ -72,12 +72,18 @@ ok( await c.evaluate( "! document.querySelector('#contactList [data-more], #tree
 // Share is there only where the browser can share files (headless may not).
 const SHARE = await c.evaluate( "canShareFiles()" );
 let fs = await fitState( c );
-ok( fs.acts.join() === [ "edit", "fav", "group", SHARE && "share", "export", "delete" ].filter( Boolean ).join() && ! fs.out.length && ! fs.more && ! fs.crowded,
-    "wide: every action is a button, in menu order (no Merge for one, no Remove from group outside one); no ⋮", fs );
+ok( fs.acts.join() === [ "edit", "fav", "group", SHARE && "share", "export", "delete" ].filter( Boolean ).join() && ! fs.out.length && fs.rows.join() === "import" && ! fs.crowded,
+    "wide: every action is a button, in menu order (no Merge for one, no Remove from group outside one); the ⋮ holds only Import (the picked cards' Export stands for Export all)", fs );
 await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
 fs = await fitState( c );
-ok( fs.acts.includes( "merge" ) && ! fs.out.length && ! fs.more, "…two picked: Merge shows too", fs );
+ok( fs.acts.includes( "merge" ) && ! fs.acts.includes( "edit" ) && ! fs.out.length && fs.rows.join() === "import", "…two picked: Merge shows too, Edit leaves", fs );
 await mouse( c, ROW( "a" ), { dx: 120, mods: 2 } );
+const ALL = "#selActions [data-sel=all]";
+await mouse( c, ALL );
+ok( await c.until( "browse.ids().length === document.querySelectorAll('#contactList .contact-row').length" ) &&
+    await c.evaluate( "document.querySelector('" + ALL + "').getAttribute('aria-label') === 'Unselect all'" ), "Select all picks every row and turns into Unselect all" );
+await mouse( c, ALL );
+ok( await c.until( "browse.ids().length === 0" ), "…Unselect all drops them all" );
 await c.evaluate( "browse.clear(); true" );
 await mouse( c, "#contactList .letter-head", { dx: 40, button: "right" } );
 rows = await menuRows( c );
@@ -194,6 +200,7 @@ ok( ! fs.crowded && fs.more && [ "group", "delete" ].every( a => fs.acts.include
 const ORDER = [ "edit", "fav", "group", "share", "export", "merge", "delete" ];
 ok( fs.out.length && fs.rows.filter( r => r !== "all" ).slice( 0, fs.out.length ).join() === fs.out.join() && fs.out.join() === ORDER.filter( a => fs.out.includes( a ) ).join(),
     "…its ⋮ lists the hidden actions in toolbar order (Select all first, when hidden), then the hidden tools", fs );
+ok( fs.rows.filter( r => r === "export" ).length <= 1 && fs.rows.includes( "import" ), "…Export shows once (the picked cards'), Import is there", fs );
 await finger( c, ".header .fit-more" );
 let mrows = await menuRows( c );
 ok( mrows && mrows.some( r => r.act === fs.out[ 0 ] ) && mrows.some( r => r.act === "addBtn" ), "the ⋮ opens with them", mrows );

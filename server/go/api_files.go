@@ -23,6 +23,7 @@ package main
 //	       (nothing)                   the whole tree
 //	POST   ?old=&new=                  rename / move
 //	       ?from=&new=                 copy (copy.go)
+//	       ?from=&bak=1                the file's .bak/ copy, replaced (copy.go)
 //	       ?trash=restore|empty        undelete / empty (&ids=a;b: only those)
 //	PUT    ?type=dir&name=&parent=     mkdir
 //	       ?file=<path>                upload (If-None-Match: * = only a new file;
@@ -98,6 +99,12 @@ func (s *Server) apiFiles(w http.ResponseWriter, r *http.Request) {
 	// ---- PUT ?type=dir&name=&parent=  -> mkdir ----------------------------
 	if r.Method == http.MethodPut && q.Get("type") == "dir" {
 		s.filesMkdir(w, r, role, user, q)
+		return
+	}
+
+	// ---- POST ?from=&bak=1  -> the file's .bak, replaced (copy.go) ---------
+	if r.Method == http.MethodPost && q.Has("from") && q.Get("bak") == "1" {
+		s.filesBak(w, r, role, user, q)
 		return
 	}
 

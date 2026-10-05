@@ -2161,6 +2161,10 @@
                 // a page that is on its way out. See NayiveI18n.adopt.
                 if( window.NayiveI18n && NayiveI18n.adopt && NayiveI18n.adopt( me.lang ) ) return;
 
+                // What an editor closed meanwhile left parked on this device
+                // goes up now (shared/store.js PARKED SAVES).
+                if( window.NayiveStore && NayiveStore.sendLeft ) NayiveStore.sendLeft();
+
                 document.getElementById( 'logoutBtn' ).title = NayiveUI.tf( 'launcher.logoutUser', { user: me.user } );
 
                 // No timezone on this account yet: adopt THIS browser's, once.

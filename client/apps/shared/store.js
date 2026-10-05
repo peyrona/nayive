@@ -181,6 +181,41 @@
  * calendar.ics stays a plain .ics the reminder service can read. A body that is
  * small, binary, or on a browser without CompressionStream just goes up raw -
  * see gzipBody().
+ *
+ * ---------------------------------------------------------------------------
+ * PARKED SAVES  (2026-10-05, docs/upload-less-plan.md)
+ *
+ * Every office autosave sent the whole .docx up again: megabytes with
+ * pictures. write( path, body, { park: true } ) of more than PARK_MIN bytes
+ * going up (Text: once gzipped) is stored in the outbox as usual, flagged
+ * `park`, and NOT sent: unpark( path ) sends it (Ctrl+S, a closed window, the
+ * editor's own 10 / 60 min). The page holds a shared Web Lock
+ * "nayive-park:<who>:<path>" from BEFORE the entry is stored until
+ * releasePark( path ) or its end; a flush from any page skips a parked entry
+ * whose lock is held, and sends one whose page is gone (the launcher and the
+ * desktop flush at boot). settle() does not count parked entries: the plug
+ * stays calm. No Web Locks, a failed storage, a `direct` or create-only save:
+ * never parked.
+ *
+ * MARKS. The first parked save of a path puts "changes waiting on device X
+ * since H" in data/office/pending.json ({ marks: [ { path, device, name, at,
+ * state } ] }); the entry is then `marked`. Another device asks before it
+ * opens, deletes or moves the file (pendingElsewhere), and the user's "go on"
+ * turns the mark "dismissed" (dismissPending). Before a marked entry goes up
+ * its mark is read: dismissed and no page holds the lock = dropped in
+ * silence, no PUT (the user chose); dismissed with the page open = held back
+ * as a conflict, told with why "dismissed". A 412 on a parked or marked
+ * entry with no page open puts it beside the file as "<name> (<device>,
+ * <time>).<ext>", create-only - never the old name again. Every way out of
+ * the entry (sent, dropped, set aside, forget, 403 / 409, a sign-out that
+ * clears it) takes the mark away; what could not be said is kept in
+ * localStorage and said at the next write. Marks older than MARK_DAYS are
+ * ignored.
+ *
+ * BAK. { bak: true }: before the PUT, whoever sends it asks the server to copy
+ * the file to <dir>/.bak/<name> (POST ?from=&bak=1, checked against the
+ * entry's version) - no download, no upload. Kept through a replace, so a
+ * later save of the same page does not lose it.
  */
 ( function ()
 {
@@ -197,6 +232,9 @@
                                     // below ~one packet, compression is a net loss
     var KEEP_IDS          = 50;     // ids an entry remembers it took the place of (VERSIONS)
     var KEEP_ANC          = 20;     // versions an entry remembers its body descends from
+    var PARK_MIN          = 100 * 1024;   // bytes going up above which a save may be parked (PARKED SAVES)
+    var MARKS             = "data/office/pending.json";
+    var MARK_DAYS         = 30;     // a mark this old is ignored, and goes at the next write
 
     // Page-wide, shared by every store on the page (the outbox is shared too):
     var inflight = {};   // path -> the PUT being sent for it; one at a time per path
@@ -747,12 +785,14 @@
     {
         if( m.who && ME && m.who !== ME ) return;
         if( ! holds( held[ m.path ], { id: m.id } ) ) return;
-        conflictHub.forEach( function ( fn ) { try { fn( m.path ); } catch ( e ) {} } );
+        conflictHub.forEach( function ( fn ) { try { fn( m.path, m.why ); } catch ( e ) {} } );
     }
 
-    function toldConflict( path, entry )
+    // why: "dismissed" = another device went on without these changes
+    // (PARKED SAVES); nothing = saved from elsewhere since.
+    function toldConflict( path, entry, why )
     {
-        var m = { path: path, who: entry.who || ME, id: idOf( entry ) };
+        var m = { path: path, who: entry.who || ME, id: idOf( entry ), why: why || "" };
         heardConflict( m );
         if( ! channel ) return;
         try { channel.postMessage( Object.assign( { t: "conflict" }, m ) ); }
@@ -783,6 +823,271 @@
     }
 
     //------------------------------------------------------------------------//
+    // PARKED SAVES  (see the top): this device, the page's park locks, and
+    // the marks in data/office/pending.json.
+
+    // This browser, for the marks: a random id kept in localStorage. "" =
+    // no localStorage: nothing is parked (no mark could say whose it is).
+    var DEVICE = ( function ()
+    {
+        try
+        {
+            var id = localStorage.getItem( "nayive-office-device" );
+            if( ! id ) { id = newId(); localStorage.setItem( "nayive-office-device", id ); }
+            return id;
+        }
+        catch ( e ) { return ""; }
+    } )();
+
+    // The name a person knows it by: the enrolled phone's own (index.html,
+    // "nayive-device"), else "<system> · <browser>" - no guess at phone or
+    // tablet (Chrome no longer gives the model).
+    function deviceName()
+    {
+        try
+        {
+            var d = JSON.parse( localStorage.getItem( "nayive-device" ) || "null" );
+            if( d && d.n ) return String( d.n );
+        }
+        catch ( e ) {}
+        var ua = navigator.userAgent || "";
+        var os = /Android/.test( ua ) ? "Android" : /iPhone/.test( ua ) ? "iPhone"
+               : /iPad/.test( ua ) || ( /Macintosh/.test( ua ) && navigator.maxTouchPoints > 1 ) ? "iPad"
+               : /Windows/.test( ua ) ? "Windows" : /CrOS/.test( ua ) ? "ChromeOS"
+               : /Mac OS X|Macintosh/.test( ua ) ? "Mac" : /Linux/.test( ua ) ? "Linux" : "";
+        var br = /Edg\//.test( ua ) ? "Edge" : /OPR\//.test( ua ) ? "Opera" : /SamsungBrowser/.test( ua ) ? "Samsung Internet"
+               : /Firefox\/|FxiOS/.test( ua ) ? "Firefox" : /Chrome\/|CriOS/.test( ua ) ? "Chrome" : /Safari\//.test( ua ) ? "Safari" : "";
+        return [ os, br ].filter( Boolean ).join( " · " ) || "?";
+    }
+
+    function canPark() { return !! DEVICE && !! ( navigator.locks && navigator.locks.request && navigator.locks.query ); }
+
+    function parkName( who, path ) { return "nayive-park:" + ( who || "" ) + ":" + path; }
+
+    var parkLocks = {};   // path -> this page's park lock: a promise of its release() (null: not had)
+
+    // Shared - two tabs of one document hold it together - and never waited
+    // for: true when this page holds it now.
+    function takePark( path )
+    {
+        if( ! parkLocks[ path ] )
+        {
+            var p = parkLocks[ path ] = new Promise( function ( res )
+            {
+                try
+                {
+                    navigator.locks.request( parkName( ME, path ), { mode: "shared", ifAvailable: true }, function ( lock )
+                    {
+                        if( ! lock ) { res( null ); return null; }
+                        return new Promise( function ( rel ) { res( rel ); } );
+                    } ).catch( function () { res( null ); } );
+                }
+                catch ( e ) { res( null ); }
+            } );
+            p.then( function ( rel ) { if( ! rel && parkLocks[ path ] === p ) delete parkLocks[ path ]; } );
+        }
+        return parkLocks[ path ].then( function ( rel ) { return !! rel; } );
+    }
+
+    function releasePark( path )
+    {
+        var p = parkLocks[ path ];
+        delete parkLocks[ path ];
+        if( p ) p.then( function ( rel ) { if( rel ) rel(); } );
+    }
+
+    // The park locks some page of this browser holds now, by name; null =
+    // not known (then every parked entry counts as open).
+    async function heldParks()
+    {
+        try
+        {
+            var q = await navigator.locks.query(), out = {};
+            ( q.held || [] ).forEach( function ( l ) { if( String( l.name ).indexOf( "nayive-park:" ) === 0 ) out[ l.name ] = true; } );
+            return out;
+        }
+        catch ( e ) { return null; }
+    }
+
+    function isOpen( locks, e ) { return ! locks || !! locks[ parkName( e.who || ME, e.path ) ]; }
+
+    // ---- the marks ----------------------------------------------------------
+
+    function marksUrl() { return window.location.origin + "/api/files?file=" + encodeURIComponent( MARKS ); }
+
+    function freshMark( m ) { return !! m && typeof m.path === "string" && Date.now() - ( +m.at || 0 ) < MARK_DAYS * 86400000; }
+
+    function under( m, paths ) { return paths.some( function ( p ) { return m.path === p || m.path.indexOf( p + "/" ) === 0; } ); }
+
+    // pending.json as the server has it: { ok, list, tag, none } (none = no
+    // file yet). Not ok = not read: status 0 offline, 401 signed out...
+    async function readMarks()
+    {
+        try
+        {
+            var r = await fetch( marksUrl(), { method: "GET", cache: "no-store" } );
+            if( r.status === 404 ) return { ok: true, list: [], tag: null, none: true };
+            if( ! r.ok || r.headers.get( "X-Nayive-Copy" ) ) return { ok: false, status: r.ok ? 0 : r.status };
+            var j = null;
+            try { j = JSON.parse( await r.text() ); } catch ( e ) {}   // not ours to keep: rewritten whole
+            return { ok: true, tag: strongTag( r.headers.get( "ETag" ) ),
+                     list: j && Array.isArray( j.marks ) ? j.marks.filter( function ( m ) { return m && typeof m.path === "string"; } ) : [] };
+        }
+        catch ( e ) { return { ok: false, status: 0 }; }
+    }
+
+    // Read, changed by fn( list ) -> the list to write (null = nothing to
+    // change), written back checked against what was read - again when
+    // another device wrote in between. Marks too old go on the way. Resolves
+    // the list as it is now, or null when it could not be done.
+    async function changeMarks( fn )
+    {
+        if( ME && whoNow() && whoNow() !== ME ) return null;   // another account signed in: its file
+        for( var i = 0; i < 4; i++ )
+        {
+            var got = await readMarks();
+            if( ! got.ok ) return null;
+            var list = fn( got.list.filter( freshMark ).map( function ( m ) { return Object.assign( {}, m ); } ) );
+            if( ! list ) return got.list.filter( freshMark );
+            var h = { "Content-Type": "application/json" };
+            if( got.tag )       h[ "If-Match" ] = got.tag;
+            else if( got.none ) h[ "If-None-Match" ] = "*";
+            if( ME )            h[ "X-Nayive-User" ] = ME;
+            try
+            {
+                var r = await fetch( marksUrl(), { method: "PUT", headers: h, body: JSON.stringify( { marks: list } ) } );
+                if( r.ok ) return list;
+                if( r.status !== 412 ) return null;
+            }
+            catch ( e ) { return null; }
+        }
+        return null;
+    }
+
+    // What this device still has to say there, per account (a sign-out
+    // leaves it for the next sign-in): path -> { at } "changes waiting here
+    // since at", or 0 "none any more". The latest word wins.
+    function owedKey( who ) { return "nayive-park-marks:" + ( who || "" ); }
+
+    function owedOf( who )
+    {
+        try { return JSON.parse( localStorage.getItem( owedKey( who ) ) || "{}" ) || {}; }
+        catch ( e ) { return {}; }
+    }
+
+    function owe( path, want, who )
+    {
+        try
+        {
+            var o = owedOf( who || ME );
+            o[ path ] = want;
+            localStorage.setItem( owedKey( who || ME ), JSON.stringify( o ) );
+        }
+        catch ( e ) {}
+    }
+
+    // Says what is owed, one write at a time. Resolves the marks as written,
+    // or null (not reached: said again next time).
+    var marksQ = Promise.resolve();
+    function syncMarks()
+    {
+        var run = marksQ.then( async function ()
+        {
+            var o = owedOf( ME ), keys = Object.keys( o );
+            if( ! DEVICE || ! keys.length ) return null;
+            var list = await changeMarks( function ( l )
+            {
+                keys.forEach( function ( p )
+                {
+                    var mine = function ( m ) { return m.device === DEVICE && m.path === p; };
+                    var had  = l.filter( mine )[ 0 ];
+                    if( o[ p ] && had && had.state === "pending" ) return;
+                    l = l.filter( function ( m ) { return ! mine( m ); } );
+                    if( o[ p ] ) l.push( { path: p, device: DEVICE, name: deviceName(), at: o[ p ].at || Date.now(), state: "pending" } );
+                } );
+                return l;
+            } );
+            if( list )
+            {
+                var now = owedOf( ME );
+                keys.forEach( function ( p ) { if( JSON.stringify( now[ p ] ) === JSON.stringify( o[ p ] ) ) delete now[ p ]; } );
+                try { localStorage.setItem( owedKey( ME ), JSON.stringify( now ) ); } catch ( e ) {}
+            }
+            return list;
+        } );
+        marksQ = run.catch( function () {} );
+        return run;
+    }
+
+    // The save of `path` is over (sent, dropped, set aside, forgotten): its
+    // mark goes - only for an entry that was parked or marked, or one whose
+    // mark is still owed.
+    function unmark( path, e )
+    {
+        var who = ( e && e.who ) || ME;
+        if( ! ( e && ( e.marked || e.park ) ) && ! ( path in owedOf( who ) ) ) return Promise.resolve( null );
+        owe( path, 0, who );
+        return who === ME ? syncMarks() : Promise.resolve( null );
+    }
+
+    // OTHER devices' marks on `paths` (a path, or a list; a folder counts
+    // for everything in it): [ { path, device, name, at } ]. [] when none -
+    // or when pending.json cannot be read.
+    async function pendingElsewhere( paths )
+    {
+        paths = [].concat( paths || [] );
+        if( ! paths.length || ( ME && whoNow() && whoNow() !== ME ) ) return [];
+        var got = await readMarks();
+        if( ! got.ok ) return [];
+        return got.list.filter( function ( m ) { return freshMark( m ) && m.device !== DEVICE && m.state === "pending" && under( m, paths ); } )
+                       .map( function ( m ) { return { path: m.path, device: m.device, name: m.name || "?", at: m.at }; } );
+    }
+
+    // The user went on anyway: those marks are "dismissed" - their device
+    // drops its changes when it next tries to send them. True when written.
+    async function dismissPending( paths )
+    {
+        paths = [].concat( paths || [] );
+        return !! await changeMarks( function ( l )
+        {
+            l.forEach( function ( m ) { if( m.device !== DEVICE && m.state === "pending" && under( m, paths ) ) m.state = "dismissed"; } );
+            return l;
+        } );
+    }
+
+    // Those marks as lines for the question: "• Android · Chrome, since
+    // today 18:40" - and the file's name when they are on more than one.
+    function pendingText( list )
+    {
+        var T = window.NayiveUI && NayiveUI.tf ? NayiveUI : null, now = new Date();
+        var many = ( list || [] ).some( function ( m ) { return m.path !== list[ 0 ].path; } );
+        return ( list || [] ).map( function ( m )
+        {
+            var d    = new Date( +m.at || 0 );
+            var hm   = ( "0" + d.getHours() ).slice( -2 ) + ":" + ( "0" + d.getMinutes() ).slice( -2 );
+            var when = d.toDateString() === now.toDateString() ? ( T ? T.tf( "ui.park.today", { time: hm } ) : hm )
+                     : d.toLocaleDateString( T && T.lang ? T.lang() : undefined ) + " " + hm;
+            return "• " + ( T ? T.tf( "ui.park.since", { device: m.name, when: when } ) : m.name + ", " + when ) +
+                   ( many ? " · " + String( m.path ).split( "/" ).pop() : "" );
+        } ).join( "\n" );
+    }
+
+    // "carta.docx" -> "carta (Linux · Firefox, 18.40).docx": where a parked
+    // save goes when its file changed or went (no page open).
+    function asideName( path, at )
+    {
+        var base = String( path ).split( "/" ).pop();
+        var dot  = base.lastIndexOf( "." );
+        var name = dot > 0 ? base.slice( 0, dot ) : base, ext = dot > 0 ? base.slice( dot ) : "";
+        var d    = new Date( at || Date.now() );
+        var time = ( "0" + d.getHours() ).slice( -2 ) + "." + ( "0" + d.getMinutes() ).slice( -2 );
+        var v    = { name: name, device: deviceName(), time: time, ext: ext };
+        try { if( window.NayiveUI && NayiveUI.tf ) { var s = NayiveUI.tf( "ui.park.copyName", v ); if( s && s.indexOf( "ui.park" ) !== 0 ) return s; } }
+        catch ( e ) {}
+        return name + " (" + v.device + ", " + time + ")" + ext;
+    }
+
+    //------------------------------------------------------------------------//
     // THE STORE
 
     function createStore( opts )
@@ -804,7 +1109,7 @@
         // saves of the old name are its own before it reads anything.
         var dbPromise = retagged.then( openDb );
 
-        conflictHub.push( function ( p ) { conflictFns.forEach( function ( fn ) { try { fn( p ); } catch ( e ) {} } ); } );
+        conflictHub.push( function ( p, why ) { conflictFns.forEach( function ( fn ) { try { fn( p, why ); } catch ( e ) {} } ); } );
 
         // Best-effort: ask the browser not to evict our cache. Harmless where
         // unsupported; on iOS this is what keeps an installed app's data past a
@@ -871,8 +1176,9 @@
             var db      = await dbPromise;
             var here    = Object.keys( pageOnly ).map( function ( k ) { return pageOnly[ k ]; } );
             // Another window's save held back as a conflict waits for THAT
-            // window: not this page's conflict, nor anything to send.
-            var pending = ( await ownEntries( db ) ).filter( function ( e ) { return ! e.conflict || holds( held[ e.path ], e ); } )
+            // window: not this page's conflict, nor anything to send. A
+            // parked save is not waiting either: it is kept here on purpose.
+            var pending = ( await ownEntries( db ) ).filter( function ( e ) { return e.conflict ? holds( held[ e.path ], e ) : ! e.park; } )
                                                      .concat( here );
 
             if( pending.some( function ( e ) { return e.conflict; } ) ) emit( "conflict" );
@@ -1169,9 +1475,13 @@
             // cached one: the two differ when another page cached a read over it.
             if( queued )
             {
+                // This page has it open from now on: a parked save is never
+                // sent - nor dropped - behind its back (PARKED SAVES).
+                if( queued.park ) await takePark( path );
                 scheduleFlush();
                 adopt( path, queued, cached );
-                emit( navigator.onLine ? "pending" : "offline" );
+                if( queued.park ) settle();        // kept here on purpose (PARKED SAVES): no "pending"
+                else emit( navigator.onLine ? "pending" : "offline" );
                 return { body: queued.body, source: "cache",
                          mtime: cached && cached.body === queued.body ? cached.mtime : queued.queuedAt };
             }
@@ -1230,9 +1540,11 @@
                     if( put.ok && put.ret.queued )
                     {
                         var q = put.ret.queued;
+                        if( q.park ) await takePark( path );
                         adopt( path, q, put.ret.doc );
                         scheduleFlush();
-                        emit( navigator.onLine ? "pending" : "offline" );
+                        if( q.park ) settle();
+                        else emit( navigator.onLine ? "pending" : "offline" );
                         return { body: q.body, source: "cache", mtime: q.queuedAt };
                     }
 
@@ -1344,13 +1656,27 @@
             {
                 var db   = await dbPromise;
                 var made = null;
+                // PARKED SAVES: big enough, kept in the browser's own storage
+                // (not this page's memory), and this page's lock held BEFORE the
+                // entry is there - a flush elsewhere would send it.
+                var park = !! ( opts && opts.park ) && ! how && !! db && canPark() && await upSize( body ) > PARK_MIN && await takePark( path );
                 var r    = await pathTx( db, path, "readwrite", function ( c )
                 {
                     made = queueIn( c, path, body, basis, id, now, how );
+                    var e = made.entry;
+                    // What the entry it replaces still owed goes on with it:
+                    // its mark, and its .bak not taken yet.
+                    if( ! made.direct && c.out && c.out.marked ) e.marked = true;
+                    if( ( ! made.direct && c.out && c.out.bak ) || ( opts && opts.bak ) ) e.bak = true;
+                    if( park && ! made.direct ) e.park = true;
                     return made.tx;
                 } );
                 // The browser's storage failed (K2): the save is kept in this page.
-                if( ! r.ok ) made = queueIn( {}, path, body, basis, id, now, how );
+                if( ! r.ok )
+                {
+                    made = queueIn( {}, path, body, basis, id, now, how );
+                    if( opts && opts.bak ) made.entry.bak = true;
+                }
                 return { made: made, stored: r.ok };
             } )();
 
@@ -1392,6 +1718,15 @@
             {
                 emit( "conflict" );
                 return { ok: false, conflict: true };
+            }
+
+            // Parked: safe in this browser, sent later (PARKED SAVES). Its
+            // mark, the first time.
+            if( e.park && ! here )
+            {
+                settle();
+                if( ! e.marked ) markSoon( path, e ).catch( function () {} );
+                return { ok: true, parked: true };
             }
 
             emit( "saving" );
@@ -1532,22 +1867,24 @@
         // One PUT per path at a time on this page: two in flight would both carry
         // the same version check, and the second would come back 412 - a false
         // "saved on another device". The next one waits, then re-reads the
-        // outbox. `mine` = { id } of the entry a write() just queued.
-        async function flushPath( path, mine )
+        // outbox. `mine` = { id } of the entry a write() just queued. `open`:
+        // the page sending it has the document open (PARKED SAVES) - as
+        // `mine` does; otherwise its park lock says.
+        async function flushPath( path, mine, open )
         {
             while( inflight[ path ] )
             {
                 try { await inflight[ path ]; } catch ( e ) {}
             }
 
-            var p = flushPathNow( path, mine, 0 );
+            var p = flushPathNow( path, mine, 0, open || !! mine );
             inflight[ path ] = p;
 
             try { return await p; }
             finally { if( inflight[ path ] === p ) delete inflight[ path ]; }
         }
 
-        async function flushPathNow( path, mine, again )
+        async function flushPathNow( path, mine, again, open )
         {
             var db = await dbPromise;
 
@@ -1601,6 +1938,18 @@
             var ius = entry.ius != null ? !! entry.ius : bin;
             var who = entry.who || ME;
 
+            // PARKED SAVES: is the page that parked it still there, and did
+            // another device go on without these changes?
+            var locks = entry.park || entry.marked ? await heldParks() : {};
+            if( entry.park && isOpen( locks, entry ) ) return { ok: true, parked: true };   // still parked by a page that has it open
+            if( entry.park || entry.marked ) open = open || isOpen( locks, entry );
+            if( entry.marked )
+            {
+                var gate = await markGate( db, path, entry, open );
+                if( gate ) return gate;
+            }
+            if( entry.bak ) await bakFirst( db, path, entry, doc, who );
+
             emit( "saving" );                      // a PUT is in flight - sending data
             var res = await netPut( path, entry.body, ius ? entryVer( entry, doc ) : null, bin, who );
 
@@ -1635,7 +1984,10 @@
                     var head  = await netHead( path );
                     var since = await since412( db, path, entry );
                     if( since === "sent" ) { await settle(); return { ok: true }; }
-                    if( since === "again" && again < 3 ) return flushPathNow( path, mine, again + 1 );
+                    if( since === "again" && again < 3 ) return flushPathNow( path, mine, again + 1, open );
+                    // A parked save nobody has open: beside the file, never
+                    // over it nor at its old name (PARKED SAVES).
+                    if( ( entry.park || entry.marked ) && ! open ) return setAside( db, path, entry, bin, who );
                     if( head === 404 ) res = await netPut( path, entry.body, { none: true }, bin, who );   // made again - never over a file put there since
                     else if( entryVer( entry, doc ).none )
                     {
@@ -1669,11 +2021,12 @@
             {
                 // Dropped; its body stays in the cached copy, never queued again
                 // by a read (`refused`).
-                await pathTx( db, path, "readwrite", function ( c )
+                var gone = await pathTx( db, path, "readwrite", function ( c )
                 {
                     if( ! sameEntry( c.out, entry ) ) return {};
-                    return { out: null, doc: c.doc && ours( c.doc ) ? Object.assign( c.doc, { refused: true } ) : undefined };
+                    return { out: null, doc: c.doc && ours( c.doc ) ? Object.assign( c.doc, { refused: true } ) : undefined, ret: true };
                 } );
+                if( gone.ok && gone.ret ) unmark( path, entry );
                 emit( "error" );
                 return { ok: false, forbidden: true };
             }
@@ -1745,10 +2098,12 @@
                     d.sent = ( d.sent || [] ).concat( took ).slice( -KEEP_IDS );
                     delete d.refused;
                 }
-                return { out: out, doc: d, ret: rebased };
+                return { out: out, doc: d, ret: { rebased: rebased, left: out === null || ! cur } };
             } );
 
-            toldSaved( { path: path, who: entry.who || ME, id: eid, rebased: r.ok ? r.ret : null, prev: sentKey, tag: ver.tag, srv: ver.srv }, entry.body );
+            toldSaved( { path: path, who: entry.who || ME, id: eid, rebased: r.ok ? r.ret.rebased : null, prev: sentKey, tag: ver.tag, srv: ver.srv }, entry.body );
+            // Nothing of this device waits for it any more: its mark goes (PARKED SAVES).
+            if( r.ok && r.ret.left ) unmark( path, entry );
             await settle();
             return { ok: true };
         }
@@ -1764,6 +2119,8 @@
 
             var who    = po.who || ME;
             var merger = po.mrg ? mergers[ path ] : null;
+            if( po.bak && await bakFirst( db, path, po, null, who ) && pageOnly[ path ] === po )
+                pageOnly[ path ] = po = Object.assign( {}, po, { bak: false } );
             emit( "saving" );
             var res = await netPut( path, po.body, po.ius ? entryVer( po ) : null, po.bin, who );
 
@@ -1941,7 +2298,12 @@
             {
                 var db    = await dbPromise;
                 var paths = [];
-                ( await ownEntries( db ) ).map( function ( e ) { return e.path; } ).concat( Object.keys( pageOnly ) )
+                var own   = await ownEntries( db );
+                // A parked save whose page still has it open waits for that
+                // page; one whose page is gone goes now (PARKED SAVES).
+                var locks = own.some( function ( e ) { return e.park; } ) ? await heldParks() : {};
+                own.filter( function ( e ) { return ! e.park || ! isOpen( locks, e ); } )
+                   .map( function ( e ) { return e.path; } ).concat( Object.keys( pageOnly ) )
                     .forEach( function ( p ) { if( paths.indexOf( p ) === -1 ) paths.push( p ); } );
 
                 for( var i = 0; i < paths.length; i++ )
@@ -1969,6 +2331,183 @@
                 flushTimer = null;
                 flushAll();
             }, FLUSH_DEBOUNCE_MS );
+        }
+
+        //--------------------------------------------------------------------//
+        // PARKED SAVES  (see the top)
+
+        // The bytes a body puts on the wire: its own, or Text's once gzipped
+        // (gzip runs only for a body that could pass PARK_MIN at all).
+        async function upSize( body )
+        {
+            if( typeof body !== "string" ) return body && body.length || 0;
+            var raw = new TextEncoder().encode( body ).length;
+            if( raw <= PARK_MIN ) return raw;
+            var packed = await gzipBody( body, false );
+            return packed ? packed.length : raw;
+        }
+
+        // The first parked save of a path puts this device's mark up; the
+        // entry waiting then (whichever it is by now) is `marked`. Not
+        // reached: the next parked save tries again.
+        async function markSoon( path, e )
+        {
+            if( ! owedOf( ME )[ path ] ) owe( path, { at: e.queuedAt || Date.now() } );
+            var list = await syncMarks();
+            if( ! list || ! list.some( function ( m ) { return m.device === DEVICE && m.path === path && m.state === "pending"; } ) ) return;
+            var db = await dbPromise;
+            await pathTx( db, path, "readwrite", function ( c )
+            {
+                return c.out && ! c.out.marked ? { out: Object.assign( {}, c.out, { marked: true } ) } : {};
+            } );
+        }
+
+        // Drops `entry` and its cached copy in one step (nothing left to
+        // requeue it from), and its mark. True when it was still there.
+        async function dropEntry( db, path, entry )
+        {
+            var r = await pathTx( db, path, "readwrite", function ( c )
+            {
+                if( ! sameEntry( c.out, entry ) ) return { ret: false };
+                return { out: null, doc: c.doc && ours( c.doc ) ? null : undefined, ret: true };
+            } );
+            if( ! r.ok || ! r.ret ) return false;
+            await unmark( path, entry );
+            return true;
+        }
+
+        // Before a marked entry goes up: its mark as the server has it.
+        // Dismissed (another device went on without it) = dropped in
+        // silence when no page has it open - the user chose; held back as a
+        // conflict, told with why "dismissed", while one does. Not read =
+        // not sent now. Returns the answer, or null = go on.
+        async function markGate( db, path, entry, open )
+        {
+            var who = entry.who || ME;
+            if( who && whoNow() && whoNow() !== who ) return null;   // the PUT meets its 423: not this account's marks to read
+            var got = await readMarks();
+            if( ! got.ok )
+            {
+                if( got.status === 401 ) { authLost( 401 ); emit( "needs-auth" ); return { ok: false, needsAuth: true }; }
+                emit( navigator.onLine ? "pending" : "offline" );
+                return { ok: false, offline: true };
+            }
+            var mark = got.list.filter( function ( m ) { return m.device === DEVICE && m.path === path; } )[ 0 ];
+            if( ! mark || mark.state !== "dismissed" ) return null;
+
+            if( open )
+            {
+                await pathTx( db, path, "readwrite", function ( c )
+                {
+                    return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
+                } );
+                if( holds( held[ path ], entry ) ) emit( "conflict" );
+                else await settle();
+                toldConflict( path, entry, "dismissed" );
+                return { ok: false, conflict: true, dismissed: true };
+            }
+            await dropEntry( db, path, entry );
+            await settle();
+            return { ok: true, dropped: true };
+        }
+
+        // The server copies the file to its .bak before this save replaces
+        // it - only the version the save was made from (If-Match). Done (or
+        // nothing there to copy): the flag goes from the entry, and from a
+        // newer one holding it. False = not done; the save goes anyway.
+        async function bakFirst( db, path, entry, doc, who )
+        {
+            var v = entryVer( entry, doc );
+            var done = false;
+            if( v.none ) done = true;                // made from no file: nothing to keep
+            else
+            {
+                try
+                {
+                    var h = {};
+                    if( v.tag ) h[ "If-Match" ] = v.tag;
+                    if( v.srv ) h[ "If-Unmodified-Since" ] = new Date( v.srv ).toUTCString();
+                    if( who )   h[ "X-Nayive-User" ] = who;
+                    var r = await fetch( api + "?from=" + encodeURIComponent( path ) + "&bak=1", { method: "POST", headers: h } );
+                    done = r.ok || r.status === 404;
+                }
+                catch ( e ) { done = false; }
+            }
+            if( ! done ) return false;
+            entry.bak = false;
+            await pathTx( db, path, "readwrite", function ( c )
+            {
+                var mine = c.out && c.out.bak && ( sameEntry( c.out, entry ) || ( c.out.inc || [] ).indexOf( idOf( entry ) ) !== -1 );
+                return mine ? { out: Object.assign( {}, c.out, { bak: false } ) } : {};
+            } );
+            return true;
+        }
+
+        // A parked save met a 412 and no page has it open: it goes beside the
+        // file, "<name> (<device>, <time>).<ext>", create-only - in files/
+        // when the folder is gone; " (2)"... when that name is taken. Then
+        // it leaves the outbox, with its mark.
+        async function setAside( db, path, entry, bin, who )
+        {
+            var dir  = path.indexOf( "/" ) > 0 ? path.slice( 0, path.lastIndexOf( "/" ) ) : "files";
+            var name = asideName( path, entry.queuedAt );
+            // Another page set it aside (or sent it) meanwhile: not twice.
+            var still = await pathTx( db, path, "readonly", function ( c ) { return { ret: sameEntry( c.out, entry ) }; } );
+            if( ! still.ok || ! still.ret ) return { ok: false };
+            try
+            {
+                var d = await netFetch( api + "?dir=" + encodeURIComponent( dir ), { method: "GET" } );
+                if( d.status === 404 ) dir = "files";
+            }
+            catch ( e ) {}
+            var dot = name.lastIndexOf( "." );
+            for( var i = 1; i <= 9; i++ )
+            {
+                var to  = dir + "/" + ( i === 1 ? name : dot > 0 ? name.slice( 0, dot ) + " (" + i + ")" + name.slice( dot ) : name + " (" + i + ")" );
+                emit( "saving" );
+                var res = await netPut( to, entry.body, { none: true }, bin, who );
+                if( res.ok )
+                {
+                    await dropEntry( db, path, entry );
+                    await settle();
+                    return { ok: true, aside: to };
+                }
+                if( ! res.conflict ) { emit( res.netError ? "offline" : "error" ); return { ok: false, offline: !! res.netError }; }
+            }
+            emit( "error" );
+            return { ok: false };
+        }
+
+        // Sends what is parked for `paths` (a path or a list; a folder takes
+        // everything in it; null = all) - and anything else of theirs still
+        // queued - now, whoever holds the park lock: Ctrl+S, a closed window,
+        // Drive before it moves or deletes, a sign-out. The flag goes first,
+        // so a send that fails is an ordinary queued save from then on.
+        // `o.open`: the caller has the document open (the editor). Resolves
+        // the answer for the one path asked, else { ok } for them all.
+        async function unpark( paths, o )
+        {
+            o = o || {};
+            var db   = await dbPromise;
+            var list = paths == null ? null : [].concat( paths );
+            var hit  = function ( p ) { return ! list || list.some( function ( x ) { return p === x || p.indexOf( x + "/" ) === 0; } ); };
+            var todo = [];
+            ( await ownEntries( db ) ).map( function ( e ) { return e.path; } ).concat( Object.keys( pageOnly ) )
+                .forEach( function ( p ) { if( hit( p ) && todo.indexOf( p ) === -1 ) todo.push( p ); } );
+
+            var last = { ok: true }, all = true;
+            for( var i = 0; i < todo.length; i++ )
+            {
+                await pathTx( db, todo[ i ], "readwrite", function ( c )
+                {
+                    return c.out && c.out.park ? { out: Object.assign( {}, c.out, { park: false } ) } : {};
+                } );
+                last = ( await flushPath( todo[ i ], null, !! o.open ) ) || {};
+                if( ! last.ok ) all = false;
+                if( last.needsAuth || last.offline ) break;      // as flushAll: a later try sends the rest
+            }
+            if( todo.length ) await settle();
+            return list && list.length === 1 && todo.length <= 1 ? last : { ok: all };
         }
 
         //--------------------------------------------------------------------//
@@ -2011,11 +2550,13 @@
             delete held[ path ];
             delete pageOnly[ path ];
             seen[ path ] = ( seen[ path ] || 0 ) + 1;
-            await pathTx( db, path, "readwrite", function ( c )
+            var r = await pathTx( db, path, "readwrite", function ( c )
             {
                 if( c.out && h && ! holds( h, c.out ) ) return {};
-                return { out: c.out ? null : undefined, doc: c.doc && ours( c.doc ) ? null : undefined };
+                return { out: c.out ? null : undefined, doc: c.doc && ours( c.doc ) ? null : undefined, ret: c.out };
             } );
+            if( r.ok && r.ret ) unmark( path, r.ret );
+            releasePark( path );
         }
 
         // The file at `from` was moved to `to` on the server (a rename, C6):
@@ -2134,6 +2675,8 @@
             isBlocked:    isBlocked,
             onState:      onState,
             resting:      settle,
+            unpark:       unpark,
+            releasePark:  releasePark,
             get state() { return state; }
         };
     }
@@ -2261,12 +2804,25 @@
     // count: as long as one is actually being sent, up to `ms` (10 s), never
     // longer - flush() comes back at once when nothing is queued, and stops
     // at the first "offline" or "signed out". Offline, no wait at all.
+    // Parked saves go too, whoever has them open (PARKED SAVES): this page
+    // cannot let go of another tab's lock.
     function sendWaiting( ms )
     {
         if( ! navigator.onLine ) return Promise.resolve();
         waitStore = waitStore || createStore();
-        return Promise.race( [ waitStore.flush().catch( function () {} ),
+        return Promise.race( [ waitStore.unpark( null ).then( function () { return waitStore.flush(); } ).catch( function () {} ),
                                new Promise( function ( r ) { setTimeout( r, ms || 10000 ); } ) ] );
+    }
+
+    // The launcher and the desktop at boot: what an editor closed meanwhile
+    // left parked here goes up now (a flush sends a parked save whose page
+    // is gone). Only with something of this account's queued: no request
+    // otherwise.
+    function sendLeft()
+    {
+        if( ! ME ) return Promise.resolve();
+        waitStore = waitStore || createStore();
+        return waitStore.flush().catch( function () {} );
     }
 
     // Deletes what localCount() counted (with no count before it: what is here
@@ -2279,6 +2835,7 @@
         counted = null;
 
         var left  = 0;
+        var marks = [];   // parked saves that go unsent: their marks go too (PARKED SAVES)
         var store = await openDb();
         if( store )
         {
@@ -2295,7 +2852,11 @@
                     {
                         rq.result.forEach( function ( r )
                         {
-                            if( seen.out.indexOf( outName( r ) ) !== -1 ) os.delete( r.path );
+                            if( seen.out.indexOf( outName( r ) ) !== -1 )
+                            {
+                                os.delete( r.path );
+                                if( r.marked || r.park ) marks.push( norm( r ) );
+                            }
                             else { kept++; keep[ r.file || r.path ] = true; }
                         } );
                         var kq = ds.getAllKeys();
@@ -2307,6 +2868,14 @@
                 catch ( e ) { resolve( 0 ); }
             } );
             store.close();
+        }
+
+        // Said before the sign-out ends the session; not reached in a few
+        // seconds = said at this account's next write of the marks here.
+        if( marks.length )
+        {
+            marks.forEach( function ( e ) { owe( e.path, 0, e.who || ME ); } );
+            await Promise.race( [ syncMarks().catch( function () {} ), new Promise( function ( r ) { setTimeout( r, 5000 ); } ) ] );
         }
 
         var mailKept = false;
@@ -2573,7 +3142,8 @@
         return ( "0000000" + a.toString( 16 ) ).slice( -8 ) + ( "0000000" + b.toString( 16 ) ).slice( -8 );
     }
 
-    window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting,
+    window.NayiveStore = { createStore: createStore, me: ME, sendWaiting: sendWaiting, sendLeft: sendLeft,
+                           pendingElsewhere: pendingElsewhere, dismissPending: dismissPending, pendingText: pendingText, deviceName: deviceName,
                            localCount: localCount, clearLocal: clearLocal, leaveDevice: leaveDevice,
                            mergeLists: mergeLists, mergeFields: mergeFields, mergeSets: mergeSets,
                            hashText: hashText };

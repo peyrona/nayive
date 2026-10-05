@@ -319,8 +319,8 @@
     // Each action calls what the open chat's bar calls (conv.js, list.js).
     // ---------------------------------------------------------------------
 
-    // Side by side (wider than a phone) a click on a chat still opens it, as
-    // it always has: it picks the chat and shows it, like eMail's wide view.
+    // Side by side (wider than a phone) a click on a chat only opens it; it
+    // picks nothing (clickOpens below).
     // A phone, or a window as narrow as one: a tap opens, a mouse click picks
     // and a double-click opens (docs/item-browser-plan.md, decision 1).
     var MQ_WIDE = window.matchMedia( "(min-width: 641px)" );
@@ -373,12 +373,13 @@
             { id: "read", label: T( "chat.markRead" ), icon: "mailOpen", rank: 5, group: 1,
               when: function ( ids ) { return chatsOf( ids ).some( function ( c ) { return c.unread; } ); },
               run: function ( ids ) { ids.forEach( function ( id ) { C.markConvRead( id ); } ); } },
-            // The chat's Delete -> Delete chat (info.js): for me only,
-            // with Undo, so no question. One chat at a time: the shared Undo
+            // Delete chat: the whole chat goes - the person, or the group
+            // (info.js deleteDialog says what goes). Clearing its messages is
+            // the open chat's trash. One chat at a time: the shared Undo
             // holds one delete, and a second toast makes the first final.
             { id: "del", label: T( "chat.deleteChat" ), icon: "trash", key: "Del", rank: 1, danger: true, group: 2,
-              when: one,
-              run: function ( ids ) { var c = C.convOf( ids[ 0 ] ); if( c ) C.clearChat( c ); } }
+              when: function ( ids ) { var c = one( ids ) && C.convOf( ids[ 0 ] ); return !! ( c && C.canDeleteConv( c ) ); },
+              run: function ( ids ) { var c = C.convOf( ids[ 0 ] ); if( c ) C.deleteDialog( c ); } }
         ];
     }
 
@@ -398,8 +399,10 @@
             area:    [ { id: "newChat", label: T( "chat.newChat" ), icon: "plus", run: function () { C.openNewChat(); } } ],
             active:  listOn,
             open:    function ( id ) { C.openConv( id ); },
-            // A click (not an arrow key: opening moves the focus to the box).
-            preview: function ( id, e ) { if( MQ_WIDE.matches && ! ( e && e.type === "keydown" ) ) C.openConv( id ); },
+            // Side by side a click only opens: the open chat's bar has its
+            // buttons, so the list's would show them twice (his call,
+            // 2026-10-05). Ctrl/Shift+click and the right-click still pick.
+            clickOpens: function () { return MQ_WIDE.matches; },
             search:  function () { if( search.offsetParent ) search.focus(); else searchBtn.click(); }
         } );
     }

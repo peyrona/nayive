@@ -57,6 +57,9 @@ async function destNameSet( dest )
 
 async function doMove( paths, dest )
 {
+    // Changes of these files still on a device first (actions.js parkedFirst).
+    const going = paths.filter( function( p ) { return NayiveMedia.dirOf( p ) !== dest; } );
+    if( going.length && ! await parkedFirst( going ) ) return;
     setStatus( T( 'drive.moving' ) );
 
     // A move onto an existing item would destroy it (the server refuses,

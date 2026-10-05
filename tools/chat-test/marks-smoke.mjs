@@ -96,13 +96,28 @@ await sendText( "Buy:\n- milk\n- eggs" );
 ok( await c.until( `[ ...document.querySelectorAll( '#wall .msg.out ul' ) ].some( u => u.children.length === 2 )` ), "two items make one list" );
 ok( await c.until( `( document.querySelector( '[data-conv="${CA}"] .prev' ) || {} ).textContent?.includes( '• milk' )` ), "the list row shows bullets" );
 ok( await focused(), "after sending the box keeps the focus" );
+await c.evaluate( "document.getElementById( 'fmtBtn' ).click(); true" );
+ok( await barOn(), "the T brings the bar up again" );
 await sendText( "Plan:\n\n- *bold item*\n- _italic_ and ~gone~\nThanks!" );
+ok( ! await barOn(), "sending folds the bar" );
 await sleep( 800 );
 if( shot )
 {
     const p = await c.send( "Page.captureScreenshot", { format: "png", clip: { x: 340, y: 0, width: 940, height: 420, scale: 1 } } );
     fs.writeFileSync( shot.replace( /\.png$/, "-wall.png" ), Buffer.from( p.data ?? p.result?.data, "base64" ) );
 }
+
+section( "RIGHT-CLICK MENU" );
+const at = await c.evaluate( `( () => { const r = [ ...document.querySelectorAll( '#wall .msg.out' ) ].pop().getBoundingClientRect();
+    return { x: Math.round( r.left + 10 ), y: Math.round( r.top + 8 ) }; } )()` );
+for( const type of [ "mouseMoved", "mousePressed", "mouseReleased" ] )
+    await c.send( "Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "right", buttons: type === "mousePressed" ? 2 : 0, clickCount: 1 } );
+ok( await c.until( "document.querySelector( '.ctx.at' )" ), "a right-click opens the menu in pointer mode" );
+const box = await c.evaluate( "( () => { const r = document.querySelector( '.ctx-box' ).getBoundingClientRect(); return { x: r.left, y: r.top, r: r.right, b: r.bottom }; } )()" );
+ok( Math.abs( box.x - at.x ) < 2 && Math.abs( box.y - at.y ) < 2 || box.r <= 1280 - 7 && box.b <= 800 - 7 && ( box.x < at.x || box.y < at.y ),
+    "its corner is at the pointer (or pulled inside the window)" );
+await c.evaluate( "document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape' } ) ); true" );
+ok( await c.until( "! document.querySelector( '.ctx' )" ), "Escape closes it" );
 
 section( "LEAVING THE BOX" );
 await click( c, "#wall" );

@@ -725,9 +725,16 @@
     //   saver.setLock( l )        this document is (not) locked - no writing
     //   saver.lockDoc( l )        put a password on: also frees the plain .bak
     //   saver.unlockDoc()         take it off: puts the sealed .bak back in the clear
+    //   saver.upload( p )         send what is parked for p (default: the open document) now
     //
     // What it does:
-    //   - saves 7 s after the last edit, and at least every 3 min while typing
+    //   - saves 15 s after the last edit, and at least every 7 min while typing
+    //   - a big document (store.js PARKED SAVES: over 100 KB going up) is
+    //     saved on this device only - the floppy "here", green with a blue
+    //     dot - and goes up on Ctrl+S, before another document, a rename or a
+    //     closed window, when a touch screen hides the page, and after 10 min
+    //     with no edit or 60 min at most; what a closed tab left goes up at the
+    //     next boot. Its .bak is made on the server, by whoever sends it.
     //   - a document with nowhere to save to (untitled, or someone else's) goes
     //     to a DRAFT on this device only - IndexedDB "nayive-drafts", one per
     //     app and tab (ONE DRAFT PER TAB below), never the store's own
@@ -750,8 +757,10 @@
     //
     // Paired CSS: .saved-at in the OFFICE CHROME block of app.css.
 
-    var SAVE_DELAY_MS    = 7000;          // quiet time after the last edit
-    var SAVE_MAX_WAIT_MS = 3 * 60000;     // longest an edit waits while typing goes on
+    var SAVE_DELAY_MS    = 15000;         // quiet time after the last edit
+    var SAVE_MAX_WAIT_MS = 7 * 60000;     // longest an edit waits while typing goes on
+    var UPLOAD_IDLE_MS   = 10 * 60000;    // a parked save goes up after this long with no edit
+    var UPLOAD_MAX_MS    = 60 * 60000;    // ...and never later than this after the first one
 
     // The server's copy from before a session's first save lives here.
     function bakPath( path ) { return ( dirName( path ) || "files" ) + "/.bak/" + baseName( path ); }
@@ -889,6 +898,10 @@
         var slotQ    = Promise.resolve();   // one device-draft write at a time (keepDraft / dropDraft)
         var fresh    = new Set();   // names saved create-only (D6) whose file the server has not confirmed yet
         var onlyHere = false;       // the last save is kept only in this page (the store's pageOnly)
+        var parkedAt = null;        // the path this page parked a save of (it holds its park lock)
+        var upTimer  = null;        // sends the parked save (UPLOAD_IDLE_MS / UPLOAD_MAX_MS)
+        var upSince  = 0;           // when the first save still parked was made
+        var sealBak  = false;       // a password just went on: the next .bak is sealed here, from the page
 
         draftKey( o.app );          // this tab's draft key and its lock, from the start: the tab counts as open
 
@@ -917,7 +930,8 @@
         }
 
         // #savedAt is a floppy in the sync plug's colours: red "unsaved", blue
-        // "saving", green "saved". Its title says what and when.
+        // "saving", green "saved" - and "here": green with a blue dot, saved on
+        // this device, not sent yet (PARKED SAVES). Its title says what and when.
         function disk( state, title )
         {
             var el = byId( o.savedAtId || "savedAt" );
@@ -928,12 +942,15 @@
             el.setAttribute( "aria-label", el.title );
         }
 
-        // Only "Guardado 12:04" is on the server; a device draft or a page-only
-        // copy is not saved yet. No key: saved unless edits are waiting.
+        function diskState() { var el = byId( o.savedAtId || "savedAt" ); return el ? el.dataset.state : ""; }
+
+        // Only "Guardado 12:04" is on the server ("here": on this device, on
+        // its way later); a device draft or a page-only copy is not saved yet.
+        // No key: saved unless edits are waiting.
         function stamp( key, at, note )
         {
             var text = key ? tf( key, { time: hhmm( at ) } ) : "";
-            disk( key ? ( key === "write.savedAt" ? "saved" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
+            disk( key ? ( key === "write.savedAt" ? "saved" : key === "write.parkedAt" ? "here" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
                   note ? text + " - " + note : text );
         }
 
@@ -953,13 +970,52 @@
             clearTimeout( timer );
             timer = null;
             since = 0;
-            return writable() && ! held ? writeTo( path() ) : keepDraft();
+            return writable() && ! held ? writeTo( path(), "", true ) : keepDraft();
+        }
+
+        // The parked save goes up UPLOAD_IDLE_MS after the last edit, but
+        // never later than UPLOAD_MAX_MS after the first save it holds. Only
+        // while the page lives: one closed or asleep sends it at the next boot.
+        function armUpload()
+        {
+            var now = Date.now();
+            if( ! upSince ) upSince = now;
+            clearTimeout( upTimer );
+            upTimer = setTimeout( function () { upload(); },
+                                  Math.max( 0, Math.min( UPLOAD_IDLE_MS, upSince + UPLOAD_MAX_MS - now ) ) );
+        }
+
+        // What is parked for `p` (default: the open document) goes up now -
+        // what this page parked, and what another tab of it did. The store's
+        // answer; null when nothing was parked here.
+        async function upload( p )
+        {
+            p = p || path();
+            if( ! p || ! o.store.unpark ) return null;
+            // The open document's: the store may hold its park lock for this
+            // page (it took a closed tab's parked save on read) - let go of
+            // when another document comes (leave).
+            if( p === path() ) { clearTimeout( upTimer ); upTimer = null; upSince = 0; parkedAt = p; }
+            var res = null;
+            try { res = await o.store.unpark( p, { open: p === path() } ); } catch ( e ) {}
+            if( res && res.ok && p === path() && diskState() === "here" && ! timer && ! busy ) stamp( "write.savedAt", Date.now() );
+            return res;
+        }
+
+        // Another document on screen (or this one under a new name): the
+        // last one's parked save goes up, and its park lock is let go.
+        function leave( p )
+        {
+            if( ! p || p === path() ) return;
+            if( p === parkedAt ) parkedAt = null;
+            upload( p ).then( function () { if( o.store.releasePark && p !== parkedAt ) o.store.releasePark( p ); } );
         }
 
         function edited()
         {
             dirty = true;
             disk( "unsaved" );
+            if( upTimer ) armUpload();          // a parked save waits for 10 min with no edit
 
             if( writable() )
             {
@@ -1010,6 +1066,7 @@
                 await catchUp();
                 if( dirty && ( ! writable() || held ) && ! ( drafted && draftOk ) ) await keepDraft();
                 await idle();
+                await upload();                // a parked save goes up with the window (PARKED SAVES)
                 return true;
             } )();
             var late = new Promise( function ( r ) { setTimeout( function () { r( false ); }, ms ); } );
@@ -1034,7 +1091,8 @@
         // it over that one.
         function lockDoc( l )
         {
-            lock = l;
+            lock    = l;
+            sealBak = true;                    // the server's copy is plain: sealed here, never copied there as it is
             if( path() ) backedUp.delete( path() );
         }
 
@@ -1074,7 +1132,13 @@
         // checked: D6): written only where there is no file; "replace" - the
         // user said "Replace" to a file that is there. See store.js
         // CREATE-ONLY AND REPLACE.
-        async function writeTo( p, how )
+        // auto: an autosave - it may be parked (store.js PARKED SAVES), and
+        // its .bak is then made by whoever sends it (server-side, bak).
+        // Never parked, .bak made here from the page: a name not ours yet
+        // (create / replace), an import's first save (`pristine`: those
+        // bytes are only here), the first save after a password went on
+        // (the .bak must be sealed).
+        async function writeTo( p, how, auto )
         {
             // Not written now (the app's gate). The open document's edits go
             // to the device draft instead (see edited) - Ctrl+S included.
@@ -1107,14 +1171,23 @@
                 }
                 if( mine !== seq ) return null;        // a newer save started meanwhile - it wins
 
-                await backup( p, how );
+                var fromPage = !! how || !! pristine || ( sealBak && ! backedUp.has( p ) );
+                if( fromPage ) await backup( p, how );
                 if( mine !== seq ) return null;
 
                 if( how === "create" ) fresh.add( p );
                 if( how === "replace" ) fresh.delete( p );
+                var bak = ! fromPage && ! backedUp.has( p );
                 var res = ( await o.store.write( p, body, how === "create" ? { createOnly: true }
-                                                         : how === "replace" ? { replace: true } : undefined ) ) || {};
+                                                         : how === "replace" ? { replace: true }
+                                                         : fromPage ? undefined : { park: !! auto, bak: bak } ) ) || {};
+                if( bak && ! res.blocked ) backedUp.add( p );   // the store makes it, before the PUT
                 if( res.ok === true ) fresh.delete( p );     // the file there is ours now
+                if( res.parked )
+                {
+                    parkedAt = p;
+                    if( ! upTimer ) armUpload();
+                }
                 if( mine !== seq ) return res;
 
                 onlyHere = false;
@@ -1122,7 +1195,7 @@
                 {
                     failed = true;
                     disk( "unsaved" );
-                    offerCopy( p );
+                    offerCopy( p, res.dismissed ? "dismissed" : "" );
                     return res;
                 }
 
@@ -1151,7 +1224,7 @@
                     if( ! timer ) dirty = false;       // an edit made meanwhile is still waiting
                     held = false;                      // written ("Save anyway", a copy): not held any more
                     if( drafted ) dropDraft();         // the edits it held are in the store now
-                    stamp( "write.savedAt", Date.now() );
+                    stamp( res.parked ? "write.parkedAt" : "write.savedAt", Date.now() );
                 }
                 return res;
             }
@@ -1253,7 +1326,9 @@
 
         // Saved from another device since it was opened. The store keeps our
         // version here and will not send it; the way out is a copy of our own.
-        async function offerCopy( p )
+        // why "dismissed": another device was told these changes were waiting
+        // and went on without them (store.js PARKED SAVES) - its own words.
+        async function offerCopy( p, why )
         {
             sync( "conflict" );
             if( savingAs || askedFor === p ) return;
@@ -1265,7 +1340,7 @@
 
             var copy = await NayiveUI.confirm( {
                 title:   t( "ui.conflictTitle" ),
-                body:    tf( "ui.conflictBody", { name: baseName( p ) } ),
+                body:    tf( why === "dismissed" ? "ui.park.dismissedBody" : "ui.conflictBody", { name: baseName( p ) } ),
                 confirm: t( "ui.conflictCopy" ),
                 cancel:  t( "ui.notNow" ) } );
 
@@ -1292,6 +1367,7 @@
             {
                 await flush();                // what is waiting goes to the OLD place first
                 var from = path();
+                if( from && from !== p ) await upload( from );   // ...and up, parked or not
 
                 // Another document's file is about to be written over (the user
                 // said "replace"): what it holds now gets its own .bak, even when
@@ -1303,6 +1379,11 @@
                 if( ! res || failed ) return res;
 
                 if( drafted ) dropDraft();
+                if( from && from !== p )
+                {
+                    if( parkedAt === from ) parkedAt = null;
+                    if( o.store.releasePark ) o.store.releasePark( from );    // sent above: not this page's to hold any more
+                }
 
                 // Our copy of a conflicted file is now safe under the new name:
                 // drop the held-back write, so theirs is what the old name shows.
@@ -1330,7 +1411,12 @@
             drafted  = false;           // the slot may still hold the last document: keepDraft leaves it be
             askedFor = null;
             pristine = x.pristine || null;
+            sealBak  = false;
+            clearTimeout( upTimer );    // the last document's: it goes up now, below
+            upTimer  = null;
+            upSince  = 0;
             stamp( null );
+            leave( parkedAt );          // the last document's parked save goes up, its lock let go
 
             // Reopened with an edit still held back as a conflict: say so now.
             var p = path();
@@ -1338,7 +1424,14 @@
                 o.store.conflicted( p ).then( function ( c ) { if( c && p === path() ) offerCopy( p ); } );
         }
 
-        function moved( from, to ) { if( backedUp.has( from ) ) backedUp.add( to ); }
+        function moved( from, to )
+        {
+            if( backedUp.has( from ) ) backedUp.add( to );
+            if( parkedAt === from ) parkedAt = null;   // sent before the move; the store let its lock go (renamed)
+            clearTimeout( upTimer );
+            upTimer = null;
+            upSince = 0;
+        }
 
         // "Replace" to a name saved create-only and found taken (o.taken): the
         // file there gets its own .bak first, then this document goes over it.
@@ -1447,8 +1540,17 @@
 
         // ---- leaving --------------------------------------------------------
 
-        document.addEventListener( "visibilitychange", function () { if( document.visibilityState === "hidden" ) flush(); } );
+        // A touch screen's hidden tab is often killed, never closed: what is
+        // parked goes up then (PARKED SAVES). Elsewhere it waits.
+        document.addEventListener( "visibilitychange", function ()
+        {
+            if( document.visibilityState !== "hidden" ) return;
+            var up = flush();
+            if( matchMedia( "(pointer: coarse)" ).matches ) up.then( function () { return upload(); } );
+        } );
         window.addEventListener( "pagehide", function () { flush(); } );
+        // A parked save is not asked about: it is safe in this browser, and
+        // goes up at the next boot (keepalive could not carry it anyway).
         window.addEventListener( "beforeunload", function ( e )
         {
             if( ! timer && ! busy && ! failed && ! held ) return;   // held: in the device draft only, the file never got it
@@ -1458,7 +1560,7 @@
         } );
 
         // A background flush (reconnect, tab focus) can meet the conflict too.
-        o.store.onConflict( function ( p ) { if( p === path() ) offerCopy( p ); } );
+        o.store.onConflict( function ( p, why ) { if( p === path() ) offerCopy( p, why ); } );
 
         // A save of this page went up later, sent by the store on its own (a
         // reconnect, its retry of a save kept only in this page): a
@@ -1468,6 +1570,8 @@
         {
             if( ! mine ) return;
             fresh.delete( p );
+            // A parked save went up (its timer, Drive, the launcher): on the server now.
+            if( p === path() && ! busy && ! timer && ! dirty && diskState() === "here" ) { stamp( "write.savedAt", Date.now() ); return; }
             if( p !== path() || ! onlyHere || busy ) return;
             onlyHere = false;
             failed   = false;
@@ -1497,7 +1601,8 @@
             lock:      function () { return lock; },
             setLock:   function ( l ) { lock = l; },
             lockDoc:   lockDoc,
-            unlockDoc: unlockDoc
+            unlockDoc: unlockDoc,
+            upload:    upload
         };
     }
 
@@ -1749,6 +1854,25 @@
             return true;
         }
 
+        // Changes to `p` saved on ANOTHER device and not sent yet (store.js
+        // PARKED SAVES): asked before it opens. Open anyway / Forget the
+        // warning both tell that device to drop them; Forget does not open.
+        // True = open it.
+        async function othersWaiting( p )
+        {
+            if( NayiveUI.isShared( p ) || ! NayiveStore.pendingElsewhere ) return true;
+            var list = [];
+            try { list = await NayiveStore.pendingElsewhere( p ); } catch ( e ) {}
+            if( ! list.length ) return true;
+            var r = await NayiveUI.confirm( { title:     t( "ui.park.title" ),
+                                              body:      tf( "ui.park.body", { name: baseName( p ), list: NayiveStore.pendingText( list ) } ),
+                                              confirm:   t( "ui.park.open" ),
+                                              other:     t( "ui.park.forget" ),
+                                              otherIcon: "eyeoff" } );
+            if( r === true || r === "other" ) try { await NayiveStore.dismissPending( p ); } catch ( e ) {}
+            return r === true;
+        }
+
         function showLabel()
         {
             label.set( path ? relLabel( path, o.appDir, o.openRoot ) + ( readOnly ? t( "text.readOnlySuffix" ) : "" )
@@ -1859,9 +1983,11 @@
         async function open( p )
         {
             await saver.flush();               // don't lose a waiting autosave for the one we're leaving
+            await saver.upload();              // ...nor a parked one: it goes up before another document
 
             var res = await readViaStore( o.store, p );   // the store drives the plug; toasts on trouble
             if( res.body === null ) return false;
+            if( ! await othersWaiting( p ) ) return false;
 
             var body = res.body;
             var got  = null;
@@ -1895,6 +2021,7 @@
             opened( p );
             saver.setLock( got ? got.lock : null );      // opened() reopened the saver: set it after
             showLock();                                  // ...and light the padlock by it (opened() drew the last one's)
+            saver.upload();                              // what a closed tab of it left parked goes up now (PARKED SAVES)
             if( kept ) offerBack( kept, true );
             return true;
         }
@@ -1925,6 +2052,7 @@
         {
             if( ! file || notReady() ) return;
             await saver.flush();
+            await saver.upload();
 
             var bytes;
             try { bytes = new Uint8Array( await file.arrayBuffer() ); }
@@ -2067,6 +2195,7 @@
         async function startBlank( dropping )
         {
             await saver.flush();               // a named document keeps its waiting autosave
+            await saver.upload();              // ...and its parked one goes up
             if( dropping ) await saver.dropDraft();
 
             try { await o.blank(); }
@@ -2129,7 +2258,7 @@
             catch ( e ) { return null; }
         }
 
-        // Its Undo: back on screen and back in the device draft - now, not in 7 s.
+        // Its Undo: back on screen and back in the device draft - now, not in 15 s.
         // aside: its draft was KEPT (Open, Import, New over someone else's
         // document), not dropped - the toast must not say "discarded".
         function offerBack( kept, aside )
@@ -2426,6 +2555,7 @@
                 await saver.flush();
                 renaming = path;
                 await saver.idle();
+                await saver.upload( path );     // a parked save goes up under the OLD name first
                 try { await o.store.flush(); } catch ( e ) {}
 
                 // Still waiting for the old name: the rename would leave it
@@ -2497,6 +2627,12 @@
             if( ! path )   { toast( "write.noBackupYet" ); return; }
             if( readOnly ) { toast( "text.notYours" );     return; }
             if( notOwner() ) return;                   // that account's .bak, read and written (L5)
+
+            // A parked save goes up first: its .bak is made as it goes (the
+            // copy from before this session's first save), never later over
+            // the one this restore writes. Not sent: no restore now.
+            var up = await saver.upload( path );
+            if( up && ! up.ok ) { toast( "write.actionFailed" ); return; }
 
             var p    = path;
             var bak  = bakPath( path );

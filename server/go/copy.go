@@ -154,6 +154,125 @@ func (s *Server) filesCopy(w http.ResponseWriter, r *http.Request, role, user st
 	sendJSON(w, r, http.StatusOK, map[string]any{"message": "copied", "files": files})
 }
 
+// =============================================================================
+// POST /api/files?from=<path>&bak=1 - the office editors' ".bak" copy.
+// =============================================================================
+//
+// Before a session's first save replaces a document, Write, Calc and Text keep
+// its old version in <folder>/.bak/<name> ("Restore the previous copy"). The
+// page used to download the whole file and upload it again for that; the
+// server copies it disk to disk now (docs/upload-less-plan.md, step 1b).
+//
+// Unlike "Copy to..." it REPLACES what is there - only the .bak of that very
+// file, inside .bak/ - and only while the file is still the version the save
+// was made from (If-Match / If-Unmodified-Since, as a PUT is judged): a file
+// another device changed meanwhile keeps its .bak, and the save meets its own
+// 412. A temp beside it, then one rename: a reader never sees half a copy.
+func (s *Server) filesBak(w http.ResponseWriter, r *http.Request, role, user string, q Query) {
+	virt := strings.Join(splitPath(q.Get("from")), "/")
+	dir, name := path.Split(virt)
+	dir = strings.TrimSuffix(dir, "/")
+	if dir == "" {
+		dir = "files"
+	}
+	if name == "" || path.Base(dir) == ".bak" {
+		sendError(w, r, http.StatusBadRequest, "no .bak for that")
+		return
+	}
+	src, srcOK := s.users.Resolve(role, user, virt)
+	dst, dstOK := s.users.Resolve(role, user, dir+"/.bak/"+name)
+	if !srcOK || !dstOK || !src.Writable || !dst.Writable || IsSharedPath(virt) ||
+		s.isProtectedFile(role, src.Abs) || s.isProtectedFile(role, dst.Abs) {
+		sendError(w, r, http.StatusForbidden, "forbidden")
+		return
+	}
+	info, err := src.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		if err == nil {
+			err = errNotRegular
+		}
+		sendMissing(w, r, err, "source not found")
+		return
+	}
+	if staleBase(r, src.Stat) {
+		sendError(w, r, http.StatusPreconditionFailed, "el archivo ha cambiado desde que lo abriste")
+		return
+	}
+
+	// The old .bak's bytes come back to the quota as the new one takes them.
+	var old int64
+	if bi, err := dst.Lstat(); err == nil {
+		if !bi.Mode().IsRegular() {
+			sendError(w, r, http.StatusConflict, "no se puede copiar ahí")
+			return
+		}
+		old = bi.Size()
+	}
+	room := int64(-1)
+	if left, limited := s.quotaLeft(role, user, dst.Abs); limited {
+		room = max(left+old, 0)
+		if info.Size() > room {
+			sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
+			return
+		}
+	}
+
+	srcRoot, err := src.open()
+	if err != nil {
+		sendMissing(w, r, err, "source not found")
+		return
+	}
+	defer srcRoot.Close()
+	root, err := dst.openCreating()
+	if err != nil {
+		sendMissing(w, r, err, "")
+		return
+	}
+	defer root.Close()
+	bakDir := filepath.Dir(dst.Rel)
+	if err := root.MkdirAll(bakDir, 0o755); err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo crear la carpeta")
+		return
+	}
+	tmp, tmpRel, err := createUploadTemp(root, bakDir)
+	if err != nil {
+		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+		return
+	}
+	defer root.Remove(tmpRel) // a no-op once renamed away
+	cw := &cappedWriter{w: io.Discard, ceiling: room}
+	err = copyBytes(srcRoot, src.Rel, tmp, cw)
+	if err == nil {
+		err = root.Chmod(tmpRel, 0o644)
+	}
+	if err == nil {
+		unlock := lockPath(dst.Abs) // as an upload's replacing rename
+		err = root.Rename(tmpRel, dst.Rel)
+		unlock()
+	}
+	if err == nil {
+		err = syncRootDir(root, bakDir) // the name durable (K1)
+	}
+	owner := s.users.HomeOwner(dst.Abs)
+	switch {
+	case errors.Is(err, errTooBig):
+		sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
+		return
+	case err != nil:
+		if owner != "" {
+			s.users.ForgetUsage(owner)
+		}
+		s.log.Warn("bak copy failed", "from", src.Abs, "err", err)
+		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+		return
+	}
+	if owner != "" {
+		s.users.AdjustUsage(owner, cw.written-old)
+	}
+	s.log.Info("bak copied", "user", user, "from", virt, "bytes", cw.written)
+	sendJSON(w, r, http.StatusOK, map[string]any{"message": "copied"})
+}
+
 // missingParents lists the folders above dst that do not exist yet, outermost
 // first - what MkdirParent is about to make.
 func missingParents(dst Resolved) []string {

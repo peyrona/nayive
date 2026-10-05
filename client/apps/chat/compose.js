@@ -390,6 +390,7 @@
             var m = S.editing, conv = S.open;
             if( ! text && m.kind === "text" ) return;
             C.resetComposer();
+            fmtBar.classList.remove( "on" );   // sent: the format bar folds
             try
             {
                 var out = await C.api( "PATCH", "conv/" + conv + "/messages/" + m.id, { text: text } );
@@ -414,6 +415,7 @@
         if( ! text ) { C.focusComposer(); return; }
         var reply = S.replyTo ? S.replyTo.id : 0;
         C.resetComposer();
+        fmtBar.classList.remove( "on" );       // sent: the format bar folds
         C.focusComposer();
         var body = { kind: "text", text: text, replyTo: reply };
         if( opts && opts.silent ) body.silent = true;
@@ -504,7 +506,7 @@
             {
                 var l = await C.api( "POST", "conv/" + conv + "/later", { text: text, at: at, replyTo: reply, cid: cid } );
                 sh.close();
-                if( S.open === conv && ta.value.trim() === text ) C.resetComposer();
+                if( S.open === conv && ta.value.trim() === text ) { C.resetComposer(); fmtBar.classList.remove( "on" ); }
                 else dropDraftIf( conv, text );
                 NayiveUI.toast( C.TF( "chat.scheduledFor", { when: whenLabel( l.at ) } ), { ms: 3000 } );
                 var c = C.convOf( conv );
@@ -1008,7 +1010,7 @@
         {
             if( e.target.closest( "a" ) ) return;
             e.preventDefault();
-            if( ! held ) C.openCtx( m );
+            if( ! held ) C.openCtx( m, e.pointerType !== "touch" && e.button === 2 ? e : null );
         } );
         el.addEventListener( "pointerdown", function ( e )
         {
@@ -1054,7 +1056,7 @@
             if( held ) { held = false; return; }      // the end of a hold
             if( m.failed ) C.retry( m );
         } );
-        el.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); if( menu() ) C.openCtx( m ); } );
+        el.addEventListener( "contextmenu", function ( e ) { e.preventDefault(); if( menu() ) C.openCtx( m, e.pointerType !== "touch" && e.button === 2 ? e : null ); } );
         el.addEventListener( "pointerdown", function ( e )
         {
             held = false;
@@ -1071,18 +1073,29 @@
     // the menu of one message
     // ---------------------------------------------------------------------
 
-    C.openCtx = function ( m )
+    // at: a mouse right-click (its clientX/Y) - the menu opens at the
+    // pointer, as on any desktop; held down (or the caret) it opens on the
+    // bubble's side, as on a phone.
+    C.openCtx = function ( m, at )
     {
         if( document.querySelector( ".ctx" ) ) return;
         var mine = m.from === C.me();
         var unsent = m.id < 0;     // still on this device (THE OUTBOX, a failed upload): no reactions, its own three
-        var layer = h( "div", { class: "ctx " + ( mine ? "out" : "in" ) } );
+        var layer = h( "div", { class: "ctx " + ( at ? "at" : mine ? "out" : "in" ) } );
         var box = h( "div", { class: "ctx-box" } );
         layer.appendChild( box );
 
         function close() { layer.remove(); document.removeEventListener( "keydown", esc, true ); }
         function done()  { C.popNav( "ctx" ); close(); }
         function esc( e ) { if( e.key === "Escape" ) { e.preventDefault(); done(); } }
+        // Its top-left corner at the pointer, kept inside the window.
+        function place()
+        {
+            if( ! at ) return;
+            var w = box.offsetWidth, ht = box.offsetHeight;
+            box.style.left = Math.max( 8, Math.min( at.clientX, innerWidth  - w - 8 ) ) + "px";
+            box.style.top  = Math.max( 8, Math.min( at.clientY, innerHeight - ht - 8 ) ) + "px";
+        }
 
         var reacts = h( "div", { class: "reacts" } );
         var mineReact = ( m.reacts || {} )[ C.me() ];
@@ -1096,6 +1109,7 @@
                                    {
                                        ev.stopPropagation();
                                        reacts.replaceWith( emojiPanel( function ( e ) { done(); C.react( m, e ); } ) );
+                                       place();
                                    } } } );
         moreB.appendChild( C.ic( "plus" ) );
         reacts.appendChild( moreB );
@@ -1149,6 +1163,7 @@
         layer.addEventListener( "click", function ( e ) { if( e.target === layer ) done(); } );
         document.addEventListener( "keydown", esc, true );
         document.body.appendChild( layer );
+        place();
         C.pushNav( "ctx", close );
         if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch( _ ) {}
     };

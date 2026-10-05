@@ -34,7 +34,15 @@
             .then( function ( r ) { return r.ok ? r.json() : null; } )
             .then( function ( me )
             {
-                if( ! me || ! me.must_set_password ) return;
+                if( ! me ) return;
+                if( ! me.must_set_password )
+                {
+                    // What an editor closed meanwhile left parked on this device
+                    // goes up now (shared/store.js PARKED SAVES; deferred).
+                    var send = function () { if( window.NayiveStore && NayiveStore.sendLeft ) NayiveStore.sendLeft(); };
+                    if( window.NayiveStore ) send(); else document.addEventListener( 'DOMContentLoaded', send );
+                    return;
+                }
                 try { sessionStorage.setItem( 'nayive-must-set', '1' ); } catch ( e ) {}
                 location.replace( '../index.html' );
             } )
@@ -53,6 +61,7 @@
     <script src="../shared/theme.js" defer></script>
     <script src="../shared/locker.js"></script>
     <script src="../shared/ui.js" defer></script>
+    <script src="../shared/store.js" defer></script>
     <script>
         if( 'serviceWorker' in navigator )
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );

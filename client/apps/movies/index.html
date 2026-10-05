@@ -381,6 +381,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
                 <input type="range" id="volumeRange" min="0" max="100" value="90">
             </div>
+            <!-- Play on: a paired speaker or Cast / AirPlay (shared/play-on.js). -->
+            <button class="icon-btn has-popup" id="outBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" data-i18n-attr="title:media.outBtn, aria-label:media.outBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="6" r="1"/></svg>
+            </button>
         </div>
     </div>
 
@@ -404,6 +408,7 @@
 </div>
 
 <script src="../shared/media.js"></script>
+<script src="../shared/play-on.js"></script>
 <script>
 "use strict";
 
@@ -1750,6 +1755,7 @@ function wireStaticUI()
 async function boot()
 {
     wireStaticUI();
+    NayivePlayOn.wire( video, $( "#outBtn" ) );
 
     DIR = await NayiveMedia.openLibrary( DIR, { app: "movies", title: NayiveUI.t( 'movies.whereFolder' ), note: NayiveUI.t( 'movies.whereFolderNote' ) } );
     if( ! DIR ) return;
