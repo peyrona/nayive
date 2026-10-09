@@ -431,12 +431,30 @@
                 { icon: 'grip', name: NayiveUI.t( 'tasks.introDragName' ), text: NayiveUI.t( 'tasks.introDrag' ) },
                 { sel: '#planGlyph', name: NayiveUI.t( 'tasks.introPlanName' ), text: NayiveUI.t( 'tasks.introPlan' ) },
                 { icon: 'undo', name: NayiveUI.t( 'tasks.introUndoneName' ), text: NayiveUI.t( 'tasks.introUndone' ) }
-            ]
-            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
-            // so its row would document a control that is not on screen.
-            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
-                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
-                  text: NayiveUI.t( 'tasks.introSync' ) } ] )
+            ],
+            // The guided tour ("Ver el tour" in the card). Row buttons need a task:
+            // with none they ring the empty state. The sub-task steps open the
+            // first task that has some, and fold it again on leaving.
+            tour: function () {
+                const T = NayiveUI.t;
+                const filterTo = f => function () { const b = document.querySelector( '[data-filter="' + f + '"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
+                let unfolded = false;
+                const unfold = function () { if( document.querySelector( '.subtask-row' ) ) return; const c = document.querySelector( '.task-chevron:not(.expanded)' ); if( c ) { c.click(); unfolded = true; } };
+                const refold = function () { if( ! unfolded ) return; unfolded = false; const c = document.querySelector( '.task-chevron.expanded' ); if( c ) c.click(); };
+                const NONE = '.task-row, #emptyState';
+                return [
+                    { before: filterTo( 'active' ), sel: '#addBtn', title: T( 'tasks.addTask' ),
+                      text: document.documentElement.classList.contains( 'is-embedded' ) ? T( 'tasks.introAdd' ) : T( 'tasks.introOpen' ) },
+                    { sel: '.task-row .icon-btn.check', ghost: '#emptyState', icon: 'check', title: T( 'tasks.markDone' ), text: T( 'tasks.tourCheck' ) },
+                    { sel: '.task-row .task-actions .icon-btn:not(.check)', ghost: '#emptyState', icon: 'plus', title: T( 'tasks.addSubtask' ), text: T( 'tasks.tourAddSub' ) },
+                    { sel: '.task-chevron', ghost: NONE, icon: 'forward', title: T( 'tasks.showSubtasks' ), text: T( 'tasks.tourChevron' ) },
+                    { before: unfold, after: refold, sel: '.subtask-handle', ghost: NONE, icon: 'grip', title: T( 'tasks.introDragName' ), text: T( 'tasks.introDrag' ) },
+                    { before: unfold, after: refold, sel: '.subtask-plan-btn', ghost: NONE, icon: 'menudots', title: T( 'tasks.introPlanName' ), text: T( 'tasks.introPlan' ) },
+                    { before: filterTo( 'active' ), sel: '[data-filter="done"]', tap: true, title: T( 'tasks.filterDone' ), text: T( 'tasks.tourDone' ) },
+                    { before: filterTo( 'done' ), after: filterTo( 'active' ), sel: '.task-row .task-actions .icon-btn:not(.danger)', ghost: '#emptyState', icon: 'undo', title: T( 'tasks.introUndoneName' ), text: T( 'tasks.introUndone' ) },
+                    { before: filterTo( 'done' ), after: filterTo( 'active' ), sel: '#clearCompletedBtn', ghost: '#emptyState', icon: 'trash', title: T( 'tasks.clearCompleted' ), text: T( 'tasks.tourClear' ) }
+                ];
+            }
         } );
     } );
     </script>

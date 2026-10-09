@@ -40,11 +40,14 @@ import java.util.concurrent.Executors;
  * GET /api/device/wait is held open by the server until something about this
  * phone changes, or for `hold` seconds, and answers the phone's whole state:
  *
- *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null, "media"}
+ *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null, "media", "ear"}
  *
  * No Google, no FCM, no second app. What the answer says is applied as it is:
  * track -> positions on/off, badge -> the unread notification, call -> ring,
- * find -> the alarm + one fresh position, media -> the daily photo upload (MediaJob).
+ * find -> the alarm + one fresh position, media -> the daily photo upload (MediaJob),
+ * ear -> a voice call is on in this phone's browser: the screen goes off near
+ * the ear, as in a phone call (server/go/devices_ear.go). The wait says ear=1
+ * when the phone has the sensor; without it the page puts up its own padlock.
  */
 public class LinkService extends Service {
 
@@ -94,6 +97,10 @@ public class LinkService extends Service {
 
     private Tracker tracker;
     private PowerManager.WakeLock wake;
+    private PowerManager.WakeLock ear;   // null: no proximity sensor
+
+    /** The server ends "ear" when the page stops asking; this is only a backstop. */
+    private static final long EAR_MAX = 4 * 3600_000L;
     private ConnectivityManager.NetworkCallback netCallback;
 
     private String version = "";
@@ -108,6 +115,11 @@ public class LinkService extends Service {
         tracker = new Tracker(this, this::onPosition);
         wake = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "nayive:link");
         wake.setReferenceCounted(false);
+        PowerManager pm = getSystemService(PowerManager.class);
+        if (pm.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+            ear = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "nayive:ear");
+            ear.setReferenceCounted(false);
+        }
         foreground(Prefs.enrolled(this) ? Notes.Link.ON : Notes.Link.ENROL);
 
         netCallback = new ConnectivityManager.NetworkCallback() {
@@ -147,6 +159,7 @@ public class LinkService extends Service {
         }
         sender.shutdown();
         if (wake.isHeld()) wake.release();
+        ear(false);
         super.onDestroy();
     }
 
@@ -229,7 +242,8 @@ public class LinkService extends Service {
             maybeCheckUpdate();
             Api.Reply r;
             try {
-                r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version), (holdSeconds + 30) * 1000);
+                r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version) + (ear != null ? "&ear=1" : ""),
+                        (holdSeconds + 30) * 1000);
             } catch (IOException e) {
                 failures++;
                 Log.i(TAG, "wait failed (" + failures + "): " + e);
@@ -320,6 +334,8 @@ public class LinkService extends Service {
             Notes.cancel(this, Notes.CALL);
         }
 
+        ear(s.optBoolean("ear", false));
+
         JSONObject find = s.optJSONObject("find");
         if (find != null && !handled.contains(find.optString("id"))) {
             String id = find.optString("id");
@@ -331,6 +347,20 @@ public class LinkService extends Service {
         } else if (Ringer.kind() == Ringer.FIND) {
             Ringer.stop(this);
             Notes.cancel(this, Notes.FIND);
+        }
+    }
+
+    /**
+     * A voice call at the ear: while held, Android turns the screen off when
+     * something is near the sensor - no ear or cheek presses the page. Let go,
+     * the screen stays off until the phone leaves the ear.
+     */
+    private void ear(boolean on) {
+        if (ear == null) return;
+        if (on && !ear.isHeld()) {
+            ear.acquire(EAR_MAX);
+        } else if (!on && ear.isHeld()) {
+            ear.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY);
         }
     }
 

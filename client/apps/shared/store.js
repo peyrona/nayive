@@ -1919,7 +1919,16 @@
                 emit( "error" );
                 return { ok: false, unknown: true };
             }
-            if( entry.conflict ) return { ok: false, conflict: true };   // waits for the app, never re-sent
+            if( entry.conflict )
+            {
+                // Waits for the app, never re-sent - unless the file there IS
+                // this save: its first try landed and the answer was lost (held
+                // back before the 412 check below looked). Then it is saved.
+                var there0 = navigator.onLine ? await netGet( path ) : null;
+                if( there0 && there0.ok && sameBody( there0.body, entry.body ) )
+                    return saved( db, path, entry, { ok: true, status: 200, srv: there0.srv, tag: there0.tag } );
+                return { ok: false, conflict: true };
+            }
 
             var merger = entry.mrg ? mergers[ path ] : null;   // see MERGE above
 
@@ -1985,18 +1994,21 @@
                     var since = await since412( db, path, entry );
                     if( since === "sent" ) { await settle(); return { ok: true }; }
                     if( since === "again" && again < 3 ) return flushPathNow( path, mine, again + 1, open );
-                    // A parked save nobody has open: beside the file, never
-                    // over it nor at its old name (PARKED SAVES).
-                    if( ( entry.park || entry.marked ) && ! open ) return setAside( db, path, entry, bin, who );
-                    if( head === 404 ) res = await netPut( path, entry.body, { none: true }, bin, who );   // made again - never over a file put there since
-                    else if( entryVer( entry, doc ).none )
+                    // A save whose answer was lost - netFetch sent it again, or
+                    // the page closed before it heard (a window closed mid-save;
+                    // the next open sends it again): the file there may be its
+                    // own first try. Exactly its bytes there = saved, not
+                    // "changed on another device" nor set aside (D6 did this for
+                    // create-only saves only; GumApi does it for all).
+                    if( head !== 404 )
                     {
-                        // A create-only save (D6) whose answer was lost and that
-                        // netFetch sent again: the file there may be its own
-                        // first try. Exactly its bytes there = saved, not "taken".
                         var there = await netGet( path );
                         if( there.ok && sameBody( there.body, entry.body ) ) res = { ok: true, status: 200, srv: there.srv, tag: there.tag };
                     }
+                    // A parked save nobody has open: beside the file, never
+                    // over it nor at its old name (PARKED SAVES).
+                    if( ! res.ok && ( entry.park || entry.marked ) && ! open ) return setAside( db, path, entry, bin, who );
+                    if( head === 404 ) res = await netPut( path, entry.body, { none: true }, bin, who );   // made again - never over a file put there since
                 }
             }
 
@@ -2580,7 +2592,9 @@
         async function conflicted( path )
         {
             var e = await pending( path );
-            return !! ( e && e.conflict && e.mine );
+            if( ! ( e && e.conflict && e.mine ) ) return false;
+            // Asked again first: the file there may be exactly this save (flushPathNow).
+            return e.page || ! ( await flushPath( path ) ).ok;
         }
 
         // What waits to go up for `path` from this account: null when nothing

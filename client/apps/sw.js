@@ -30,7 +30,7 @@
  */
 
 /* @generated:cache-version */
-var CACHE_VERSION = "nayive-01a6586ecdb0";
+var CACHE_VERSION = "nayive-5814293e2f5b";
 /* @end */
 
 /* @generated:precache */
@@ -64,6 +64,7 @@ var PRECACHE_SHELL = [
     "chat/compose.js",
     "chat/conv.js",
     "chat/core.js",
+    "chat/ear.js",
     "chat/guest-sw.js",
     "chat/guest.js",
     "chat/index.html",
@@ -72,6 +73,7 @@ var PRECACHE_SHELL = [
     "chat/marks.js",
     "chat/media.js",
     "chat/push-notice.js",
+    "chat/watch.js",
     "contact/icons/icon-192.png",
     "contact/icons/icon-512.png",
     "contact/index.html",

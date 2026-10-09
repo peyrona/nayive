@@ -25,7 +25,8 @@
  *   Touch: tap opens. Long-press starts picking: ticks show on every row and
  *   each tap adds / removes. The × in the header or Esc stops.
  *   Header: while something is picked, the selection group (cfg.bar) shows
- *   the count with ×, Select all, then EVERY action as a button, in the menu's
+ *   the count with × (a tap on the number scrolls to the next pick; closing
+ *   the search scrolls to the first), Select all, then EVERY action as a button, in the menu's
  *   order. What does not fit goes into the toolbar's one ⋮ (fitBar), least
  *   important (highest rank) first; the order never changes.
  *   Right-click (long-press on touch) opens the full menu. Right-click on a
@@ -827,7 +828,43 @@
             if( cursor != null && shown.indexOf( cursor ) < 0 ) cursor = null;
             if( sel.length !== before ) changed();
             else { paint(); drawBar(); }
+            if( seekRows != null && rows().length !== seekRows ) { seekRows = null; jump( false ); }
         }
+
+        //---- find the picks -----------------------------------------------//
+
+        // The picks can sit far down the list once the whole list is back.
+        // jump( false ) brings the first one into view, jump( true ) the next
+        // (a tap on the count chip); the row flashes once.
+        var lastJump = null;
+        function jump( next )
+        {
+            var picked = rows().filter( function ( el ) { return has( idOf( el ) ); } );
+            if( ! picked.length ) return;
+            var ids = picked.map( idOf );
+            var el = picked[ next ? ( ids.indexOf( lastJump ) + 1 ) % ids.length : 0 ];
+            lastJump = cursor = idOf( el );
+            paint();
+            el.scrollIntoView( { block: "center", inline: "nearest" } );
+            el.classList.remove( "nb-flash" );
+            void el.offsetWidth;                 // restart the flash
+            el.classList.add( "nb-flash" );
+            setTimeout( function () { el.classList.remove( "nb-flash" ); }, 1300 );
+        }
+
+        // The search was closed: the list comes back whole (at once, or when
+        // the server answers) - then show the first pick.
+        var seekRows = null;
+        document.addEventListener( "nayive:search-closed", function ()
+        {
+            if( ! sel.length || ! list.getClientRects().length ) return;
+            seekRows = rows().length;
+            setTimeout( function ()
+            {
+                if( seekRows != null && rows().length !== seekRows ) { seekRows = null; jump( false ); }
+            }, 0 );
+            setTimeout( function () { seekRows = null; }, 4000 );
+        } );
 
         //---- paint ------------------------------------------------------//
 
@@ -940,8 +977,9 @@
             var ids = sel.slice(), all = allPicked();
             var allLbl = all ? "ui.unselectAll" : "ui.selectAll";     // the button toggles
             var html = ( cfg.count === false ? "" :
-                       '<button type="button" class="icon-btn sel-count" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
-                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + "<span>" + n + "</span></button>" ) +
+                       '<span class="sel-count"><button type="button" class="icon-btn" data-sel="clear" title="' + esc( t( "ui.clearSel" ) + " (" + keyLabel( "Esc" ) + ")" ) +
+                       '" aria-label="' + esc( t( "ui.clearSel" ) ) + '">' + UI.icon( "x" ) + '</button><button type="button" class="icon-btn" data-sel="jump" title="' +
+                       esc( t( "ui.showSel" ) ) + '" aria-label="' + esc( t( "ui.showSel" ) ) + '">' + n + "</button></span>" ) +
                        '<button type="button" class="icon-btn" data-sel="all" data-rank="4" title="' + esc( t( allLbl ) + " (" + keyLabel( all ? "Esc" : "Ctrl+A" ) + ")" ) +
                        '" aria-label="' + esc( t( allLbl ) ) + '">' + G.checkAll + "</button>";
             var g = null;
@@ -974,6 +1012,7 @@
             var b = e.target.closest( "button" );
             if( ! b || b.disabled ) return;
             if( b.dataset.sel === "clear" ) clear();
+            else if( b.dataset.sel === "jump" ) jump( true );
             else if( b.dataset.sel === "all" ) { if( allPicked() ) clear(); else selectAll(); }
             else if( b.dataset.selAct )
             {

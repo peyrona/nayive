@@ -64,11 +64,16 @@
                 { sel: '#folderInfoBtn', text: NayiveUI.t( 'music.introFolder' ) },
                 { sel: '#searchToggle', text: NayiveUI.t( 'music.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'music.introRescan' ) },
-                { icon: 'folder',       name: NayiveUI.t( 'music.library' ), text: NayiveUI.t( 'music.introTree' ) },
-                { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ) },
-                { sel: '#saveListBtn',  text: NayiveUI.t( 'music.introSaveList' ) },
-                { sel: '#clearQueueBtn', text: NayiveUI.t( 'music.introClear' ) }
-            ]
+                { icon: 'folder',       name: NayiveUI.t( 'music.library' ), text: NayiveUI.t( 'music.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
+                // tour: on a phone the queue is a sheet behind #queueBtn
+                { sel: '#seqBtn',       name: NayiveUI.t( 'music.introOrderName' ), text: NayiveUI.t( 'music.introOrder' ), tour: { open: '#queueBtn' } },
+                { sel: '#saveListBtn',  text: NayiveUI.t( 'music.introSaveList' ), tour: { open: '#queueBtn' } },
+                { sel: '#clearQueueBtn', text: NayiveUI.t( 'music.introClear' ), tour: { open: '#queueBtn' } }
+            ],
+            // The guided tour ("Ver el tour" in the card): the card's rows, picking
+            // songs (the shared item browser), the player.
+            tour: [ 'buttons', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
+                    { sel: '#playerBar', text: NayiveUI.t( 'music.tourPlayer' ) } ]
         } );
     } );
     </script>

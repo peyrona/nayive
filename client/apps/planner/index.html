@@ -48,13 +48,21 @@
                     { sel: '[data-pane="habitsPane"]',   text: NayiveUI.t( 'planner.introHabits' ) }
                   ]
                 : [
-                    { sel: '#habitsRestore', text: NayiveUI.t( 'planner.introRestore' ) }
+                    { sel: '#habitsRestore', text: NayiveUI.t( 'planner.introRestore' ), tour: { ghost: '#habitsPane' } }
                   ] ).concat( [
-                    { icon: 'help', name: NayiveUI.t( 'planner.introHelpName' ), text: NayiveUI.t( 'planner.introHelp' ) },
-                    { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
-                      text: NayiveUI.t( 'planner.introSync' ) }
+                    { icon: 'help', name: NayiveUI.t( 'planner.introHelpName' ), text: NayiveUI.t( 'planner.introHelp' ), tour: { sel: '#panes' } }
                   ] ),
-            tip: NayiveUI.t( 'planner.introTip' )
+            tip: NayiveUI.t( 'planner.introTip' ),
+            // The guided tour ("Ver el tour" in the card): on a big screen the three
+            // panes and the bars between them first, then the card's rows.
+            tour: function () {
+                return ( phone ? [] : [
+                    { sel: '#calendarPane', title: 'Calendar', text: NayiveUI.t( 'planner.introCal' ) },
+                    { sel: '#tasksPane',    title: 'Tasks',    text: NayiveUI.t( 'planner.introTasks' ) },
+                    { sel: '#habitsPane',   title: 'Habits',   text: NayiveUI.t( 'planner.introHabits' ), optional: true },
+                    { sel: '#splitter', text: NayiveUI.t( 'planner.tourBars' ) }
+                ] ).concat( 'buttons' );
+            }
         } );
     } );
     </script>

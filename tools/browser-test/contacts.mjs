@@ -90,6 +90,21 @@ rows = await menuRows( c );
 ok( rows && rows.some( r => r.act === "new" ) && rows.some( r => r.act === "selectAll" ), "right-click off the rows: New contact, Select all", rows );
 await key( c, "Escape" );
 
+section( "CONTACTS · FIND THE PICKS" );
+await mouse( c, "#searchBtn" );
+await c.evaluate( "const i = document.getElementById('searchInput'); i.value = 'carla'; i.dispatchEvent( new Event( 'input' ) ); true" );
+ok( await c.until( "document.querySelectorAll('#contactList .contact-row').length === 1" ), "a search shows only Carla" );
+await mouse( c, ROW( "c" ), { dx: 120 } );
+await mouse( c, ".search-fold .search-shut" );
+ok( await c.until( "document.querySelectorAll('#contactList .contact-row').length === 5" ) && await sel() === "c", "the × brings the whole list back; Carla stays picked" );
+ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('nb-flash')` ), "…and Carla's row flashes (scrolled into view)" );
+await mouse( c, ROW( "e" ), { dx: 120, mods: 2 } );
+await mouse( c, "#selActions [data-sel=jump]" );
+ok( await c.until( `document.querySelector('${ ROW( "e" ) }').classList.contains('nb-flash')` ), "a tap on the count goes to the next pick (Elena)" );
+await mouse( c, "#selActions [data-sel=jump]" );
+ok( await c.until( `document.querySelector('${ ROW( "c" ) }').classList.contains('nb-flash')` ) && await sel() === "c,e", "…and round to the first again; the picks stay" );
+await c.evaluate( "browse.clear(); true" );
+
 section( "CONTACTS · KEYS" );
 await mouse( c, ROW( "d" ), { dx: 120 } );
 await key( c, "F2" );

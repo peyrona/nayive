@@ -62,6 +62,7 @@ function wireStaticUI()
     // (?dir=), so they save where the user is looking, not the files/ root.
     document.getElementById( 'syncIndicator'     ).addEventListener( 'click', function() { reload(); } );
     GumApi.onFilesChanged( onFilesNews );                         // another app saved here (toolbar.js)
+    listenStoreSaves();                                           // Write/Calc/Text saves (toolbar.js)
     document.addEventListener( 'visibilitychange', catchUpNews );
     document.getElementById( 'trashViewBtn'      ).addEventListener( 'click', function() { trashMode ? closeTrash() : openTrash(); } );
     document.getElementById( 'bigFilesBtn'       ).addEventListener( 'click', function() { bigMode ? endAdvSearch() : openBigFiles(); } );

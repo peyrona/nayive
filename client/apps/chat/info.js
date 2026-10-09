@@ -469,15 +469,19 @@
         {
             rows.push( { sel: "#newChatBtn", name: T( "chat.newChat" ), text: T( "chat.helpNewChat" ) } );
             rows.push( { sel: "#settingsBtn", name: T( "ui.settings" ), text: T( "chat.helpSettings" ) } );
-            rows.push( { icon: "check", name: T( "chat.pickName" ), text: T( "chat.helpPick" ) } );
+            rows.push( { icon: "check", name: T( "chat.pickName" ), text: T( "chat.helpPick" ),
+                         tour: { sel: "#vList .pick-tick", tap: true, ghost: "#vList [aria-selected], #vList" } } );
         }
         else
         {
             // a person's list keeps these two in its ⋮
-            rows.push( { sel: "#listMenu .menu-item:nth-child(1)", name: "⋮ → " + T( "chat.notifications" ), text: T( "chat.helpBell" ) } );
-            rows.push( { sel: "#listMenu .menu-item:nth-child(2)", name: "⋮ → " + T( "chat.homeIcon" ), text: T( "chat.helpHomeIcon" ) } );
+            rows.push( { sel: "#listMenu .menu-item:nth-child(1)", name: "⋮ → " + T( "chat.notifications" ), text: T( "chat.helpBell" ), tour: { open: "#listMore" } } );
+            rows.push( { sel: "#listMenu .menu-item:nth-child(2)", name: "⋮ → " + T( "chat.homeIcon" ), text: T( "chat.helpHomeIcon" ), tour: { open: "#listMore" } } );
         }
-        NayiveUI.showIntro( { app: "chat", title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), buttons: rows } );
+        // The guided tour ("Ver el tour" in the card): the card's rows, then the
+        // picked chats' actions (the shared item browser).
+        NayiveUI.showIntro( { app: "chat", title: "Chat", lead: T( owner ? "chat.introLead" : "chat.introLeadGuest" ), buttons: rows,
+                              tour: [ "buttons" ].concat( owner ? [ { use: "picked", ghost: "#vList" } ] : [] ) } );
     };
 
     // The rows are read off the bar's buttons and the ⋮ menu themselves
@@ -494,7 +498,7 @@
         } );
         [].forEach.call( document.querySelectorAll( "#convMenu .menu-item" ), function ( b, i )
         {
-            rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ) } );
+            rows.push( { sel: "#convMenu .menu-item:nth-child(" + ( i + 1 ) + ")", name: "⋮ → " + b.textContent, text: T( b._help ), tour: { open: "#convMoreBtn" } } );
         } );
         rows.push( { sel: "#emojiBtn", text: T( "chat.helpEmoji" ) } );
         rows.push( { sel: "#fmtBtn", text: T( "chat.helpFmt" ) } );
@@ -502,8 +506,10 @@
         rows.push( { sel: "#attachBtn", text: T( "chat.helpAttach" ) } );
         rows.push( { sel: "#cameraBtn", text: T( "chat.helpCamera" ) } );
         rows.push( { sel: "#composer .send", name: T( "chat.sendMsg" ), text: T( "chat.helpSend" ) } );
-        rows.push( { icon: "forward", name: T( "chat.holdName" ), text: T( "chat.helpHold" ) } );
-        rows.push( { icon: "check", name: T( "chat.ticksName" ), text: T( "chat.helpTicks" ) } );
-        NayiveUI.showIntro( { app: "chat", title: "Chat", buttons: rows } );
+        // tour: the messages themselves, or the empty wall as a ghost
+        rows.push( { icon: "forward", name: T( "chat.holdName" ), text: T( "chat.helpHold" ), tour: { sel: "#wall .msg", ghost: "#wall" } } );
+        rows.push( { icon: "check", name: T( "chat.ticksName" ), text: T( "chat.helpTicks" ), tour: { sel: "#wall .msg", ghost: "#wall" } } );
+        rows.push( { svg: C.icon( "music" ), name: T( "chat.watchPlay" ), text: T( "chat.helpWatch" ), tour: { ghost: "#wall", sel: "#wall .watch" } } );
+        NayiveUI.showIntro( { app: "chat", title: "Chat", buttons: rows, tour: [ "buttons" ] } );
     };
 } )();

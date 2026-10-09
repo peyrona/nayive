@@ -116,16 +116,16 @@ const PHONE = window.matchMedia( '(max-width: 640px)' );
 // whole. `phoneOnly` names the ones a PC still has on the row (or inside one
 // of its group cards), and app.css drops those entries above 640px, so a PC
 // is never offered the same thing twice. What is left on a PC is the file
-// block: the eight buttons that are on no bar at all (#fileTools).
+// block: the nine buttons that are on no bar at all (#fileTools).
 const MENU_IDS =
 [
-    'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'settingsBtn', 'scBtn',
+    'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'settingsBtn', 'scBtn',
     'tplBtn', 'printBtn', 'pdfBtn',
     'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn'
 ];
 const MENU_PHONE_ONLY =
 [
-    'tplBtn', 'printBtn', 'pdfBtn',
+    'settingsBtn', 'tplBtn', 'printBtn', 'pdfBtn',
     'pageSetupBtn', 'headerBtn', 'footerBtn', 'pageNumBtn', 'paraBtn'
 ];
 
@@ -306,6 +306,8 @@ function wireStaticUI()
     restoreTbStyle();
 
     document.getElementById( 'settingsBtn'         ).addEventListener( 'click', openSettings );
+    document.getElementById( 'saveBtn'             ).addEventListener( 'click', saveNow );
+    document.getElementById( 'recentBtn'           ).addEventListener( 'click', openRecent );
     document.getElementById( 'pageSetupCancelBtn'  ).addEventListener( 'click', function() { setBackdrop( 'pageSetupBackdrop', false ); } );
     document.getElementById( 'pageSetupConfirmBtn' ).addEventListener( 'click', confirmPageSetup );
     document.getElementById( 'psSize'              ).addEventListener( 'change', syncPageSizeRows );
@@ -589,19 +591,40 @@ function setDocMode( mode )
     refreshToolbar();          // read-only greys the buttons at once, not at the next caret move
 }
 
-// Settings (the File menu's entry, Ctrl+,) is no dialog any more: it opens the
-// Herramientas list. In menu mode that is the menu itself; with the toolbar it
-// hangs under the File button that held the entry.
+// Settings (the gear before "?", Ctrl+,) is no dialog: it opens the tools
+// list (toolsItems). In menu mode it hangs under Edición, whose last entry is
+// the same list; on a phone, under the File button whose menu holds the gear.
 function openSettings()
 {
     if( ! ready ) { NayiveUI.toast( NayiveUI.t( 'write.waitForDoc' ) ); return; }
 
-    if( menusOn() ) { MENUBAR.openAt( MENUS.findIndex( function( m ) { return m.key === 'ui.menu.tools'; } ) ); return; }
+    if( menusOn() )
+    {
+        const edit = document.querySelectorAll( '#menuBar .menu-top' )[ MENUS.findIndex( function( m ) { return m.key === 'ui.menu.edit'; } ) ];
+        MENUBAR.openItems( toolsItems, edit.getBoundingClientRect() );
+        return;
+    }
 
+    if( PHONE.matches )
+    {
+        const btn = document.getElementById( 'moreBtn' );
+        // A rectangle, not the button: a press on the button then closes this list
+        // instead of opening the File menu over it.
+        setTimeout( function() { MENUBAR.openItems( toolsItems, btn.getBoundingClientRect() ); }, 0 );
+        return;
+    }
+
+    const gear = document.getElementById( 'settingsBtn' );
+    if( MENUBAR.isOpenFor( gear ) ) MENUBAR.close();
+    else MENUBAR.openItems( toolsItems, gear );
+}
+
+// Recientes from the File list (toolbar chrome): the menu's own entries, hung
+// under the File button the list came from.
+function openRecent()
+{
     const btn = document.getElementById( 'moreBtn' );
-    // A rectangle, not the button: a press on the button then closes this list
-    // instead of opening the File menu over it.
-    setTimeout( function() { MENUBAR.openItems( toolsItems, btn.getBoundingClientRect() ); }, 0 );
+    setTimeout( function() { MENUBAR.openItems( session.recentItems, btn.getBoundingClientRect() ); }, 0 );
 }
 
 //----------------------------------------------------------------------------//
@@ -623,7 +646,7 @@ function changeProofLangs( raw )
     if( spell ) spell.reset();
 }
 
-// Herramientas ▸ one language on / off, the others kept (in proofing.js's order).
+// Settings ▸ one language on / off, the others kept (in proofing.js's order).
 function toggleProofLang( code )
 {
     const on = proofLangs.indexOf( code ) >= 0;
@@ -1996,8 +2019,8 @@ function printDocument( pdfHint )
 //
 //   'toolbar'  the icon strip (the original, and still the default)
 //   'menus'    classic pull-downs - Archivo, Edicion, Ver, Insertar, Formato,
-//              Herramientas, Tabla, Ayuda - laid out the way Word did it before
-//              the ribbon.
+//              Tabla, Ayuda - laid out the way Word did it before the ribbon
+//              (Settings is Edicion's last entry, as in every Nayive app).
 //
 // The choice is saved TWICE on purpose: in localStorage, which is what a fresh
 // load starts from with no network wait, and in data/write/config.json, which is
@@ -2227,7 +2250,9 @@ function fillItems()
 // The toolbar's table button: insert one, or change the one the caret is in.
 function tableItems()
 {
-    return [ { key: 'write.cm.insertTable', sub: gridItems }, { sep: true } ].concat( TABLE_EDIT_ITEMS );
+    // The Tabla menu's list, less Bordes: that one has its own button.
+    return [ { key: 'write.cm.insertTable', sub: gridItems }, { sep: true } ]
+        .concat( TABLE_EDIT_ITEMS.slice( 0, -1 ), [ { key: 'write.cellFill', sub: fillItems } ], TABLE_EDIT_ITEMS.slice( -1 ) );
 }
 
 // A Material glyph for a menu row that has no toolbar button of its own.
@@ -2248,10 +2273,17 @@ const CLIP_ITEMS =
       enabled: function() { return canExec( { type: 'pasteWithoutFormatting', text: ' ' } ); } }
 ];
 
-// Herramientas - what the Settings dialog held (the editing mode is Ver ▸ Modo):
+// Ver ▸ Modo, and the toolbar's Mode drop-down.
+const MODE_ITEMS =
+[
+    { key: 'write.modeEdit', run: function() { setDocMode( 'editing' ); }, checked: function() { return docMode() === 'editing'; } },
+    { key: 'write.modeRead', run: function() { setDocMode( 'viewing' ); }, checked: function() { return docMode() === 'viewing'; } }
+];
+
+// Settings - what the old Settings dialog held (the editing mode is Ver ▸ Modo):
 // autocorrect, then one tick per vendored dictionary, from proofing.js's own
 // list so a new .aff/.dic pair shows up here without touching this file.
-// Settings (the File menu, Ctrl+,) opens this same list.
+// The gear, Ctrl+, and Edición's last entry all open this same list.
 function toolsItems()
 {
     return [
@@ -2298,7 +2330,9 @@ const MENUS = [
     ].concat( CLIP_ITEMS, [
         { sep: true },
         { key: 'write.sc.find',    run: function() { openFind( false ); }, sc: 'write.sc.find',    iconOf: '#findBtn' },
-        { key: 'write.sc.replace', run: function() { openFind( true );  }, sc: 'write.sc.replace', iconOf: '#findBtn' } ] )
+        { key: 'write.sc.replace', run: function() { openFind( true );  }, sc: 'write.sc.replace', iconOf: '#findBtn' },
+        { sep: true },
+        { key: 'ui.settings', sub: toolsItems, iconOf: '#settingsBtn' } ] )
 },
 {
     key: 'ui.menu.view',
@@ -2310,9 +2344,7 @@ const MENUS = [
         { key: 'write.footer', el: 'footerBtn', checked: function() { return hfEditing() === 'footer'; } },
         { sep: true },
         { key: 'write.tb.zoom', sub: zoomItems, iconOf: '#zoomBtn' },
-        { key: 'write.mode', sub:
-            [ { key: 'write.modeEdit',    run: function() { setDocMode( 'editing' ); }, checked: function() { return docMode() === 'editing'; } },
-              { key: 'write.modeRead',    run: function() { setDocMode( 'viewing' ); }, checked: function() { return docMode() === 'viewing'; } } ] }
+        { key: 'write.mode', sub: MODE_ITEMS, iconOf: '#modeBtn' }
     ]
 },
 {
@@ -2373,10 +2405,6 @@ const MENUS = [
               TABLE_EDIT_ITEMS.slice( -1 ) )
 },
 {
-    key: 'ui.menu.tools',
-    items: toolsItems()
-},
-{
     key: 'ui.menu.help',
     items: NayiveOffice.HELP_ITEMS   // the "?" shows the same three (shared/office.js)
 } ];
@@ -2390,7 +2418,9 @@ const TOOLBAR_DROPDOWNS =
     tableBtn      : tableItems,
     alignBtn      : ALIGN_ITEMS,
     lineSpacingBtn: lineItems,
-    zoomBtn       : zoomItems
+    zoomBtn       : zoomItems,
+    editBtn       : CLIP_ITEMS,
+    modeBtn       : MODE_ITEMS
 };
 
 

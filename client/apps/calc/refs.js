@@ -12,7 +12,7 @@ import
 {
     decodeCell
 }
-from './lib/xlsx-format_v2.4.1.js';
+from './lib/xlsx-format_v2.4.5.js';
 import
 {
     table, activeSheet

@@ -13,6 +13,7 @@ What the service does, all through ONE long poll to `/api/device/wait`
 |---|---|
 | Positions during a trip | on and off by itself with the trip's dates |
 | A Chat call | rings (the phone's ringtone, obeying silent/vibrate) with a full-screen Contestar / Rechazar |
+| A voice call at the ear | the screen goes off near the ear (proximity sensor), as in a phone call; the page's padlock stays away |
 | Unread messages | a silent notification carrying the number: the icon's badge (a dot on Pixel) |
 | "Buscar mi móvil" | rings on the ALARM stream - heard with the phone silenced - until Parar on the phone, and sends where it is |
 | A new APK | once a day, `<origin>/app/version.json` → a notification |

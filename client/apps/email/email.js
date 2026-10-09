@@ -66,24 +66,28 @@
     function intro()
     {
         var T = E.T;
+        var NO_MAIL = "#list [aria-selected], #listEmpty, #noAcct, #list";
         NayiveUI.firstRun( {
             app:   "email",
             title: "eMail",
             lead:  T( "mail.introLead" ),
+            // tour: ("Ver el tour" in the card) what each row lights - a message's
+            // own buttons with the first one picked, a ghost on the list while
+            // there is none (no account yet, an empty tray).
             buttons: [
-                { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTree" ) },
-                { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introOpen" ) },
-                { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ) },
+                { svg: E.icon( "inbox" ), name: T( "mail.tray.inbox" ) + " · " + T( "mail.tray.trash" ), text: T( "mail.introTree" ), tour: { sel: "#tree, #treeBtn", ghost: NO_MAIL, icon: "folder" } },
+                { icon: "forward", name: T( "mail.introReadName" ), text: T( "mail.introOpen" ), tour: { sel: "#list [aria-selected]", ghost: NO_MAIL } },
+                { icon: "search", name: T( "mail.search" ), text: T( "mail.introSearch" ), tour: { sel: "#searchBtn", ghost: NO_MAIL } },
                 { sel: "#composeBtn", text: T( "mail.introCompose" ) },
-                { icon: "back", name: T( "mail.reply" ) + " \u00b7 " + T( "mail.forward" ), text: T( "mail.introReply" ) },
-                { sel: "#fBold", name: T( "mail.format" ), text: T( "mail.introFormat" ) },
+                { icon: "back", name: T( "mail.reply" ) + " \u00b7 " + T( "mail.forward" ), text: T( "mail.introReply" ), tour: { sel: "#actReply", picked: true, ghost: NO_MAIL } },
+                { sel: "#fBold", name: T( "mail.format" ), text: T( "mail.introFormat" ), tour: { ghost: "#composeBtn" } },
                 { sel: "#selectBtn", text: T( "mail.introPick" ) },
-                { sel: "#actDelete", text: T( "mail.introDelete" ) },
-                { sel: "#actLabel", text: T( "mail.introLabels" ) },
-                { svg: E.icon( "tag" ), name: T( "mail.labels" ), text: T( "mail.introLabelMenu" ) },
-                { sel: "#setBtn", text: T( "mail.introSettings" ) },
-                { sel: "#syncIndicator", name: T( "ui.syncName" ), text: T( "mail.introSync" ) }
-            ]
+                { sel: "#actDelete", text: T( "mail.introDelete" ), tour: { picked: true, ghost: NO_MAIL } },
+                { sel: "#actLabel", text: T( "mail.introLabels" ), tour: { picked: true, ghost: NO_MAIL } },
+                { svg: E.icon( "tag" ), name: T( "mail.labels" ), text: T( "mail.introLabelMenu" ), tour: { sel: "#tree, #treeBtn", ghost: NO_MAIL, icon: "folder" } },
+                { sel: "#setBtn", text: T( "mail.introSettings" ) }
+            ],
+            tour: [ "buttons" ]
         } );
     }
 

@@ -111,6 +111,7 @@
                 if( m.id > seen && m.from !== me ) { S.bandId = m.id; break; }
             }
             C.renderAll();
+            if( C.syncWatch ) C.syncWatch();         // a video playing here (watch.js)
             if( C.refreshInfo ) C.refreshInfo();     // Info opened before the messages came
             var band = C.$( ".band", wallIn );
             if( band ) band.scrollIntoView( { block: "center" } );
@@ -142,6 +143,7 @@
         S.msgs = new Map();
         S.order = [];
         S.els = new Map();
+        if( C.syncWatch ) C.syncWatch();   // its video stops on this page (watch.js)
         C.$( "#vConv" ).hidden = true;
         C.$( "#vEmpty" ).hidden = false;
         C.$( "#chat" ).classList.remove( "in-main" );
@@ -201,9 +203,9 @@
         // [phone] [video] | [search] [info] [mute] [pin] [their link] [new link]
         // [delete] | [⋮] [?]. Each button has a rank (1 = the last to leave):
         // what does not fit goes into the ⋮ (fitBar, built in buildMain); a
-        // person's page keeps all but the calls in the ⋮. Calls are one to
-        // one (call.js): a group has no phone, and neither does a server
-        // without coturn. This "?" explains this side only; the list's help
+        // person's page keeps all but the calls in the ⋮. A group calls up
+        // to four people (call.js GROUP CALLS); a server without coturn has
+        // no phone at all. This "?" explains this side only; the list's help
         // explains the list (his call, 2026-09-21).
         // The groups of every header (shared/app.css HEADER).
         var fits = !! head._fitBar;
@@ -218,9 +220,10 @@
             .concat( ct && ! ct.user ? [ [ "convLinkBtn", "link", "chat.theirLink", function () { C.showLink( ct ); }, "chat.helpTheirLink", 8 ],   // a Nayive user has no link
                                          [ "convNewLinkBtn", "refresh", "chat.newLink", function () { C.newLink( ct ); }, "chat.helpNewLink", 9 ] ] : [],
                      [ [ "convDeleteBtn", "trash", "chat.clearMsgs", function () { C.clearChat( c ); }, "chat.deleteChatAsk", 7, "danger" ] ] );
-        if( c.kind === "d" && S.callsOn )
-            list.unshift( [ "convCallBtn", "phone", "chat.voiceCall", function () { C.startCall( false ); }, "chat.helpVoiceCall", 1 ],
-                          [ "convVideoBtn", "video", "chat.videoCall", function () { C.startCall( true ); }, "chat.helpVideoCall", 2 ] );
+        var g = c.kind === "g";
+        if( ( c.kind === "d" || g ) && S.callsOn )
+            list.unshift( [ "convCallBtn", "phone", "chat.voiceCall", function () { C.startCall( false ); }, g ? "chat.helpGroupVoiceCall" : "chat.helpVoiceCall", 1 ],
+                          [ "convVideoBtn", "video", "chat.videoCall", function () { C.startCall( true ); }, g ? "chat.helpGroupVideoCall" : "chat.helpVideoCall", 2 ] );
         if( ! fits ) convMenu.textContent = "";
         list.forEach( function ( it )
         {
@@ -241,9 +244,11 @@
         } );
         var help = C.btn( "help", "chat.help", function () { C.showConvHelp(); } );
         help.id = "convHelpBtn";
+        help.setAttribute( "data-intro-open", "" );   // the tour ends here (shared/ui.js)
         if( fits ) help.dataset.rank = 31;
         head.appendChild( h( "div", { class: "topbar-actions" }, calls, acts, h( "div", { class: "tb-group tb-sys" }, convMore, help ) ) );
         if( fits ) head._fitBar.fit();
+        if( C.renderCallBar ) C.renderCallBar();   // a group call on here (call.js)
     };
 
     // id: the chat (the open one by default; the list's menu names its own).
@@ -779,6 +784,7 @@
                 // a reply or a forward keeps its bubble: the quote needs it
                 if( ! m.replyTo && ! m.fwd && C.fewEmojis( m.text ) ) el.classList.add( "jumbo" );
                 C.textNodes( el, m.text || "" );
+                if( C.watchRow ) C.watchRow( el, m );   // a YouTube link: "Play for everyone" (watch.js)
                 el.appendChild( meta( m ) );
         }
 

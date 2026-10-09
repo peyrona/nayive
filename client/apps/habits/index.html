@@ -372,12 +372,22 @@
                 { icon: 'grid', name: NayiveUI.t( 'habits.introMonthName' ), text: NayiveUI.t( 'habits.introMonth' ) }
             ].concat( document.getElementById( 'collapseBtn' ).hidden
                       ? []
-                      : [ { sel: '#collapseBtn', text: NayiveUI.t( 'habits.introCollapse' ) } ] )
-            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
-            // so its row would document a control that is not on screen.
-            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
-                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
-                  text: NayiveUI.t( 'habits.introSync' ) } ] )
+                      : [ { sel: '#collapseBtn', text: NayiveUI.t( 'habits.introCollapse' ) } ] ),
+            // The guided tour ("Ver el tour" in the card). Rows that need a habit
+            // ring the empty list as a ghost until there is one.
+            tour: function () {
+                const T = NayiveUI.t, toToday = function () { const b = document.querySelector( '[data-view="today"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); };
+                return [
+                    { before: toToday, sel: '#addBtn', title: T( 'habits.newHabit' ), text: T( 'habits.introAdd' ) },
+                    { sel: '.habit-row .check-btn', ghost: '#homeEmpty, #dueList', icon: 'check', title: T( 'habits.introMarkName' ), text: T( 'habits.introMark' ) },
+                    { sel: '.habit-row .text-btn.danger', ghost: '.habit-row .row-meta, #homeEmpty', icon: 'undo', title: T( 'habits.introYesterdayName' ), text: T( 'habits.introYesterday' ) },
+                    { sel: '.habit-row .row-main', ghost: '#homeEmpty', icon: 'edit', title: T( 'ui.settings' ), text: T( 'habits.introEdit' ) },
+                    { before: toToday, sel: '[data-view="month"]', tap: true, title: T( 'habits.introMonthName' ), text: T( 'habits.introMonth' ) },
+                    { sel: '#gridWrap', ghost: '#monthEmpty', icon: 'grid', text: T( 'habits.gridHint' ), after: toToday },
+                    document.getElementById( 'collapseBtn' ).hidden ? null
+                        : { sel: '#collapseBtn', text: T( 'habits.introCollapse' ) }
+                ];
+            }
         } );
     } );
     </script>

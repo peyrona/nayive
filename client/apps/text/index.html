@@ -81,11 +81,12 @@
             lead:  NayiveUI.t( 'text.introLead' ),
             buttons: [
                 { sel: '#moreBtn',      text: NayiveUI.t( 'text.introFileMenu' ) },
-                { sel: '#newBtn',       text: NayiveUI.t( 'write.introNew' ) },
-                { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ) },
-                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ) },
-                { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ) },
-                { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ) },
+                // tour: the File menu rows are lit inside the open menu
+                { sel: '#newBtn',       text: NayiveUI.t( 'write.introNew' ),     tour: { open: '#moreBtn' } },
+                { sel: '#openBtn',      text: NayiveUI.t( 'text.introOpen' ),     tour: { open: '#moreBtn' } },
+                { sel: '#importBtn',    text: NayiveUI.t( 'text.introImport' ),   tour: { open: '#moreBtn' } },
+                { sel: '#saveAsBtn',    text: NayiveUI.t( 'text.introSaveAs' ),   tour: { open: '#moreBtn' } },
+                { sel: '#restoreBtn',   text: NayiveUI.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
                 { sel: '#langSelect',   text: NayiveUI.t( 'text.introLang' ) },
                 { sel: '#previewBtn',   text: NayiveUI.t( 'text.introPreview' ) },
                 { sel: '#wrapBtn',      text: NayiveUI.t( 'text.introWrap' ) },
@@ -93,7 +94,9 @@
                 { sel: '#marginInput',  text: NayiveUI.t( 'text.introMargin' ) },
                 { sel: '#zoomOutBtn',   text: NayiveUI.t( 'text.introZoomOut' ) },
                 { sel: '#zoomInBtn',    text: NayiveUI.t( 'text.introZoomIn' ) }
-            ]
+            ],
+            // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows.
+            tour: [ { sel: '#panes', text: NayiveUI.t( 'text.introLead' ) }, 'buttons' ]
         } );
     } );
     </script>

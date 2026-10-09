@@ -551,43 +551,51 @@
         // .row-act` the bin on an archived one: each row appears only while
         // that button is really there. `:not([hidden])` does the same job for
         // the four buttons a group shared with us (read-only) takes away.
-        var sync = { sel: '#syncIndicator', name: T( 'ui.syncName' ), text: T( 'split.introSync' ) };
+        // The guided tour ("Ver el tour" in the card) walks the rows of the card
+        // on screen ('buttons'): `tour` gives the rows with no button of their
+        // own something to light - a row, a block, the empty state as a ghost.
+        var tab = function ( k ) { return function () { var b = document.querySelector( '#groupTabs [data-tab="' + k + '"]' ); if( b && ! b.classList.contains( 'is-active' ) ) b.click(); }; };
+        var NO_GROUP = '#groupList > .card-row, #homeEmpty';
+        var NO_ENTRY = '#entryList > *, #entriesEmpty';
 
         var home = {
             app:   'split',
+            tour:  [ 'buttons' ],
             title: 'Split',
             lead:  T( 'split.introLead' ),
             buttons: [
                 { sel: '#addBtn', text: T( 'split.introAddGroup' ) },
-                { icon: 'forward', name: T( 'split.introOpenName' ), text: T( 'split.introOpenGroup' ) },
-                { sel: '#groupList .row-act',   text: T( 'split.introArchive' ) },
-                { sel: '#archivedList .row-act', text: T( 'split.introDelete' ) },
-                { name: T( 'split.introArchivedName' ), text: T( 'split.introArchived' ) },
-                { icon: 'lock', name: T( 'split.sharedWithMe' ), text: T( 'split.introShared' ) },
-                sync
+                { icon: 'forward', name: T( 'split.introOpenName' ), text: T( 'split.introOpenGroup' ),
+                  tour: { sel: '#groupList > .card-row', ghost: '#homeEmpty' } },
+                { sel: '#groupList .row-act',   text: T( 'split.introArchive' ), tour: { ghost: NO_GROUP } },
+                { sel: '#archivedList .row-act', text: T( 'split.introDelete' ), tour: { open: '#archivedToggle', ghost: NO_GROUP, icon: 'trash' } },
+                { name: T( 'split.introArchivedName' ), text: T( 'split.introArchived' ), tour: { sel: '#archivedToggle', ghost: NO_GROUP } },
+                { icon: 'lock', name: T( 'split.sharedWithMe' ), text: T( 'split.introShared' ), tour: { sel: '#sharedBlock', ghost: NO_GROUP } }
             ]
         };
 
         var group = {
             app:   'split',
+            tour:  [ 'buttons' ],
             title: 'Split',
             lead:  T( 'split.introGroupLead' ),
             buttons: [
                 { sel: '#backBtn', text: T( 'split.introBack' ) },
                 { sel: '#addBtn:not([hidden])',  text: T( 'split.introAddEntry' ) },
-                { name: T( 'split.tabEntries' ) + ' \u00b7 ' + T( 'split.tabBalances' ), text: T( 'split.introTabs' ) },
-                { icon: 'search', name: T( 'ui.search' ), text: T( 'split.introSearch' ) },
-                { icon: 'edit',   name: T( 'split.editEntry' ), text: T( 'split.introEditEntry' ) },
-                { icon: 'trash',  name: T( 'ui.delete' ), text: T( 'split.introDelEntry' ) },
-                { name: T( 'split.introModesName' ), text: T( 'split.introModes' ) },
-                { name: T( 'split.currency' ) + ' \u00b7 ' + T( 'split.fx' ), text: T( 'split.introFx' ) },
+                { name: T( 'split.tabEntries' ) + ' \u00b7 ' + T( 'split.tabBalances' ), text: T( 'split.introTabs' ), tour: { sel: '#groupTabs' } },
+                { icon: 'search', name: T( 'ui.search' ), text: T( 'split.introSearch' ), tour: { before: tab( 'entries' ), sel: '#searchInput', ghost: NO_ENTRY } },
+                { icon: 'edit',   name: T( 'split.editEntry' ), text: T( 'split.introEditEntry' ), tour: { sel: '#entryList > .card-row', ghost: '#entriesEmpty' } },
+                { icon: 'trash',  name: T( 'ui.delete' ), text: T( 'split.introDelEntry' ), tour: { ghost: NO_ENTRY } },
+                { name: T( 'split.introModesName' ), text: T( 'split.introModes' ), tour: { ghost: NO_ENTRY, icon: 'grid' } },
+                { name: T( 'split.currency' ) + ' \u00b7 ' + T( 'split.fx' ), text: T( 'split.introFx' ), tour: { ghost: NO_ENTRY, icon: 'compass' } },
                 { sel: '#peopleBtn:not([hidden])', text: T( 'split.introPeople' ) },
                 { sel: '#editBtn:not([hidden])',   text: T( 'split.introEdit' ) },
                 { sel: '#shareBtn:not([hidden])',  text: T( 'split.introShare' ) },
-                { icon: 'check', name: T( 'split.introPayName' ), text: T( 'split.introPay' ) },
-                { name: T( 'split.perCurrency' ), text: T( 'split.introPerCur' ) },
-                { sel: '#pdfBtn',     text: T( 'split.introPdf' ) },
-                sync
+                { icon: 'check', name: T( 'split.introPayName' ), text: T( 'split.introPay' ),
+                  tour: { before: tab( 'balances' ), after: tab( 'entries' ), sel: '#balanceList .settle-row .icon-btn', ghost: '#balanceList, #balancesTab' } },
+                { name: T( 'split.perCurrency' ), text: T( 'split.introPerCur' ),
+                  tour: { before: tab( 'balances' ), after: tab( 'entries' ), sel: '#perCurBtn', ghost: '#balanceList, #balancesTab' } },
+                { sel: '#pdfBtn',     text: T( 'split.introPdf' ) }
             ]
         };
 

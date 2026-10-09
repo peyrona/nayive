@@ -10,7 +10,7 @@ import
 {
     encodeCell, decodeCell, formatNumber
 }
-from './lib/xlsx-format_v2.4.1.js';
+from './lib/xlsx-format_v2.4.5.js';
 import
 {
     NF_SAMPLE_DATE, borderWeight, borderColorValue, T, scheduleAutosave, menus, CHROME,
@@ -452,7 +452,7 @@ function updateToolbarActiveState()
     setColorBar( document.getElementById( 'fmtFillColor' ) );
     document.getElementById( 'fmtFontFamily' ).value = ( style && style.fontFamily ) || '';
     document.getElementById( 'fmtFontSize'   ).value = ( style && style.size )        || '';
-    document.getElementById( 'fmtNumFormat'  ).value = numFmtCategory( style && style.numFmt );
+    showNumFmt( style && style.numFmt );
 
     document.getElementById( 'fmtSplitBtn'     ).disabled = ! mergesInSelection().length;
 
@@ -721,11 +721,52 @@ function numFmtCategory( code )
     return 'numero';
 }
 
+// The drop-down never rests on a real row: the hidden first one carries the
+// cell's category label. So picking that same category again still fires
+// 'change' and reopens the dialog - 2 decimals to 3 without clearing first.
+function showNumFmt( code )
+{
+    const sel = document.getElementById( 'fmtNumFormat' );
+    const cat = numFmtCategory( code );
+
+    sel.dataset.cur = cat;
+    sel.options[ 0 ].textContent = sel.querySelector( 'option[value="' + cat + '"]' ).textContent;
+    sel.selectedIndex = 0;
+}
+
+// Opening on a cell of the same category starts from its own code.
+function fillNumFmtFields( code )
+{
+    const num = code.split( ';' )[ 0 ];
+    const dec = /\.(0+)/.exec( num );
+    const sym = /"([^"]*)"/.exec( num );
+    const set = function( id, v ) { const el = document.getElementById( id ); if( el.querySelector( 'option[value="' + v + '"]' ) ) el.value = v; };
+
+    set( 'nfDecimals',    dec ? dec[ 1 ].length : 0 );
+    set( 'nfDatePattern', code );
+    document.getElementById( 'nfThousands' ).checked = num.indexOf( ',' ) !== -1;
+    document.getElementById( 'nfRedNeg'    ).checked = /\[Red\]/i.test( code );
+
+    if( sym )
+    {
+        document.getElementById( 'nfCurrency'    ).value = sym[ 1 ].trim();
+        document.getElementById( 'nfCurrencyPos' ).value = num.indexOf( '"' ) === 0 ? 'before' : 'after';
+    }
+}
+
 function openNumFmtDialog( cat )
 {
+    const st = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
+
+    // The pick moved the drop-down off its shown row: put it back now, so
+    // however the dialog closes (×, Esc, outside) the next pick still fires.
+    showNumFmt( st && st.numFmt );
+
     if( ! lastSelection ) return;
 
     nfCategory = cat;
+
+    if( st && st.numFmt && numFmtCategory( st.numFmt ) === cat ) fillNumFmtFields( st.numFmt );
 
     document.getElementById( 'numFmtTitle' ).textContent =
     ({
@@ -797,15 +838,9 @@ function confirmNumFmt()
     NayiveUI.close( 'numFmtBackdrop' );
 }
 
-// Closing without applying must also put the dropdown back to the selected cell's
-// real category — the change event that opened the dialog already moved it off.
 function cancelNumFmt()
 {
     NayiveUI.close( 'numFmtBackdrop' );
-
-    const st = lastSelection ? styleOf( activeSheet, lastSelection.r1, lastSelection.c1 ) : null;
-
-    document.getElementById( 'fmtNumFormat' ).value = numFmtCategory( st && st.numFmt );
 }
 
 export
@@ -813,5 +848,5 @@ export
     toggleStyleField, setStyleField, clearSelectionStyle, setOrClearStyleField, setColorBar,
     updateToolbarActiveState, mergeSelection, splitSelection, mergesInSelection, toggleFreezeColumns, toggleFreezeRows,
     openBorderPopup, closeBorderPopup, syncBorderPopupState, applyBorder, openNumFmtDialog,
-    updateNumFmtPreview, confirmNumFmt, cancelNumFmt, gridColors, togglePainter, paintFormat, setPainter
+    updateNumFmtPreview, confirmNumFmt, cancelNumFmt, gridColors, togglePainter, paintFormat, setPainter, MAX_COLS
 };

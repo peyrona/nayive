@@ -182,7 +182,10 @@ func TestChatCallRules(t *testing.T) {
 	f.call(t, javi, "POST", jp+"/conv/"+dc+"/call", `{"dev":"javi-page-1"}`, 403, nil)    // not his chat
 	var g struct{ ID string }
 	f.call(t, f.owner, "POST", "/api/chat/groups", `{"name":"G","members":["`+f.ids["Carmen"]+`"]}`, 201, &g)
-	f.call(t, f.owner, "POST", "/api/chat/conv/g-"+g.ID+"/call", `{"dev":"owner-page-1"}`, 400, nil)
+	// A group rings now (chat_call_group_test.go); hung up at once, it is out of the way.
+	var gc struct{ ID string }
+	f.call(t, f.owner, "POST", "/api/chat/conv/g-"+g.ID+"/call", `{"dev":"owner-page-1"}`, 201, &gc)
+	f.call(t, f.owner, "POST", "/api/chat/call/"+gc.ID+"/end", `{"dev":"owner-page-1"}`, 200, nil)
 
 	// A page cannot write a call bubble itself.
 	f.call(t, carmen, "POST", cp+"/conv/"+dc+"/messages", `{"kind":"call","text":"x"}`, 400, nil)

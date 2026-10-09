@@ -49,10 +49,23 @@
                 { sel: '#dedupBtn',  text: T( 'contact.introDedup' ) },
                 { sel: '.header .fit-more', text: T( 'contact.introSettings' ) },
                 { sel: '#treeBtn',   text: T( 'contact.introGroups' ) },
-                { sel: '#addBtn',    text: T( 'contact.introAdd' ) },
-                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
-                  text: T( 'contact.introSync' ) }
-            ]
+                { sel: '#addBtn',    text: T( 'contact.introAdd' ) }
+            ],
+            // The guided tour ("Ver el tour" in the card). With no contact yet the
+            // row steps ring the empty state; the A-Z rail only shows from 30 rows.
+            tour: function () {
+                return [
+                    { sel: '#treeBtn, #treePane', title: T( 'contact.groups' ), text: T( 'contact.introGroups' ) },
+                    'search',
+                    { sel: '#addBtn', title: T( 'contact.newContact' ), text: T( 'contact.introAdd' ) },
+                    { sel: '#dedupBtn', title: T( 'contact.findDupes' ), text: T( 'contact.introDedup' ) },
+                    { use: 'more', text: T( 'contact.introSettings' ) },
+                    { sel: '#contactList .contact-row', ghost: '#emptyState', icon: 'user', text: T( 'contact.tourOpen' ) },
+                    { use: 'pick', ghost: '#contactList [aria-selected], #emptyState' },
+                    { use: 'picked', ghost: '#emptyState' },
+                    { sel: '#azRail', ghost: '#contactList, #emptyState', text: T( 'contact.tourAz' ) }
+                ];
+            }
         } );
     } );
     </script>
@@ -2982,7 +2995,9 @@
         function topMenuItems()
         {
             return [
-                { id: 'import', label: T( 'contact.importVcf' ), icon: 'upload', disabled: ! canSave(),
+                // canSave()'s own test, without its toast: fitBar asks for these rows on
+                // every refit, and while the book loads that flashed "still reading".
+                { id: 'import', label: T( 'contact.importVcf' ), icon: 'upload', disabled: ! bookRead || !! store.isBlocked( CONTACTS_FILE ),
                   run: () => { if( canSave() ) document.getElementById( 'importInput' ).click(); } },
                 // While picking, the selection's own Export (the picked cards) stands for it.
                 { id: 'export', label: T( 'contact.exportVcf' ), icon: 'download', run: exportVcf,

@@ -593,6 +593,8 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		"online": a.o.onlineFor(a.pid),
 		"typing": a.o.typingFor(a.pid),
 		"calls":  a.o.cs().callsFor(a.pid, dev),
+		"watch":  a.o.watchFor(a.pid),
+		"now":    nowMs(),
 	}
 	if dev != "" {
 		res["sig"] = a.o.cs().sigsFor(dev, sigSeen)
@@ -1355,6 +1357,16 @@ func (s *Server) chatConvRoute(w http.ResponseWriter, r *http.Request, conv stri
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})
+
+	case len(rest) == 1 && rest[0] == "watch":
+		if !method(http.MethodPost) {
+			return
+		}
+		var body chatWatchReq
+		if !readJSONBody(w, r, &body) {
+			return
+		}
+		in(func(a chatActor, c *chatConv) { s.chatWatchSet(w, r, a, c, conv, body) })
 
 	case len(rest) == 1 && rest[0] == "prefs":
 		if !method(http.MethodPost) {

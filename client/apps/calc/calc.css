@@ -15,6 +15,7 @@
     --calc-header:     var(--card2);                                         /* row / col headers */
     --calc-header-hi:  color-mix(in srgb, var(--accent) 22%, var(--card2));  /* selected header   */
     --calc-grid-line:  var(--line);
+    --calc-header-line: var(--calc-grid-line);                               /* lines between A, B… / 1, 2… */
 }
 :root[data-theme="light"]
 {
@@ -23,6 +24,7 @@
     --calc-header:     color-mix(in srgb, var(--card) 72%, var(--line));     /* tan, frames grid  */
     --calc-header-hi:  color-mix(in srgb, var(--accent) 18%, var(--card));
     --calc-grid-line:  color-mix(in srgb, var(--line) 38%, var(--card2));    /* soft tan rules    */
+    --calc-header-line: color-mix(in srgb, var(--line) 70%, var(--card));    /* the soft rules vanish on the tan headers */
 }
 
 /* Handsontable v18's theme is built on CSS custom properties — the semantic tokens
@@ -59,6 +61,12 @@
 }
 
 #gridHost.ht-theme-main-dark, #gridHost.ht-theme-main { background-color: var(--calc-paper); }
+#gridHost th
+{
+    --ht-border-color: var(--calc-header-line);
+    --ht-cell-horizontal-border-color: var(--calc-header-line);
+    --ht-cell-vertical-border-color: var(--calc-header-line);
+}
 
 /* "Select all" affordance in the row-0 / col-0 corner cell. Clicking that cell
    already selects the whole sheet (Handsontable default); this is just the visual
@@ -128,6 +136,8 @@ html, body { height: 100%; overflow: hidden; }
 .fmt-select-narrow { width: 52px; }
 .fmt-select-font { width: 104px; }
 .fmt-select-numfmt { width: 92px; }
+/* The small × right after each colour picker: back to no colour. */
+.fmt-color-clear { width: 16px; margin-left: -3px; border-radius: 4px; }
 
 /* The bottom bar: sheet tabs on the left, the selection's totals on the
    right — the one place a spreadsheet is allowed chrome below the grid.
@@ -160,6 +170,7 @@ html, body { height: 100%; overflow: hidden; }
     padding: 5px 12px; border: none; border-radius: var(--radius-s) var(--radius-s) 0 0;
     background: transparent; color: var(--text-dim);
     font-family: inherit; font-size: 0.85rem; cursor: pointer;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 .sheet-tab:hover   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); }
 .sheet-tab.is-active
@@ -167,6 +178,12 @@ html, body { height: 100%; overflow: hidden; }
     background: var(--calc-paper); color: var(--text); font-weight: 600;
     box-shadow: inset 0 2px 0 var(--accent);
 }
+/* Renaming a tab (grid.js, editSheetName): the tab becomes this field, in place. */
+.sheet-tab-edit { height: auto; align-self: stretch; min-width: 6ch; max-width: 33ch; border-radius: var(--radius-s) var(--radius-s) 0 0; }
+/* Dragging a tab (grid.js, dragTab): it fades, and a line marks where it lands. */
+.sheet-tab.is-dragging { opacity: 0.5; cursor: grabbing; }
+.sheet-tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.sheet-tab.drop-after  { box-shadow: inset -3px 0 0 var(--accent); }
 
 /* ---- THE FORMULA ROW ------------------------------------------------
    One row of its own, right under the chrome, where LibreOffice Calc and
@@ -329,6 +346,7 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
     #formulaRow { padding: 4px 4px; }
     #formulaRow .fmt-sep { margin: 4px 3px; }
     .fmt-btn, .fmt-color-btn { width: 36px; height: 36px; }
+    .fmt-color-clear { width: 22px; }
 
     /* Collapsed: only the favourites (the .fmt-keep ones). They wrap like
        everything else - nine controls do not fit on one 360px line, and
@@ -468,3 +486,29 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
     box-shadow: inset 0 0 0 1px var(--accent);
 }
 .htContextMenu td.htCustomMenuRenderer.htDisabled .cm-ico { opacity: 0.45; }
+
+/* PRINT (grid.js, printSheet): paper gets only #printSheet, a plain copy of
+   the sheet - the grid itself draws just the cells on screen. */
+#printSheet { display: none; }
+
+@media print
+{
+    @page { margin: 12mm; }
+
+    html, body
+    {
+        height: auto !important; min-height: 0 !important; overflow: visible !important;
+        background: #fff !important;
+    }
+    body > *:not(#printSheet) { display: none !important; }
+
+    #printSheet { display: block; color: #000; font: 11pt Calibri, Carlito, Arial, sans-serif; }
+    #printSheet table { border-collapse: collapse; table-layout: fixed; }
+    #printSheet td
+    {
+        padding: 1px 4px; border: 0.5pt solid #d0d0d0; vertical-align: bottom;
+        white-space: nowrap; overflow: hidden;
+        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+    }
+    #printSheet tr { break-inside: avoid; }
+}

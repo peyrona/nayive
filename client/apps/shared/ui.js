@@ -782,6 +782,9 @@
             input.value = "";
             count( "" );
             if( quiet === true ) return;
+            // First: the item browser counts the rows now, then shows the
+            // first pick once the whole list is back.
+            document.dispatchEvent( new Event( "nayive:search-closed" ) );
             if( o.onClose ) o.onClose();
             else input.dispatchEvent( new Event( "input" ) );
         }
@@ -1975,6 +1978,22 @@
             } );
         }
 
+        // The guided tour, when the app has one: first thing under the lead.
+        if( opts.tour )
+        {
+            var tb = document.createElement( "button" );
+            tb.type      = "button";
+            tb.className = "text-btn small intro-tour";
+            tb.innerHTML = icon( "play" ) + "<span></span>";
+            tb.lastChild.textContent = t( "ui.tour.open" );
+            tb.addEventListener( "click", function ()
+            {
+                d.close();
+                setTimeout( function () { runTour( opts.tour, opts ); }, 250 );
+            } );
+            sheet.appendChild( tb );
+        }
+
         var rows = opts.buttons || [];
         if( rows.length )
         {
@@ -2019,8 +2038,6 @@
                 }
                 var tx = document.createElement( "span" );
                 tx.textContent = it.text || "";
-                // The plug is a floating chip now: say when it shows at all.
-                if( el && el.classList.contains( "sync-indicator" ) ) tx.textContent += " " + t( "ui.sync.chipHint" );
                 boxx.appendChild( tx );
 
                 li.appendChild( boxx );
@@ -2635,6 +2652,460 @@
 
     // "The ? opens my own Ayuda menu, not the card." See helpIsMenu above.
     function setHelpMenu( on ) { helpIsMenu = on !== false; }
+
+    //------------------------------------------------------------------------//
+    // GUIDED TOUR  - a spotlight walk through the app, one button at a time
+    //
+    //   NayiveUI.firstRun( { ..., tour: [ step, ... ] } )   // or a function that
+    //                                                       // returns them at start;
+    //                                                       // true = [ "buttons" ]
+    //   step = "buttons"         // the help card's rows, in order (helpSteps)
+    //        | "search"          // a SHARED step by name (TOUR_SHARED below):
+    //                            // "search", "more", "pick", "picked"
+    //        | { use: "pick", ghost: "#empty" }   // a shared step, some fields changed
+    //        | {
+    //     sel:   "#addBtn",      // what to light up (the first one on screen)
+    //     text:  "...",          // the bubble
+    //     title: "...",          // optional bold line over the text
+    //     tap:   true,           // the user taps it to go on; the tap reaches the
+    //                            // app (Siguiente taps it for them)
+    //     open:  "#moreBtn",     // `sel` hides behind this (a folded panel, a
+    //                            // tab, a menu): tapped first, tapped again on
+    //                            // leaving. A list is a chain, each opener
+    //                            // showing the next. A hidden button with a menu
+    //                            // twin (data-menu="<its id>") lights the twin
+    //     ghost: "#list",        // `sel` is not there yet (no items): ring this
+    //     icon:  "check",        // area instead, with this glyph in the bubble
+    //     optional: true,        // not in this layout at all (Planner's frame):
+    //                            // dropped when the tour starts
+    //     picked: true,          // needs a row picked (a selection action): the
+    //                            // first row is picked, and let go after the
+    //                            // last step in a row of such steps
+    //     before / after: fn     // anything else the step sets up / puts back
+    //   }
+    //
+    // Nothing is skipped: a hidden button is reached the way a user would reach
+    // it and a missing one gets its ghost; with none of them the bubble shows
+    // centred, still with its text. A toolbar button that fitBar moved into
+    // the ⋮ (no room) needs nothing from the app: the tour opens the ⋮ and
+    // lights its row. Every tour starts at the app's name ("home") and ends
+    // at the "?" itself. It never opens on its own: the help card's "Ver el
+    // tour" button (or NayiveUI.tour()) starts it.
+
+    var tourOpen = false;
+
+    function firstShown( sel )
+    {
+        if( ! sel ) return null;
+        var all = document.querySelectorAll( sel );
+        for( var i = 0; i < all.length; i++ ) if( onScreen( all[ i ] ) ) return all[ i ];
+        return null;
+    }
+
+    // The steps every app has, with one text for all of them. "pick" and
+    // "picked" are the item browser's (shared/browser.js): the round tick of a
+    // row, then the selection group in the header with that row picked.
+    var TOUR_SHARED = {
+        home:   function () { return { sel: ".app-icon.nayive-home-link, h1.nayive-home-link", text: t( "ui.coach.home" ), optional: true }; },
+        search: function () { return { sel: ".search-fold-toggle", text: t( "ui.tour.search" ) }; },
+        more:   function () { return { sel: ".fit-more", text: t( "ui.tour.more" ), optional: true }; },
+        pick:   function () { return { sel: ".pick-tick", ghost: "[aria-selected]", tap: true, text: t( "ui.tour.pick" ) }; },
+        picked: function () { return { sel: ".sel-group:not([hidden])", text: t( "ui.tour.picked" ), picked: true }; },
+        help:   function () { return { sel: "[data-intro-open]", text: t( "ui.tour.helpAgain" ), optional: true }; }
+    };
+
+    // "picked" with nothing picked (Siguiente on a phone, where the ticks only
+    // show while picking): pick the first row the way its tick would.
+    function tourPickOne()
+    {
+        if( firstShown( ".sel-group:not([hidden])" ) ) return;
+        var tk = document.querySelector( "[aria-selected] .pick-tick" );
+        if( tk ) tk.click();
+    }
+    function tourUnpick()
+    {
+        var x = firstShown( '.sel-group [data-sel="clear"]' );
+        if( x ) x.click();
+    }
+
+    // The help card's rows as tour steps ("buttons" in a tour): a row with a
+    // `sel` lights that button with the row's text (its name, if given, as the
+    // title); a row with no `sel` is an idea, not a button, and joins only
+    // with a `tour: { sel / ghost ... }` of its own; `tour: false` keeps a row
+    // out. A row whose button this layout does not have at all is left out,
+    // as the card leaves it out.
+    function helpSteps( rows )
+    {
+        var out = [];
+        ( rows || [] ).forEach( function ( r )
+        {
+            if( ! r || r.section || r.tour === false ) return;
+            if( ! r.sel && ! r.tour ) return;
+            var st = { sel: r.sel, text: r.text, title: r.name || "", optional: ! r.tour };
+            if( r.icon ) st.icon = r.icon;
+            if( r.tour ) for( var k in r.tour ) st[ k ] = r.tour[ k ];
+            out.push( st );
+        } );
+        return out;
+    }
+
+    // src: the steps (or a function returning them); help: the help card's
+    // options, whose `buttons` the "buttons" step expands. `tour: true` is
+    // [ "buttons" ].
+    function tourSteps( src, help )
+    {
+        var s = typeof src === "function" ? src() : src;
+        if( s === true ) s = [ "buttons" ];
+        var list = [];
+        [ "home" ].concat( s || [], [ "help" ] ).forEach( function ( it )
+        {
+            if( it === "buttons" ) { list = list.concat( helpSteps( help && help.buttons ) ); return; }
+            if( ! it ) return;
+            if( typeof it === "string" ) { if( TOUR_SHARED[ it ] ) list.push( TOUR_SHARED[ it ]() ); return; }
+            if( ! it.use || ! TOUR_SHARED[ it.use ] ) { list.push( it ); return; }
+            var base = TOUR_SHARED[ it.use ]();
+            for( var k in it ) if( k !== "use" ) base[ k ] = it[ k ];
+            list.push( base );
+        } );
+        // The "?" closes every tour once: a help row naming it gives way.
+        var last = list.length - 1;
+        list = list.filter( function ( it, i ) { return i === last || it.sel !== "[data-intro-open]"; } );
+        // Only what this layout has at all: an optional step needs its button
+        // on screen or tucked in the ⋮.
+        return list.filter( function ( it )
+        {
+            return it && ( ! it.optional || it.open || firstShown( it.sel ) || inFitMenu( it.sel ) );
+        } );
+    }
+
+    // The menu row standing for a hidden button: Write / Calc / Text build
+    // their File and Ayuda menus FROM hidden buttons (shared/office.js
+    // buttonMenu), each row carrying data-menu="<the button's id>".
+    function menuTwin( sel )
+    {
+        var all = sel ? document.querySelectorAll( sel ) : [];
+        for( var i = 0; i < all.length; i++ )
+        {
+            var r = all[ i ].id && firstShown( '.top-menu [data-menu="' + all[ i ].id + '"]' );
+            if( r ) return r;
+        }
+        return null;
+    }
+
+    // A toolbar button that fitBar (shared/browser.js) moved into the ⋮ for
+    // lack of room: { opener: the ⋮, row: () => its menu row once open }.
+    function inFitMenu( sel )
+    {
+        var all = sel ? document.querySelectorAll( sel ) : [];
+        for( var i = 0; i < all.length; i++ )
+        {
+            var out = all[ i ].closest( ".fit-out" );
+            if( ! out ) continue;
+            var h = out;
+            while( h && ! h._fitBar ) h = h.parentElement;
+            var more = h && h._fitBar.button;
+            if( ! more || ! onScreen( more ) ) continue;
+
+            var b  = all[ i ].matches( "button" ) ? all[ i ] : out.querySelector( "button:not([hidden])" ) || out;
+            var id = b.id || b.dataset.sel || b.dataset.selAct || "";
+            var label = ( b.getAttribute( "aria-label" ) || b.title || "" ).trim();
+            return {
+                opener: more,
+                row: function ()
+                {
+                    var rows = document.querySelectorAll( ".item-menu:not([hidden]) .menu-item" );
+                    for( var j = 0; j < rows.length; j++ )
+                    {
+                        var r = rows[ j ];
+                        if( id ? r.dataset.act === id
+                               : label && label.indexOf( r.textContent.trim() ) === 0 ) return onScreen( r ) ? r : null;
+                    }
+                    return null;
+                }
+            };
+        }
+        return null;
+    }
+
+    function runTour( steps, help )
+    {
+        steps = tourSteps( steps, help );
+        if( tourOpen || ! steps.length ) return false;
+        tourOpen = true;
+
+        var over = document.createElement( "div" );
+        over.className = "tour-overlay";
+        over.setAttribute( "role", "dialog" );
+        over.setAttribute( "aria-modal", "true" );
+
+        // Four dim panes around the hole, a clear lid over it (gone on a tap
+        // step, so the tap reaches the real button), the ring, the bubble.
+        var panes = [];
+        for( var i = 0; i < 4; i++ )
+        {
+            panes.push( over.appendChild( document.createElement( "div" ) ) );
+            panes[ i ].className = "tour-pane";
+        }
+        var lid  = over.appendChild( document.createElement( "div" ) );
+        lid.className = "tour-lid";
+        var ring = over.appendChild( document.createElement( "div" ) );
+        ring.className = "coach-ring tour-ring";
+
+        var bub = over.appendChild( document.createElement( "div" ) );
+        bub.className = "coach-bubble tour-bubble";
+        var arrow = bub.appendChild( document.createElement( "span" ) );
+        arrow.className = "coach-arrow";
+
+        var xb = bub.appendChild( document.createElement( "button" ) );
+        xb.type      = "button";
+        xb.className = "coach-close";
+        xb.title     = t( "ui.tour.quit" );
+        xb.setAttribute( "aria-label", xb.title );
+        xb.innerHTML = icon( "x" );
+
+        var head  = bub.appendChild( document.createElement( "div" ) );
+        head.className = "tour-head";
+        var glyph = head.appendChild( document.createElement( "span" ) );
+        glyph.className = "intro-btn-i";
+        var title = head.appendChild( document.createElement( "b" ) );
+
+        var para = bub.appendChild( document.createElement( "p" ) );
+        var note = bub.appendChild( document.createElement( "p" ) );
+        note.className = "tour-note";
+
+        var row  = bub.appendChild( document.createElement( "div" ) );
+        row.className = "tour-row";
+        var count = row.appendChild( document.createElement( "span" ) );
+        count.className = "tour-count";
+        var back = row.appendChild( document.createElement( "button" ) );
+        back.type      = "button";
+        back.className = "text-btn ghost small";
+        back.textContent = t( "ui.tour.back" );
+        var next = row.appendChild( document.createElement( "button" ) );
+        next.type      = "button";
+        next.className = "text-btn small";
+
+        var idx = -1, cur = null, token = 0, ended = false;
+
+        // What a step opened, shut again from the last: an opener is pressed
+        // again only while what it revealed - the next opener, or for the last
+        // one the lit row - is still out (a press elsewhere may have shut it).
+        function leave( to )
+        {
+            if( ! cur ) return;
+            var c = cur;
+            cur = null;
+            if( c.s.picked && ! ( steps[ to ] && steps[ to ].picked ) ) tourUnpick();
+            if( c.s.after ) { try { c.s.after(); } catch ( e ) {} }
+            // The next step opens the same thing (the File menu, row after
+            // row): it stays open - no flicker - and the next step shuts it.
+            if( steps[ to ] && c.s.open && JSON.stringify( steps[ to ].open ) === JSON.stringify( c.s.open ) ) return c.opened;
+            for( var i = c.opened.length - 1; i >= 0; i-- )
+            {
+                var shown = i === c.opened.length - 1 ? c.find() : onScreen( c.opened[ i + 1 ] );
+                if( shown && onScreen( c.opened[ i ] ) ) c.opened[ i ].click();
+            }
+            return [];
+        }
+
+        function go( i )
+        {
+            var carried = leave( i ) || [];
+            if( i >= steps.length ) { finish(); return; }
+            idx = Math.max( 0, i );
+            var my = ++token;
+            var s  = steps[ idx ];
+            cur = { s: s, el: null, opened: carried, find: function () { return firstShown( s.sel ) || ( s.open ? menuTwin( s.sel ) : null ); } };
+            if( s.picked ) tourPickOne();
+            if( s.before ) { try { s.before(); } catch ( e ) {} }
+
+            var el = cur.find();
+            if( el || ! s.sel ) { show( el ); return; }
+
+            // Not on screen: open what hides it - the app's `open` (one opener,
+            // or a chain: each one shows the next), else the ⋮ fitBar put it in -
+            // or give a tap / a re-render a moment to bring it in.
+            var chain = [].concat( s.open || [] ), fm = null;
+            if( ! chain.some( function ( o ) { return firstShown( o ); } ) && ( fm = inFitMenu( s.sel ) ) )
+            {
+                chain = [ fm.opener ];
+                cur.find = fm.row;
+            }
+            if( ! chain.length && firstShown( s.ghost ) ) { show( null ); return; }
+            bub.hidden = true;
+            var end = Date.now() + 500;
+            ( function poll()
+            {
+                if( my !== token ) return;
+                var e = cur.find();
+                if( e ) { show( e ); return; }
+                // The next opener in the chain that is out and not pressed yet.
+                for( var k = 0; k < chain.length; k++ )
+                {
+                    var o = typeof chain[ k ] === "string" ? firstShown( chain[ k ] ) : ( onScreen( chain[ k ] ) ? chain[ k ] : null );
+                    if( o && cur.opened.indexOf( o ) < 0 && k >= cur.opened.length && ! cur.find() )
+                    {
+                        o.click();
+                        cur.opened.push( o );
+                        end = Date.now() + 1500;
+                        break;
+                    }
+                }
+                if( Date.now() >= end ) { show( null ); return; }
+                setTimeout( poll, 80 );
+            } )();
+        }
+
+        function show( el )
+        {
+            var s = cur.s;
+            cur.el    = el;
+            cur.ghost = el ? null : firstShown( s.ghost );
+            var target = el || cur.ghost;
+            if( target && target.scrollIntoView ) target.scrollIntoView( { block: "nearest", inline: "nearest" } );
+
+            var tap = !! ( el && s.tap );
+            over.classList.toggle( "is-tap", tap );
+            ring.classList.toggle( "is-ghost", !! cur.ghost );
+
+            glyph.hidden = ! ( cur.ghost && s.icon );
+            if( ! glyph.hidden ) glyph.innerHTML = icon( s.icon );
+            title.textContent = s.title || "";
+            head.hidden = glyph.hidden && ! s.title;
+            para.textContent = s.text || "";
+            note.textContent = tap ? t( "ui.tour.tapIt" ) : cur.ghost ? t( "ui.tour.ghost" )
+                             : el && cur.opened.length && cur.opened[ 0 ].classList.contains( "fit-more" ) ? t( "ui.tour.inMore" ) : "";
+            note.hidden = ! note.textContent;
+
+            count.textContent = tf( "ui.tour.step", { n: idx + 1, m: steps.length } );
+            back.hidden = idx === 0;
+            next.textContent = idx === steps.length - 1 ? t( "ui.tour.done" ) : t( "ui.tour.next" );
+
+            bub.hidden = false;
+            place();
+            requestAnimationFrame( place );
+            try { next.focus( { preventScroll: true } ); } catch ( e ) {}
+        }
+
+        function setBox( n, l, tp, w, h )
+        {
+            n.style.left   = l + "px";
+            n.style.top    = tp + "px";
+            n.style.width  = Math.max( 0, w ) + "px";
+            n.style.height = Math.max( 0, h ) + "px";
+        }
+
+        function place()
+        {
+            if( ! cur || bub.hidden ) return;
+            var vw = window.innerWidth, vh = window.innerHeight, PAD = 8;
+            var target = ( cur.el && onScreen( cur.el ) ) ? cur.el
+                       : ( cur.ghost && onScreen( cur.ghost ) ) ? cur.ghost : null;
+
+            var bw = bub.offsetWidth, bh = bub.offsetHeight;
+
+            if( ! target )                      // nothing to point at: centred
+            {
+                setBox( panes[ 0 ], 0, 0, vw, vh );
+                for( var k = 1; k < 4; k++ ) setBox( panes[ k ], 0, 0, 0, 0 );
+                lid.hidden = ring.hidden = arrow.hidden = true;
+                bub.style.left = Math.max( PAD, ( vw - bw ) / 2 ) + "px";
+                bub.style.top  = Math.max( PAD, ( vh - bh ) / 2 ) + "px";
+                return;
+            }
+            lid.hidden = ring.hidden = arrow.hidden = false;
+
+            // The hole: the target plus a margin, kept inside the viewport.
+            var r = target.getBoundingClientRect();
+            var L = Math.max( 0, r.left - 5 ),  T = Math.max( 0, r.top - 5 );
+            var R = Math.min( vw, r.right + 5 ), B = Math.min( vh, r.bottom + 5 );
+
+            setBox( panes[ 0 ], 0, 0, vw, T );                  // above
+            setBox( panes[ 1 ], 0, B, vw, vh - B );             // below
+            setBox( panes[ 2 ], 0, T, L, B - T );               // left
+            setBox( panes[ 3 ], R, T, vw - R, B - T );          // right
+            setBox( lid,  L, T, R - L, B - T );
+            setBox( ring, L, T, R - L, B - T );
+
+            // Bubble under the hole, else over it, else inside its lower part
+            // (a big area like a month grid).
+            var cx = ( L + R ) / 2, top, up = false;
+            if( B + 14 + bh + PAD <= vh )      top = B + 14;
+            else if( T - 14 - bh >= PAD )      { top = T - 14 - bh; up = true; }
+            else                               top = vh - bh - PAD;
+            var left = Math.max( PAD, Math.min( cx - bw / 2, vw - bw - PAD ) );
+
+            bub.style.left = left + "px";
+            bub.style.top  = top  + "px";
+            bub.classList.toggle( "coach-bubble--up", up );
+            arrow.hidden = top < B && top + bh > T;            // sits on the target
+            arrow.style.left = Math.max( 12, Math.min( cx - left, bw - 12 ) ) + "px";
+        }
+
+        // A tap on the lit target of a tap step: let the app act, then go on.
+        function onTap( e )
+        {
+            if( ! cur || ! cur.el || ! cur.s.tap ) return;
+            if( ! cur.el.contains( e.target ) ) return;
+            var want = idx + 1;
+            setTimeout( function () { if( ! ended && idx === want - 1 ) go( want ); }, 0 );
+        }
+
+        function onKey( e )
+        {
+            if( e.key === "Escape" )
+            {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                finish();
+            }
+            else if( e.key === "ArrowRight" ) { e.preventDefault(); next.click(); }
+            else if( e.key === "ArrowLeft" && idx > 0 ) { e.preventDefault(); go( idx - 1 ); }
+        }
+
+        // Taps on the dim panes / the lid end here: the page behind never sees
+        // them (an outside-click would close a menu we opened).
+        [ "click", "pointerdown", "mousedown", "touchstart" ].forEach( function ( ev )
+        {
+            over.addEventListener( ev, function ( e ) { e.stopPropagation(); } );
+        } );
+
+        xb.addEventListener( "click", finish );
+        back.addEventListener( "click", function () { go( idx - 1 ); } );
+        next.addEventListener( "click", function ()
+        {
+            if( cur && cur.el && cur.s.tap && onScreen( cur.el ) ) cur.el.click();   // onTap goes on
+            else go( idx + 1 );
+        } );
+
+        function finish()
+        {
+            if( ended ) return;
+            ended = true;
+            token++;
+            leave();
+            document.removeEventListener( "click", onTap, true );
+            document.removeEventListener( "keydown", onKey, true );
+            window.removeEventListener( "resize", place );
+            window.removeEventListener( "orientationchange", place );
+            window.removeEventListener( "scroll", place, true );
+            if( over.parentNode ) over.parentNode.removeChild( over );
+            tourOpen = false;
+        }
+
+        document.body.appendChild( over );
+        document.addEventListener( "click", onTap, true );
+        document.addEventListener( "keydown", onKey, true );
+        window.addEventListener( "resize", place );
+        window.addEventListener( "orientationchange", place );
+        window.addEventListener( "scroll", place, true );
+        go( 0 );
+        return true;
+    }
+
+    // NayiveUI.tour() - the steps given to firstRun, or these ones.
+    function tour( steps ) { return runTour( steps || ( introOpts && introOpts.tour ), introOpts ); }
 
     //------------------------------------------------------------------------//
     // FOLDER PICKER
@@ -3729,6 +4200,91 @@
         }
 
         return buildInstall( mode, manual );
+    }
+
+    //------------------------------------------------------------------------//
+    // "YOUR BROWSER" WARNING
+    //
+    // Two cases, each on every launch until "Don't show again":
+    //  - big-tech: the Android app runs inside the user's default browser;
+    //    when that is Google Chrome or Microsoft Edge, say so (Brave keeps
+    //    the app working without them). Told apart by their UA-CH brands
+    //    (Brave, Samsung Internet carry their own); no brands -> say nothing.
+    //  - limited: Firefox Focus / Klar, DuckDuckGo - on any OS, in the app or
+    //    not. They forget logins and storage, so much of Nayive falls short.
+    //    Tor and private windows hide what they are: not detectable.
+
+    var CHROME_WARN = "nayive-chrome-warn";
+
+    function browserWarnCase()
+    {
+        var ua = navigator.userAgent;
+        if( /\bFocus\//.test( ua ) )      return { kind: "limited", name: "Firefox Focus" };
+        if( /\bKlar\//.test( ua ) )       return { kind: "limited", name: "Firefox Klar" };
+        if( /\bDuckDuckGo\//.test( ua ) ) return { kind: "limited", name: "DuckDuckGo" };
+        if( ! inAndroidApp() ) return null;
+        var b = ( navigator.userAgentData && navigator.userAgentData.brands ) || [];
+        function has( n ) { return b.some( function ( x ) { return x.brand === n; } ); }
+        if( has( "Microsoft Edge" ) ) return { kind: "bigtech", name: "Microsoft Edge", company: "Microsoft" };
+        if( has( "Google Chrome" ) )  return { kind: "bigtech", name: "Google Chrome", company: "Google" };
+        return null;
+    }
+
+    function warnChrome()
+    {
+        var wc = browserWarnCase();
+        if( ! wc ) return;
+        try { if( localStorage.getItem( CHROME_WARN ) === "never" ) return; } catch ( _ ) {}
+        if( document.getElementById( "nayive-chrome-warn" ) ) return;
+        if( introHeld || document.querySelector( ".sheet-backdrop.open" ) )
+            return void setTimeout( warnChrome, 800 );     // never on top of another sheet
+
+        var d     = modal( { id: "nayive-chrome-warn", cls: "intro-sheet install-sheet" } );
+        var sheet = d.sheet;
+        function finish() { d.close(); }
+        d.back._finish = finish;
+
+        var xb = document.createElement( "button" );
+        xb.type      = "button";
+        xb.className = "sheet-close intro-close";
+        xb.title     = t( "ui.close" );
+        xb.setAttribute( "aria-label", xb.title );
+        xb.innerHTML = icon( "x" );
+        xb.addEventListener( "click", finish );
+        sheet.appendChild( xb );
+
+        var h = document.createElement( "h2" );
+        h.className   = "install-title";
+        h.textContent = t( "ui.chromeWarn.title" );
+        sheet.appendChild( h );
+
+        [ tf( inAndroidApp() ? "ui.chromeWarn.p1" : "ui.chromeWarn.p1using", { name: wc.name } ),
+          wc.kind === "limited" ? t( "ui.chromeWarn.p2limited" )
+                                 : tf( "ui.chromeWarn.p2", { company: wc.company } ),
+          t( "ui.chromeWarn.p3" ) ].forEach( function ( s )
+        {
+            var p = document.createElement( "p" );
+            p.className   = "dialog-text";
+            p.textContent = s;
+            sheet.appendChild( p );
+        } );
+
+        var acts  = document.createElement( "div" );
+        acts.className = "install-actions";
+        var never = document.createElement( "button" );
+        never.type        = "button";
+        never.className   = "intro-dismiss install-never";
+        never.textContent = t( "ui.install.dismiss" );
+        never.addEventListener( "click", function ()
+        {
+            try { localStorage.setItem( CHROME_WARN, "never" ); } catch ( _ ) {}
+            finish();
+        } );
+        acts.appendChild( never );
+        sheet.appendChild( acts );
+
+        d.show();
+        xb.focus();
     }
 
     //------------------------------------------------------------------------//
@@ -5924,6 +6480,7 @@
         setIntro:  setIntro,      // swap that dialog when the app changes screen
         setHelpMenu: setHelpMenu, // the "?" opens the app's own Ayuda menu instead
         showIntro: showIntro,     // open it now (the toolbar "?" button)
+        tour:      tour,          // the guided spotlight tour (firstRun's `tour` steps)
         holdIntro: holdIntro,     // suppress + close the auto help card for this load
         isShared:     isShared,
         sharedWithMe: sharedWithMe,   // everything shared WITH us, fetched once per page
@@ -5944,6 +6501,7 @@
         launcherFolder:       launcherFolder,
         changeLauncherFolder: changeLauncherFolder,
         offerInstall:         offerInstall,
+        warnChrome:           warnChrome,
         isStandalone:         isStandalone,
         installMode:          installMode
     };

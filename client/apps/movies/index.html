@@ -70,9 +70,13 @@
                 { sel: '#folderInfoBtn', text: NayiveUI.t( 'movies.introFolder' ) },
                 { sel: '#searchToggle', text: NayiveUI.t( 'movies.introSearch' ) },
                 { sel: '#reloadBtn',   text: NayiveUI.t( 'movies.introRescan' ) },
-                { icon: 'folder',       name: NayiveUI.t( 'movies.library' ), text: NayiveUI.t( 'movies.introTree' ) },
+                { icon: 'folder',       name: NayiveUI.t( 'movies.library' ), text: NayiveUI.t( 'movies.introTree' ), tour: { sel: '#treePane, #treeBtn' } },
                 { sel: '#postersBtn',   text: NayiveUI.t( 'movies.introPosters' ) }
-            ]
+            ],
+            // The guided tour ("Ver el tour" in the card): the card's rows, picking
+            // films (the shared item browser), the player.
+            tour: [ 'buttons', { use: 'pick', ghost: '#libContent' }, { use: 'picked', ghost: '#libContent' },
+                    { sel: '#playerBar', text: NayiveUI.t( 'movies.tourPlayer' ) } ]
         } );
     } );
     </script>

@@ -17,11 +17,12 @@ import
 {
     decodeRange, encodeCell
 }
-from './lib/xlsx-format_v2.4.1.js';
+from './lib/xlsx-format_v2.4.5.js';
 import
 {
     table, doc, activeSheet, gridBooting, lastSelection, htThemeName, CM_ICONS,
-    switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf
+    addSheet, renameActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles, editText, styleOf,
+    blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
 }
 from './grid.js';
 import
@@ -92,7 +93,7 @@ const session = O.session( {
     // A draft is always .xlsx: a .csv would lose the formatting.
     encode     : function( path ) { return encodeFromGrid( path ? O.extOf( path ) : 'xlsx' ); },
     load       : loadSheet,
-    blank      : function() { initGrid( null ); },
+    blank      : function() { initGrid( blankDoc() ); },     // in the font Settings picked
     renameName : keepExt,
     // THE LOSS GATE's hard stop, checked on every edit AND every write -
     // Ctrl+S and the pagehide flush never pass through an edit. Writing
@@ -123,7 +124,7 @@ const session = O.session( {
 const PHONE = window.matchMedia( '(max-width: 640px)' );
 
 const fileMenu = O.fileMenu( { btn: 'moreBtn', menu: 'topMenu',
-                               ids: [ 'newBtn', 'openBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'scBtn' ] } );
+                               ids: [ 'newBtn', 'openBtn', 'recentBtn', 'saveBtn', 'importBtn', 'saveAsBtn', 'restoreBtn', 'lockBtn', 'printBtn', 'pdfBtn', 'scBtn' ] } );
 
 // Ayuda on the "?" - the three entries O.HELP_ITEMS names (the pull-down
 // Ayuda menu shows the same ones; the guide card is the third).
@@ -171,6 +172,7 @@ function applyPhoneChrome()
 function wireStaticUI()
 {
     registerUiLocale();
+    wireSettings();
 
     // ---- phone chrome (see PHONE CHROME above) ----
     applyPhoneChrome();
@@ -248,6 +250,14 @@ function wireStaticUI()
             if( ! document.querySelector( '.sheet-backdrop.open' ) ) saveNow();
             return;
         }
+        // Ctrl/Cmd+P: the sheet, not the page (grid.js, PRINT) - the browser's
+        // own would print one screenful of grid. Over a dialog it does nothing.
+        if( e.code === 'KeyP' && ( e.ctrlKey || e.metaKey ) && ! e.altKey && ! e.shiftKey )
+        {
+            e.preventDefault();
+            if( ! document.querySelector( '.sheet-backdrop.open' ) ) printSheet( false );
+            return;
+        }
         // Ctrl/Cmd+B, I, U format the selection — unless something is being
         // typed into, where they belong to the text.
         //
@@ -299,6 +309,22 @@ function wireStaticUI()
     document.getElementById( 'undoBtn'  ).addEventListener( 'click', function() { table.getPlugin( 'undoRedo' ).undo(); } );
     document.getElementById( 'redoBtn'  ).addEventListener( 'click', function() { table.getPlugin( 'undoRedo' ).redo(); } );
 
+    // The Edit drop-down and the File list's Recent / Save: the menus' own entries.
+    document.getElementById( 'editBtn' ).addEventListener( 'click', function( e )
+    {
+        e.stopPropagation();
+        if( menus.isOpenFor( this ) ) menus.close();
+        else menus.openItems( CLIP_ITEMS.concat( [ { sep: true }, ADD_COMMENT ] ), this );
+    } );
+    document.getElementById( 'saveBtn'   ).addEventListener( 'click', function() { saveNow(); } );
+    document.getElementById( 'printBtn'  ).addEventListener( 'click', function() { printSheet( false ); } );
+    document.getElementById( 'pdfBtn'    ).addEventListener( 'click', function() { printSheet( true );  } );
+    document.getElementById( 'recentBtn' ).addEventListener( 'click', function()
+    {
+        const btn = document.getElementById( 'moreBtn' );
+        setTimeout( function() { menus.openItems( session.recentItems, btn.getBoundingClientRect() ); }, 0 );
+    } );
+
     document.getElementById( 'fxBtn'        ).addEventListener( 'click', openFxPicker );
     document.getElementById( 'fxSearch'     ).addEventListener( 'input', function( e ) { renderFxList( e.target.value ); } );
     wireFormulaPanel();
@@ -335,6 +361,7 @@ function wireStaticUI()
     document.getElementById( 'delRowBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'remove_row', lastSelection.r1, lastSelection.r2 - lastSelection.r1 + 1 ); } );
     document.getElementById( 'insColBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'insert_col_end', lastSelection.c1 ); } );
     document.getElementById( 'delColBtn' ).addEventListener( 'click', function() { if( lastSelection ) table.alter( 'remove_col', lastSelection.c1, lastSelection.c2 - lastSelection.c1 + 1 ); } );
+    document.getElementById( 'addSheetBtn' ).addEventListener( 'click', addSheet );
 
     document.getElementById( 'fmtFontFamily' ).addEventListener( 'change', function( e ) { setOrClearStyleField( 'fontFamily', e.target.value ); } );
     document.getElementById( 'fmtFontSize'   ).addEventListener( 'change', function( e ) { setOrClearStyleField( 'size', e.target.value ? Number( e.target.value ) : null ); } );
@@ -360,10 +387,14 @@ function wireStaticUI()
     document.getElementById( 'fmtClearBtn'       ).addEventListener( 'click', clearSelectionStyle );
     document.getElementById( 'fmtFontColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'color', e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
     document.getElementById( 'fmtFillColor'      ).addEventListener( 'input', function( e ) { setStyleField( 'bg',    e.target.value.replace( '#', '' ).toUpperCase() ); setColorBar( e.target ); } );
+    document.getElementById( 'fmtFontColorClear' ).addEventListener( 'click', function() { setOrClearStyleField( 'color', '' ); } );
+    document.getElementById( 'fmtFillColorClear' ).addEventListener( 'click', function() { setOrClearStyleField( 'bg',    '' ); } );
     document.getElementById( 'fmtNumFormat'      ).addEventListener( 'change', function( e )
     {
-        if( e.target.value === 'general' ) setOrClearStyleField( 'numFmt', '' );
-        else                               openNumFmtDialog( e.target.value );
+        const cat = e.target.value || e.target.dataset.cur;   // '' = the shown row (iOS lists hidden rows)
+
+        if( cat === 'general' ) setOrClearStyleField( 'numFmt', '' );
+        else                    openNumFmtDialog( cat );
     });
 
     document.getElementById( 'fmtMergeBtn' ).addEventListener( 'click', mergeSelection );
@@ -695,9 +726,9 @@ function refreshSelStats()
 
     if( ! filled ) { el.innerHTML = ''; return; }
 
-    // NayiveI18n.locale() is the tag the rest of Nayive hands Intl: the
-    // INTERFACE language, not whatever the browser happens to be set to.
-    const fmt  = function( n ) { return n.toLocaleString( NayiveI18n.locale(), { maximumFractionDigits: 2 } ); };
+    // The interface language's marks (NayiveI18n.locale(), not whatever the
+    // browser is set to) - or the one picked in Settings, as in the grid.
+    const fmt  = function( n ) { return n.toLocaleString( numberLocale(), { maximumFractionDigits: 2 } ); };
     const cell = function( label, value ) { return '<span>' + label + ' <b>' + value + '</b></span>'; };
 
     const parts = [];
@@ -982,7 +1013,7 @@ const IS_MAC = NayiveUI.isMac;
 const MOD    = IS_MAC ? '⌘' : T( 'ui.keyCtrl' ) + '+';   // "Strg+" in German
 const SC  =
 {
-    save: MOD + 'S', bold: MOD + 'B', italic: MOD + 'I', underline: MOD + 'U',
+    save: MOD + 'S', print: MOD + 'P', bold: MOD + 'B', italic: MOD + 'I', underline: MOD + 'U',
     undo: MOD + 'Z', redo: MOD + 'Y', cut: MOD + 'X', copy: MOD + 'C', paste: MOD + 'V',
     // A getter, not a string: the Shift key's NAME is translated, and this
     // table is built before the dictionaries are in.
@@ -995,6 +1026,7 @@ function openShortcuts()
 {
     O.showShortcuts( [
         [ 'write.sc.save',  SC.save      ],
+        [ 'write.print',    SC.print     ],
         [ 'ui.undo',        SC.undo      ],
         [ 'ui.redo',        SC.redo      ],
         [ 'ui.cut',         SC.cut       ],
@@ -1076,18 +1108,19 @@ function haveSelection() { return !! lastSelection; }
 
 // A <select> in the toolbar becomes a submenu: one row per option, the
 // current one ticked. Picking a row sets the select and fires its own
-// 'change' handler - the same path a click on the toolbar takes.
+// 'change' handler - the same path a click on the toolbar takes. A hidden
+// row is only the toolbar's label; data-cur, when set, is the real pick.
 function selectItems( id )
 {
     return function()
     {
         const sel = document.getElementById( id );
 
-        return Array.prototype.map.call( sel.options, function( opt )
+        return Array.prototype.filter.call( sel.options, function( opt ) { return ! opt.hidden; } ).map( function( opt )
         {
             return {
                 text    : opt.textContent,
-                checked : function() { return sel.value === opt.value; },
+                checked : function() { return ( sel.dataset.cur || sel.value ) === opt.value; },
                 enabled : haveSelection,
                 run     : function()
                 {
@@ -1102,14 +1135,16 @@ function selectItems( id )
 // The text colours are Excel's own first row (NayiveMenus.COLORS, Write's
 // too); the fills are Calc's. The names are keys because no interface
 // string lives in the source (docs/i18n.md).
-const MENU_FILLS  = [ [ '#FFFF00', 'yellow' ], [ '#00B050', 'green'  ], [ '#00FFFF', 'cyan'   ],
-                      [ '#FF66FF', 'pink'   ], [ '#FF9900', 'orange' ], [ '#BFBFBF', 'gray'   ],
-                      [ '#FFFFFF', 'white'  ] ];
+const MENU_FILLS  = [ [ '#FFF2CC', 'yellow' ], [ '#E2EFDA', 'green'  ], [ '#DDF3F5', 'cyan'   ],
+                      [ '#FADCEB', 'pink'   ], [ '#FCE4D6', 'orange' ], [ '#E7E6E6', 'gray'   ],
+                      [ '#FFFFFF', 'white'  ] ];   // soft, Excel's light tints: text stays readable
 
 // Same idea for the two <input type="color"> pickers: the swatch sets the
 // input and fires its 'input' handler, so the colour travels the one path
-// that also paints the little bar under the toolbar glyph.
-function colorItems( id, list )
+// that also paints the little bar under the toolbar glyph. Then the
+// browser's own picker for any other colour, and the toolbar's small ×
+// beside the picker: back to no colour.
+function colorItems( id, list, clearKey )
 {
     return list.map( function( c )
     {
@@ -1124,7 +1159,13 @@ function colorItems( id, list )
                 inp.dispatchEvent( new Event( 'input', { bubbles: true } ) );
             }
         };
-    } );
+    } ).concat( [ { sep: true },
+                  { key: 'ui.color.more', enabled: haveSelection, run: function()
+                      {
+                          const inp = document.getElementById( id );
+                          try { inp.showPicker(); } catch( _ ) { inp.click(); }
+                      } },
+                  { key: clearKey, el: id + 'Clear', enabled: haveSelection } ] );
 }
 
 //---- the clipboard -------------------------------------------------//
@@ -1213,6 +1254,18 @@ function addComment()
 // (No "Ventana": Calc is one window. No "Herramientas": everything that
 // would live there - language, theme, account - belongs to the launcher.)
 
+// Edición's middle, and the toolbar's Edit drop-down (with Add comment).
+const CLIP_ITEMS =
+[
+    { key: 'ui.cut',   run: clipCut,   sc: 'cut',   enabled: haveSelection, icon: 'cut'   },
+    { key: 'ui.copy',  run: clipCopy,  sc: 'copy',  enabled: haveSelection, icon: 'copy'  },
+    { key: 'ui.paste', run: clipPaste, sc: 'paste', enabled: haveSelection, icon: 'paste' },
+    { key: 'ui.pastePlain', run: clipPastePlain, sc: 'pastePlain', enabled: haveSelection, icon: 'paste' },
+    { sep: true },
+    { key: 'calc.selectAll', run: function() { table.selectAll(); } }
+];
+const ADD_COMMENT = { key: 'calc.ht.addComment', run: addComment, enabled: haveSelection, icon: CM_ICONS.commentsAddEdit };
+
 const MENUS =
 [
 {
@@ -1227,7 +1280,10 @@ const MENUS =
         { key: 'ui.saveAs', el:  'saveAsBtn' },
         { key: 'ui.importDevice', el: 'importBtn'  },
         { key: 'write.restore',   el: 'restoreBtn' },
-        { key: 'lock.title',      el: 'lockBtn', checked: function() { return session.locked(); } }
+        { key: 'lock.title',      el: 'lockBtn', checked: function() { return session.locked(); } },
+        { sep: true },
+        { key: 'write.print',     el: 'printBtn', sc: 'print' },
+        { key: 'write.savePdf',   el: 'pdfBtn'   }
     ]
 },
 {
@@ -1236,17 +1292,11 @@ const MENUS =
     [
         { key: 'ui.undo', el: 'undoBtn', sc: 'undo' },
         { key: 'ui.redo', el: 'redoBtn', sc: 'redo' },
+        { sep: true }
+    ].concat( CLIP_ITEMS, [
         { sep: true },
-        { key: 'ui.cut',   run: clipCut,   sc: 'cut',   enabled: haveSelection, icon: 'cut'   },
-        { key: 'ui.copy',  run: clipCopy,  sc: 'copy',  enabled: haveSelection, icon: 'copy'  },
-        { key: 'ui.paste', run: clipPaste, sc: 'paste', enabled: haveSelection, icon: 'paste' },
-        { key: 'ui.pastePlain', run: clipPastePlain, sc: 'pastePlain', enabled: haveSelection, icon: 'paste' },
-        { sep: true },
-        { key: 'calc.selectAll', run: function() { table.selectAll(); } },
-        { sep: true },
-        { key: 'write.tb.copyFormat', el: 'fmtPainterBtn' },
-        { key: 'calc.clearFormat', el: 'fmtClearBtn' }
-    ]
+        { key: 'ui.settings',    el: 'settingsBtn' }   // last of Edición, as in every app
+    ] )
 },
 {
     key: 'ui.menu.view',
@@ -1268,8 +1318,11 @@ const MENUS =
         { key: 'calc.delRow', el: 'delRowBtn' },
         { key: 'calc.delCol', el: 'delColBtn' },
         { sep: true },
+        { key: 'calc.addSheet', el: 'addSheetBtn' },
+        { key: 'calc.renameSheet', run: renameActiveSheet },
+        { sep: true },
         { key: 'calc.insertFx', el: 'fxBtn' },
-        { key: 'calc.ht.addComment', run: addComment, enabled: haveSelection, icon: CM_ICONS.commentsAddEdit }
+        ADD_COMMENT
     ]
 },
 {
@@ -1283,8 +1336,8 @@ const MENUS =
         { key: 'calc.fontFamily', sub: selectItems( 'fmtFontFamily' ) },
         { key: 'calc.fontSize',   sub: selectItems( 'fmtFontSize'   ) },
         { sep: true },
-        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', NayiveMenus.COLORS ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
-        { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS  ), iconOf: '.fmt-color-btn:has(#fmtFillColor) svg' },
+        { key: 'calc.fontColor', sub: colorItems( 'fmtFontColor', NayiveMenus.COLORS, 'calc.noFontColor' ), iconOf: '.fmt-color-btn:has(#fmtFontColor) svg' },
+        { key: 'calc.fillColor', sub: colorItems( 'fmtFillColor', MENU_FILLS, 'calc.noFillColor' ), iconOf: '.fmt-color-btn:has(#fmtFillColor) svg' },
         { sep: true },
         { key: 'calc.alignment', iconOf: '#fmtAlignLeftBtn', sub:
             [ { key: 'calc.alignLeft',    el: 'fmtAlignLeftBtn',    checked: styleOn( 'align',  'left'   ) },
@@ -1297,10 +1350,13 @@ const MENUS =
         { key: 'calc.wrapText', el: 'fmtWrapBtn', checked: styleOn( 'wrap' ) },
         { sep: true },
         { key: 'calc.borders',   el:  'fmtBorderBtn', checked: styleOn( 'border' ) },
-        { key: 'calc.numFormat', sub: selectItems( 'fmtNumFormat' ) },
+        { key: 'calc.cellFormat', sub: selectItems( 'fmtNumFormat' ) },
         { sep: true },
         { key: 'calc.mergeCells', el: 'fmtMergeBtn' },
-        { key: 'calc.splitCells', el: 'fmtSplitBtn', enabled: function() { return mergesInSelection().length > 0; } }
+        { key: 'calc.splitCells', el: 'fmtSplitBtn', enabled: function() { return mergesInSelection().length > 0; } },
+        { sep: true },
+        { key: 'write.tb.copyFormat', el: 'fmtPainterBtn' },
+        { key: 'calc.clearFormat', el: 'fmtClearBtn' }
     ]
 },
 {
@@ -1328,7 +1384,8 @@ const CHROME = NayiveMenus.chrome(
 {
     key   : 'nayive-calc-chrome',
     menus : menus,
-    load  : async function() { return ( await calcCfg.read() ).chrome; },
+    // One read for both: the toolbar-or-menus choice and Settings (see SETTINGS).
+    load  : async function() { const c = await calcCfg.read(); if( 'prefs' in c ) setCalcPrefs( c.prefs ); return c.chrome; },
     save  : function( mode ) { return calcCfg.write( { chrome: mode } ); },
 
     // What CSS cannot do: the toolbar's height changed, so the grid has to
@@ -1346,6 +1403,45 @@ const CHROME = NayiveMenus.chrome(
         if( table ) table.refreshDimensions();
     }
 } );
+
+//------------------------------------------------------------------------//
+// SETTINGS  (the gear before "?"; Edit > Settings)
+//
+// A close-only dialog (shared/ui.js, CLOSE-ONLY DIALOGS): each select is
+// kept the moment it changes. What the values do is grid.js, SETTINGS.
+// They are the account's (data/calc/config.json, `prefs`), so every
+// device follows them.
+
+const SET_FIELDS = { setDec: 'dec', setDate: 'date', setFont: 'font', setSize: 'size' };
+const setCtls    = {};
+
+function openSettings()
+{
+    for( const id in SET_FIELDS )
+    {
+        const v = String( calcPrefs[ SET_FIELDS[ id ] ] || '' );
+        document.getElementById( id ).value = v;
+        if( setCtls[ id ] ) setCtls[ id ].saved( v );
+    }
+    NayiveUI.open( 'settingsBackdrop' );
+}
+
+function wireSettings()
+{
+    document.getElementById( 'settingsBtn' ).addEventListener( 'click', openSettings );
+
+    for( const id in SET_FIELDS )
+    {
+        setCtls[ id ] = NayiveUI.autoSave( document.getElementById( id ), async function( v )
+        {
+            const was  = calcPrefs;
+            const next = Object.assign( {}, was );
+            next[ SET_FIELDS[ id ] ] = v;
+            setCalcPrefs( next );          // '' drops it: back to the language / Calibri 11
+            if( ! await calcCfg.write( { prefs: calcPrefs } ) ) { setCalcPrefs( was ); throw new Error( 'prefs not saved' ); }
+        } );     // a failed write says so itself (calcCfg's toast) and the select goes back
+    }
+}
 
 //------------------------------------------------------------------------//
 // INITIALIZATION

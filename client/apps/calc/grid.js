@@ -11,7 +11,7 @@ import
 {
     encodeCell, decodeCell, formatNumber
 }
-from './lib/xlsx-format_v2.4.1.js';
+from './lib/xlsx-format_v2.4.5.js';
 import
 {
     T, PHONE, fold, HT_LOCALE, refreshNameBox, gotoReference, refreshFormulaBar,
@@ -20,7 +20,7 @@ import
 from './calc.js';
 import
 {
-    updateToolbarActiveState, gridColors, paintFormat, setPainter
+    updateToolbarActiveState, gridColors, paintFormat, setPainter, MAX_COLS
 }
 from './format.js';
 import
@@ -103,6 +103,19 @@ function newDoc()
         date1904 : false,    // the file counts its dates from 1904 (codec.js reads and writes it)
         srcZip   : null      // the bytes we opened, for the parts we cannot rebuild
     };
+}
+
+// A workbook made by New: in the font Settings picked, as one look on the
+// whole sheet - the one object on every column that Select all + a font
+// gives (format.js, lookTargets). Calibri 11 needs none.
+function blankDoc()
+{
+    const d  = newDoc();
+    const st = {};
+    if( calcPrefs.font ) st.fontFamily = calcPrefs.font;
+    if( calcPrefs.size ) st.size       = calcPrefs.size;
+    if( Object.keys( st ).length ) for( let c = 0; c < MAX_COLS; c++ ) d.sheets[ 0 ].colStyles[ c ] = st;
+    return d;
 }
 
 let doc         = newDoc();
@@ -215,13 +228,27 @@ function cmItem( key )
 // HyperFormula is told which sheet it is writing into BEFORE the new data
 // arrives, or loadData() pours this sheet's cells into the one just left.
 
-function renderSheetTabs()
+// `naming`: the sheet whose tab is being renamed - shown even when it is the
+// only one (Insert > Rename sheet on a one-sheet file).
+function renderSheetTabs( naming )
 {
     const strip   = document.getElementById( 'sheetTabs' );
     const visible = doc.sheets.filter( function( sh ) { return ! sh.hidden; } );
 
-    strip.hidden = visible.length < 2;      // a one-sheet file looks untouched
+    strip.hidden = visible.length < 2 && naming == null;     // a one-sheet file looks untouched
     strip.innerHTML = '';
+
+    // Double-click a tab: rename it in place. On the strip, once - a click
+    // re-draws the tabs, so the second click of the pair lands on a new one.
+    if( ! strip.dataset.wired )
+    {
+        strip.dataset.wired = '1';
+        strip.addEventListener( 'dblclick', function( e )
+        {
+            const tab = e.target.closest( '.sheet-tab' );
+            if( tab ) editSheetName( Number( tab.dataset.i ) );
+        } );
+    }
 
     if( strip.hidden ) return;
 
@@ -233,13 +260,321 @@ function renderSheetTabs()
         b.type      = 'button';
         b.className = 'sheet-tab' + ( i === doc.active ? ' is-active' : '' );
         b.textContent = sh.name;
-        b.title       = sh.name;
+        b.title       = sh.name + ' \u00b7 ' + T( 'calc.renameSheetHint' );
         b.setAttribute( 'role', 'tab' );
         b.setAttribute( 'aria-selected', i === doc.active ? 'true' : 'false' );
-        b.addEventListener( 'click', function() { switchToSheet( i ); } );
+        b.dataset.i = i;
+        b.addEventListener( 'click', function() { if( Date.now() - tabDropAt > 300 ) switchToSheet( i ); } );
+        b.addEventListener( 'pointerdown', function( e ) { dragTab( e, b, i ); } );
+        // A finger that is dragging must not also pan the strip or open a menu.
+        b.addEventListener( 'touchmove',   function( e ) { if( tabDragging ) e.preventDefault(); }, { passive: false } );
+        b.addEventListener( 'contextmenu', function( e ) { if( tabDragging ) e.preventDefault(); } );
 
         strip.appendChild( b );
     });
+}
+
+// Drag a tab along the strip to move its sheet. A mouse drags as soon as it
+// moves; a finger first holds still a moment, so a swipe still scrolls the
+// strip. A line on the tab under the pointer shows where it will land.
+const TAB_SLOP = 5;      // px of travel before a mouse press is a drag
+const TAB_HOLD = 350;    // ms a finger holds before it drags
+
+let tabDragging = false;
+let tabDropAt   = 0;     // when the last drag ended: its click is not a pick
+
+function dragTab( e, tab, from )
+{
+    if( e.button !== 0 ) return;
+
+    const strip = document.getElementById( 'sheetTabs' );
+    const x0    = e.clientX;
+    let to      = from;
+    let hold    = e.pointerType === 'mouse' ? 0 : setTimeout( function() { hold = 0; begin(); }, TAB_HOLD );
+    let moved   = false;     // a finger held still and let go: rename, not move
+
+    function begin()
+    {
+        tabDragging = true;
+        tab.classList.add( 'is-dragging' );
+        try { tab.setPointerCapture( e.pointerId ); } catch( _ ) {}
+    }
+
+    // `to` is where the sheet ends up once it has left its old place.
+    function mark( x )
+    {
+        const tabs = Array.prototype.slice.call( strip.querySelectorAll( '.sheet-tab' ) );
+        let over = tabs[ tabs.length - 1 ], after = true;
+
+        tabs.forEach( function( t ) { t.classList.remove( 'drop-before', 'drop-after' ); } );
+
+        for( const t of tabs )
+        {
+            const r = t.getBoundingClientRect();
+            if( x < r.left + r.width / 2 ) { over = t; after = false; break; }
+        }
+
+        const at = Number( over.dataset.i ) + ( after ? 1 : 0 );
+        to = at > from ? at - 1 : at;
+
+        if( to !== from ) over.classList.add( after ? 'drop-after' : 'drop-before' );
+    }
+
+    function move( ev )
+    {
+        if( ev.pointerId !== e.pointerId ) return;
+
+        if( ! tabDragging )
+        {
+            if( Math.abs( ev.clientX - x0 ) < TAB_SLOP ) return;
+            if( hold ) return end();          // a finger that moves before the hold scrolls
+            begin();
+        }
+
+        moved = true;
+        mark( ev.clientX );
+    }
+
+    function end()
+    {
+        clearTimeout( hold );
+        window.removeEventListener( 'pointermove',   move );
+        window.removeEventListener( 'pointerup',     up   );
+        window.removeEventListener( 'pointercancel', end  );
+        strip.querySelectorAll( '.sheet-tab' ).forEach( function( t ) { t.classList.remove( 'is-dragging', 'drop-before', 'drop-after' ); } );
+
+        const was = tabDragging;
+        tabDragging = false;
+        return was;
+    }
+
+    function up( ev )
+    {
+        if( ev.pointerId !== e.pointerId ) return;
+        if( ! end() ) return;
+
+        tabDropAt = Date.now();
+        if( e.pointerType !== 'mouse' && ! moved ) editSheetName( from );
+        else moveSheet( from, to );
+    }
+
+    window.addEventListener( 'pointermove',   move );
+    window.addEventListener( 'pointerup',     up   );
+    window.addEventListener( 'pointercancel', end  );
+}
+
+// The sheet at `from` goes to `to`; the others close up around it.
+function moveSheet( from, to )
+{
+    if( from === to || ! doc.sheets[ from ] ) return;
+
+    const before = doc.sheets.slice();
+
+    doc.sheets.splice( to, 0, doc.sheets.splice( from, 1 )[ 0 ] );
+    doc.active = doc.sheets.indexOf( activeSheet );
+
+    // A name kept for one sheet (xlsx localSheetId: a print area, a local
+    // range) counts sheets by position, so it follows its sheet.
+    ( doc.names || [] ).forEach( function( n )
+    {
+        if( n && n.Sheet != null && before[ n.Sheet ] ) n.Sheet = doc.sheets.indexOf( before[ n.Sheet ] );
+    });
+
+    renderSheetTabs();
+    scheduleAutosave();
+}
+
+//------------------------------------------------------------------------//
+// RENAME A SHEET  (double-click its tab, a finger's long press, Insert menu)
+//
+// The tab turns into a text field where it is: Enter or leaving it keeps the
+// name, Escape keeps the old one. A name Excel would refuse stays in the
+// field to be put right.
+//
+// Formulas name sheets as text (='Ventas'!A1), in every sheet and in the
+// workbook's named ranges, so they are rewritten with it; the grid is then
+// built again from the document, which gives the formula engine the new
+// names too. Charts, pictures, tables and the rules Calc keeps verbatim
+// (codec.js, captureRawSheet) may name the sheet in parts Calc cannot edit:
+// such a workbook keeps its names - renaming there would break them.
+
+function editSheetName( i )
+{
+    if( ! table || ! doc.sheets[ i ] ) return;
+    if( i !== doc.active ) switchToSheet( i );
+
+    renderSheetTabs( i );
+    const strip = document.getElementById( 'sheetTabs' );
+    const tab   = strip.querySelector( '.sheet-tab[data-i="' + i + '"]' );
+    if( ! tab ) return;
+
+    const old   = doc.sheets[ i ].name;
+    const input = document.createElement( 'input' );
+    input.type        = 'text';
+    input.className   = 'tb-input sheet-tab-edit';
+    input.value       = old;
+    input.maxLength   = 31;
+    input.spellcheck  = false;
+    input.setAttribute( 'aria-label', T( 'calc.renameSheet' ) );
+    const fit = function() { input.style.width = Math.max( 6, input.value.length + 2 ) + 'ch'; };
+    fit();
+    tab.replaceWith( input );
+    input.focus();
+    input.select();
+
+    let done = false;            // re-drawing the strip may blur the field: act once
+    input.addEventListener( 'input', fit );
+    input.addEventListener( 'keydown', function( e )
+    {
+        e.stopPropagation();                         // the grid's keys stay out of it
+        if( e.key !== 'Enter' && e.key !== 'Escape' ) return;
+        e.preventDefault();
+        done = true;
+        if( e.key === 'Enter' && ! renameSheet( i, input.value ) ) { done = false; return; }   // a refused name stays to be put right
+        renderSheetTabs();
+        if( table ) table.listen();
+    } );
+    // Clicked away: kept as Enter would, or a refused name is let go (its
+    // toast says why) - the focus is never trapped in the field.
+    input.addEventListener( 'blur', function()
+    {
+        if( done ) return;
+        done = true;
+        renameSheet( i, input.value );
+        renderSheetTabs();
+    } );
+}
+
+// Insert > Rename sheet: the sheet on screen.
+function renameActiveSheet() { editSheetName( doc.active ); }
+
+// Excel's rules: 1-31 characters, none of \ / ? * [ ] :, no ' at either
+// end, and not another sheet's name (whatever its case). True = done (or
+// nothing to do); false = refused, said in a toast. `quiet`: no toast.
+function renameSheet( i, name, quiet )
+{
+    const sh  = doc.sheets[ i ];
+    const old = sh ? sh.name : '';
+    name = String( name || '' ).trim();
+    if( ! sh || name === old ) return true;
+
+    const taken = doc.sheets.some( function( o, k ) { return k !== i && o.name.toLowerCase() === name.toLowerCase(); } );
+    if( ! name || name.length > 31 || /[\\\/?*\[\]:]/.test( name ) || /^'|'$/.test( name ) || taken )
+    {
+        if( ! quiet ) NayiveUI.toast( T( taken ? 'calc.sheetNameTaken' : 'calc.sheetNameBad' ) );
+        return false;
+    }
+
+    const kept = doc.sheets.some( function( o ) { return o.raw && ( o.raw.refs.length || o.raw.cf || o.raw.dv ); } );
+    if( kept )
+    {
+        if( ! quiet ) NayiveUI.toast( T( 'calc.sheetNameKept' ) );
+        return true;                                 // nothing to fix in the field: closed, name unchanged
+    }
+
+    stashActiveSheet();
+    doc.sheets.forEach( function( o )
+    {
+        o.data = ( o.data || [] ).map( function( row )
+        {
+            return ( row || [] ).map( function( v ) { return typeof v === 'string' && v.charAt( 0 ) === '=' ? renameInFormula( v, old, name ) : v; } );
+        } );
+    } );
+    ( doc.names || [] ).forEach( function( n ) { if( n && typeof n.Ref === 'string' ) n.Ref = renameInFormula( n.Ref, old, name ); } );
+    sh.name = name;
+
+    const sel = lastSelection;
+    initGrid( doc );
+    if( sel ) table.selectCell( sel.r1, sel.c1, sel.r2, sel.c2 );
+    scheduleAutosave();
+    return true;
+}
+
+// How a formula writes a sheet's name: bare when it is a plain word that
+// is not also a cell (AB1) or R1C1 address, else in quotes ('' for ').
+function sheetRef( name )
+{
+    return /^[A-Za-z_\u00C0-\uFFFF][A-Za-z0-9_.\u00C0-\uFFFF]*$/.test( name ) && ! /^[A-Za-z]{1,3}\d+$/.test( name ) && ! /^R\d*C\d*$/i.test( name )
+         ? name : "'" + name.replace( /'/g, "''" ) + "'";
+}
+
+// Every reference to sheet `from` in formula `f`, quoted or bare, now names
+// `to`. Text in double quotes and [table] parts are passed over, and a
+// bare name counts only when nothing word-like touches it on the left.
+function renameInFormula( f, from, to )
+{
+    const low = from.toLowerCase();
+    const ref = sheetRef( to );
+    let out = '';
+    let i   = 0;
+
+    while( i < f.length )
+    {
+        const ch = f.charAt( i );
+
+        if( ch === '"' || ch === "'" || ch === '[' )
+        {
+            let j = i + 1;
+            if( ch === '[' )
+            {
+                let depth = 1;
+                for( ; j < f.length; j++ )
+                {
+                    if( f.charAt( j ) === '[' ) depth++;
+                    else if( f.charAt( j ) === ']' && --depth === 0 ) break;
+                }
+            }
+            else
+            {
+                for( ; j < f.length; j++ )
+                {
+                    if( f.charAt( j ) !== ch ) continue;
+                    if( f.charAt( j + 1 ) === ch ) { j++; continue; }     // "" / '' inside
+                    break;
+                }
+            }
+            const piece = f.slice( i, j + 1 );
+            const named = ch === "'" && f.charAt( j + 1 ) === '!' && piece.slice( 1, -1 ).replace( /''/g, "'" ).toLowerCase() === low;
+            out += named ? ref : piece;
+            i = j + 1;
+            continue;
+        }
+
+        if( ! /[A-Za-z0-9_.$\u00C0-\uFFFF]/.test( f.charAt( i - 1 ) ) &&
+            f.substr( i, from.length ).toLowerCase() === low && f.charAt( i + from.length ) === '!' )
+        {
+            out += ref;
+            i   += from.length;
+            continue;
+        }
+
+        out += ch;
+        i++;
+    }
+    return out;
+}
+
+// A new, empty sheet at the end, named like the first one ("Sheet1" →
+// "Sheet2", "Sheet3"…), and shown at once. The engine gets it first, the way
+// registerSheetsInEngine puts in every sheet switchToSheet can go to.
+function addSheet()
+{
+    if( ! table ) return;
+
+    const base  = defaultSheetName().replace( /\d+$/, '' ) || 'Sheet';
+    const taken = doc.sheets.map( function( sh ) { return sh.name.toLowerCase(); } );   // Excel: names are case-blind
+    let n = doc.sheets.length + 1;
+    while( taken.indexOf( ( base + n ).toLowerCase() ) >= 0 ) n++;
+
+    const sh = newSheet( base + n );
+    doc.sheets.push( sh );
+
+    const hf = formulaEngine();
+    try { if( hf && ! hf.doesSheetExist( sh.name ) ) hf.addSheet( sh.name ); }
+    catch( _ ) { /* Handsontable adds it itself when the grid switches to it */ }
+
+    switchToSheet( doc.sheets.length - 1 );
+    scheduleAutosave();
 }
 
 function switchToSheet( i )
@@ -791,12 +1126,55 @@ function decimalComma()
 // A plain number shows at most 15 significant digits, as in Excel: 0.1+0.2
 // is 0.3, not 0.30000000000000004.
 
+//------------------------------------------------------------------------//
+// SETTINGS  (the dialog is calc.js, SETTINGS)
+//
+// What the user picked over the language: the decimal mark ('.' or ','),
+// the short date's order, and the font and size New starts in. Missing
+// = the language's / Calibri 11. The account's copy is `prefs` in
+// data/calc/config.json; this device keeps one too, so the first number
+// drawn already follows it.
+
+const PREFS_KEY    = 'nayive-calc-prefs';
+const DATE_ORDERS  = [ 'dd/mm/yyyy', 'mm/dd/yyyy', 'yyyy-mm-dd', 'dd.mm.yyyy' ];
+const PREF_FONTS   = [ 'Arial', 'Georgia', "'Courier New'", 'Verdana' ];   // #fmtFontFamily's, Calibri aside
+
+let calcPrefs = {};
+
+// Only values the dialog offers: a hand-edited config cannot reach a format code.
+function cleanPrefs( p )
+{
+    p = ( p && typeof p === 'object' ) ? p : {};
+    const out  = {};
+    const size = Number( p.size );
+    if( p.dec === '.' || p.dec === ',' )               out.dec  = p.dec;
+    if( DATE_ORDERS.indexOf( p.date ) >= 0 )           out.date = p.date;
+    if( PREF_FONTS.indexOf( p.font ) >= 0 )            out.font = p.font;
+    if( size >= 6 && size <= 72 && size !== 11 )       out.size = size;
+    return out;
+}
+
+function setCalcPrefs( p )
+{
+    calcPrefs = cleanPrefs( p );
+    try { localStorage.setItem( PREFS_KEY, JSON.stringify( calcPrefs ) ); } catch( _ ) {}
+    if( table ) { table.render(); refreshFormulaBar(); refreshSelStats(); }
+}
+
+try { calcPrefs = cleanPrefs( JSON.parse( localStorage.getItem( PREFS_KEY ) || '{}' ) ); } catch( _ ) {}
+
+// The locale numbers are written in: the language's, unless a mark was picked.
+function numberLocale()
+{
+    return calcPrefs.dec === ',' ? 'de-DE' : calcPrefs.dec === '.' ? 'en-US' : NayiveI18n.locale();
+}
+
 let marksFor = null;     // the locale numberMarks() last looked at
 let marks    = null;     // its { dec, group }, or null where they are "." and ","
 
 function numberMarks()
 {
-    const loc = NayiveI18n.locale();
+    const loc = numberLocale();
     if( loc === marksFor ) return marks;
 
     let dec = '.', group = ',';
@@ -860,6 +1238,8 @@ let shortCode = null;    // its format code, "dd/mm/yyyy" in Spanish
 // Spanish, 12/31/2026 in English, 31.12.2026 in German.
 function shortDate()
 {
+    if( calcPrefs.date ) return calcPrefs.date;      // picked in Settings
+
     const loc = NayiveI18n.locale();
     if( loc === shortFor ) return shortCode;
 
@@ -1669,7 +2049,9 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
     const ink                = readableInk( style );    // see READABLE COLOURS
     td.style.color           = ink                           ? '#' + ink         : '';
     td.style.backgroundColor = ( style && style.bg )         ? '#' + style.bg    : '';
-    td.style.textAlign       = ( style && style.align )      ? style.align       : '';
+    // A number with no alignment of its own sits on the right, as in Excel.
+    const isNum              = typeof value === 'number' && isFinite( value );
+    td.style.textAlign       = ( style && style.align )      ? style.align       : ( isNum ? 'right' : '' );
     td.style.verticalAlign   = ( style && style.valign )     ? style.valign      : '';
     td.style.whiteSpace      = ( style && style.wrap )       ? 'normal'          : '';
     td.style.fontFamily      = ( style && style.fontFamily ) ? style.fontFamily  : '';
@@ -1687,7 +2069,7 @@ function styledRenderer( instance, td, row, col, prop, value, cellProperties )
 
     // A number shows through its format, with the language's marks (see
     // NUMBERS ON SCREEN).
-    if( typeof value === 'number' && isFinite( value ) ) td.textContent = showNumber( value, style && style.numFmt );
+    if( isNum ) td.textContent = showNumber( value, style && style.numFmt );
 
     // Mark a linked cell. Cells are recycled DOM nodes, so this has to be
     // set AND cleared on every render like every other style above.
@@ -2348,9 +2730,113 @@ function wireFormulaPanel()
     PHONE.addEventListener( 'change', syncFormulaPanel );
 }
 
+//------------------------------------------------------------------------//
+// PRINT  /  SAVE AS PDF
+//
+// The grid draws only the cells on screen, so printing the page would print
+// one screenful. Instead the sheet on screen - up to its last filled row and
+// column - is copied into a plain <table> (#printSheet) that only paper sees
+// (calc.css, @media print), drawn the way styledRenderer draws a cell. Hidden
+// rows and columns stay out. "Save as PDF" is the same browser dialog, plus a
+// line saying where to pick it, as in Write.
+
+function printSheet( pdfHint )
+{
+    if( ! table ) return;
+
+    const data = table.getData();           // answers, not formulas
+    const last = lastUsedRow( data );
+    let lastC  = -1;
+    for( let r = 0; r <= last; r++ )
+        for( let c = ( data[ r ] || [] ).length - 1; c > lastC; c-- )
+            if( data[ r ][ c ] !== '' && data[ r ][ c ] !== null && data[ r ][ c ] !== undefined ) { lastC = c; break; }
+
+    const hr = table.getPlugin( 'hiddenRows' ), hc = table.getPlugin( 'hiddenColumns' );
+    const showR = function( r ) { return ! hr.isHidden( r ); };
+    const showC = function( c ) { return ! hc.isHidden( c ); };
+
+    // A merge's top-left cell spans it; the cells under it are left out.
+    const covered = {};
+    const spans   = {};
+    activeSheet.merges.forEach( function( m )
+    {
+        spans[ m.row + ',' + m.col ] = m;
+        for( let r = m.row; r < m.row + m.rowspan; r++ )
+            for( let c = m.col; c < m.col + m.colspan; c++ )
+                if( r !== m.row || c !== m.col ) covered[ r + ',' + c ] = true;
+    });
+
+    const tbl = document.createElement( 'table' );
+    const cg  = document.createElement( 'colgroup' );
+    for( let c = 0; c <= lastC; c++ )
+    {
+        if( ! showC( c ) ) continue;
+        const col = document.createElement( 'col' );
+        col.style.width = ( activeSheet.cols[ c ] || DEFAULT_COL_PX ) + 'px';
+        cg.appendChild( col );
+    }
+    tbl.appendChild( cg );
+
+    for( let r = 0; r <= last; r++ )
+    {
+        if( ! showR( r ) ) continue;
+        const tr = tbl.insertRow();
+        if( activeSheet.rows[ r ] ) tr.style.height = activeSheet.rows[ r ] + 'px';
+
+        for( let c = 0; c <= lastC; c++ )
+        {
+            if( ! showC( c ) || covered[ r + ',' + c ] ) continue;
+
+            const td    = tr.insertCell();
+            const m     = spans[ r + ',' + c ];
+            const v     = data[ r ] ? data[ r ][ c ] : null;
+            const style = styleOf( activeSheet, r, c );
+            const isNum = typeof v === 'number' && isFinite( v );
+
+            if( m ) { td.rowSpan = m.rowspan; td.colSpan = m.colspan; }
+            td.textContent = isNum ? showNumber( v, style && style.numFmt ) : ( v == null ? '' : String( v ) );
+
+            if( ! style ) { if( isNum ) td.style.textAlign = 'right'; continue; }
+            td.style.textAlign = style.align || ( isNum ? 'right' : '' );
+            if( style.valign )     td.style.verticalAlign   = style.valign;
+            if( style.wrap )       td.style.whiteSpace      = 'normal';
+            if( style.bold )       td.style.fontWeight      = 'bold';
+            if( style.italic )     td.style.fontStyle       = 'italic';
+            if( style.underline )  td.style.textDecoration  = 'underline';
+            if( style.color )      td.style.color           = '#' + style.color;    // paper is white: no READABLE COLOURS
+            if( style.bg )         td.style.backgroundColor = '#' + style.bg;
+            if( style.fontFamily ) td.style.fontFamily      = style.fontFamily;
+            if( style.size )       td.style.fontSize        = style.size + 'pt';
+
+            const bd = style.border === true ? { top: true, right: true, bottom: true, left: true } : style.border;
+            if( bd )
+            {
+                const line = ( bd.style === 'medium' ? '2px' : '1px' ) + ' solid #' + ( bd.color || '000000' );
+                if( bd.top )    td.style.borderTop    = line;
+                if( bd.right )  td.style.borderRight  = line;
+                if( bd.bottom ) td.style.borderBottom = line;
+                if( bd.left )   td.style.borderLeft   = line;
+            }
+        }
+    }
+
+    let box = document.getElementById( 'printSheet' );
+    if( box ) box.remove();
+    box = document.createElement( 'div' );
+    box.id = 'printSheet';
+    box.appendChild( tbl );
+    document.body.appendChild( box );
+    window.addEventListener( 'afterprint', function() { box.remove(); }, { once: true } );
+
+    if( pdfHint ) NayiveUI.toast( T( 'write.pdfHint' ), { ms: 5000 } );
+
+    // A tick, so the toast paints before the modal print dialog freezes the page.
+    setTimeout( function() { window.print(); }, pdfHint ? 350 : 0 );
+}
+
 export
 {
     table, newSheet, newDoc, doc, activeSheet, defaultSheetName, gridBooting, lastSelection, htThemeName,
-    CM_ICONS, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
-    editText, localMarks, undoStep, lineStyle, styleOf
+    CM_ICONS, addSheet, renameActiveSheet, switchToSheet, sortByColumn, initGrid, wireFormulaPanel, pasteWithoutStyles,
+    editText, localMarks, undoStep, lineStyle, styleOf, blankDoc, calcPrefs, setCalcPrefs, numberLocale, printSheet
 };

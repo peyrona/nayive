@@ -929,9 +929,11 @@
             return p;
         }
 
-        // #savedAt is a floppy in the sync plug's colours: red "unsaved", blue
-        // "saving", green "saved" - and "here": green with a blue dot, saved on
-        // this device, not sent yet (PARKED SAVES). Its title says what and when.
+        // #savedAt is a floppy: plain "pending" (edits waiting for the timer),
+        // blue "saving", green "saved", "here" green with a blue dot (saved on
+        // this device, not sent yet - PARKED SAVES), amber "draft" (on this
+        // device only, nowhere to save to) and red "unsaved" only when
+        // something went wrong. Its title says what and when.
         function disk( state, title )
         {
             var el = byId( o.savedAtId || "savedAt" );
@@ -950,7 +952,7 @@
         function stamp( key, at, note )
         {
             var text = key ? tf( key, { time: hhmm( at ) } ) : "";
-            disk( key ? ( key === "write.savedAt" ? "saved" : key === "write.parkedAt" ? "here" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
+            disk( key ? ( key === "write.savedAt" ? "saved" : key === "write.parkedAt" ? "here" : key === "ui.draftAt" ? "draft" : "unsaved" ) : ( dirty ? "unsaved" : "saved" ),
                   note ? text + " - " + note : text );
         }
 
@@ -1014,7 +1016,7 @@
         function edited()
         {
             dirty = true;
-            disk( "unsaved" );
+            disk( "pending" );
             if( upTimer ) armUpload();          // a parked save waits for 10 min with no edit
 
             if( writable() )
@@ -1331,6 +1333,7 @@
         async function offerCopy( p, why )
         {
             sync( "conflict" );
+            if( p === path() ) disk( "unsaved" );   // the edits on screen are not on the server
             if( savingAs || askedFor === p ) return;
             askedFor = p;
 
@@ -1344,7 +1347,7 @@
                 confirm: t( "ui.conflictCopy" ),
                 cancel:  t( "ui.notNow" ) } );
 
-            if( copy && p === path() ) o.saveAs();
+            if( copy && p === path() ) o.saveAs( true );
         }
 
         function saveNow()
@@ -2354,10 +2357,14 @@
             return vals.indexOf( "" ) !== -1 ? "" : vals[ 0 ];
         }
 
-        function openSaveAs()
+        // asCopy: the conflict question's "save my version as a copy" - never
+        // offered the name it conflicts with (saving there only meets the
+        // same conflict again), but the next free one: "hoja (2).xlsx".
+        async function openSaveAs( asCopy )
         {
             var input = byId( "saveName" );
-            var name  = pending || ( path ? baseName( path ) : o.defaultName );
+            var name  = asCopy === true && path ? baseName( await freeName( path ) )
+                      : pending || ( path ? baseName( path ) : o.defaultName );
 
             asked = true;                      // asked by hand counts too: not again by itself
             clearTimeout( askTimer );
@@ -3095,7 +3102,22 @@
         byId( "statsBtn" ).addEventListener( "click", o.stats );
         byId( "scBtn"    ).addEventListener( "click", o.shortcuts );
         byId( "guideBtn" ).addEventListener( "click", function () { NayiveUI.showIntro(); } );
-        var menu = buttonMenu( { btn: "helpBtn", menu: "helpMenu", ids: HELP_IDS } );
+        // A fourth entry, "Ver el tour" (NayiveUI.tour, shared/ui.js): made here,
+        // beside the three, so no page carries its own copy.
+        var tools = byId( "helpTools" ), ids = HELP_IDS.slice();
+        if( tools && NayiveUI.tour )
+        {
+            var tb = byId( "tourBtn" ) || tools.appendChild( document.createElement( "button" ) );
+            tb.id = "tourBtn";
+            tb.type = "button";
+            tb.className = "tb-btn";
+            tb.title = t( "ui.tour.open" );
+            tb.setAttribute( "aria-label", tb.title );
+            tb.innerHTML = NayiveUI.icon( "play" );
+            tb.addEventListener( "click", function () { NayiveUI.tour(); } );
+            ids.push( "tourBtn" );
+        }
+        var menu = buttonMenu( { btn: "helpBtn", menu: "helpMenu", ids: ids } );
         NayiveUI.setHelpMenu( true );
         return menu;
     }

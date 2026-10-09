@@ -12,7 +12,7 @@ import
     read, write, createWorkbook, appendSheet, decodeRange, encodeRange, encodeCell,
     decodeCell, decodeCol, encodeCol, arrayToSheet
 }
-from './lib/xlsx-format_v2.4.1.js';
+from './lib/xlsx-format_v2.4.5.js';
 import
 {
     table, newSheet, newDoc, doc, activeSheet, defaultSheetName, lineStyle
@@ -32,7 +32,7 @@ from './grid.js';
 // Known gap: xlsx-format has no "xls"/"ods" support (xlsx/xlsm/csv/tsv/html
 // only — dropped ODS import/export when we switched off SheetJS).
 // Italic/underline were added to the vendored codec's font read/write path
-// (lib/xlsx-format_v2.4.1.js: parseFonts, normalizeFont, writeFont) so they
+// (lib/xlsx-format_v2.4.5.js: parseFonts, normalizeFont, writeFont) so they
 // round-trip like bold — the library's original xlsx.js/SheetJS lineage only
 // ever wrote <b/>, not <i/>/<u/>.
 
@@ -1429,9 +1429,12 @@ async function encodeFromGrid( ext )
     // The library's own guard against formulas in a .csv is off: it put an
     // apostrophe in front of every negative NUMBER too. writeCsv guards the
     // text written from here instead.
+    // maxWorksheetCells: the library writes at most 1e6 cells a sheet but
+    // reads up to 1e7; whatever opened must save, so the write gets 1e7 too.
     const csv = ( bookType === 'csv' && doc.csv ) || { sep: ',', eol: '\n', endEol: false };
     let   out = await write( wb, { type: 'array', bookType: bookType, cellStyles: true,
-                                   preserve: doc.srcZip, FS: csv.sep, escapeFormulae: false } );
+                                   preserve: doc.srcZip, FS: csv.sep, escapeFormulae: false,
+                                   maxWorksheetCells: 1e7 } );
 
     // A sheet that came from a .csv keeps every field it was not edited in.
     if( bookType === 'csv' && sheets[ 0 ] )

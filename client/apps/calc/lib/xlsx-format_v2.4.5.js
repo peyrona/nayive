@@ -1,4 +1,4 @@
-//#region \0@oxc-project+runtime@0.138.0/helpers/esm/typeof.js
+//#region \0@oxc-project+runtime@0.148.0/helpers/esm/typeof.js
 function _typeof(o) {
 	"@babel/helpers - typeof";
 	return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
@@ -9,7 +9,7 @@ function _typeof(o) {
 }
 
 //#endregion
-//#region \0@oxc-project+runtime@0.138.0/helpers/esm/toPrimitive.js
+//#region \0@oxc-project+runtime@0.148.0/helpers/esm/toPrimitive.js
 function toPrimitive(t, r) {
 	if ("object" != _typeof(t) || !t) return t;
 	var e = t[Symbol.toPrimitive];
@@ -22,14 +22,14 @@ function toPrimitive(t, r) {
 }
 
 //#endregion
-//#region \0@oxc-project+runtime@0.138.0/helpers/esm/toPropertyKey.js
+//#region \0@oxc-project+runtime@0.148.0/helpers/esm/toPropertyKey.js
 function toPropertyKey(t) {
 	var i = toPrimitive(t, "string");
 	return "symbol" == _typeof(i) ? i : i + "";
 }
 
 //#endregion
-//#region \0@oxc-project+runtime@0.138.0/helpers/esm/defineProperty.js
+//#region \0@oxc-project+runtime@0.148.0/helpers/esm/defineProperty.js
 function _defineProperty(e, r, t) {
 	return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
 		value: t,
@@ -158,11 +158,27 @@ async function deflate(data) {
 
 //#endregion
 //#region src/zip/index.ts
-const encoder$1 = new TextEncoder();
-const decoder$1 = new TextDecoder();
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 const DEFAULT_MAX_ZIP_ENTRIES = 1e4;
-const DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;
-const DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
+const DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES = 536870912;
+const DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 268435456;
+function stripLeadingSlash$1(path) {
+	return path.charAt(0) === "/" ? path.slice(1) : path;
+}
+function asciiLower(path) {
+	return path.replace(/[A-Z]/g, (character) => character.toLowerCase());
+}
+/** Resolve an OPC part name using exact, leading-slash, then ASCII case-insensitive matching. */
+function resolveZipPath(archive, path) {
+	if (Object.hasOwn(archive.files, path)) return path;
+	const alternate = path.startsWith("/") ? path.slice(1) : "/" + path;
+	if (Object.hasOwn(archive.files, alternate)) return alternate;
+	const foldedPath = asciiLower(stripLeadingSlash$1(path));
+	const matches = Object.keys(archive.files).filter((candidate) => asciiLower(stripLeadingSlash$1(candidate)) === foldedPath);
+	if (matches.length > 1) throw new XlsxError("DUPLICATE", `Ambiguous ZIP entry path ${path} matches ${matches.join(", ")}`);
+	return matches[0] || null;
+}
 /** Local file header signature: "PK\x03\x04" */
 const SIG_LOCAL = 67324752;
 /** Central directory file header signature: "PK\x01\x02" */
@@ -272,7 +288,7 @@ async function zipRead(data, opts) {
 		const entryEnd = pos + 46 + nameLen + extraLen + commentLen;
 		if (entryEnd > cdEnd) throw new XlsxError("MALFORMED", "Invalid ZIP: central directory entry exceeds declared size");
 		const nameBytes = data.subarray(pos + 46, pos + 46 + nameLen);
-		const name = decoder$1.decode(nameBytes);
+		const name = decoder.decode(nameBytes);
 		entries.push({
 			method,
 			crc: crcVal,
@@ -302,7 +318,7 @@ async function zipRead(data, opts) {
 		assertRange(data, dataStart, entry.compSize, `file data for ${entry.name}`);
 		const dataEnd = dataStart + entry.compSize;
 		if (localMethod !== entry.method) throw new XlsxError("MALFORMED", `Invalid ZIP: local header method mismatch for ${entry.name}`);
-		if (decoder$1.decode(data.subarray(loc + 30, loc + 30 + localNameLen)) !== name) throw new XlsxError("MALFORMED", `Invalid ZIP: local header file name mismatch for ${name}`);
+		if (decoder.decode(data.subarray(loc + 30, loc + 30 + localNameLen)) !== name) throw new XlsxError("MALFORMED", `Invalid ZIP: local header file name mismatch for ${name}`);
 		if (entry.uncompSize > maxEntryUncompressedBytes) throw new XlsxError("LIMIT_EXCEEDED", `Invalid ZIP: entry ${name} uncompressed size ${entry.uncompSize} exceeds limit ${maxEntryUncompressedBytes}`);
 		totalUncompressedBytes += entry.uncompSize;
 		if (totalUncompressedBytes > maxTotalUncompressedBytes) throw new XlsxError("LIMIT_EXCEEDED", `Invalid ZIP: total uncompressed size ${totalUncompressedBytes} exceeds limit ${maxTotalUncompressedBytes}`);
@@ -340,7 +356,7 @@ async function zipRead(data, opts) {
 async function zipWrite(archive, compress) {
 	const rawEntries = Object.keys(archive.files).map((name) => ({
 		name,
-		nameBytes: encoder$1.encode(name),
+		nameBytes: encoder.encode(name),
 		data: archive.files[name],
 		crc: crc32(archive.files[name])
 	}));
@@ -421,6 +437,7 @@ async function zipWrite(archive, compress) {
 }
 /**
 * Read a file from a ZIP archive as a UTF-8 string.
+* XML parsers consume this decoded text directly; do not decode it again.
 *
 * Falls back to trying with/without a leading slash if the exact path is not found.
 *
@@ -429,13 +446,9 @@ async function zipWrite(archive, compress) {
 * @returns Decoded string, or `null` if the file is not found
 */
 function zipReadString(archive, path) {
-	let data = archive.files[path];
-	if (!data) {
-		const normalized = path.startsWith("/") ? path.slice(1) : "/" + path;
-		data = archive.files[normalized];
-	}
-	if (!data) return null;
-	return decoder$1.decode(data);
+	const resolvedPath = resolveZipPath(archive, path);
+	if (resolvedPath == null) return null;
+	return decoder.decode(archive.files[resolvedPath]);
 }
 /**
 * Add a UTF-8 string as a file entry in the archive.
@@ -445,7 +458,7 @@ function zipReadString(archive, path) {
 * @param content - String content to encode as UTF-8
 */
 function zipAddString(archive, path, content) {
-	archive.files[path] = encoder$1.encode(content);
+	archive.files[path] = encoder.encode(content);
 }
 /** Create a new empty ZIP archive with no file entries. */
 function zipCreate() {
@@ -462,24 +475,18 @@ function zipCreate() {
 * @returns `true` if the file exists
 */
 function zipHas(archive, path) {
-	if (archive.files[path]) return true;
-	const normalized = path.startsWith("/") ? path.slice(1) : "/" + path;
-	if (archive.files[normalized]) return true;
-	const lpath = path.toLowerCase();
-	for (const k of Object.keys(archive.files)) if (k.toLowerCase() === lpath) return true;
-	return false;
+	return resolveZipPath(archive, path) != null;
 }
 
 //#endregion
 //#region src/xml/limits.ts
-const DEFAULT_MAX_XML_PART_BYTES = 128 * 1024 * 1024;
+const DEFAULT_MAX_XML_PART_BYTES = 134217728;
 const DEFAULT_MAX_XML_TAGS = 5e6;
 const DEFAULT_MAX_XML_NESTING_DEPTH = 256;
-const DEFAULT_MAX_XML_TAG_LENGTH = 1024 * 1024;
+const DEFAULT_MAX_XML_TAG_LENGTH = 1048576;
 const DEFAULT_MAX_XML_ATTRIBUTES_PER_TAG = 1e4;
 const DEFAULT_MAX_SHARED_STRING_ITEMS = 1e6;
 const DEFAULT_MAX_WORKSHEET_ROWS = 1048576;
-const DEFAULT_MAX_WORKSHEET_CELLS = 1e7;
 function xmlOptionLimit(value, fallback, name) {
 	if (value == null) return fallback;
 	if (!Number.isFinite(value) || value < 0) throw new XlsxError("INVALID_ARGUMENT", `Invalid XML option: ${name} must be a non-negative finite number`);
@@ -619,10 +626,18 @@ const XML_ESCAPE_MAP = {
 	"<": "&lt;",
 	"&": "&amp;"
 };
-const encregex = /&(?:quot|apos|gt|lt|amp|#x?([\da-f]+));/gi;
+const encregex = /&(?:quot|apos|gt|lt|amp|#(?:x([\da-f]+)|(\d+)));/gi;
 const coderegex = /_x([\da-fA-F]{4})_/g;
+const literalCoderegex = /_(?=x[\da-fA-F]{4}_)/g;
 const decregex = /[&<>'"]/g;
 const charegex = /[\u0000-\u0008\u000b-\u001f\uFFFE\uFFFF]/g;
+/**
+* Check whether a number is a character allowed by the XML 1.0 Char production.
+* XML excludes surrogate code points and values outside the listed ranges.
+*/
+function isValidXmlCodePoint(codePoint) {
+	return codePoint === 9 || codePoint === 10 || codePoint === 13 || codePoint >= 32 && codePoint <= 55295 || codePoint >= 57344 && codePoint <= 65533 || codePoint >= 65536 && codePoint <= 1114111;
+}
 /**
 * Recursively unescape XML entities, handling CDATA sections.
 * @param text - raw XML text potentially containing entities and CDATA blocks
@@ -631,8 +646,10 @@ const charegex = /[\u0000-\u0008\u000b-\u001f\uFFFE\uFFFF]/g;
 function rawUnescapeXml(text) {
 	const str = text;
 	const i = str.indexOf("<![CDATA[");
-	if (i === -1) return str.replace(encregex, ($$, $1) => {
-		return encodings[$$] || String.fromCharCode(parseInt($1, $$.indexOf("x") > -1 ? 16 : 10)) || $$;
+	if (i === -1) return str.replace(encregex, ($$, $1, $2) => {
+		if (encodings[$$]) return encodings[$$];
+		const codePoint = Number.parseInt($1 || $2, $1 ? 16 : 10);
+		return isValidXmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : $$;
 	}).replace(coderegex, (_m, c) => {
 		return String.fromCharCode(parseInt(c, 16));
 	});
@@ -657,7 +674,7 @@ function unescapeXml(text, xlsx) {
 * @returns XML-safe string
 */
 function escapeXml(text) {
-	return text.replace(decregex, (char) => XML_ESCAPE_MAP[char]).replace(charegex, (char) => "_x" + ("000" + char.charCodeAt(0).toString(16)).slice(-4) + "_");
+	return text.replace(decregex, (char) => XML_ESCAPE_MAP[char]).replace(literalCoderegex, () => "_x005F_").replace(charegex, (char) => "_x" + ("000" + char.charCodeAt(0).toString(16)).slice(-4) + "_");
 }
 const htmlcharegex = /[\u0000-\u001f]/g;
 /**
@@ -702,6 +719,30 @@ function writeXmlTag(tagName, content) {
 */
 function formatXmlAttributes$1(attributes) {
 	return Object.keys(attributes).map((key) => " " + key + "=\"" + attributes[key] + "\"").join("");
+}
+const HTML_ATTRIBUTE_ESCAPE_MAP = {
+	"&": "&amp;",
+	"<": "&lt;",
+	">": "&gt;",
+	"\"": "&quot;",
+	"'": "&#39;"
+};
+const htmlAttributeEscapeRegex = /[&<>"'\u0000-\u001f\u007f]/g;
+/** Escape a value for a double-quoted HTML attribute. */
+function escapeHtmlAttribute(value) {
+	return value.replace(htmlAttributeEscapeRegex, (character) => {
+		return HTML_ATTRIBUTE_ESCAPE_MAP[character] || "&#x" + character.charCodeAt(0).toString(16).padStart(4, "0") + ";";
+	});
+}
+function formatHtmlAttributes(attributes) {
+	return Object.keys(attributes).map((key) => " " + key + "=\"" + escapeHtmlAttribute(attributes[key]) + "\"").join("");
+}
+/**
+* Write an HTML element whose content is already safe markup and whose
+* attribute values are escaped for a double-quoted HTML attribute context.
+*/
+function writeHtmlElement(tagName, content, attributes) {
+	return "<" + tagName + (attributes != null ? formatHtmlAttributes(attributes) : "") + ">" + content + "</" + tagName + ">";
 }
 /**
 * Write an XML element with optional attributes and optional content.
@@ -931,9 +972,7 @@ function parseContentTypes(data, opts) {
 			case "<Default":
 				ctext[y.Extension.toLowerCase()] = y.ContentType;
 				break;
-			case "<Override":
-				if (CONTENT_TYPE_MAP[y.ContentType] && ct[CONTENT_TYPE_MAP[y.ContentType]] !== void 0) ct[CONTENT_TYPE_MAP[y.ContentType]].push(y.PartName);
-				break;
+			case "<Override": if (CONTENT_TYPE_MAP[y.ContentType] && ct[CONTENT_TYPE_MAP[y.ContentType]] !== void 0) ct[CONTENT_TYPE_MAP[y.ContentType]].push(y.PartName);
 		}
 	}
 	if (ct.xmlns !== XMLNS.CT) throw new XlsxError("UNSUPPORTED", "Unknown Namespace: " + ct.xmlns);
@@ -1332,9 +1371,7 @@ function parseExtendedProperties(data, props) {
 			case "string":
 				if (xml) props[propDef[1]] = unescapeXml(xml);
 				break;
-			case "bool":
-				props[propDef[1]] = xml === "true";
-				break;
+			case "bool": props[propDef[1]] = xml === "true";
 		}
 	}
 	const hpMatch = data.match(/<HeadingPairs>([\s\S]*?)<\/HeadingPairs>/);
@@ -1378,9 +1415,7 @@ function writeExtendedProperties(cp) {
 			case "string":
 				propValue = escapeXml(String(cp[propDef[1]]));
 				break;
-			case "bool":
-				propValue = cp[propDef[1]] ? "true" : "false";
-				break;
+			case "bool": propValue = cp[propDef[1]] ? "true" : "false";
 		}
 		if (propValue !== void 0) lines.push(writeElement(propDef[0], propValue));
 	}
@@ -1499,75 +1534,6 @@ function writeCustomProperties(cp) {
 }
 
 //#endregion
-//#region src/utils/buffer.ts
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-/**
-* Decode a UTF-8 binary string (where each character's charCode is a byte value)
-* into a proper JavaScript string.
-*
-* This manually implements UTF-8 decoding for strings that store raw byte values
-* as character codes (common in legacy binary formats).
-*
-* UTF-8 byte patterns:
-*   - 0xxxxxxx (0-127): single-byte ASCII
-*   - 110xxxxx 10xxxxxx (192-223): two-byte sequence
-*   - 1110xxxx 10xxxxxx 10xxxxxx (224-239): three-byte sequence
-*   - 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx (240-247): four-byte sequence (produces surrogate pair)
-*
-* @param orig - Binary string with byte values as char codes
-* @returns Properly decoded JavaScript string
-*/
-function utf8read(orig) {
-	// NAYIVE: identity. Every caller feeds this the output of zipReadString, which
-	// already ran the bytes through a real TextDecoder, so the string is correct
-	// UTF-16 before it gets here. Decoding it a SECOND time as if each JS character
-	// were one UTF-8 byte destroys any non-ASCII text: "Día" (D, U+00ED, a) is read
-	// as a three-byte sequence and collapses into the lone surrogate U+D860, which
-	// is not valid UTF-16 at all. Handsontable then puts that in the DOM and the
-	// browser tab dies. Every accented word in a Spanish spreadsheet hit this.
-	//
-	// The function survives from this library's SheetJS lineage, where XML parts
-	// arrived as binary strings (one character per byte) and this step was correct.
-	// Kept as a no-op rather than deleted so the ten call sites stay untouched.
-	return orig;
-}
-
-/** The original byte-string decoder, unused — see utf8read above. */
-function utf8readBytes(orig) {
-	let out = "";
-	let i = 0;
-	let byte1 = 0;
-	let byte2 = 0;
-	let byte3 = 0;
-	let byte4 = 0;
-	let codePoint = 0;
-	while (i < orig.length) {
-		byte1 = orig.charCodeAt(i++);
-		if (byte1 < 128) {
-			out += String.fromCharCode(byte1);
-			continue;
-		}
-		byte2 = orig.charCodeAt(i++);
-		if (byte1 > 191 && byte1 < 224) {
-			codePoint = (byte1 & 31) << 6 | byte2 & 63;
-			out += String.fromCharCode(codePoint);
-			continue;
-		}
-		byte3 = orig.charCodeAt(i++);
-		if (byte1 < 240) {
-			out += String.fromCharCode((byte1 & 15) << 12 | (byte2 & 63) << 6 | byte3 & 63);
-			continue;
-		}
-		byte4 = orig.charCodeAt(i++);
-		codePoint = ((byte1 & 7) << 18 | (byte2 & 63) << 12 | (byte3 & 63) << 6 | byte4 & 63) - 65536;
-		out += String.fromCharCode(55296 + (codePoint >>> 10 & 1023));
-		out += String.fromCharCode(56320 + (codePoint & 1023));
-	}
-	return out;
-}
-
-//#endregion
 //#region src/xlsx/shared-strings.ts
 /** Parse rich-text run properties (<rPr>) into a font descriptor object */
 function parseRunProperties(rpr, opts) {
@@ -1606,9 +1572,7 @@ function parseRunProperties(rpr, opts) {
 					case "singleAccounting":
 						font.uval = "single-accounting";
 						break;
-					case "doubleAccounting":
-						font.uval = "double-accounting";
-						break;
+					case "doubleAccounting": font.uval = "double-accounting";
 				}
 			case "<u>":
 			case "<u/>":
@@ -1724,7 +1688,6 @@ function parseRichTextRuns(rs, opts) {
 }
 /** Convert an array of parsed rich-text runs into an HTML string */
 function richTextToHtml(rs) {
-	const nlregex = /(\r\n|\n)/g;
 	return rs.map((r) => {
 		if (!r.v) return "";
 		const intro = [];
@@ -1734,38 +1697,65 @@ function richTextToHtml(rs) {
 			const style = [];
 			if (font.u) style.push("text-decoration: underline;");
 			if (font.uval) style.push("text-underline-style:" + font.uval + ";");
-			if (font.sz) style.push("font-size:" + font.sz + "pt;");
+			const fontSize = Number(font.sz);
+			if (Number.isFinite(fontSize) && fontSize > 0) style.push("font-size:" + fontSize + "pt;");
 			if (font.outline) style.push("text-effect: outline;");
 			if (font.shadow) style.push("text-shadow: auto;");
 			intro.push("<span style=\"" + style.join("") + "\">");
 			if (font.b) {
 				intro.push("<b>");
-				outro.push("</b>");
+				outro.unshift("</b>");
 			}
 			if (font.i) {
 				intro.push("<i>");
-				outro.push("</i>");
+				outro.unshift("</i>");
 			}
 			if (font.strike) {
 				intro.push("<s>");
-				outro.push("</s>");
+				outro.unshift("</s>");
 			}
-			let align = font.valign || "";
-			if (align === "superscript" || align === "super") align = "sup";
-			else if (align === "subscript") align = "sub";
-			if (align !== "") {
+			let align = "";
+			if (font.valign === "superscript" || font.valign === "super") align = "sup";
+			else if (font.valign === "subscript") align = "sub";
+			if (align) {
 				intro.push("<" + align + ">");
-				outro.push("</" + align + ">");
+				outro.unshift("</" + align + ">");
 			}
 			outro.push("</span>");
 		}
-		return intro.join("") + r.v.replace(nlregex, "<br/>") + outro.join("");
+		return intro.join("") + escapeHtml(r.v) + outro.join("");
 	}).join("");
 }
 /** Regex to extract text from <t> elements */
 const sitregex = /<(?:\w+:)?t\b[^<>]*>([^<]*)<\/(?:\w+:)?t>/g;
 /** Regex to detect if a string item contains rich-text runs (<r>) */
 const sirregex = /<(?:\w+:)?r\b[^<>]*>/;
+const richTextMainElements = /* @__PURE__ */ new Set([
+	"r",
+	"rPr",
+	"t",
+	"rPh",
+	"phoneticPr",
+	"condense",
+	"extend",
+	"shadow",
+	"rFont",
+	"sz",
+	"strike",
+	"u",
+	"b",
+	"i",
+	"color",
+	"family",
+	"vertAlign",
+	"scheme",
+	"extLst",
+	"ext"
+]);
+/** Remove prefixes from known SpreadsheetML rich-text elements before moving a fragment to a new XML part. */
+function normalizeRichTextXml(x) {
+	return x.replace(/<(\/?)\w+:([\w.-]+)(?=[\s/>])/g, (tag, closing, localName) => richTextMainElements.has(localName) ? "<" + closing + localName : tag);
+}
 /**
 * Parse a single string item (<si>) from the shared string table.
 * Handles both plain text (<t>) and rich text (<r>) formats.
@@ -1775,22 +1765,21 @@ function parseStringItem(x, opts) {
 	const result = {};
 	if (!x) return { t: "" };
 	if (x.match(/^\s*<(?:\w+:)?t[^>]*>/)) {
-		result.t = unescapeXml(utf8read(x.slice(x.indexOf(">") + 1).split(/<\/(?:\w+:)?t>/)[0] || ""), true);
-		result.r = utf8read(x);
+		result.t = unescapeXml(x.slice(x.indexOf(">") + 1).split(/<\/(?:\w+:)?t>/)[0] || "", true);
+		result.r = x;
 		if (html) result.h = escapeHtml(result.t);
 	} else if (x.match(sirregex)) {
-		result.r = utf8read(x);
+		result.r = x;
 		const stripped = str_remove_xml_ns_g_local(x, "rPh");
 		sitregex.lastIndex = 0;
-		result.t = unescapeXml(utf8read((stripped.match(sitregex) || []).join("").replace(XML_TAG_REGEX, "")), true);
-		if (html) result.h = richTextToHtml(parseRichTextRuns(result.r, opts));
+		const matches = stripped.match(sitregex) || [];
+		result.t = unescapeXml(matches.join("").replace(XML_TAG_REGEX, ""), true);
+		if (html) result.h = richTextToHtml(parseRichTextRuns(stripped, opts));
 	}
 	return result;
 }
-/** Regex to match opening <si> or <sstItem> tags */
-const sstr1 = /<(?:\w+:)?(?:si|sstItem)>/g;
-/** Regex to match closing </si> or </sstItem> tags */
-const sstr2 = /<\/(?:\w+:)?(?:si|sstItem)>/;
+/** Regex to extract complete <si> or <sstItem> elements, including self-closing entries. */
+const sstr = /<(?:\w+:)?(?:si|sstItem)\b[^>]*\/>|<(?:\w+:)?(?:si|sstItem)\b[^>]*>([\s\S]*?)<\/(?:\w+:)?(?:si|sstItem)\s*>/g;
 /**
 * Parse the Shared String Table (SST) XML into an array of string entries.
 *
@@ -1807,7 +1796,8 @@ function parseSstXml(data, opts) {
 	assertXmlPartLimits("sharedStrings.xml", data, opts);
 	const sst = str_match_xml_ns_local(data, "sst");
 	if (sst) {
-		const stringItems = sst[1].replace(sstr1, "").split(sstr2);
+		sstr.lastIndex = 0;
+		const stringItems = Array.from(sst[1].matchAll(sstr), (match) => match[1] ?? "");
 		const maxSharedStringItems = xmlOptionLimit(opts?.maxSharedStringItems, DEFAULT_MAX_SHARED_STRING_ITEMS, "maxSharedStringItems");
 		assertXmlCountWithinLimit("shared string item", stringItems.length, maxSharedStringItems);
 		for (let i = 0; i < stringItems.length; ++i) {
@@ -1846,7 +1836,7 @@ function writeSstXml(sst, opts) {
 		if (sst[i] == null) continue;
 		const entry = sst[i];
 		let sitag = "<si>";
-		if (entry.r) sitag += entry.r;
+		if (entry.r) sitag += normalizeRichTextXml(entry.r);
 		else {
 			sitag += "<t";
 			if (!entry.t) entry.t = "";
@@ -2126,6 +2116,7 @@ function normalizeCellStyle(cell, opts) {
 		if (style.numFmt != null) out.numFmt = style.numFmt;
 	}
 	if (out.numFmt == null && cell.z != null) out.numFmt = cell.z;
+	if (out.numFmt == null && cell.XF?.numFmt != null) out.numFmt = cell.XF.numFmt;
 	return Object.keys(out).some((key) => out[key] !== void 0) ? out : void 0;
 }
 function getOrAdd(items, seen, value) {
@@ -2355,15 +2346,13 @@ function parseCellFormats(t, styles) {
 				if (parsedTag.applyAlignment) xf.applyAlignment = parsedTag.applyAlignment === "1";
 				styles.CellXf.push(xf);
 				break;
-			case "<alignment":
-				if (xf) {
-					const alignment = {};
-					if (parsedTag.horizontal === "left" || parsedTag.horizontal === "center" || parsedTag.horizontal === "right") alignment.horizontal = parsedTag.horizontal;
-					if (parsedTag.vertical === "top" || parsedTag.vertical === "center" || parsedTag.vertical === "bottom") alignment.vertical = parsedTag.vertical === "center" ? "middle" : parsedTag.vertical;
-					if (parsedTag.wrapText === "1") alignment.wrapText = true;
-					if (Object.keys(alignment).length > 0) xf.alignment = alignment;
-				}
-				break;
+			case "<alignment": if (xf) {
+				const alignment = {};
+				if (parsedTag.horizontal === "left" || parsedTag.horizontal === "center" || parsedTag.horizontal === "right") alignment.horizontal = parsedTag.horizontal;
+				if (parsedTag.vertical === "top" || parsedTag.vertical === "center" || parsedTag.vertical === "bottom") alignment.vertical = parsedTag.vertical === "center" ? "middle" : parsedTag.vertical;
+				if (parsedTag.wrapText === "1") alignment.wrapText = true;
+				if (Object.keys(alignment).length > 0) xf.alignment = alignment;
+			}
 		}
 	}
 }
@@ -2732,9 +2721,7 @@ function applyDefaultsToArray(target, defaults) {
 				case "bool":
 					if (typeof entry[defaultDef[0]] === "string") entry[defaultDef[0]] = parseXmlBoolean(entry[defaultDef[0]]);
 					break;
-				case "int":
-					if (typeof entry[defaultDef[0]] === "string") entry[defaultDef[0]] = parseInt(entry[defaultDef[0]], 10);
-					break;
+				case "int": if (typeof entry[defaultDef[0]] === "string") entry[defaultDef[0]] = parseInt(entry[defaultDef[0]], 10);
 			}
 		}
 	}
@@ -2751,9 +2738,7 @@ function applyDefaults(target, defaults) {
 			case "bool":
 				if (typeof target[defaultDef[0]] === "string") target[defaultDef[0]] = parseXmlBoolean(target[defaultDef[0]]);
 				break;
-			case "int":
-				if (typeof target[defaultDef[0]] === "string") target[defaultDef[0]] = parseInt(target[defaultDef[0]], 10);
-				break;
+			case "int": if (typeof target[defaultDef[0]] === "string") target[defaultDef[0]] = parseInt(target[defaultDef[0]], 10);
 		}
 	}
 }
@@ -2937,7 +2922,7 @@ function parseWorkbookXml(data, _opts) {
 						default: workbook.WBProps[propDef[0]] = parsedTag[propDef[0]];
 					}
 				});
-				if (parsedTag.codeName) workbook.WBProps.CodeName = utf8read(parsedTag.codeName);
+				if (parsedTag.codeName) workbook.WBProps.CodeName = parsedTag.codeName;
 				break;
 			case "<workbookView":
 			case "<workbookView/>":
@@ -2955,27 +2940,26 @@ function parseWorkbookXml(data, _opts) {
 					default: parsedTag.Hidden = 0;
 				}
 				delete parsedTag.state;
-				parsedTag.name = unescapeXml(utf8read(parsedTag.name));
+				parsedTag.name = unescapeXml(parsedTag.name);
 				delete parsedTag[0];
 				workbook.Sheets.push(parsedTag);
 				break;
 			case "<definedName":
 				dname = {};
-				dname.Name = utf8read(parsedTag.name);
+				dname.Name = parsedTag.name;
 				if (parsedTag.comment) dname.Comment = parsedTag.comment;
 				if (parsedTag.localSheetId) dname.Sheet = +parsedTag.localSheetId;
 				if (parseXmlBoolean(parsedTag.hidden || "0")) dname.Hidden = true;
 				dnstart = idx + xmlTag.length;
 				break;
 			case "</definedName>":
-				dname.Ref = unescapeXml(utf8read(data.slice(dnstart, idx)));
+				dname.Ref = unescapeXml(data.slice(dnstart, idx));
 				workbook.Names.push(dname);
 				break;
 			case "<calcPr":
 			case "<calcPr/>":
 				delete parsedTag[0];
 				workbook.CalcPr = parsedTag;
-				break;
 		}
 		return xmlTag;
 	});
@@ -3032,9 +3016,7 @@ function writeWorkbookXml(wb) {
 			case 1:
 				sht.state = "hidden";
 				break;
-			case 2:
-				sht.state = "veryHidden";
-				break;
+			case 2: sht.state = "veryHidden";
 		}
 		lines.push(writeXmlElement("sheet", null, sht));
 	}
@@ -3057,6 +3039,26 @@ function writeWorkbookXml(wb) {
 	}
 	return lines.join("");
 }
+
+//#endregion
+//#region src/types.ts
+/**
+* Map of Excel error codes to their display strings.
+* Keys are the numeric error codes stored in XLSX files.
+*/
+const BErr = {
+	0: "#NULL!",
+	7: "#DIV/0!",
+	15: "#VALUE!",
+	23: "#REF!",
+	29: "#NAME?",
+	36: "#NUM!",
+	42: "#N/A",
+	43: "#GETTING_DATA"
+};
+/** Reverse map from error display strings to numeric error codes */
+const RBErr = {};
+for (const [k, v] of Object.entries(BErr)) RBErr[v] = +k;
 
 //#endregion
 //#region src/utils/cell.ts
@@ -3282,8 +3284,8 @@ function getOrCreateCell(sheet, row, col) {
 */
 function dateToSerialNumber(v, date1904) {
 	const epoch = v.getTime();
-	if (date1904) return (epoch - Date.UTC(1904, 0, 1, 0, 0, 0)) / (1440 * 60 * 1e3);
-	return (epoch - Date.UTC(1899, 11, 30, 0, 0, 0)) / (1440 * 60 * 1e3);
+	if (date1904) return (epoch - Date.UTC(1904, 0, 1, 0, 0, 0)) / 864e5;
+	return (epoch - Date.UTC(1899, 11, 30, 0, 0, 0)) / 864e5;
 }
 /**
 * Convert an Excel serial date number to a JavaScript Date.
@@ -3568,7 +3570,6 @@ function SSF_write_date(type, fmt, val, ss0) {
 				default:
 					numericOut = year % 1e4;
 					outputLength = 4;
-					break;
 			}
 			break;
 		case 109:
@@ -3656,7 +3657,6 @@ function SSF_write_date(type, fmt, val, ss0) {
 		case 101:
 			numericOut = year;
 			outputLength = 1;
-			break;
 	}
 	return outputLength > 0 ? padWithZeros(numericOut, outputLength) : "";
 }
@@ -3736,12 +3736,14 @@ function SSF_frac(value, maxDenominator, mixed) {
 		prevPrevDenom = prevDenom;
 		prevDenom = denominator;
 	}
-	if (denominator > maxDenominator) if (prevDenom > maxDenominator) {
-		denominator = prevPrevDenom;
-		numerator = prevPrevNumer;
-	} else {
-		denominator = prevDenom;
-		numerator = prevNumer;
+	if (denominator > maxDenominator) {
+		if (prevDenom > maxDenominator) {
+			denominator = prevPrevDenom;
+			numerator = prevPrevNumer;
+		} else {
+			denominator = prevDenom;
+			numerator = prevNumer;
+		}
 	}
 	if (!mixed) return [
 		0,
@@ -4174,9 +4176,7 @@ function getDateTimeFormatKind(fmt) {
 		case " ":
 			++i;
 			break;
-		default:
-			++i;
-			break;
+		default: ++i;
 	}
 	return classifyDateTimeTokens(hasDate, hasTime, hasMonth);
 }
@@ -4441,7 +4441,6 @@ function eval_fmt(fmt, value, opts, flen) {
 				value: char
 			};
 			++i;
-			break;
 	}
 	let dateTimePrecision = 0;
 	let subSecondDigits = 0;
@@ -4523,9 +4522,7 @@ function eval_fmt(fmt, value, opts, flen) {
 					case 2:
 						dateVal.subSeconds = Math.round(dateVal.subSeconds * 100) / 100;
 						break;
-					case 3:
-						dateVal.subSeconds = Math.round(dateVal.subSeconds * 1e3) / 1e3;
-						break;
+					case 3: dateVal.subSeconds = Math.round(dateVal.subSeconds * 1e3) / 1e3;
 				}
 				if (dateVal.subSeconds >= 1) {
 					dateVal.subSeconds = 0;
@@ -4551,7 +4548,6 @@ function eval_fmt(fmt, value, opts, flen) {
 						dateVal = _dt;
 					}
 				}
-				break;
 		}
 	}
 	let numberFmtStr = "";
@@ -4597,7 +4593,6 @@ function eval_fmt(fmt, value, opts, flen) {
 			case "G":
 				out[i].type = "t";
 				out[i].value = SSF_general(value, opts);
-				break;
 		}
 	}
 	let partialValue = "";
@@ -4627,7 +4622,7 @@ function eval_fmt(fmt, value, opts, flen) {
 				if (out[i] == null || "n?".indexOf(out[i].type) === -1) continue;
 				if (numFmtIdx >= out[i].value.length - 1) {
 					numFmtIdx -= out[i].value.length;
-					out[i].value = formattedNumber.substring(numFmtIdx + 1, out[i].value.length);
+					out[i].value = formattedNumber.substring(numFmtIdx + 1, numFmtIdx + 1 + out[i].value.length);
 				} else if (numFmtIdx < 0) out[i].value = "";
 				else {
 					out[i].value = formattedNumber.substring(0, numFmtIdx + 1);
@@ -4692,9 +4687,7 @@ function chkcond(v, rr) {
 		case ">=":
 			if (v >= thresh) return true;
 			break;
-		case "<=":
-			if (v <= thresh) return true;
-			break;
+		case "<=": if (v <= thresh) return true;
 	}
 	return false;
 }
@@ -4751,20 +4744,17 @@ function choose_fmt(fmtStr, value) {
 				"@"
 			];
 			break;
-		case 3:
-			fmt = lat > -1 ? [
-				fmt[0],
-				fmt[1],
-				fmt[0],
-				fmt[2]
-			] : [
-				fmt[0],
-				fmt[1],
-				fmt[2],
-				"@"
-			];
-			break;
-		case 4: break;
+		case 3: fmt = lat > -1 ? [
+			fmt[0],
+			fmt[1],
+			fmt[0],
+			fmt[2]
+		] : [
+			fmt[0],
+			fmt[1],
+			fmt[2],
+			"@"
+		];
 	}
 	const selectedFmt = value > 0 ? fmt[0] : value < 0 ? fmt[1] : fmt[2];
 	if (fmt[0].indexOf("[") === -1 && fmt[1].indexOf("[") === -1) return [ll, selectedFmt];
@@ -4800,10 +4790,12 @@ function formatNumber(fmt, value, options) {
 			else sfmt = (options.table != null ? options.table : formatTable)[fmt];
 			if (sfmt == null) sfmt = options.table && options.table[DEFAULT_FORMAT_MAP[fmt]] || formatTable[DEFAULT_FORMAT_MAP[fmt]];
 			if (sfmt == null) sfmt = DEFAULT_FORMAT_STRINGS[fmt] || "General";
-			break;
 	}
 	if (isGeneralFormat(sfmt, 0)) return SSF_general(value, options);
-	if (value instanceof Date) value = dateToSerialNumber(options.UTC ? value : new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate(), value.getHours(), value.getMinutes(), value.getSeconds(), value.getMilliseconds())), options.date1904);
+	if (value instanceof Date) {
+		const dateValue = options.UTC ? value : new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate(), value.getHours(), value.getMinutes(), value.getSeconds(), value.getMilliseconds()));
+		value = dateToSerialNumber(dateValue, options.date1904);
+	}
 	const chosenFmt = choose_fmt(sfmt, value);
 	if (isGeneralFormat(chosenFmt[1])) return SSF_general(value, options);
 	if (value === true) value = "TRUE";
@@ -4812,6 +4804,146 @@ function formatNumber(fmt, value, options) {
 	else if (isNaN(value) && chosenFmt[1].indexOf("0") > -1) return "#NUM!";
 	else if (!isFinite(value) && chosenFmt[1].indexOf("0") > -1) return "#DIV/0!";
 	return eval_fmt(chosenFmt[1], value, options, chosenFmt[0]);
+}
+
+//#endregion
+//#region src/utils/worksheet-budget.ts
+const XLSX_MAX_ROWS = 1048576;
+const XLSX_MAX_COLUMNS = 16384;
+const DEFAULT_MAX_EXPORT_CELLS = 1e6;
+const DEFAULT_MAX_IMPORT_CELLS = 1e7;
+function worksheetOptionLimit(value, fallback, name) {
+	if (value == null) return fallback;
+	if (!Number.isSafeInteger(value) || value < 0) throw new XlsxError("INVALID_ARGUMENT", `${name} must be a non-negative safe integer`);
+	return value;
+}
+/** Cumulative per-sheet budget for explicit and derived worksheet cell work. */
+var WorksheetCellBudget = class {
+	constructor(value, fallback) {
+		_defineProperty(this, "limit", void 0);
+		_defineProperty(this, "used", 0);
+		this.limit = worksheetOptionLimit(value, fallback, "maxWorksheetCells");
+	}
+	charge(kind, count) {
+		if (!Number.isSafeInteger(count) || count < 0) throw new XlsxError("MALFORMED", `Invalid ${kind} count ${count}`);
+		if (count > this.limit - this.used) throw new XlsxError("LIMIT_EXCEEDED", `${kind} count ${this.used + count} exceeds limit ${this.limit}`);
+		this.used += count;
+	}
+};
+
+//#endregion
+//#region src/utils/export-range.ts
+const CELL_REF_RE = /^[A-Z]+[1-9]\d*$/;
+function rangeCellCount(range, kind = "worksheet range") {
+	for (const [name, value] of [
+		["start row", range.s.r],
+		["start column", range.s.c],
+		["end row", range.e.r],
+		["end column", range.e.c]
+	]) if (!Number.isSafeInteger(value) || value < 0) throw new XlsxError("INVALID_ARGUMENT", `Invalid ${kind}: ${name} must be a non-negative safe integer`);
+	if (range.e.r < range.s.r || range.e.c < range.s.c) throw new XlsxError("INVALID_ARGUMENT", `Invalid ${kind}: end must not precede start`);
+	if (range.e.r >= 1048576 || range.e.c >= 16384) throw new XlsxError("INVALID_ARGUMENT", `Invalid ${kind}: range exceeds XLSX worksheet bounds`);
+	return (range.e.r - range.s.r + 1) * (range.e.c - range.s.c + 1);
+}
+function occupiedRangeEnd(sheet, range) {
+	let maxRow = -1;
+	let maxCol = -1;
+	const data = sheet["!data"];
+	if (data != null) for (const rowKey of Object.keys(data)) {
+		const rowIdx = Number(rowKey);
+		if (!Number.isInteger(rowIdx) || rowIdx < range.s.r || rowIdx > range.e.r) continue;
+		const row = data[rowIdx];
+		if (!row) continue;
+		for (const colKey of Object.keys(row)) {
+			const colIdx = Number(colKey);
+			if (!Number.isInteger(colIdx) || colIdx < range.s.c || colIdx > range.e.c || row[colIdx] == null) continue;
+			if (rowIdx > maxRow) maxRow = rowIdx;
+			if (colIdx > maxCol) maxCol = colIdx;
+		}
+	}
+	else for (const ref of Object.keys(sheet)) {
+		if (!CELL_REF_RE.test(ref) || sheet[ref] == null) continue;
+		const cell = decodeCell(ref);
+		if (cell.r < range.s.r || cell.r > range.e.r || cell.c < range.s.c || cell.c > range.e.c) continue;
+		if (cell.r > maxRow) maxRow = cell.r;
+		if (cell.c > maxCol) maxCol = cell.c;
+	}
+	return maxRow === -1 ? null : {
+		r: maxRow,
+		c: maxCol
+	};
+}
+function clampLargeExportRange(sheet, range, budget = new WorksheetCellBudget(void 0, DEFAULT_MAX_EXPORT_CELLS), clampToOccupied = true) {
+	let count = rangeCellCount(range, "worksheet export range");
+	if (count <= budget.limit) {
+		budget.charge("worksheet export cell", count);
+		return range;
+	}
+	if (!clampToOccupied) {
+		budget.charge("worksheet export cell", count);
+		return range;
+	}
+	const end = occupiedRangeEnd(sheet, range);
+	if (!end) return null;
+	const clamped = {
+		s: {
+			r: range.s.r,
+			c: range.s.c
+		},
+		e: {
+			r: Math.max(range.s.r, Math.min(range.e.r, end.r)),
+			c: Math.max(range.s.c, Math.min(range.e.c, end.c))
+		}
+	};
+	count = rangeCellCount(clamped, "worksheet export range");
+	budget.charge("worksheet export cell", count);
+	return clamped;
+}
+
+//#endregion
+//#region src/xlsx/formula.ts
+/**
+* Regex to match A1-style cell references in formulas.
+*
+* Matches column letters (A-XFD), optional $ anchors, and row numbers (1-1048576).
+* The lookbehind and lookahead prevent matching inside identifiers or function names.
+*/
+const crefregex = /(^|[^.\w])(\$?)([A-Z]{1,2}|[A-W][A-Z]{2}|X[A-E][A-Z]|XF[A-D])(\$?)(10[0-3]\d{4}|104[0-7]\d{3}|1048[0-4]\d{2}|10485[0-6]\d|104857[0-6]|[1-9]\d{0,5})(?![\w.(![])/g;
+const wholeColumnRegex = /(^|[^.\w])(\$?)([A-Z]{1,2}|[A-W][A-Z]{2}|X[A-E][A-Z]|XF[A-D]):(\$?)([A-Z]{1,2}|[A-W][A-Z]{2}|X[A-E][A-Z]|XF[A-D])(?![\w.(![])/g;
+const wholeRowRegex = /(^|[^.\w])(\$?)(10[0-3]\d{4}|104[0-7]\d{3}|1048[0-4]\d{2}|10485[0-6]\d|104857[0-6]|[1-9]\d{0,5}):(\$?)(10[0-3]\d{4}|104[0-7]\d{3}|1048[0-4]\d{2}|10485[0-6]\d|104857[0-6]|[1-9]\d{0,5})(?![\w.(![])/g;
+const protectedFormulaTokenRegex = /("(?:[^"]|"")*"|'(?:[^']|'')*'!|[A-Za-z_][\w.]*(?::[A-Za-z_][\w.]*)?!|\[[^\]]*\])/g;
+/**
+* Shift all cell references in a formula string by a given row/column delta.
+*
+* Absolute references (prefixed with $) are left unchanged.
+*
+* @param f - Formula string to transform
+* @param delta - Row and column offsets to apply
+* @returns Formula string with shifted references
+*/
+function shiftFormulaStr(f, delta) {
+	const shiftColumn = (anchor, column) => {
+		const shifted = decodeCol(column) + (anchor ? 0 : delta.c);
+		return shifted < 0 || shifted >= 16384 ? void 0 : anchor + encodeCol(shifted);
+	};
+	const shiftRow = (anchor, row) => {
+		const shifted = decodeRow(row) + (anchor ? 0 : delta.r);
+		return shifted < 0 || shifted >= 1048576 ? void 0 : anchor + encodeRow(shifted);
+	};
+	const shiftReferences = (segment) => segment.replace(wholeColumnRegex, ($0, prefix, startAnchor, startColumn, endAnchor, endColumn) => {
+		const start = shiftColumn(startAnchor, startColumn);
+		const end = shiftColumn(endAnchor, endColumn);
+		return prefix + (start && end ? start + ":" + end : "#REF!");
+	}).replace(wholeRowRegex, ($0, prefix, startAnchor, startRow, endAnchor, endRow) => {
+		const start = shiftRow(startAnchor, startRow);
+		const end = shiftRow(endAnchor, endRow);
+		return prefix + (start && end ? start + ":" + end : "#REF!");
+	}).replace(crefregex, ($0, prefix, columnAnchor, column, rowAnchor, row) => {
+		const shiftedColumn = shiftColumn(columnAnchor, column);
+		const shiftedRow = shiftRow(rowAnchor, row);
+		return prefix + (shiftedColumn && shiftedRow ? shiftedColumn + shiftedRow : "#REF!");
+	});
+	return f.split(protectedFormulaTokenRegex).map((segment, index) => index % 2 === 0 ? shiftReferences(segment) : segment).join("");
 }
 
 //#endregion
@@ -4831,26 +4963,42 @@ function parseWorksheetXml_dim(ws, s) {
 }
 /** Parse <pageMargins> attributes with defaults matching Excel's standard margins */
 function parseWorksheetXml_margins(tag) {
-	return {
-		left: parseFloat(tag.left) || .7,
-		right: parseFloat(tag.right) || .7,
-		top: parseFloat(tag.top) || .75,
-		bottom: parseFloat(tag.bottom) || .75,
-		header: parseFloat(tag.header) || .3,
-		footer: parseFloat(tag.footer) || .3
+	const margin = (value, fallback) => {
+		const parsed = typeof value === "string" ? parseFloat(value) : Number(value);
+		return Number.isFinite(parsed) ? parsed : fallback;
 	};
+	return {
+		left: margin(tag.left, .7),
+		right: margin(tag.right, .7),
+		top: margin(tag.top, .75),
+		bottom: margin(tag.bottom, .75),
+		header: margin(tag.header, .3),
+		footer: margin(tag.footer, .3)
+	};
+}
+function parseWorksheetXml_error(value) {
+	if (value === null) return "";
+	const token = unescapeXml(value);
+	return Object.hasOwn(RBErr, token) ? RBErr[token] : token;
+}
+function serializeWorksheetXml_error(value) {
+	if (typeof value === "number") return BErr[value] ?? String(value);
+	return typeof value === "string" ? value : "";
 }
 /** Parse <autoFilter> element extracting the filter reference range */
 function parseWorksheetXml_autofilter(data, opts) {
 	return { ref: parseXmlTag(data.match(/<[^>]*>/)?.[0] || "", void 0, void 0, opts).ref || "" };
 }
 /** Parse <col> elements to populate column width and hidden state */
-function parseWorksheetXml_cols(columns, cols, opts) {
+function parseWorksheetXml_cols(columns, cols, budget, opts) {
 	for (let i = 0; i < cols.length; ++i) {
 		const tag = parseXmlTag(cols[i], void 0, void 0, opts);
 		if (!tag.min || !tag.max) continue;
-		const min = parseInt(tag.min, 10) - 1;
-		const max = parseInt(tag.max, 10) - 1;
+		if (!/^[1-9]\d*$/.test(tag.min) || !/^[1-9]\d*$/.test(tag.max)) throw new XlsxError("MALFORMED", "Invalid worksheet column range: min and max must be positive integers");
+		const min = Number(tag.min) - 1;
+		const max = Number(tag.max) - 1;
+		if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || max < min || max >= 16384) throw new XlsxError("MALFORMED", "Invalid worksheet column range: range exceeds XLSX worksheet bounds");
+		budget.charge("worksheet cell", max - min + 1);
 		const width = tag.width ? parseFloat(tag.width) : void 0;
 		const hidden = tag.hidden === "1";
 		for (let j = min; j <= max; ++j) {
@@ -4875,12 +5023,17 @@ function parseWorksheetXml_views(data, opts) {
 	return [view];
 }
 /** Parse <hyperlink> elements and attach link objects to the corresponding cells */
-function parseWorksheetXml_hlinks(s, hlinks, rels, opts) {
+function parseWorksheetXml_hlinks(s, hlinks, rels, budget, opts) {
 	for (let i = 0; i < hlinks.length; ++i) {
 		const tag = parseXmlTag(hlinks[i], void 0, void 0, opts);
 		if (!tag.ref) continue;
+		if (!/^[A-Z]+[1-9]\d*(?::[A-Z]+[1-9]\d*)?$/.test(tag.ref)) throw new XlsxError("MALFORMED", "Invalid worksheet hyperlink range");
 		const rng = safeDecodeRange(tag.ref);
-		for (let R = rng.s.r; R <= rng.e.r; ++R) for (let C = rng.s.c; C <= rng.e.c; ++C) {
+		if (rng.s.r < 0 || rng.s.c < 0 || rng.e.r < rng.s.r || rng.e.c < rng.s.c || rng.e.r >= 1048576 || rng.e.c >= 16384) throw new XlsxError("MALFORMED", "Invalid worksheet hyperlink range: range exceeds XLSX worksheet bounds");
+		if (opts.sheetRows > 0 && rng.s.r >= opts.sheetRows) continue;
+		const endRow = opts.sheetRows > 0 ? Math.min(rng.e.r, opts.sheetRows - 1) : rng.e.r;
+		budget.charge("worksheet cell", (endRow - rng.s.r + 1) * (rng.e.c - rng.s.c + 1));
+		for (let R = rng.s.r; R <= endRow; ++R) for (let C = rng.s.c; C <= rng.e.c; ++C) {
 			const addr = encodeCell({
 				r: R,
 				c: C
@@ -4916,18 +5069,35 @@ function parseWorksheetXml_hlinks(s, hlinks, rels, opts) {
 }
 /** Regex to match <c> (cell) elements, capturing inner content */
 const cellregex = /<(?:\w+:)?c\b[^>]*?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g;
+const cellReferenceRegex = /^([A-Z]+)([1-9]\d*)$/;
+function parseWorksheetCellColumn(ref, expectedRow) {
+	const match = cellReferenceRegex.exec(ref);
+	if (!match) throw new XlsxError("MALFORMED", "Invalid worksheet cell reference");
+	const row = Number(match[2]) - 1;
+	if (!Number.isSafeInteger(row) || row < 0 || row >= 1048576) throw new XlsxError("MALFORMED", "Invalid worksheet cell row: value exceeds XLSX worksheet bounds");
+	if (row !== expectedRow) throw new XlsxError("MALFORMED", "Invalid worksheet cell reference: row does not match containing row");
+	let column = 0;
+	for (const letter of match[1]) column = 26 * column + (letter.charCodeAt(0) - 64);
+	column -= 1;
+	if (!Number.isSafeInteger(column) || column < 0 || column >= 16384) throw new XlsxError("MALFORMED", "Invalid worksheet cell column: value exceeds XLSX worksheet bounds");
+	return column;
+}
 /**
 * Parse the <sheetData> XML into cell objects within the worksheet.
 * Processes rows and cells, handling all cell types (string, number, boolean, etc.).
 */
-function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
+function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb, budget, maxWorksheetRows) {
 	const dense = s["!data"] != null;
 	const date1904 = wb?.WBProps?.date1904;
-	const maxWorksheetRows = xmlOptionLimit(opts.maxWorksheetRows, DEFAULT_MAX_WORKSHEET_ROWS, "maxWorksheetRows");
-	const maxWorksheetCells = xmlOptionLimit(opts.maxWorksheetCells, DEFAULT_MAX_WORKSHEET_CELLS, "maxWorksheetCells");
 	let rowCount = 0;
-	let cellCount = 0;
-	const rows = sdata.split(/<\/(?:\w+:)?row>/);
+	const sharedFormulas = /* @__PURE__ */ new Map();
+	const pendingSharedFormulas = [];
+	const unresolvedSharedFormulaIds = /* @__PURE__ */ new Set();
+	// NAYIVE: an empty row may be self-closed (<row r="13" ht="15.75"/>, as
+	// Excel writes it). Split on </row> alone, it would share a chunk with the
+	// next row: the next row's cells read under row 13's tag, and the check
+	// that a cell sits in its own row throws - the whole file fails to open.
+	const rows = sdata.replace(/<((\w+:)?row\b[^>]*?)\s*\/>/g, (m, tag, ns) => "<" + tag + "></" + (ns || "") + "row>").split(/<\/(?:\w+:)?row>/);
 	for (let ri = 0; ri < rows.length; ++ri) {
 		const rowStr = rows[ri];
 		if (!rowStr) continue;
@@ -4936,28 +5106,51 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 		assertXmlCountWithinLimit("worksheet row", ++rowCount, maxWorksheetRows);
 		const rowTag = parseXmlTag(rowTagMatch[0], void 0, void 0, opts);
 		const R = parseInt(rowTag.r, 10) - 1;
-		if (isNaN(R)) continue;
-		if (rowTag.ht || rowTag.hidden) {
+		if (!Number.isSafeInteger(R) || R < 0 || R >= 1048576) throw new XlsxError("MALFORMED", "Invalid worksheet row index: value exceeds XLSX worksheet bounds");
+		const rowIsWithinLimit = !opts.sheetRows || R < opts.sheetRows;
+		if (rowIsWithinLimit && (rowTag.ht !== void 0 || rowTag.hidden !== void 0)) {
 			if (!s["!rows"]) s["!rows"] = [];
 			if (!s["!rows"][R]) s["!rows"][R] = {};
-			if (rowTag.ht) s["!rows"][R].hpt = parseFloat(rowTag.ht);
+			if (rowTag.ht !== void 0) {
+				const hpt = parseFloat(rowTag.ht);
+				if (Number.isFinite(hpt)) s["!rows"][R].hpt = hpt;
+			}
 			if (rowTag.hidden === "1") s["!rows"][R].hidden = true;
 		}
-		if (opts.sheetRows && R >= opts.sheetRows) continue;
+		if (!rowIsWithinLimit) {
+			if (opts.cellFormula !== false && unresolvedSharedFormulaIds.size > 0) {
+				cellregex.lastIndex = 0;
+				let skippedCellMatch;
+				while (skippedCellMatch = cellregex.exec(rowStr)) {
+					budget.charge("worksheet cell", 1);
+					const skippedRef = parseXmlTag(skippedCellMatch[0].match(/<(?:\w+:)?c\b[^>]*/)?.[0] + ">" || "", void 0, void 0, opts).r;
+					const skippedCellValue = skippedCellMatch[1] || "";
+					const skippedFormulaTagMatch = skippedCellValue.match(/<(?:\w+:)?f\b[^>]*>/);
+					const skippedFormulaMatch = skippedCellValue.match(/<(?:\w+:)?f\b[^>]*>([\s\S]*?)<\/(?:\w+:)?f>/);
+					if (!skippedRef || !skippedFormulaTagMatch || !skippedFormulaMatch?.[1]) continue;
+					parseWorksheetCellColumn(skippedRef, R);
+					const skippedFormulaTag = parseXmlTag(skippedFormulaTagMatch[0], void 0, void 0, opts);
+					if (skippedFormulaTag.t !== "shared" || skippedFormulaTag.si == null) continue;
+					const si = String(skippedFormulaTag.si);
+					if (!unresolvedSharedFormulaIds.has(si)) continue;
+					sharedFormulas.set(si, {
+						formula: unescapeXml(skippedFormulaMatch[1]),
+						origin: skippedRef
+					});
+					unresolvedSharedFormulaIds.delete(si);
+					if (unresolvedSharedFormulaIds.size === 0) break;
+				}
+			}
+			continue;
+		}
 		cellregex.lastIndex = 0;
 		let cellMatch;
 		while (cellMatch = cellregex.exec(rowStr)) {
-			assertXmlCountWithinLimit("worksheet cell", ++cellCount, maxWorksheetCells);
+			budget.charge("worksheet cell", 1);
 			const cellTag = parseXmlTag(cellMatch[0].match(/<(?:\w+:)?c\b[^>]*/)?.[0] + ">" || "", void 0, void 0, opts);
 			const ref = cellTag.r;
 			if (!ref) continue;
-			let C = 0;
-			for (let ci = 0; ci < ref.length; ++ci) {
-				const cc = ref.charCodeAt(ci);
-				if (cc >= 65 && cc <= 90) C = 26 * C + (cc - 64);
-				else break;
-			}
-			C -= 1;
+			const C = parseWorksheetCellColumn(ref, R);
 			if (R < refguess.s.r) refguess.s.r = R;
 			if (R > refguess.e.r) refguess.e.r = R;
 			if (C < refguess.s.c) refguess.s.c = C;
@@ -4967,8 +5160,10 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 			const cellValue = cellMatch[1] || "";
 			let cell;
 			const vMatch = cellValue.match(/<(?:\w+:)?v>([\s\S]*?)<\/(?:\w+:)?v>/);
-			const fMatch = cellValue.match(/<(?:\w+:)?f[^>]*>([\s\S]*?)<\/(?:\w+:)?f>/);
-			const isMatch = cellValue.match(/<(?:\w+:)?is>([\s\S]*?)<\/(?:\w+:)?is>/);
+			const fTagMatch = cellValue.match(/<(?:\w+:)?f\b[^>]*>/);
+			const fMatch = cellValue.match(/<(?:\w+:)?f\b[^>]*>([\s\S]*?)<\/(?:\w+:)?f>/);
+			const isMatch = cellValue.match(/<(?:\w+:)?is\b[^>]*>([\s\S]*?)<\/(?:\w+:)?is\s*>/);
+			const preserveFormula = fTagMatch != null && opts.cellFormula !== false;
 			const v = vMatch ? vMatch[1] : null;
 			switch (cellType) {
 				case "s":
@@ -4989,11 +5184,13 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 					break;
 				case "inlineStr":
 					if (isMatch) {
-						const tMatch = isMatch[1].match(/<(?:\w+:)?t[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/);
+						const inlineString = parseStringItem(isMatch[1], opts);
 						cell = {
 							t: "s",
-							v: tMatch ? unescapeXml(tMatch[1]) : ""
+							v: inlineString.t
 						};
+						if (inlineString.r !== void 0) cell.r = inlineString.r;
+						if (inlineString.h !== void 0) cell.h = inlineString.h;
 					} else cell = {
 						t: "s",
 						v: ""
@@ -5008,9 +5205,9 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 				case "e":
 					cell = {
 						t: "e",
-						v: v ? parseInt(v, 10) || 0 : 0
+						v: parseWorksheetXml_error(v)
 					};
-					cell.w = v || "";
+					cell.w = v === null ? "" : unescapeXml(v);
 					break;
 				case "d":
 					if (v) cell = {
@@ -5019,53 +5216,88 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 					};
 					else cell = { t: "z" };
 					break;
-				default:
-					if (v !== null) cell = {
-						t: "n",
-						v: parseFloat(v)
-					};
-					else {
-						if (!opts.sheetStubs) continue;
-						cell = { t: "z" };
-					}
-					break;
+				default: if (v !== null) cell = {
+					t: "n",
+					v: parseFloat(v)
+				};
+				else {
+					if (!preserveFormula && !opts.sheetStubs) continue;
+					cell = preserveFormula ? { t: "n" } : { t: "z" };
+				}
 			}
-			if (cellStyle > 0 && styles) {
+			if (styles) {
 				const xf = styles.CellXf[cellStyle];
 				if (xf) {
-					cell.XF = { numFmtId: xf.numFmtId };
-					if (opts.cellStyles) {
+					const numberFormat = styles.NumberFmt[xf.numFmtId] || formatTable[xf.numFmtId];
+					if (cellStyle > 0 || xf.numFmtId !== 0) cell.XF = {
+						numFmtId: xf.numFmtId,
+						numFmt: numberFormat
+					};
+					// NAYIVE: a plain cell (s=0, the workbook default) gets no style,
+					// as up to 2.4.1. Calc turns cell.s into the cell's own look, so a
+					// default font here would pin "Calibri 11" on every plain cell.
+					if (opts.cellStyles && cellStyle > 0) {
 						const style = getStyleFromXf(styles, cellStyle);
 						if (style) cell.s = style;
 					}
 					if (opts.cellNF) {
-						const nf = styles.NumberFmt[xf.numFmtId] || formatTable[xf.numFmtId];
-						if (nf) cell.z = nf;
+						if (numberFormat) cell.z = numberFormat;
 					}
 				}
 			}
-			if (fMatch && opts.cellFormula !== false) {
-				cell.f = unescapeXml(fMatch[1]);
-				const fTag = parseXmlTag(cellValue.match(/<(?:\w+:)?f[^>]*/)?.[0] + ">" || "", void 0, void 0, opts);
-				if (fTag.t === "shared" && fTag.si != null) {}
+			if (fTagMatch && opts.cellFormula !== false) {
+				const fTag = parseXmlTag(fTagMatch[0], void 0, void 0, opts);
+				const formula = fMatch ? unescapeXml(fMatch[1]) : void 0;
+				if (fTag.t === "shared" && fTag.si != null) {
+					const si = String(fTag.si);
+					if (formula) {
+						cell.f = formula;
+						sharedFormulas.set(si, {
+							formula,
+							origin: ref
+						});
+						unresolvedSharedFormulaIds.delete(si);
+					} else {
+						const master = sharedFormulas.get(si);
+						if (master) {
+							const origin = decodeCell(master.origin);
+							const target = decodeCell(ref);
+							cell.f = shiftFormulaStr(master.formula, {
+								r: target.r - origin.r,
+								c: target.c - origin.c
+							});
+						} else {
+							pendingSharedFormulas.push({
+								cell,
+								ref,
+								si
+							});
+							unresolvedSharedFormulaIds.add(si);
+						}
+					}
+				} else if (formula !== void 0) cell.f = formula;
 				if (fTag.t === "array" && fTag.ref) {
 					cell.F = fTag.ref;
-					cell.D = fTag.dt === "1";
+					const cellMetadata = cellTag.cm ? opts.xlmeta?.Cell?.[Number(cellTag.cm) - 1] : void 0;
+					cell.D = fTag.dt === "1" || cellMetadata?.type === "XLDAPR";
 				}
 			}
-			if (opts.cellText !== false) {
-				if (cell.t === "n") {
-					const nfmt = cell.z || cell.XF && cell.XF.numFmtId != null && styles?.NumberFmt[cell.XF.numFmtId] || formatTable[cell.XF && cell.XF.numFmtId || 0];
+			if (cell.t === "n") {
+				const numFmtId = cell.XF?.numFmtId ?? 0;
+				const nfmt = cell.z || cell.XF?.numFmt || styles?.NumberFmt[numFmtId] || formatTable[numFmtId];
+				if (opts.cellText !== false && typeof cell.v === "number") {
 					if (nfmt) try {
-						cell.w = formatNumber(nfmt, cell.v, { date1904 });
+						cell.w = formatNumber(nfmt, cell.v, {
+							date1904,
+							dateNF: opts.dateNF
+						});
 					} catch {}
-					if (opts.cellDates && cell.XF) {
-						const fmtStr = nfmt || formatTable[cell.XF.numFmtId || 0] || "";
-						const fmtKind = typeof fmtStr === "string" ? getDateTimeFormatKind(fmtStr) : "none";
-						if (fmtKind !== "none" && fmtKind !== "time" && typeof cell.v === "number") {
-							cell.t = "d";
-							cell.v = serialNumberToDate(cell.v, date1904);
-						}
+				}
+				if (opts.cellDates && cell.XF) {
+					const fmtKind = typeof nfmt === "string" ? getDateTimeFormatKind(nfmt) : "none";
+					if (fmtKind !== "none" && fmtKind !== "time" && typeof cell.v === "number") {
+						cell.t = "d";
+						cell.v = serialNumberToDate(cell.v, date1904);
 					}
 				}
 			}
@@ -5074,6 +5306,16 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 				s["!data"][R][C] = cell;
 			} else s[ref] = cell;
 		}
+	}
+	for (const pending of pendingSharedFormulas) {
+		const master = sharedFormulas.get(pending.si);
+		if (!master) continue;
+		const origin = decodeCell(master.origin);
+		const target = decodeCell(pending.ref);
+		pending.cell.f = shiftFormulaStr(master.formula, {
+			r: target.r - origin.r,
+			c: target.c - origin.c
+		});
 	}
 }
 /**
@@ -5085,26 +5327,8 @@ function parseSheetData(sdata, s, opts, refguess, _themes, styles, wb) {
 * @param opts - Options controlling HTML output (cellHTML)
 */
 function resolveSharedStrings(s, sst, opts) {
-	if (s["!data"] != null) {
-		const data = s["!data"];
-		for (let R = 0; R < data.length; ++R) {
-			if (!data[R]) continue;
-			for (let C = 0; C < data[R].length; ++C) {
-				const cell = data[R][C];
-				if (!cell || cell._sstIdx === void 0) continue;
-				const idx = cell._sstIdx;
-				delete cell._sstIdx;
-				if (sst[idx]) {
-					cell.v = sst[idx].t;
-					if (opts.cellHTML !== false && sst[idx].h) cell.h = sst[idx].h;
-					if (sst[idx].r) cell.r = sst[idx].r;
-				}
-			}
-		}
-	} else for (const ref of Object.keys(s)) {
-		if (ref.charAt(0) === "!") continue;
-		const cell = s[ref];
-		if (!cell || cell._sstIdx === void 0) continue;
+	const resolveCell = (cell) => {
+		if (!cell || cell._sstIdx === void 0) return;
 		const idx = cell._sstIdx;
 		delete cell._sstIdx;
 		if (sst[idx]) {
@@ -5112,6 +5336,23 @@ function resolveSharedStrings(s, sst, opts) {
 			if (opts.cellHTML !== false && sst[idx].h) cell.h = sst[idx].h;
 			if (sst[idx].r) cell.r = sst[idx].r;
 		}
+	};
+	if (s["!data"] != null) {
+		const data = s["!data"];
+		for (const rowKey of Object.keys(data)) {
+			const R = Number(rowKey);
+			if (!Number.isSafeInteger(R) || R < 0) continue;
+			const row = data[R];
+			if (!row) continue;
+			for (const columnKey of Object.keys(row)) {
+				const C = Number(columnKey);
+				if (!Number.isSafeInteger(C) || C < 0) continue;
+				resolveCell(row[C]);
+			}
+		}
+	} else for (const ref of Object.keys(s)) {
+		if (ref.charAt(0) === "!") continue;
+		resolveCell(s[ref]);
 	}
 }
 /**
@@ -5132,9 +5373,12 @@ function resolveSharedStrings(s, sst, opts) {
 function parseWorksheetXml(data, opts, _idx, rels, wb, _themes, styles) {
 	if (!data) return {};
 	if (!opts) opts = {};
+	opts.sheetRows = worksheetOptionLimit(opts.sheetRows, 0, "sheetRows");
+	const maxWorksheetRows = worksheetOptionLimit(opts.maxWorksheetRows, DEFAULT_MAX_WORKSHEET_ROWS, "maxWorksheetRows");
 	assertXmlPartLimits("worksheet.xml", data, opts);
 	if (!rels) rels = { "!id": {} };
 	const s = opts.dense ? { "!data": [] } : {};
+	const budget = new WorksheetCellBudget(opts.maxWorksheetCells, DEFAULT_MAX_IMPORT_CELLS);
 	const refguess = {
 		s: {
 			r: 2e6,
@@ -5160,18 +5404,18 @@ function parseWorksheetXml(data, opts, _idx, rels, wb, _themes, styles) {
 	const columns = [];
 	if (opts.cellStyles) {
 		const cols = data1.match(colregex);
-		if (cols) parseWorksheetXml_cols(columns, cols, opts);
+		if (cols) parseWorksheetXml_cols(columns, cols, budget, opts);
 		const views = parseWorksheetXml_views(data1, opts);
 		if (views) s["!views"] = views;
 	}
-	if (sdMatch) parseSheetData(sdMatch[1], s, opts, refguess, _themes, styles, wb);
+	if (sdMatch) parseSheetData(sdMatch[1], s, opts, refguess, _themes, styles, wb, budget, maxWorksheetRows);
 	const afilter = data2.match(afregex);
 	if (afilter) s["!autofilter"] = parseWorksheetXml_autofilter(afilter[0], opts);
 	const merges = [];
 	const _merge = data2.match(mergecregex);
 	if (_merge) for (let i = 0; i < _merge.length; ++i) merges[i] = safeDecodeRange(_merge[i].slice(_merge[i].indexOf("=") + 2));
 	const hlink = data2.match(hlinkregex);
-	if (hlink) parseWorksheetXml_hlinks(s, hlink, rels, opts);
+	if (hlink) parseWorksheetXml_hlinks(s, hlink, rels, budget, opts);
 	const margins = data2.match(marginregex);
 	if (margins) s["!margins"] = parseWorksheetXml_margins(parseXmlTag(margins[0], void 0, void 0, opts));
 	const legm = data2.match(/legacyDrawing r:id="(.*?)"/);
@@ -5233,6 +5477,29 @@ function writeWorksheetXml_sheetViews(ws, idx) {
 	const selection = writeXmlElement("selection", null, { pane: paneAttrs.activePane });
 	return "<sheetViews><sheetView workbookViewId=\"0\"" + attrs + ">" + pane + selection + "</sheetView></sheetViews>";
 }
+/** Return reusable rich-text XML only when it still represents the cell's current value. */
+function getCellRichText(cell) {
+	const text = String(cell.v);
+	if (typeof cell.r !== "string" || cell.r.length === 0) return;
+	try {
+		if (parseStringItem(cell.r, { cellHTML: false }).t === text) return normalizeRichTextXml(cell.r);
+	} catch {}
+}
+/** Add a string cell to the workbook-wide shared string table and return its index. */
+function addSharedString(cell, richText, opts) {
+	const text = String(cell.v);
+	const key = richText === void 0 ? "t\0" + text : "r\0" + richText;
+	const existing = opts.revStrings.get(key);
+	opts.Strings.Count = (opts.Strings.Count || 0) + 1;
+	if (existing !== void 0) return existing;
+	const entry = { t: text };
+	if (richText !== void 0) entry.r = richText;
+	const index = opts.Strings.length;
+	opts.Strings.push(entry);
+	opts.Strings.Unique = (opts.Strings.Unique || 0) + 1;
+	opts.revStrings.set(key, index);
+	return index;
+}
 /**
 * Write a worksheet as XML.
 *
@@ -5247,16 +5514,22 @@ function writeWorksheetXml_sheetViews(ws, idx) {
 * @returns Complete worksheet XML string
 */
 function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
+	const budget = new WorksheetCellBudget(opts.maxWorksheetCells, DEFAULT_MAX_EXPORT_CELLS);
 	const lines = [XML_HEADER];
 	lines.push(writeXmlElement("worksheet", null, {
 		xmlns: XMLNS_main[0],
 		"xmlns:r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 	}));
 	const ref = ws["!ref"] || "A1";
-	lines.push("<dimension ref=\"" + ref + "\"/>");
+	const range = ws["!ref"] ? clampLargeExportRange(ws, safeDecodeRange(ref), budget) : null;
+	const effectiveRef = range ? encodeRange(range) : "A1";
+	lines.push("<dimension ref=\"" + effectiveRef + "\"/>");
 	lines.push(writeWorksheetXml_sheetViews(ws, _idx));
 	lines.push("<sheetFormatPr defaultRowHeight=\"15\"/>");
 	if (ws["!cols"]) {
+		const columnIndexes = Object.keys(ws["!cols"]).map(Number).filter((index) => Number.isSafeInteger(index) && index >= 0 && ws["!cols"][index]).sort((a, b) => a - b);
+		if (columnIndexes.some((index) => index >= 16384)) throw new XlsxError("INVALID_ARGUMENT", `Worksheet column metadata exceeds XLSX column limit ${XLSX_MAX_COLUMNS}`);
+		budget.charge("worksheet column metadata", columnIndexes.length);
 		lines.push("<cols>");
 		// NAYIVE: a column's look goes out as style=, and a run of columns with
 		// the same look (and the same width and hidden flag) as ONE <col min max>
@@ -5266,12 +5539,12 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 		// as some readers take a missing one for zero).
 		const colStyle = (col) => col && col.s ? getCellStyleIndex(opts, col) || 0 : 0;
 		const cols = ws["!cols"];
-		for (let i = 0; i < cols.length; ++i) {
-			if (!cols[i]) continue;
+		for (let n = 0; n < columnIndexes.length; ++n) {
+			const i = columnIndexes[n];
 			const col = cols[i];
 			const sid = colStyle(col);
 			let last = i;
-			if (sid > 0) while (last + 1 < cols.length && cols[last + 1] && colStyle(cols[last + 1]) === sid && cols[last + 1].width === col.width && !!cols[last + 1].hidden === !!col.hidden) last++;
+			if (sid > 0) while (n + 1 < columnIndexes.length && columnIndexes[n + 1] === last + 1 && colStyle(cols[last + 1]) === sid && cols[last + 1].width === col.width && !!cols[last + 1].hidden === !!col.hidden) { last++; n++; }
 			const attrs = {
 				min: String(i + 1),
 				max: String(last + 1)
@@ -5282,32 +5555,47 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 			if (col.hidden) attrs.hidden = "1";
 			if (col.width || !(sid > 0)) attrs.customWidth = "1";
 			lines.push(writeXmlElement("col", null, attrs));
-			i = last;
 		}
 		lines.push("</cols>");
 	}
 	lines.push("<sheetData>");
 	const dense = ws["!data"] != null;
-	const range = safeDecodeRange(ref);
+	const firstRow = range?.s.r ?? 1;
+	const lastRow = range?.e.r ?? 0;
+	const firstColumn = range?.s.c ?? 0;
+	const lastColumn = range?.e.c ?? -1;
 	// NAYIVE: a row's look (see buildStyleRegistry) is s= customFormat="1", and
-	// such a row is written even with no cell in it.
+	// such a row is written even with no cell in it (also past the used range;
+	// the <dimension> stays the range of the cells).
 	const rowStyle = (rowIdx) => {
 		const row = ws["!rows"]?.[rowIdx];
 		return row && row.s ? getCellStyleIndex(opts, row) || 0 : 0;
 	};
-	const rowXml = (rowIdx, row_cells) => {
+	const appendRow = (rowIdx, rowCells) => {
+		const rowInfo = ws["!rows"]?.[rowIdx];
+		const hasFiniteHeight = rowInfo != null && Number.isFinite(rowInfo.hpt);
+		const sid = rowStyle(rowIdx);
+		const hasMetadata = hasFiniteHeight || rowInfo?.hidden === true || sid > 0;
+		if (rowCells.length === 0 && !hasMetadata) return;
 		let rowTag = "<row r=\"" + (rowIdx + 1) + "\"";
-		if (ws["!rows"]?.[rowIdx]) {
-			if (ws["!rows"][rowIdx].hpt) rowTag += " ht=\"" + ws["!rows"][rowIdx].hpt + "\" customHeight=\"1\"";
-			if (ws["!rows"][rowIdx].hidden) rowTag += " hidden=\"1\"";
+		if (rowInfo) {
+			if (hasFiniteHeight) rowTag += " ht=\"" + rowInfo.hpt + "\" customHeight=\"1\"";
+			if (rowInfo.hidden === true) rowTag += " hidden=\"1\"";
 		}
-		if (rowStyle(rowIdx) > 0) rowTag += " s=\"" + rowStyle(rowIdx) + "\" customFormat=\"1\"";
-		if (!row_cells.length) return rowTag + "/>";
-		return rowTag + ">" + row_cells.join("") + "</row>";
+		if (sid > 0) rowTag += " s=\"" + sid + "\" customFormat=\"1\"";
+		rowTag += ">";
+		lines.push(rowTag);
+		lines.push(rowCells.join(""));
+		lines.push("</row>");
 	};
-	for (let rowIdx = range.s.r; rowIdx <= range.e.r; ++rowIdx) {
+	const rowMetadataIndexes = Object.keys(ws["!rows"] ?? {}).map(Number).filter((rowIdx) => Number.isSafeInteger(rowIdx) && rowIdx >= 0 && ws["!rows"]?.[rowIdx]).sort((a, b) => a - b);
+	if (rowMetadataIndexes.some((rowIdx) => rowIdx >= 1048576)) throw new XlsxError("INVALID_ARGUMENT", `Worksheet row metadata exceeds XLSX row limit ${XLSX_MAX_ROWS}`);
+	budget.charge("worksheet row metadata", rowMetadataIndexes.length);
+	const extraRows = rowMetadataIndexes.filter((rowIdx) => range == null || rowIdx < range.s.r || rowIdx > range.e.r);
+	for (const rowIdx of extraRows) if (range == null || rowIdx < range.s.r) appendRow(rowIdx, []);
+	for (let rowIdx = firstRow; rowIdx <= lastRow; ++rowIdx) {
 		const row_cells = [];
-		for (let colIdx = range.s.c; colIdx <= range.e.c; ++colIdx) {
+		for (let colIdx = firstColumn; colIdx <= lastColumn; ++colIdx) {
 			let cell;
 			if (dense) cell = ws["!data"]?.[rowIdx]?.[colIdx];
 			else cell = ws[encodeCell({
@@ -5322,32 +5610,42 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 			});
 			let cellValueStr = "";
 			let cellTypeAttr = "";
+			let cellValueTag = "v";
+			const richText = cell.t === "s" ? getCellRichText(cell) : void 0;
 			switch (cell.t) {
 				case "b":
 					cellValueStr = cell.v ? "1" : "0";
 					cellTypeAttr = "b";
 					break;
 				case "n":
-					cellValueStr = String(cell.v);
+					if (cell.v != null) cellValueStr = String(cell.v);
 					break;
 				case "e":
-					cellValueStr = String(cell.v);
+					cellValueStr = escapeXml(serializeWorksheetXml_error(cell.v));
 					cellTypeAttr = "e";
 					break;
 				case "d":
 					if (opts.cellDates) {
 						cellValueStr = cell.v.toISOString();
 						cellTypeAttr = "d";
-					} else cellValueStr = String(dateToSerialNumber(cell.v));
+					} else cellValueStr = String(dateToSerialNumber(cell.v, _wb?.Workbook?.WBProps?.date1904));
 					break;
-				case "s":
+				case "s": if (!cell.f && opts.bookSST) {
+					cellValueStr = String(addSharedString(cell, richText, opts));
+					cellTypeAttr = "s";
+				} else if (!cell.f && richText !== void 0) {
+					cellValueStr = richText;
+					cellTypeAttr = "inlineStr";
+					cellValueTag = "is";
+				} else {
 					cellValueStr = escapeXml(String(cell.v));
 					cellTypeAttr = "str";
-					break;
+				}
 			}
 			let cellXml = "<c r=\"" + addr + "\"";
 			if (cellTypeAttr) cellXml += " t=\"" + cellTypeAttr + "\"";
 			if (styleIndex != null && styleIndex > 0) cellXml += " s=\"" + styleIndex + "\"";
+			if (cell.D) cellXml += " cm=\"1\"";
 			if (!cell.f && cellValueStr === "") {
 				cellXml += "/>";
 				row_cells.push(cellXml);
@@ -5359,17 +5657,13 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 				if (cell.F) cellXml += " ref=\"" + cell.F + "\" t=\"array\"";
 				cellXml += ">" + escapeXml(cell.f) + "</f>";
 			}
-			if (cellValueStr !== "") cellXml += "<v>" + cellValueStr + "</v>";
+			if (cellValueStr !== "") cellXml += "<" + cellValueTag + ">" + cellValueStr + "</" + cellValueTag + ">";
 			cellXml += "</c>";
 			row_cells.push(cellXml);
 		}
-		if (row_cells.length > 0 || rowStyle(rowIdx) > 0) lines.push(rowXml(rowIdx, row_cells));
+		appendRow(rowIdx, row_cells);
 	}
-	// NAYIVE: rows past the used range that carry only a look. The <dimension>
-	// stays the range of the cells.
-	(ws["!rows"] || []).forEach((row, rowIdx) => {
-		if (rowIdx > range.e.r && rowStyle(rowIdx) > 0) lines.push(rowXml(rowIdx, []));
-	});
+	for (const rowIdx of extraRows) if (range && rowIdx > range.e.r) appendRow(rowIdx, []);
 	lines.push("</sheetData>");
 	// NAYIVE: CT_Worksheet is a *sequence* — a reader is entitled to reject a file
 	// whose elements are out of order, and Excel answers such a file with the
@@ -5443,18 +5737,19 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 	if (ws["!margins"]) {
 		const margins = ws["!margins"];
 		lines.push(writeXmlElement("pageMargins", null, {
-			left: String(margins.left || .7),
-			right: String(margins.right || .7),
-			top: String(margins.top || .75),
-			bottom: String(margins.bottom || .75),
-			header: String(margins.header || .3),
-			footer: String(margins.footer || .3)
+			left: String(margins.left ?? .7),
+			right: String(margins.right ?? .7),
+			top: String(margins.top ?? .75),
+			bottom: String(margins.bottom ?? .75),
+			header: String(margins.header ?? .3),
+			footer: String(margins.footer ?? .3)
 		}));
 	}
 
+	// NAYIVE: CT_Worksheet order is drawing, legacyDrawing, ..., tableParts, extLst.
+	const RNS = " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"";
+	const tableIds = [];
 	if (raw.refs && raw.refs.length && _rels) {
-		const RNS = " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"";
-		const tableIds = [];
 		for (const ref of raw.refs) {
 			if (!ref || !ref.target || !ref.type) continue;
 			// Belt and braces: a relationship whose part is not in the archive we are
@@ -5464,9 +5759,11 @@ function writeWorksheetXml(ws, opts, _idx, _rels, _wb) {
 			if (ref.tag === "drawing") lines.push("<drawing" + RNS + " r:id=\"" + rId + "\"/>");
 			else if (ref.tag === "tablePart") tableIds.push(rId);
 		}
-		if (tableIds.length) lines.push("<tableParts" + RNS + " count=\"" + tableIds.length + "\">"
-			+ tableIds.map((id) => "<tablePart r:id=\"" + id + "\"/>").join("") + "</tableParts>");
 	}
+	const legacyDrawing = Object.values(_rels?.["!id"] || {}).find((relationship) => relationship.Type === RELS.VML);
+	if (legacyDrawing) lines.push(writeXmlElement("legacyDrawing", null, { "r:id": legacyDrawing.Id }));
+	if (tableIds.length) lines.push("<tableParts" + RNS + " count=\"" + tableIds.length + "\">"
+		+ tableIds.map((id) => "<tablePart r:id=\"" + id + "\"/>").join("") + "</tableParts>");
 
 	if (raw.extLst) lines.push(raw.extLst);
 	lines.push("</worksheet>");
@@ -5506,6 +5803,43 @@ function matchXmlTagFirst(xmlString, tag) {
 
 //#endregion
 //#region src/xlsx/comments.ts
+/**
+* Collect cell comments for serialization without mutating the worksheet.
+*
+* Iterating the materialized cells avoids expanding a large worksheet range merely
+* to discover comments.  The copied comment arrays also isolate the public `cell.c`
+* objects from the IDs assigned while writing threaded comments.
+*/
+function collectCellComments(sheet) {
+	const out = [];
+	const add = (ref, cell) => {
+		if (!Array.isArray(cell?.c) || cell.c.length === 0) return;
+		const comments = cell.c.map((comment) => ({ ...comment }));
+		if (cell.c.hidden != null) comments.hidden = cell.c.hidden;
+		out.push([ref, comments]);
+	};
+	if (sheet["!data"] != null) {
+		const rows = sheet["!data"];
+		for (const rowKey of Object.keys(rows)) {
+			const rowIndex = Number(rowKey);
+			const row = rows[rowIndex];
+			if (!Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex > 1048575 || !Array.isArray(row)) continue;
+			for (const columnKey of Object.keys(row)) {
+				const columnIndex = Number(columnKey);
+				if (!Number.isSafeInteger(columnIndex) || columnIndex < 0 || columnIndex > 16383) continue;
+				add(encodeCell({
+					r: rowIndex,
+					c: columnIndex
+				}), row[columnIndex]);
+			}
+		}
+	} else for (const ref of Object.keys(sheet)) {
+		if (!/^[A-Z]{1,3}[1-9]\d*$/.test(ref)) continue;
+		const address = decodeCell(ref);
+		if (address.r <= 1048575 && address.c <= 16383 && encodeCell(address) === ref) add(ref, sheet[ref]);
+	}
+	return out;
+}
 /**
 * Insert parsed comments into a worksheet, attaching them to the appropriate cells.
 *
@@ -5591,7 +5925,7 @@ function parseCommentsXml(data, opts) {
 	if (authtag) authtag.split(/<\/\w*:?author>/).forEach((x) => {
 		if (x === "" || x.trim() === "") return;
 		const a = x.match(/<(?:\w+:)?author\b[^<>]*>(.*)/);
-		if (a) authors.push(a[1]);
+		if (a) authors.push(unescapeXml(a[1]));
 	});
 	const cmnttag = matchXmlTagFirst(data, "commentList");
 	if (cmnttag) cmnttag.split(/<\/\w*:?comment>/).forEach((x) => {
@@ -5664,7 +5998,7 @@ function writeCommentsXml(data) {
 		d[1].forEach((c) => {
 			if (c.a) lastauthor = iauthor.indexOf(escapeXml(c.a));
 			if (c.T) ++tcnt;
-			ts.push(c.t == null ? "" : escapeXml(c.t));
+			ts.push(c.t == null ? "" : String(c.t));
 		});
 		if (tcnt === 0) d[1].forEach((c) => {
 			o.push("<comment ref=\"" + d[0] + "\" authorId=\"" + iauthor.indexOf(escapeXml(c.a)) + "\"><text>");
@@ -5735,9 +6069,7 @@ function parseTcmntXml(data, _opts) {
 			case "<text":
 				tidx = idx + x.length;
 				break;
-			case "</text>":
-				comment.t = data.slice(tidx, idx).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-				break;
+			case "</text>": comment.t = unescapeXml(data.slice(tidx, idx)).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 		}
 		return x;
 	});
@@ -5772,7 +6104,7 @@ function writeTcmntXml(comments, people, opts) {
 			else tcopts.parentId = rootid;
 			c.ID = tcopts.id;
 			if (c.a) tcopts.personId = "{54EE7950-7262-4200-6969-" + ("000000000000" + people.indexOf(c.a)).slice(-12) + "}";
-			o.push(writeXmlElement("threadedComment", writeXmlTag("text", c.t || ""), tcopts));
+			o.push(writeXmlElement("threadedComment", writeXmlTag("text", escapeXml(c.t == null ? "" : String(c.t))), tcopts));
 		});
 	});
 	o.push("</ThreadedComments>");
@@ -5805,12 +6137,10 @@ function parsePeopleXml(data) {
 		const tag = stripNamespace(y[0]);
 		if (ignoredTags.has(tag)) return x;
 		switch (tag) {
-			case "<person":
-				out.push({
-					name: y.displayname,
-					id: y.id
-				});
-				break;
+			case "<person": out.push({
+				name: unescapeXml(y.displayname),
+				id: y.id
+			});
 		}
 		return x;
 	});
@@ -5829,9 +6159,9 @@ function writePeopleXml(people) {
 	}).replace(/\/>/, ">")];
 	people.forEach((person, idx) => {
 		o.push(writeXmlElement("person", null, {
-			displayName: person,
+			displayName: escapeXml(person),
 			id: "{54EE7950-7262-4200-6969-" + ("000000000000" + idx).slice(-12) + "}",
-			userId: person,
+			userId: escapeXml(person),
 			providerId: "None"
 		}));
 	});
@@ -5887,9 +6217,7 @@ function parseVml(data, sheet, comments) {
 				case "<Column>":
 					aidx = idx + x.length;
 					break;
-				case "</Column>":
-					C = +m.slice(aidx, idx).trim();
-					break;
+				case "</Column>": C = +m.slice(aidx, idx).trim();
 			}
 			return "";
 		});
@@ -5901,8 +6229,11 @@ function parseVml(data, sheet, comments) {
 				}) : comments[cidx]?.ref;
 				const dense = sheet["!data"] != null;
 				let cell;
-				if (dense) cell = sheet["!data"]?.[R]?.[C];
-				else cell = sheet[ref];
+				if (dense) {
+					const address = ref ? decodeCell(ref) : null;
+					const rows = sheet["!data"];
+					cell = address ? rows?.[address.r]?.[address.c] : void 0;
+				} else cell = sheet[ref];
 				if (cell && cell.c) cell.c.hidden = hidden;
 				++cidx;
 				break;
@@ -5922,10 +6253,11 @@ function writeVmlComment(x, _shapeid) {
 		type: "gradient"
 	};
 	if (fillopts.type === "gradient") fillopts.angle = "-180";
-	const fillxml = writeXmlElement("v:fill", fillopts.type === "gradient" ? writeXmlElement("o:fill", null, {
+	const fillparm = fillopts.type === "gradient" ? writeXmlElement("o:fill", null, {
 		type: "gradientUnscaled",
 		"v:ext": "view"
-	}) : null, fillopts);
+	}) : null;
+	const fillxml = writeXmlElement("v:fill", fillparm, fillopts);
 	return [
 		"<v:shape" + formatXmlAttributes({
 			id: "_x0000_s" + _shapeid,
@@ -6085,12 +6417,10 @@ function parseMetadataXml(data, _opts) {
 			case "</valueMetadata>":
 				metatype = 2;
 				break;
-			case "<rvb":
-				if (lastmeta) {
-					if (!lastmeta.offsets) lastmeta.offsets = [];
-					lastmeta.offsets.push(+y.i);
-				}
-				break;
+			case "<rvb": if (lastmeta) {
+				if (!lastmeta.offsets) lastmeta.offsets = [];
+				lastmeta.offsets.push(+y.i);
+			}
 		}
 		return x;
 	});
@@ -6139,7 +6469,6 @@ function parseCalcChainXml(data) {
 				if (y.i) i = y.i;
 				else y.i = i;
 				d.push(y);
-				break;
 		}
 	});
 	return d;
@@ -6205,35 +6534,50 @@ function safe_parse_wbrels(wbrels, sheets) {
 	}
 }
 /**
-* Safely parse a single sheet from the ZIP, including its relationships,
+* Optional worksheet relationships and annotations are best-effort in normal
+* mode. Caller configuration failures must still surface, since retrying after
+* silently ignoring a configured limit would bypass the caller's policy.
+*/
+function tolerateOptionalSheetError(error, opts) {
+	if (opts.WTF || error instanceof XlsxError && (error.code === "LIMIT_EXCEEDED" || error.code === "INVALID_ARGUMENT")) throw error;
+}
+/**
+* Parse a required worksheet and then best-effort optional relationships,
 * comments, threaded comments, and VML drawings.
 */
-function safe_parse_sheet(zip, path, relsPath, sheetName, idx, sheetRels, sheets, stype, opts, wb, themes, styles, strs) {
+function parse_sheet(zip, path, relsPath, sheetName, idx, sheetRels, sheets, stype, opts, wb, themes, styles, strs) {
+	if (stype !== "sheet") return;
+	let relationships;
 	try {
-		sheetRels[sheetName] = parseRelationships(getZipString(zip, relsPath, true, opts), path, opts);
-		const data = getZipData(zip, path, false, opts);
-		if (!data) return;
-		let _ws;
-		switch (stype) {
-			case "sheet":
-				_ws = parseWorksheetXml(data, opts, idx, sheetRels[sheetName], wb, themes, styles);
-				break;
-			default: return;
-		}
-		if (!_ws) return;
-		resolveSharedStrings(_ws, strs, opts);
-		sheets[sheetName] = _ws;
+		relationships = parseRelationships(getZipString(zip, relsPath, true, opts), path, opts);
+	} catch (error) {
+		tolerateOptionalSheetError(error, opts);
+		relationships = parseRelationships(null, path, opts);
+	}
+	sheetRels[sheetName] = relationships;
+	const data = getZipData(zip, path, false, opts);
+	const _ws = parseWorksheetXml(data, opts, idx, relationships, wb, themes, styles);
+	resolveSharedStrings(_ws, strs, opts);
+	sheets[sheetName] = _ws;
+	try {
 		const comments = [];
+		const commentCells = /* @__PURE__ */ new Set();
 		let tcomments = [];
-		if (sheetRels[sheetName]) for (const n of Object.keys(sheetRels[sheetName])) {
+		if (relationships) for (const n of Object.keys(relationships)) {
 			if (n === "!id" || n === "!idx") continue;
-			const rel = sheetRels[sheetName][n];
+			const rel = relationships[n];
 			if (!rel || !rel.Type) continue;
 			if (rel.Type === RELS.CMNT) {
 				const cmntData = getZipData(zip, resolve_path(rel.Target, path), true, opts);
 				if (cmntData) {
 					const parsedComments = parseCommentsXml(cmntData, opts);
-					if (parsedComments && parsedComments.length > 0) insertCommentsIntoSheet(_ws, parsedComments, false);
+					if (parsedComments && parsedComments.length > 0) {
+						for (const comment of parsedComments) if (!commentCells.has(comment.ref)) {
+							commentCells.add(comment.ref);
+							comments.push(comment);
+						}
+						insertCommentsIntoSheet(_ws, parsedComments, false);
+					}
 				}
 			}
 			if (rel.Type === RELS.TCMNT) {
@@ -6242,12 +6586,13 @@ function safe_parse_sheet(zip, path, relsPath, sheetName, idx, sheetRels, sheets
 			}
 		}
 		if (tcomments.length > 0) insertCommentsIntoSheet(_ws, tcomments, true, opts.people || []);
-		if (_ws["!legdrawel"] && sheetRels[sheetName]) {
-			const draw = getZipString(zip, resolve_path(_ws["!legdrawel"].Target, path), true, opts);
-			if (draw) parseVml(utf8read(draw), _ws, comments);
+		const legacyDrawing = relationships?.["!id"]?.[_ws["!legrel"]];
+		if (legacyDrawing) {
+			const draw = getZipString(zip, resolve_path(legacyDrawing.Target, path), true, opts);
+			if (draw) parseVml(draw, _ws, comments);
 		}
-	} catch (e) {
-		if (opts.WTF) throw e;
+	} catch (error) {
+		tolerateOptionalSheetError(error, opts);
 	}
 }
 /**
@@ -6282,11 +6627,9 @@ function parseZip(zip, opts) {
 	};
 	let strs = [];
 	if (!options.bookSheets && !options.bookProps) {
-		if (dir.sst) try {
+		if (dir.sst) {
 			const sstData = getZipData(zip, stripLeadingSlash(dir.sst), false, options);
-			if (sstData) strs = parseSstXml(sstData, options);
-		} catch (e) {
-			if (options.WTF) throw e;
+			strs = parseSstXml(sstData, options);
 		}
 		if (dir.themes.length) {
 			const themeData = getZipString(zip, dir.themes[0].replace(/^\//, ""), true, options);
@@ -6369,7 +6712,7 @@ function parseZip(zip, opts) {
 			}
 		}
 		const relsPath = path.replace(/^(.*)(\/)([^/]*)$/, "$1/_rels/$3.rels");
-		safe_parse_sheet(zip, path, relsPath, props.SheetNames[i], i, sheetRels, sheets, stype, options, wb, themes, styles, strs);
+		parse_sheet(zip, path, relsPath, props.SheetNames[i], i, sheetRels, sheets, stype, options, wb, themes, styles, strs);
 	}
 	const result = {
 		Sheets: sheets,
@@ -6428,79 +6771,6 @@ function base64encode(data) {
 }
 
 //#endregion
-//#region src/utils/export-range.ts
-const CELL_REF_RE = /^[A-Z]+[1-9]\d*$/;
-const MAX_EXPORT_CELLS = 1e6;
-function rangeCellCount(range) {
-	const rows = range.e.r - range.s.r + 1;
-	const cols = range.e.c - range.s.c + 1;
-	return rows > 0 && cols > 0 ? rows * cols : 0;
-}
-function occupiedRangeEnd(sheet, range) {
-	let maxRow = -1;
-	let maxCol = -1;
-	const data = sheet["!data"];
-	if (data != null) for (const rowKey of Object.keys(data)) {
-		const rowIdx = Number(rowKey);
-		if (!Number.isInteger(rowIdx) || rowIdx < range.s.r || rowIdx > range.e.r) continue;
-		const row = data[rowIdx];
-		if (!row) continue;
-		for (const colKey of Object.keys(row)) {
-			const colIdx = Number(colKey);
-			if (!Number.isInteger(colIdx) || colIdx < range.s.c || colIdx > range.e.c || row[colIdx] == null) continue;
-			if (rowIdx > maxRow) maxRow = rowIdx;
-			if (colIdx > maxCol) maxCol = colIdx;
-		}
-	}
-	else for (const ref of Object.keys(sheet)) {
-		if (!CELL_REF_RE.test(ref) || sheet[ref] == null) continue;
-		const cell = decodeCell(ref);
-		if (cell.r < range.s.r || cell.r > range.e.r || cell.c < range.s.c || cell.c > range.e.c) continue;
-		if (cell.r > maxRow) maxRow = cell.r;
-		if (cell.c > maxCol) maxCol = cell.c;
-	}
-	return maxRow === -1 ? null : {
-		r: maxRow,
-		c: maxCol
-	};
-}
-function clampLargeExportRange(sheet, range) {
-	if (rangeCellCount(range) <= MAX_EXPORT_CELLS) return range;
-	const end = occupiedRangeEnd(sheet, range);
-	if (!end) return null;
-	return {
-		s: {
-			r: range.s.r,
-			c: range.s.c
-		},
-		e: {
-			r: Math.max(range.s.r, Math.min(range.e.r, end.r)),
-			c: Math.max(range.s.c, Math.min(range.e.c, end.c))
-		}
-	};
-}
-
-//#endregion
-//#region src/types.ts
-/**
-* Map of Excel error codes to their display strings.
-* Keys are the numeric error codes stored in XLSX files.
-*/
-const BErr = {
-	0: "#NULL!",
-	7: "#DIV/0!",
-	15: "#VALUE!",
-	23: "#REF!",
-	29: "#NAME?",
-	36: "#NUM!",
-	42: "#N/A",
-	43: "#GETTING_DATA"
-};
-/** Reverse map from error display strings to numeric error codes */
-const RBErr = {};
-for (const [k, v] of Object.entries(BErr)) RBErr[v] = +k;
-
-//#endregion
 //#region src/api/format.ts
 function resolveNumberFormat(fmt, options) {
 	if (typeof fmt === "string") return fmt === "m/d/yy" && options?.dateNF ? String(options.dateNF) : fmt;
@@ -6510,7 +6780,7 @@ function resolveNumberFormat(fmt, options) {
 	return table[fmt] || table[DEFAULT_FORMAT_MAP[fmt]] || DEFAULT_FORMAT_STRINGS[fmt];
 }
 function resolveCellNumberFormat(cell, options) {
-	return resolveNumberFormat(cell.z ?? cell.XF?.numFmtId, options);
+	return resolveNumberFormat(cell.z ?? cell.XF?.numFmt ?? cell.XF?.numFmtId, options);
 }
 /** Return the date/time classification for a cell's number format. */
 function getCellDateTimeFormatKind(cell, options) {
@@ -6546,14 +6816,15 @@ function normalizeDateOutput(date, options) {
 * Attempt to format a cell value using the cell's number format or XF record.
 * Falls back to a plain string coercion if all formatting attempts fail.
 */
-function safeFormatCell(cell, value) {
+function safeFormatCell(cell, value, options) {
 	const isDateCell = cell.t === "d" && value instanceof Date;
-	if (cell.z != null) try {
-		cell.w = formatNumber(cell.z, isDateCell ? dateToSerialNumber(value) : value);
+	const numberFormat = resolveCellNumberFormat(cell, options);
+	if (numberFormat != null) try {
+		cell.w = formatNumber(numberFormat, isDateCell ? dateToSerialNumber(value, options?.date1904) : value, options);
 		return cell.w;
 	} catch {}
 	try {
-		cell.w = formatNumber((cell.XF || {}).numFmtId || (isDateCell ? 14 : 0), isDateCell ? dateToSerialNumber(value) : value);
+		cell.w = formatNumber((cell.XF || {}).numFmtId || (isDateCell ? 14 : 0), isDateCell ? dateToSerialNumber(value, options?.date1904) : value, options);
 		return cell.w;
 	} catch {
 		return "" + value;
@@ -6575,8 +6846,8 @@ function formatCell(cell, value, options) {
 	if (cell.w !== void 0) return cell.w;
 	if (cell.t === "d" && !cell.z && options && options.dateNF) cell.z = options.dateNF;
 	if (cell.t === "e") return BErr[cell.v] || String(cell.v);
-	if (value == null) return safeFormatCell(cell, cell.v);
-	return safeFormatCell(cell, value);
+	if (value == null) return safeFormatCell(cell, cell.v, options);
+	return safeFormatCell(cell, value, options);
 }
 /**
 * Format a cell for worksheet export APIs.
@@ -6637,6 +6908,13 @@ function buildJsonRow(sheet, range, rowIndex, header, headers, options) {
 			continue;
 		}
 		let cellValue = val.v;
+		if (val.t === "n" && cellValue == null && (val.f != null || val.F != null)) {
+			if (defval !== void 0 && headers[colIdx] != null) {
+				setRowValue(row, headers[colIdx], defval);
+				isempty = false;
+			}
+			continue;
+		}
 		switch (val.t) {
 			case "z":
 				if (cellValue == null) break;
@@ -6658,11 +6936,12 @@ function buildJsonRow(sheet, range, rowIndex, header, headers, options) {
 			default: throw new XlsxError("INVALID_ARGUMENT", "unrecognized type " + val.t);
 		}
 		if (headers[colIdx] != null) {
-			if (cellValue == null) if (val.t === "e" && cellValue === null) setRowValue(row, headers[colIdx], null);
-			else if (defval !== void 0) setRowValue(row, headers[colIdx], defval);
-			else if (raw && cellValue === null) setRowValue(row, headers[colIdx], null);
-			else continue;
-			else {
+			if (cellValue == null) {
+				if (val.t === "e" && cellValue === null) setRowValue(row, headers[colIdx], null);
+				else if (defval !== void 0) setRowValue(row, headers[colIdx], defval);
+				else if (raw && cellValue === null) setRowValue(row, headers[colIdx], null);
+				else continue;
+			} else {
 				const useRaw = val.t === "n" && typeof options.rawNumbers === "boolean" ? options.rawNumbers : raw;
 				const fmtKind = getCellDateTimeFormatKind(val, options);
 				const useDateOutput = options.dateOutput === "iso" && (val.t === "d" || fmtKind === "date" || fmtKind === "datetime");
@@ -6697,22 +6976,23 @@ function sheetToJson(sheet, opts) {
 	else if (options.header === "A") header = 2;
 	else if (Array.isArray(options.header)) header = 3;
 	else if (options.header == null) header = 0;
+	const budget = new WorksheetCellBudget(options.maxWorksheetCells, DEFAULT_MAX_EXPORT_CELLS);
 	let decodedRange;
 	switch (typeof range) {
 		case "string":
 			decodedRange = safeDecodeRange(range);
 			break;
 		case "number":
+			if (!Number.isSafeInteger(range) || range < 0 || range >= 1048576) throw new XlsxError("INVALID_ARGUMENT", "Invalid worksheet JSON range: row must be a non-negative safe integer");
 			decodedRange = safeDecodeRange(sheet["!ref"]);
+			if (range > decodedRange.e.r) return [];
 			decodedRange.s.r = range;
 			break;
 		default: decodedRange = range;
 	}
-	if (options.range == null || typeof options.range === "number") {
-		const clampedRange = clampLargeExportRange(sheet, decodedRange);
-		if (!clampedRange) return [];
-		decodedRange = clampedRange;
-	}
+	const clampedRange = clampLargeExportRange(sheet, decodedRange, budget, options.range == null || typeof options.range === "number");
+	if (!clampedRange) return [];
+	decodedRange = clampedRange;
 	if (header > 0) offset = 0;
 	const out = [];
 	let outputIndex = 0;
@@ -6779,11 +7059,13 @@ function addJsonToSheet(existingSheet, jsonData, opts) {
 	const worksheet = existingSheet || {};
 	if (!existingSheet && dense) worksheet["!data"] = [];
 	let originRow = 0, originCol = 0;
-	if (worksheet && options.origin != null) if (typeof options.origin === "number") originRow = options.origin;
-	else {
-		const parsedOrigin = typeof options.origin === "string" ? decodeCell(options.origin) : options.origin;
-		originRow = parsedOrigin.r;
-		originCol = parsedOrigin.c;
+	if (worksheet && options.origin != null) {
+		if (typeof options.origin === "number") originRow = options.origin;
+		else {
+			const parsedOrigin = typeof options.origin === "string" ? decodeCell(options.origin) : options.origin;
+			originRow = parsedOrigin.r;
+			originCol = parsedOrigin.c;
+		}
 	}
 	const range = {
 		s: {
@@ -6819,9 +7101,10 @@ function addJsonToSheet(existingSheet, jsonData, opts) {
 			let dateFormat = "";
 			const ref = dense ? "" : encodeCol(originCol + colIdx) + encodeRow(originRow + rowIdx + offset);
 			const cell = dense ? denseRow[originCol + colIdx] : worksheet[ref];
-			if (value && typeof value === "object" && !(value instanceof Date)) if (dense) denseRow[originCol + colIdx] = value;
-			else worksheet[ref] = value;
-			else {
+			if (value && typeof value === "object" && !(value instanceof Date)) {
+				if (dense) denseRow[originCol + colIdx] = value;
+				else worksheet[ref] = value;
+			} else {
 				if (typeof value === "number") cellType = "n";
 				else if (typeof value === "boolean") cellType = "b";
 				else if (typeof value === "string") cellType = "s";
@@ -6902,11 +7185,13 @@ function addArrayToSheet(worksheet, data, opts) {
 	const ws = worksheet || (dense ? { "!data": [] } : {});
 	if (dense && !ws["!data"]) ws["!data"] = [];
 	let originRow = 0, originCol = 0;
-	if (ws && options.origin != null) if (typeof options.origin === "number") originRow = options.origin;
-	else {
-		const parsedOrigin = typeof options.origin === "string" ? decodeCell(options.origin) : options.origin;
-		originRow = parsedOrigin.r;
-		originCol = parsedOrigin.c;
+	if (ws && options.origin != null) {
+		if (typeof options.origin === "number") originRow = options.origin;
+		else {
+			const parsedOrigin = typeof options.origin === "string" ? decodeCell(options.origin) : options.origin;
+			originRow = parsedOrigin.r;
+			originCol = parsedOrigin.c;
+		}
 	}
 	const range = {
 		s: {
@@ -6925,7 +7210,10 @@ function addArrayToSheet(worksheet, data, opts) {
 		range.e.c = Math.max(range.e.c, existingRange.e.c);
 		range.e.r = Math.max(range.e.r, existingRange.e.r);
 		if (originRow === -1) range.e.r = originRow = ws["!ref"] ? existingRange.e.r + 1 : 0;
-	} else range.s.c = range.e.c = range.s.r = range.e.r = 0;
+	} else {
+		range.s.c = range.e.c = range.s.r = range.e.r = 0;
+		if (originRow === -1) originRow = 0;
+	}
 	let seen = false;
 	for (let rowIdx = 0; rowIdx < data.length; ++rowIdx) {
 		if (!data[rowIdx]) continue;
@@ -6950,21 +7238,23 @@ function addArrayToSheet(worksheet, data, opts) {
 					cell.f = rowData[colIdx][1];
 					cell.v = cell.v[0];
 				}
-				if (cell.v === null) if (cell.f) cell.t = "n";
-				else if (options.nullError) {
-					cell.t = "e";
-					cell.v = 0;
-				} else if (!options.sheetStubs) continue;
-				else cell.t = "z";
-				else if (typeof cell.v === "number") if (isFinite(cell.v)) cell.t = "n";
-				else if (isNaN(cell.v)) {
-					cell.t = "e";
-					cell.v = 15;
-				} else {
-					cell.t = "e";
-					cell.v = 7;
-				}
-				else if (typeof cell.v === "boolean") cell.t = "b";
+				if (cell.v === null) {
+					if (cell.f) cell.t = "n";
+					else if (options.nullError) {
+						cell.t = "e";
+						cell.v = 0;
+					} else if (!options.sheetStubs) continue;
+					else cell.t = "z";
+				} else if (typeof cell.v === "number") {
+					if (isFinite(cell.v)) cell.t = "n";
+					else if (isNaN(cell.v)) {
+						cell.t = "e";
+						cell.v = 15;
+					} else {
+						cell.t = "e";
+						cell.v = 7;
+					}
+				} else if (typeof cell.v === "boolean") cell.t = "b";
 				else if (cell.v instanceof Date) {
 					cell.z = options.dateNF || formatTable[14];
 					if (!options.UTC) cell.v = localToUtc(cell.v);
@@ -7021,6 +7311,13 @@ function sheetToArray(sheet, opts) {
 //#region src/api/csv.ts
 /** Regex to match double-quote characters for CSV escaping (doubled inside quoted fields) */
 const qreg = /"/g;
+function containsSeparatorCharacter(text, separator) {
+	return separator.length > 0 && text.includes(separator.charAt(0));
+}
+function quoteCsvField(text, fieldSeparator, recordSeparator, forceQuotes) {
+	if (forceQuotes || text.includes("\"") || text.includes("\r") || text.includes("\n") || containsSeparatorCharacter(text, fieldSeparator) || containsSeparatorCharacter(text, recordSeparator)) return "\"" + text.replace(qreg, "\"\"") + "\"";
+	return text;
+}
 function escapeFormulaText(txt, options) {
 	if (options.escapeFormulae === false || txt.length === 0) return txt;
 	switch (txt.charCodeAt(0)) {
@@ -7042,7 +7339,7 @@ function escapeFormulaText(txt, options) {
 *
 * @returns The joined CSV row string, or `null` if the row is blank and blankrows is disabled
 */
-function buildCsvRow(sheet, range, rowIndex, cols, fieldSepCode, recordSepCode, fieldSeparator, rowCount, options) {
+function buildCsvRow(sheet, range, rowIndex, cols, fieldSeparator, recordSeparator, rowCount, options) {
 	let isempty = true;
 	const row = [];
 	for (let colIdx = range.s.c; colIdx <= range.e.c; ++colIdx) {
@@ -7056,16 +7353,13 @@ function buildCsvRow(sheet, range, rowIndex, cols, fieldSepCode, recordSepCode, 
 			const useDateOutput = options.dateOutput === "iso" && (val.t === "d" || fmtKind === "date" || fmtKind === "datetime");
 			txt = "" + (options.rawNumbers && val.t === "n" && !useDateOutput ? val.v : formatCellForOutput(val, null, options));
 			txt = escapeFormulaText(txt, options);
-			for (let i = 0, charCode = 0; i !== txt.length; ++i) if ((charCode = txt.charCodeAt(i)) === fieldSepCode || charCode === recordSepCode || charCode === 10 || charCode === 13 || charCode === 34 || options.forceQuotes) {
-				txt = "\"" + txt.replace(qreg, "\"\"") + "\"";
-				break;
-			}
+			txt = quoteCsvField(txt, fieldSeparator, recordSeparator, options.forceQuotes);
 			if (txt === "ID" && rowCount === 0 && row.length === 0) txt = "\"ID\"";
 		} else if (val.f != null && !val.F) {
 			isempty = false;
 			txt = "=" + val.f;
 			txt = escapeFormulaText(txt, options);
-			if (txt.indexOf(",") >= 0) txt = "\"" + txt.replace(qreg, "\"\"") + "\"";
+			txt = quoteCsvField(txt, fieldSeparator, recordSeparator, options.forceQuotes);
 		} else txt = "";
 		row.push(txt);
 	}
@@ -7087,12 +7381,11 @@ function sheetToCsv(sheet, opts) {
 	const out = [];
 	const options = opts == null ? {} : opts;
 	if (sheet == null || sheet["!ref"] == null) return "";
-	const range = clampLargeExportRange(sheet, safeDecodeRange(sheet["!ref"]));
+	const budget = new WorksheetCellBudget(options.maxWorksheetCells, DEFAULT_MAX_EXPORT_CELLS);
+	const range = clampLargeExportRange(sheet, safeDecodeRange(sheet["!ref"]), budget);
 	if (!range) return "";
 	const fieldSeparator = options.FS !== void 0 ? options.FS : ",";
-	const fieldSepCode = fieldSeparator.charCodeAt(0);
 	const recordSeparator = options.RS !== void 0 ? options.RS : "\n";
-	const recordSepCode = recordSeparator.charCodeAt(0);
 	const cols = [];
 	const colinfo = options.skipHidden && sheet["!cols"] || [];
 	const rowinfo = options.skipHidden && sheet["!rows"] || [];
@@ -7100,7 +7393,7 @@ function sheetToCsv(sheet, opts) {
 	let rowCount = 0;
 	for (let rowIdx = range.s.r; rowIdx <= range.e.r; ++rowIdx) {
 		if ((rowinfo[rowIdx] || {}).hidden) continue;
-		const row = buildCsvRow(sheet, range, rowIdx, cols, fieldSepCode, recordSepCode, fieldSeparator, rowCount, options);
+		const row = buildCsvRow(sheet, range, rowIdx, cols, fieldSeparator, recordSeparator, rowCount, options);
 		if (row == null) continue;
 		if (row || options.blankrows !== false) out.push((rowCount++ ? recordSeparator : "") + row);
 	}
@@ -7127,65 +7420,94 @@ function sheetToTxt(sheet, opts) {
 *
 * Handles quoted fields, escaped double-quotes, and newlines within quotes.
 */
-function parseCsv(text, sep) {
+function parseCsv(text, sep, opts) {
 	const rows = [];
 	let row = [];
 	let i = 0;
 	const len = text.length;
-	while (i <= len) {
-		if (i === len) {
-			if (row.length > 0 || rows.length > 0) {
-				row.push("");
-				rows.push(row);
-			}
-			break;
-		}
+	let afterSeparator = false;
+	let rowActive = false;
+	let rowCount = 0;
+	const maxRows = worksheetOptionLimit(opts.maxWorksheetRows, XLSX_MAX_ROWS, "maxWorksheetRows");
+	const sheetRows = worksheetOptionLimit(opts.sheetRows, 0, "sheetRows");
+	const budget = new WorksheetCellBudget(opts.maxWorksheetCells, DEFAULT_MAX_IMPORT_CELLS);
+	const beginRow = () => {
+		if (rowActive) return;
+		++rowCount;
+		if (rowCount > 1048576) throw new XlsxError("MALFORMED", `CSV data exceeds XLSX row limit ${XLSX_MAX_ROWS}`);
+		if (rowCount > maxRows) throw new XlsxError("LIMIT_EXCEEDED", `worksheet row count ${rowCount} exceeds limit ${maxRows}`);
+		rowActive = true;
+	};
+	const pushField = (value) => {
+		if (row.length >= 16384) throw new XlsxError("MALFORMED", `CSV row exceeds XLSX column limit ${XLSX_MAX_COLUMNS}`);
+		budget.charge("worksheet cell", 1);
+		row.push(value);
+	};
+	const finishRow = () => {
+		beginRow();
+		if (row.length === 0) budget.charge("worksheet cell", 1);
+		rows.push(row);
+		row = [];
+		rowActive = false;
+		afterSeparator = false;
+		return sheetRows > 0 && rows.length >= sheetRows;
+	};
+	while (i < len) {
+		beginRow();
 		if (text[i] === "\"") {
 			let val = "";
 			i++;
-			while (i < len) if (text[i] === "\"") if (i + 1 < len && text[i + 1] === "\"") {
-				val += "\"";
-				i += 2;
+			while (i < len) if (text[i] === "\"") {
+				if (i + 1 < len && text[i + 1] === "\"") {
+					val += "\"";
+					i += 2;
+				} else {
+					i++;
+					break;
+				}
 			} else {
-				i++;
-				break;
-			}
-			else {
 				val += text[i];
 				i++;
 			}
-			row.push(val);
-			if (i < len && text[i] === sep) i++;
-			else if (i < len && (text[i] === "\r" || text[i] === "\n")) {
+			pushField(val);
+			afterSeparator = false;
+			if (i < len && text[i] === sep) {
+				i++;
+				afterSeparator = true;
+			} else if (i < len && (text[i] === "\r" || text[i] === "\n")) {
 				if (text[i] === "\r" && i + 1 < len && text[i + 1] === "\n") i++;
 				i++;
-				rows.push(row);
-				row = [];
+				if (finishRow()) return rows;
 			}
 		} else if (text[i] === sep) {
-			row.push("");
+			pushField("");
 			i++;
+			afterSeparator = true;
 		} else if (text[i] === "\r" || text[i] === "\n") {
+			if (afterSeparator) pushField("");
 			if (text[i] === "\r" && i + 1 < len && text[i + 1] === "\n") i++;
 			i++;
-			rows.push(row);
-			row = [];
+			if (finishRow()) return rows;
 		} else {
 			let val = "";
 			while (i < len && text[i] !== sep && text[i] !== "\r" && text[i] !== "\n") {
 				val += text[i];
 				i++;
 			}
-			row.push(val);
-			if (i < len && text[i] === sep) i++;
-			else if (i < len && (text[i] === "\r" || text[i] === "\n")) {
+			pushField(val);
+			afterSeparator = false;
+			if (i < len && text[i] === sep) {
+				i++;
+				afterSeparator = true;
+			} else if (i < len && (text[i] === "\r" || text[i] === "\n")) {
 				if (text[i] === "\r" && i + 1 < len && text[i + 1] === "\n") i++;
 				i++;
-				rows.push(row);
-				row = [];
+				if (finishRow()) return rows;
 			}
 		}
 	}
+	if (afterSeparator) pushField("");
+	if (row.length > 0) finishRow();
 	return rows;
 }
 /** Try to coerce a string value to a number or boolean */
@@ -7205,8 +7527,2144 @@ function coerceValue(val) {
 * @returns A WorkSheet with the parsed data
 */
 function csvToSheet(text, opts) {
-	return arrayToSheet(parseCsv(text, opts && opts.FS || ",").map((row) => row.map((value) => coerceValue(value))));
+	const data = parseCsv(text, opts && opts.FS || ",", opts || {}).map((row) => row.length === 0 ? [null] : row.map((value) => coerceValue(value)));
+	return arrayToSheet(data, { sheetStubs: true });
 }
+
+//#endregion
+//#region src/api/html-entities.ts
+/**
+* Generated by `python3 scripts/generate-html-entities.py` from Python's `html.entities.html5`.
+* Source: https://html.spec.whatwg.org/multipage/named-characters.html
+* Do not edit manually.
+*/
+const HTML_ENTITY_VALUES = {
+	AElig: "Æ",
+	AMP: "&",
+	Aacute: "Á",
+	Abreve: "Ă",
+	Acirc: "Â",
+	Acy: "А",
+	Afr: "𝔄",
+	Agrave: "À",
+	Alpha: "Α",
+	Amacr: "Ā",
+	And: "⩓",
+	Aogon: "Ą",
+	Aopf: "𝔸",
+	ApplyFunction: "⁡",
+	Aring: "Å",
+	Ascr: "𝒜",
+	Assign: "≔",
+	Atilde: "Ã",
+	Auml: "Ä",
+	Backslash: "∖",
+	Barv: "⫧",
+	Barwed: "⌆",
+	Bcy: "Б",
+	Because: "∵",
+	Bernoullis: "ℬ",
+	Beta: "Β",
+	Bfr: "𝔅",
+	Bopf: "𝔹",
+	Breve: "˘",
+	Bscr: "ℬ",
+	Bumpeq: "≎",
+	CHcy: "Ч",
+	COPY: "©",
+	Cacute: "Ć",
+	Cap: "⋒",
+	CapitalDifferentialD: "ⅅ",
+	Cayleys: "ℭ",
+	Ccaron: "Č",
+	Ccedil: "Ç",
+	Ccirc: "Ĉ",
+	Cconint: "∰",
+	Cdot: "Ċ",
+	Cedilla: "¸",
+	CenterDot: "·",
+	Cfr: "ℭ",
+	Chi: "Χ",
+	CircleDot: "⊙",
+	CircleMinus: "⊖",
+	CirclePlus: "⊕",
+	CircleTimes: "⊗",
+	ClockwiseContourIntegral: "∲",
+	CloseCurlyDoubleQuote: "”",
+	CloseCurlyQuote: "’",
+	Colon: "∷",
+	Colone: "⩴",
+	Congruent: "≡",
+	Conint: "∯",
+	ContourIntegral: "∮",
+	Copf: "ℂ",
+	Coproduct: "∐",
+	CounterClockwiseContourIntegral: "∳",
+	Cross: "⨯",
+	Cscr: "𝒞",
+	Cup: "⋓",
+	CupCap: "≍",
+	DD: "ⅅ",
+	DDotrahd: "⤑",
+	DJcy: "Ђ",
+	DScy: "Ѕ",
+	DZcy: "Џ",
+	Dagger: "‡",
+	Darr: "↡",
+	Dashv: "⫤",
+	Dcaron: "Ď",
+	Dcy: "Д",
+	Del: "∇",
+	Delta: "Δ",
+	Dfr: "𝔇",
+	DiacriticalAcute: "´",
+	DiacriticalDot: "˙",
+	DiacriticalDoubleAcute: "˝",
+	DiacriticalGrave: "`",
+	DiacriticalTilde: "˜",
+	Diamond: "⋄",
+	DifferentialD: "ⅆ",
+	Dopf: "𝔻",
+	Dot: "¨",
+	DotDot: "⃜",
+	DotEqual: "≐",
+	DoubleContourIntegral: "∯",
+	DoubleDot: "¨",
+	DoubleDownArrow: "⇓",
+	DoubleLeftArrow: "⇐",
+	DoubleLeftRightArrow: "⇔",
+	DoubleLeftTee: "⫤",
+	DoubleLongLeftArrow: "⟸",
+	DoubleLongLeftRightArrow: "⟺",
+	DoubleLongRightArrow: "⟹",
+	DoubleRightArrow: "⇒",
+	DoubleRightTee: "⊨",
+	DoubleUpArrow: "⇑",
+	DoubleUpDownArrow: "⇕",
+	DoubleVerticalBar: "∥",
+	DownArrow: "↓",
+	DownArrowBar: "⤓",
+	DownArrowUpArrow: "⇵",
+	DownBreve: "̑",
+	DownLeftRightVector: "⥐",
+	DownLeftTeeVector: "⥞",
+	DownLeftVector: "↽",
+	DownLeftVectorBar: "⥖",
+	DownRightTeeVector: "⥟",
+	DownRightVector: "⇁",
+	DownRightVectorBar: "⥗",
+	DownTee: "⊤",
+	DownTeeArrow: "↧",
+	Downarrow: "⇓",
+	Dscr: "𝒟",
+	Dstrok: "Đ",
+	ENG: "Ŋ",
+	ETH: "Ð",
+	Eacute: "É",
+	Ecaron: "Ě",
+	Ecirc: "Ê",
+	Ecy: "Э",
+	Edot: "Ė",
+	Efr: "𝔈",
+	Egrave: "È",
+	Element: "∈",
+	Emacr: "Ē",
+	EmptySmallSquare: "◻",
+	EmptyVerySmallSquare: "▫",
+	Eogon: "Ę",
+	Eopf: "𝔼",
+	Epsilon: "Ε",
+	Equal: "⩵",
+	EqualTilde: "≂",
+	Equilibrium: "⇌",
+	Escr: "ℰ",
+	Esim: "⩳",
+	Eta: "Η",
+	Euml: "Ë",
+	Exists: "∃",
+	ExponentialE: "ⅇ",
+	Fcy: "Ф",
+	Ffr: "𝔉",
+	FilledSmallSquare: "◼",
+	FilledVerySmallSquare: "▪",
+	Fopf: "𝔽",
+	ForAll: "∀",
+	Fouriertrf: "ℱ",
+	Fscr: "ℱ",
+	GJcy: "Ѓ",
+	GT: ">",
+	Gamma: "Γ",
+	Gammad: "Ϝ",
+	Gbreve: "Ğ",
+	Gcedil: "Ģ",
+	Gcirc: "Ĝ",
+	Gcy: "Г",
+	Gdot: "Ġ",
+	Gfr: "𝔊",
+	Gg: "⋙",
+	Gopf: "𝔾",
+	GreaterEqual: "≥",
+	GreaterEqualLess: "⋛",
+	GreaterFullEqual: "≧",
+	GreaterGreater: "⪢",
+	GreaterLess: "≷",
+	GreaterSlantEqual: "⩾",
+	GreaterTilde: "≳",
+	Gscr: "𝒢",
+	Gt: "≫",
+	HARDcy: "Ъ",
+	Hacek: "ˇ",
+	Hat: "^",
+	Hcirc: "Ĥ",
+	Hfr: "ℌ",
+	HilbertSpace: "ℋ",
+	Hopf: "ℍ",
+	HorizontalLine: "─",
+	Hscr: "ℋ",
+	Hstrok: "Ħ",
+	HumpDownHump: "≎",
+	HumpEqual: "≏",
+	IEcy: "Е",
+	IJlig: "Ĳ",
+	IOcy: "Ё",
+	Iacute: "Í",
+	Icirc: "Î",
+	Icy: "И",
+	Idot: "İ",
+	Ifr: "ℑ",
+	Igrave: "Ì",
+	Im: "ℑ",
+	Imacr: "Ī",
+	ImaginaryI: "ⅈ",
+	Implies: "⇒",
+	Int: "∬",
+	Integral: "∫",
+	Intersection: "⋂",
+	InvisibleComma: "⁣",
+	InvisibleTimes: "⁢",
+	Iogon: "Į",
+	Iopf: "𝕀",
+	Iota: "Ι",
+	Iscr: "ℐ",
+	Itilde: "Ĩ",
+	Iukcy: "І",
+	Iuml: "Ï",
+	Jcirc: "Ĵ",
+	Jcy: "Й",
+	Jfr: "𝔍",
+	Jopf: "𝕁",
+	Jscr: "𝒥",
+	Jsercy: "Ј",
+	Jukcy: "Є",
+	KHcy: "Х",
+	KJcy: "Ќ",
+	Kappa: "Κ",
+	Kcedil: "Ķ",
+	Kcy: "К",
+	Kfr: "𝔎",
+	Kopf: "𝕂",
+	Kscr: "𝒦",
+	LJcy: "Љ",
+	LT: "<",
+	Lacute: "Ĺ",
+	Lambda: "Λ",
+	Lang: "⟪",
+	Laplacetrf: "ℒ",
+	Larr: "↞",
+	Lcaron: "Ľ",
+	Lcedil: "Ļ",
+	Lcy: "Л",
+	LeftAngleBracket: "⟨",
+	LeftArrow: "←",
+	LeftArrowBar: "⇤",
+	LeftArrowRightArrow: "⇆",
+	LeftCeiling: "⌈",
+	LeftDoubleBracket: "⟦",
+	LeftDownTeeVector: "⥡",
+	LeftDownVector: "⇃",
+	LeftDownVectorBar: "⥙",
+	LeftFloor: "⌊",
+	LeftRightArrow: "↔",
+	LeftRightVector: "⥎",
+	LeftTee: "⊣",
+	LeftTeeArrow: "↤",
+	LeftTeeVector: "⥚",
+	LeftTriangle: "⊲",
+	LeftTriangleBar: "⧏",
+	LeftTriangleEqual: "⊴",
+	LeftUpDownVector: "⥑",
+	LeftUpTeeVector: "⥠",
+	LeftUpVector: "↿",
+	LeftUpVectorBar: "⥘",
+	LeftVector: "↼",
+	LeftVectorBar: "⥒",
+	Leftarrow: "⇐",
+	Leftrightarrow: "⇔",
+	LessEqualGreater: "⋚",
+	LessFullEqual: "≦",
+	LessGreater: "≶",
+	LessLess: "⪡",
+	LessSlantEqual: "⩽",
+	LessTilde: "≲",
+	Lfr: "𝔏",
+	Ll: "⋘",
+	Lleftarrow: "⇚",
+	Lmidot: "Ŀ",
+	LongLeftArrow: "⟵",
+	LongLeftRightArrow: "⟷",
+	LongRightArrow: "⟶",
+	Longleftarrow: "⟸",
+	Longleftrightarrow: "⟺",
+	Longrightarrow: "⟹",
+	Lopf: "𝕃",
+	LowerLeftArrow: "↙",
+	LowerRightArrow: "↘",
+	Lscr: "ℒ",
+	Lsh: "↰",
+	Lstrok: "Ł",
+	Lt: "≪",
+	Map: "⤅",
+	Mcy: "М",
+	MediumSpace: " ",
+	Mellintrf: "ℳ",
+	Mfr: "𝔐",
+	MinusPlus: "∓",
+	Mopf: "𝕄",
+	Mscr: "ℳ",
+	Mu: "Μ",
+	NJcy: "Њ",
+	Nacute: "Ń",
+	Ncaron: "Ň",
+	Ncedil: "Ņ",
+	Ncy: "Н",
+	NegativeMediumSpace: "​",
+	NegativeThickSpace: "​",
+	NegativeThinSpace: "​",
+	NegativeVeryThinSpace: "​",
+	NestedGreaterGreater: "≫",
+	NestedLessLess: "≪",
+	NewLine: "\n",
+	Nfr: "𝔑",
+	NoBreak: "⁠",
+	NonBreakingSpace: "\xA0",
+	Nopf: "ℕ",
+	Not: "⫬",
+	NotCongruent: "≢",
+	NotCupCap: "≭",
+	NotDoubleVerticalBar: "∦",
+	NotElement: "∉",
+	NotEqual: "≠",
+	NotEqualTilde: "≂̸",
+	NotExists: "∄",
+	NotGreater: "≯",
+	NotGreaterEqual: "≱",
+	NotGreaterFullEqual: "≧̸",
+	NotGreaterGreater: "≫̸",
+	NotGreaterLess: "≹",
+	NotGreaterSlantEqual: "⩾̸",
+	NotGreaterTilde: "≵",
+	NotHumpDownHump: "≎̸",
+	NotHumpEqual: "≏̸",
+	NotLeftTriangle: "⋪",
+	NotLeftTriangleBar: "⧏̸",
+	NotLeftTriangleEqual: "⋬",
+	NotLess: "≮",
+	NotLessEqual: "≰",
+	NotLessGreater: "≸",
+	NotLessLess: "≪̸",
+	NotLessSlantEqual: "⩽̸",
+	NotLessTilde: "≴",
+	NotNestedGreaterGreater: "⪢̸",
+	NotNestedLessLess: "⪡̸",
+	NotPrecedes: "⊀",
+	NotPrecedesEqual: "⪯̸",
+	NotPrecedesSlantEqual: "⋠",
+	NotReverseElement: "∌",
+	NotRightTriangle: "⋫",
+	NotRightTriangleBar: "⧐̸",
+	NotRightTriangleEqual: "⋭",
+	NotSquareSubset: "⊏̸",
+	NotSquareSubsetEqual: "⋢",
+	NotSquareSuperset: "⊐̸",
+	NotSquareSupersetEqual: "⋣",
+	NotSubset: "⊂⃒",
+	NotSubsetEqual: "⊈",
+	NotSucceeds: "⊁",
+	NotSucceedsEqual: "⪰̸",
+	NotSucceedsSlantEqual: "⋡",
+	NotSucceedsTilde: "≿̸",
+	NotSuperset: "⊃⃒",
+	NotSupersetEqual: "⊉",
+	NotTilde: "≁",
+	NotTildeEqual: "≄",
+	NotTildeFullEqual: "≇",
+	NotTildeTilde: "≉",
+	NotVerticalBar: "∤",
+	Nscr: "𝒩",
+	Ntilde: "Ñ",
+	Nu: "Ν",
+	OElig: "Œ",
+	Oacute: "Ó",
+	Ocirc: "Ô",
+	Ocy: "О",
+	Odblac: "Ő",
+	Ofr: "𝔒",
+	Ograve: "Ò",
+	Omacr: "Ō",
+	Omega: "Ω",
+	Omicron: "Ο",
+	Oopf: "𝕆",
+	OpenCurlyDoubleQuote: "“",
+	OpenCurlyQuote: "‘",
+	Or: "⩔",
+	Oscr: "𝒪",
+	Oslash: "Ø",
+	Otilde: "Õ",
+	Otimes: "⨷",
+	Ouml: "Ö",
+	OverBar: "‾",
+	OverBrace: "⏞",
+	OverBracket: "⎴",
+	OverParenthesis: "⏜",
+	PartialD: "∂",
+	Pcy: "П",
+	Pfr: "𝔓",
+	Phi: "Φ",
+	Pi: "Π",
+	PlusMinus: "±",
+	Poincareplane: "ℌ",
+	Popf: "ℙ",
+	Pr: "⪻",
+	Precedes: "≺",
+	PrecedesEqual: "⪯",
+	PrecedesSlantEqual: "≼",
+	PrecedesTilde: "≾",
+	Prime: "″",
+	Product: "∏",
+	Proportion: "∷",
+	Proportional: "∝",
+	Pscr: "𝒫",
+	Psi: "Ψ",
+	QUOT: "\"",
+	Qfr: "𝔔",
+	Qopf: "ℚ",
+	Qscr: "𝒬",
+	RBarr: "⤐",
+	REG: "®",
+	Racute: "Ŕ",
+	Rang: "⟫",
+	Rarr: "↠",
+	Rarrtl: "⤖",
+	Rcaron: "Ř",
+	Rcedil: "Ŗ",
+	Rcy: "Р",
+	Re: "ℜ",
+	ReverseElement: "∋",
+	ReverseEquilibrium: "⇋",
+	ReverseUpEquilibrium: "⥯",
+	Rfr: "ℜ",
+	Rho: "Ρ",
+	RightAngleBracket: "⟩",
+	RightArrow: "→",
+	RightArrowBar: "⇥",
+	RightArrowLeftArrow: "⇄",
+	RightCeiling: "⌉",
+	RightDoubleBracket: "⟧",
+	RightDownTeeVector: "⥝",
+	RightDownVector: "⇂",
+	RightDownVectorBar: "⥕",
+	RightFloor: "⌋",
+	RightTee: "⊢",
+	RightTeeArrow: "↦",
+	RightTeeVector: "⥛",
+	RightTriangle: "⊳",
+	RightTriangleBar: "⧐",
+	RightTriangleEqual: "⊵",
+	RightUpDownVector: "⥏",
+	RightUpTeeVector: "⥜",
+	RightUpVector: "↾",
+	RightUpVectorBar: "⥔",
+	RightVector: "⇀",
+	RightVectorBar: "⥓",
+	Rightarrow: "⇒",
+	Ropf: "ℝ",
+	RoundImplies: "⥰",
+	Rrightarrow: "⇛",
+	Rscr: "ℛ",
+	Rsh: "↱",
+	RuleDelayed: "⧴",
+	SHCHcy: "Щ",
+	SHcy: "Ш",
+	SOFTcy: "Ь",
+	Sacute: "Ś",
+	Sc: "⪼",
+	Scaron: "Š",
+	Scedil: "Ş",
+	Scirc: "Ŝ",
+	Scy: "С",
+	Sfr: "𝔖",
+	ShortDownArrow: "↓",
+	ShortLeftArrow: "←",
+	ShortRightArrow: "→",
+	ShortUpArrow: "↑",
+	Sigma: "Σ",
+	SmallCircle: "∘",
+	Sopf: "𝕊",
+	Sqrt: "√",
+	Square: "□",
+	SquareIntersection: "⊓",
+	SquareSubset: "⊏",
+	SquareSubsetEqual: "⊑",
+	SquareSuperset: "⊐",
+	SquareSupersetEqual: "⊒",
+	SquareUnion: "⊔",
+	Sscr: "𝒮",
+	Star: "⋆",
+	Sub: "⋐",
+	Subset: "⋐",
+	SubsetEqual: "⊆",
+	Succeeds: "≻",
+	SucceedsEqual: "⪰",
+	SucceedsSlantEqual: "≽",
+	SucceedsTilde: "≿",
+	SuchThat: "∋",
+	Sum: "∑",
+	Sup: "⋑",
+	Superset: "⊃",
+	SupersetEqual: "⊇",
+	Supset: "⋑",
+	THORN: "Þ",
+	TRADE: "™",
+	TSHcy: "Ћ",
+	TScy: "Ц",
+	Tab: "	",
+	Tau: "Τ",
+	Tcaron: "Ť",
+	Tcedil: "Ţ",
+	Tcy: "Т",
+	Tfr: "𝔗",
+	Therefore: "∴",
+	Theta: "Θ",
+	ThickSpace: "  ",
+	ThinSpace: " ",
+	Tilde: "∼",
+	TildeEqual: "≃",
+	TildeFullEqual: "≅",
+	TildeTilde: "≈",
+	Topf: "𝕋",
+	TripleDot: "⃛",
+	Tscr: "𝒯",
+	Tstrok: "Ŧ",
+	Uacute: "Ú",
+	Uarr: "↟",
+	Uarrocir: "⥉",
+	Ubrcy: "Ў",
+	Ubreve: "Ŭ",
+	Ucirc: "Û",
+	Ucy: "У",
+	Udblac: "Ű",
+	Ufr: "𝔘",
+	Ugrave: "Ù",
+	Umacr: "Ū",
+	UnderBar: "_",
+	UnderBrace: "⏟",
+	UnderBracket: "⎵",
+	UnderParenthesis: "⏝",
+	Union: "⋃",
+	UnionPlus: "⊎",
+	Uogon: "Ų",
+	Uopf: "𝕌",
+	UpArrow: "↑",
+	UpArrowBar: "⤒",
+	UpArrowDownArrow: "⇅",
+	UpDownArrow: "↕",
+	UpEquilibrium: "⥮",
+	UpTee: "⊥",
+	UpTeeArrow: "↥",
+	Uparrow: "⇑",
+	Updownarrow: "⇕",
+	UpperLeftArrow: "↖",
+	UpperRightArrow: "↗",
+	Upsi: "ϒ",
+	Upsilon: "Υ",
+	Uring: "Ů",
+	Uscr: "𝒰",
+	Utilde: "Ũ",
+	Uuml: "Ü",
+	VDash: "⊫",
+	Vbar: "⫫",
+	Vcy: "В",
+	Vdash: "⊩",
+	Vdashl: "⫦",
+	Vee: "⋁",
+	Verbar: "‖",
+	Vert: "‖",
+	VerticalBar: "∣",
+	VerticalLine: "|",
+	VerticalSeparator: "❘",
+	VerticalTilde: "≀",
+	VeryThinSpace: " ",
+	Vfr: "𝔙",
+	Vopf: "𝕍",
+	Vscr: "𝒱",
+	Vvdash: "⊪",
+	Wcirc: "Ŵ",
+	Wedge: "⋀",
+	Wfr: "𝔚",
+	Wopf: "𝕎",
+	Wscr: "𝒲",
+	Xfr: "𝔛",
+	Xi: "Ξ",
+	Xopf: "𝕏",
+	Xscr: "𝒳",
+	YAcy: "Я",
+	YIcy: "Ї",
+	YUcy: "Ю",
+	Yacute: "Ý",
+	Ycirc: "Ŷ",
+	Ycy: "Ы",
+	Yfr: "𝔜",
+	Yopf: "𝕐",
+	Yscr: "𝒴",
+	Yuml: "Ÿ",
+	ZHcy: "Ж",
+	Zacute: "Ź",
+	Zcaron: "Ž",
+	Zcy: "З",
+	Zdot: "Ż",
+	ZeroWidthSpace: "​",
+	Zeta: "Ζ",
+	Zfr: "ℨ",
+	Zopf: "ℤ",
+	Zscr: "𝒵",
+	aacute: "á",
+	abreve: "ă",
+	ac: "∾",
+	acE: "∾̳",
+	acd: "∿",
+	acirc: "â",
+	acute: "´",
+	acy: "а",
+	aelig: "æ",
+	af: "⁡",
+	afr: "𝔞",
+	agrave: "à",
+	alefsym: "ℵ",
+	aleph: "ℵ",
+	alpha: "α",
+	amacr: "ā",
+	amalg: "⨿",
+	amp: "&",
+	and: "∧",
+	andand: "⩕",
+	andd: "⩜",
+	andslope: "⩘",
+	andv: "⩚",
+	ang: "∠",
+	ange: "⦤",
+	angle: "∠",
+	angmsd: "∡",
+	angmsdaa: "⦨",
+	angmsdab: "⦩",
+	angmsdac: "⦪",
+	angmsdad: "⦫",
+	angmsdae: "⦬",
+	angmsdaf: "⦭",
+	angmsdag: "⦮",
+	angmsdah: "⦯",
+	angrt: "∟",
+	angrtvb: "⊾",
+	angrtvbd: "⦝",
+	angsph: "∢",
+	angst: "Å",
+	angzarr: "⍼",
+	aogon: "ą",
+	aopf: "𝕒",
+	ap: "≈",
+	apE: "⩰",
+	apacir: "⩯",
+	ape: "≊",
+	apid: "≋",
+	apos: "'",
+	approx: "≈",
+	approxeq: "≊",
+	aring: "å",
+	ascr: "𝒶",
+	ast: "*",
+	asymp: "≈",
+	asympeq: "≍",
+	atilde: "ã",
+	auml: "ä",
+	awconint: "∳",
+	awint: "⨑",
+	bNot: "⫭",
+	backcong: "≌",
+	backepsilon: "϶",
+	backprime: "‵",
+	backsim: "∽",
+	backsimeq: "⋍",
+	barvee: "⊽",
+	barwed: "⌅",
+	barwedge: "⌅",
+	bbrk: "⎵",
+	bbrktbrk: "⎶",
+	bcong: "≌",
+	bcy: "б",
+	bdquo: "„",
+	becaus: "∵",
+	because: "∵",
+	bemptyv: "⦰",
+	bepsi: "϶",
+	bernou: "ℬ",
+	beta: "β",
+	beth: "ℶ",
+	between: "≬",
+	bfr: "𝔟",
+	bigcap: "⋂",
+	bigcirc: "◯",
+	bigcup: "⋃",
+	bigodot: "⨀",
+	bigoplus: "⨁",
+	bigotimes: "⨂",
+	bigsqcup: "⨆",
+	bigstar: "★",
+	bigtriangledown: "▽",
+	bigtriangleup: "△",
+	biguplus: "⨄",
+	bigvee: "⋁",
+	bigwedge: "⋀",
+	bkarow: "⤍",
+	blacklozenge: "⧫",
+	blacksquare: "▪",
+	blacktriangle: "▴",
+	blacktriangledown: "▾",
+	blacktriangleleft: "◂",
+	blacktriangleright: "▸",
+	blank: "␣",
+	blk12: "▒",
+	blk14: "░",
+	blk34: "▓",
+	block: "█",
+	bne: "=⃥",
+	bnequiv: "≡⃥",
+	bnot: "⌐",
+	bopf: "𝕓",
+	bot: "⊥",
+	bottom: "⊥",
+	bowtie: "⋈",
+	boxDL: "╗",
+	boxDR: "╔",
+	boxDl: "╖",
+	boxDr: "╓",
+	boxH: "═",
+	boxHD: "╦",
+	boxHU: "╩",
+	boxHd: "╤",
+	boxHu: "╧",
+	boxUL: "╝",
+	boxUR: "╚",
+	boxUl: "╜",
+	boxUr: "╙",
+	boxV: "║",
+	boxVH: "╬",
+	boxVL: "╣",
+	boxVR: "╠",
+	boxVh: "╫",
+	boxVl: "╢",
+	boxVr: "╟",
+	boxbox: "⧉",
+	boxdL: "╕",
+	boxdR: "╒",
+	boxdl: "┐",
+	boxdr: "┌",
+	boxh: "─",
+	boxhD: "╥",
+	boxhU: "╨",
+	boxhd: "┬",
+	boxhu: "┴",
+	boxminus: "⊟",
+	boxplus: "⊞",
+	boxtimes: "⊠",
+	boxuL: "╛",
+	boxuR: "╘",
+	boxul: "┘",
+	boxur: "└",
+	boxv: "│",
+	boxvH: "╪",
+	boxvL: "╡",
+	boxvR: "╞",
+	boxvh: "┼",
+	boxvl: "┤",
+	boxvr: "├",
+	bprime: "‵",
+	breve: "˘",
+	brvbar: "¦",
+	bscr: "𝒷",
+	bsemi: "⁏",
+	bsim: "∽",
+	bsime: "⋍",
+	bsol: "\\",
+	bsolb: "⧅",
+	bsolhsub: "⟈",
+	bull: "•",
+	bullet: "•",
+	bump: "≎",
+	bumpE: "⪮",
+	bumpe: "≏",
+	bumpeq: "≏",
+	cacute: "ć",
+	cap: "∩",
+	capand: "⩄",
+	capbrcup: "⩉",
+	capcap: "⩋",
+	capcup: "⩇",
+	capdot: "⩀",
+	caps: "∩︀",
+	caret: "⁁",
+	caron: "ˇ",
+	ccaps: "⩍",
+	ccaron: "č",
+	ccedil: "ç",
+	ccirc: "ĉ",
+	ccups: "⩌",
+	ccupssm: "⩐",
+	cdot: "ċ",
+	cedil: "¸",
+	cemptyv: "⦲",
+	cent: "¢",
+	centerdot: "·",
+	cfr: "𝔠",
+	chcy: "ч",
+	check: "✓",
+	checkmark: "✓",
+	chi: "χ",
+	cir: "○",
+	cirE: "⧃",
+	circ: "ˆ",
+	circeq: "≗",
+	circlearrowleft: "↺",
+	circlearrowright: "↻",
+	circledR: "®",
+	circledS: "Ⓢ",
+	circledast: "⊛",
+	circledcirc: "⊚",
+	circleddash: "⊝",
+	cire: "≗",
+	cirfnint: "⨐",
+	cirmid: "⫯",
+	cirscir: "⧂",
+	clubs: "♣",
+	clubsuit: "♣",
+	colon: ":",
+	colone: "≔",
+	coloneq: "≔",
+	comma: ",",
+	commat: "@",
+	comp: "∁",
+	compfn: "∘",
+	complement: "∁",
+	complexes: "ℂ",
+	cong: "≅",
+	congdot: "⩭",
+	conint: "∮",
+	copf: "𝕔",
+	coprod: "∐",
+	copy: "©",
+	copysr: "℗",
+	crarr: "↵",
+	cross: "✗",
+	cscr: "𝒸",
+	csub: "⫏",
+	csube: "⫑",
+	csup: "⫐",
+	csupe: "⫒",
+	ctdot: "⋯",
+	cudarrl: "⤸",
+	cudarrr: "⤵",
+	cuepr: "⋞",
+	cuesc: "⋟",
+	cularr: "↶",
+	cularrp: "⤽",
+	cup: "∪",
+	cupbrcap: "⩈",
+	cupcap: "⩆",
+	cupcup: "⩊",
+	cupdot: "⊍",
+	cupor: "⩅",
+	cups: "∪︀",
+	curarr: "↷",
+	curarrm: "⤼",
+	curlyeqprec: "⋞",
+	curlyeqsucc: "⋟",
+	curlyvee: "⋎",
+	curlywedge: "⋏",
+	curren: "¤",
+	curvearrowleft: "↶",
+	curvearrowright: "↷",
+	cuvee: "⋎",
+	cuwed: "⋏",
+	cwconint: "∲",
+	cwint: "∱",
+	cylcty: "⌭",
+	dArr: "⇓",
+	dHar: "⥥",
+	dagger: "†",
+	daleth: "ℸ",
+	darr: "↓",
+	dash: "‐",
+	dashv: "⊣",
+	dbkarow: "⤏",
+	dblac: "˝",
+	dcaron: "ď",
+	dcy: "д",
+	dd: "ⅆ",
+	ddagger: "‡",
+	ddarr: "⇊",
+	ddotseq: "⩷",
+	deg: "°",
+	delta: "δ",
+	demptyv: "⦱",
+	dfisht: "⥿",
+	dfr: "𝔡",
+	dharl: "⇃",
+	dharr: "⇂",
+	diam: "⋄",
+	diamond: "⋄",
+	diamondsuit: "♦",
+	diams: "♦",
+	die: "¨",
+	digamma: "ϝ",
+	disin: "⋲",
+	div: "÷",
+	divide: "÷",
+	divideontimes: "⋇",
+	divonx: "⋇",
+	djcy: "ђ",
+	dlcorn: "⌞",
+	dlcrop: "⌍",
+	dollar: "$",
+	dopf: "𝕕",
+	dot: "˙",
+	doteq: "≐",
+	doteqdot: "≑",
+	dotminus: "∸",
+	dotplus: "∔",
+	dotsquare: "⊡",
+	doublebarwedge: "⌆",
+	downarrow: "↓",
+	downdownarrows: "⇊",
+	downharpoonleft: "⇃",
+	downharpoonright: "⇂",
+	drbkarow: "⤐",
+	drcorn: "⌟",
+	drcrop: "⌌",
+	dscr: "𝒹",
+	dscy: "ѕ",
+	dsol: "⧶",
+	dstrok: "đ",
+	dtdot: "⋱",
+	dtri: "▿",
+	dtrif: "▾",
+	duarr: "⇵",
+	duhar: "⥯",
+	dwangle: "⦦",
+	dzcy: "џ",
+	dzigrarr: "⟿",
+	eDDot: "⩷",
+	eDot: "≑",
+	eacute: "é",
+	easter: "⩮",
+	ecaron: "ě",
+	ecir: "≖",
+	ecirc: "ê",
+	ecolon: "≕",
+	ecy: "э",
+	edot: "ė",
+	ee: "ⅇ",
+	efDot: "≒",
+	efr: "𝔢",
+	eg: "⪚",
+	egrave: "è",
+	egs: "⪖",
+	egsdot: "⪘",
+	el: "⪙",
+	elinters: "⏧",
+	ell: "ℓ",
+	els: "⪕",
+	elsdot: "⪗",
+	emacr: "ē",
+	empty: "∅",
+	emptyset: "∅",
+	emptyv: "∅",
+	emsp13: " ",
+	emsp14: " ",
+	emsp: " ",
+	eng: "ŋ",
+	ensp: " ",
+	eogon: "ę",
+	eopf: "𝕖",
+	epar: "⋕",
+	eparsl: "⧣",
+	eplus: "⩱",
+	epsi: "ε",
+	epsilon: "ε",
+	epsiv: "ϵ",
+	eqcirc: "≖",
+	eqcolon: "≕",
+	eqsim: "≂",
+	eqslantgtr: "⪖",
+	eqslantless: "⪕",
+	equals: "=",
+	equest: "≟",
+	equiv: "≡",
+	equivDD: "⩸",
+	eqvparsl: "⧥",
+	erDot: "≓",
+	erarr: "⥱",
+	escr: "ℯ",
+	esdot: "≐",
+	esim: "≂",
+	eta: "η",
+	eth: "ð",
+	euml: "ë",
+	euro: "€",
+	excl: "!",
+	exist: "∃",
+	expectation: "ℰ",
+	exponentiale: "ⅇ",
+	fallingdotseq: "≒",
+	fcy: "ф",
+	female: "♀",
+	ffilig: "ﬃ",
+	fflig: "ﬀ",
+	ffllig: "ﬄ",
+	ffr: "𝔣",
+	filig: "ﬁ",
+	fjlig: "fj",
+	flat: "♭",
+	fllig: "ﬂ",
+	fltns: "▱",
+	fnof: "ƒ",
+	fopf: "𝕗",
+	forall: "∀",
+	fork: "⋔",
+	forkv: "⫙",
+	fpartint: "⨍",
+	frac12: "½",
+	frac13: "⅓",
+	frac14: "¼",
+	frac15: "⅕",
+	frac16: "⅙",
+	frac18: "⅛",
+	frac23: "⅔",
+	frac25: "⅖",
+	frac34: "¾",
+	frac35: "⅗",
+	frac38: "⅜",
+	frac45: "⅘",
+	frac56: "⅚",
+	frac58: "⅝",
+	frac78: "⅞",
+	frasl: "⁄",
+	frown: "⌢",
+	fscr: "𝒻",
+	gE: "≧",
+	gEl: "⪌",
+	gacute: "ǵ",
+	gamma: "γ",
+	gammad: "ϝ",
+	gap: "⪆",
+	gbreve: "ğ",
+	gcirc: "ĝ",
+	gcy: "г",
+	gdot: "ġ",
+	ge: "≥",
+	gel: "⋛",
+	geq: "≥",
+	geqq: "≧",
+	geqslant: "⩾",
+	ges: "⩾",
+	gescc: "⪩",
+	gesdot: "⪀",
+	gesdoto: "⪂",
+	gesdotol: "⪄",
+	gesl: "⋛︀",
+	gesles: "⪔",
+	gfr: "𝔤",
+	gg: "≫",
+	ggg: "⋙",
+	gimel: "ℷ",
+	gjcy: "ѓ",
+	gl: "≷",
+	glE: "⪒",
+	gla: "⪥",
+	glj: "⪤",
+	gnE: "≩",
+	gnap: "⪊",
+	gnapprox: "⪊",
+	gne: "⪈",
+	gneq: "⪈",
+	gneqq: "≩",
+	gnsim: "⋧",
+	gopf: "𝕘",
+	grave: "`",
+	gscr: "ℊ",
+	gsim: "≳",
+	gsime: "⪎",
+	gsiml: "⪐",
+	gt: ">",
+	gtcc: "⪧",
+	gtcir: "⩺",
+	gtdot: "⋗",
+	gtlPar: "⦕",
+	gtquest: "⩼",
+	gtrapprox: "⪆",
+	gtrarr: "⥸",
+	gtrdot: "⋗",
+	gtreqless: "⋛",
+	gtreqqless: "⪌",
+	gtrless: "≷",
+	gtrsim: "≳",
+	gvertneqq: "≩︀",
+	gvnE: "≩︀",
+	hArr: "⇔",
+	hairsp: " ",
+	half: "½",
+	hamilt: "ℋ",
+	hardcy: "ъ",
+	harr: "↔",
+	harrcir: "⥈",
+	harrw: "↭",
+	hbar: "ℏ",
+	hcirc: "ĥ",
+	hearts: "♥",
+	heartsuit: "♥",
+	hellip: "…",
+	hercon: "⊹",
+	hfr: "𝔥",
+	hksearow: "⤥",
+	hkswarow: "⤦",
+	hoarr: "⇿",
+	homtht: "∻",
+	hookleftarrow: "↩",
+	hookrightarrow: "↪",
+	hopf: "𝕙",
+	horbar: "―",
+	hscr: "𝒽",
+	hslash: "ℏ",
+	hstrok: "ħ",
+	hybull: "⁃",
+	hyphen: "‐",
+	iacute: "í",
+	ic: "⁣",
+	icirc: "î",
+	icy: "и",
+	iecy: "е",
+	iexcl: "¡",
+	iff: "⇔",
+	ifr: "𝔦",
+	igrave: "ì",
+	ii: "ⅈ",
+	iiiint: "⨌",
+	iiint: "∭",
+	iinfin: "⧜",
+	iiota: "℩",
+	ijlig: "ĳ",
+	imacr: "ī",
+	image: "ℑ",
+	imagline: "ℐ",
+	imagpart: "ℑ",
+	imath: "ı",
+	imof: "⊷",
+	imped: "Ƶ",
+	in: "∈",
+	incare: "℅",
+	infin: "∞",
+	infintie: "⧝",
+	inodot: "ı",
+	int: "∫",
+	intcal: "⊺",
+	integers: "ℤ",
+	intercal: "⊺",
+	intlarhk: "⨗",
+	intprod: "⨼",
+	iocy: "ё",
+	iogon: "į",
+	iopf: "𝕚",
+	iota: "ι",
+	iprod: "⨼",
+	iquest: "¿",
+	iscr: "𝒾",
+	isin: "∈",
+	isinE: "⋹",
+	isindot: "⋵",
+	isins: "⋴",
+	isinsv: "⋳",
+	isinv: "∈",
+	it: "⁢",
+	itilde: "ĩ",
+	iukcy: "і",
+	iuml: "ï",
+	jcirc: "ĵ",
+	jcy: "й",
+	jfr: "𝔧",
+	jmath: "ȷ",
+	jopf: "𝕛",
+	jscr: "𝒿",
+	jsercy: "ј",
+	jukcy: "є",
+	kappa: "κ",
+	kappav: "ϰ",
+	kcedil: "ķ",
+	kcy: "к",
+	kfr: "𝔨",
+	kgreen: "ĸ",
+	khcy: "х",
+	kjcy: "ќ",
+	kopf: "𝕜",
+	kscr: "𝓀",
+	lAarr: "⇚",
+	lArr: "⇐",
+	lAtail: "⤛",
+	lBarr: "⤎",
+	lE: "≦",
+	lEg: "⪋",
+	lHar: "⥢",
+	lacute: "ĺ",
+	laemptyv: "⦴",
+	lagran: "ℒ",
+	lambda: "λ",
+	lang: "⟨",
+	langd: "⦑",
+	langle: "⟨",
+	lap: "⪅",
+	laquo: "«",
+	larr: "←",
+	larrb: "⇤",
+	larrbfs: "⤟",
+	larrfs: "⤝",
+	larrhk: "↩",
+	larrlp: "↫",
+	larrpl: "⤹",
+	larrsim: "⥳",
+	larrtl: "↢",
+	lat: "⪫",
+	latail: "⤙",
+	late: "⪭",
+	lates: "⪭︀",
+	lbarr: "⤌",
+	lbbrk: "❲",
+	lbrace: "{",
+	lbrack: "[",
+	lbrke: "⦋",
+	lbrksld: "⦏",
+	lbrkslu: "⦍",
+	lcaron: "ľ",
+	lcedil: "ļ",
+	lceil: "⌈",
+	lcub: "{",
+	lcy: "л",
+	ldca: "⤶",
+	ldquo: "“",
+	ldquor: "„",
+	ldrdhar: "⥧",
+	ldrushar: "⥋",
+	ldsh: "↲",
+	le: "≤",
+	leftarrow: "←",
+	leftarrowtail: "↢",
+	leftharpoondown: "↽",
+	leftharpoonup: "↼",
+	leftleftarrows: "⇇",
+	leftrightarrow: "↔",
+	leftrightarrows: "⇆",
+	leftrightharpoons: "⇋",
+	leftrightsquigarrow: "↭",
+	leftthreetimes: "⋋",
+	leg: "⋚",
+	leq: "≤",
+	leqq: "≦",
+	leqslant: "⩽",
+	les: "⩽",
+	lescc: "⪨",
+	lesdot: "⩿",
+	lesdoto: "⪁",
+	lesdotor: "⪃",
+	lesg: "⋚︀",
+	lesges: "⪓",
+	lessapprox: "⪅",
+	lessdot: "⋖",
+	lesseqgtr: "⋚",
+	lesseqqgtr: "⪋",
+	lessgtr: "≶",
+	lesssim: "≲",
+	lfisht: "⥼",
+	lfloor: "⌊",
+	lfr: "𝔩",
+	lg: "≶",
+	lgE: "⪑",
+	lhard: "↽",
+	lharu: "↼",
+	lharul: "⥪",
+	lhblk: "▄",
+	ljcy: "љ",
+	ll: "≪",
+	llarr: "⇇",
+	llcorner: "⌞",
+	llhard: "⥫",
+	lltri: "◺",
+	lmidot: "ŀ",
+	lmoust: "⎰",
+	lmoustache: "⎰",
+	lnE: "≨",
+	lnap: "⪉",
+	lnapprox: "⪉",
+	lne: "⪇",
+	lneq: "⪇",
+	lneqq: "≨",
+	lnsim: "⋦",
+	loang: "⟬",
+	loarr: "⇽",
+	lobrk: "⟦",
+	longleftarrow: "⟵",
+	longleftrightarrow: "⟷",
+	longmapsto: "⟼",
+	longrightarrow: "⟶",
+	looparrowleft: "↫",
+	looparrowright: "↬",
+	lopar: "⦅",
+	lopf: "𝕝",
+	loplus: "⨭",
+	lotimes: "⨴",
+	lowast: "∗",
+	lowbar: "_",
+	loz: "◊",
+	lozenge: "◊",
+	lozf: "⧫",
+	lpar: "(",
+	lparlt: "⦓",
+	lrarr: "⇆",
+	lrcorner: "⌟",
+	lrhar: "⇋",
+	lrhard: "⥭",
+	lrm: "‎",
+	lrtri: "⊿",
+	lsaquo: "‹",
+	lscr: "𝓁",
+	lsh: "↰",
+	lsim: "≲",
+	lsime: "⪍",
+	lsimg: "⪏",
+	lsqb: "[",
+	lsquo: "‘",
+	lsquor: "‚",
+	lstrok: "ł",
+	lt: "<",
+	ltcc: "⪦",
+	ltcir: "⩹",
+	ltdot: "⋖",
+	lthree: "⋋",
+	ltimes: "⋉",
+	ltlarr: "⥶",
+	ltquest: "⩻",
+	ltrPar: "⦖",
+	ltri: "◃",
+	ltrie: "⊴",
+	ltrif: "◂",
+	lurdshar: "⥊",
+	luruhar: "⥦",
+	lvertneqq: "≨︀",
+	lvnE: "≨︀",
+	mDDot: "∺",
+	macr: "¯",
+	male: "♂",
+	malt: "✠",
+	maltese: "✠",
+	map: "↦",
+	mapsto: "↦",
+	mapstodown: "↧",
+	mapstoleft: "↤",
+	mapstoup: "↥",
+	marker: "▮",
+	mcomma: "⨩",
+	mcy: "м",
+	mdash: "—",
+	measuredangle: "∡",
+	mfr: "𝔪",
+	mho: "℧",
+	micro: "µ",
+	mid: "∣",
+	midast: "*",
+	midcir: "⫰",
+	middot: "·",
+	minus: "−",
+	minusb: "⊟",
+	minusd: "∸",
+	minusdu: "⨪",
+	mlcp: "⫛",
+	mldr: "…",
+	mnplus: "∓",
+	models: "⊧",
+	mopf: "𝕞",
+	mp: "∓",
+	mscr: "𝓂",
+	mstpos: "∾",
+	mu: "μ",
+	multimap: "⊸",
+	mumap: "⊸",
+	nGg: "⋙̸",
+	nGt: "≫⃒",
+	nGtv: "≫̸",
+	nLeftarrow: "⇍",
+	nLeftrightarrow: "⇎",
+	nLl: "⋘̸",
+	nLt: "≪⃒",
+	nLtv: "≪̸",
+	nRightarrow: "⇏",
+	nVDash: "⊯",
+	nVdash: "⊮",
+	nabla: "∇",
+	nacute: "ń",
+	nang: "∠⃒",
+	nap: "≉",
+	napE: "⩰̸",
+	napid: "≋̸",
+	napos: "ŉ",
+	napprox: "≉",
+	natur: "♮",
+	natural: "♮",
+	naturals: "ℕ",
+	nbsp: "\xA0",
+	nbump: "≎̸",
+	nbumpe: "≏̸",
+	ncap: "⩃",
+	ncaron: "ň",
+	ncedil: "ņ",
+	ncong: "≇",
+	ncongdot: "⩭̸",
+	ncup: "⩂",
+	ncy: "н",
+	ndash: "–",
+	ne: "≠",
+	neArr: "⇗",
+	nearhk: "⤤",
+	nearr: "↗",
+	nearrow: "↗",
+	nedot: "≐̸",
+	nequiv: "≢",
+	nesear: "⤨",
+	nesim: "≂̸",
+	nexist: "∄",
+	nexists: "∄",
+	nfr: "𝔫",
+	ngE: "≧̸",
+	nge: "≱",
+	ngeq: "≱",
+	ngeqq: "≧̸",
+	ngeqslant: "⩾̸",
+	nges: "⩾̸",
+	ngsim: "≵",
+	ngt: "≯",
+	ngtr: "≯",
+	nhArr: "⇎",
+	nharr: "↮",
+	nhpar: "⫲",
+	ni: "∋",
+	nis: "⋼",
+	nisd: "⋺",
+	niv: "∋",
+	njcy: "њ",
+	nlArr: "⇍",
+	nlE: "≦̸",
+	nlarr: "↚",
+	nldr: "‥",
+	nle: "≰",
+	nleftarrow: "↚",
+	nleftrightarrow: "↮",
+	nleq: "≰",
+	nleqq: "≦̸",
+	nleqslant: "⩽̸",
+	nles: "⩽̸",
+	nless: "≮",
+	nlsim: "≴",
+	nlt: "≮",
+	nltri: "⋪",
+	nltrie: "⋬",
+	nmid: "∤",
+	nopf: "𝕟",
+	not: "¬",
+	notin: "∉",
+	notinE: "⋹̸",
+	notindot: "⋵̸",
+	notinva: "∉",
+	notinvb: "⋷",
+	notinvc: "⋶",
+	notni: "∌",
+	notniva: "∌",
+	notnivb: "⋾",
+	notnivc: "⋽",
+	npar: "∦",
+	nparallel: "∦",
+	nparsl: "⫽⃥",
+	npart: "∂̸",
+	npolint: "⨔",
+	npr: "⊀",
+	nprcue: "⋠",
+	npre: "⪯̸",
+	nprec: "⊀",
+	npreceq: "⪯̸",
+	nrArr: "⇏",
+	nrarr: "↛",
+	nrarrc: "⤳̸",
+	nrarrw: "↝̸",
+	nrightarrow: "↛",
+	nrtri: "⋫",
+	nrtrie: "⋭",
+	nsc: "⊁",
+	nsccue: "⋡",
+	nsce: "⪰̸",
+	nscr: "𝓃",
+	nshortmid: "∤",
+	nshortparallel: "∦",
+	nsim: "≁",
+	nsime: "≄",
+	nsimeq: "≄",
+	nsmid: "∤",
+	nspar: "∦",
+	nsqsube: "⋢",
+	nsqsupe: "⋣",
+	nsub: "⊄",
+	nsubE: "⫅̸",
+	nsube: "⊈",
+	nsubset: "⊂⃒",
+	nsubseteq: "⊈",
+	nsubseteqq: "⫅̸",
+	nsucc: "⊁",
+	nsucceq: "⪰̸",
+	nsup: "⊅",
+	nsupE: "⫆̸",
+	nsupe: "⊉",
+	nsupset: "⊃⃒",
+	nsupseteq: "⊉",
+	nsupseteqq: "⫆̸",
+	ntgl: "≹",
+	ntilde: "ñ",
+	ntlg: "≸",
+	ntriangleleft: "⋪",
+	ntrianglelefteq: "⋬",
+	ntriangleright: "⋫",
+	ntrianglerighteq: "⋭",
+	nu: "ν",
+	num: "#",
+	numero: "№",
+	numsp: " ",
+	nvDash: "⊭",
+	nvHarr: "⤄",
+	nvap: "≍⃒",
+	nvdash: "⊬",
+	nvge: "≥⃒",
+	nvgt: ">⃒",
+	nvinfin: "⧞",
+	nvlArr: "⤂",
+	nvle: "≤⃒",
+	nvlt: "<⃒",
+	nvltrie: "⊴⃒",
+	nvrArr: "⤃",
+	nvrtrie: "⊵⃒",
+	nvsim: "∼⃒",
+	nwArr: "⇖",
+	nwarhk: "⤣",
+	nwarr: "↖",
+	nwarrow: "↖",
+	nwnear: "⤧",
+	oS: "Ⓢ",
+	oacute: "ó",
+	oast: "⊛",
+	ocir: "⊚",
+	ocirc: "ô",
+	ocy: "о",
+	odash: "⊝",
+	odblac: "ő",
+	odiv: "⨸",
+	odot: "⊙",
+	odsold: "⦼",
+	oelig: "œ",
+	ofcir: "⦿",
+	ofr: "𝔬",
+	ogon: "˛",
+	ograve: "ò",
+	ogt: "⧁",
+	ohbar: "⦵",
+	ohm: "Ω",
+	oint: "∮",
+	olarr: "↺",
+	olcir: "⦾",
+	olcross: "⦻",
+	oline: "‾",
+	olt: "⧀",
+	omacr: "ō",
+	omega: "ω",
+	omicron: "ο",
+	omid: "⦶",
+	ominus: "⊖",
+	oopf: "𝕠",
+	opar: "⦷",
+	operp: "⦹",
+	oplus: "⊕",
+	or: "∨",
+	orarr: "↻",
+	ord: "⩝",
+	order: "ℴ",
+	orderof: "ℴ",
+	ordf: "ª",
+	ordm: "º",
+	origof: "⊶",
+	oror: "⩖",
+	orslope: "⩗",
+	orv: "⩛",
+	oscr: "ℴ",
+	oslash: "ø",
+	osol: "⊘",
+	otilde: "õ",
+	otimes: "⊗",
+	otimesas: "⨶",
+	ouml: "ö",
+	ovbar: "⌽",
+	par: "∥",
+	para: "¶",
+	parallel: "∥",
+	parsim: "⫳",
+	parsl: "⫽",
+	part: "∂",
+	pcy: "п",
+	percnt: "%",
+	period: ".",
+	permil: "‰",
+	perp: "⊥",
+	pertenk: "‱",
+	pfr: "𝔭",
+	phi: "φ",
+	phiv: "ϕ",
+	phmmat: "ℳ",
+	phone: "☎",
+	pi: "π",
+	pitchfork: "⋔",
+	piv: "ϖ",
+	planck: "ℏ",
+	planckh: "ℎ",
+	plankv: "ℏ",
+	plus: "+",
+	plusacir: "⨣",
+	plusb: "⊞",
+	pluscir: "⨢",
+	plusdo: "∔",
+	plusdu: "⨥",
+	pluse: "⩲",
+	plusmn: "±",
+	plussim: "⨦",
+	plustwo: "⨧",
+	pm: "±",
+	pointint: "⨕",
+	popf: "𝕡",
+	pound: "£",
+	pr: "≺",
+	prE: "⪳",
+	prap: "⪷",
+	prcue: "≼",
+	pre: "⪯",
+	prec: "≺",
+	precapprox: "⪷",
+	preccurlyeq: "≼",
+	preceq: "⪯",
+	precnapprox: "⪹",
+	precneqq: "⪵",
+	precnsim: "⋨",
+	precsim: "≾",
+	prime: "′",
+	primes: "ℙ",
+	prnE: "⪵",
+	prnap: "⪹",
+	prnsim: "⋨",
+	prod: "∏",
+	profalar: "⌮",
+	profline: "⌒",
+	profsurf: "⌓",
+	prop: "∝",
+	propto: "∝",
+	prsim: "≾",
+	prurel: "⊰",
+	pscr: "𝓅",
+	psi: "ψ",
+	puncsp: " ",
+	qfr: "𝔮",
+	qint: "⨌",
+	qopf: "𝕢",
+	qprime: "⁗",
+	qscr: "𝓆",
+	quaternions: "ℍ",
+	quatint: "⨖",
+	quest: "?",
+	questeq: "≟",
+	quot: "\"",
+	rAarr: "⇛",
+	rArr: "⇒",
+	rAtail: "⤜",
+	rBarr: "⤏",
+	rHar: "⥤",
+	race: "∽̱",
+	racute: "ŕ",
+	radic: "√",
+	raemptyv: "⦳",
+	rang: "⟩",
+	rangd: "⦒",
+	range: "⦥",
+	rangle: "⟩",
+	raquo: "»",
+	rarr: "→",
+	rarrap: "⥵",
+	rarrb: "⇥",
+	rarrbfs: "⤠",
+	rarrc: "⤳",
+	rarrfs: "⤞",
+	rarrhk: "↪",
+	rarrlp: "↬",
+	rarrpl: "⥅",
+	rarrsim: "⥴",
+	rarrtl: "↣",
+	rarrw: "↝",
+	ratail: "⤚",
+	ratio: "∶",
+	rationals: "ℚ",
+	rbarr: "⤍",
+	rbbrk: "❳",
+	rbrace: "}",
+	rbrack: "]",
+	rbrke: "⦌",
+	rbrksld: "⦎",
+	rbrkslu: "⦐",
+	rcaron: "ř",
+	rcedil: "ŗ",
+	rceil: "⌉",
+	rcub: "}",
+	rcy: "р",
+	rdca: "⤷",
+	rdldhar: "⥩",
+	rdquo: "”",
+	rdquor: "”",
+	rdsh: "↳",
+	real: "ℜ",
+	realine: "ℛ",
+	realpart: "ℜ",
+	reals: "ℝ",
+	rect: "▭",
+	reg: "®",
+	rfisht: "⥽",
+	rfloor: "⌋",
+	rfr: "𝔯",
+	rhard: "⇁",
+	rharu: "⇀",
+	rharul: "⥬",
+	rho: "ρ",
+	rhov: "ϱ",
+	rightarrow: "→",
+	rightarrowtail: "↣",
+	rightharpoondown: "⇁",
+	rightharpoonup: "⇀",
+	rightleftarrows: "⇄",
+	rightleftharpoons: "⇌",
+	rightrightarrows: "⇉",
+	rightsquigarrow: "↝",
+	rightthreetimes: "⋌",
+	ring: "˚",
+	risingdotseq: "≓",
+	rlarr: "⇄",
+	rlhar: "⇌",
+	rlm: "‏",
+	rmoust: "⎱",
+	rmoustache: "⎱",
+	rnmid: "⫮",
+	roang: "⟭",
+	roarr: "⇾",
+	robrk: "⟧",
+	ropar: "⦆",
+	ropf: "𝕣",
+	roplus: "⨮",
+	rotimes: "⨵",
+	rpar: ")",
+	rpargt: "⦔",
+	rppolint: "⨒",
+	rrarr: "⇉",
+	rsaquo: "›",
+	rscr: "𝓇",
+	rsh: "↱",
+	rsqb: "]",
+	rsquo: "’",
+	rsquor: "’",
+	rthree: "⋌",
+	rtimes: "⋊",
+	rtri: "▹",
+	rtrie: "⊵",
+	rtrif: "▸",
+	rtriltri: "⧎",
+	ruluhar: "⥨",
+	rx: "℞",
+	sacute: "ś",
+	sbquo: "‚",
+	sc: "≻",
+	scE: "⪴",
+	scap: "⪸",
+	scaron: "š",
+	sccue: "≽",
+	sce: "⪰",
+	scedil: "ş",
+	scirc: "ŝ",
+	scnE: "⪶",
+	scnap: "⪺",
+	scnsim: "⋩",
+	scpolint: "⨓",
+	scsim: "≿",
+	scy: "с",
+	sdot: "⋅",
+	sdotb: "⊡",
+	sdote: "⩦",
+	seArr: "⇘",
+	searhk: "⤥",
+	searr: "↘",
+	searrow: "↘",
+	sect: "§",
+	semi: ";",
+	seswar: "⤩",
+	setminus: "∖",
+	setmn: "∖",
+	sext: "✶",
+	sfr: "𝔰",
+	sfrown: "⌢",
+	sharp: "♯",
+	shchcy: "щ",
+	shcy: "ш",
+	shortmid: "∣",
+	shortparallel: "∥",
+	shy: "­",
+	sigma: "σ",
+	sigmaf: "ς",
+	sigmav: "ς",
+	sim: "∼",
+	simdot: "⩪",
+	sime: "≃",
+	simeq: "≃",
+	simg: "⪞",
+	simgE: "⪠",
+	siml: "⪝",
+	simlE: "⪟",
+	simne: "≆",
+	simplus: "⨤",
+	simrarr: "⥲",
+	slarr: "←",
+	smallsetminus: "∖",
+	smashp: "⨳",
+	smeparsl: "⧤",
+	smid: "∣",
+	smile: "⌣",
+	smt: "⪪",
+	smte: "⪬",
+	smtes: "⪬︀",
+	softcy: "ь",
+	sol: "/",
+	solb: "⧄",
+	solbar: "⌿",
+	sopf: "𝕤",
+	spades: "♠",
+	spadesuit: "♠",
+	spar: "∥",
+	sqcap: "⊓",
+	sqcaps: "⊓︀",
+	sqcup: "⊔",
+	sqcups: "⊔︀",
+	sqsub: "⊏",
+	sqsube: "⊑",
+	sqsubset: "⊏",
+	sqsubseteq: "⊑",
+	sqsup: "⊐",
+	sqsupe: "⊒",
+	sqsupset: "⊐",
+	sqsupseteq: "⊒",
+	squ: "□",
+	square: "□",
+	squarf: "▪",
+	squf: "▪",
+	srarr: "→",
+	sscr: "𝓈",
+	ssetmn: "∖",
+	ssmile: "⌣",
+	sstarf: "⋆",
+	star: "☆",
+	starf: "★",
+	straightepsilon: "ϵ",
+	straightphi: "ϕ",
+	strns: "¯",
+	sub: "⊂",
+	subE: "⫅",
+	subdot: "⪽",
+	sube: "⊆",
+	subedot: "⫃",
+	submult: "⫁",
+	subnE: "⫋",
+	subne: "⊊",
+	subplus: "⪿",
+	subrarr: "⥹",
+	subset: "⊂",
+	subseteq: "⊆",
+	subseteqq: "⫅",
+	subsetneq: "⊊",
+	subsetneqq: "⫋",
+	subsim: "⫇",
+	subsub: "⫕",
+	subsup: "⫓",
+	succ: "≻",
+	succapprox: "⪸",
+	succcurlyeq: "≽",
+	succeq: "⪰",
+	succnapprox: "⪺",
+	succneqq: "⪶",
+	succnsim: "⋩",
+	succsim: "≿",
+	sum: "∑",
+	sung: "♪",
+	sup1: "¹",
+	sup2: "²",
+	sup3: "³",
+	sup: "⊃",
+	supE: "⫆",
+	supdot: "⪾",
+	supdsub: "⫘",
+	supe: "⊇",
+	supedot: "⫄",
+	suphsol: "⟉",
+	suphsub: "⫗",
+	suplarr: "⥻",
+	supmult: "⫂",
+	supnE: "⫌",
+	supne: "⊋",
+	supplus: "⫀",
+	supset: "⊃",
+	supseteq: "⊇",
+	supseteqq: "⫆",
+	supsetneq: "⊋",
+	supsetneqq: "⫌",
+	supsim: "⫈",
+	supsub: "⫔",
+	supsup: "⫖",
+	swArr: "⇙",
+	swarhk: "⤦",
+	swarr: "↙",
+	swarrow: "↙",
+	swnwar: "⤪",
+	szlig: "ß",
+	target: "⌖",
+	tau: "τ",
+	tbrk: "⎴",
+	tcaron: "ť",
+	tcedil: "ţ",
+	tcy: "т",
+	tdot: "⃛",
+	telrec: "⌕",
+	tfr: "𝔱",
+	there4: "∴",
+	therefore: "∴",
+	theta: "θ",
+	thetasym: "ϑ",
+	thetav: "ϑ",
+	thickapprox: "≈",
+	thicksim: "∼",
+	thinsp: " ",
+	thkap: "≈",
+	thksim: "∼",
+	thorn: "þ",
+	tilde: "˜",
+	times: "×",
+	timesb: "⊠",
+	timesbar: "⨱",
+	timesd: "⨰",
+	tint: "∭",
+	toea: "⤨",
+	top: "⊤",
+	topbot: "⌶",
+	topcir: "⫱",
+	topf: "𝕥",
+	topfork: "⫚",
+	tosa: "⤩",
+	tprime: "‴",
+	trade: "™",
+	triangle: "▵",
+	triangledown: "▿",
+	triangleleft: "◃",
+	trianglelefteq: "⊴",
+	triangleq: "≜",
+	triangleright: "▹",
+	trianglerighteq: "⊵",
+	tridot: "◬",
+	trie: "≜",
+	triminus: "⨺",
+	triplus: "⨹",
+	trisb: "⧍",
+	tritime: "⨻",
+	trpezium: "⏢",
+	tscr: "𝓉",
+	tscy: "ц",
+	tshcy: "ћ",
+	tstrok: "ŧ",
+	twixt: "≬",
+	twoheadleftarrow: "↞",
+	twoheadrightarrow: "↠",
+	uArr: "⇑",
+	uHar: "⥣",
+	uacute: "ú",
+	uarr: "↑",
+	ubrcy: "ў",
+	ubreve: "ŭ",
+	ucirc: "û",
+	ucy: "у",
+	udarr: "⇅",
+	udblac: "ű",
+	udhar: "⥮",
+	ufisht: "⥾",
+	ufr: "𝔲",
+	ugrave: "ù",
+	uharl: "↿",
+	uharr: "↾",
+	uhblk: "▀",
+	ulcorn: "⌜",
+	ulcorner: "⌜",
+	ulcrop: "⌏",
+	ultri: "◸",
+	umacr: "ū",
+	uml: "¨",
+	uogon: "ų",
+	uopf: "𝕦",
+	uparrow: "↑",
+	updownarrow: "↕",
+	upharpoonleft: "↿",
+	upharpoonright: "↾",
+	uplus: "⊎",
+	upsi: "υ",
+	upsih: "ϒ",
+	upsilon: "υ",
+	upuparrows: "⇈",
+	urcorn: "⌝",
+	urcorner: "⌝",
+	urcrop: "⌎",
+	uring: "ů",
+	urtri: "◹",
+	uscr: "𝓊",
+	utdot: "⋰",
+	utilde: "ũ",
+	utri: "▵",
+	utrif: "▴",
+	uuarr: "⇈",
+	uuml: "ü",
+	uwangle: "⦧",
+	vArr: "⇕",
+	vBar: "⫨",
+	vBarv: "⫩",
+	vDash: "⊨",
+	vangrt: "⦜",
+	varepsilon: "ϵ",
+	varkappa: "ϰ",
+	varnothing: "∅",
+	varphi: "ϕ",
+	varpi: "ϖ",
+	varpropto: "∝",
+	varr: "↕",
+	varrho: "ϱ",
+	varsigma: "ς",
+	varsubsetneq: "⊊︀",
+	varsubsetneqq: "⫋︀",
+	varsupsetneq: "⊋︀",
+	varsupsetneqq: "⫌︀",
+	vartheta: "ϑ",
+	vartriangleleft: "⊲",
+	vartriangleright: "⊳",
+	vcy: "в",
+	vdash: "⊢",
+	vee: "∨",
+	veebar: "⊻",
+	veeeq: "≚",
+	vellip: "⋮",
+	verbar: "|",
+	vert: "|",
+	vfr: "𝔳",
+	vltri: "⊲",
+	vnsub: "⊂⃒",
+	vnsup: "⊃⃒",
+	vopf: "𝕧",
+	vprop: "∝",
+	vrtri: "⊳",
+	vscr: "𝓋",
+	vsubnE: "⫋︀",
+	vsubne: "⊊︀",
+	vsupnE: "⫌︀",
+	vsupne: "⊋︀",
+	vzigzag: "⦚",
+	wcirc: "ŵ",
+	wedbar: "⩟",
+	wedge: "∧",
+	wedgeq: "≙",
+	weierp: "℘",
+	wfr: "𝔴",
+	wopf: "𝕨",
+	wp: "℘",
+	wr: "≀",
+	wreath: "≀",
+	wscr: "𝓌",
+	xcap: "⋂",
+	xcirc: "◯",
+	xcup: "⋃",
+	xdtri: "▽",
+	xfr: "𝔵",
+	xhArr: "⟺",
+	xharr: "⟷",
+	xi: "ξ",
+	xlArr: "⟸",
+	xlarr: "⟵",
+	xmap: "⟼",
+	xnis: "⋻",
+	xodot: "⨀",
+	xopf: "𝕩",
+	xoplus: "⨁",
+	xotime: "⨂",
+	xrArr: "⟹",
+	xrarr: "⟶",
+	xscr: "𝓍",
+	xsqcup: "⨆",
+	xuplus: "⨄",
+	xutri: "△",
+	xvee: "⋁",
+	xwedge: "⋀",
+	yacute: "ý",
+	yacy: "я",
+	ycirc: "ŷ",
+	ycy: "ы",
+	yen: "¥",
+	yfr: "𝔶",
+	yicy: "ї",
+	yopf: "𝕪",
+	yscr: "𝓎",
+	yucy: "ю",
+	yuml: "ÿ",
+	zacute: "ź",
+	zcaron: "ž",
+	zcy: "з",
+	zdot: "ż",
+	zeetrf: "ℨ",
+	zeta: "ζ",
+	zfr: "𝔷",
+	zhcy: "ж",
+	zigrarr: "⇝",
+	zopf: "𝕫",
+	zscr: "𝓏",
+	zwj: "‍",
+	zwnj: "‌"
+};
 
 //#endregion
 //#region src/api/html.ts
@@ -7224,54 +9682,128 @@ function isSanitizedLinkTarget(target) {
 	normalized = normalized.toLowerCase();
 	return !UNSAFE_LINK_TARGET_RE.test(normalized);
 }
+function sanitizeRichTextStyle(styleText) {
+	const safeDeclarations = [];
+	for (const declaration of styleText.split(";")) {
+		const separator = declaration.indexOf(":");
+		if (separator === -1) continue;
+		const property = declaration.slice(0, separator).trim().toLowerCase();
+		const value = declaration.slice(separator + 1).trim().toLowerCase();
+		if (property === "text-decoration" && value === "underline") safeDeclarations.push("text-decoration: underline;");
+		else if (property === "text-underline-style" && (value === "double" || value === "single-accounting" || value === "double-accounting")) safeDeclarations.push("text-underline-style:" + value + ";");
+		else if (property === "font-size" && /^(?:0|[1-9]\d*)(?:\.\d+)?pt$/.test(value)) safeDeclarations.push("font-size:" + value + ";");
+		else if (property === "text-effect" && value === "outline") safeDeclarations.push("text-effect: outline;");
+		else if (property === "text-shadow" && value === "auto") safeDeclarations.push("text-shadow: auto;");
+	}
+	return safeDeclarations.join("");
+}
 /**
-* Build a single HTML `<tr>` row from a worksheet row, handling merged cells,
-* error coercion, hyperlinks, editable mode, and data attributes.
+* CellObject.h is an HTML-shaped cache, including for direct worksheet input.
+* Keep the presentation-only subset emitted by the XLSX rich-text reader and
+* render every other tag as inert text.
 */
-function buildHtmlRow(ws, range, rowIndex, options) {
-	const merges = ws["!merges"] || [];
-	const cells = [];
-	for (let colIdx = range.s.c; colIdx <= range.e.c; ++colIdx) {
-		let rowSpan = 0, colSpan = 0;
-		for (let j = 0; j < merges.length; ++j) {
-			if (merges[j].s.r > rowIndex || merges[j].s.c > colIdx) continue;
-			if (merges[j].e.r < rowIndex || merges[j].e.c < colIdx) continue;
-			if (merges[j].s.r < rowIndex || merges[j].s.c < colIdx) {
-				rowSpan = -1;
-				break;
-			}
-			rowSpan = merges[j].e.r - merges[j].s.r + 1;
-			colSpan = merges[j].e.c - merges[j].s.c + 1;
+function sanitizeCellHtml(html) {
+	const output = [];
+	const openTags = [];
+	let offset = 0;
+	while (offset < html.length) {
+		const tagStart = html.indexOf("<", offset);
+		if (tagStart === -1) {
+			output.push(html.slice(offset));
 			break;
 		}
-		if (rowSpan < 0) continue;
+		output.push(html.slice(offset, tagStart));
+		const tagEnd = html.indexOf(">", tagStart + 1);
+		if (tagEnd === -1) {
+			output.push(escapeHtml(html.slice(tagStart)));
+			break;
+		}
+		const token = html.slice(tagStart, tagEnd + 1);
+		const simpleOpen = token.match(/^<([bis]|sup|sub)>$/i);
+		const simpleClose = token.match(/^<\/([bis]|sup|sub)>$/i);
+		const spanOpen = token.match(/^<span\s+style\s*=\s*(["'])([\s\S]*)\1\s*>$/i);
+		if (/^<br\s*\/?>$/i.test(token)) output.push("<br/>");
+		else if (simpleOpen) {
+			const name = simpleOpen[1].toLowerCase();
+			openTags.push(name);
+			output.push("<" + name + ">");
+		} else if (spanOpen) {
+			openTags.push("span");
+			output.push("<span style=\"" + escapeHtmlAttribute(sanitizeRichTextStyle(spanOpen[2])) + "\">");
+		} else if (simpleClose) {
+			const name = simpleClose[1].toLowerCase();
+			if (openTags[openTags.length - 1] === name) {
+				openTags.pop();
+				output.push("</" + name + ">");
+			} else output.push(escapeHtml(token));
+		} else if (/^<\/span>$/i.test(token) && openTags[openTags.length - 1] === "span") {
+			openTags.pop();
+			output.push("</span>");
+		} else output.push(escapeHtml(token));
+		offset = tagEnd + 1;
+	}
+	while (openTags.length) output.push("</" + openTags.pop() + ">");
+	return output.join("");
+}
+function buildHtmlMergeIndex(ws, range, budget) {
+	const merges = ws["!merges"] || [];
+	budget.charge("worksheet merge metadata", merges.length);
+	const index = /* @__PURE__ */ new Map();
+	for (let i = 0; i < merges.length; ++i) {
+		const merge = merges[i];
+		rangeCellCount(merge, "worksheet merge");
+		const startRow = Math.max(range.s.r, merge.s.r);
+		const endRow = Math.min(range.e.r, merge.e.r);
+		const startColumn = Math.max(range.s.c, merge.s.c);
+		const endColumn = Math.min(range.e.c, merge.e.c);
+		if (startRow > endRow || startColumn > endColumn) continue;
+		for (let row = startRow; row <= endRow; ++row) for (let column = startColumn; column <= endColumn; ++column) {
+			const key = row * XLSX_MAX_COLUMNS + column;
+			if (index.has(key)) throw new XlsxError("INVALID_ARGUMENT", "Invalid worksheet merge: ranges must not overlap");
+			index.set(key, row === merge.s.r && column === merge.s.c ? {
+				rowSpan: merge.e.r - merge.s.r + 1,
+				colSpan: merge.e.c - merge.s.c + 1
+			} : null);
+		}
+	}
+	return index;
+}
+function buildHtmlRow(ws, range, rowIndex, options, mergeIndex) {
+	const cells = [];
+	for (let colIdx = range.s.c; colIdx <= range.e.c; ++colIdx) {
+		const merge = mergeIndex.get(rowIndex * XLSX_MAX_COLUMNS + colIdx);
+		if (merge === null) continue;
+		const rowSpan = merge?.rowSpan ?? 0;
+		const colSpan = merge?.colSpan ?? 0;
 		const coord = encodeCol(colIdx) + encodeRow(rowIndex);
 		let cell = getCell(ws, rowIndex, colIdx);
-		if (cell && cell.t === "n" && cell.v != null && !isFinite(cell.v)) if (isNaN(cell.v)) cell = {
-			t: "e",
-			v: 36,
-			w: BErr[36]
-		};
-		else cell = {
-			t: "e",
-			v: 7,
-			w: BErr[7]
-		};
+		if (cell && cell.t === "n" && cell.v != null && !isFinite(cell.v)) {
+			if (isNaN(cell.v)) cell = {
+				t: "e",
+				v: 36,
+				w: BErr[36]
+			};
+			else cell = {
+				t: "e",
+				v: 7,
+				w: BErr[7]
+			};
+		}
 		let cellContent = "";
-		if (cell && cell.v != null) cellContent = cell.h || escapeHtml(cell.w || formatCell(cell) || "");
+		if (cell && cell.v != null) cellContent = cell.h ? sanitizeCellHtml(cell.h) : escapeHtml(cell.w || formatCell(cell) || "");
 		const cellAttrs = {};
 		if (rowSpan > 1) cellAttrs.rowspan = String(rowSpan);
 		if (colSpan > 1) cellAttrs.colspan = String(colSpan);
 		if (options.editable) cellContent = "<span contenteditable=\"true\">" + cellContent + "</span>";
 		else if (cell) {
 			cellAttrs["data-t"] = cell && cell.t || "z";
-			if (cell.v != null) cellAttrs["data-v"] = escapeHtml(cell.v instanceof Date ? cell.v.toISOString() : String(cell.v));
+			if (cell.v != null) cellAttrs["data-v"] = cell.v instanceof Date ? cell.v.toISOString() : String(cell.v);
 			if (cell.z != null) cellAttrs["data-z"] = String(cell.z);
-			if (cell.f != null) cellAttrs["data-f"] = escapeHtml(cell.f);
-			if (cell.l && (cell.l.Target || "#").charAt(0) !== "#" && (options.sanitizeLinks === false || isSanitizedLinkTarget(cell.l.Target || ""))) cellContent = "<a href=\"" + escapeHtml(cell.l.Target) + "\">" + cellContent + "</a>";
+			if (cell.f != null) cellAttrs["data-f"] = cell.f;
+			if (cell.l && (cell.l.Target || "#").charAt(0) !== "#" && (options.sanitizeLinks === false || isSanitizedLinkTarget(cell.l.Target || ""))) cellContent = writeHtmlElement("a", cellContent, { href: cell.l.Target });
 		}
 		cellAttrs.id = (options.id || "sjs") + "-" + coord;
-		cells.push(writeXmlElement("td", cellContent, cellAttrs));
+		cells.push(writeHtmlElement("td", cellContent, cellAttrs));
 	}
 	return "<tr>" + cells.join("") + "</tr>";
 }
@@ -7291,15 +9823,59 @@ function sheetToHtml(ws, opts) {
 	const header = options.header != null ? options.header : HTML_BEGIN;
 	const footer = options.footer != null ? options.footer : HTML_END;
 	const out = [header];
-	const range = clampLargeExportRange(ws, decodeRange(ws["!ref"] || "A1"));
-	out.push("<table" + (options.id ? " id=\"" + options.id + "\"" : "") + ">");
-	if (ws["!ref"] && range) for (let rowIdx = range.s.r; rowIdx <= range.e.r; ++rowIdx) out.push(buildHtmlRow(ws, range, rowIdx, options));
-	out.push("</table>" + footer);
+	const budget = new WorksheetCellBudget(options.maxWorksheetCells, DEFAULT_MAX_EXPORT_CELLS);
+	const range = clampLargeExportRange(ws, decodeRange(ws["!ref"] || "A1"), budget);
+	const rows = [];
+	if (ws["!ref"] && range) {
+		const mergeIndex = buildHtmlMergeIndex(ws, range, budget);
+		for (let rowIdx = range.s.r; rowIdx <= range.e.r; ++rowIdx) rows.push(buildHtmlRow(ws, range, rowIdx, options, mergeIndex));
+	}
+	out.push(writeHtmlElement("table", rows.join(""), options.id ? { id: options.id } : null));
+	out.push(footer);
 	return out.join("");
 }
-/** Unescape basic HTML entities */
-function unescapeHtml(s) {
-	return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#x27;/g, "'").replace(/&#39;/g, "'");
+const NUMERIC_REFERENCE_REPLACEMENTS = {
+	128: 8364,
+	130: 8218,
+	131: 402,
+	132: 8222,
+	133: 8230,
+	134: 8224,
+	135: 8225,
+	136: 710,
+	137: 8240,
+	138: 352,
+	139: 8249,
+	140: 338,
+	142: 381,
+	145: 8216,
+	146: 8217,
+	147: 8220,
+	148: 8221,
+	149: 8226,
+	150: 8211,
+	151: 8212,
+	152: 732,
+	153: 8482,
+	154: 353,
+	155: 8250,
+	156: 339,
+	158: 382,
+	159: 376
+};
+function decodeNumericReference(codePoint) {
+	if (codePoint === 0 || codePoint > 1114111 || codePoint >= 55296 && codePoint <= 57343) return "�";
+	return String.fromCodePoint(NUMERIC_REFERENCE_REPLACEMENTS[codePoint] ?? codePoint);
+}
+/** Decode semicolon-terminated HTML named and numeric character references exactly once. */
+function decodeHtmlEntities(s) {
+	return s.replace(/&(?:#(\d+)|#[xX]([\dA-Fa-f]+)|([\dA-Za-z]+));/g, (entity, decimal, hex, name) => {
+		if (name) {
+			const normalizedName = String(name);
+			return Object.hasOwn(HTML_ENTITY_VALUES, normalizedName) ? HTML_ENTITY_VALUES[normalizedName] : entity;
+		}
+		return decodeNumericReference(parseInt(decimal || hex, decimal ? 10 : 16));
+	});
 }
 /** Strip HTML tags from a string, returning only text content */
 function stripTags(s) {
@@ -7307,19 +9883,92 @@ function stripTags(s) {
 }
 /** Extract an attribute value from a tag string */
 function getAttr(tag, name) {
-	const re = new RegExp(name + "\\s*=\\s*\"([^\"]*)\"", "i");
+	const re = new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i");
 	const m = tag.match(re);
-	return m ? m[1] : null;
+	return m ? m[1] ?? m[2] : null;
 }
-/** Coerce a data-v value based on data-t type code */
-function coerceDataValue(type, rawValue) {
-	switch (type) {
-		case "n": return Number(rawValue);
-		case "b": return rawValue === "true" || rawValue === "1";
-		case "d": return rawValue;
-		case "e": return rawValue;
-		default: return rawValue;
+function parseHtmlSpan(value, name, allowZero = false) {
+	if (value == null) return 1;
+	if (!(allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/).test(value)) throw new XlsxError("MALFORMED", `Invalid HTML ${name}: expected a ${allowZero ? "non-negative" : "positive"} integer`);
+	const span = Number(value);
+	if (!Number.isSafeInteger(span)) throw new XlsxError("MALFORMED", `Invalid HTML ${name}: expected a safe integer`);
+	return span;
+}
+/** Extract retained rows while preserving their truncated row-group boundaries for rowspan="0". */
+function extractHtmlRows(tableBody, rowLimit) {
+	const rows = [];
+	let groupRows = [];
+	const appendGroup = (groupRows) => {
+		for (let i = 0; i < groupRows.length; ++i) rows.push({
+			html: groupRows[i],
+			remainingInGroup: groupRows.length - i
+		});
+	};
+	const flushGroup = () => {
+		appendGroup(groupRows);
+		groupRows = [];
+	};
+	const tokenRegex = /<(thead|tbody|tfoot)\b[^>]*>|<\/(thead|tbody|tfoot)\s*>|<tr\b[^>]*>[\s\S]*?<\/tr>/gi;
+	let match;
+	while (match = tokenRegex.exec(tableBody)) if (match[1]) flushGroup();
+	else if (match[2]) flushGroup();
+	else {
+		groupRows.push(match[0]);
+		if (rows.length + groupRows.length >= rowLimit) {
+			flushGroup();
+			return rows;
+		}
 	}
+	flushGroup();
+	return rows;
+}
+/** Construct a typed cell from an explicit data-t/data-v pair. */
+function typedCell(type, rawValue) {
+	if (rawValue == null) {
+		switch (type) {
+			case "n": return { t: "n" };
+			case "b": return { t: "b" };
+			case "d": return { t: "d" };
+			case "e": return { t: "e" };
+			case "s": return { t: "s" };
+			case "z": return { t: "z" };
+		}
+		return null;
+	}
+	const decodedValue = decodeHtmlEntities(rawValue);
+	switch (type) {
+		case "n": {
+			const value = Number(decodedValue);
+			return Number.isFinite(value) ? {
+				t: "n",
+				v: value
+			} : null;
+		}
+		case "b": return {
+			t: "b",
+			v: decodedValue === "true" || decodedValue === "1"
+		};
+		case "d": {
+			const value = new Date(decodedValue);
+			return Number.isNaN(value.getTime()) ? null : {
+				t: "d",
+				v: value
+			};
+		}
+		case "e": {
+			const value = Number(decodedValue);
+			return Number.isFinite(value) ? {
+				t: "e",
+				v: value
+			} : null;
+		}
+		case "s": return {
+			t: "s",
+			v: decodedValue
+		};
+		case "z": return { t: "z" };
+	}
+	return null;
 }
 /** Try to coerce a plain text value to number or boolean */
 function coerceTextValue(text) {
@@ -7330,43 +9979,68 @@ function coerceTextValue(text) {
 	if (text.length > 0 && !isNaN(num) && isFinite(num)) return num;
 	return text;
 }
+function textFromHtml(innerHtml) {
+	return decodeHtmlEntities(stripTags(innerHtml.replace(/<\s*br\s*\/?>/gi, "\n"))).trim();
+}
 /**
 * Parse an HTML string containing a `<table>` into a WorkSheet.
 *
 * Handles `rowspan`/`colspan` attributes and uses `data-t`/`data-v`
 * attributes (when present) for round-trip fidelity.
+* This is a lightweight table parser: it recognizes quoted attributes,
+* table cells, ordinary `<br>` line breaks, and semicolon-terminated HTML
+* character references without implementing full browser DOM parsing.
 *
 * @param html - HTML string containing a table
 * @returns A WorkSheet with the parsed table data
 */
-function htmlToSheet(html) {
+function htmlToSheet(html, opts) {
+	const options = opts || {};
+	const maxRows = worksheetOptionLimit(options.maxWorksheetRows, XLSX_MAX_ROWS, "maxWorksheetRows");
+	const sheetRows = worksheetOptionLimit(options.sheetRows, 0, "sheetRows");
+	const budget = new WorksheetCellBudget(options.maxWorksheetCells, DEFAULT_MAX_IMPORT_CELLS);
 	const tableMatch = html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
 	if (!tableMatch) return arrayToSheet([]);
-	const rowMatches = tableMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+	const tableBody = tableMatch[1];
+	const rowMatches = extractHtmlRows(tableBody, sheetRows > 0 ? Math.min(sheetRows, XLSX_MAX_ROWS + 1) : Math.min(maxRows, XLSX_MAX_ROWS) + 1);
+	const retainedRowCount = rowMatches.length;
+	if (retainedRowCount > 1048576) throw new XlsxError("MALFORMED", `HTML table exceeds XLSX row limit ${XLSX_MAX_ROWS}`);
+	if (retainedRowCount > maxRows) throw new XlsxError("LIMIT_EXCEEDED", `worksheet row count ${retainedRowCount} exceeds limit ${maxRows}`);
 	const data = [];
 	const occupied = {};
-	for (let r = 0; r < rowMatches.length; r++) {
+	for (let r = 0; r < retainedRowCount; r++) {
 		if (!data[r]) data[r] = [];
 		if (!occupied[r]) occupied[r] = {};
-		const cellMatches = rowMatches[r].match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
+		const cellMatches = rowMatches[r].html.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
 		let col = 0;
 		for (let ci = 0; ci < cellMatches.length; ci++) {
 			while (occupied[r][col]) col++;
+			if (col >= 16384) throw new XlsxError("MALFORMED", `HTML row exceeds XLSX column limit ${XLSX_MAX_COLUMNS}`);
 			const cellHtml = cellMatches[ci];
 			const tagEnd = cellHtml.indexOf(">");
 			const tag = cellHtml.slice(0, tagEnd + 1);
 			const rowspanStr = getAttr(tag, "rowspan");
 			const colspanStr = getAttr(tag, "colspan");
-			const rs = rowspanStr ? parseInt(rowspanStr, 10) : 1;
-			const cs = colspanStr ? parseInt(colspanStr, 10) : 1;
+			const declaredRowSpan = parseHtmlSpan(rowspanStr, "rowspan", true);
+			const rs = declaredRowSpan === 0 ? rowMatches[r].remainingInGroup : declaredRowSpan;
+			const cs = parseHtmlSpan(colspanStr, "colspan");
+			if (r + rs > 1048576 || col + cs > 16384) throw new XlsxError("MALFORMED", "Invalid HTML span: range exceeds XLSX worksheet bounds");
+			const retainedRowSpan = sheetRows > 0 ? Math.min(rs, sheetRows - r) : rs;
+			budget.charge("worksheet cell", retainedRowSpan * cs);
 			const dataT = getAttr(tag, "data-t");
 			const dataV = getAttr(tag, "data-v");
+			const dataF = getAttr(tag, "data-f");
+			const dataZ = getAttr(tag, "data-z");
 			const innerHtml = cellHtml.slice(tagEnd + 1, cellHtml.lastIndexOf("</"));
+			const explicitCell = dataT ? typedCell(dataT, dataV) : null;
 			let value;
-			if (dataT && dataV != null) value = coerceDataValue(dataT, unescapeHtml(dataV));
-			else value = coerceTextValue(unescapeHtml(stripTags(innerHtml)).trim());
+			if (explicitCell) {
+				if (dataF != null) explicitCell.f = decodeHtmlEntities(dataF);
+				if (dataZ != null) explicitCell.z = decodeHtmlEntities(dataZ);
+				value = explicitCell;
+			} else value = coerceTextValue(textFromHtml(innerHtml));
 			data[r][col] = value;
-			for (let dr = 0; dr < rs; dr++) for (let dc = 0; dc < cs; dc++) {
+			for (let dr = 0; dr < retainedRowSpan; dr++) for (let dc = 0; dc < cs; dc++) {
 				if (dr === 0 && dc === 0) continue;
 				const tr = r + dr;
 				const tc = col + dc;
@@ -7419,24 +10093,36 @@ function sheetToWorkBook(ws, name) {
 		Sheets: { [n]: ws }
 	};
 }
-/**
-* Read a spreadsheet from an in-memory data source.
-*
-* Supports XLSX (ZIP), CSV, and HTML input. For string input with type "string",
-* auto-detects HTML (starts with "<") vs CSV.
-*
-* @param data - File contents as Uint8Array, ArrayBuffer, Buffer, base64 string, binary string, or plain text string
-* @param opts - Read options controlling parsing behavior
-* @returns Promise resolving to a parsed WorkBook object
-* @throws XlsxError if the input is a PDF, PNG, or other unsupported format
-*/
+function rejectUnsupportedReadOptions(options) {
+	for (const [name, requested] of [
+		["bookFiles", options.bookFiles],
+		["bookVBA", options.bookVBA],
+		["bookDeps", options.bookDeps],
+		["xlfn", options.xlfn]
+	]) if (requested) throw new XlsxError("UNSUPPORTED", `Read option "${name}" is not supported`);
+}
+function selectReadResult(workbook, options) {
+	if (options.bookSheets && options.bookProps) return {
+		SheetNames: workbook.SheetNames,
+		Props: workbook.Props ?? {},
+		Custprops: workbook.Custprops ?? {}
+	};
+	if (options.bookSheets) return { SheetNames: workbook.SheetNames };
+	if (options.bookProps) return {
+		Props: workbook.Props ?? {},
+		Custprops: workbook.Custprops ?? {}
+	};
+	return workbook;
+}
 async function read(data, opts) {
-	resetFormatTable();
 	const options = opts ? { ...opts } : {};
+	if (options.password) throw new XlsxError("UNSUPPORTED", "Password-protected workbooks are not supported");
+	rejectUnsupportedReadOptions(options);
+	resetFormatTable();
 	if (!options.type) options.type = detect_type(data);
 	if (options.type === "string" && typeof data === "string") {
-		if (data.trimStart().charAt(0) === "<") return sheetToWorkBook(htmlToSheet(data));
-		return sheetToWorkBook(csvToSheet(data));
+		if (data.trimStart().charAt(0) === "<") return selectReadResult(sheetToWorkBook(htmlToSheet(data, options)), options);
+		return selectReadResult(sheetToWorkBook(csvToSheet(data, options)), options);
 	}
 	const u8 = to_uint8array(data, options);
 	if (u8[0] === 80 && u8[1] === 75) {
@@ -7512,35 +10198,37 @@ function writeZipXlsx(wb, opts) {
 	for (let rId = 1; rId <= wb.SheetNames.length; ++rId) {
 		const wsrels = { "!id": {} };
 		const ws = wb.Sheets[wb.SheetNames[rId - 1]];
+		let comments = [];
+		let needtc = false;
+		if (ws) {
+			comments = collectCellComments(ws);
+			if (comments.length === 0 && Array.isArray(ws["!comments"])) comments = ws["!comments"].map(([ref, list]) => {
+				const copied = list.map((comment) => ({ ...comment }));
+				if (list.hidden != null) copied.hidden = list.hidden;
+				return [ref, copied];
+			});
+			for (const [, list] of comments) if (list.some((comment) => comment.T === true)) for (const comment of list) comment.T = true;
+			needtc = comments.some(([, list]) => list.some((comment) => comment.T === true));
+			if (needtc) addRelationship(wsrels, -1, "../threadedComments/threadedComment" + rId + ".xml", RELS.TCMNT);
+			if (comments.length > 0) {
+				addRelationship(wsrels, -1, "../comments" + rId + ".xml", RELS.CMNT);
+				addRelationship(wsrels, -1, "../drawings/vmlDrawing" + rId + ".vml", RELS.VML);
+			}
+		}
 		filePath = "xl/worksheets/sheet" + rId + ".xml";
 		zipAddString(zip, filePath, writeWorksheetXml(ws || {}, opts, rId - 1, wsrels, wb));
 		ct.sheets.push(filePath);
 		addRelationship(opts.wbrels, -1, "worksheets/sheet" + rId + ".xml", RELS.SHEET);
-		if (ws) {
-			const comments = ws["!comments"];
-			let need_vml = false;
-			if (comments && comments.length > 0) {
-				let needtc = false;
-				comments.forEach((carr) => {
-					carr[1].forEach((c) => {
-						if (c.T === true) needtc = true;
-					});
-				});
-				if (needtc) {
-					const cf = "xl/threadedComments/threadedComment" + rId + ".xml";
-					zipAddString(zip, cf, writeTcmntXml(comments, people, opts));
-					ct.threadedcomments.push(cf);
-					addRelationship(wsrels, -1, "../threadedComments/threadedComment" + rId + ".xml", RELS.TCMNT);
-				}
-				const cf2 = "xl/comments" + rId + ".xml";
-				zipAddString(zip, cf2, writeCommentsXml(comments));
-				ct.comments.push(cf2);
-				addRelationship(wsrels, -1, "../comments" + rId + ".xml", RELS.CMNT);
-				need_vml = true;
+		if (comments.length > 0) {
+			if (needtc) {
+				const cf = "xl/threadedComments/threadedComment" + rId + ".xml";
+				zipAddString(zip, cf, writeTcmntXml(comments, people, opts));
+				ct.threadedcomments.push(cf);
 			}
-			if (ws["!legacy"] && need_vml) zipAddString(zip, "xl/drawings/vmlDrawing" + rId + ".vml", writeVml(rId, ws["!comments"]));
-			delete ws["!comments"];
-			delete ws["!legacy"];
+			const cf2 = "xl/comments" + rId + ".xml";
+			zipAddString(zip, cf2, writeCommentsXml(comments));
+			ct.comments.push(cf2);
+			zipAddString(zip, "xl/drawings/vmlDrawing" + rId + ".vml", writeVml(rId, comments));
 		}
 		if (wsrels["!id"].rId1) zipAddString(zip, getRelsPath(filePath), writeRelationships(wsrels));
 	}
@@ -7635,7 +10323,7 @@ function preserveSourceParts(zip, src, wb) {
 		if (!zip.files[rp]) zip.files[rp] = src.files[rp];
 		copied.add(rp);
 
-		const relsXml = decoder$1.decode(src.files[rp]);
+		const relsXml = decoder.decode(src.files[rp]);
 		const re = /Target="([^"]+)"([^>]*)/g;
 		let m;
 		while ((m = re.exec(relsXml)) !== null) {
@@ -7654,8 +10342,8 @@ function declareContentTypes(zip, src, copied) {
 	const ctPath = "[Content_Types].xml";
 	if (!zip.files[ctPath] || !src.files[ctPath]) return;
 
-	let out = decoder$1.decode(zip.files[ctPath]);
-	const from = decoder$1.decode(src.files[ctPath]);
+	let out = decoder.decode(zip.files[ctPath]);
+	const from = decoder.decode(src.files[ctPath]);
 	const add = [];
 
 	for (const part of copied) {
@@ -7686,10 +10374,10 @@ function carryDxfs(zip, src) {
 	const p = "xl/styles.xml";
 	if (!zip.files[p] || !src.files[p]) return;
 
-	const out = decoder$1.decode(zip.files[p]);
+	const out = decoder.decode(zip.files[p]);
 	if (out.indexOf("<dxfs") !== -1) return;
 
-	const m = /<dxfs[\s>][\s\S]*?<\/dxfs>/.exec(decoder$1.decode(src.files[p]));
+	const m = /<dxfs[\s>][\s\S]*?<\/dxfs>/.exec(decoder.decode(src.files[p]));
 	if (!m) return;
 
 	// dxfs sits after cellStyles and before tableStyles in CT_Stylesheet.
@@ -7716,23 +10404,27 @@ function textOutput(text, type) {
 		default: return text;
 	}
 }
+function hasVbaPayload(value) {
+	if (value == null) return false;
+	if (typeof value === "string" || Array.isArray(value)) return value.length > 0;
+	if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return value.byteLength > 0;
+	return true;
+}
+function rejectUnsupportedWriteOptions(wb, options) {
+	if (options.bookVBA) throw new XlsxError("UNSUPPORTED", "Write option \"bookVBA\" is not supported");
+	if (options.themeXLSX) throw new XlsxError("UNSUPPORTED", "Write option \"themeXLSX\" is not supported");
+	if (hasVbaPayload(wb?.vbaraw)) throw new XlsxError("UNSUPPORTED", "Workbooks containing VBA data cannot be written");
+}
 /** Get the first worksheet from a workbook */
 function firstSheet(wb) {
 	return wb.Sheets[wb.SheetNames[0]];
 }
-/**
-* Write a WorkBook to an in-memory representation.
-*
-* Supports XLSX (default), CSV, TSV, and HTML output formats via opts.bookType.
-*
-* @param wb - WorkBook object to serialize
-* @param opts - Write options controlling output format and behavior
-* @returns Promise resolving to the serialized data in the requested format
-*/
 async function write(wb, opts) {
+	const options = { ...opts };
+	if (options.password) throw new XlsxError("UNSUPPORTED", "Password-protected workbooks are not supported");
+	rejectUnsupportedWriteOptions(wb, options);
 	resetFormatTable();
 	if (!opts || !opts.unsafe) validateWorkbook(wb);
-	const options = { ...opts };
 	if (options.cellStyles) {
 		options.cellNF = true;
 		options.sheetStubs = true;
@@ -7751,7 +10443,8 @@ async function write(wb, opts) {
 			return textOutput(ws ? sheetToHtml(ws, options) : "", options.type);
 		}
 		default: {
-			const compressed = await zipWrite(writeZipXlsx(wb, options), !!options.compression);
+			const zip = writeZipXlsx(wb, options);
+			const compressed = await zipWrite(zip, !!options.compression);
 			switch (options.type) {
 				case "base64": return base64encode_u8(compressed);
 				case "buffer":
@@ -7813,7 +10506,12 @@ function appendSheet(wb, ws, name, roll) {
 	validateSheetName(name);
 	if (wb.SheetNames.indexOf(name) >= 0) throw new XlsxError("DUPLICATE", "Worksheet with name |" + name + "| already exists!");
 	wb.SheetNames.push(name);
-	wb.Sheets[name] = ws;
+	Object.defineProperty(wb.Sheets, name, {
+		value: ws,
+		enumerable: true,
+		configurable: true,
+		writable: true
+	});
 	return name;
 }
 /**
@@ -7877,6 +10575,7 @@ function setSheetVisibility(wb, sh, vis) {
 */
 function setCellNumberFormat(cell, fmt) {
 	cell.z = fmt;
+	delete cell.w;
 	return cell;
 }
 /**
@@ -8046,7 +10745,7 @@ function setArrayFormula(ws, range, formula, dynamic) {
 		if (wsr.e.r < rng.e.r) wsr.e.r = rng.e.r;
 		if (wsr.e.c < rng.e.c) wsr.e.c = rng.e.c;
 		ws["!ref"] = encodeRange(wsr);
-	}
+	} else ws["!ref"] = encodeRange(rng);
 	return ws;
 }
 /**
@@ -8057,11 +10756,14 @@ function setArrayFormula(ws, range, formula, dynamic) {
 * String values are prefixed with a single quote; booleans become TRUE/FALSE.
 *
 * @param ws - The worksheet to extract formulas from
+* @param opts - Optional worksheet export budget
 * @returns An array of "ref=value" strings representing every non-empty cell
 */
-function sheetToFormulae(ws) {
+function sheetToFormulae(ws, opts) {
 	if (ws == null || ws["!ref"] == null) return [];
-	const r = safeDecodeRange(ws["!ref"]);
+	const budget = new WorksheetCellBudget(opts?.maxWorksheetCells, DEFAULT_MAX_EXPORT_CELLS);
+	const r = clampLargeExportRange(ws, safeDecodeRange(ws["!ref"]), budget);
+	if (!r) return [];
 	const cols = [];
 	const cmds = [];
 	for (let C = r.s.c; C <= r.e.c; ++C) cols[C] = encodeCol(C);
@@ -8095,7 +10797,7 @@ function sheetToFormulae(ws) {
 
 //#endregion
 //#region src/index.ts
-const version = "2.4.1";
+const version = "2.4.5";
 
 //#endregion
 export { XlsxError, addArrayToSheet, addCellComment, addJsonToSheet, appendSheet, arrayToSheet, createSheet, createWorkbook, csvToSheet, decodeCell, decodeCol, decodeRange, decodeRow, encodeCell, encodeCol, encodeRange, encodeRow, formatCell, formatNumber, freezePanes, getSheetIndex, htmlToSheet, jsonToSheet, mergeCells, read, setArrayFormula, setCellHyperlink, setCellInternalLink, setCellNumberFormat, setCellStyle, setColumnWidth, setRowHeight, setSheetVisibility, sheetToArray, sheetToCsv, sheetToFormulae, sheetToHtml, sheetToJson, sheetToTxt, styleRange, version, write };

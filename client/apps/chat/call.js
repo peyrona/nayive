@@ -1,5 +1,6 @@
 /*
- * call.js - voice and video calls, one to one (the owner and one person).
+ * call.js - voice and video calls: one to one (the owner and one person), and
+ * a group's (up to four people - GROUP CALLS below).
  * Server side: server/go/chat_call.go. Plan and decisions: docs/chat-calls-plan.md.
  *
  * The sound and the picture go browser to browser (WebRTC, always encrypted).
@@ -16,6 +17,13 @@
  *
  * This page's id (S.dev) goes on every wait: signals are addressed to a page,
  * so the owner's second tab never reads the answer meant for the first one.
+ *
+ * GROUP CALLS: one connection to each other page in the call (a mesh). The
+ * server says who is in it (c.in: participant + page); whoever JOINS makes an
+ * offer to each page already in, so two offers never cross. Signals name the
+ * page they are for (`to`) and come with the page they are from. A page that
+ * drops out leaves only its own connection; the others talk on. The 1:1 code
+ * above is left as it was - a group call takes its own branch at each step.
  *
  * A call belongs to the world (core.js) of its chat: a chat in another user's
  * home rings, signals and ends through that home (call.w.api), and every
@@ -56,7 +64,9 @@
         {
             if( ours && c.id === call.id ) { seen = call.known = true; update( c ); return; }
             if( ! call && c.state === "ringing" && c.to === w.me ) incoming( c, w );
+            else if( ! call && c.group && c.ring ) incoming( c, w );   // a group rings everybody not in it
         } );
+        w.calls = list;
         // Gone from the server altogether (it restarted): nothing to wait for.
         // Only once it was seen there: a reply sent just before our call
         // existed would not list it yet.
@@ -66,14 +76,16 @@
         {
             if( g.seq <= w.sigSeen ) return;
             w.sigSeen = g.seq;
-            if( call && call.w === w && g.call === call.id ) onSig( g.data );
+            if( call && call.w === w && g.call === call.id ) onSig( g.data, g.from );
         } );
+        C.renderCallBar();
     };
 
     // A change of the call as the server sees it.
     function update( c )
     {
         if( c.state === "ended" ) { finish( c.reason ); return; }
+        if( call.group ) { groupUpdate( c ); return; }
         if( call.dir === "in" && call.state === "incoming" && c.state === "active" && ! c.mine )
         {
             // Another page (or device) of mine took it.
@@ -88,13 +100,13 @@
     // starting and answering
     // ---------------------------------------------------------------------
 
-    // The phone / video button of a 1:1 chat.
+    // The phone / video button of a chat (1:1 or a group).
     C.startCall = async function ( video )
     {
         var conv = S.open;
         if( call ) { if( call.el ) call.el.hidden = false; return; }
-        if( ! conv || conv.indexOf( "d-" ) !== 0 ) return;
-        var mine = call = newCall( { conv: conv, video: !! video, dir: "out", state: "calling", w: C.W( conv ) } );
+        if( ! conv || ( conv.indexOf( "d-" ) !== 0 && conv.indexOf( "g-" ) !== 0 ) ) return;
+        var mine = call = newCall( { conv: conv, video: !! video, dir: "out", state: "calling", w: C.W( conv ), from: C.W( conv ).me } );
         show();
         // false also when it was hung up while the phone asked for the mic
         if( ! await getMedia() ) { if( ! gone( mine ) ) drop(); return; }
@@ -119,6 +131,7 @@
                 await C.answerCall();
                 return;
             }
+            if( call.group ) call.joined = true;   // in it from the start: the others' offers come
             tone( "back" );
             render();
         }
@@ -134,7 +147,7 @@
 
     function incoming( c, w )
     {
-        call = newCall( { id: c.id, conv: c.conv, video: !! c.video, dir: "in", state: "incoming", w: w } );
+        call = newCall( { id: c.id, conv: c.conv, video: !! c.video, dir: "in", state: "incoming", w: w, from: c.from } );
         show();
         tone( "ring" );
     }
@@ -153,16 +166,20 @@
             var r = await C.api( "POST", "call/" + call.id + "/answer", { dev: S.dev }, { base: call.w.api } );
             if( gone( mine ) ) return;            // hung up meanwhile: its /end went with the id
             call.ice = r.ice;
+            // joinedWith: who was in at the moment I came - mine to offer to.
+            // The others (later) offer to me, so two offers never cross.
+            if( call.group ) { call.inList = call.joinedWith = r.in || []; call.joined = true; }
         }
         catch( e )
         {
             if( gone( mine ) ) return;
-            if( e.status === 409 ) { finish( "elsewhere" ); return; }
+            if( e.status === 409 ) { finish( e.body && e.body.full ? "full" : "elsewhere" ); return; }
             finish( "lost" );
             return;
         }
         if( ! call.local && ! await getMedia() ) { if( ! gone( mine ) ) hangUp( "fail" ); return; }
         if( gone( mine ) ) return;
+        if( call.group ) { armConnect(); joinPeers(); return; }
         makePeer();
         armConnect();
         // The offer comes as a signal (onSig) - or it already came, while the
@@ -174,7 +191,10 @@
 
     function newCall( o )
     {
-        o.peer = o.w.me === "o" ? o.conv.slice( 2 ) : "o";   // the other side of the 1:1 chat
+        o.group = o.conv.indexOf( "g-" ) === 0;
+        o.peer = o.group ? null : o.w.me === "o" ? o.conv.slice( 2 ) : "o";   // the other side of the 1:1 chat
+        o.peers = {};                                                      // a group call: page -> connection
+        o.inList = [];
         o.mic = true;
         o.cam = !! o.video;
         o.peerMic = true;
@@ -197,6 +217,8 @@
         var mine = call;
         var want = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
         if( mine.video ) want.video = { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
+        // A group: the picture goes to up to three people - smaller.
+        if( mine.video && mine.group ) want.video = { facingMode: "user", width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15 } };
         var local = null;
         try { local = await navigator.mediaDevices.getUserMedia( want ); }
         catch( e )
@@ -238,6 +260,21 @@
 
     function makePeer()
     {
+        var pc = call.pc = new RTCPeerConnection( iceCfg() );
+        call.local.getTracks().forEach( function ( t ) { pc.addTrack( t, call.local ); } );
+        pc.ontrack = function ( e )
+        {
+            if( ! call || call.pc !== pc ) return;
+            call.remote = e.streams[ 0 ] || new MediaStream( [ e.track ] );
+            attachRemote();
+        };
+        pc.onconnectionstatechange = function () { if( call && call.pc === pc ) onConn(); };
+        pc.oniceconnectionstatechange = function () { if( call && call.pc === pc ) onIce(); };
+    }
+
+    // The RTCPeerConnection settings: the call's STUN/TURN servers.
+    function iceCfg()
+    {
         var cfg = { iceServers: call.ice || [] };
         // Debug only (proves coturn): localStorage "nayive.chat.relay" = "udp" | "tcp".
         var relay = "";
@@ -251,16 +288,7 @@
                 return { urls: urls, username: s.username, credential: s.credential };
             } );
         }
-        var pc = call.pc = new RTCPeerConnection( cfg );
-        call.local.getTracks().forEach( function ( t ) { pc.addTrack( t, call.local ); } );
-        pc.ontrack = function ( e )
-        {
-            if( ! call || call.pc !== pc ) return;
-            call.remote = e.streams[ 0 ] || new MediaStream( [ e.track ] );
-            attachRemote();
-        };
-        pc.onconnectionstatechange = function () { if( call && call.pc === pc ) onConn(); };
-        pc.oniceconnectionstatechange = function () { if( call && call.pc === pc ) onIce(); };
+        return cfg;
     }
 
     // Wait for the address search to finish - at most 2 s (a whole offer, no trickle).
@@ -297,9 +325,10 @@
         catch( e ) { hangUp( "fail" ); }
     }
 
-    async function onSig( d )
+    async function onSig( d, from )
     {
         if( ! d || ! call ) return;
+        if( call.group ) { groupSig( d, from ); return; }
         var pc = call.pc;
         try
         {
@@ -334,7 +363,14 @@
         C.api( "POST", "call/" + call.id + "/sig", { dev: S.dev, data: data }, { base: call.w.api } ).catch( function () {} );
     }
 
-    function sendState() { if( call ) sendSig( { t: "state", mic: call.mic, cam: call.cam } ); }
+    function sendState()
+    {
+        if( ! call ) return;
+        if( call.group ) { Object.keys( call.peers ).forEach( function ( d ) { sendSigTo( d, stateSig() ); } ); return; }
+        sendSig( stateSig() );
+    }
+
+    function stateSig() { return { t: "state", mic: call.mic, cam: call.cam }; }
 
     function onConn()
     {
@@ -394,6 +430,7 @@
 
     function attachRemote()
     {
+        if( call && call.group ) { playTiles(); return; }
         if( ! call || ! call.el || ! call.remote ) return;
         var el = call.video ? call.el.querySelector( ".call-remote" ) : call.el.querySelector( "audio" );
         if( el.srcObject !== call.remote ) el.srcObject = call.remote;
@@ -437,8 +474,13 @@
             track.enabled = call.cam;
             if( old ) call.local.removeTrack( old );
             call.local.addTrack( track );
-            var sender = call.pc && call.pc.getSenders().filter( function ( x ) { return x.track === old || ( x.track && x.track.kind === "video" ); } )[ 0 ];
-            if( sender ) await sender.replaceTrack( track );
+            // Every connection (a group call has one per page) sends the new one.
+            var pcs = call.group ? Object.keys( call.peers ).map( function ( d ) { return call.peers[ d ].pc; } ) : [ call.pc ];
+            for( var i = 0; i < pcs.length; i++ )
+            {
+                var sender = pcs[ i ] && pcs[ i ].getSenders().filter( function ( x ) { return x.track === old || ( x.track && x.track.kind === "video" ); } )[ 0 ];
+                if( sender ) await sender.replaceTrack( track );
+            }
             call.facing = next;
             call.el.querySelector( ".call-self" ).srcObject = null;   // render() hangs the new one
             render();
@@ -493,6 +535,11 @@
         clearTimeout( call.failTimer );
         clearInterval( call.tick );
         if( call.pc ) try { call.pc.close(); } catch( _ ) {}
+        Object.keys( call.peers || {} ).forEach( function ( d )
+        {
+            clearTimeout( call.peers[ d ].failTimer );
+            try { call.peers[ d ].pc.close(); } catch( _ ) {}
+        } );
         if( call.local ) call.local.getTracks().forEach( function ( t ) { t.stop(); } );
         wakeLock( false );
     }
@@ -505,6 +552,7 @@
         tone( null );                             // whatever started after the end, too
         var el = call.el;
         call = null;
+        atEar();
         if( el ) { el.remove(); C.popNav( isSmall( el ) ? "callguard" : "call" ); }
         if( S.open && C.renderConvHead ) C.renderConvHead();
     }
@@ -594,6 +642,7 @@
         // (the window's title bar), so any empty spot of it drags the window.
         var el = call.el = h( "div", { class: "call-screen" + ( call.video ? " video" : "" ), attrs: { role: "dialog", "aria-modal": "true", "data-win-drag": "" } } );
         el.appendChild( h( "video", { class: "call-remote", attrs: { playsinline: "", autoplay: "" } } ) );
+        el.appendChild( h( "div", { class: "call-grid" } ) );   // a group call's people
         el.appendChild( h( "audio", { attrs: { autoplay: "" } } ) );
         el.appendChild( h( "div", { class: "call-top" } ) );
         el.appendChild( pip() );
@@ -735,19 +784,23 @@
     function render()
     {
         if( ! call || ! call.el ) return;
+        atEar();
         var el = call.el;
-        var name = C.nameOf( call.peer, call.conv );
+        var name = call.group ? groupName() : C.nameOf( call.peer, call.conv );
         el.classList.toggle( "video", !! call.video );
         el.classList.toggle( "live", call.state === "talking" || call.state === "reconnecting" );
-        el.classList.toggle( "peer-cam-off", ! call.peerCam );
+        // A group: the tiles carry the pictures, the 1:1 full-screen one never shows.
+        el.classList.toggle( "group", !! call.group );
+        el.classList.toggle( "peer-cam-off", !! call.group || ! call.peerCam );
 
         var top = el.querySelector( ".call-top" );
         top.textContent = "";
         top.appendChild( C.avatar( call.conv, name, "xl" ) );
         top.appendChild( h( "b", { text: name } ) );
         top.appendChild( h( "small", { class: "call-state", text: stateWords() } ) );
-        if( ! call.peerMic && call.state === "talking" )
+        if( ! call.group && ! call.peerMic && call.state === "talking" )
             top.appendChild( h( "small", { class: "call-note" }, C.ic( "mic-off" ), T( "chat.peerMuted" ) ) );
+        if( call.group ) renderTiles( el );
 
         var self = el.querySelector( ".call-self" );
         self.muted = true;
@@ -787,15 +840,24 @@
         btns.appendChild( C.btn( "phone-off", "chat.hangUp", function () { hangUp(); }, "lg solid-danger" ) );
     }
 
+    // A voice call may be at the ear: the phone's sensor, or a padlock (ear.js).
+    function atEar()
+    {
+        var on = !! call && ! call.video && /^(calling|connecting|talking|reconnecting)$/.test( call.state );
+        if( C.ear ) C.ear( on, on && call.el && ! isSmall( call.el ) );
+    }
+
     function stateWords()
     {
         switch( call.state )
         {
-            case "calling":      return T( call.w.online.has( call.peer ) ? "chat.ringing" : "chat.calling" );
-            case "incoming":     return T( call.video ? "chat.incomingVideo" : "chat.incomingVoice" );
+            case "calling":      return call.group ? T( "chat.callingGroup" ) : T( call.w.online.has( call.peer ) ? "chat.ringing" : "chat.calling" );
+            case "incoming":
+                var kind = T( call.video ? "chat.incomingVideo" : "chat.incomingVoice" );
+                return call.group && call.from ? C.nameOf( call.from, call.conv ) + " · " + kind : kind;
             case "connecting":   return T( "chat.connecting" );
             case "reconnecting": return T( "chat.reconnecting" );
-            case "talking":      return clock( Date.now() - call.since );
+            case "talking":      return clock( Date.now() - call.since ) + ( call.group ? " · " + C.TF( "chat.nInCall", { n: call.inList.length } ) : "" );
         }
         switch( call.why )
         {
@@ -806,6 +868,7 @@
             case "elsewhere": return T( "chat.answeredElsewhere" );
             case "fail":      return T( "chat.callFailed" );
             case "lost":      return T( "chat.callLost" );
+            case "full":      return T( "chat.callFull" );
         }
         return T( "chat.callEnded" );
     }
@@ -814,7 +877,7 @@
     {
         if( ! call || ! call.el || call.state !== "talking" ) return;
         var s = call.el.querySelector( ".call-state" );
-        if( s ) s.textContent = clock( Date.now() - call.since );
+        if( s ) s.textContent = stateWords();
     }
 
     function clock( ms )
@@ -823,6 +886,283 @@
         var m = Math.floor( s / 60 ), hh = Math.floor( m / 60 );
         var two = function ( n ) { return ( n < 10 ? "0" : "" ) + n; };
         return ( hh ? hh + ":" + two( m % 60 ) : m ) + ":" + two( s % 60 );
+    }
+
+    // ---------------------------------------------------------------------
+    // GROUP CALLS: one connection to each other page (a mesh, at most four)
+    // ---------------------------------------------------------------------
+
+    function groupName()
+    {
+        var c = C.convOf( call.conv );
+        return c ? c.name : "";
+    }
+
+    // The participant on page `dev` (the server's list of who is in).
+    function pidOf( dev )
+    {
+        var x = call.inList.filter( function ( i ) { return i.dev === dev; } )[ 0 ];
+        return x ? x.pid : "";
+    }
+
+    // The server's view of the group call changed: who is in it.
+    function groupUpdate( c )
+    {
+        call.inList = c.in || [];
+        if( c.from ) call.from = c.from;
+        if( call.state === "incoming" )
+        {
+            // Another page of mine went in; or the ringing time is over.
+            if( call.inList.some( function ( i ) { return i.pid === call.w.me; } ) ) { finish( "elsewhere" ); return; }
+            if( ! c.ring ) { finish( "noanswer" ); return; }
+            render();
+            return;
+        }
+        if( ! call.joined ) return;               // the server has not answered us yet
+        if( ! call.inList.some( function ( i ) { return i.dev === S.dev; } ) ) { finish( "lost" ); return; }
+        if( call.state === "calling" && call.inList.length > 1 )
+        {
+            // Somebody came: their offer is on its way.
+            tone( null );
+            call.state = "connecting";
+            armConnect();
+        }
+        Object.keys( call.peers ).forEach( function ( dev ) { if( ! pidOf( dev ) ) closePeer( dev ); } );   // gone from the call
+        render();
+    }
+
+    // Just joined: an offer to each page that was in when I came. Not
+    // call.inList: a wait read while the phone asked for the microphone may
+    // already list someone who came after me - they offer to me.
+    function joinPeers()
+    {
+        ( call.joinedWith || [] ).forEach( function ( i ) { if( i.dev !== S.dev ) groupOffer( makeGroupPeer( i.dev, i.pid ), false ); } );
+        ( call.pendingOffers || [] ).splice( 0 ).forEach( function ( q ) { groupSig( q[ 0 ], q[ 1 ] ); } );
+        render();
+    }
+
+    // A fresh connection to page `dev`. `gen` counts the fresh ones: an offer
+    // with a new number replaces the connection on the other side too.
+    function makeGroupPeer( dev, pid, gen )
+    {
+        var old = call.peers[ dev ];
+        closePeer( dev );
+        var mine = call;
+        var p = { dev: dev, pid: pid, mic: true, cam: !! call.video, remote: null, tile: null,
+                  gen: gen || ( old ? old.gen + 1 : 1 ) };
+        var pc = p.pc = new RTCPeerConnection( iceCfg() );
+        call.local.getTracks().forEach( function ( t ) { pc.addTrack( t, call.local ); } );
+        pc.ontrack = function ( e )
+        {
+            if( call !== mine || call.peers[ dev ] !== p ) return;
+            p.remote = e.streams[ 0 ] || new MediaStream( [ e.track ] );
+            render();
+        };
+        pc.onconnectionstatechange = function () { if( call === mine && call.peers[ dev ] === p ) groupConn( p ); };
+        call.peers[ dev ] = p;
+        return p;
+    }
+
+    function closePeer( dev )
+    {
+        var p = call && call.peers[ dev ];
+        if( ! p ) return;
+        clearTimeout( p.failTimer );
+        try { p.pc.close(); } catch( _ ) {}
+        delete call.peers[ dev ];
+        if( p.tile ) p.tile.remove();
+    }
+
+    // Each picture goes to up to three people: kept small (~300 kbit/s, 15 fps).
+    function capVideo( pc )
+    {
+        pc.getSenders().forEach( function ( s )
+        {
+            if( ! s.track || s.track.kind !== "video" || ! s.getParameters ) return;
+            var prm = s.getParameters();
+            if( ! prm.encodings || ! prm.encodings.length ) return;
+            prm.encodings[ 0 ].maxBitrate = 300000;
+            prm.encodings[ 0 ].maxFramerate = 15;
+            s.setParameters( prm ).catch( function () {} );
+        } );
+    }
+
+    async function groupOffer( p, restart )
+    {
+        var mine = call;
+        p.offerer = true;
+        try
+        {
+            // A video call where I have no camera: their picture must still come.
+            if( ! restart && call.video && ! call.local.getVideoTracks().length ) p.pc.addTransceiver( "video", { direction: "recvonly" } );
+            await p.pc.setLocalDescription( await p.pc.createOffer( restart ? { iceRestart: true } : undefined ) );
+            capVideo( p.pc );
+            await gathered( p.pc );
+            if( call === mine && call.peers[ p.dev ] === p ) sendSigTo( p.dev, { t: "offer", sdp: p.pc.localDescription.sdp, gen: p.gen } );
+        }
+        catch( e ) { if( call === mine && call.peers[ p.dev ] === p ) closePeer( p.dev ); }
+    }
+
+    async function groupSig( d, from )
+    {
+        if( ! from || ! call ) return;
+        // An offer while the phone still asks for the microphone: kept for joinPeers.
+        if( d.t === "offer" && ! call.local ) { ( call.pendingOffers = call.pendingOffers || [] ).push( [ d, from ] ); return; }
+        var mine = call;
+        var p = call.peers[ from ];
+        try
+        {
+            if( d.t === "offer" )
+            {
+                // Both offered at once (should not happen - joinPeers): the
+                // lower page id keeps its offer, the other answers it.
+                if( p && p.offerer && p.pc.signalingState === "have-local-offer" )
+                {
+                    if( S.dev < from ) return;
+                    p = makeGroupPeer( from, pidOf( from ), d.gen );
+                }
+                // A page that just came, or one starting over (a new gen);
+                // the same gen is an ICE restart on the connection we have.
+                if( ! p || p.gen !== d.gen ) p = makeGroupPeer( from, pidOf( from ), d.gen );
+                await p.pc.setRemoteDescription( { type: "offer", sdp: d.sdp } );
+                await p.pc.setLocalDescription( await p.pc.createAnswer() );
+                capVideo( p.pc );
+                await gathered( p.pc );
+                if( call !== mine || call.peers[ from ] !== p ) return;
+                sendSigTo( from, { t: "answer", sdp: p.pc.localDescription.sdp } );
+                sendSigTo( from, stateSig() );
+                render();
+            }
+            else if( d.t === "answer" && p && p.offerer )
+            {
+                await p.pc.setRemoteDescription( { type: "answer", sdp: d.sdp } );
+                sendSigTo( from, stateSig() );
+            }
+            else if( d.t === "state" && p )
+            {
+                p.mic = d.mic !== false;
+                p.cam = d.cam !== false;
+                render();
+            }
+        }
+        catch( e ) { if( call === mine && call.peers[ from ] === p ) closePeer( from ); render(); }
+    }
+
+    function sendSigTo( dev, data )
+    {
+        if( ! call || ! call.id ) return;
+        C.api( "POST", "call/" + call.id + "/sig", { dev: S.dev, to: dev, data: data }, { base: call.w.api } ).catch( function () {} );
+    }
+
+    // One connection's state. Down: the side that offered offers again (an
+    // ICE restart), and starts over with a fresh connection if that does not
+    // bring it back. The rest of the call talks on meanwhile.
+    function groupConn( p )
+    {
+        var st = p.pc.connectionState;
+        if( st === "connected" )
+        {
+            clearTimeout( p.failTimer );
+            p.failTimer = null;
+            clearTimeout( call.connectTimer );
+            if( ! call.since ) call.since = Date.now();
+            if( call.state !== "talking" ) { call.state = "talking"; tone( null ); wakeLock( true ); }
+            if( ! call.tick ) call.tick = setInterval( renderTime, 1000 );
+            render();
+            return;
+        }
+        if( st !== "disconnected" && st !== "failed" ) return;
+        var dev = p.dev;
+        var still = function () { return call && call.peers[ dev ] === p && p.pc.connectionState !== "connected"; };
+        if( p.offerer && ! p.restarting )
+        {
+            p.restarting = true;
+            setTimeout( function () { p.restarting = false; if( still() ) groupOffer( p, true ); }, st === "failed" ? 0 : RESTART_AFTER );
+        }
+        if( ! p.failTimer ) p.failTimer = setTimeout( function ()
+        {
+            p.failTimer = null;
+            if( ! still() ) return;
+            if( p.offerer && pidOf( dev ) ) groupOffer( makeGroupPeer( dev, p.pid ), false );
+        }, FAIL_AFTER );
+        render();
+    }
+
+    // A tile for each of the others: their picture, or their circle.
+    function renderTiles( el )
+    {
+        var grid = el.querySelector( ".call-grid" );
+        var devs = Object.keys( call.peers );
+        grid.dataset.n = String( devs.length );
+        devs.forEach( function ( dev )
+        {
+            var p = call.peers[ dev ];
+            p.pid = p.pid || pidOf( dev );
+            if( ! p.tile )
+            {
+                p.tile = h( "div", { class: "call-tile" },
+                            h( "video", { attrs: { playsinline: "", autoplay: "" } } ),
+                            h( "span", { class: "call-tile-av" } ),
+                            h( "span", { class: "call-tile-name" } ) );
+                grid.appendChild( p.tile );
+            }
+            var media = p.tile.querySelector( "video" );
+            if( p.remote && media.srcObject !== p.remote )
+            {
+                media.srcObject = p.remote;
+                playOne( media );
+            }
+            var pic = call.video && p.cam && p.remote && p.remote.getVideoTracks().length > 0;
+            p.tile.classList.toggle( "cam-off", ! pic );
+            p.tile.classList.toggle( "waiting", p.pc.connectionState !== "connected" );
+            var name = C.nameOf( p.pid, call.conv );
+            var av = p.tile.querySelector( ".call-tile-av" );
+            if( av.dataset.pid !== p.pid ) { av.textContent = ""; av.appendChild( C.avatar( p.pid, name, "xl", call.conv ) ); av.dataset.pid = p.pid; }
+            var nm = p.tile.querySelector( ".call-tile-name" );
+            nm.textContent = "";
+            if( ! p.mic ) nm.appendChild( C.ic( "mic-off" ) );
+            nm.appendChild( document.createTextNode( name ) );
+        } );
+    }
+
+    function playOne( media )
+    {
+        var pr = media.play();
+        if( pr && pr.catch ) pr.catch( function () { if( call && call.el ) call.el.querySelector( ".call-hear" ).hidden = false; } );
+    }
+
+    function playTiles()
+    {
+        if( ! call || ! call.el ) return;
+        [].forEach.call( call.el.querySelectorAll( ".call-tile video" ), playOne );
+    }
+
+    // A group call on in the open chat that this page is not in: a bar over
+    // the messages, with "Join" while there is room.
+    C.renderCallBar = function ()
+    {
+        var conv = S.open, host = C.$( "#vConv" ), wall = C.$( "#wall" );
+        var bar = C.$( "#callBar" );
+        var w = conv ? C.W( conv ) : null;
+        var c = w && ( w.calls || [] ).filter( function ( x ) { return x.group && x.conv === conv && x.state !== "ended" && ! x.mine; } )[ 0 ];
+        if( ! c || ! host || ! wall || ( call && call.id === c.id ) ) { if( bar ) bar.remove(); return; }
+        var n = ( c.in || [] ).length;
+        if( ! bar ) { bar = h( "div", { class: "call-bar", attrs: { id: "callBar" } } ); host.insertBefore( bar, wall ); }
+        bar.textContent = "";
+        bar.appendChild( C.ic( c.video ? "video" : "phone" ) );
+        bar.appendChild( h( "span", { text: C.TF( "chat.groupCallOn", { n: n, max: 4 } ) } ) );
+        if( ! call && n < 4 )
+            bar.appendChild( h( "button", { class: "pill is-active", attrs: { type: "button" }, text: T( "chat.join" ),
+                                            on: { click: function () { joinFromBar( c, w ); } } } ) );
+    };
+
+    function joinFromBar( c, w )
+    {
+        if( call ) return;
+        call = newCall( { id: c.id, conv: c.conv, video: !! c.video, dir: "in", state: "incoming", w: w, from: c.from } );
+        call.inList = c.in || [];
+        show();
+        C.answerCall();
     }
 
     // ---------------------------------------------------------------------
@@ -849,7 +1189,7 @@
             case "busy":     return mine ? kind + " · " + T( "chat.busy" ) : T( c.video ? "chat.missedVideo" : "chat.missedVoice" );
             case "failed":   return kind + " · " + T( "chat.callFailed" );
         }
-        return kind + " · " + clock( ( c.secs || 0 ) * 1000 );
+        return kind + " · " + clock( ( c.secs || 0 ) * 1000 ) + ( c.n ? " · " + C.TF( "chat.nPeople", { n: c.n } ) : "" );
     }
 
     C.callBody = function ( el, m, meta )
@@ -857,7 +1197,7 @@
         var c = m.call || {};
         var missed = m.from !== C.me() && ( c.end === "missed" || c.end === "busy" );
         if( missed ) el.classList.add( "missed" );
-        var back = S.callsOn && S.open && S.open.indexOf( "d-" ) === 0
+        var back = S.callsOn && S.open && ( S.open.indexOf( "d-" ) === 0 || S.open.indexOf( "g-" ) === 0 )
             ? C.btn( c.video ? "video" : "phone", "chat.callBack", function ( e ) { e.stopPropagation(); C.startCall( !! c.video ); }, "sm" )
             : null;
         el.appendChild( h( "div", { class: "call-line" },

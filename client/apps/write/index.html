@@ -44,22 +44,26 @@
                 { sel: '#fmtBtn',          text: NayiveUI.t( 'write.introFormatBar' ) },
                 { sel: '#moreToolsBtn',    text: NayiveUI.t( 'write.introMoreBar' ) },
                 { sel: '#moreBtn',         text: NayiveUI.t( 'write.introFileMenu' ) },
-                { sel: '#newBtn',          text: NayiveUI.t( 'write.introNew' ) },
-                { sel: '#openBtn',         text: NayiveUI.t( 'write.introOpen' ) },
-                { sel: '#importBtn',       text: NayiveUI.t( 'write.introImport' ) },
-                { sel: '#saveAsBtn',       text: NayiveUI.t( 'write.introSaveAs' ) },
-                { sel: '#printBtn',        text: NayiveUI.t( 'write.introPrint' ) },
-                { sel: '#pageSetupBtn',    text: NayiveUI.t( 'write.introPage' ) },
-                { sel: '#headerBtn',       text: NayiveUI.t( 'write.introHeader' ) },
-                { sel: '#pageNumBtn',      text: NayiveUI.t( 'write.introPageNum' ) },
-                { sel: '#settingsBtn',     text: NayiveUI.t( 'write.introSettings' ) },
-                { sel: '#tplBtn',          text: NayiveUI.t( 'write.introTemplates' ) },
-                { sel: '#restoreBtn',      text: NayiveUI.t( 'write.introRestore' ) },
-                { sel: '#lockBtn',         text: NayiveUI.t( 'write.introLock' ) },
-                { sel: '#paraBtn',         text: NayiveUI.t( 'write.introPara' ) },
-                { sel: '#statsBtn',        text: NayiveUI.t( 'write.introStats' ) },
-                { sel: '#scBtn',           text: NayiveUI.t( 'write.introShortcuts' ) }
-            ]
+                { sel: '#newBtn',          text: NayiveUI.t( 'write.introNew' ), tour: { open: '#moreBtn' } },
+                { sel: '#openBtn',         text: NayiveUI.t( 'write.introOpen' ), tour: { open: '#moreBtn' } },
+                { sel: '#importBtn',       text: NayiveUI.t( 'write.introImport' ), tour: { open: '#moreBtn' } },
+                { sel: '#saveAsBtn',       text: NayiveUI.t( 'write.introSaveAs' ), tour: { open: '#moreBtn' } },
+                { sel: '#printBtn',        text: NayiveUI.t( 'write.introPrint' ), tour: { open: [ '#wrOutputBtn', '#moreBtn' ] } },
+                { sel: '#pageSetupBtn',    text: NayiveUI.t( 'write.introPage' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#headerBtn',       text: NayiveUI.t( 'write.introHeader' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#pageNumBtn',      text: NayiveUI.t( 'write.introPageNum' ), tour: { open: [ '#wrPageBtn', '#moreBtn' ] } },
+                { sel: '#settingsBtn',     text: NayiveUI.t( 'write.introSettings' ), tour: { open: '#moreBtn' } },
+                { sel: '#tplBtn',          text: NayiveUI.t( 'write.introTemplates' ), tour: { open: '#moreBtn' } },
+                { sel: '#restoreBtn',      text: NayiveUI.t( 'write.introRestore' ), tour: { open: '#moreBtn' } },
+                { sel: '#lockBtn',         text: NayiveUI.t( 'write.introLock' ), tour: { open: '#moreBtn' } },
+                { sel: '#paraBtn',         text: NayiveUI.t( 'write.introPara' ), tour: { open: '#moreBtn' } },
+                { sel: '#statsBtn',        text: NayiveUI.t( 'write.introStats' ), tour: { open: '#helpBtn' } },
+                { sel: '#scBtn',           text: NayiveUI.t( 'write.introShortcuts' ), tour: { open: '#moreBtn' } }
+            ],
+            // The guided tour (Ayuda ▸ Ver el tour): the page, then the card's rows;
+            // `tour: { open }` lights a row inside the menu or popup that holds it
+            // (a list: the first one on screen - a phone keeps these in the ⋮).
+            tour: [ { sel: '#editor', text: NayiveUI.t( 'write.introLead' ) }, 'buttons' ]
         } );
     } );
     </script>
@@ -170,9 +174,10 @@
         /* Write has TWO chromes and Settings picks between them: the icon
            TOOLBAR (the default, everything in one wrapping strip) and classic
            PULL-DOWN MENUS — Archivo · Edición · Ver · Insertar · Formato ·
-           Herramientas · Tabla · Ayuda, the way Word laid them out before the
-           ribbon. Two header buttons switch between them (.chrome-btn, the same
-           shape as Calendar's day / week / month).
+           Tabla · Ayuda, the way Word laid them out before the ribbon
+           (Settings is Edición's last entry, as in every app). Two header
+           buttons switch between them (.chrome-btn, the same shape as
+           Calendar's day / week / month).
            Both drive exactly the same code: a menu entry either clicks the real
            (hidden) button in #writeTools or runs the same engine command the
            toolbar button runs. Nothing is exclusive to one chrome.
@@ -541,9 +546,11 @@
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="undoBtn" class="icon-btn tb-keep" type="button" data-slot="history.undo" data-i18n-attr="title:write.tb.undo, aria-label:write.tb.undo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"></path></svg></button>
                 <button id="redoBtn" class="icon-btn" type="button" data-slot="history.redo" data-i18n-attr="title:write.tb.redo, aria-label:write.tb.redo"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"></path></svg></button>
+                <button id="editBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:ui.menu.edit, aria-label:ui.menu.edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg></button>
                 <span class="vsep" aria-hidden="true"></span>
                 <button id="findBtn" class="icon-btn" type="button" data-i18n-attr="title:write.tb.search, aria-label:write.tb.search"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"></path></svg></button>
                 <button id="marksBtn" class="icon-btn" type="button" data-slot="review.paragraphMarks" data-i18n-attr="title:write.formattingMarks, aria-label:write.formattingMarks"><svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-160v-240q-83 0-141.5-58.5T160-600q0-83 58.5-141.5T360-800h360v80h-80v560h-80v-560H440v560h-80Z"></path></svg></button>
+                <button id="modeBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.mode, aria-label:write.mode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"></path><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"></path></svg></button>
                 <button id="zoomBtn" class="icon-btn has-popup" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-attr="title:write.tb.zoom, aria-label:write.tb.zoom"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="20.5" y1="20.5" x2="16" y2="16"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
             </div>
 
@@ -572,6 +579,10 @@
                 </button>
                 <span class="vsep" aria-hidden="true"></span>
 
+                <!-- Settings: the gear before "?", as in every app. -->
+                <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
                 <!-- Ayuda. Opens the three-entry menu below (#helpMenu), not the
                      guide card: the card is one of the three entries. -->
                 <button id="helpBtn" class="icon-btn" data-intro-open type="button" data-i18n-attr="title:ui.help, aria-label:ui.help">
@@ -579,8 +590,8 @@
                 </button>
             </div>
 
-            <!-- FILE: new, open, import, "guardar como", restore, password,
-                 settings and the shortcut sheet. Off the row on every screen -
+            <!-- FILE: new, open, recent, save, import, "guardar como", restore,
+                 password and the shortcut sheet. Off the row on every screen -
                  the header's "..." menu is built FROM these buttons (glyph and
                  title cloned) and an entry clicks the one it came from, so
                  there is one set of handlers and the menu cannot drift. -->
@@ -590,6 +601,12 @@
                 </button>
                 <button id="openBtn" class="icon-btn" data-i18n-attr="title:ui.openDoc, aria-label:ui.openDoc">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>
+                </button>
+                <button id="recentBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.recent, aria-label:ui.recent">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
+                </button>
+                <button id="saveBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.save, aria-label:ui.save">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </button>
                 <input id="importInput" type="file" accept=".docx" style="display:none">
                 <button id="importBtn" class="icon-btn" data-i18n-attr="title:ui.importDevice, aria-label:ui.importDevice">
@@ -603,9 +620,6 @@
                 </button>
                 <button id="lockBtn" class="icon-btn" data-i18n-attr="title:lock.title, aria-label:lock.title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="M10.7 12.3 21 2"></path><path d="m15.5 7.5 3 3"></path><path d="m18 5 2.5 2.5"></path></svg>
-                </button>
-                <button id="settingsBtn" class="icon-btn" data-i18n-attr="title:ui.settings, aria-label:ui.settings">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
                 <button id="scBtn" class="icon-btn" type="button" data-i18n-attr="title:write.shortcuts, aria-label:write.shortcuts">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6" y2="10"></line><line x1="10" y1="10" x2="10" y2="10"></line><line x1="14" y1="10" x2="14" y2="10"></line><line x1="18" y1="10" x2="18" y2="10"></line><line x1="7" y1="14" x2="17" y2="14"></line></svg>

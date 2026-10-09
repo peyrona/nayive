@@ -69,7 +69,7 @@ function open( kind )
     var tabs  = el( "div", "salon-tabs", null, sheet );
     tabs.setAttribute( "role", "tablist" );
     var panes = {};
-    var TABS = [ [ "langs", "salon.tabLangs" ], [ "content", "salon.tabContent" ],
+    var TABS = [ [ "content", "salon.tabContent" ], [ "langs", "salon.tabLangs" ],
                  sci ? [ "news", "sci.tabNews" ] : [ "art", "salon.tabArt" ], [ "look", "salon.tabLook" ] ];
     TABS.forEach( function ( x )
     {
@@ -101,7 +101,7 @@ function open( kind )
     NayiveUI.onSheetClose( ui.back, save );
 
     ui.show( function () { NayiveUI.applySheetButtons( sheet ); } );
-    show( "langs" );
+    show( "content" );
     [].forEach.call( sheet.querySelectorAll( ".salon-pane" ), function ( p ) { el( "p", "salon-note", "…", p ); } );
 
     // `base`: the settings as read, what closing compares with (save). A read

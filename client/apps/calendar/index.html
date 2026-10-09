@@ -70,13 +70,15 @@
                 { sel: '#settingsBtn', text: NayiveUI.t( 'calendar.introSettings' ) },
                 { sel: '#moreBtn',   text: NayiveUI.t( 'calendar.introViews'  ) }
             ]
-            // Framed by Planner the sync dot is hidden (the host shows ONE for every pane),
-            // so its row would document a control that is not on screen.
-            .concat( document.documentElement.classList.contains( 'is-embedded' ) ? [] : [
-                { sel: '#syncIndicator', name: NayiveUI.t( 'ui.syncName' ),
-                  text: NayiveUI.t( 'calendar.introSync' ) } ] )
             .concat( window.matchMedia( '(max-width: 640px)' ).matches
-                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] )
+                ? [ { sel: '#dlAddBtn', text: NayiveUI.t( 'calendar.introAdd' ) } ] : [] ),
+            // The guided tour ("Ver el tour" in the card): the calendar itself, then
+            // the card's buttons in order.
+            tour: function () {
+                return [ { sel: '#calHost', text: window.matchMedia( '(max-width: 640px)' ).matches
+                                                  ? NayiveUI.t( 'calendar.introLeadPhone' ) : NayiveUI.t( 'calendar.introLead' ) },
+                         'buttons' ];
+            }
         } );
     } );
     </script>

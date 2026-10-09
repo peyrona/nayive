@@ -173,6 +173,7 @@
         var onlineBefore = Array.from( w.online ).sort().join();
         w.online = new Set( r.online || [] );
         C.onCalls( r, w );   // first: a call must not wait for the list to reload
+        var watchMoved = C.onWatch ? C.onWatch( r, w ) : false;   // "Play for everyone" (watch.js)
         var typingBefore = JSON.stringify( w.typing );
         w.typing = r.typing || {};
 
@@ -187,7 +188,7 @@
         else
         {
             var moved = onlineBefore !== Array.from( w.online ).sort().join();   // the green dots
-            if( moved || typingBefore !== JSON.stringify( w.typing ) ) C.renderList();
+            if( moved || watchMoved || typingBefore !== JSON.stringify( w.typing ) ) C.renderList();
             if( mine ) C.renderConvHead();
             if( moved && C.refreshInfo ) C.refreshInfo();
         }
@@ -262,6 +263,7 @@
                 var el = C.btn( b[ 0 ], b[ 1 ], b[ 2 ] );
                 el.id = b[ 3 ];
                 el.dataset.rank = b[ 4 ];
+                if( b[ 0 ] === "help" ) el.setAttribute( "data-intro-open", "" );   // the tour ends here (shared/ui.js)
                 ( b[ 0 ] === "plus" ? tools : sys ).appendChild( el );
             } );
         else sys.appendChild( moreBtn );
@@ -498,6 +500,7 @@
         else if( c.via && c.kind === "d" ) prev.appendChild( h( "span", { text: T( "chat.sayHello" ) } ) );
 
         var l2 = h( "div", { class: "l2" }, prev );
+        if( C.watchOf && C.watchOf( c.id ) ) l2.appendChild( h( "span", { class: "flag watching", attrs: { title: T( "chat.watchTitle" ) } }, C.ic( "music" ) ) );
         if( c.pin )  l2.appendChild( h( "span", { class: "flag" }, C.ic( "pin" ) ) );
         if( c.mute ) l2.appendChild( h( "span", { class: "flag" }, C.ic( "bell-off" ) ) );
         if( c.unread ) l2.appendChild( h( "span", { class: "badge", text: String( c.unread ) } ) );

@@ -31,14 +31,17 @@ NayiveUI.firstRun( {
     title: 'Bookmarks',
     lead:  T( 'bookmarks.introLead' ),
     buttons: [
-        { icon: 'search', name: T( 'ui.search' ), text: T( 'bookmarks.introSearch' ) },
+        { icon: 'search', name: T( 'ui.search' ), text: T( 'bookmarks.introSearch' ), tour: { sel: '#searchBtn' } },
         { sel: '#addBtn',       text: T( 'bookmarks.introAdd' ) },
         { sel: '#newFolderBtn', text: T( 'bookmarks.introFolder' ) },
         { sel: '#moreBtn',      text: T( 'bookmarks.introMore' ) },
         { sel: '#gridBtn',      text: T( 'bookmarks.introGrid' ) },
-        { sel: '#listBtn',      text: T( 'bookmarks.introList' ) },
-        { sel: '#syncIndicator', name: T( 'ui.syncName' ), text: T( 'bookmarks.introSync' ) }
-    ]
+        { sel: '#listBtn',      text: T( 'bookmarks.introList' ) }
+    ],
+    // The guided tour ("Ver el tour" in the card): the folders, the card's
+    // buttons, then picking bookmarks (the shared item browser).
+    tour: [ { sel: '#treePane, #treeBtn', text: T( 'bookmarks.tourTree' ) }, 'buttons',
+            { use: 'pick', ghost: '#items, #emptyHint' }, { use: 'picked', ghost: '#items, #emptyHint' } ]
 } );
 
 await NayiveUI.bootWithStore( store, loadData );

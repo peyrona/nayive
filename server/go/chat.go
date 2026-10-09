@@ -238,6 +238,7 @@ type ChatCallInfo struct {
 	Video bool   `json:"video,omitempty"`
 	Secs  int    `json:"secs,omitempty"`
 	End   string `json:"end,omitempty"`
+	N     int    `json:"n,omitempty"` // a group call: how many people were in it
 }
 
 // ChatMsg is one message. Kind is text | photo | file | loc | card | poll |
@@ -354,6 +355,7 @@ type chatOwner struct {
 	lastEnd map[string]time.Time // participant -> when their last wait ended
 	online  map[string]bool
 	typing  map[string]map[string]time.Time // conv -> participant -> until
+	watch   map[string]*chatWatch           // conv -> the video playing for all (chat_watch.go)
 
 	sent map[string][]time.Time // a person's recent messages (rate limit)
 	day  map[string]chatDayUse  // a person's upload bytes today
@@ -1942,6 +1944,9 @@ func (h *ChatHub) sweep() {
 				if len(who) == 0 {
 					delete(o.typing, conv)
 				}
+			}
+			if o.watchTick(now) {
+				moved = true
 			}
 			if moved {
 				o.changed(false)

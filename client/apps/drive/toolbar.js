@@ -212,6 +212,23 @@ async function applyNews()
     catch( _ ) {}     // offline or a hiccup: the next news or a manual reload catches up
 }
 
+// Write, Calc and Text save through shared/store.js, which tells the other
+// pages on its own channel ("saved"), not on GumApi's: hear it too, so a
+// new document's first save shows up here. Only listens - never writes.
+function listenStoreSaves()
+{
+    try
+    {
+        const ch = new BroadcastChannel( 'nayive-store' );
+        ch.addEventListener( 'message', function( e )
+        {
+            const m = e.data || {};
+            if( m.t === 'saved' && typeof m.path === 'string' ) onFilesNews( { paths: [ m.path ], folders: false } );
+        } );
+    }
+    catch( _ ) {}
+}
+
 function catchUpNews()
 {
     if( ! newsWaiting || document.hidden ) return;

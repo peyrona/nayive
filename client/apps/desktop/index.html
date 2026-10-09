@@ -9,7 +9,8 @@
      One bar (bottom by default): on its left the menu button, which pops up the real
      launcher (../index.html, framed); then one button per open window, in the order
      they were opened, named after the document it shows; on its right a clock
-     ("<weekday> <hh:mm>" by default) - a press on it opens a countdown, whose
+     ("<weekday> <hh:mm>" by default) - a press on its weekday / date opens the
+     month's calendar, on the time a countdown, whose
      time left then sits on the bar just before the clock; after the clock a "?" opens
      the desktop's help card. The desktop's settings - per device: the clock,
      the bar's place and height - live in the "⋮" menu after the clock, which a
@@ -65,6 +66,10 @@
     <script>
         if( 'serviceWorker' in navigator )
             window.addEventListener( 'load', function () { navigator.serviceWorker.register( '../sw.js' ).catch( function () {} ); } );
+        // A limited browser (Firefox Focus...): the privacy note (NayiveUI decides).
+        window.addEventListener( 'load', function () {
+            setTimeout( function () { if( window.NayiveUI && NayiveUI.warnChrome ) NayiveUI.warnChrome(); }, 1500 );
+        } );
     </script>
 
     <style>
@@ -303,6 +308,7 @@
         /* Its menu: the shared .top-menu, above the windows; the Free/Tile switch
            is a row of it, as tall as a .menu-item. */
         #moreMenu { z-index: 100000; }
+        .tour-overlay { z-index: 200000; }   /* the guided tour over the bar's menus and pop-ups */
         #moreMenu .tile-sw { padding: 8px 12px; }
         /* Sticky windows, the clock and the bar: rows of the menu with the shared
            .switch, a <select> or the height slider at their end. */
@@ -345,14 +351,51 @@
         .wx-col > svg  { width: 30px; height: 30px; }
         .wx-col > b    { font-weight: 600; font-variant-numeric: tabular-nums; }
         .wx-fail    { width: 300px; color: var(--text-dim); font-size: 0.9rem; }
-        .wx-ico .s  { stroke: #e9a10d; }
-        .wx-ico .r  { stroke: #3b8fd9; }
+        /* The sun's disc is filled; on the light theme's beige the amber lines go
+           darker (#e9a10d there is almost invisible). */
+        .wx-ico     { --wx-sun: #e9a10d; --wx-rain: #3b8fd9; }
+        :root[data-theme="light"] .wx-ico { --wx-sun: #b86e00; --wx-rain: #1f6db5; }   /* rain: one step darker too */
+        .wx-ico .s  { stroke: var(--wx-sun); }
+        .wx-ico .sd { fill: #f2b632; }
+        .wx-ico .r  { stroke: var(--wx-rain); }
 
         /* The clock: "<weekday> <date> <time>", each part optional but the time. A quiet
-           .text-btn.ghost with no border: a press opens the countdown dialog. */
-        #clock      { gap: 6px; height: calc(var(--bar-h) - 14px); padding: 0 10px; border-color: transparent;
+           .text-btn.ghost with no border: a press on the time opens the countdown
+           dialog, on the weekday / date the month (#calPop). Two places to press, so
+           two hover chips: the button itself never lights, each part does. */
+        #clock      { gap: 2px; height: calc(var(--bar-h) - 14px); padding: 0; border-color: transparent;
                       font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+        #clock:hover { background: transparent; }
         #clock b    { font-weight: 500; font-variant-numeric: tabular-nums; }
+        #clock > span, #clock > b { display: flex; align-items: center; align-self: stretch; padding: 0 8px;
+                                    border-radius: var(--radius-s); transition: background-color var(--tr-fast); }
+        #clock > span:hover, #clock > b:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+        /* The second clock (set.tz2): "<time> [+1]" with its city on a row below,
+           before the clock, paler and a bit smaller; shows only. */
+        #clock2     { display: grid; grid-template-columns: auto auto; justify-content: center; align-content: center;
+                      flex: 0 0 auto; padding: 0 6px; line-height: 1.15;
+                      font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; cursor: default; }
+        #clock2[hidden] { display: none; }
+        #clock2 > span { grid-row: 2; grid-column: 1 / -1; text-align: center; font-size: 0.7rem; }
+        #clock2 b   { font-weight: 500; font-variant-numeric: tabular-nums; }
+        #clock2 i   { font-style: normal; margin-left: 3px; font-size: 0.7rem; }
+        #clock2 i:empty { display: none; }
+
+        /* THE MONTH - the date's popup: ← "October [2026]" → on top, then the days,
+           Monday first, always 6 rows so it never jumps; today in the accent, the
+           days of the months beside it faint; each row's week number on its left. */
+        #calPop       { z-index: 100000; min-width: 0; padding: 8px 10px 10px; gap: 6px; }
+        .cal-head     { display: flex; align-items: center; gap: 4px; }
+        .cal-title    { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .cal-title b  { font-weight: 600; }
+        #calYear      { width: calc(4.5em + 10px); padding: 4px 6px; text-align: center; font-variant-numeric: tabular-nums; }
+        .cal-grid     { display: grid; grid-template-columns: 26px repeat(7, 34px); gap: 2px; }
+        .cal-grid > span        { height: 30px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-s);
+                                  font-size: 0.9rem; font-variant-numeric: tabular-nums; cursor: default; }
+        .cal-grid > .cal-wd     { height: 22px; font-size: 0.75rem; font-weight: 600; color: var(--text-dim); }
+        .cal-grid > .cal-wk     { font-size: 0.75rem; color: var(--text-dim); }
+        .cal-grid > .cal-out    { color: var(--text-dim); opacity: 0.55; }
+        .cal-grid > .cal-today  { background: var(--accent); color: var(--on-accent); font-weight: 600; opacity: 1; }
 
         /* The battery: an icon filled to its level and "80%" (red when low, green
            while charging). Shows only: no press. Greyed menu row with no battery. */
@@ -385,7 +428,9 @@
         #cdChip.done > .cd-text { color: var(--text); font-weight: 600; }
         #cdChip b:empty, #cdChip .task-x[hidden] { display: none; }
 
-        /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below. */
+        /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
+           Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
+        #cdBackdrop > .sheet { position: fixed; }
         .cd-nums      { flex-wrap: nowrap; }
         .cd-nums .field { flex: 1 1 0; min-width: 76px; }
         .cd-nums .field input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
@@ -434,6 +479,10 @@
         body.bar-side  #cdChip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
                                   padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
                                   font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
+        body.bar-side  #clock  { padding: 4px 2px; }
+        body.bar-side  #clock2 { width: calc(var(--bar-h) - 4px); padding: 4px 2px;
+                                 white-space: normal; text-align: center; font-size: 0.7rem; line-height: 1.2; overflow-wrap: anywhere; }
+        body.bar-side  #clock > span, body.bar-side  #clock > b { justify-content: center; padding: 2px; }
         body.bar-side  #cdChip > .cd-text { display: none; }
         body.bar-side  #cdChip > .task-x  { margin: 0; }
         body.bar-side  #moreBtn,
@@ -483,6 +532,8 @@
             <button id="wxBtn" class="icon-btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
             <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
             <span id="batt" role="img" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect class="batt-fill" x="4" y="9" width="14" height="6" rx="1" stroke="none" fill="currentColor"/></svg><b></b></span>
+            <!-- SECOND CLOCK - another time zone (set.tz2, see THE SECOND CLOCK); shows only, no press. -->
+            <span id="clock2" hidden><span></span><b></b><i></i></span>
             <button id="clock" class="text-btn ghost" type="button"><span></span><b></b></button>
             <!-- MORE (2026-09-28) - the "⋮" after the clock: what used to sit on the
                  bar (Free/Tile) and what has no room there (Lock now, the clock, the bar).
@@ -531,6 +582,10 @@
                 </select></label>
             <label class="menu-item"><span data-i18n="desktop.showDate"></span><span class="switch sm"><input type="checkbox" id="setDate"><span class="track"></span></span></label>
             <label class="menu-item"><span data-i18n="desktop.showSeconds"></span><span class="switch sm"><input type="checkbox" id="setSecs"><span class="track"></span></span></label>
+            <!-- SECOND CLOCK - on: its zone's list below (filled at each menu open, see THE CLOCK AND THE BAR). -->
+            <label class="menu-item"><span data-i18n="desktop.clock2"></span><span class="switch sm"><input type="checkbox" id="setTz2On"><span class="track"></span></span></label>
+            <label class="menu-item" id="tz2Wrap" hidden><span data-i18n="desktop.clock2Zone"></span>
+                <select id="setTz2"></select></label>
             <!-- THE BAR - its side of the screen and its height (its width when at a side). -->
             <div class="menu-sep"></div>
             <div class="menu-label" data-i18n="desktop.tabDesktop"></div>
@@ -562,6 +617,17 @@
         <!-- TODAY'S WEATHER - opened by #wxBtn, beside it on the desk side of the bar
              (see WEATHER): a sliding bar until the forecast comes, then 5 hours. -->
         <div class="top-menu" id="wxPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.weather"></div>
+
+        <!-- THE MONTH - opened by the clock's weekday / date (see THE MONTH): ← and →
+             step a month, the year box in the middle jumps to any year. -->
+        <div class="top-menu" id="calPop" role="dialog" hidden data-i18n-attr="aria-label:desktop.calendar">
+            <div class="cal-head">
+                <button class="icon-btn" id="calPrev" type="button" data-i18n-attr="title:desktop.prevMonth, aria-label:desktop.prevMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
+                <span class="cal-title"><b id="calMonth"></b><input id="calYear" type="number" min="1" max="9999" step="1" inputmode="numeric" data-i18n-attr="title:calendar.year, aria-label:calendar.year"></span>
+                <button class="icon-btn" id="calNext" type="button" data-i18n-attr="title:desktop.nextMonth, aria-label:desktop.nextMonth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+        </div>
 
         <!-- WINDOW SWITCHER - Alt pressed and let go on its own (see SWITCHER). -->
         <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
@@ -1764,6 +1830,42 @@
         } );
     } );
 
+    // THE SECOND CLOCK's rows: the switch shows the zone's list; the list is
+    // filled at each menu open (ui.js is deferred), its first pick UTC.
+    var tz2On = document.getElementById( 'setTz2On' ), tz2Sel = document.getElementById( 'setTz2' ),
+        tz2Wrap = document.getElementById( 'tz2Wrap' );
+    function loadTz2()
+    {
+        var zones = window.NayiveUI ? NayiveUI.timeZones().slice() : [ 'UTC' ];
+        if( set.tz2 && zones.indexOf( set.tz2 ) < 0 ) zones.unshift( set.tz2 );
+        if( zones.indexOf( 'UTC' ) < 0 ) zones.unshift( 'UTC' );
+        if( tz2Sel.options.length !== zones.length )
+        {
+            tz2Sel.innerHTML = '';
+            zones.forEach( function ( z )
+            {
+                var o = document.createElement( 'option' );
+                o.value = z; o.textContent = z.replace( /_/g, ' ' );
+                tz2Sel.appendChild( o );
+            } );
+        }
+        tz2Sel.value = set.tz2 || 'UTC';
+        tz2On.checked = !! set.tz2On;
+        tz2Wrap.hidden = ! set.tz2On;
+    }
+    function saveTz2()
+    {
+        set.tz2On = tz2On.checked; set.tz2 = tz2Sel.value || 'UTC';
+        tz2Wrap.hidden = ! set.tz2On;
+        saveSet();
+        tick();
+        placeMore();
+    }
+    tz2On.addEventListener( 'change', saveTz2 );
+    tz2Sel.addEventListener( 'change', saveTz2 );
+    loadTz2();
+    moreBtn.addEventListener( 'click', loadTz2 );
+
     // SCREEN LOCKER - saved at once, on this device (see #lockSel).
     var lockSel = document.getElementById( 'lockSel' ), lockMin = document.getElementById( 'lockMin' ),
         lockText = document.getElementById( 'lockText' );
@@ -1839,29 +1941,39 @@
 
     // One icon per sky of the engine's skyOf (clear, partly cloudy, cloudy, fog,
     // drizzle, rain, snow, showers, storm), [ day, night ] where they differ.
-    // Class "s" paints amber (sun, bolt), "r" blue (rain, snow).
+    // Class "s" paints amber (sun, bolt), "sd" fills the sun's disc, "r" blue (rain, snow).
     var WX_CLOUD = '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>';
-    var WX_RAYS  = '<path class="s" d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.947 12.65a4 4 0 0 0-5.925-4.128"/>';
+    // A sun behind the cloud `d`: its rays, and its disc (filled, like the clear
+    // sky's) cut away by the cloud with a small gap - a mask, "#M" made unique per
+    // icon in wxSvg; then the cloud itself.
+    function wxPeek( d )
+    {
+        return '<path class="s" d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41"/>' +
+               '<mask id="M"><rect width="24" height="24" fill="#fff" stroke="none"/>' +
+               '<path d="' + d + '" fill="#000" stroke="#000" stroke-width="5"/></mask>' +
+               '<circle class="s sd" cx="12" cy="12" r="4" mask="url(#M)"/><path d="' + d + '"/>';
+    }
     var WX_ICONS =
     [
-        [ '<g class="s"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g>',
+        [ '<g class="s"><circle class="sd" cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g>',
           '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>' ],
-        [ WX_RAYS + '<path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>',
+        [ wxPeek( 'M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z' ),
           '<path d="M13 16a3 3 0 1 1 0 6H7a5 5 0 1 1 4.9-6Z"/><path d="M10.1 9A6 6 0 0 1 16 4a4 4 0 0 0 6 6 6 6 0 0 1-3 5.197"/>' ],
         [ '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>' ],
         [ WX_CLOUD + '<path d="M16 17H7M17 21H9"/>' ],
         [ WX_CLOUD + '<path class="r" d="M8 19v1M8 14v1M16 19v1M16 14v1M12 21v1M12 16v1"/>' ],
         [ WX_CLOUD + '<path class="r" d="M16 14v6M8 14v6M12 16v6"/>' ],
         [ WX_CLOUD + '<path class="r" d="M8 15h.01M8 19h.01M12 17h.01M12 21h.01M16 15h.01M16 19h.01"/>' ],
-        [ WX_RAYS + '<path d="M3 20a5 5 0 1 1 8.9-4H13a3 3 0 0 1 2 5.24"/><path class="r" d="M11 20v2M7 19v2"/>',
+        [ wxPeek( 'M3 20a5 5 0 1 1 8.9-4H13a3 3 0 0 1 2 5.24' ) + '<path class="r" d="M11 20v2M7 19v2"/>',
           WX_CLOUD + '<path class="r" d="M16 14v6M8 14v6M12 16v6"/>' ],
         [ '<path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/><path class="s" d="m13 12-3 5h4l-3 5"/>' ]
     ];
+    var wxMask = 0;
     function wxSvg( k, day )
     {
-        var i = WX_ICONS[ k ] || WX_ICONS[ 2 ];
+        var i = WX_ICONS[ k ] || WX_ICONS[ 2 ], id = 'wxm' + ( ++wxMask );
         return '<svg class="wx-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-               ( day || i.length < 2 ? i[ 0 ] : i[ 1 ] ) + '</svg>';
+               ( day || i.length < 2 ? i[ 0 ] : i[ 1 ] ).replace( 'id="M"', 'id="' + id + '"' ).replace( 'url(#M)', 'url(#' + id + ')' ) + '</svg>';
     }
 
     // Day or night at place-local time `iso` ("YYYY-MM-DDTHH:MM"): Open-Meteo says
@@ -2345,8 +2457,8 @@
 
     //------------------------------------------------------------------------//
     // THE CLOCK - "<weekday> <yyyy-mm-dd> <hh:mm[:ss]>", weekday and date as the
-    // settings say, the weekday in the interface language. A press opens the
-    // countdown (below).
+    // settings say, the weekday in the interface language. A press on the time
+    // opens the countdown (below), on the weekday / date the month (THE MONTH).
 
     var clock = document.getElementById( 'clock' ), clockTimer = 0;
     function pad( n ) { return ( n < 10 ? '0' : '' ) + n; }
@@ -2368,12 +2480,130 @@
         clock.querySelector( 'b' ).textContent =
             pad( now.getHours() ) + ':' + pad( now.getMinutes() ) + ( set.secs ? ':' + pad( now.getSeconds() ) : '' );
         clock.title = dayName( now, 'long' ) + ' ' + isoDate( now );
+        tick2( now );
         clockTimer = setTimeout( tick, set.secs ? 1000 - now.getMilliseconds() + 20
                                                 : 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50 );
+    }
+
+    // THE SECOND CLOCK (2026-10-09) - another time zone (set.tz2On + set.tz2,
+    // the "⋮" menu; the zone is kept while off): "<city> <hh:mm>" just before the clock, paler, and "+1" / "-1"
+    // when that place is already on another day. Shows only: no press.
+    var clock2 = document.getElementById( 'clock2' );
+    function zoneCity( z ) { return z.split( '/' ).pop().replace( /_/g, ' ' ); }
+    function tick2( now )
+    {
+        var z = set.tz2On && set.tz2;
+        clock2.hidden = ! z;
+        if( ! z ) return;
+        var p = {};
+        try
+        {
+            new Intl.DateTimeFormat( 'en-GB', { timeZone: z, year: 'numeric', month: '2-digit', day: '2-digit',
+                                                hour: '2-digit', minute: '2-digit', hourCycle: 'h23' } )
+                .formatToParts( now ).forEach( function ( x ) { p[ x.type ] = x.value; } );
+        }
+        catch( e ) { clock2.hidden = true; return; }      // a zone this browser no longer knows
+        var there = Date.UTC( +p.year, +p.month - 1, +p.day ),
+            here  = Date.UTC( now.getFullYear(), now.getMonth(), now.getDate() ),
+            days  = Math.round( ( there - here ) / 86400000 );
+        clock2.querySelector( 'span' ).textContent = zoneCity( z );
+        clock2.querySelector( 'b' ).textContent = p.hour + ':' + p.minute;
+        clock2.querySelector( 'i' ).textContent = days > 0 ? '+' + days : days < 0 ? String( days ) : '';
+        clock2.title = z + ' - ' + p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute;
     }
     tick();
     // the weekday is written in the interface language: once more when that is in
     if( window.NayiveI18n && NayiveI18n.ready ) NayiveI18n.ready.then( tick );
+
+    //------------------------------------------------------------------------//
+    // THE MONTH (2026-10-08) - a press on the clock's weekday / date (only when
+    // shown) opens a month's calendar beside the bar, like many Linux desktops:
+    // ← and → step a month, the year box jumps to any year. It always opens on
+    // today's month. Each row starts with its ISO week number (week 1 holds the
+    // year's first Thursday). Shows only: a day has no press.
+
+    var calPop = document.getElementById( 'calPop' ), calGrid = document.getElementById( 'calGrid' );
+    var calYear = document.getElementById( 'calYear' ), calMonth = document.getElementById( 'calMonth' );
+    var calY = 0, calM = 0;
+
+    function calCell( text, cls )
+    {
+        var c = document.createElement( 'span' );
+        c.textContent = text;
+        if( cls ) c.className = cls;
+        calGrid.appendChild( c );
+    }
+
+    function calPaint()
+    {
+        calMonth.textContent = window.NayiveI18n ? NayiveI18n.month( calM ) : String( calM + 1 );
+        if( +calYear.value !== calY ) calYear.value = calY;          // not while it is being typed
+        calGrid.textContent = '';
+        calCell( '', 'cal-wd' );                                      // over the week numbers
+        for( var i = 1; i <= 7; i++ )
+            calCell( window.NayiveI18n ? NayiveI18n.weekday( i, 'narrow' ) : String( i ), 'cal-wd' );
+        var d = new Date( 2000, 0, 1 ), now = new Date();
+        d.setFullYear( calY, calM, 1 );                               // years below 100 too
+        d.setDate( 1 - ( d.getDay() + 6 ) % 7 );                      // back to its Monday
+        for( i = 0; i < 42; i++ )
+        {
+            if( i % 7 === 0 ) calCell( calWeek( d ), 'cal-wk' );
+            var cls = d.getMonth() !== calM ? 'cal-out' : '';
+            if( d.toDateString() === now.toDateString() ) cls += ' cal-today';
+            calCell( d.getDate(), cls.trim() );
+            d.setDate( d.getDate() + 1 );
+        }
+    }
+
+    // ISO week of the Monday `mon`: its Thursday's year, counted from 1 January.
+    function calWeek( mon )
+    {
+        var thu = new Date( mon ), jan1 = new Date( 2000, 0, 1 );
+        thu.setDate( thu.getDate() + 3 );
+        jan1.setFullYear( thu.getFullYear(), 0, 1 );
+        return 1 + Math.floor( Math.round( ( thu - jan1 ) / 86400000 ) / 7 );   // round: a summer-time day is 23 h
+    }
+
+    function calStep( n )
+    {
+        calM += n;
+        if( calM < 0 )  { calM = 11; calY--; }
+        if( calM > 11 ) { calM = 0;  calY++; }
+        calY = Math.max( 1, Math.min( 9999, calY ) );
+        calPaint();
+    }
+
+    function calOpen()
+    {
+        closeMenu(); closeMore();
+        if( wxMenu ) wxMenu.close();
+        var now = new Date();
+        calY = now.getFullYear(); calM = now.getMonth();
+        calPaint();
+        calPop.hidden = false;
+        placeBy( clock, calPop );
+    }
+    function calClose() { calPop.hidden = true; }
+
+    document.getElementById( 'calPrev' ).addEventListener( 'click', function () { calStep( -1 ); } );
+    document.getElementById( 'calNext' ).addEventListener( 'click', function () { calStep( 1 ); } );
+    calYear.addEventListener( 'input', function ()
+    {
+        var y = Math.floor( +calYear.value );
+        if( y >= 1 && y <= 9999 && y !== calY ) { calY = y; calPaint(); }
+    } );
+    calYear.addEventListener( 'change', function () { calYear.value = calY; } );    // a wrong year shows the right one again
+    // Closed by a press anywhere else, Escape, a resize or a press in a window;
+    // the "⋮" and the weather stop their press, so they close it themselves.
+    document.addEventListener( 'click', function ( e )
+    {
+        if( ! calPop.hidden && ! calPop.contains( e.target ) && ! clock.contains( e.target ) ) calClose();
+    } );
+    document.addEventListener( 'keydown', function ( e ) { if( e.key === 'Escape' ) calClose(); } );
+    window.addEventListener( 'resize', calClose );
+    window.addEventListener( 'blur', calClose );
+    moreBtn.addEventListener( 'click', calClose );
+    wxBtn.addEventListener( 'click', calClose );
 
     //------------------------------------------------------------------------//
     // THE COUNTDOWN - one at a time, on this device (localStorage), so it goes
@@ -2478,7 +2708,10 @@
         } catch( e ) {}
     }
 
-    function cdOpen()
+    // `by`: what was pressed (the clock or the chip); the dialog sits beside it,
+    // on the desk side of the bar, as the month does.
+    var cdBy = clock;
+    function cdOpen( by )
     {
         closeMenu();
         var s = cd.last > 0 ? cd.last : 300;
@@ -2486,7 +2719,13 @@
         cdText.value = cd.text;
         if( window.NayiveUI ) NayiveUI.open( 'cdBackdrop' );
         else cdBack.classList.add( 'open' );
+        cdBy = by || clock;
+        placeBy( cdBy, cdBack.querySelector( '.sheet' ) );
     }
+    window.addEventListener( 'resize', function ()
+    {
+        if( cdBack.classList.contains( 'open' ) ) placeBy( cdBy, cdBack.querySelector( '.sheet' ) );
+    } );
 
     function num( el, max ) { var n = Math.floor( +el.value ); return n > 0 ? Math.min( n, max ) : 0; }
 
@@ -2502,7 +2741,14 @@
         cdTick();
     }
 
-    clock.addEventListener( 'click', cdOpen );
+    // The clock: its weekday / date opens the month (a second press closes it), the rest the countdown.
+    clock.addEventListener( 'click', function ( e )
+    {
+        var head = clock.querySelector( 'span' );
+        if( ! head.hidden && head.contains( e.target ) ) { if( calPop.hidden ) calOpen(); else calClose(); return; }
+        calClose();
+        cdOpen( clock );
+    } );
     cdPlay.addEventListener( 'click', cdStart );
     [ cdH, cdM, cdS, cdText ].forEach( function ( el )
     {
@@ -2513,7 +2759,7 @@
     cdChip.addEventListener( 'click', function ( e )
     {
         var b = e.target.closest( '[data-cd]' ), what = b && b.getAttribute( 'data-cd' );
-        if( ! what ) { cdOpen(); return; }
+        if( ! what ) { cdOpen( cdChip ); return; }
         if( what === 'pp' )
         {
             if( cd.end ) { cd.left = Math.max( 1000, cd.end - Date.now() ); cd.end = 0; }
@@ -2805,17 +3051,20 @@
             lead:  t( 'desktop.helpLead' ),
             buttons: [
                 { sel: '#menuBtn',       icon: 'grid', text: t( 'desktop.helpMenu' ) },
-                { svg: ICON_WIN,  name: t( 'desktop.helpWinName' ),    text: t( 'desktop.helpWin' ) },
-                { svg: ICON_SCALE, name: t( 'desktop.helpScaleName' ), text: t( 'desktop.helpScale' ) },
-                { icon: 'fullscr', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ) },
-                { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ) },
-                { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ) },
-                { svg: wxSvg( 1, true ), name: t( 'desktop.weather' ), text: t( 'desktop.helpWeather' ) },   // listed even while off: it says where to turn it on
-                { svg: battEl.querySelector( 'svg' ).outerHTML, name: t( 'desktop.battery' ), text: t( 'desktop.helpBattery' ) },   // the same
+                // tour: ("Ver el tour" in the card) a window, its bar button, the
+                // ⋮'s Tile switch, the bar's weather and battery - or, with no
+                // window open / the item off, the desk or the bar as a ghost.
+                { svg: ICON_WIN,  name: t( 'desktop.helpWinName' ),    text: t( 'desktop.helpWin' ), tour: { sel: '.win:not([hidden]) .win-bar', ghost: '#desk' } },
+                { svg: ICON_SCALE, name: t( 'desktop.helpScaleName' ), text: t( 'desktop.helpScale' ), tour: { sel: '#tasks button', ghost: '#tasks, #bar' } },
+                { icon: 'fullscr', name: t( 'desktop.helpMoveName' ),   text: t( 'desktop.helpMove' ), tour: { sel: '.win:not([hidden])', ghost: '#desk' } },
+                { svg: ICON_TILE, name: t( 'desktop.tileOn' ),          text: t( 'desktop.helpTile' ), tour: { sel: '#tileSw', open: '#moreBtn' } },
+                { icon: 'forward', name: t( 'desktop.helpSwitchName' ), text: t( 'desktop.helpSwitch' ), tour: { sel: '#tasks', ghost: '#bar' } },
+                { svg: wxSvg( 1, true ), name: t( 'desktop.weather' ), text: t( 'desktop.helpWeather' ), tour: { sel: '#wxBtn', ghost: '#bar' } },   // listed even while off: it says where to turn it on
+                { svg: battEl.querySelector( 'svg' ).outerHTML, name: t( 'desktop.battery' ), text: t( 'desktop.helpBattery' ), tour: { sel: '#batt', ghost: '#bar' } },   // the same
                 { sel: '#clock',         svg: CLOCK_SVG, name: t( 'desktop.tabClock' ), text: t( 'desktop.helpClock' ) },
-                { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) },
-                { sel: '#syncIndicator:not([hidden])', text: t( 'desktop.helpSync' ) }
-            ]
+                { sel: '#moreBtn',       icon: 'menudots', text: t( 'desktop.helpMore' ) }
+            ],
+            tour: [ 'buttons' ]
         } );
     } ); } );
 

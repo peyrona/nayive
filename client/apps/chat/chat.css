@@ -893,6 +893,33 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 .call-screen .call-hear { position: relative; z-index: 2; margin-top: 24px; }
 .call-screen audio      { display: none; }
 
+/* The padlock over a voice call at the ear (ear.js): the call shows dimmed
+   through it, the knob slides along the bottom where the buttons are. */
+.ear-pad
+{
+    position: fixed; inset: 0; z-index: 410;
+    display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+    padding: 0 16px calc(28px + env(safe-area-inset-bottom));
+    background: rgba(0, 0, 0, 0.6);
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.ear-pad[hidden] { display: none; }
+.ear-track
+{
+    position: relative; width: 100%; max-width: 320px; height: 64px;
+    border-radius: 32px; background: rgba(255, 255, 255, 0.16);
+    display: flex; align-items: center; justify-content: center;
+}
+.ear-hint { padding-left: 56px; color: #fff; font-size: 0.95rem; opacity: 0.85; pointer-events: none; }
+.ear-knob
+{
+    position: absolute; left: 6px; top: 6px; width: 52px; height: 52px;
+    border-radius: 50%; background: #fff; color: #0b0e0d;
+    display: flex; align-items: center; justify-content: center;
+}
+.ear-knob svg { width: 24px; height: 24px; pointer-events: none; }
+.ear-knob.back { transition: transform 0.2s ease-out; }
+
 /* Video: the other side fills the screen, I am a small box in a corner. */
 .call-screen .call-remote { display: none; }
 .call-screen.video.live .call-remote
@@ -1000,3 +1027,77 @@ button.irow:hover { background: color-mix(in srgb, var(--text) 6%, transparent);
 /* "New person": the address book's cards under the form. */
 .pane .book-lbl     { padding: 18px 0 4px; }
 .pane .book-rows    { overflow: visible; margin: 0 -16px; }
+
+/* ---- "Play for everyone" (watch.js) -------------------------------------- */
+.watch-pane      { flex: none; background: #000; border-bottom: 1px solid var(--line); }
+.watch-bar
+{
+    display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 12px;
+    background: var(--head); color: var(--text-dim); font-size: 0.82rem;
+}
+.watch-bar > svg { width: 16px; height: 16px; color: var(--accent); flex: none; }
+.watch-title     { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-acts      { display: flex; gap: 2px; }
+.watch-frame     { position: relative; width: 100%; max-width: calc(40vh * 16 / 9); margin: 0 auto; aspect-ratio: 16 / 9; }
+.watch-frame iframe, .watch-yt { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.watch-tap
+{
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border-radius: var(--radius-m); background: rgba(0, 0, 0, 0.75); color: #fff;
+    font-size: 0.85rem; pointer-events: none;   /* the tap goes to the video below */
+}
+.watch-tap svg   { width: 16px; height: 16px; }
+.watch-row       { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
+.watch-btn       { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }   /* a .pill (app.css) */
+.watch-btn svg   { width: 14px; height: 14px; }
+.row .flag.watching svg { color: var(--accent); }
+
+/* ---- group calls (call.js GROUP CALLS) ------------------------------------ */
+/* A tile for each of the others: one, two (stacked, or side by side when the
+   screen is wide), or 2×2. */
+.call-grid { display: none; }
+.call-screen.group:not(.small) .call-grid
+{
+    position: relative; z-index: 2; flex: 1 1 auto; min-height: 0;
+    width: 100%; max-width: 960px; margin: 14px 0;
+    display: grid; gap: 8px; grid-template-columns: 1fr; grid-auto-rows: minmax(0, 1fr);
+}
+.call-screen.group:not(.small) .call-grid:empty         { display: none; }
+.call-screen.group:not(.small) .call-grid[data-n="3"]   { grid-template-columns: 1fr 1fr; }
+@media (orientation: landscape) { .call-screen.group:not(.small) .call-grid[data-n="2"] { grid-template-columns: 1fr 1fr; } }
+.call-screen.group .call-grid[data-n="3"] .call-tile:first-child { grid-column: 1 / -1; }
+.call-tile
+{
+    position: relative; min-height: 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-m); background: rgba(0, 0, 0, 0.3);
+}
+.call-tile video          { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.call-tile.cam-off video  { opacity: 0; }     /* it keeps playing: it carries the sound */
+.call-tile .call-tile-av  { position: relative; z-index: 1; }
+.call-tile:not(.cam-off) .call-tile-av { display: none; }
+.call-tile .call-tile-name
+{
+    position: absolute; left: 10px; bottom: 8px; z-index: 1;
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.85rem; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.call-tile .call-tile-name svg { width: 14px; height: 14px; }
+.call-tile.waiting { opacity: 0.55; }
+/* The group's name and the timer stay at the top; the group's circle goes
+   once people talk (the tiles have theirs). */
+.call-screen.group .call-remote { display: none; }
+.call-screen.group.video.live:not(.small) .call-top { margin-top: 0; }
+.call-screen.group.live:not(.small) .call-top .av   { display: none; }
+.call-screen.group.live:not(.small) .call-btns      { margin-top: 0; }
+
+/* A group call on in this chat, and I am not in it. */
+.call-bar
+{
+    flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+    background: color-mix(in srgb, var(--ok) 16%, var(--head)); color: var(--text);
+    border-bottom: 1px solid var(--line); font-size: 0.85rem;
+}
+.call-bar > svg  { width: 18px; height: 18px; color: var(--ok); flex: none; }
+.call-bar > span { flex: 1 1 auto; min-width: 0; }

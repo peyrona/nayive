@@ -1379,8 +1379,25 @@ input[type="range"]
 .pane-resizer:hover, .pane-resizer.dragging { background: var(--accent); }
 
 
-/* A long-press on a button would otherwise pop the iOS callout / selection menu. */
-button { -webkit-touch-callout: none; }
+/* A long-press on a button would otherwise pop the iOS callout / selection menu.
+   Menus too: a long-press opens a menu under the finger and, if the finger stays
+   down, iOS goes on and selects the word under it ("Responder" painted blue). */
+button,
+.top-menu,
+.popup,
+.menu-item
+{
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+/* A field inside a menu or popup still takes typing and selection (iOS). */
+.top-menu :is(input, textarea),
+.popup    :is(input, textarea)
+{
+    -webkit-user-select: text;
+    user-select: text;
+}
 
 
 /* -----------------------------------------------------------------------------
@@ -1608,6 +1625,31 @@ button { -webkit-touch-callout: none; }
     .coach-bubble   { max-width: 232px; }
     .coach-bubble p { font-size: 0.85rem; }
 }
+
+/* ---------------------------------------------------------------------------
+ * GUIDED TOUR  (.tour-*)
+ *
+ * The help card's "Ver el tour" (shared/ui.js, runTour): one lit button at a
+ * time. Four dim panes frame a hole over the target; a clear lid covers the
+ * hole so the page cannot be touched, except on a "tap" step, where the lid
+ * goes and the user's tap reaches the real button. Ring, bubble, pointer and
+ * (x) are the coach marks' own (.coach-*). A dashed ring is a "ghost": the
+ * place where the button shows up once there is something to act on.
+ * ---------------------------------------------------------------------------*/
+.tour-overlay           { position: fixed; inset: 0; z-index: 2000; pointer-events: none; }   /* over every menu, popup and sheet: Calc lifts those to 400-700 */
+.tour-overlay > *       { pointer-events: auto; }
+.tour-pane              { position: fixed; background: var(--scrim); }
+.tour-lid               { position: fixed; }
+.tour-overlay.is-tap .tour-lid { display: none; }
+.tour-ring              { pointer-events: none; transition: left var(--tr-fast), top var(--tr-fast), width var(--tr-fast), height var(--tr-fast); }
+.tour-ring.is-ghost     { border-style: dashed; }
+.tour-bubble            { max-width: 300px; }
+.tour-head              { display: flex; align-items: center; gap: 8px; margin: 0 30px 6px 0; }
+.tour-head .intro-btn-i { flex: 0 0 auto; }
+.tour-note              { margin-top: 6px !important; color: var(--text-dim); font-style: italic; }
+.tour-row               { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tour-count             { flex: 1; color: var(--text-dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.intro-tour             { margin: 4px 0 10px; }
 
 /* ---------------------------------------------------------------------------
  * INSTALL-AS-APP DIALOG  (.install-*)
@@ -2202,13 +2244,16 @@ button { -webkit-touch-callout: none; }
 #toolbarRow #moreToolsBtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--text); }
 
 /* The save floppy before the sync plug (NayiveOffice.autosave): a readout, not
- * a control, in the plug's colours - red not saved yet, blue saving, green
- * saved; "here" = green with a blue dot: saved on this device, not sent yet
- * (store.js PARKED SAVES). Its title says "Guardado 12:04" / "Borrador
- * 12:04". Empty (no state) until a document is open. */
+ * a control. Plain text colour while edits wait, blue saving, green saved;
+ * "here" = green with a blue dot: saved on this device, not sent yet
+ * (store.js PARKED SAVES); amber "draft" = on this device only; red only when
+ * something went wrong. Its title says "Guardado 12:04" / "Borrador 12:04".
+ * Empty (no state) until a document is open. */
 .saved-at                { display: inline-flex; align-items: center; margin-left: 6px; color: var(--danger); position: relative; }
 .saved-at:not([data-state]) { display: none; }
 .saved-at svg            { width: 18px; height: 18px; }
+.saved-at[data-state="pending"] { color: var(--text); }
+.saved-at[data-state="draft"]   { color: var(--warn); }
 .saved-at[data-state="saving"] { color: var(--busy); }
 .saved-at[data-state="saved"],
 .saved-at[data-state="here"]   { color: var(--ok); }
@@ -2844,21 +2889,36 @@ html.nv-locked body { visibility: hidden; }
 .nb-list [aria-selected]:focus               { outline: none; }
 .nb-list [aria-selected]:focus-visible       { outline: 2px solid color-mix(in srgb, var(--accent) 70%, var(--text)); outline-offset: -2px; }
 
-/* The selection group in the header: the count with its ×. */
-.icon-btn.sel-count
+/* The selection group in the header: the count with its ×. The × clears,
+   the number scrolls to the next pick. */
+.sel-count
 {
-    width: auto;
-    gap: 4px;
-    padding: 0 10px 0 7px;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
     border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.sel-count > .icon-btn
+{
+    width: auto;
+    padding: 0 4px 0 7px;
+    border-radius: var(--radius-pill);
     color: var(--text);
     font: inherit;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
-.icon-btn.sel-count svg                      { width: 15px; height: 15px; }
-.icon-btn.sel-count:hover                    { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.sel-count > .icon-btn + .icon-btn           { padding: 0 10px 0 4px; min-width: 2em; }
+.sel-count svg                               { width: 15px; height: 15px; }
+.sel-count > .icon-btn:hover                 { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+/* The pick the count chip (or a closed search) just scrolled to. */
+.nb-list .nb-flash                           { animation: nb-flash 1.2s ease-out; }
+@keyframes nb-flash
+{
+    0%, 40% { outline: 3px solid var(--text); outline-offset: -3px; }
+    100%    { outline: 3px solid transparent; outline-offset: -3px; }
+}
 /* A button that did not fit (fitBar); a gap between two menu sections. */
 .fit-out                                     { display: none !important; }
 .sel-group > .sel-gap:not(:first-child)      { margin-left: 6px; }

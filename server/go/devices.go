@@ -11,7 +11,7 @@ package main
 // uses. Through it the phone learns, with the screen off, what a web page
 // cannot wait for:
 //
-//	GET /api/device/wait?v=V   (the app) -> {"v","hold","track","badge","call","find","media"}
+//	GET /api/device/wait?v=V   (the app) -> {"v","hold","track","badge","call","find","media","ear"}
 //
 //	track  a trip of the owner covers today, on the owner's clock (the rule
 //	       positions.go keeps positions by): send positions
@@ -20,6 +20,8 @@ package main
 //	find   "Buscar mi móvil" was pressed for THIS phone
 //	media  when "Upload new photos and videos" was switched on for THIS phone
 //	       (unix seconds; 0 = off) - api_device_media.go
+//	ear    a voice call is on in this phone's browser: screen off near the ear
+//	       (devices_ear.go; the wait says ear=1 when the phone can)
 //
 // It answers at once when that differs from V (a hash of the answer the phone
 // last saw), otherwise when something changes, otherwise after `hold` seconds.
@@ -40,6 +42,7 @@ package main
 //	                                              {ask: true, endpoint?} push "¿Dónde estás?"
 //	POST   /api/device/find/<fid>/stop  (session) stop it from the web
 //	POST   /api/device/here             (session) {lat, lon, acc, find?} this browser's position
+//	POST   /api/device/<id>/ear         (session) {on} a voice call at the ear (devices_ear.go)
 //
 //	POST   /api/device/report           (the app) {positions?, find?}
 //	POST   /api/device/ack              (the app) {call|find, act: decline|stop}
@@ -164,6 +167,7 @@ type Devices struct {
 	rings   map[string]*deviceRing // account -> the call ringing for it
 	finds   map[string]*deviceFind // find id -> the find
 	trips   map[string]tripsToday  // account -> "a trip covers today", cached a minute
+	ear     earTable               // a voice call at the ear (devices_ear.go)
 	closing chan struct{}
 	once    sync.Once
 
@@ -798,6 +802,7 @@ type deviceState struct {
 	Call  *deviceCallOut `json:"call"`
 	Find  *deviceFindOut `json:"find"`
 	Media int64          `json:"media"`
+	Ear   bool           `json:"ear"`
 }
 
 // version is what the phone echoes back: equal means nothing to tell it.
@@ -852,6 +857,12 @@ func (s *Server) deviceStateFor(r *deviceRow) (deviceState, time.Time) {
 	if f := s.devices.ringingFind(r.ID); f != nil {
 		st.Find = &deviceFindOut{ID: f.ID, Since: f.Since}
 		if end := time.UnixMilli(f.Since).Add(findRing); next.IsZero() || end.Before(next) {
+			next = end
+		}
+	}
+	if end := s.devices.ear.on(r.ID); !end.IsZero() {
+		st.Ear = true
+		if next.IsZero() || end.Before(next) {
 			next = end
 		}
 	}
@@ -980,6 +991,9 @@ func (s *Server) apiDevice(w http.ResponseWriter, r *http.Request) {
 			s.devices.FoundAt(user, body.Find, roundedForFind(p))
 		}
 		sendJSON(w, r, http.StatusOK, map[string]any{"ok": true})
+
+	case len(parts) == 2 && parts[1] == "ear":
+		s.deviceEar(w, r, user, parts[0])
 
 	case len(parts) == 1 && r.Method == http.MethodPut:
 		// The launcher no longer keeps the phone's token, so after a new
@@ -1114,6 +1128,8 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 		return
 	}
 	defer waits.release(key)
+	s.devices.ear.opened(dev.ID, queryValue(r, "ear") == "1")
+	defer s.devices.ear.closed(dev.ID)
 	seen := queryValue(r, "v")
 	deadline := time.Now().Add(deviceHold)
 	for {
@@ -1126,7 +1142,7 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 		if v != seen || !now.Before(deadline) {
 			sendJSON(w, r, http.StatusOK, map[string]any{
 				"v": v, "hold": int(deviceHold / time.Second),
-				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find, "media": st.Media,
+				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find, "media": st.Media, "ear": st.Ear,
 			})
 			return
 		}

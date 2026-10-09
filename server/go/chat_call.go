@@ -36,7 +36,13 @@ package main
 // vapid.json; the servers are server.json's turn_uris. Either one missing: no
 // calls, and the pages show no call buttons.
 //
-// Only 1:1 chats (d-<person>): a group call needs a media server.
+// GROUP CALLS (g-<group>): up to chatCallMax people, each page sending to each
+// other page (a mesh - no media server; past four people the phones could not
+// carry it). Starting one rings every other member; anybody may join while it
+// is on, until it is full. The one who JOINS makes the offers, to everybody
+// already in, so two offers never cross. Leaving ends it for nobody else -
+// until fewer than two are left. Signals then name their page (`to`) and say
+// whose they are (`from`).
 
 import (
 	"crypto/hmac"
@@ -46,6 +52,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +72,7 @@ const (
 	chatCallSigQueue  = 50           // signals waiting for one call
 	chatCallStartsMin = 3            // calls a person may start per minute
 	chatCallSigsMin   = 60           // signals a person may send per minute
+	chatCallMax       = 4            // people in one group call
 )
 
 type chatCall struct {
@@ -79,14 +87,53 @@ type chatCall struct {
 	Rang     time.Time
 	Answered time.Time
 	Ended    time.Time
+
+	// A group call: From/FromDev started it, To/ToDev stay empty.
+	Group    bool
+	In       map[string]string // who is in it now: participant -> their page
+	Had      map[string]bool   // who was in it at some point (the bubble's count)
+	Declined map[string]bool   // pressed Decline: it no longer rings for them
+	RingDone bool              // the ringing time is over: the missed pushes went out
 }
 
 type chatSig struct {
 	Seq  int64           `json:"seq"`
 	Call string          `json:"call"`
+	From string          `json:"from,omitempty"` // a group call: the page it comes from
 	Data json.RawMessage `json:"data"`
 	to   string          // the device it is for
 	at   time.Time
+}
+
+// side: `pid` may see and act on this call - one of its two people, or a
+// member of its group.
+func (c *chatCall) side(o *chatOwner, pid string) bool {
+	if c.Group {
+		return o.isMember(c.Conv, pid)
+	}
+	return c.From == pid || c.To == pid
+}
+
+// rings: a group call still rings for `pid` - not in it, did not decline,
+// and the ringing time is not over.
+func (c *chatCall) rings(pid string, now time.Time) bool {
+	_, in := c.In[pid]
+	return c.Group && c.State != "ended" && !in && !c.Declined[pid] && now.Sub(c.Rang) < chatCallRing
+}
+
+type chatCallIn struct {
+	Pid string `json:"pid"`
+	Dev string `json:"dev"`
+}
+
+// inList is who is in a group call, in a steady order.
+func (c *chatCall) inList() []chatCallIn {
+	out := []chatCallIn{}
+	for p, d := range c.In {
+		out = append(out, chatCallIn{Pid: p, Dev: d})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Pid < out[j].Pid })
+	return out
 }
 
 // chatCalls is one owner's calls, signals and devices. Caller holds h.mu.
@@ -98,6 +145,7 @@ type chatCalls struct {
 	seen   map[string]time.Time   // device -> last seen
 	starts map[string][]time.Time // a person's recent calls (rate limit)
 	sent   map[string][]time.Time // a person's recent signals (rate limit)
+	member func(conv, pid string) bool
 }
 
 func (o *chatOwner) cs() *chatCalls {
@@ -108,6 +156,7 @@ func (o *chatOwner) cs() *chatCalls {
 			seen:   make(map[string]time.Time),
 			starts: make(map[string][]time.Time),
 			sent:   make(map[string][]time.Time),
+			member: o.isMember,
 		}
 	}
 	return o.calls
@@ -144,7 +193,14 @@ func (cs *chatCalls) alive(dev string, now time.Time) bool {
 // live is `pid`'s call that is ringing or talking, or nil.
 func (cs *chatCalls) live(pid string) *chatCall {
 	for _, c := range cs.byID {
-		if c.State != "ended" && (c.From == pid || c.To == pid) {
+		if c.State == "ended" {
+			continue
+		}
+		if c.Group {
+			if _, in := c.In[pid]; in {
+				return c
+			}
+		} else if c.From == pid || c.To == pid {
 			return c
 		}
 	}
@@ -211,17 +267,30 @@ type chatCallOut struct {
 	Reason   string `json:"reason,omitempty"`
 	Mine     bool   `json:"mine,omitempty"` // this page is the one talking (or calling)
 	Answered int64  `json:"answered,omitempty"`
+
+	Group bool         `json:"group,omitempty"`
+	In    []chatCallIn `json:"in,omitempty"`   // a group call: who is in it
+	Ring  bool         `json:"ring,omitempty"` // a group call: it rings for this person
 }
 
 // callsFor are the calls `pid` is a side of, as page `dev` sees them.
 func (cs *chatCalls) callsFor(pid, dev string) []chatCallOut {
 	out := []chatCallOut{}
+	now := time.Now()
 	for _, c := range cs.byID {
-		if c.From != pid && c.To != pid {
+		if c.Group {
+			if !cs.member(c.Conv, pid) {
+				continue
+			}
+		} else if c.From != pid && c.To != pid {
 			continue
 		}
 		o := chatCallOut{ID: c.ID, Conv: c.Conv, From: c.From, To: c.To, Video: c.Video, State: c.State, Reason: c.Reason}
 		o.Mine = dev != "" && ((c.From == pid && c.FromDev == dev) || (c.To == pid && c.ToDev == dev))
+		if c.Group {
+			o.Group, o.In, o.Ring = true, c.inList(), c.rings(pid, now)
+			o.Mine = dev != "" && c.In[pid] == dev
+		}
 		if !c.Answered.IsZero() {
 			o.Answered = c.Answered.UnixMilli()
 		}
@@ -323,6 +392,10 @@ func (s *Server) chatCallStart(w http.ResponseWriter, r *http.Request, conv stri
 			sendError(w, r, http.StatusForbidden, "no estás en esta conversación")
 			return
 		}
+		if strings.HasPrefix(conv, "g-") {
+			jobs = h.startGroupCall(w, r, a, conv, body.Video, body.Dev)
+			return
+		}
 		if !strings.HasPrefix(conv, "d-") {
 			sendError(w, r, http.StatusBadRequest, "solo llamadas de uno a uno")
 			return
@@ -376,6 +449,7 @@ func (s *Server) chatCallStart(w http.ResponseWriter, r *http.Request, conv stri
 func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act string, resolve func(func(chatActor))) {
 	var body struct {
 		Dev    string          `json:"dev"`
+		To     string          `json:"to"` // a group call's signal: the page it is for
 		Reason string          `json:"reason"`
 		Data   json.RawMessage `json:"data"`
 	}
@@ -395,7 +469,7 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 	resolve(func(a chatActor) {
 		cs := a.o.cs()
 		c := cs.byID[id]
-		if c == nil || (c.From != a.pid && c.To != a.pid) {
+		if c == nil || !c.side(a.o, a.pid) {
 			sendError(w, r, http.StatusNotFound, "esa llamada ya no existe")
 			return
 		}
@@ -407,6 +481,10 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 		case "answer":
 			if !validDev(body.Dev) {
 				sendError(w, r, http.StatusBadRequest, "falta el dispositivo")
+				return
+			}
+			if c.Group {
+				jobs = h.joinGroupCall(w, r, a, c, body.Dev, now)
 				return
 			}
 			if c.To != a.pid {
@@ -427,6 +505,11 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 				sendJSON(w, r, http.StatusOK, map[string]any{"state": c.State, "reason": c.Reason})
 				return
 			}
+			if c.Group {
+				jobs = h.leaveGroupCall(a.o, c, a.pid, body.Reason, now)
+				sendJSON(w, r, http.StatusOK, map[string]any{"state": c.State, "reason": c.Reason})
+				return
+			}
 			reason := "hangup"
 			switch {
 			case body.Reason == "fail":
@@ -440,9 +523,18 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 			sendJSON(w, r, http.StatusOK, map[string]any{"state": c.State, "reason": c.Reason})
 
 		case "sig":
-			var to string
+			var to, from string
 			switch {
 			case c.State != "active":
+			case c.Group:
+				// Both pages in the call, and not the same one.
+				if d, in := c.In[a.pid]; in && d == body.Dev {
+					for _, d := range c.In {
+						if d == body.To && d != body.Dev {
+							to, from = d, body.Dev
+						}
+					}
+				}
 			case a.pid == c.From && body.Dev == c.FromDev:
 				to = c.ToDev
 			case a.pid == c.To && body.Dev == c.ToDev:
@@ -471,7 +563,7 @@ func (s *Server) chatCallAct(w http.ResponseWriter, r *http.Request, id, act str
 				return
 			}
 			cs.seq++
-			cs.sigs = append(cs.sigs, &chatSig{Seq: cs.seq, Call: c.ID, Data: body.Data, to: to, at: now})
+			cs.sigs = append(cs.sigs, &chatSig{Seq: cs.seq, Call: c.ID, From: from, Data: body.Data, to: to, at: now})
 			a.o.changed(false)
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -493,6 +585,9 @@ func (h *ChatHub) endCall(o *chatOwner, c *chatCall, reason string, now time.Tim
 	c.State, c.Reason, c.Ended = "ended", reason, now
 
 	info := &ChatCallInfo{Video: c.Video}
+	if c.Group {
+		info.N = len(c.Had)
+	}
 	switch {
 	case was == "active":
 		info.Secs = max(1, int(now.Sub(c.Answered).Round(time.Second)/time.Second))
@@ -513,17 +608,37 @@ func (h *ChatHub) endCall(o *chatOwner, c *chatCall, reason string, now time.Tim
 		}
 		m := &ChatMsg{ID: cv.st.Next, At: nowMs(), From: c.From, Kind: "call", Call: info}
 		// A call both of them had is not news to either: it must not light
-		// the unread badge. A missed one is exactly the news.
-		read, hadRead := cv.st.Read[c.To]
-		if was == "active" && read >= before {
-			cv.st.Read[c.To] = m.ID
+		// the unread badge. A missed one is exactly the news. A group call:
+		// everybody who was in it.
+		readers := []string{c.To}
+		if c.Group {
+			readers = nil
+			for p := range c.Had {
+				if p != c.From {
+					readers = append(readers, p)
+				}
+			}
+		}
+		type cursor struct {
+			at  int64
+			had bool
+		}
+		saved := map[string]cursor{}
+		for _, p := range readers {
+			read, hadRead := cv.st.Read[p]
+			saved[p] = cursor{read, hadRead}
+			if was == "active" && read >= before {
+				cv.st.Read[p] = m.ID
+			}
 		}
 		if err := h.record(o, cv, m); err != nil { // no push: the call itself did the ringing
 			// Not stored (record logged it): the cursor must not point past it.
-			if hadRead {
-				cv.st.Read[c.To] = read
-			} else {
-				delete(cv.st.Read, c.To)
+			for p, s := range saved {
+				if s.had {
+					cv.st.Read[p] = s.at
+				} else {
+					delete(cv.st.Read, p)
+				}
 			}
 		}
 	}
@@ -537,6 +652,14 @@ func (h *ChatHub) endCall(o *chatOwner, c *chatCall, reason string, now time.Tim
 	o.cs().sigs = keep
 	o.changed(false)
 
+	if c.Group {
+		// Whoever it still rang for and never came: a missed call.
+		if c.RingDone {
+			return nil
+		}
+		c.RingDone = true
+		return h.groupPushes(o, c, "missed")
+	}
 	if was != "ringing" || reason == "busy" {
 		return nil
 	}
@@ -556,11 +679,16 @@ func (h *ChatHub) DeclineCall(owner, id, pid string) bool {
 		return false
 	}
 	c := o.cs().byID[id]
-	if c == nil || c.State != "ringing" || c.To != pid {
+	var jobs []chatCallPush
+	switch {
+	case c != nil && c.rings(pid, time.Now()) && o.isMember(c.Conv, pid):
+		jobs = h.leaveGroupCall(o, c, pid, "", time.Now())
+	case c == nil || c.Group || c.State != "ringing" || c.To != pid:
 		h.mu.Unlock()
 		return false
+	default:
+		jobs = h.endCall(o, c, "decline", time.Now())
 	}
-	jobs := h.endCall(o, c, "decline", time.Now())
 	h.mu.Unlock()
 	if len(jobs) > 0 {
 		go h.sendCallPushes(jobs)
@@ -585,7 +713,19 @@ func (h *ChatHub) callTick(o *chatOwner, now time.Time) []chatCallPush {
 				jobs = append(jobs, h.endCall(o, c, "cancel", now)...)
 			}
 		case "active":
-			if !cs.alive(c.FromDev, now) || !cs.alive(c.ToDev, now) {
+			if c.Group {
+				// A page not seen for a while leaves; the others talk on.
+				for p, d := range c.In {
+					if c.State == "active" && !cs.alive(d, now) {
+						jobs = append(jobs, h.leaveGroupCall(o, c, p, "lost", now)...)
+					}
+				}
+				if c.State == "active" && !c.RingDone && now.Sub(c.Rang) > chatCallRing {
+					c.RingDone = true
+					o.changed(false)
+					jobs = append(jobs, h.groupPushes(o, c, "missed")...)
+				}
+			} else if !cs.alive(c.FromDev, now) || !cs.alive(c.ToDev, now) {
 				jobs = append(jobs, h.endCall(o, c, "lost", now)...)
 			}
 		case "ended":
@@ -629,7 +769,16 @@ type chatCallPush struct {
 // answered or declined - replaces the ringing one without a sound). Mute is
 // ignored on purpose: a muted chat still rings, as in WhatsApp. Caller holds h.mu.
 func (h *ChatHub) callPushes(o *chatOwner, c *chatCall, kind string) []chatCallPush {
+	return h.callPushesTo(o, c, c.To, kind)
+}
+
+// callPushesTo: callPushes for one called participant `to` (a group call
+// rings each member). Caller holds h.mu.
+func (h *ChatHub) callPushesTo(o *chatOwner, c *chatCall, to, kind string) []chatCallPush {
 	title := h.nameOf(o, c.From)
+	if g := o.group(strings.TrimPrefix(c.Conv, "g-")); c.Group && g != nil {
+		title += " · " + g.Name
+	}
 	video := map[bool]string{false: "Voice", true: "Video"}[c.Video]
 	words := map[string]struct{ key, builtin string }{
 		"ringVoice":   {"chat.incomingVoice", "Llamada de voz entrante"},
@@ -642,9 +791,9 @@ func (h *ChatHub) callPushes(o *chatOwner, c *chatCall, kind string) []chatCallP
 	var subs []PushSub
 	acct := "" // the called side's account: the owner, or a Nayive user
 	var ct *ChatContact
-	if c.To == "o" {
+	if to == "o" {
 		acct = o.user
-	} else if ct = o.contact(c.To); ct != nil && ct.User != "" {
+	} else if ct = o.contact(to); ct != nil && ct.User != "" {
 		acct = ct.User
 	} else if ct != nil {
 		subs = ct.Subs
@@ -659,7 +808,7 @@ func (h *ChatHub) callPushes(o *chatOwner, c *chatCall, kind string) []chatCallP
 	}
 	if mine && h.onCall != nil {
 		// The Android app rings a call to an account itself (devices.go)...
-		h.onCall(acct, deviceRing{ID: c.ID, Owner: o.user, Pid: c.To, From: title, Video: c.Video,
+		h.onCall(acct, deviceRing{ID: c.ID, Owner: o.user, Pid: to, From: title, Video: c.Video,
 			URL: link, Until: c.Rang.Add(chatCallRing).UnixMilli()}, kind)
 		// ...so the Chrome inside that phone's app must not ring it again. A
 		// missed call still goes through: the app shows no "missed" of its own.
@@ -710,4 +859,117 @@ func (h *ChatHub) sendCallPushes(jobs []chatCallPush) {
 		}
 		deliverPushTo(h.push, h.log, j.sub, j.payload, j.ttl, h.forgetGuestSub(j.user, j.person, j.sub.Endpoint))
 	}
+}
+
+// -----------------------------------------------------------------------------
+// group calls
+// -----------------------------------------------------------------------------
+
+// startGroupCall: POST conv/g-<group>/call. A call already on in that group is
+// joined instead ("incoming", as when two 1:1 calls cross). Caller holds h.mu.
+func (h *ChatHub) startGroupCall(w http.ResponseWriter, r *http.Request, a chatActor, conv string, video bool, dev string) []chatCallPush {
+	now := time.Now()
+	cs := a.o.cs()
+	for _, c := range cs.byID {
+		if c.Group && c.Conv == conv && c.State != "ended" {
+			sendJSON(w, r, http.StatusOK, map[string]any{"id": c.ID, "video": c.Video, "incoming": true, "ice": h.iceFor(now)})
+			return nil
+		}
+	}
+	if !allowIn(cs.starts, a.pid, chatCallStartsMin, now) {
+		sendError(w, r, http.StatusTooManyRequests, "demasiadas llamadas seguidas")
+		return nil
+	}
+	if cs.live(a.pid) != nil {
+		sendError(w, r, http.StatusConflict, "ya estás en una llamada")
+		return nil
+	}
+	call := &chatCall{ID: newChatID(), Conv: conv, From: a.pid, Video: video, State: "ringing", FromDev: dev, Rang: now,
+		Group: true, In: map[string]string{a.pid: dev}, Had: map[string]bool{a.pid: true}, Declined: map[string]bool{}}
+	cs.byID[call.ID] = call
+	a.o.changed(false)
+	sendJSON(w, r, http.StatusCreated, map[string]any{"id": call.ID, "ice": h.iceFor(now)})
+	return h.groupPushes(a.o, call, "ring")
+}
+
+// joinGroupCall: POST call/<id>/answer of a group call. Caller holds h.mu.
+func (h *ChatHub) joinGroupCall(w http.ResponseWriter, r *http.Request, a chatActor, c *chatCall, dev string, now time.Time) []chatCallPush {
+	cs := a.o.cs()
+	if c.State == "ended" {
+		sendJSON(w, r, http.StatusConflict, map[string]any{"error": "la llamada ya terminó", "state": c.State, "reason": c.Reason})
+		return nil
+	}
+	if d, in := c.In[a.pid]; in && d != dev {
+		sendJSON(w, r, http.StatusConflict, map[string]any{"error": "ya estás en esta llamada en otra página", "state": c.State})
+		return nil
+	}
+	if _, in := c.In[a.pid]; !in {
+		if len(c.In) >= chatCallMax {
+			sendJSON(w, r, http.StatusConflict, map[string]any{"error": "llamada llena", "full": true, "state": c.State})
+			return nil
+		}
+		if other := cs.live(a.pid); other != nil {
+			sendJSON(w, r, http.StatusConflict, map[string]any{"error": "ya estás en una llamada", "state": c.State})
+			return nil
+		}
+		c.In[a.pid] = dev
+		c.Had[a.pid] = true
+		delete(c.Declined, a.pid)
+		if c.State == "ringing" {
+			c.State, c.Answered = "active", now
+		}
+		a.o.changed(false)
+	}
+	sendJSON(w, r, http.StatusOK, map[string]any{"id": c.ID, "ice": h.iceFor(now), "in": c.inList()})
+	return h.callPushesTo(a.o, c, a.pid, "quiet") // it stops ringing on their other devices
+}
+
+// leaveGroupCall: `pid` hangs up (or declines, when not in it). It ends for
+// everybody once fewer than two are left - or when the one who started it
+// gives up before anybody came. Caller holds h.mu.
+func (h *ChatHub) leaveGroupCall(o *chatOwner, c *chatCall, pid, reason string, now time.Time) []chatCallPush {
+	if c.State == "ended" {
+		return nil
+	}
+	dev, in := c.In[pid]
+	if !in {
+		if c.Declined[pid] {
+			return nil
+		}
+		c.Declined[pid] = true
+		o.changed(false)
+		return h.callPushesTo(o, c, pid, "quiet")
+	}
+	delete(c.In, pid)
+	cs := o.cs()
+	keep := cs.sigs[:0]
+	for _, g := range cs.sigs {
+		if !(g.Call == c.ID && (g.to == dev || g.From == dev)) {
+			keep = append(keep, g)
+		}
+	}
+	cs.sigs = keep
+	o.changed(false)
+	switch {
+	case c.State == "ringing":
+		return h.endCall(o, c, "cancel", now)
+	case len(c.In) < 2:
+		if reason != "fail" && reason != "lost" {
+			reason = "hangup"
+		}
+		return h.endCall(o, c, reason, now)
+	}
+	return nil
+}
+
+// groupPushes ring (or say "missed" to) every member it is for. Caller holds h.mu.
+func (h *ChatHub) groupPushes(o *chatOwner, c *chatCall, kind string) []chatCallPush {
+	var jobs []chatCallPush
+	for _, p := range o.members(c.Conv) {
+		if p == c.From || (kind == "missed" && (c.Had[p] || c.Declined[p])) {
+			continue
+		}
+		jobs = append(jobs, h.callPushesTo(o, c, p, kind)...)
+	}
+	return jobs
 }

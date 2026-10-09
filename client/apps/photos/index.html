@@ -76,7 +76,11 @@
                 { sel: '[data-mode="pase"]',   text: NayiveUI.t( 'photos.introSlideshow' ) },
                 { sel: '[data-mode="editar"]', text: NayiveUI.t( 'photos.introEdit' ) },
                 { sel: '#addBtn',      text: NayiveUI.t( 'photos.introUpload' ) }
-            ]
+            ],
+            // The guided tour ("Ver el tour" in the card): the albums, the card's
+            // buttons, then picking photos (the shared item browser).
+            tour: [ { sel: '#treePane, #treeBtn', text: NayiveUI.t( 'photos.tourTree' ) }, 'buttons',
+                    { use: 'pick', ghost: '#grid' }, { use: 'picked', ghost: '#grid' } ]
         } );
     } );
     </script>

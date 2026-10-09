@@ -41,7 +41,12 @@
         ];
         // a desktop window has no ←: its own close does that
         if( ! NayiveUI.windowed ) rows.unshift( { sel: '#backBtn', icon: 'back', text: NayiveUI.t( 'image.introBack' ) } );
-        NayiveUI.firstRun( { app: 'image', title: 'Image', lead: NayiveUI.t( 'image.introLead' ), buttons: rows } );
+        NayiveUI.firstRun( { app: 'image', title: 'Image', lead: NayiveUI.t( 'image.introLead' ), buttons: rows,
+            // The guided tour ("Ver el tour" in the card): the bar's buttons, the
+            // editor's tools, the note under the picture.
+            tour: [ 'buttons',
+                    { sel: '.tui-image-editor-menu', ghost: '#tuiEditor', text: NayiveUI.t( 'image.tourTools' ) },
+                    { sel: '#editorComment', text: NayiveUI.t( 'image.tourNote' ) } ] } );
     } );
     </script>
 </head>
