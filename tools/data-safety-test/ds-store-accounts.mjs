@@ -24,8 +24,10 @@ const A = await browser( s, { user: "ana" } );
 section( "K5 · A SAVE MADE WHILE THE SIGN-OUT QUESTION IS UP" );
 {
     await A.open( "/nayive/st.html" );
-    ok( await A.evaluate( "offline( true ), SC.write( 'files/before.txt', 'counted\\n' ).then( r => r.offline )" ), "a save waits here (offline)" );
 
+    // The launcher first, and offline before the save is made: at boot it
+    // sends what waits here (NayiveStore.sendLeft), so a save queued before
+    // would already be up - nothing left to ask about.
     const L = await A.tab();
     await L.open( "/nayive/" );
     ok( await L.until( "window.NayiveStore && window.NayiveUI && document.getElementById( 'logoutBtn' )" ), "the launcher is up" );
@@ -33,6 +35,7 @@ section( "K5 · A SAVE MADE WHILE THE SIGN-OUT QUESTION IS UP" );
     // nothing goes up before the count.
     await L.evaluate( `Object.defineProperty( navigator, 'onLine', { get: () => false, configurable: true } );
         window.asks = []; NayiveUI.confirm = o => new Promise( r => asks.push( { body: o.body, r } ) ); true` );
+    ok( await A.evaluate( "offline( true ), SC.write( 'files/before.txt', 'counted\\n' ).then( r => r.offline )" ), "a save waits here (offline)" );
     await L.evaluate( "document.getElementById( 'logoutBtn' ).click(), true" );
     ok( await L.until( "asks.length === 1" ), "Sign out asks about the save still here" );
 
