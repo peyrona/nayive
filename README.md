@@ -13,6 +13,12 @@ Passwords), Photos, Music, Movies, Trips, Split and Games.
 - A desktop mode on big screens: windows, a task bar, tiling.
 - An Android app (`android/`) for location sharing and photo upload.
 
+## Browsers
+
+Chrome or Edge 111+, Safari 16.4+ (macOS, iPhone, iPad) and Firefox 113+:
+anything from spring 2023 on. An older browser gets a warning on the launcher.
+On iPhone and iPad every browser runs Safari's engine, so the Safari version is the one that counts.
+
 ## Install
 
 ```sh

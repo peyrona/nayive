@@ -1,0 +1,9 @@
+{
+  "name": "nayive-compat-test",
+  "private": true,
+  "description": "Loads every app in Chromium, Firefox and WebKit, PC and phone shape. Dev only - never deployed.",
+  "type": "module",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

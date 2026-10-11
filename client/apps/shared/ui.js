@@ -693,7 +693,10 @@
     //   o.onClose() the field has been emptied: drop the search (default:
     //               an "input" event on it)
     //   o.min       the narrowest the field may get beside the icons (180)
-    // Returns { open, close, fit, isOpen, count }. count( "12 / 300" ) shows
+    //   o.step( d ) the field steps through its hits in place (Calendar): an
+    //               up / down pair before the ×, and Enter / Shift+Enter;
+    //               d is -1 or +1. canStep( false ) greys the pair.
+    // Returns { open, close, fit, isOpen, count, canStep }. count( "12 / 300" ) shows
     // how many items match, dim, inside the field before its buttons ("" hides
     // it). open( true ) unfolds it without
     // the focus (a search the app set itself: no phone keyboard); close( true )
@@ -756,6 +759,25 @@
         tally.hidden = true;
         ends.appendChild( tally );
         if( mark ) ends.appendChild( mark );
+        var steps = [];
+        if( o.step )
+        {
+            [ [ -1, "up", "ui.prev" ], [ 1, "down", "ui.next" ] ].forEach( function ( d )
+            {
+                var b = document.createElement( "button" );
+                b.type = "button";
+                b.className = "icon-btn sm search-step";
+                b.innerHTML = icon( d[ 1 ] );
+                b.setAttribute( "data-i18n-attr", "title:" + d[ 2 ] + ", aria-label:" + d[ 2 ] );
+                b.title = t( d[ 2 ] );
+                b.setAttribute( "aria-label", t( d[ 2 ] ) );
+                b.disabled = true;
+                b.addEventListener( "click", function () { o.step( d[ 0 ] ); } );
+                steps.push( b );
+                ends.appendChild( b );
+            } );
+            box.classList.add( "has-steps" );
+        }
         ends.appendChild( shut );
         box.appendChild( ends );
 
@@ -767,6 +789,7 @@
             tally.hidden = ! text;
             input.style.paddingRight = text ? ( ends.offsetWidth + 8 ) + "px" : "";
         }
+        function canStep( on ) { steps.forEach( function ( b ) { b.disabled = ! on; } ); }
 
         function isOpen() { return box.classList.contains( "is-open" ); }
         function open( noFocus )
@@ -803,6 +826,12 @@
         toggle.addEventListener( "click", function () { open(); } );
         input.addEventListener( "keydown", function ( e )
         {
+            if( e.key === "Enter" && o.step && ! e.isComposing )
+            {
+                e.preventDefault();
+                if( steps.length && ! steps[ 0 ].disabled ) o.step( e.shiftKey ? -1 : 1 );
+                return;
+            }
             if( e.key !== "Escape" || ! isOpen() ) return;
             e.preventDefault();
             e.stopPropagation();      // not the app's own Escape (a dialog, a viewer)
@@ -818,7 +847,7 @@
             ro.observe( box );
         }
 
-        return { open: open, close: close, fit: fit, isOpen: isOpen, count: count };
+        return { open: open, close: close, fit: fit, isOpen: isOpen, count: count, canStep: canStep };
     }
 
     // A Mac (or an iPhone / iPad with a keyboard): its shortcuts take ⌘, not
@@ -4213,12 +4242,30 @@
     //  - limited: Firefox Focus / Klar, DuckDuckGo - on any OS, in the app or
     //    not. They forget logins and storage, so much of Nayive falls short.
     //    Tor and private windows hide what they are: not detectable.
+    //  - old: a browser older than the floor (Chrome/Edge 111, Safari 16.4,
+    //    Firefox 113 - spring 2023), found by asking for what the code uses
+    //    (tooOld), never by name. A warning, not a wall: a wrong guess must not
+    //    lock anyone out. Its own "Don't show again", apart from the others.
 
     var CHROME_WARN = "nayive-chrome-warn";
+
+    // What the apps use from spring 2023 on: color-mix() paints every colour
+    // in app.css, structuredClone and Object.hasOwn are called bare.
+    function tooOld()
+    {
+        try
+        {
+            return ! ( window.CSS && CSS.supports( "color", "color-mix(in srgb, red, blue)" ) &&
+                       CSS.supports( "container-type", "inline-size" ) &&
+                       typeof structuredClone === "function" && typeof Object.hasOwn === "function" );
+        }
+        catch ( _ ) { return true; }
+    }
 
     function browserWarnCase()
     {
         var ua = navigator.userAgent;
+        if( tooOld() )                    return { kind: "old" };
         if( /\bFocus\//.test( ua ) )      return { kind: "limited", name: "Firefox Focus" };
         if( /\bKlar\//.test( ua ) )       return { kind: "limited", name: "Firefox Klar" };
         if( /\bDuckDuckGo\//.test( ua ) ) return { kind: "limited", name: "DuckDuckGo" };
@@ -4234,7 +4281,8 @@
     {
         var wc = browserWarnCase();
         if( ! wc ) return;
-        try { if( localStorage.getItem( CHROME_WARN ) === "never" ) return; } catch ( _ ) {}
+        var key = CHROME_WARN + ( wc.kind === "old" ? "-old" : "" );
+        try { if( localStorage.getItem( key ) === "never" ) return; } catch ( _ ) {}
         if( document.getElementById( "nayive-chrome-warn" ) ) return;
         if( introHeld || document.querySelector( ".sheet-backdrop.open" ) )
             return void setTimeout( warnChrome, 800 );     // never on top of another sheet
@@ -4258,8 +4306,10 @@
         h.textContent = t( "ui.chromeWarn.title" );
         sheet.appendChild( h );
 
-        [ tf( inAndroidApp() ? "ui.chromeWarn.p1" : "ui.chromeWarn.p1using", { name: wc.name } ),
-          wc.kind === "limited" ? t( "ui.chromeWarn.p2limited" )
+        [ wc.kind === "old"     ? t( "ui.chromeWarn.p1old" )
+                                 : tf( inAndroidApp() ? "ui.chromeWarn.p1" : "ui.chromeWarn.p1using", { name: wc.name } ),
+          wc.kind === "old"     ? t( "ui.chromeWarn.p2old" )
+        : wc.kind === "limited" ? t( "ui.chromeWarn.p2limited" )
                                  : tf( "ui.chromeWarn.p2", { company: wc.company } ),
           t( "ui.chromeWarn.p3" ) ].forEach( function ( s )
         {
@@ -4277,7 +4327,7 @@
         never.textContent = t( "ui.install.dismiss" );
         never.addEventListener( "click", function ()
         {
-            try { localStorage.setItem( CHROME_WARN, "never" ); } catch ( _ ) {}
+            try { localStorage.setItem( key, "never" ); } catch ( _ ) {}
             finish();
         } );
         acts.appendChild( never );

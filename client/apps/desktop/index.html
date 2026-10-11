@@ -2612,8 +2612,8 @@
     // neither. `last` is the length last started, to offer it again. While one
     // runs or is paused, its chip sits on the bar just before the clock - the
     // time left (not the text) and small Pause / Play and Stop buttons.
-    // Time's up (`done`): a few beeps, a system notice when the desktop is not on
-    // screen, and NO dialog - the button stays on the bar with the text (or 0:00
+    // Time's up (`done`): beeps again and again until a press on the chip, a
+    // system notice when the desktop is not on screen, and NO dialog - the button stays on the bar with the text (or 0:00
     // when there is none) and a small x at its end that takes it away.
 
     var CD_KEY = 'balata-countdown';
@@ -2622,7 +2622,7 @@
     var cdH = document.getElementById( 'cdH' ), cdM = document.getElementById( 'cdM' ), cdS = document.getElementById( 'cdS' );
     var cdText = document.getElementById( 'cdText' ), cdPlay = document.getElementById( 'cdPlay' );
     var cdPP = cdChip.querySelector( '.cd-pp' ), cdStop = cdChip.querySelector( '.cd-stop' ), cdX = cdChip.querySelector( '.cd-x' );
-    var cdTimer = 0, audio = null;
+    var cdTimer = 0, audio = null, ringTimer = 0;
 
     function cdSave() { store( CD_KEY, cd ); }
     function cdMs()   { return cd.end ? Math.max( 0, cd.end - Date.now() ) : cd.left; }
@@ -2636,6 +2636,7 @@
     function cdPaint()
     {
         var on = !! ( cd.end || cd.left ), left = cdFmt( cdMs() ), done = ! on && !! cd.done;
+        if( ! done ) stopRing();                            // started again, stopped, or taken away (also in another tab)
         cdChip.hidden = ! on && ! done;
         cdChip.classList.toggle( 'paused', on && ! cd.end );
         cdChip.classList.toggle( 'done', done );
@@ -2693,6 +2694,11 @@
         } catch( e ) {}
     }
 
+    // Time's up rings until the user stops it (his call, 2026-10-11): the 3
+    // pairs again every 2.5 s, until a press on the chip.
+    function ring()     { stopRing(); beep(); ringTimer = setInterval( beep, 2500 ); }
+    function stopRing() { clearInterval( ringTimer ); ringTimer = 0; }
+
     function cdDone()
     {
         var text = cd.text;
@@ -2700,7 +2706,7 @@
         cd.done = true;
         cdSave();
         cdPaint();
-        beep();
+        ring();
         try
         {
             if( document.hidden && window.Notification && Notification.permission === 'granted' )
@@ -2759,6 +2765,7 @@
     cdChip.addEventListener( 'click', function ( e )
     {
         var b = e.target.closest( '[data-cd]' ), what = b && b.getAttribute( 'data-cd' );
+        stopRing();                                         // any press on it silences it
         if( ! what ) { cdOpen( cdChip ); return; }
         if( what === 'pp' )
         {

@@ -6,6 +6,7 @@
 function renderHeader()
 {
     const header = document.getElementById( 'tripHeader' );
+    searchHadFocus = !! tripSearchEls && document.activeElement === tripSearchEls[ 0 ].firstChild;
     header.innerHTML = '';
 
     // Trailing controls go in their own group so the whole button bar
@@ -19,13 +20,15 @@ function renderHeader()
     const sys = document.createElement( 'div' );
     sys.className = 'tb-group tb-sys';
 
+    // The search comes first in the tools (shared/app.css HEADER), on both screens.
+    tools.append( ...searchParts() );
+
     if( view === 'list' )
     {
         header.appendChild( svgIcon( ICON_TRIP, 26, 'app-icon' ) );
 
         const h1 = document.createElement( 'h1' );
         h1.className = 'app-title';
-        h1.style.flex = '1 1 auto';
         h1.textContent = 'Trips';
         header.appendChild( h1 );
 
@@ -149,6 +152,9 @@ function renderHeader()
         header.appendChild( actions );
     }
 
+    // The field had the keys: it gets them back after the rebuild.
+    if( searchHadFocus ) { tripSearchEls[ 0 ].firstChild.focus( { preventScroll: true } ); searchHadFocus = false; }
+
     // The "?" answers about the screen you are on (see TRIPS_INTRO).
     if( window.TRIPS_INTRO && NayiveUI.setIntro )
         NayiveUI.setIntro( view === 'detail' ? TRIPS_INTRO.stages : TRIPS_INTRO.home );
@@ -168,6 +174,85 @@ function buildHelpBtn()
 }
 
 //------------------------------------------------------------------------//
+// SEARCH - the shared fold (NayiveUI.searchFold), as in every app: the
+// magnifier opens the field in the toolbar, the other buttons stay unless
+// the bar is too narrow, its × (or Escape) empties and folds it. On the
+// list it filters the trips (name, places, documents), in a trip its
+// documents and stages. Built once: renderHeader puts the same box back.
+
+let tripSearch     = null;      // the fold's handle
+let tripSearchEls  = null;      // [ box, magnifier ]
+let tripSearchView = null;      // the screen it was opened on: another one empties it
+let tripQuery      = '';
+let searchHadFocus = false;
+
+function searchParts()
+{
+    if( tripSearchView !== view && tripSearch ) { tripSearch.close( true ); tripQuery = ''; }
+    tripSearchView = view;
+    if( tripSearchEls ) return tripSearchEls;
+
+    // type=text, not search: the browser's own clear cross would sit next to ours
+    const input = document.createElement( 'input' );
+    input.type = 'text';
+    input.className = 'search-input';
+    input.autocomplete = 'off';
+    input.setAttribute( 'enterkeyhint', 'search' );
+    input.placeholder = NayiveUI.t( 'ui.search' );
+    input.setAttribute( 'aria-label', NayiveUI.t( 'ui.search' ) );
+    input.addEventListener( 'input', function() { tripQuery = input.value; applySearch(); } );
+    const box = document.createElement( 'div' );
+    box.className = 'search-wrap';
+    box.appendChild( input );
+
+    const btn = document.createElement( 'button' );
+    btn.className = 'icon-btn';
+    btn.type = 'button';
+    btn.id = 'searchBtn';                 // the help dialog points at it
+    btn.dataset.rank = 20;
+    btn.title = NayiveUI.t( 'ui.search' );
+    btn.setAttribute( 'aria-label', btn.title );
+    btn.innerHTML = NayiveUI.icon( 'search' );
+
+    tripSearchEls = [ box, btn ];
+    tripSearch = NayiveUI.searchFold( { bar: document.getElementById( 'tripHeader' ), box: box, input: input, toggle: btn } );
+    return tripSearchEls;
+}
+
+// Accent- and case-blind.
+function searchFoldText( s ) { return String( s || '' ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' ).toLowerCase(); }
+
+// Hides what does not match, after every content render. A section label
+// with nothing left under it goes too; a folded section opens while searching.
+function applySearch()
+{
+    const content = document.getElementById( 'tripContent' );
+    const q = searchFoldText( tripQuery.trim() );
+    // A stage's own documents go with their stage.
+    const items = content.querySelectorAll( view === 'list' ? '.trip-card' : '.stage-item, .file-row:not(.stage-item .file-row)' );
+    let shown = 0;
+    items.forEach( function( el )
+    {
+        const hit = ! q || searchFoldText( el._find || el.textContent ).indexOf( q ) >= 0;
+        el.hidden = ! hit;
+        if( hit ) shown++;
+    } );
+    content.querySelectorAll( '.section-label' ).forEach( function( lab )
+    {
+        let any = false;
+        for( let n = lab.nextElementSibling; n && ! n.classList.contains( 'section-label' ); n = n.nextElementSibling )
+            if( ! n.hidden ) any = true;
+        lab.hidden = ! any;
+    } );
+    content.querySelectorAll( '.detail-section' ).forEach( function( sec )
+    {
+        const body = sec.querySelector( '.section-body' );
+        body.hidden = q ? false : sec.classList.contains( 'collapsed' );
+    } );
+    if( tripSearch ) tripSearch.count( q ? shown + ' / ' + items.length : '' );
+}
+
+//------------------------------------------------------------------------//
 // RENDERING - CONTENT (list / detail)
 
 function renderContent()
@@ -179,6 +264,7 @@ function renderContent()
         content.appendChild( buildListView() );
     else
         content.appendChild( buildDetailView() );
+    if( tripQuery ) applySearch();
 }
 
 function buildListView()
@@ -320,6 +406,11 @@ function buildTripCard( t, bPast )
     if( countdown ) meta.appendChild( countdown );
 
     card.appendChild( meta );
+
+    // What the search looks in (applySearch): more than the card shows.
+    card._find = [ t.destination ].concat( t.stages.map( function( st ) { return st.location; } ),
+                                           t.documents.map( function( d ) { return d.name; } ),
+                                           ...t.stages.map( function( st ) { return ( st.documents || [] ).map( function( d ) { return d.name; } ); } ) ).join( ' ' );
 
     return card;
 }

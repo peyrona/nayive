@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -135,5 +136,41 @@ func TestChatSilent(t *testing.T) {
 	loud := h.pushPayload(chatPushJob{msg: ChatMsg{Kind: "text", Text: "hola"}, conv: conv})
 	if quiet["quiet"] != true || loud["quiet"] != nil {
 		t.Fatalf("quiet = %v, loud = %v", quiet, loud)
+	}
+
+	// A photo or file too (the "night" question covers every send).
+	for _, q := range []string{"&silent=1", ""} {
+		resp := do(t, anonymous(), "POST", fmt.Sprintf("%s/api/c/%s/conv/%s/upload?kind=file&name=a.txt%s",
+			f.base, f.carmen, conv, q), strings.NewReader("hola"), nil)
+		raw := readBody(t, resp)
+		var up chatMsgOut
+		if err := json.Unmarshal(raw, &up); err != nil || resp.StatusCode != 201 || up.Silent != (q != "") {
+			t.Fatalf("upload%s = %d: %s", q, resp.StatusCode, raw)
+		}
+	}
+}
+
+// TestChatZones: a page's wait says its time zone; the others in its chats
+// see it (the "night: without sound?" offer), nobody else does, and a bad
+// name is not kept.
+func TestChatZones(t *testing.T) {
+	f := newChatFixture(t)
+	guest := anonymous()
+	f.call(t, guest, "GET", "/api/c/"+f.carmen+"/wait?v=-1&tz=America/Argentina/Buenos_Aires", "", 200, nil)
+	f.call(t, anonymous(), "GET", "/api/c/"+f.javi+"/wait?v=-1&tz=../etc/passwd", "", 200, nil)
+	f.call(t, f.owner, "GET", "/api/chat/wait?v=-1&tz=Europe/Madrid", "", 200, nil)
+
+	type zones struct {
+		Zones map[string]string `json:"zones"`
+	}
+	var mine zones
+	f.call(t, f.owner, "GET", "/api/chat", "", 200, &mine)
+	if len(mine.Zones) != 1 || mine.Zones[f.ids["Carmen"]] != "America/Argentina/Buenos_Aires" {
+		t.Fatalf("owner sees %v", mine.Zones)
+	}
+	var hers zones
+	f.call(t, guest, "GET", "/api/c/"+f.carmen+"/wait?v=-1", "", 200, &hers)
+	if len(hers.Zones) != 1 || hers.Zones["o"] != "Europe/Madrid" {
+		t.Fatalf("Carmen sees %v", hers.Zones)
 	}
 }

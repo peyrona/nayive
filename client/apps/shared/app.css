@@ -522,14 +522,19 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
  * be measured. When the field would get under 180px the bar turns
  * .search-tight and its other icons step aside. Inside the field, right: a
  * funnel button (.search-mark, only for a field with a filter dialog:
- * .has-filter), then the × (.search-shut) that folds it away. The field's
+ * .has-filter), an up / down pair (.search-step, a field that steps through
+ * its hits in place: .has-steps), then the × (.search-shut) that folds it away. The field's
  * look is the shared input rule - see FORM FIELD below.
  * ---------------------------------------------------------------------------*/
 .search-fold                { display: none; position: relative; flex: 1 1 auto; width: auto;
                               min-width: 0; max-width: 360px; }
 .search-fold.is-open        { display: block; }
 .search-fold > input        { width: 100%; padding-right: 34px; }
+/* type="search" gets the browser's own × while typing (Chromium, Safari):
+   the fold's × already does that job - hide it so no app shows two. */
+.search-fold > input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
 .search-fold.has-filter > input { padding-right: 60px; }
+.search-fold.has-steps > input  { padding-right: 86px; }   /* up · down · × */
 .search-fold .search-ends   { position: absolute; top: 0; bottom: 0; right: 2px;
                               display: flex; align-items: center; }
 .search-fold .search-ends .icon-btn.sm     { width: 26px; height: 26px; }
@@ -3035,4 +3040,65 @@ html.nv-locked body { visibility: hidden; }
     .tree-sheet .ntree                       { min-width: 0; }
     .tree-sheet .ntree .tree-row             { min-height: 40px; }
     .tree-sheet .ntree .tree-name            { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* ---------------------------------------------------------------------------
+ * FINGER-SIZED TARGETS (touch screens only)
+ *
+ * A finger pad is ~10 mm, 40-44 CSS px; Apple asks 44, Google 48. Many controls
+ * here draw at 16-36 px, which a mouse hits fine and a thumb misses - and a
+ * long press that lands beside a drag grip selected the text next to it.
+ *
+ * 1. HIT PAD: an invisible ::before grows the area that takes the tap to at
+ *    least --hit on each axis, centred. Nothing moves and nothing looks
+ *    different: only where a finger counts as "on" the control. :where() keeps
+ *    it at zero specificity, so a control with its own position or ::before
+ *    keeps them. The svg app icon cannot carry a ::before: padding + an equal
+ *    negative margin do the same there.
+ * 2. NO TEXT SELECTION on rows that are dragged (a stage's head row, a
+ *    sub-task, a queue row, a sheet tab): a long press there means "move",
+ *    never "select". Text fields inside keep selecting.
+ * 3. Rows that are too dense for (1) - pads would overlap the next row - grow
+ *    instead (Tasks' sub-tasks: tasks/index.html).
+ *
+ * tools/compat-test/targets.mjs lists what is still under 40 px, app by app.
+ * ---------------------------------------------------------------------------*/
+@media (pointer: coarse)
+{
+    :root { --hit: 44px; }
+
+    :where(.icon-btn, .pop-btn, .transport-btn, .tb-btn, .fmt-btn, .fmt-color-btn, .pill,
+           .text-btn, .info-dot, .task-chevron, .stage-drag, .subtask-handle,
+           h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)
+    {
+        position: relative;
+    }
+    :where(.icon-btn, .pop-btn, .transport-btn, .tb-btn, .fmt-btn, .fmt-color-btn, .pill,
+           .text-btn, .info-dot, .task-chevron, .stage-drag, .subtask-handle,
+           h1.nayive-home-link, .app-title.nayive-home-link, .detail-heading.collapsible)::before
+    {
+        content: "";
+        position: absolute;
+        inset: min(0px, calc((100% - var(--hit)) / 2));
+    }
+    svg.app-icon.nayive-home-link             { box-sizing: content-box; padding: 12px; margin: -12px -6px -12px -12px; }   /* right: keeps the icon's 6px */
+
+    :where(.stage-top, .subtask-row, .queue-row, .sheet-tab)
+    {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+    :where(.stage-top, .subtask-row, .queue-row, .sheet-tab) :is(input, textarea, [contenteditable=""], [contenteditable="true"])
+    {
+        -webkit-user-select: text;
+        user-select: text;
+        -webkit-touch-callout: default;
+    }
+
+    /* The seek / volume sliders: the bar stays 4 px, the box a thumb can grab
+       grows - and an equal negative margin keeps the layout where it was. */
+    input[type=range]                         { height: 40px; margin-block: -18px; background: transparent; }
+    input[type=range]::-webkit-slider-thumb   { width: 20px; height: 20px; margin-top: -8px; }
+    input[type=range]::-moz-range-thumb       { width: 20px; height: 20px; }
 }

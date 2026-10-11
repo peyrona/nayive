@@ -117,12 +117,22 @@
     // ---------------------------------------------------------------------
 
     // loadList( false ): the first page, from scratch; ( true ): the next one.
-    E.loadList = async function ( more )
+    // stamp: the tray's change stamp, just read (E.refresh) - the same one as
+    // when this list was read means nothing changed, and nothing is asked.
+    E.loadList = async function ( more, stamp )
     {
         if( ! S.acct ) return;
         if( more && ( S.loading || ! S.next || S.label ) ) return;
+        // The same list read again (a refresh, after a move): it stays on
+        // screen while the server is asked, and is redrawn only if it changed.
+        var key = [ S.acct, S.tray, S.label, S.query, JSON.stringify( S.adv || null ) ].join( "|" );
+        var quiet = ! more && key === S.listKey && ! S.only;
+        if( quiet && stamp && S.listStamp === key + "#" + stamp ) { E.plug( "synced" ); return; }
+        quiet = quiet && S.items.length > 0;
+        if( ! more ) S.listStamp = "";
         var gen = more ? S.gen : ++S.gen;
-        if( ! more )
+        S.listKey = key;
+        if( ! more && ! quiet )
         {
             S.items = [];
             S.next = "";
@@ -145,8 +155,11 @@
 
         S.loading = true;
         var moreBox = E.$( "listMore" );
-        moreBox.hidden = false;
-        moreBox.textContent = E.T( "mail.loading" );
+        if( ! quiet )
+        {
+            moreBox.hidden = false;
+            moreBox.textContent = E.T( "mail.loading" );
+        }
         E.plug( "loading" );
 
         var path = S.label ? "label/" + encodeURIComponent( S.label )
@@ -157,12 +170,31 @@
         {
             var page = await E.api( "GET", path );
             if( gen !== S.gen ) return;
+            var was = { next: S.next, dry: S.advDry };
             S.next = page.next || "";
             var items = E.advFilter( ( page.items || [] ).filter( shown ), more );   // search.js (may end S.next)
+            if( stamp ) S.listStamp = key + "#" + stamp;
+            if( quiet && sameRows( items, S.items, !! page.next ) )
+            {
+                S.next = was.next;
+                S.advDry = was.dry;
+                E.showProblem( null );
+                E.plug( "synced" );
+                return;
+            }
             // split: the message open beside the list keeps its object (the
             // reader and the bar hold it), with what the list says now
             if( S.open ) items = items.map( function ( m ) { return E.acctOf( m ) === E.acctOf( S.open ) && m.ref === S.open.ref ? Object.assign( S.open, m ) : m; } );
-            // each row's id for the item browser (the message open keeps its own)
+            // each row's id for the item browser (the message open keeps its
+            // own; on a quiet redraw, a row still there keeps its id too)
+            if( quiet )
+            {
+                var ids = {};
+                S.items.forEach( function ( m ) { ids[ E.acctOf( m ) + "|" + m.ref ] = m._id; } );
+                items.forEach( function ( m ) { if( ! m._id ) m._id = ids[ E.acctOf( m ) + "|" + m.ref ]; } );
+                S.items = [];
+                E.$( "list" ).textContent = "";
+            }
             items.forEach( function ( m ) { if( ! m._id ) m._id = "m" + ( ++rowSeq ); } );
             S.items = S.items.concat( items );
             E.showProblem( null );
@@ -190,6 +222,21 @@
             }
         }
     };
+
+    // The new first page says what the rows on screen say (more pages read
+    // further down stay as they are, when the server has more).
+    function sameRows( fresh, shown, hasMore )
+    {
+        if( hasMore ? fresh.length > shown.length : fresh.length !== shown.length ) return false;
+        for( var i = 0; i < fresh.length; i++ ) if( rowSig( fresh[ i ] ) !== rowSig( shown[ i ] ) ) return false;
+        return true;
+    }
+
+    function rowSig( m )
+    {
+        return JSON.stringify( [ E.acctOf( m ), m.ref, m.seen, m.flagged, m.attach, m.labels, m.subject,
+                                 m.snippet, m.date, m.from, m.to ] );
+    }
 
     // A row whose going waits on its Undo (deleted for good, its account
     // being removed): a re-read of the list does not bring it back.

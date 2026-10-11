@@ -674,3 +674,41 @@ func TestMailFixDecoders(t *testing.T) {
 		t.Errorf("contacts = %v", names)
 	}
 }
+
+// The tray stamp: only with HIGHESTMODSEQ (CONDSTORE), and any change in
+// the folder changes it. A server without CONDSTORE gives none.
+func TestMailTrayStamp(t *testing.T) {
+	n := func(v uint32) *uint32 { return &v }
+	base := imap.StatusData{UIDValidity: 7, UIDNext: 40, NumMessages: n(30), HighestModSeq: 900}
+	if got := trayStamp(&base); got != "7.40.30.900" {
+		t.Fatalf("stamp %q", got)
+	}
+	for name, st := range map[string]imap.StatusData{
+		"new mail": {UIDValidity: 7, UIDNext: 41, NumMessages: n(31), HighestModSeq: 901},
+		"deleted":  {UIDValidity: 7, UIDNext: 40, NumMessages: n(29), HighestModSeq: 900},
+		"read":     {UIDValidity: 7, UIDNext: 40, NumMessages: n(30), HighestModSeq: 905},
+		"rebuilt":  {UIDValidity: 8, UIDNext: 40, NumMessages: n(30), HighestModSeq: 900},
+	} {
+		if trayStamp(&st) == trayStamp(&base) {
+			t.Errorf("%s: same stamp", name)
+		}
+	}
+	if got := trayStamp(&imap.StatusData{UIDValidity: 7, UIDNext: 40, NumMessages: n(30)}); got != "" {
+		t.Fatalf("no CONDSTORE, stamp %q", got)
+	}
+
+	addr := startMemIMAP(t)
+	appendMail(t, addr, "INBOX", plainMail(1), false)
+	trays, err := memProvider(addr, nil).Trays(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tr := range trays {
+		if tr.Stamp != "" {
+			t.Fatalf("%s: stamp %q without CONDSTORE", tr.Role, tr.Stamp)
+		}
+		if tr.Role == RoleInbox && tr.Total != 1 {
+			t.Fatalf("inbox total %d", tr.Total)
+		}
+	}
+}

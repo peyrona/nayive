@@ -19,6 +19,7 @@ NayiveI18n.ready.then( function () {
         title: T( 'trips.itinerary' ),
         tour:  [ 'buttons' ],
         buttons: [
+            { icon: 'search', name: T( 'ui.search' ),           text: T( 'ui.tour.search' ), tour: { sel: '#searchBtn' } },
             { icon: 'plus',   name: T( 'trips.addStage' ),      text: T( 'trips.introStage' ),
               tour: { sel: '.detail-heading-row .icon-btn[aria-label="' + T( 'trips.addStage' ) + '"]' } },
             { icon: 'compass', name: T( 'trips.disc.btn' ),      text: T( 'trips.introDiscover' ), tour: { sel: STAGE( 'trips.disc.btn' ), ghost: NO_STAGE } },
@@ -36,6 +37,7 @@ NayiveI18n.ready.then( function () {
         title: 'Trips',
         lead:  NayiveUI.t( 'trips.introLead' ),
         buttons: [
+            { sel: '.trip-header-actions #searchBtn', text: NayiveUI.t( 'ui.tour.search' ) },
             { sel: '.trip-header-actions #addTripBtn', text: NayiveUI.t( 'trips.introAdd' ) },
             { sel: '.trip-header-actions #settingsBtn', text: NayiveUI.t( 'trips.introSettings' ) },
             // Export and Share are on each trip card, so they show once the list has a trip.

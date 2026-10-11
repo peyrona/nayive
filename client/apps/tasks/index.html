@@ -148,6 +148,19 @@
         .icon-btn.thin svg       { width: 14px; height: 14px; }
         @media (max-width: 640px) { .icon-btn.sm.thin { width: 18px; } }
 
+        /* Touch: 24px rows are too dense for app.css's hit pads (each would reach
+           into the next row), so the row grows to a finger instead - its grip
+           and buttons with it. See app.css FINGER-SIZED TARGETS. */
+        @media (pointer: coarse)
+        {
+            .subtask-row                             { min-height: 44px; }
+            .subtask-handle                          { width: 36px; height: 44px; }
+            .subtask-actions                         { gap: 6px; }
+            .subtask-actions .icon-btn.sm            { height: 36px; }
+            .subtask-actions .icon-btn.sm:not(.thin) { width: 36px; }
+            .icon-btn.sm.thin                        { width: 26px; }
+        }
+
         /* WHAT A SUB-TASK'S PLAN LOOKS LIKE ON ITS ROW
            A chip for the duration, and the rail below for the dependencies. Both
            appear only when the sub-task (or its task) actually uses them - a task

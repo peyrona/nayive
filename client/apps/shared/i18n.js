@@ -336,3 +336,93 @@
         }
     };
 } )();
+
+// ---------------------------------------------------------------------------
+// ERROR REPORTS
+//
+// Lives here, not in ui.js, because this is the one script every page loads
+// first and without `defer`: an error in the app's own scripts is caught even
+// when it happens before ui.js runs.
+//
+// An uncaught error or rejected promise is sent to POST /api/clientlog with the
+// browser, its version and the device shape (mouse / finger, window size), so
+// a page that breaks on someone's phone no longer breaks in silence. The server
+// keeps it in <run-root>/logs/client-errors.log (server/go/api_clientlog.go).
+//
+// Only pages under /nayive/ (a session exists there); guest and public pages
+// (/c/..., /s/...) and the sign-in page send nothing. At most MAX_SENDS a page;
+// noise nobody can act on (extensions, cross-origin "Script error.", aborted
+// fetches, the harmless ResizeObserver warning) is dropped here.
+// ---------------------------------------------------------------------------
+( function ()
+{
+    "use strict";
+
+    var BASE = "/nayive/", MAX_SENDS = 10;
+
+    if( location.pathname.indexOf( BASE ) !== 0 ) return;
+    var app = location.pathname.slice( BASE.length ).split( "/" )[ 0 ].replace( /\.html$/, "" ) || "launcher";
+    if( app === "login" ) return;
+
+    var left = MAX_SENDS;
+
+    // "Firefox 131.0 (Android)". On iPhone every browser is Safari's engine
+    // underneath: the "(iOS)" says so whatever name comes first.
+    function browserName()
+    {
+        var ua = navigator.userAgent || "", m;
+        var names = [ [ "Edge",             /Edg(?:A|iOS)?\/([\d.]+)/ ],
+                      [ "Opera",            /OPR\/([\d.]+)/ ],
+                      [ "Samsung Internet", /SamsungBrowser\/([\d.]+)/ ],
+                      [ "Firefox",          /(?:Firefox|FxiOS)\/([\d.]+)/ ],
+                      [ "Chrome",           /(?:Chrome|CriOS)\/([\d.]+)/ ],
+                      [ "Safari",           /Version\/([\d.]+).*Safari/ ] ];
+        var os = /iPhone|iPad|iPod/.test( ua ) || ( /Macintosh/.test( ua ) && navigator.maxTouchPoints > 1 ) ? " (iOS)"
+               : /Android/.test( ua ) ? " (Android)" : "";
+        for( var i = 0; i < names.length; i++ )
+            if( ( m = names[ i ][ 1 ].exec( ua ) ) )
+                return names[ i ][ 0 ] + " " + m[ 1 ].split( "." ).slice( 0, 2 ).join( "." ) + os;
+        return "?" + os;
+    }
+
+    function noise( msg, src )
+    {
+        return /^(chrome|moz|safari(-web)?)-extension:/.test( src || "" ) ||
+               ( msg === "Script error." && ! src ) ||
+               /ResizeObserver loop/.test( msg );
+    }
+
+    function send( rep )
+    {
+        if( left <= 0 || noise( rep.message, rep.source ) ) return;
+        left--;
+        try
+        {
+            rep.app     = app;
+            rep.browser = browserName();
+            rep.ua      = navigator.userAgent;
+            rep.touch   = !! ( window.matchMedia && matchMedia( "(pointer: coarse)" ).matches );
+            rep.w       = window.innerWidth;
+            rep.h       = window.innerHeight;
+            fetch( "/api/clientlog", { method: "POST", keepalive: true, credentials: "same-origin",
+                                       headers: { "Content-Type": "application/json" },
+                                       body: JSON.stringify( rep ) } ).catch( function () {} );
+        }
+        catch ( _ ) {}                      // a report must never become an error of its own
+    }
+
+    window.addEventListener( "error", function ( e )
+    {
+        if( ! ( e instanceof ErrorEvent ) ) return;     // a broken <img> or <script> load, not a script error
+        send( { kind: "error", message: String( e.message || "" ), source: e.filename || "",
+                line: e.lineno || 0, col: e.colno || 0, stack: ( e.error && e.error.stack ) || "" } );
+    } );
+
+    window.addEventListener( "unhandledrejection", function ( e )
+    {
+        var r = e.reason;
+        if( r && r.name === "AbortError" ) return;     // a fetch we cancelled on purpose
+        send( { kind: "rejection", message: String( ( r && r.message ) || r ), source: "",
+                line: 0, col: 0, stack: ( r && r.stack ) || "" } );
+    } );
+} )();

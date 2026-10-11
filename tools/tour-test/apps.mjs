@@ -82,8 +82,8 @@ const APPS = {
         expect: { 2: s => /trip-card/.test( s.lit ) || "a trip card" },
         group: {
             then: async c => { await c.evaluate( "goToDetail( 9100 ); true" ); return c.until( "!! document.querySelector( '.stage-actions' )" ); },
-            expect: { 3: s => /icon-btn/.test( s.lit ) && ! s.ghost || "a real stage button", 4: s => ! s.ghost || "real", 5: s => ! s.ghost || "real",
-                      6: s => /stage-drag/.test( s.lit ) || "the grip" }
+            expect: { 4: s => /icon-btn/.test( s.lit ) && ! s.ghost || "a real stage button", 5: s => ! s.ghost || "real", 6: s => ! s.ghost || "real",
+                      7: s => /stage-drag/.test( s.lit ) || "the grip" }
         }
     },
     drive: {
@@ -118,7 +118,7 @@ const APPS = {
                     members: [ { id: "m1", name: "Yo", me: true }, { id: "m2", name: "Ana" } ], rates: {},
                     entries: [ { id: "e1", type: "expense", date: today, amount: 3000, currency: "EUR", rate: 1, created: 1, text: "Pizza",
                                  paidBy: "m1", split: { mode: "equal", among: [ "m1", "m2" ] } } ] } ) },
-        expect: { 2: s => /addBtn/.test( s.lit ) || "+ for a new group", 3: s => /card-row/.test( s.lit ) || "a group row" },
+        expect: { 3: s => /addBtn/.test( s.lit ) || "+ for a new group", 4: s => /card-row/.test( s.lit ) || "a group row" },
         // A second tour inside the group: its own card, its own steps.
         group: {
             then: async c => { await mouse( c, "#groupList > .card-row .row-main" ); return c.until( "! document.getElementById( 'groupView' ).hidden" ); },

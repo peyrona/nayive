@@ -44,6 +44,9 @@ type adminRequest struct {
 	// set-sites
 	SitesDir string `json:"sites_dir"`
 
+	// list-dirs (read-only: the web sites folder picker)
+	Path string `json:"path"`
+
 	// raw keeps the object as it arrived, so "was this key present at all?" can
 	// still be asked - encoding/json cannot tell an absent key from a null one
 	// for a non-pointer field, and cannot tell either from a pointer that was
@@ -118,6 +121,10 @@ func (s *Server) apiAdmin(w http.ResponseWriter, r *http.Request) {
 	case "set-sites":
 		if s.needAdmin(w, r, isAdmin) {
 			s.adminSetSites(w, r, &body)
+		}
+	case "list-dirs":
+		if s.needAdmin(w, r, isAdmin) {
+			s.adminListDirs(w, r, &body)
 		}
 	case "create-user", "update-user":
 		if s.needAdmin(w, r, isAdmin) {

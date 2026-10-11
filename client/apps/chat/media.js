@@ -240,7 +240,8 @@
     function sendFiles( files )
     {
         var pics = files.filter( isPicture );
-        files.forEach( function ( f ) { if( ! isPicture( f ) ) upload( f, "file", "" ); } );
+        var docs = files.filter( function ( f ) { return ! isPicture( f ); } );
+        if( docs.length ) C.nightGate( S.open, function ( silent ) { docs.forEach( function ( f ) { upload( f, "file", "", 0, null, silent ); } ); } );
         if( pics.length ) previewPhotos( pics );
     }
 
@@ -383,12 +384,12 @@
             var bytes = await GumApi.readFileBytes( f.path );
             if( S.open !== conv ) return;
             var file = new File( [ bytes ], f.name );
-            if( ! photo ) upload( file, "file", "" );
-            else if( /\.jpe?g$/i.test( f.name ) && C.canEditPhotos() ) previewPhotos( [ file ], function ( caption, reply, url )
+            if( ! photo ) C.nightGate( conv, function ( silent ) { upload( file, "file", "", 0, null, silent ); } );
+            else if( /\.jpe?g$/i.test( f.name ) && C.canEditPhotos() ) previewPhotos( [ file ], function ( caption, reply, url, silent )
             {
                 measure( file ).then( function ( dims )
                 {
-                    C.sendMsg( { kind: "photo", ref: f.path, text: caption, replyTo: reply,
+                    C.sendMsg( { kind: "photo", ref: f.path, text: caption, replyTo: reply, silent: silent || undefined,
                                  w: dims ? dims[ 0 ] : 0, h: dims ? dims[ 1 ] : 0 }, conv,
                                { localUrl: url, file: { name: f.name, w: dims ? dims[ 0 ] : 0, h: dims ? dims[ 1 ] : 0 } } );
                 } );
@@ -399,7 +400,7 @@
     };
 
     // WhatsApp's step before sending photos: see them, add a line, send.
-    // sendOne( caption, replyTo, previewUrl ): sends a single photo another way.
+    // sendOne( caption, replyTo, previewUrl, silent ): sends a single photo another way.
     function previewPhotos( files, sendOne )
     {
         var body = h( "div" );
@@ -421,10 +422,13 @@
             // the photo's caption. The sheet stays open, the caption in its box.
             if( Array.from( cap.value.trim() ).length > 4000 ) { C.toast( "chat.tooLong", 4000 ); return; }
             sh.close();
-            var reply = S.replyTo ? S.replyTo.id : 0;
+            var reply = S.replyTo ? S.replyTo.id : 0, caption = cap.value.trim();
             C.resetComposer();
-            if( sendOne ) { sendOne( cap.value.trim(), reply, urls[ 0 ] ); return; }
-            files.forEach( function ( f, i ) { upload( f, "photo", i === 0 ? cap.value.trim() : "", i === 0 ? reply : 0, urls[ i ] ); } );
+            C.nightGate( S.open, function ( silent )
+            {
+                if( sendOne ) { sendOne( caption, reply, urls[ 0 ], silent ); return; }
+                files.forEach( function ( f, i ) { upload( f, "photo", i === 0 ? caption : "", i === 0 ? reply : 0, urls[ i ], silent ); } );
+            } );
         }
         go.addEventListener( "click", send );
         cap.addEventListener( "keydown", function ( e ) { if( e.key === "Enter" ) send(); } );
@@ -432,7 +436,7 @@
     }
 
     // One photo or file: shown at once, then sent with a progress figure.
-    async function upload( file, kind, caption, replyTo, localUrl )
+    async function upload( file, kind, caption, replyTo, localUrl, silent )
     {
         var conv = S.open;
         var blob = file, name = file.name || ( kind === "photo" ? "foto.jpg" : "file" );
@@ -461,6 +465,7 @@
         var q = "kind=" + kind + "&name=" + encodeURIComponent( name ) + "&cid=" + cid +
                 ( caption ? "&text=" + encodeURIComponent( caption ) : "" ) +
                 ( replyTo ? "&replyTo=" + replyTo : "" ) +
+                ( silent ? "&silent=1" : "" ) +
                 ( dims ? "&w=" + dims[ 0 ] + "&h=" + dims[ 1 ] : "" );
         var xhr = new XMLHttpRequest();
         xhr.open( "POST", C.W( conv ).api + "/conv/" + encodeURIComponent( conv ) + "/upload?" + q );
@@ -486,7 +491,7 @@
         xhr.onerror = function () { fail( 0 ); };
         function fail( status )
         {
-            if( temp ) { temp.progress = null; temp._retry = function () { upload( file, kind === "photo" ? "photo" : "file", caption, replyTo, localUrl ); }; C.failTemp( temp ); }
+            if( temp ) { temp.progress = null; temp._retry = function () { upload( file, kind === "photo" ? "photo" : "file", caption, replyTo, localUrl, silent ); }; C.failTemp( temp ); }
             C.fail( { status: status } );
         }
         xhr.send( blob );
@@ -1012,7 +1017,7 @@
             close();
             var place = "";
             try { place = await NayiveUI.townName( f.lat, f.lon ); } catch( _ ) {}
-            C.sendMsg( { kind: "loc", loc: { lat: f.lat, lon: f.lon, acc: f.acc, place: place } }, conv );
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "loc", loc: { lat: f.lat, lon: f.lon, acc: f.acc, place: place }, silent: silent || undefined }, conv ); } );
         } );
     };
 
@@ -1102,7 +1107,7 @@
             card = cardFit( card );
             if( ! card.name || ! ( card.tels.length || card.emails.length ) ) { C.toast( "chat.cardNeeds", 2600 ); return; }
             if( sh ) sh.close();
-            C.sendMsg( { kind: "card", card: card }, conv );
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "card", card: card, silent: silent || undefined }, conv ); } );
         }
         go.addEventListener( "click", function ()
         {
@@ -1199,7 +1204,8 @@
                                       } );
             if( ! q.value.trim() || list.length < 2 ) { C.toast( "chat.pollNeeds", 2600 ); return; }
             sh.close();
-            C.sendMsg( { kind: "poll", poll: { q: q.value.trim(), opts: list, multi: multi.checked } }, conv );
+            var poll = { q: q.value.trim(), opts: list, multi: multi.checked };
+            C.nightGate( conv, function ( silent ) { C.sendMsg( { kind: "poll", poll: poll, silent: silent || undefined }, conv ); } );
         } );
         setTimeout( function () { q.focus(); }, 50 );
     };

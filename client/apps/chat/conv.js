@@ -81,6 +81,7 @@
         S.replyTo = null;
         S.editing = null;
         S.searching = null;
+        C.endSearch();     // its field folds away (compose.js)
         newBelow = 0;
         // the box only: what was being written in the chat left stays kept
         // there, and this chat's own comes back (compose.js, J3)
@@ -211,10 +212,11 @@
         var fits = !! head._fitBar;
         var calls = h( "div", { class: "tb-group" } );
         var acts  = h( "div", { class: "tb-group" } );
+        // The search field + its magnifier, the same ones each time (compose.js)
+        C.convSearch().forEach( function ( el ) { acts.appendChild( el ); } );
         var ct = C.owns( c ) && c.kind === "d" ? C.contactOf( C.otherOf( c ) ) : null;
         // [id, icon, label, action, its line in the "?" help, rank, class]
-        var list = [ [ "convSearchBtn", "search", "chat.searchIn", function () { C.startSearch(); }, "chat.helpSearchIn", 5 ],
-                     [ "convInfoBtn", "info", "chat.chatOptions", function () { C.openInfo(); }, C.owns( c ) ? "chat.helpInfo" : "chat.helpInfoGuest", 6 ],
+        var list = [ [ "convInfoBtn", "info", "chat.chatOptions", function () { C.openInfo(); }, C.owns( c ) ? "chat.helpInfo" : "chat.helpInfoGuest", 6 ],
                      [ "convMuteBtn", c.mute ? "bell" : "bell-off", c.mute ? "chat.unmute" : "chat.mute", function () { C.setPref( { mute: ! c.mute } ); }, "chat.helpMute", 3 ],
                      [ "convPinBtn", "pin", c.pin ? "chat.unpin" : "chat.pin", function () { C.setPref( { pin: ! c.pin } ); }, "chat.helpPin", 4 ] ]
             .concat( ct && ! ct.user ? [ [ "convLinkBtn", "link", "chat.theirLink", function () { C.showLink( ct ); }, "chat.helpTheirLink", 8 ],   // a Nayive user has no link

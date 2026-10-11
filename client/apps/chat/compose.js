@@ -413,6 +413,12 @@
             return;
         }
         if( ! text ) { C.focusComposer(); return; }
+        if( ! opts )
+        {
+            var conv0 = S.open;
+            C.nightGate( conv0, function ( silent ) { if( S.open === conv0 ) send( { silent: silent } ); } );
+            return;
+        }
         var reply = S.replyTo ? S.replyTo.id : 0;
         C.resetComposer();
         fmtBar.classList.remove( "on" );       // sent: the format bar folds
@@ -470,6 +476,80 @@
         panel.dataset.which = "send";
         composer.appendChild( panel );
         if( navigator.vibrate ) try { navigator.vibrate( 15 ); } catch( _ ) {}
+    }
+
+    // ---------------------------------------------------------------------
+    // night: a plain send - text, photo, file, place, contact, poll - while it
+    // is 22:00-10:00 for someone in the chat who is not on it now asks "without
+    // sound?" (his call, 2026-10-10). The answer holds for that chat for an
+    // hour - the question says until when - then it asks again.
+    // ---------------------------------------------------------------------
+
+    var nightPick = {};   // conv -> { silent, until }
+
+    // The others in `conv` it is night for now: [ { name, time } ]. Their
+    // zones come from their own pages (the server's zonesFor).
+    function nightFor( conv )
+    {
+        var w = C.W( conv ), out = [];
+        C.membersOf( conv ).forEach( function ( p )
+        {
+            var z = w.zones && w.zones[ p ];
+            if( p === w.me || ! z || w.online.has( p ) ) return;
+            var hh, mm;
+            try
+            {
+                new Intl.DateTimeFormat( "en-GB", { timeZone: z, hour: "2-digit", minute: "2-digit", hourCycle: "h23" } )
+                    .formatToParts( new Date() ).forEach( function ( x )
+                    {
+                        if( x.type === "hour" ) hh = x.value;
+                        if( x.type === "minute" ) mm = x.value;
+                    } );
+            }
+            catch( _ ) { return; }   // a zone this browser does not know
+            var hour = parseInt( hh, 10 );
+            if( hour >= 22 || hour < 10 ) out.push( { name: C.nameOf( p, conv ), time: hh + ":" + mm } );
+        } );
+        return out;
+    }
+
+    // go( silent ) sends. It runs at once by day, or with this chat's recent
+    // answer; else after the question.
+    C.nightGate = function ( conv, go )
+    {
+        var who = nightFor( conv ), pick = nightPick[ conv ];
+        if( ! who.length ) go( false );
+        else if( pick && pick.until > Date.now() ) go( pick.silent );
+        else setTimeout( function () { nightAsk( who, conv, go ); } );   // after this click's own "close the panel"
+    };
+
+    // The question, over the Send button like the hold menu.
+    function nightAsk( who, conv, go )
+    {
+        if( S.open !== conv ) return;
+        closePanel();
+        var names = who.slice( 0, 2 ).map( function ( x ) { return x.name; } ).join( ", " ) + ( who.length > 2 ? " +" + ( who.length - 2 ) : "" );
+        var menu = h( "div", { class: "top-menu send-menu", attrs: { role: "menu" } },
+            h( "div", { class: "menu-label", text: who.length === 1 ? C.TF( "chat.nightAt", { time: who[ 0 ].time, who: names } )
+                                                                   : C.TF( "chat.nightFor", { who: names } ) } ) );
+        function item( icon, key, silent )
+        {
+            menu.appendChild( h( "button", { class: "menu-item", attrs: { type: "button", role: "menuitem" },
+                                             on: { click: function ()
+                                             {
+                                                 closePanel();
+                                                 nightPick[ conv ] = { silent: silent, until: Date.now() + 60 * 60 * 1000 };
+                                                 go( silent );
+                                             } } }, C.ic( icon ), T( key ) ) );
+        }
+        item( "bell-off", "chat.sendSilent", true );
+        item( "bell", "chat.sendLoud", false );
+        // Say the answer holds, so a later quiet send is not taken for a loud one.
+        menu.appendChild( h( "div", { class: "menu-label note", text: C.TF( "chat.nightHold", { time: C.time( Date.now() + 60 * 60 * 1000 ) } ) } ) );
+        panel = menu;
+        panel.dataset.which = "night";
+        composer.appendChild( panel );
+        menu.querySelector( ".menu-item" ).focus();
     }
 
     // A date input's value ("2026-09-19T21:30") for a moment, in local time.
@@ -1309,63 +1389,90 @@
     // searching inside the open conversation
     // ---------------------------------------------------------------------
 
-    C.startSearch = async function ()
-    {
-        if( ! S.open ) return;
-        try { await C.loadAll(); } catch( _ ) {}
-        S.searching = { q: "", hits: [], at: -1 };
-        var bar = C.$( "#convBar" );
-        bar.textContent = "";
-        var input = h( "input", { class: "search-in", attrs: { type: "search", placeholder: T( "chat.searchIn" ), "aria-label": T( "chat.searchIn" ) } } );
-        var count = h( "span", { class: "count" } );
-        bar.appendChild( C.btn( "back", "ui.close", stopSearch ) );
-        bar.appendChild( input );
-        bar.appendChild( count );
-        bar.appendChild( C.btn( "chev-up", "chat.prevHit", function () { step( -1 ); } ) );
-        bar.appendChild( C.btn( "chev-down", "chat.nextHit", function () { step( 1 ); } ) );
-        C.pushNav( "search", endSearch );
+    // The shared fold (ui.js searchFold), as every app's search: the
+    // magnifier opens the field in the bar, the chat's buttons stay and
+    // leave only when the bar is too narrow; count · up · down · × inside
+    // the field. Built once: renderConvHead puts the same box back each time.
+    var fold = null, box = null, toggle = null, input = null;
 
-        function run()
-        {
-            var q = input.value.trim();
-            S.searching.q = q;
-            var f = C.fold( q );
-            S.searching.hits = ! q ? [] : S.order.filter( function ( id )
-            {
-                var m = S.msgs.get( id );
-                return m && ! m.deleted && ! C.msgHidden( id ) && C.fold( m.text || ( m.file && m.file.name ) || "" ).indexOf( f ) >= 0;
-            } );
-            S.searching.at = S.searching.hits.length;
-            C.renderAll();
-            step( -1 );
-        }
-        function step( d )
-        {
-            var s = S.searching;
-            if( ! s || ! s.hits.length ) { count.textContent = s && s.q ? "0" : ""; return; }
-            s.at = Math.max( 0, Math.min( s.hits.length - 1, s.at + d ) );
-            count.textContent = ( s.at + 1 ) + "/" + s.hits.length;
-            S.els.forEach( function ( el ) { el.classList.remove( "hit" ); } );
-            var el = S.els.get( s.hits[ s.at ] );
-            if( el ) { el.classList.add( "hit" ); el.scrollIntoView( { block: "center" } ); }
-        }
+    C.convSearch = function ()
+    {
+        if( box ) return [ box, toggle ];
+        // type=text, not search: the browser's own clear cross would sit next to ours
+        input = h( "input", { attrs: { type: "text", enterkeyhint: "search", autocomplete: "off",
+                              placeholder: T( "chat.searchIn" ), "aria-label": T( "chat.searchIn" ) } } );
+        box = h( "div", { class: "search-wrap" }, input );
+        toggle = C.btn( "search", "chat.searchIn", startSearch );
+        toggle.id = "convSearchBtn";
+        toggle._help = "chat.helpSearchIn";
+        toggle.dataset.rank = 20;      // search never leaves the bar (fitBar)
         var t = null;
         input.addEventListener( "input", function () { clearTimeout( t ); t = setTimeout( run, 200 ); } );
+        // Enter goes up, to the older hit (Shift+Enter down): ours, before the fold's
         input.addEventListener( "keydown", function ( e )
         {
-            if( e.key === "Enter" ) { e.preventDefault(); step( e.shiftKey ? 1 : -1 ); }
+            if( e.key !== "Enter" || e.isComposing ) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            step( e.shiftKey ? 1 : -1 );
         } );
-        setTimeout( function () { input.focus(); }, 30 );
+        fold = NayiveUI.searchFold( { bar: C.$( "#convBar" ), box: box, input: input, toggle: toggle,
+                                      step: step, onClose: stopSearch } );
+        return [ box, toggle ];
     };
 
+    C.startSearch = function () { if( toggle ) toggle.click(); };
+
+    async function startSearch()
+    {
+        if( ! S.open || S.searching ) return;
+        S.searching = { q: "", hits: [], at: -1 };
+        C.pushNav( "search", endSearch );
+        try { await C.loadAll(); } catch( _ ) {}
+        if( S.searching && input.value.trim() ) run();
+    }
+
+    function run()
+    {
+        if( ! S.searching ) return;
+        var q = input.value.trim();
+        S.searching.q = q;
+        var f = C.fold( q );
+        S.searching.hits = ! q ? [] : S.order.filter( function ( id )
+        {
+            var m = S.msgs.get( id );
+            return m && ! m.deleted && ! C.msgHidden( id ) && C.fold( m.text || ( m.file && m.file.name ) || "" ).indexOf( f ) >= 0;
+        } );
+        S.searching.at = S.searching.hits.length;
+        C.renderAll();
+        step( -1 );
+    }
+
+    function step( d )
+    {
+        var s = S.searching;
+        if( ! s || ! s.hits.length ) { fold.count( s && s.q ? "0" : "" ); fold.canStep( false ); return; }
+        s.at = Math.max( 0, Math.min( s.hits.length - 1, s.at + d ) );
+        fold.count( ( s.at + 1 ) + "/" + s.hits.length );
+        fold.canStep( true );
+        S.els.forEach( function ( el ) { el.classList.remove( "hit" ); } );
+        var el = S.els.get( s.hits[ s.at ] );
+        if( el ) { el.classList.add( "hit" ); el.scrollIntoView( { block: "center" } ); }
+    }
+
+    // The fold's × or Escape.
     function stopSearch() { C.popNav( "search" ); endSearch(); }
 
+    // "back", or another chat opened (conv.js): the field folds away quietly.
     function endSearch()
     {
+        if( fold && fold.isOpen() ) fold.close( true );
+        if( fold ) fold.canStep( false );
         if( ! S.searching ) return;
         S.searching = null;
         C.renderConvHead();
         C.renderAll();
         C.toBottom( false );
     }
+    C.endSearch = endSearch;
 } )();

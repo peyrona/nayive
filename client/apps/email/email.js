@@ -57,7 +57,8 @@
             if( S.acct !== before ) { E.showAccounts(); return; }
             await E.loadTrays();
             var main = E.$( "listView" ).parentNode;
-            if( E.listShown() && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false );
+            var tray = S.trays.filter( function ( t ) { return t.role === S.tray; } )[ 0 ];
+            if( E.listShown() && ! S.label && ( force || main.scrollTop < 40 ) ) await E.loadList( false, ! force && tray && tray.stamp );
             else E.plug( "synced" );
         }
         catch( err ) { E.plug( "offline" ); }

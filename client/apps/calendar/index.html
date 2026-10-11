@@ -164,21 +164,14 @@
 
         .section-divider { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 
-        /* Search-events sheet */
-        .search-results { margin-top: 2px; max-height: 52vh; overflow-y: auto; }
-        .search-result
-        {
-            display: flex; align-items: center; gap: 8px; width: 100%;
-            padding: 11px 6px; background: none; border: none; border-top: 1px solid var(--line);
-            color: var(--text); font-family: inherit; text-align: left; cursor: pointer;
-        }
-        .search-result:first-child { border-top: none; }
-        .search-result:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
-        .search-result:active { background: color-mix(in srgb, var(--text) 13%, transparent); }
-        .search-result .sr-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.95rem; }
-        .search-result .sr-recur { flex: 0 0 auto; display: flex; color: var(--text-dim); }
-        .search-result .sr-when { flex: 0 0 auto; font-size: 0.8rem; color: var(--text-dim); }
-        .search-empty { padding: 18px 6px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+        /* Search (the shared toolbar fold, SEARCH below): while the field has
+           text the other events fade, and the hit the arrows landed on is ringed. */
+        .fc-event.ev-dim, .dl-row.is-dim { opacity: 0.3; }
+        .fc-list-event.ev-dim td { opacity: 0.4; }
+        .fc-event.ev-hit, .dl-row.is-hit { outline: 2px solid var(--text); outline-offset: 1px; }
+        .dl-row.is-hit { outline-offset: -2px; }     /* inside: the list's scroll box would clip it */
+        .fc-list-event.ev-hit td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+        .pm-dots i.is-dim { opacity: 0.3; }
 
         /* FullCalendar touch-friendly overrides */
         .fc { --fc-border-color: var(--line); --fc-page-bg-color: transparent; --fc-neutral-bg-color: color-mix(in srgb, var(--text) 5%, transparent); height: 100%; }
@@ -387,7 +380,11 @@
 
             <div class="topbar-actions">
                 <div class="tb-group">
-                    <button id="searchBtn" class="icon-btn" data-i18n-attr="title:calendar.searchEvent">
+                    <!-- The shared search fold (NayiveUI.searchFold, SEARCH below). -->
+                    <div class="search-wrap">
+                        <input id="fSearch" class="search-input" type="text" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh, aria-label:ui.search">
+                    </div>
+                    <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:calendar.searchEvent, aria-label:calendar.searchEvent">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
                     <button id="gotoBtn" class="icon-btn" data-i18n-attr="title:calendar.goTo">
@@ -620,26 +617,6 @@
                 <button id="goToTodayBtn" type="button" class="text-btn sheet-actions-left" data-i18n="calendar.today"></button>
                 <button id="goToCancelBtn" data-act="close" data-i18n-attr="title:ui.cancel"></button>
                 <button id="goToGoBtn"     data-act="primary" data-i18n-attr="title:calendar.go"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Search events -->
-    <div id="searchBackdrop" class="sheet-backdrop">
-        <div class="sheet">
-            <div class="sheet-header">
-                <h2 data-i18n="calendar.searchEvent"></h2>
-            </div>
-
-            <div class="field">
-                <input type="text" id="fSearch" autocomplete="off" data-i18n-attr="placeholder:calendar.searchPh">
-            </div>
-
-            <div id="searchResults" class="search-results"></div>
-
-            <div class="sheet-actions">
-                <button id="searchCloseBtn" data-act="close" data-i18n-attr="title:ui.close"></button>
-                <button id="searchApplyBtn" data-act="primary:search" data-i18n-attr="title:ui.search"></button>
             </div>
         </div>
     </div>
@@ -1029,6 +1006,9 @@
                     successCallback( out );
                 },
 
+                eventClassNames: searchClasses,
+                eventDidMount:   searchMounted,
+
                 eventContent: function( arg )
                 {
                     const zoneTag = arg.event.extendedProps.showZoneTag
@@ -1152,7 +1132,8 @@
                 allDay: inst.allDay,
                 startEditable: ! isRecurring,
                 durationEditable: ! isRecurring,
-                extendedProps: { key: inst.def.key, occ: occKey( inst ), showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ) }
+                extendedProps: { key: inst.def.key, occ: occKey( inst ), showZoneTag: showTag, tzAbbrev: zoneAbbrev( zone ),
+                                 match: searchMatch( inst.def ) }
             };
         }
 
@@ -1380,7 +1361,7 @@
 
         function anyBackdropOpen()
         {
-            return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'searchBackdrop', 'settingsBackdrop' ]
+            return [ 'sheetBackdrop', 'helpBackdrop', 'goToBackdrop', 'settingsBackdrop' ]
                    .some( id => document.getElementById( id ).classList.contains( 'open' ) );
         }
 
@@ -1539,11 +1520,15 @@
             const fromMs  = view.activeStart.getTime() - 86400000;
             const toMs    = view.activeEnd.getTime()   + 86400000;
             const counts  = {};
+            const faded   = {};   // a search: the days' events that do not match
 
             for( const def of eventDefs )
+            {
+                const box = searchQ && ! searchMatch( def ) ? faded : counts;
                 for( const inst of expandEventDef( def, fromMs, toMs ) )
                     for( const iso of instDays( inst, fromIso, toIso ) )
-                        counts[ iso ] = ( counts[ iso ] || 0 ) + 1;
+                        box[ iso ] = ( box[ iso ] || 0 ) + 1;
+            }
 
             cells.forEach( function( td )
             {
@@ -1553,7 +1538,8 @@
                 let box = frame.querySelector( '.pm-dots' );
                 if( ! box ) { box = document.createElement( 'div' ); box.className = 'pm-dots'; frame.appendChild( box ); }
 
-                box.innerHTML = '<i></i>'.repeat( Math.min( counts[ td.dataset.date ] || 0, 3 ) );
+                const lit = Math.min( counts[ td.dataset.date ] || 0, 3 );
+                box.innerHTML = '<i></i>'.repeat( lit ) + '<i class="is-dim"></i>'.repeat( Math.min( faded[ td.dataset.date ] || 0, 3 - lit ) );
             } );
 
             markPickedCell();
@@ -1598,10 +1584,12 @@
 
                 const btn = document.createElement( 'button' );
                 btn.type      = 'button';
-                btn.className = 'dl-row';
+                btn.className = 'dl-row' + ( ! searchQ ? '' : ! searchMatch( inst.def ) ? ' is-dim'
+                                           : searchHit && searchHit.id === inst.def.key + '::' + inst.start ? ' is-hit' : '' );
                 btn.innerHTML = '<time>' + when + '</time><span class="dl-title">' + NayiveUI.escapeHtml( inst.def.title || T( 'calendar.untitledEvent' ) ) + '</span>' + tag;
                 btn.addEventListener( 'click', () => openSheetForEdit( inst.def.key, occKey( inst ) ) );
                 box.appendChild( btn );
+                if( hitScroll && btn.classList.contains( 'is-hit' ) ) { hitScroll = false; scrollToMiddle( btn ); }
             }
         }
 
@@ -1711,13 +1699,14 @@
             document.getElementById( 'exportGoBtn' ).addEventListener( 'click', commitExport );
             document.getElementById( 'setRemindMin' ).addEventListener( 'change', saveRemind );
 
-            document.getElementById( 'searchBtn' ).addEventListener( 'click', openSearch );
-            document.getElementById( 'searchCloseBtn' ).addEventListener( 'click', closeSearch );
-            document.getElementById( 'searchApplyBtn' ).addEventListener( 'click', renderSearchResults );
-            document.getElementById( 'fSearch' ).addEventListener( 'keydown', function( e )
-            {
-                if( e.key === 'Enter' ) { e.preventDefault(); renderSearchResults(); }
-            });
+            // The magnifier opens the field; its up / down (Enter, Shift+Enter)
+            // step through the hits; its × (or Escape) empties and folds it,
+            // which fires "input" and lights every event again.
+            const search = document.getElementById( 'fSearch' );
+            search.addEventListener( 'input', onSearchInput );
+            searchFold = NayiveUI.searchFold( { box: search.parentElement, input: search,
+                                                toggle: document.getElementById( 'searchBtn' ),
+                                                step: stepSearch } );
         }
 
         function closeHelp() { document.getElementById( 'helpBackdrop' ).classList.remove( 'open' ); }
@@ -1752,21 +1741,23 @@
         //------------------------------------------------------------------------//
         // SEARCH
         //
-        // Text-matches every event-def by title / notes / location (accent- and
-        // case-insensitive) and lists one representative occurrence per match: the
-        // next upcoming one, or — when nothing is left in the future — the most
-        // recent past one. Picking a result jumps the calendar to that date and
-        // opens the event for editing.
+        // The toolbar field (NayiveUI.searchFold), stepping in place like a
+        // browser's Find. Typing text-matches every event-def by title / notes /
+        // location (accent- and case-insensitive): the calendar stays, the other
+        // events fade. Up / down (Enter / Shift+Enter) walk the matching
+        // occurrences in time order - the first "down" lands on the next one from
+        // now - and each step turns the calendar to that day and rings the event.
+        // Clicking an event opens it, as always.
 
-        function openSearch()
+        let searchFold = null;
+        let searchQ    = '';     // the folded query; '' = no search
+        let searchHit  = null;   // { id, ms } of the occurrence the arrows landed on (its FullCalendar id)
+        let hitScroll  = false;  // bring that event into view once it is drawn
+
+        function searchMatch( def )
         {
-            document.getElementById( 'fSearch' ).value = '';
-            renderSearchResults();
-            document.getElementById( 'searchBackdrop' ).classList.add( 'open' );
-            setTimeout( () => document.getElementById( 'fSearch' ).focus(), 0 );
+            return !! searchQ && foldText( def.title + ' ' + def.notes + ' ' + def.location ).includes( searchQ );
         }
-
-        function closeSearch() { document.getElementById( 'searchBackdrop' ).classList.remove( 'open' ); }
 
         // Lower-case and strip diacritics so "medico" matches "Médico".
         function foldText( s )
@@ -1774,102 +1765,114 @@
             return String( s || '' ).toLowerCase().normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' );
         }
 
-        function renderSearchResults()
+        // Every matching occurrence from two years back to three ahead, in time
+        // order. A single event outside that window still counts.
+        function searchHits()
         {
-            const box = document.getElementById( 'searchResults' );
-            const q    = foldText( document.getElementById( 'fSearch' ).value.trim() );
-
-            box.innerHTML = '';
-
-            if( ! q )
-                return;
-
-            const nowMs   = Date.now();
-            const winFrom = nowMs - 2 * 366 * 86400000;
-            const winTo    = nowMs + 3 * 366 * 86400000;
-
-            const matches = [];
+            const nowMs = Date.now();
+            const from  = nowMs - 2 * 366 * 86400000;
+            const to    = nowMs + 3 * 366 * 86400000;
+            const out   = [];
 
             for( const def of eventDefs )
             {
-                if( foldText( def.title + ' ' + def.notes + ' ' + def.location ).includes( q ) )
-                    matches.push( { def, occ: pickRepresentativeOccurrence( def, nowMs, winFrom, winTo ) } );
+                if( ! searchMatch( def ) ) continue;
+
+                let insts = expandEventDef( def, from, to );
+                if( ! insts.length && ! def.rrule )
+                    insts = [ instantiate( def, def.start, def.end, def.floating ? VIEWER_TZ : def.tzid ) ];
+
+                for( const inst of insts )
+                    // An all-day one's millis are UTC midnight: sort it by its local day.
+                    out.push( { inst, id: inst.def.key + '::' + inst.start,
+                                ms: inst.allDay ? DateTime.fromISO( inst.start ).toMillis() : inst.startMs } );
             }
 
-            if( ! matches.length )
+            return out.sort( ( a, b ) => ( a.ms - b.ms ) || ( a.id < b.id ? -1 : a.id > b.id ? 1 : 0 ) );
+        }
+
+        function showSearchCount( hits, at )
+        {
+            searchFold.count( searchQ ? ( at >= 0 ? ( at + 1 ) + ' / ' + hits.length : String( hits.length ) ) : '' );
+            searchFold.canStep( hits.length > 0 );
+        }
+
+        // Fades / rings follow the query: the grid and the phone's dots + list repaint.
+        function repaintSearch()
+        {
+            if( ! calendar ) return;
+            if( dragBusy ) refetchHeld = true;
+            else           refetchAll();
+        }
+
+        function onSearchInput()
+        {
+            searchQ   = foldText( document.getElementById( 'fSearch' ).value.trim() );
+            searchHit = null;
+            showSearchCount( searchQ ? searchHits() : [], -1 );
+            repaintSearch();
+        }
+
+        function stepSearch( dir )
+        {
+            const hits = searchHits();
+            if( ! hits.length ) { showSearchCount( hits, -1 ); return; }
+
+            let at = searchHit ? hits.findIndex( h => h.id === searchHit.id ) : -1;
+
+            if( at >= 0 )
+                at = ( at + dir + hits.length ) % hits.length;
+            else
             {
-                box.innerHTML = '<div class="search-empty" data-i18n="calendar.noMatch"></div>';
-                return;
+                // First step, or the hit went away: from now (or from where it was).
+                const ms   = searchHit ? searchHit.ms : Date.now();
+                const next = hits.findIndex( h => searchHit ? h.ms > ms : h.inst.endMs > ms );
+                at = dir > 0 ? ( next < 0 ? 0 : next )
+                             : ( next < 0 ? hits.length : next ) - 1;
+                if( at < 0 ) at = hits.length - 1;
             }
 
-            matches.sort( ( a, b ) => (a.occ ? a.occ.startMs : Infinity) - (b.occ ? b.occ.startMs : Infinity) );
+            const hit = hits[ at ];
+            searchHit = { id: hit.id, ms: hit.ms };
+            hitScroll = true;
+            showSearchCount( hits, at );
 
-            for( const m of matches )
-                box.appendChild( buildSearchResultRow( m.def, m.occ ) );
+            // inst.start, not its millis: an all-day one is a bare date, and
+            // UTC midnight is the day before west of UTC.
+            const day = DateTime.fromMillis( hit.ms ).toISODate();
+            if( PHONE ) phoneDay = day;          // the phone month lists that day
+            calendar.gotoDate( hit.inst.start );
+            repaintSearch();
         }
 
-        function pickRepresentativeOccurrence( def, nowMs, winFrom, winTo )
+        // FullCalendar: the fade / ring of one event (eventClassNames).
+        function searchClasses( arg )
         {
-            const insts = expandEventDef( def, winFrom, winTo );
-
-            if( ! insts.length )
-            {
-                // Single event outside the search window: instantiate it directly so it
-                // still shows and stays clickable. A finite series with nothing left in
-                // the window simply has no representative occurrence.
-                if( ! def.rrule )
-                {
-                    const zone = def.floating ? VIEWER_TZ : def.tzid;
-                    return instantiate( def, def.start, def.end, zone );
-                }
-                return null;
-            }
-
-            insts.sort( ( a, b ) => a.startMs - b.startMs );
-
-            return insts.find( i => i.startMs >= nowMs ) || insts[ insts.length - 1 ];
+            if( ! searchQ ) return [];
+            if( ! arg.event.extendedProps.match ) return [ 'ev-dim' ];
+            return searchHit && arg.event.id === searchHit.id ? [ 'ev-hit' ] : [];
         }
 
-        function buildSearchResultRow( def, occ )
+        // FullCalendar: the ringed event scrolls into view once (eventDidMount).
+        function searchMounted( arg )
         {
-            const row = document.createElement( 'button' );
-            row.type      = 'button';
-            row.className = 'search-result';
-
-            const recurIcon = def.rrule
-                ? '<span class="sr-recur" data-i18n-attr="title:calendar.recurs"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M8 16H3v5"></path></svg></span>'
-                : '';
-
-            row.innerHTML = '<span class="sr-title">' + NayiveUI.escapeHtml( def.title || T( 'calendar.untitledEvent' ) ) + '</span>' +
-                            recurIcon +
-                            '<span class="sr-when">' + NayiveUI.escapeHtml( formatOccurrenceWhen( def, occ ) ) + '</span>';
-
-            row.addEventListener( 'click', function()
-            {
-                closeSearch();
-
-                // occ.start, not its millis: an all-day one is a bare date, and
-                // UTC midnight is the day before west of UTC.
-                if( occ && calendar )
-                    calendar.gotoDate( occ.start );
-
-                openSheetForEdit( def.key, occ ? occKey( occ ) : null );
-            });
-
-            return row;
+            if( ! hitScroll || ! searchHit || arg.event.id !== searchHit.id || isPhoneMonth() ) return;
+            hitScroll = false;
+            const el = arg.el;
+            requestAnimationFrame( function() { scrollToMiddle( el ); } );
         }
 
-        function formatOccurrenceWhen( def, occ )
+        // Centres el in its own scroll box only. Not scrollIntoView: that also
+        // moves the overflow:hidden page and host around it.
+        function scrollToMiddle( el )
         {
-            if( ! occ ) return '—';
+            let box = el.parentElement;
+            while( box && box !== document.body && ! /auto|scroll/.test( getComputedStyle( box ).overflowY ) )
+                box = box.parentElement;
+            if( ! box || box === document.body ) return;
 
-            if( def.allDay )
-                return DateTime.fromMillis( occ.startMs, { zone: 'utc' } ).toFormat( 'yyyy-MM-dd' );
-
-            const zone  = def.floating ? VIEWER_TZ : def.tzid;
-            const shown = DateTime.fromMillis( occ.startMs, { zone } ).toFormat( 'yyyy-MM-dd, HH:mm' );
-
-            return (! def.floating && zone !== VIEWER_TZ) ? shown + ' (' + gmtLabel( zone ) + ')' : shown;
+            const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+            box.scrollTop += ( r.top - b.top ) - ( box.clientHeight - r.height ) / 2;
         }
 
         //------------------------------------------------------------------------//

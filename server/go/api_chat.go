@@ -22,7 +22,7 @@ package main
 //	DELETE conv/<c>/messages/<id>           delete one's own, for everyone
 //	POST   conv/<c>/messages/<id>/react     {"emoji"} ("" takes it back)
 //	POST   conv/<c>/messages/<id>/vote      {"opt"}
-//	POST   conv/<c>/upload?kind=photo|file  the raw bytes of one photo or file
+//	POST   conv/<c>/upload?kind=photo|file  the raw bytes of one photo or file (&silent=1: no sound)
 //	GET    conv/<c>/media/<id>              that photo or file (a kept photo: the owner's file;
 //	                                        ?thumb=1: Photos' thumbnail of it, when there is one)
 //	POST   conv/<c>/read | typing | prefs   read cursor, "escribiendo...", pin/mute
@@ -449,6 +449,7 @@ func (s *Server) chatSummary(w http.ResponseWriter, r *http.Request, a chatActor
 		"online":  o.onlineFor(a.pid),
 		"typing":  o.typingFor(a.pid),
 		"avatars": o.avatarsFor(a.pid),
+		"zones":   o.zonesFor(a.pid),
 		"callsOn": h.callsOn(),
 		"calls":   o.cs().callsFor(a.pid, ""),
 		// Everybody sees the owner's auto-delete: a person is told, by a small
@@ -536,6 +537,10 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		dev = ""
 	}
 	sigSeen, _ := strconv.ParseInt(queryValue(r, "s"), 10, 64)
+	tz := queryValue(r, "tz") // the page's time zone (zonesFor)
+	if !validZone(tz) {
+		tz = ""
+	}
 
 	h.mu.Lock()
 	a, ok := who()
@@ -543,6 +548,9 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		h.mu.Unlock()
 		sendError(w, r, http.StatusNotFound, "este enlace ya no está disponible")
 		return
+	}
+	if tz != "" {
+		a.o.zones[a.pid] = tz
 	}
 	if dev != "" {
 		cs := a.o.cs()
@@ -593,6 +601,7 @@ func (s *Server) chatWait(w http.ResponseWriter, r *http.Request, who func() (ch
 		"online": a.o.onlineFor(a.pid),
 		"typing": a.o.typingFor(a.pid),
 		"calls":  a.o.cs().callsFor(a.pid, dev),
+		"zones":  a.o.zonesFor(a.pid),
 		"watch":  a.o.watchFor(a.pid),
 		"now":    nowMs(),
 	}
@@ -2092,6 +2101,7 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 		cid = ""
 	}
 	replyTo, _ := strconv.ParseInt(queryValue(r, "replyTo"), 10, 64)
+	silent := queryValue(r, "silent") == "1" // "Send without sound", as for a text
 	width, _ := strconv.Atoi(queryValue(r, "w"))
 	height, _ := strconv.Atoi(queryValue(r, "h"))
 
@@ -2180,7 +2190,7 @@ func (s *Server) chatUpload(w http.ResponseWriter, r *http.Request, conv string,
 				return
 			}
 		}
-		m := &ChatMsg{ID: c.st.Next, At: nowMs(), From: a.pid, Kind: kind, Text: caption, CID: cid,
+		m := &ChatMsg{ID: c.st.Next, At: nowMs(), From: a.pid, Kind: kind, Text: caption, CID: cid, Silent: silent,
 			File: &ChatFileRef{Name: name, Size: size, Ext: ext, Pos: pos}}
 		if kind == "photo" {
 			if width > 0 && width < 100000 && height > 0 && height < 100000 {

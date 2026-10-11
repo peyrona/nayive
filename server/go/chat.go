@@ -355,6 +355,7 @@ type chatOwner struct {
 	lastEnd map[string]time.Time // participant -> when their last wait ended
 	online  map[string]bool
 	typing  map[string]map[string]time.Time // conv -> participant -> until
+	zones   map[string]string               // participant -> their page's time zone (memory only, zonesFor)
 	watch   map[string]*chatWatch           // conv -> the video playing for all (chat_watch.go)
 
 	sent map[string][]time.Time // a person's recent messages (rate limit)
@@ -594,6 +595,7 @@ func (h *ChatHub) owner(user string) *chatOwner {
 		lastEnd: make(map[string]time.Time),
 		online:  make(map[string]bool),
 		typing:  make(map[string]map[string]time.Time),
+		zones:   make(map[string]string),
 		sent:    make(map[string][]time.Time),
 		day:     make(map[string]chatDayUse),
 	}
@@ -1867,6 +1869,36 @@ func (o *chatOwner) onlineFor(pid string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// zonesFor are the time zones of the others `pid` shares a conversation with,
+// as their pages last said (every wait, ?tz=). The sender's page offers "Send
+// without sound" when it is night for one of them (compose.js nightAsk). In
+// memory only: after a restart a zone is known again once its page waits.
+func (o *chatOwner) zonesFor(pid string) map[string]string {
+	out := map[string]string{}
+	for _, id := range o.visible(pid) {
+		for _, p := range o.members(id) {
+			if z := o.zones[p]; z != "" && p != pid {
+				out[p] = z
+			}
+		}
+	}
+	return out
+}
+
+// validZone: an IANA zone name as a browser gives it ("Europe/Madrid",
+// "America/Argentina/Buenos_Aires", "Etc/GMT+3", "UTC").
+func validZone(z string) bool {
+	if z == "" || len(z) > 64 || z[0] == '/' || z[len(z)-1] == '/' {
+		return false
+	}
+	for _, r := range z {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '/' || r == '_' || r == '-' || r == '+') {
+			return false
+		}
+	}
+	return true
 }
 
 // typingFor are, per conversation `pid` takes part in, who is typing there.

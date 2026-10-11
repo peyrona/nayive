@@ -135,7 +135,6 @@
            name's flex-basis is 0, so when the row runs out of room it is the
            button bar that drops to the next row (packed right); the tabs stay
            beside the name, which shrinks to "..." instead. */
-        .search              { width: 100%; margin-bottom: 10px; }
 
         /* BALANCES: one row per person, a thin bar under it showing how far
            from zero they are, then "who pays whom". */
@@ -302,6 +301,16 @@
 
                         <div class="header-actions">
                             <div class="tb-group">
+                                <!-- The shared search fold (NayiveUI.searchFold, SEARCH below): the
+                                     groups on the list, a group's expenses inside one. -->
+                                <div class="search-wrap">
+                                    <input id="searchInput" class="search-input" type="text" autocomplete="off" enterkeyhint="search" data-i18n-attr="aria-label:ui.search">
+                                </div>
+                                <button id="searchBtn" class="icon-btn" type="button" data-i18n-attr="title:ui.search, aria-label:ui.search">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </button>
                                 <button id="addBtn" class="icon-btn" type="button" data-i18n-attr="title:split.newGroup, aria-label:split.newGroup">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
@@ -383,7 +392,6 @@
                     <!-- A GROUP: Gastos | Saldos -->
                     <section id="groupView" hidden>
                         <div id="entriesTab">
-                            <input id="searchInput" class="search" type="search" autocomplete="off" hidden data-i18n-attr="placeholder:split.searchPh">
                             <div id="entryList" class="list"></div>
                             <p id="noMatch" class="hint" hidden data-i18n="split.noMatch"></p>
                             <div id="entriesEmpty" class="empty-state" hidden>
@@ -564,6 +572,7 @@
             title: 'Split',
             lead:  T( 'split.introLead' ),
             buttons: [
+                { sel: '#searchBtn', text: T( 'ui.tour.search' ) },
                 { sel: '#addBtn', text: T( 'split.introAddGroup' ) },
                 { icon: 'forward', name: T( 'split.introOpenName' ), text: T( 'split.introOpenGroup' ),
                   tour: { sel: '#groupList > .card-row', ghost: '#homeEmpty' } },
@@ -583,7 +592,7 @@
                 { sel: '#backBtn', text: T( 'split.introBack' ) },
                 { sel: '#addBtn:not([hidden])',  text: T( 'split.introAddEntry' ) },
                 { name: T( 'split.tabEntries' ) + ' \u00b7 ' + T( 'split.tabBalances' ), text: T( 'split.introTabs' ), tour: { sel: '#groupTabs' } },
-                { icon: 'search', name: T( 'ui.search' ), text: T( 'split.introSearch' ), tour: { before: tab( 'entries' ), sel: '#searchInput', ghost: NO_ENTRY } },
+                { sel: '#searchBtn', text: T( 'split.introSearch' ) },
                 { icon: 'edit',   name: T( 'split.editEntry' ), text: T( 'split.introEditEntry' ), tour: { sel: '#entryList > .card-row', ghost: '#entriesEmpty' } },
                 { icon: 'trash',  name: T( 'ui.delete' ), text: T( 'split.introDelEntry' ), tour: { ghost: NO_ENTRY } },
                 { name: T( 'split.introModesName' ), text: T( 'split.introModes' ), tour: { ghost: NO_ENTRY, icon: 'grid' } },
@@ -688,6 +697,7 @@
         let tab     = 'entries';
         let perCur  = false;   // Saldos: true = one balance per currency, no conversion
         let search  = '';
+        let searchFold = null; // the header's search field (NayiveUI.searchFold)
         let meUser  = '';      // the login name, from /api/whoami
         const sharedOwners = {};   // "shared/<slug>" -> who shared it
 
@@ -808,7 +818,19 @@
         {
             b.addEventListener( 'click', function() { tab = b.dataset.tab; renderGroup(); } );
         } );
-        $( 'searchInput' ).addEventListener( 'input', function() { search = this.value; renderEntries(); } );
+        // SEARCH - the shared fold: the magnifier opens the field, the other
+        // buttons stay unless the bar is too narrow; its × (or Escape) empties
+        // and folds it. On the list it filters the groups; in a group, its
+        // expenses (typing on Saldos goes to Gastos, where they are).
+        $( 'searchInput' ).addEventListener( 'input', function()
+        {
+            search = this.value;
+            if( ! current ) { renderHome(); return; }
+            if( tab !== 'entries' && search.trim() ) { tab = 'entries'; renderGroup(); }
+            else renderEntries();
+        } );
+        searchFold = NayiveUI.searchFold( { box: $( 'searchInput' ).parentElement, input: $( 'searchInput' ),
+                                            toggle: $( 'searchBtn' ), bar: document.querySelector( '.header' ) } );
         $( 'perCurBtn' ).addEventListener( 'click', function() { perCur = ! perCur; renderBalances(); } );
         $( 'archivedToggle' ).addEventListener( 'click', function()
         {
@@ -1077,6 +1099,9 @@
             setHidden( $( 'unarchiveBtn' ), ! ( canEdit && current.archived ) );
             setHidden( $( 'pdfBtn'     ), ! inGroup );
 
+            const sIn = $( 'searchInput' );
+            sIn.placeholder = inGroup ? T( 'split.searchPh' ) : T( 'ui.search' );
+
             const add = $( 'addBtn' );
             add.hidden = inGroup && current._ro;
             add.title  = inGroup ? T( 'split.addEntry' ) : T( 'split.addGroup' );
@@ -1101,6 +1126,8 @@
         function goHome()
         {
             current = null;
+            search  = '';
+            if( searchFold ) searchFold.close( true );
             render();
         }
 
@@ -1109,7 +1136,7 @@
             current = g;
             tab     = 'entries';
             search  = '';
-            $( 'searchInput' ).value = '';
+            if( searchFold ) searchFold.close( true );
             render();
         }
 
@@ -1117,9 +1144,12 @@
 
         function renderHome()
         {
-            const own    = groups.filter( g => ! g._ro && ! g.archived ).sort( byName );
-            const shared = groups.filter( g => g._ro ).sort( byName );
-            const arch   = groups.filter( g => ! g._ro && g.archived ).sort( byName );
+            const q      = search.trim().toLowerCase();
+            const hit    = g => ! q || [ g.name || '' ].concat( visibleMembers( g ).map( m => m.name || '' ) ).join( ' ' ).toLowerCase().indexOf( q ) !== -1;
+            const own    = groups.filter( g => ! g._ro && ! g.archived && hit( g ) ).sort( byName );
+            const shared = groups.filter( g => g._ro && hit( g ) ).sort( byName );
+            const arch   = groups.filter( g => ! g._ro && g.archived && hit( g ) ).sort( byName );
+            if( searchFold ) searchFold.count( q ? ( own.length + shared.length + arch.length ) + ' / ' + groups.length : '' );
 
             const list = $( 'groupList' );
             list.innerHTML = '';
@@ -1135,7 +1165,9 @@
             const al = $( 'archivedList' );
             al.innerHTML = '';
             arch.forEach( g => al.appendChild( groupRow( g ) ) );
-            if( ! arch.length ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+            if( ! arch.length && ! q ) { al.hidden = true; $( 'archivedToggle' ).classList.remove( 'is-active' ); }
+            // A search shows the archived matches without unfolding them for good.
+            else al.hidden = ! ( q || $( 'archivedToggle' ).classList.contains( 'is-active' ) );
 
             $( 'homeEmpty' ).hidden = groups.length > 0;
         }
@@ -1274,7 +1306,7 @@
             const q    = search.trim().toLowerCase();
             const rows = q ? all.filter( e => entryMatches( g, e, q ) ) : all;
 
-            $( 'searchInput' ).hidden = all.length < 6 && ! q;
+            if( searchFold ) searchFold.count( q ? rows.length + ' / ' + all.length : '' );
 
             const list = $( 'entryList' );
             list.innerHTML = '';

@@ -166,14 +166,12 @@ button.who { cursor: pointer; }
 .who small.typing { color: var(--accent); }
 /* An open chat's name keeps some room: the bar's buttons leave into its ⋮ first (conv.js, fitBar). */
 #convBar:has(.fit-more) .who { min-width: 6em; }
-.bar .search-in { flex: 1 1 auto; min-width: 0; }
 /* WhatsApp on a PC has no "back" on the open chat: the list is right there. */
 @media (min-width: 641px) { #convBar .back-btn { display: none; } #convBar .av { margin-left: 8px; } }
 /* A desktop window as narrow as a phone shows one pane at a time, so an open
    chat's bar is the window's title bar (conv.js: data-win-drag). The name
    hugs its text there, so the room after it is empty bar to grab. */
 @media (max-width: 640px) { html.is-windowed #convBar .who { flex: 0 1 auto; } }
-.bar .count     { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; padding: 0 4px; }
 
 /* ---- the list of chats --------------------------------------------------- */
 .filters { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px; overflow-x: auto; }
@@ -582,6 +580,7 @@ button.who { cursor: pointer; }
 
 /* the Send button's menu (held down): over the button, inside the composer */
 .composer .send-menu { position: absolute; right: 8px; bottom: calc(100% + 4px); z-index: 6; min-width: 0; }
+.composer .send-menu .menu-label.note { font-weight: 400; padding: 2px 12px 6px; max-width: 16rem; }
 
 /* Settings: one width for both tabs, so it does not jump when they switch;
    no pack - its long hints would stretch it to the full 460px */

@@ -499,6 +499,8 @@
     // Search (rank 20 in every app) never leaves while nothing is picked: it
     // stays in the same place. While picking, the actions get the room.
 
+    var PAD_SLACK = 8;   // the most a finger pad sticks out: (44 - 30) / 2, rounded up
+
     function fitBar( header, opts )
     {
         header = $( header );
@@ -563,12 +565,31 @@
             return m.filter( function ( it ) { return it && ! it.hidden; } );
         }
 
+        // Wider than its box. Not scrollWidth alone: on a touch screen the
+        // invisible finger pads of app.css (FINGER-SIZED TARGETS) reach a few
+        // px past the last button and count as overflow, though nothing you can
+        // see spills. An overflow that small is checked against the children's
+        // own boxes, which leave the pads out.
+        function spills( box )
+        {
+            var over = box.scrollWidth - box.clientWidth;
+            if( over <= 1 ) return false;
+            if( over > PAD_SLACK ) return true;
+            var left = box.getBoundingClientRect().left + box.clientLeft, right = left + box.clientWidth;
+            return Array.prototype.some.call( box.children, function ( k )
+            {
+                if( ! k.getClientRects().length ) return false;
+                var r = k.getBoundingClientRect();
+                return r.right > right + 1 || r.left < left - 1;
+            } );
+        }
+
         // Off the title's line: a direct child of the header starts below the
         // bottom of the topmost one (the bar wrapped), or the header scrolls.
         function crowded()
         {
-            if( header.scrollWidth > header.clientWidth + 1 ) return true;
-            if( holder !== header && holder.scrollWidth > holder.clientWidth + 1 ) return true;
+            if( spills( header ) ) return true;
+            if( holder !== header && spills( holder ) ) return true;
             var rs = [];
             Array.prototype.forEach.call( header.children, function ( k )
             {

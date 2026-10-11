@@ -19,6 +19,8 @@ package main
 import (
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -102,3 +104,44 @@ func (s *Server) serveSite(w http.ResponseWriter, r *http.Request) bool {
 // the page would be Nayive's origin again.
 const siteSandbox = "sandbox allow-scripts allow-forms allow-popups " +
 	"allow-popups-to-escape-sandbox allow-modals allow-downloads"
+
+// adminListDirs lists the sub-folders of one server folder, for the admin
+// panel's web sites folder picker. Read-only. "" or "~" is the home of the
+// user the server runs as; "~/x" and relative paths resolve as "sites_dir"
+// does. Hidden folders are left out.
+func (s *Server) adminListDirs(w http.ResponseWriter, r *http.Request, body *adminRequest) {
+	home, _ := os.UserHomeDir()
+	raw := strings.TrimSpace(body.Path)
+	dir := raw
+	switch {
+	case raw == "" || raw == "~":
+		dir = home
+	case strings.HasPrefix(raw, "~/"):
+		dir = filepath.Join(home, raw[2:])
+	case !filepath.IsAbs(raw):
+		dir = filepath.Join(s.cfg.Here, raw)
+	}
+	dir = filepath.Clean(dir)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		sendError(w, r, http.StatusNotFound, "no existe esa carpeta")
+		return
+	}
+	dirs := []string{}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		// a symlink to a folder counts as a folder
+		if info, err := os.Stat(filepath.Join(dir, e.Name())); err == nil && info.IsDir() {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	sort.Strings(dirs)
+	sendJSON(w, r, http.StatusOK, map[string]any{
+		"path": dir,
+		"home": home,
+		"dirs": dirs,
+	})
+}

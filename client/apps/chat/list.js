@@ -31,6 +31,7 @@
         w.online  = new Set( r.online || [] );
         w.typing  = r.typing || {};
         w.avatars = r.avatars || {};
+        w.zones   = r.zones || {};     // the others' time zones (compose.js nightAsk)
     }
 
     C.loadSummary = async function ()
@@ -61,7 +62,7 @@
     function newWorld( home )
     {
         return { via: home, api: "/api/chat/via/" + encodeURIComponent( home ), me: "", owner: "", people: {},
-                 list: [], deleteAfter: 0, v: -1, meta: -1, revs: {}, online: new Set(), typing: {}, avatars: {},
+                 list: [], deleteAfter: 0, v: -1, meta: -1, revs: {}, online: new Set(), typing: {}, avatars: {}, zones: {},
                  sigSeen: 0, running: false, ctl: null };
     }
 
@@ -176,6 +177,7 @@
         var watchMoved = C.onWatch ? C.onWatch( r, w ) : false;   // "Play for everyone" (watch.js)
         var typingBefore = JSON.stringify( w.typing );
         w.typing = r.typing || {};
+        w.zones  = r.zones || {};
 
         var stale = r.meta !== w.meta;
         var revs  = r.revs || {};

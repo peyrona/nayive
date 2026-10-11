@@ -244,6 +244,8 @@ html.is-windowed .route-panel .trip-panel { min-height: 100%; border-radius: 0; 
 .photos-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--link); font-family: var(--font-mono); font-size: 0.78rem; cursor: pointer; }
 .photos-path:hover { text-decoration: underline; opacity: 0.8; }
 .photos-path.empty { color: var(--text-dim); font-family: inherit; font-style: italic; }
+/* Touch: a taller tap area, same look (app.css FINGER-SIZED TARGETS; its ::before pad would be clipped by the ellipsis' overflow). */
+@media (pointer: coarse) { .photos-path { padding-block: 14px; margin-block: -14px; } }
 .photos-row .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
 
 

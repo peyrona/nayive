@@ -113,6 +113,7 @@ type MailTray struct {
 	Unread  int      `json:"unread"`
 	Total   int      `json:"total"`
 	Missing bool     `json:"missing,omitempty"`
+	Stamp   string   `json:"stamp,omitempty"` // same stamp = same tray (IMAP CONDSTORE only)
 }
 
 type MailAddr struct {

@@ -45,7 +45,11 @@
     var CONNECT_MAX = 25000, RESTART_AFTER = 3000, FAIL_AFTER = 20000;
 
     C.inCall    = function () { return !! call; };
-    C.waitQuery = function ( w ) { return "&dev=" + S.dev + "&s=" + ( w || S ).sigSeen; };
+    // tz: this page's time zone - the others are offered "without sound" when
+    // it is night here (compose.js nightAsk; the server's zonesFor).
+    var myZone = "";
+    try { myZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch( _ ) {}
+    C.waitQuery = function ( w ) { return "&dev=" + S.dev + "&s=" + ( w || S ).sigSeen + ( myZone ? "&tz=" + encodeURIComponent( myZone ) : "" ); };
 
     // ---------------------------------------------------------------------
     // what the server says: the calls (summary and every wait) and signals

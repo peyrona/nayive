@@ -465,6 +465,10 @@ func (p *imapProvider) Trays(ctx context.Context) ([]MailTray, error) {
 	var out []MailTray
 	err := p.do(ctx, func(c *imapclient.Client) error {
 		out = out[:0]
+		opts := &imap.StatusOptions{NumMessages: true, NumUnseen: true}
+		if c.Caps().Has(imap.CapCondStore) {
+			opts.UIDNext, opts.UIDValidity, opts.HighestModSeq = true, true, true
+		}
 		for _, role := range mailRoles {
 			folder, err := p.folderFor(c, role)
 			if err != nil {
@@ -476,7 +480,7 @@ func (p *imapProvider) Trays(ctx context.Context) ([]MailTray, error) {
 				out = append(out, t)
 				continue
 			}
-			st, err := c.Status(folder, &imap.StatusOptions{NumMessages: true, NumUnseen: true}).Wait()
+			st, err := c.Status(folder, opts).Wait()
 			if err != nil {
 				return err
 			}
@@ -486,11 +490,23 @@ func (p *imapProvider) Trays(ctx context.Context) ([]MailTray, error) {
 			if st.NumUnseen != nil {
 				t.Unread = int(*st.NumUnseen)
 			}
+			t.Stamp = trayStamp(st)
 			out = append(out, t)
 		}
 		return nil
 	})
 	return out, err
+}
+
+// trayStamp: what changes whenever anything in the folder changes - a
+// message in, out, read, starred (HIGHESTMODSEQ, RFC 7162). Without it
+// (no CONDSTORE) there is no stamp, and the list is always read again.
+func trayStamp(st *imap.StatusData) string {
+	if st.HighestModSeq == 0 || st.UIDValidity == 0 || st.NumMessages == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(st.UIDValidity), 10) + "." + strconv.FormatUint(uint64(st.UIDNext), 10) + "." +
+		strconv.FormatUint(uint64(*st.NumMessages), 10) + "." + strconv.FormatUint(st.HighestModSeq, 10)
 }
 
 var mailListFetch = &imap.FetchOptions{

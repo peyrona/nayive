@@ -42,6 +42,7 @@ type Server struct {
 	devices   *Devices   // the Android app's phones (devices.go)
 	downloads *Downloads // Drive's downloads under way (api_download.go)
 	mail      *MailHub   // the eMail app's accounts and unread counts (mail.go)
+	clientLog *ClientLog // errors the browsers send (api_clientlog.go)
 
 	httpd  *http.Server
 	scheme string // "http" or "https", decided at construction
@@ -91,6 +92,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		devices:   NewDevices(cfg.ConfigDir, cfg.HomesDir, log),
 		downloads: NewDownloads(),
 		mail:      NewMailHub(cfg, users, push, log),
+		clientLog: NewClientLog(cfg.Here),
 		scheme:    "http",
 	}
 	s.chat.Hook(s.devices)
@@ -240,6 +242,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/lang", s.apiLang)
 	mux.HandleFunc("/api/tz", s.apiTZ)
 	mux.HandleFunc("/api/push", s.apiPush)
+	mux.HandleFunc("/api/clientlog", s.apiClientLog) // a page's uncaught errors (api_clientlog.go)
 
 	// --- the admin panel ---------------------------------------------------
 	// NOT wrapped in a session guard: while no admin account exists this route

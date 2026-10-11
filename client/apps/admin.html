@@ -45,8 +45,6 @@
         }
         /* the icon + title go home, as in every app (shared/ui.js) - here: this page */
         .brand > svg { width: 26px; height: 26px; }
-        /* the one page-wide Save lives at the right of the title */
-        .brand-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
         section
         {
@@ -82,7 +80,7 @@
 
         /* One tab per section (shared .pill buttons); only the chosen section
            shows, so the page no longer grows with every new setting. */
-        .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 0 auto; }   /* in the brand row, at the right */
 
         /* Action buttons use the shared .btn convention (round icon buttons,
            filled in by shared/ui.js); .pw-eye keeps its own bare look. Anything
@@ -99,7 +97,7 @@
         .pw-eye { margin: 0; border-radius: 0; }
         .pw-eye:hover { filter: none; }
         .pw-eye svg { width: 17px; height: 17px; }
-        /* a user row's in-field trash: removes the password on Save */
+        /* a user row's in-field trash: removes the password at once */
         .pw-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
 
         table { width: 100%; border-collapse: collapse; }
@@ -122,6 +120,11 @@
         .col-pass  { width: 170px; }
         .col-act   { width: 1%; white-space: nowrap; }
         .row-acts  { display: flex; gap: 6px; justify-content: flex-end; }
+        /* the header's "+": as small as the column names beside it */
+        #addUser.btn     { width: 18px; height: 18px; }
+        #addUser.btn svg { width: 12px; height: 12px; }
+        /* centred in a trash-wide (44px) box, so it stays right above the trash icons */
+        th.col-act .row-acts { width: 44px; margin-left: auto; justify-content: center; }
 
         .msg  { font-size: 0.9rem; min-height: 1.3em; margin: 4px 2px 0; }
         .msg.ok   { color: var(--ok, var(--accent) ); }
@@ -142,7 +145,10 @@
                the Password column, so no password could be set from a phone.
                Each field gets its column's name above it, like a label. */
             #usersSec table, #usersSec tbody, #usersSec tr, #usersSec td { display: block; width: auto; }
-            #usersSec thead { display: none; }
+            /* only the "+" stays from the header row, right above the trash icons */
+            #usersSec thead tr { padding: 0 0 6px; }
+            #usersSec thead th:not(.col-act) { display: none; }
+            #usersSec thead th.col-act { padding: 0; border: none; }
             #usersSec tr { position: relative; padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
             #usersSec td { border: none; padding: 4px 0; }
             #usersSec td.col-user  { padding-right: 96px; }
@@ -173,18 +179,14 @@
             <path d="m9 12 2 2 4-4"/>
         </svg>
         <h1 class="app-title">Nayive · Admin</h1>
-        <div class="brand-acts">
-            <button id="saveAll" data-act="primary:save" title="Save changes"></button>
+        <!-- Short labels, so the three fit one row on a phone; each section's own
+             heading has the full name. Hidden on first run, when the admin
+             account is the only section. -->
+        <div class="tabs hide" id="tabs" role="tablist">
+            <button class="pill" type="button" role="tab" data-tab="adminSec">Account</button>
+            <button class="pill" type="button" role="tab" data-tab="sitesSec">Web sites</button>
+            <button class="pill" type="button" role="tab" data-tab="usersSec">Users</button>
         </div>
-    </div>
-
-    <!-- Short labels, so the three fit one row on a phone; each section's own
-         heading has the full name. Hidden on first run, when the admin
-         account is the only section. -->
-    <div class="tabs hide" id="tabs" role="tablist">
-        <button class="pill" type="button" role="tab" data-tab="adminSec">Admin</button>
-        <button class="pill" type="button" role="tab" data-tab="sitesSec">Web sites</button>
-        <button class="pill" type="button" role="tab" data-tab="usersSec">Users</button>
     </div>
 
     <p class="msg" id="saveMsg"></p>
@@ -194,8 +196,8 @@
     <section id="adminSec" class="hide" role="tabpanel">
         <h2>Admin account</h2>
         <p class="banner" id="firstRunBanner">
-            First run: create the admin account. After saving it you'll be
-            asked to sign in with it.
+            First run: create the admin account. It is saved as soon as both
+            fields are filled; then you'll be asked to sign in with it.
         </p>
         <div class="row2">
             <div class="field">
@@ -211,6 +213,13 @@
                 </div>
             </div>
         </div>
+        <p class="hint"><strong>Forgot this password?</strong> An empty admin password does not
+           ask for a new one, as it does for a user: it locks the admin out. To reset it, on the
+           server edit <code>store/config/server.json</code> and, inside the <code>"admin"</code>
+           block, set a temporary password in plain text (<code>"password": "temp123"</code>).
+           Restart Nayive at once - it reads that file only when it starts, and may write the old
+           one back before. Sign in with it (it is stored hashed from then on) and pick a real
+           password here.</p>
     </section>
 
     <!-- WEB SITES ---------------------------------------------------------- -->
@@ -225,17 +234,16 @@
         </p>
         <div class="field">
             <label for="sitesDir">Base folder</label>
-            <input id="sitesDir" type="text" placeholder="~/web_sites"
-                   autocapitalize="none" autocorrect="off" spellcheck="false">
+            <div class="pw-wrap">
+                <input id="sitesDir" type="text" placeholder="~/web_sites"
+                       autocapitalize="none" autocorrect="off" spellcheck="false">
+                <button type="button" class="pw-eye" id="sitesPick" title="Choose the folder" aria-label="Choose the folder"></button>
+            </div>
         </div>
     </section>
 
     <!-- USERS ------------------------------------------------------------- -->
     <section id="usersSec" class="hide" role="tabpanel">
-        <div class="sec-title">
-            <h2>Users</h2>
-            <button id="addUser" data-act="secondary:plus" title="Add a user"></button>
-        </div>
         <table>
             <thead>
                 <tr>
@@ -244,21 +252,22 @@
                     <th class="col-photo">Photo&nbsp;px<button class="info-dot" data-info="Photos are the biggest thing most people store, and a phone photo is far larger than any screen can show.&#10;&#10;Give a user a number here and their browser shrinks every photo they upload so that neither side is longer than that many pixels - the shape is kept, nothing is squashed - and saves it as JPEG. 2048 is a good value: still sharp on any screen or TV, and about ten times smaller than the original.&#10;&#10;When the original is a JPEG (what every phone camera makes), its date and GPS position are carried over, so the map and the timeline keep working.&#10;&#10;Leave it empty to store the photos exactly as they come out of the camera."></button></th>
                     <th class="col-use">Usage</th>
                     <th class="col-pass">Password</th>
-                    <th class="col-act"></th>
+                    <th class="col-act"><div class="row-acts"><button id="addUser" data-act="primary:plus" title="Add a user"></button></div></th>
                 </tr>
             </thead>
             <tbody id="userRows"></tbody>
-            <!-- rows added by the "+" button next to the Users heading; kept in
+            <!-- rows added by the "+" button at the end of the header row; kept in
                  their own tbody so re-rendering the saved users never wipes them -->
             <tbody id="newRows"></tbody>
         </table>
-        <p class="hint">The <strong>+</strong> button next to the heading adds an empty row for a new user;
+        <p class="hint">The <strong>+</strong> button above the trash icons adds an empty row for a new user;
            its (&times;) drops the row again.
-           Edits and new users are saved with the <strong>Save</strong> button at the top.
+           Every change is saved on its own when you leave the field (or press Enter);
+           a new user is created once it has a name.
            Changing a username renames the account: everything the person owns travels with it, but
            they are signed out and must sign in again with the new name.
            The trash icon deletes a user (after a confirmation) along with all their data.
-           The small trash inside a password field removes that password on Save: the user
+           The small trash inside a password field removes that password at once: the user
            signs in with a blank one and must pick a new password.</p>
     </section>
 </div>
@@ -402,7 +411,8 @@
         IS_ADMIN   = true;
 
         $( 'firstRunBanner' ).classList.toggle( 'hide', CONFIGURED );
-        $( 'adminName' ).value = ( data.admin && data.admin.name ) || '';
+        ADMIN_ORIG = ( data.admin && data.admin.name ) || '';
+        $( 'adminName' ).value = ADMIN_ORIG;
         $( 'adminPass' ).placeholder = CONFIGURED ? "leave blank = don't change"
                                                   : 'new password';
 
@@ -428,29 +438,202 @@
     // at DOMContentLoaded it is there).
     document.addEventListener( 'DOMContentLoaded', function () { NayiveUI.pwEye( $( 'adminPwEye' ), $( 'adminPass' ) ); } );
 
-    // -- the one Save button (top-right) ------------------------------
-    // Commits, in order: the admin account, then - once an admin exists - the
-    // web sites folder, every changed user row and
-    // the "new user" row. It saves every tab, not only the one on show.
-    // Deleting a user stays immediate (its trash icon).
-    $( 'saveAll' ).addEventListener( 'click', saveAll );
+    // -- web sites folder picker -------------------------------------
+    // The folder button inside the field: browse the SERVER's folders (one at
+    // a time, the crumb goes back up) and put the chosen one in the field.
+    // Saved at once, as leaving the typed field would be.
+    document.addEventListener( 'DOMContentLoaded', function ()
+    {
+        var btn = $( 'sitesPick' );
+        btn.innerHTML = NayiveUI.icon( 'folder' );
+        btn.addEventListener( 'click', pickSitesDir );
+    } );
+
+    function pickSitesDir()
+    {
+        var d     = NayiveUI.modal();
+        var sheet = d.sheet;
+        var cur   = null;      // { path, home, dirs } once listed
+        var err   = '';
+        var seq   = 0;
+
+        // "/home/me/web" -> "~/web", as the field's placeholder writes it
+        function tilde( p, home )
+        {
+            if ( home && p === home ) return '~';
+            if ( home && p.indexOf( home + '/' ) === 0 ) return '~' + p.slice( home.length );
+            return p;
+        }
+
+        function open( path )
+        {
+            var my = ++seq;
+            err = ''; render();
+            api( { action: 'list-dirs', path: path } ).then( async function ( r )
+            {
+                if ( my !== seq ) return;
+                if ( r.ok ) cur = await r.json();
+                else if ( ! cur && path !== '~' ) return open( '~' );   // typed folder gone: start at home
+                else        err = await errText( r );
+                render();
+            }, function () { if ( my === seq ) { err = 'Could not reach the server'; render(); } } );
+        }
+
+        function msg( text )
+        {
+            var p = document.createElement( 'p' );
+            p.className = 'fp-msg'; p.textContent = text;
+            return p;
+        }
+
+        function render()
+        {
+            sheet.innerHTML = '';
+            var h = document.createElement( 'h2' );
+            h.textContent = 'Web sites folder';
+            sheet.appendChild( h );
+
+            // "/ › home › me": every step but the last goes back there
+            var crumbs = document.createElement( 'div' );
+            crumbs.className = 'fp-crumbs';
+            if ( cur )
+            {
+                var parts = cur.path.split( '/' );
+                parts[ 0 ] = '/';
+                parts.forEach( function ( part, i )
+                {
+                    if ( ! part ) return;
+                    if ( i > 1 ) crumbs.appendChild( document.createTextNode( '›' ) );
+                    var el;
+                    if ( i === parts.length - 1 ) { el = document.createElement( 'b' ); el.textContent = part; }
+                    else
+                    {
+                        el = document.createElement( 'button' );
+                        el.type = 'button'; el.textContent = part;
+                        el.addEventListener( 'click', function () { open( '/' + parts.slice( 1, i + 1 ).join( '/' ) ); } );
+                    }
+                    crumbs.appendChild( el );
+                } );
+            }
+            sheet.appendChild( crumbs );
+
+            var box = document.createElement( 'div' );
+            box.className = 'fp-tree';
+            box.setAttribute( 'role', 'listbox' );
+            sheet.appendChild( box );
+
+            if ( err )                  box.appendChild( msg( err ) );
+            else if ( ! cur )           box.appendChild( msg( 'Loading…' ) );
+            else if ( ! cur.dirs.length ) box.appendChild( msg( 'No folders here' ) );
+            else cur.dirs.forEach( function ( name )
+            {
+                var row = document.createElement( 'div' );
+                row.className = 'fp-row';
+                row.setAttribute( 'role', 'option' );
+                row.innerHTML = '<span class="fp-caret">▸</span><span class="fp-ic">' + NayiveUI.icon( 'folder' ) +
+                                '</span><span class="fp-name"></span>';
+                row.querySelector( '.fp-name' ).textContent = name;
+                row.addEventListener( 'click', function () { open( ( cur.path === '/' ? '' : cur.path ) + '/' + name ); } );
+                box.appendChild( row );
+            } );
+
+            var arow = document.createElement( 'div' );
+            arow.className = 'sheet-actions';
+            var cancel = document.createElement( 'button' );
+            cancel.setAttribute( 'data-act', 'close' );
+            cancel.title = 'Cancel';
+            cancel.addEventListener( 'click', function () { d.close(); } );
+            arow.appendChild( cancel );
+            var ok = document.createElement( 'button' );
+            ok.setAttribute( 'data-act', 'primary' );
+            ok.title    = 'Use this folder';
+            ok.disabled = ! cur || !! err;
+            ok.addEventListener( 'click', function ()
+            {
+                if ( ! cur ) return;
+                $( 'sitesDir' ).value = tilde( cur.path, cur.home );
+                d.close();
+                autosave();
+            } );
+            arow.appendChild( ok );
+            sheet.appendChild( arow );
+            NayiveUI.applySheetButtons( sheet );
+        }
+
+        d.show();
+        open( $( 'sitesDir' ).value.trim() || '~' );
+    }
+
+    // -- autosave -----------------------------------------------------
+    // No Save button: a field is saved when it is left (its "change" event:
+    // blur or Enter), a picked folder and a removed password at once. Each
+    // save commits, in order: the admin account, then - once an admin exists -
+    // the web sites folder, every changed user row and the "new user" rows.
+    // Only what changed is sent. One save at a time; a change during a save
+    // runs one more after it. Deleting a user stays immediate (its trash icon).
+    var saveTimer = null, saving = false, saveAgain = false;
+
+    function autosave()
+    {
+        clearTimeout( saveTimer );
+        saveTimer = setTimeout( function ()
+        {
+            if ( saving ) { saveAgain = true; return; }
+            saving = true;
+            saveAll().finally( function ()
+            {
+                saving = false;
+                if ( saveAgain ) { saveAgain = false; autosave(); }
+            } );
+        }, 300 );   // number spinners fire one change per click
+    }
+
+    document.querySelector( '.wrap' ).addEventListener( 'change', function ( e )
+    {
+        if ( e.target.matches( 'input' ) ) autosave();
+    } );
+
+    // The user rows are rebuilt after a save (usage, placeholders) - but never
+    // under the cursor: while focus is in the table it waits until it leaves.
+    var refreshWaiting = false;
+
+    function refreshSoon()
+    {
+        if ( $( 'usersSec' ).contains( document.activeElement ) ) refreshWaiting = true;
+        else refresh();
+    }
+
+    $( 'usersSec' ).addEventListener( 'focusout', function ()
+    {
+        setTimeout( function ()
+        {
+            if ( refreshWaiting && ! $( 'usersSec' ).contains( document.activeElement ) )
+            {
+                refreshWaiting = false;
+                refresh();
+            }
+        }, 0 );
+    } );
+
+    var ADMIN_ORIG = '';      // the admin name as loaded / last saved
 
     async function saveAll()
     {
-        var btn = $( 'saveAll' );
-        btn.disabled = true;
-        flash( $( 'saveMsg' ), 'Saving…', '' );
-        var errs = [];
+        var errs = [], sent = false;
 
         // 1. admin account ---------------------------------------------
+        // First run: nothing until both fields are filled (no nagging while
+        // the first one is typed). Later: only a new name or a typed password.
         var aName = $( 'adminName' ).value.trim();
         var aPass = $( 'adminPass' ).value;
-        if ( !aName )
+        if ( !CONFIGURED ? ( !aName || !aPass ) : ( aName === ADMIN_ORIG && !aPass ) )
+            ;
+        else if ( !aName )
             errs.push( 'admin username is empty' );
-        else if ( !CONFIGURED && !aPass )
-            errs.push( 'admin password is empty' );
         else
         {
+            sent = true;
+            flash( $( 'saveMsg' ), 'Saving…', '' );
             var action = CONFIGURED ? 'set-admin' : 'setup';
             var r = await api( { action: action, name: aName, password: aPass } );
             if ( !r.ok )
@@ -464,7 +647,10 @@
                 return;
             }
             else
+            {
+                ADMIN_ORIG = aName;
                 $( 'adminPass' ).value = '';
+            }
         }
 
         if ( CONFIGURED )
@@ -475,6 +661,8 @@
             var sd = $( 'sitesDir' ).value.trim();
             if ( sd !== SITES_ORIG )
             {
+                sent = true;
+                flash( $( 'saveMsg' ), 'Saving…', '' );
                 var rS = await api( { action: 'set-sites', sites_dir: sd } );
                 if ( !rS.ok ) errs.push( 'web sites: ' + await errText( rS ) );
                 else          SITES_ORIG = sd;
@@ -490,6 +678,8 @@
                      String( c.photo.value ).trim() === c.origPhoto && !c.pass.value &&
                      !c.clearPass )
                     continue;                        // nothing touched on this row
+                sent = true;
+                flash( $( 'saveMsg' ), 'Saving…', '' );
 
                 // A rename goes first and on its own: the other fields are then
                 // sent under the new name. If it fails we say so and carry on
@@ -514,6 +704,14 @@
                 else if ( c.clearPass ) ub.password = null;   // null = remove it
                 var ru = await api( ub );
                 if ( !ru.ok ) errs.push( c.name + ': ' + await errText( ru ) );
+                else
+                {
+                    // saved: the next save must not send it again
+                    c.orig      = String( c.quota.value ).trim();
+                    c.origPhoto = String( c.photo.value ).trim();
+                    c.pass.value = '';
+                    c.clearPass  = false;
+                }
             }
 
             // 4. the rows added with "+" ---------------------------
@@ -524,8 +722,9 @@
                 var nc    = pending[ k ];
                 var nName = nc.nameIn.value.trim();
                 var nPass = nc.pass.value;
-                if ( !nName && !nPass ) continue;      // untouched row - ignore it
-                if ( !nName ) { errs.push( 'new user needs a name' ); continue; }
+                if ( !nName ) continue;                // created once it has a name
+                sent = true;
+                flash( $( 'saveMsg' ), 'Saving…', '' );
 
                 // A blank password is fine: the user picks one on first sign-in.
                 var rn = await api( {
@@ -538,15 +737,14 @@
             }
         }
 
-        btn.disabled = false;
         if ( errs.length )
             flash( $( 'saveMsg' ), errs.join( ' · ' ), 'err' );
-        else
+        else if ( sent )
             flash( $( 'saveMsg' ), 'Saved.', 'ok' );
         // Even after an error: what did save shows as saved (a user just
-        // created, a password now set - not sent again with the next Save).
-        // A new row that failed stays, in its own tbody, as it was typed.
-        if ( CONFIGURED ) refresh();
+        // created, a password now set). A new row that failed stays, in its
+        // own tbody, as it was typed.
+        if ( CONFIGURED && sent ) refreshSoon();
     }
 
     // -- users ----------------------------------------------------------
@@ -554,8 +752,8 @@
     // walks that list and sends a "rename-user" for every row whose username
     // changed, then an "update-user" for every row whose quota, photo limit or
     // password box was touched. `.name` is the name the SERVER knows the row
-    // by, and saveAll() updates it after a successful rename. There is no
-    // per-row Save button any more - only the page-wide one at the top.
+    // by, and saveAll() updates it after a successful rename. Saved by the
+    // autosave above - there is no Save button.
     var USER_CTLS = [];
 
     // Rows created by the "+" button and not saved yet. Same control-set shape as
@@ -617,8 +815,8 @@
         return { tr: tr, n: n, q: q, m: m, tdU: tdU, p: p, tdP: tdP, btn: btn };
     }
 
-    // "+" next to the Users heading: one empty row per click, saved by the
-    // page-wide Save button. Its (x) throws the row away again.
+    // "+" next to the Users heading: one empty row per click, created by the
+    // autosave once it has a name. Its (x) throws the row away again.
     function addNewRow()
     {
         var c = userCells( 'close', 'Discard this row' );
@@ -659,7 +857,7 @@
             fillUsage( c.tdU, u.usage, u.quota );
             p.placeholder = u.has_password ? 'new password' : 'not set — user will pick it';
 
-            // Trash inside the field: remove the password on Save, so the user
+            // Trash inside the field: remove the password at once, so the user
             // must pick a new one at next sign-in. Typing a password undoes it.
             var clr = null;
             if ( u.has_password && window.NayiveUI )
@@ -671,7 +869,7 @@
                 clr = document.createElement( 'button' );
                 clr.type = 'button';
                 clr.className = 'icon-btn sm danger pw-clear';
-                clr.title = 'Remove password (saved with Save)';
+                clr.title = 'Remove password';
                 clr.setAttribute( 'aria-label', clr.title );
                 clr.innerHTML = NayiveUI.icon( 'trash' );
                 pw.appendChild( clr );
@@ -679,7 +877,7 @@
 
             // Recorded before the delete handler, so that handler can read
             // ctl.name - the name the server currently knows this row by, which
-            // a rename in the same Save changes.
+            // a rename in an earlier save changes.
             var ctl = { name: u.name, nameIn: n, quota: q, photo: m, pass: p,
                         orig: String( q.value ).trim(),
                         origPhoto: String( m.value ).trim() };
@@ -691,8 +889,9 @@
                 {
                     ctl.clearPass = true;
                     p.value = '';
-                    p.placeholder = 'removed on Save';
+                    p.placeholder = 'removed';
                     clr.classList.add( 'hide' );
+                    autosave();
                 } );
                 p.addEventListener( 'input', function ()
                 {
