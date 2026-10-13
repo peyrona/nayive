@@ -27,11 +27,6 @@
     S.searchKey = "";     // words + fields of the list on screen
     S.advDry    = 0;      // pages in a row with no match (the pause above)
 
-    // Case- and accent-blind: "jose" finds "José".
-    function plain( s )
-    {
-        return String( s || "" ).normalize( "NFD" ).replace( /[̀-ͯ]/g, "" ).toLowerCase();
-    }
     function phrase( s )
     {
         s = String( s || "" ).replace( /"/g, " " ).trim();
@@ -39,7 +34,7 @@
     }
     function addrsHave( list, want )
     {
-        return ( list || [] ).some( function ( a ) { return plain( ( a.name || "" ) + " " + ( a.addr || "" ) ).indexOf( want ) >= 0; } );
+        return ( list || [] ).some( function ( a ) { return NayiveUI.fold( ( a.name || "" ) + " " + ( a.addr || "" ) ).indexOf( want ) >= 0; } );
     }
     function dayStart( iso ) { var p = iso.split( "-" ); return new Date( +p[ 0 ], p[ 1 ] - 1, +p[ 2 ] ).getTime(); }
 
@@ -100,7 +95,7 @@
         if( ! a ) return items;
         var since = a.since ? dayStart( a.since ) : 0;
         var until = a.until ? dayStart( a.until ) + 86400000 : 0;
-        var from = plain( a.from ), to = plain( a.to ), subj = plain( a.subject );
+        var from = NayiveUI.fold( a.from ), to = NayiveUI.fold( a.to ), subj = NayiveUI.fold( a.subject );
         var out = items.filter( function ( m )
         {
             var t = new Date( m.date ).getTime();
@@ -110,7 +105,7 @@
             if( a.seen === "read" && ! m.seen ) return false;
             if( from && ! addrsHave( m.from, from ) ) return false;
             if( to && ! addrsHave( m.to, to ) ) return false;
-            if( subj && plain( m.subject ).indexOf( subj ) < 0 ) return false;
+            if( subj && NayiveUI.fold( m.subject ).indexOf( subj ) < 0 ) return false;
             if( a.label && ( m.labels || [] ).indexOf( a.label ) < 0 ) return false;
             if( a.attach && ! m.attach ) return false;
             if( a.starred && ! m.flagged ) return false;

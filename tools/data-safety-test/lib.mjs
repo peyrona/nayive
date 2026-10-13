@@ -221,6 +221,15 @@ export async function until( c, expr, ms = 15000 )
     return false;
 }
 
+// The same wait for a condition in THIS process (a file on disk, most often):
+// true once fn() is truthy, false after `ms`.
+export async function disk( fn, ms = 15000 )
+{
+    const end = Date.now() + ms;
+    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
+    return false;
+}
+
 // Navigates and waits for THAT page (the old document answers "complete"
 // before the new one starts, so the path is checked too).
 export async function open( c, url, wantPath )

@@ -1517,11 +1517,6 @@
             return 'hsl(' + h + ', 42%, 42%)';
         }
 
-        function foldForSearch( s )
-        {
-            return String( s ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, "" ).toLowerCase();
-        }
-
         function byDisplayName( a, b )
         {
             return displayName( a ).localeCompare( displayName( b ), NayiveUI.lang(), { sensitivity: 'base' } );
@@ -1562,7 +1557,7 @@
 
         function nameTokens( c )
         {
-            return foldForSearch( [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ) )
+            return NayiveUI.fold( [ c.n.given, c.n.family ].filter( Boolean ).join( ' ' ) )
                 .replace( /[^a-z0-9]+/g, ' ' ).trim().split( ' ' ).filter( Boolean );
         }
 
@@ -1576,7 +1571,7 @@
                 phones : new Set( c.tels.map( t => phoneTail( normPhone( t.value ) ) ).filter( Boolean ) ),
                 emails : new Set( emails ),
                 domains: new Set( emails.map( e => e.slice( e.indexOf( '@' ) + 1 ) ).filter( Boolean ) ),
-                org    : foldForSearch( c.org || '' ).trim(),
+                org    : NayiveUI.fold( c.org || '' ).trim(),
                 tokens : tokens,
                 nameKey: tokens.slice().sort().join( ' ' )
             };
@@ -1946,7 +1941,7 @@
         // has to find the contact: being unsearchable by your own name is never acceptable.
         function contactHaystack( c )
         {
-            return foldForSearch( [
+            return NayiveUI.fold( [
                 displayName( c ),
                 c.n.given, c.n.family,
                 c.org, c.title, c.note,
@@ -1954,12 +1949,13 @@
             ].join( ' ' ) );
         }
 
-        // Returns a predicate over contacts, or null when the query is empty. Plain
-        // accent-insensitive substring match on text; if the query carries any digits it also
+        // Returns a predicate over contacts, or null when the query is empty. The
+        // shared rule on text (NayiveUI.matcher: words in any order, "phrase", -word,
+        // accent-insensitive); if the query looks like a phone number it also
         // matches against each phone reduced to bare digits.
         function buildMatcher( rawQuery )
         {
-            const qText   = foldForSearch( rawQuery.trim() );
+            const qText   = NayiveUI.matcher( rawQuery );
             // Phone numbers are matched by their digits only when the query looks like
             // one ("+34 600", "600-12"): "Pepe 2" must not match every phone with a 2.
             const qDigits = /^[\d\s+\-().\/]+$/.test( rawQuery.trim() ) ? rawQuery.replace( /\D/g, '' ) : '';
@@ -1969,7 +1965,7 @@
 
             return function( c )
             {
-                if( contactHaystack( c ).includes( qText ) )
+                if( qText( contactHaystack( c ) ) )
                     return true;
 
                 return qDigits.length > 0 &&
@@ -1979,7 +1975,7 @@
 
         function firstLetter( sName )
         {
-            const ch = foldForSearch( sName ).charAt( 0 ).toUpperCase();
+            const ch = NayiveUI.fold( sName ).charAt( 0 ).toUpperCase();
             return /[A-Z]/.test( ch ) ? ch : '#';
         }
 
@@ -3230,9 +3226,9 @@
         {
             const withVal  = arr => arr.filter( x => ( x.value || '' ).trim() );
             const realAdrs = c => c.adrs.filter( a => a.street || a.city || a.region || a.postal || a.country );
-            const telKey   = t => { const d = normPhone( t.value ); return d ? phoneTail( d ) : foldForSearch( ( t.value || '' ).trim() ); };
+            const telKey   = t => { const d = normPhone( t.value ); return d ? phoneTail( d ) : NayiveUI.fold( ( t.value || '' ).trim() ); };
             const mailKey  = e => normEmail( e.value );
-            const adrKey   = a => foldForSearch( [ a.street, a.city, a.region, a.postal, a.country ].join( '|' ) ).replace( /[^a-z0-9|]/g, '' );
+            const adrKey   = a => NayiveUI.fold( [ a.street, a.city, a.region, a.postal, a.country ].join( '|' ) ).replace( /[^a-z0-9|]/g, '' );
             const urlKey   = u => ( u.value || '' ).trim().toLowerCase().replace( /\/+$/, '' );
 
             mergeModel = {

@@ -15,7 +15,7 @@ final class Notes {
 
     private Notes() {}
 
-    static final int LINK = 1, CALL = 2, FIND = 3, PENDING = 4, UPDATE = 5, MEDIA = 6, MEDIA_FIX = 7;
+    static final int LINK = 1, CALL = 2, FIND = 3, PENDING = 4, UPDATE = 5, MEDIA = 6, MEDIA_FIX = 7, NOTE = 8;
 
     /** What the permanent notification says. */
     enum Link { ON, TRACKING, ENROL, OFFLINE, FIX }
@@ -167,6 +167,38 @@ final class Notes {
                 .setContentIntent(PendingIntent.getActivity(c, 61, open, IMMUTABLE))
                 .build();
         c.getSystemService(NotificationManager.class).notify(MEDIA_FIX, n);
+    }
+
+    /**
+     * One server note: what web push shows on other phones (a chat message, a
+     * reminder, new mail...). The tag is the Android tag too, so the same tag
+     * replaces, as in the browser. Tapped: Nayive on that page.
+     */
+    static void note(Context c, long id, String title, String body, String tag, String url, boolean quiet) {
+        if (tag.isEmpty()) tag = "n" + id;
+        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.ORIGIN + (url.isEmpty() ? "/nayive/" : url)))
+                .setClass(c, Launcher.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        boolean chat = tag.startsWith("chat-") || tag.startsWith("call-");
+        Notification n = new NotificationCompat.Builder(c, chat ? NayiveApp.CH_MESSAGES : NayiveApp.CH_ALERTS)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setCategory(chat ? NotificationCompat.CATEGORY_MESSAGE : NotificationCompat.CATEGORY_REMINDER)
+                .setSilent(quiet)
+                .setAutoCancel(true)
+                .setContentIntent(PendingIntent.getActivity(c, (int) (id ^ (id >>> 32)), open, IMMUTABLE))
+                .build();
+        c.getSystemService(NotificationManager.class).notify(tag, NOTE, n);
+    }
+
+    /** Nothing unread any more: the chat notes go too (read on another device). */
+    static void clearChat(Context c) {
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        for (android.service.notification.StatusBarNotification s : nm.getActiveNotifications()) {
+            String tag = s.getTag();
+            if (s.getId() == NOTE && tag != null && tag.startsWith("chat-")) nm.cancel(tag, NOTE);
+        }
     }
 
     static void cancel(Context c, int id) {

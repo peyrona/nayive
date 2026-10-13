@@ -99,9 +99,6 @@
         <activity android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity">
             <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL" android:value="${nayiveOrigin}/nayive/" />
         </activity>
-        <activity
-            android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
-            android:configChanges="orientation|screenSize" />
 
         <!-- A call or "Buscar mi móvil": over the lock screen. -->
         <activity

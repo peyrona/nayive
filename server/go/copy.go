@@ -130,20 +130,12 @@ func (s *Server) filesCopy(w http.ResponseWriter, r *http.Request, role, user st
 	}
 
 	owner := s.users.HomeOwner(dst.Abs)
-	switch {
-	case errors.Is(err, fs.ErrExist):
+	if errors.Is(err, fs.ErrExist) {
 		sendError(w, r, http.StatusConflict,
 			"ya existe un archivo o carpeta con ese nombre en el destino")
 		return
-	case errors.Is(err, errTooBig):
-		sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
-		return
-	case err != nil:
-		if owner != "" {
-			s.users.ForgetUsage(owner)
-		}
-		s.log.Warn("copy failed", "from", src.Abs, "to", dst.Abs, "err", err)
-		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+	}
+	if s.copyFailed(w, r, err, owner, "copy failed", "from", src.Abs, "to", dst.Abs) {
 		return
 	}
 	done = true
@@ -254,16 +246,7 @@ func (s *Server) filesBak(w http.ResponseWriter, r *http.Request, role, user str
 		err = syncRootDir(root, bakDir) // the name durable (K1)
 	}
 	owner := s.users.HomeOwner(dst.Abs)
-	switch {
-	case errors.Is(err, errTooBig):
-		sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
-		return
-	case err != nil:
-		if owner != "" {
-			s.users.ForgetUsage(owner)
-		}
-		s.log.Warn("bak copy failed", "from", src.Abs, "err", err)
-		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+	if s.copyFailed(w, r, err, owner, "bak copy failed", "from", src.Abs) {
 		return
 	}
 	if owner != "" {
@@ -499,4 +482,23 @@ func copyBytes(srcRoot *os.Root, from string, out *os.File, cw *cappedWriter) er
 		return err
 	}
 	return out.Close()
+}
+
+// copyFailed answers a copy that did not finish and says so; nil `err`: it
+// did, nothing is sent. Over the quota is 507; anything else is 500, and the
+// owner's usage is measured again (part of the copy may be on disk).
+func (s *Server) copyFailed(w http.ResponseWriter, r *http.Request, err error, owner, what string, args ...any) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, errTooBig):
+		sendError(w, r, http.StatusInsufficientStorage, "cuota de disco superada")
+	default:
+		if owner != "" {
+			s.users.ForgetUsage(owner)
+		}
+		s.log.Warn(what, append(args, "err", err)...)
+		sendError(w, r, http.StatusInternalServerError, "no se pudo copiar")
+	}
+	return true
 }

@@ -726,9 +726,8 @@ const SCAN_CACHE = NayiveMedia.scanCache( SCAN_PATH );
 // header search box has text - just those whose file name or comment matches.
 function photos()
 {
-    const q = st.q.trim().toLowerCase();
-    return q ? PHOTOS.filter( p => p.name.toLowerCase().indexOf( q ) !== -1
-                                || noteFor( p.id ).toLowerCase().indexOf( q ) !== -1 ) : PHOTOS;
+    const q = NayiveUI.matcher( st.q );
+    return q ? PHOTOS.filter( p => q( p.name + '\n' + noteFor( p.id ) ) ) : PHOTOS;
 }
 function dayOf( ts )  { const d = new Date( ts ), p = NayiveUI.pad2; return d.getFullYear() + "-" + p( d.getMonth() + 1 ) + "-" + p( d.getDate() ); }
 // p.day stays yyyy-mm-dd (it groups and sorts); what is shown - the day
@@ -1716,8 +1715,8 @@ function tileHtml( p )
 const NO_SHOW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
 function unshown()
 {
-    const q = st.q.trim().toLowerCase();
-    return q ? UNSHOWN.filter( u => u.name.toLowerCase().indexOf( q ) !== -1 ) : UNSHOWN;
+    const q = NayiveUI.matcher( st.q );
+    return q ? UNSHOWN.filter( u => q( u.name ) ) : UNSHOWN;
 }
 function unshownTileHtml( u )
 {
@@ -2612,17 +2611,6 @@ async function destNameSet( dest )
     catch( _ ) { return new Set(); }
 }
 
-// Where `path` is after the moves in `pairs` ([ old, new ]) - Drive's followPath.
-function followPath( path, pairs )
-{
-    for( const pr of pairs )
-    {
-        if( path === pr[ 0 ] )                    return pr[ 1 ];
-        if( path.indexOf( pr[ 0 ] + "/" ) === 0 ) return pr[ 1 ] + path.slice( pr[ 0 ].length );
-    }
-    return path;
-}
-
 // "Move to album…" / "Copy to album…" (and an album's "Move to…"): the shared
 // picker with the albums tree.
 async function pickAlbumFor( paths, mode )
@@ -2727,7 +2715,7 @@ async function runMoves( items, replace, skipped, okMsg, failKey )
     const undo = done.length && canUndo ? { kind: "moves", steps: done } : null;
     const msg  = failed ? NayiveUI.tf( failKey, { err: failed && failed.message || failed } )
                : okMsg || ( NayiveUI.tf( "drive.nMoved", { n: moved } ) + ( skipped ? " · " + NayiveUI.tf( "drive.nSkipped", { n: skipped } ) : "" ) );
-    settle( remapped.map( r => r[ 0 ] ), followPath( DIR, remapped ), msg, undo );
+    settle( remapped.map( r => r[ 0 ] ), NayiveUI.followPath( DIR, remapped ), msg, undo );
 }
 
 // Copy photos (or an album) into `dest` - Drive's doCopy: one server copy per

@@ -176,7 +176,7 @@ async function undoMoves( steps, failKey )
     // find the path free and land there, under its note - restored first, it
     // would come back as "(restaurado …)" and its note stay on the old name.
     await NayiveMedia.remapPaths( back );
-    currentFolder = followPath( currentFolder, back );
+    currentFolder = NayiveUI.followPath( currentFolder, back );
 
     let res = null;
     if( ids.length )
@@ -190,18 +190,6 @@ async function undoMoves( steps, failKey )
 
     if( err )      NayiveUI.toast( TF( failKey || 'drive.moveFailed', { err: err && err.message || err } ) );
     else if( res ) restoredStatus( res );
-}
-
-// Where `path` is after the moves in `pairs` ([ old, new ]): the same
-// place, or the new one when it is (or lives inside) a moved item.
-function followPath( path, pairs )
-{
-    for( const pr of pairs )
-    {
-        if( path === pr[0] )                    return pr[1];
-        if( path.indexOf( pr[0] + '/' ) === 0 ) return pr[1] + path.slice( pr[0].length );
-    }
-    return path;
 }
 
 async function doCopy( paths, dest )

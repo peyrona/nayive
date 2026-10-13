@@ -1053,10 +1053,10 @@ function moviesUnder( path ) { return st.movies.filter( function ( mv ) { return
 
 function filteredMovies()
 {
-    var q = st.search.trim().toLowerCase();
+    var q = NayiveUI.matcher( st.search );
     if( ! q ) return st.movies;
     return st.movies.filter( function ( mv )
-    { return ( mv.title + " " + genreName( mv ) + " " + ( mv.year || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+    { return q( mv.title + " " + genreName( mv ) + " " + ( mv.year || "" ) ); } );
 }
 
 /* ---------------------------------------------------------------------------

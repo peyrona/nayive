@@ -2007,10 +2007,7 @@ func cleanOneLine(s string, max int) string {
 	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsControl(r)
 	}), " ")
-	if utf8.RuneCountInString(s) > max {
-		s = string([]rune(s)[:max])
-	}
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(capRunes(s, max))
 }
 
 // cleanChatText keeps line breaks, drops every other control character.
@@ -2176,7 +2173,7 @@ func (h *ChatHub) pushTargets(o *chatOwner, c *chatConv, m *ChatMsg, only string
 		}
 		base := chatPushJob{title: o.convName(c.id, p), from: from, msg: *m, conv: c.id, group: group}
 		if p == "o" {
-			for _, sub := range h.users.UserPush(o.user).Subs {
+			for _, sub := range h.users.PushTargets(o.user) {
 				j := base
 				j.sub, j.owner = sub, o.user
 				jobs = append(jobs, j)
@@ -2185,7 +2182,7 @@ func (h *ChatHub) pushTargets(o *chatOwner, c *chatConv, m *ChatMsg, only string
 		}
 		if ct := o.contact(p); ct != nil && ct.User != "" {
 			// A Nayive user: their account's devices, opening their own Chat.
-			for _, sub := range h.users.UserPush(ct.User).Subs {
+			for _, sub := range h.users.PushTargets(ct.User) {
 				j := base
 				j.sub, j.owner = sub, ct.User
 				jobs = append(jobs, j)

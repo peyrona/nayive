@@ -9,7 +9,7 @@
 // E7 (list-apps #26): "+" on a task, a name typed while the previous save is
 //     being merged with another device's: Enter still saves it - also when
 //     the other device deleted that task meanwhile.
-import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 
 const s = await server();
 const phone = await s.client();
@@ -56,12 +56,6 @@ async function tasksPage( { hold = null, syncs = false } = {} )
 }
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 const F = "data/tasks.json";
 const groups = "[...document.querySelectorAll( '.task-group' )]";
 

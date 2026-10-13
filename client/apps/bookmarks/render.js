@@ -133,8 +133,8 @@ function sortNodes( list )
     const by = ui.sort;
     if( by === 'saved' ) return list;
     const cmp = {
-        az:  function( a, b ) { return fold( a.title ).localeCompare( fold( b.title ) ); },
-        za:  function( a, b ) { return fold( b.title ).localeCompare( fold( a.title ) ); },
+        az:  function( a, b ) { return NayiveUI.fold( a.title ).localeCompare( NayiveUI.fold( b.title ) ); },
+        za:  function( a, b ) { return NayiveUI.fold( b.title ).localeCompare( NayiveUI.fold( a.title ) ); },
         new: byDate( true ),
         old: byDate( false )
     }[ by ];

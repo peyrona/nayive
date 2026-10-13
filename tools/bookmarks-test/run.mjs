@@ -266,6 +266,20 @@ try
     ok( await c.evaluate( "query === '#docs' && document.querySelectorAll('#items .bm-item').length === 1 && window.__opened.length === 1" ), "a tag chip searches that tag (and does not open the link)" );
     await c.evaluate( "setQuery('EXÁMPLE'); true" );
     ok( await c.evaluate( "document.querySelectorAll('#items .bm-item:not(.is-folder)').length === 1 && !!document.querySelector('#items .bm-path')" ), "accent-insensitive search, with folder path" );
+    // The shared rule (NayiveUI.matcher) under Bookmarks' #tag words.
+    const hits = await c.evaluate( `( function() {
+        const n = { type: 'bookmark', title: 'Factura de la Luz', url: 'https://luz.example/', tags: [ 'casa' ], notes: 'pagada en marzo' };
+        const t = q => { const m = makeMatcher( q ); return !! m && m( n ); };
+        return [ t( 'luz factura' ), t( '"factura de la"' ), ! t( '"luz factura"' ), ! t( 'factura -marzo' ),
+                 t( 'factura -abril' ), t( '#cas LUZ' ), ! t( '#luz' ), t( 'MARZO' ) ].join();
+    } )()` );
+    ok( hits === "true,true,true,true,true,true,true,true", "words in any order, \"phrase\", -word, #tag", hits );
+    const langs = await c.evaluate( `( function() {
+        const t = ( q, title ) => { const m = makeMatcher( q ); return !! m && m( { type: 'bookmark', title: title, url: '', tags: [], notes: '' } ); };
+        return [ t( 'strasse', 'Hauptstraße' ), t( 'oeuvre', 'Œuvre' ), t( "l'eau", 'l’eau' ), t( 'mueller', 'Müller' ),
+                 t( 'Müller', 'Mueller' ), t( 'muller', 'Müller' ), ! t( 'fue', 'fumar' ) ].join();
+    } )()` );
+    ok( langs === "true,true,true,true,true,true,true", "ß, œ, ’ and German umlauts (ü = ue)", langs );
     ok( await c.evaluate( "document.querySelector('.search-fold').classList.contains('is-open') && !!document.querySelector('.search-fold .search-shut')" ), "while searching: the field is open, with its ×" );
     await c.evaluate( "setQuery('zzzqqq'); true" );
     ok( await c.evaluate( "!document.getElementById('emptyHint').hidden && !document.querySelector('#emptyHint [data-empty]')" ), "no results: no big button" );

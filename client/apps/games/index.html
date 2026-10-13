@@ -579,6 +579,204 @@
             btn.querySelector( '[data-ic="play"]'  ).toggleAttribute( 'hidden', ! paused );
         }
 
+        // The board games' machine (Chess, Checkers): its turn, after `wait`
+        // ms, and the thread it thinks on.
+        //
+        // The worker is made from the game's engine source, as a blob, and not
+        // from a file of its own: the page needs the same rules the moment it
+        // is mounted, which is before any second file could have loaded. A
+        // blob is also nothing to download, so offline it thinks exactly as
+        // well as online. No worker to be had: it thinks on the page.
+        //
+        // Every question carries a number, and an answer is only handed on if
+        // it is to the LAST question asked: a new game or leaving the pane ends
+        // the search in flight (terminate - a search left running would hold
+        // the next question up behind it), and the number throws away an
+        // answer that was already on its way.
+        //
+        //   o.engine     the engine's factory (chessEngine): its source is the worker
+        //   o.name       the worker's name in the debugger ("chess")
+        //   o.wait       ms between the player's move being painted and the machine starting
+        //   o.question() { pos, level } as they are now
+        //   o.think( pos, level )  the page's own engine, when there is no worker
+        //   o.thinking() true while the game waits for the machine
+        //   o.answer( m ) its move, as it came: the game looks it up among its own
+        function machine( o )
+        {
+            var url    = '';
+            var alone  = false;
+            var worker = null;                 // made on the machine's first turn
+            var asked  = 0;                    // the number of the question in flight
+            var busy   = false;                // a question is out and not yet answered
+            var timer  = 0;                    // the machine's pending turn
+
+            function brain()
+            {
+                var w;
+
+                if( ! url )
+                    url = URL.createObjectURL( new Blob( [
+                        'var E = (' + o.engine.toString() + ')();\n'
+                      + 'onmessage = function ( e ) { postMessage( { id: e.data.id, m: E.think( e.data.pos, e.data.level ) } ); };\n'
+                      + '//# sourceURL=' + o.name + '-worker.js\n' ], { type: 'text/javascript' } ) );
+
+                w = new Worker( url );
+                w.onmessage = heard;
+                w.onerror   = function ( e )
+                {
+                    e.preventDefault();
+                    stop();
+                    alone = true;
+                    if( o.thinking() ) ask();
+                };
+                return w;
+            }
+
+            function ask()
+            {
+                var q = o.question();
+
+                if( ! alone && ! worker )
+                {
+                    try { worker = brain(); } catch ( e ) { alone = true; }
+                }
+                if( alone ) { o.answer( o.think( q.pos, q.level ) ); return; }
+
+                busy = true;
+                worker.postMessage( { id: ++asked, pos: q.pos, level: q.level } );
+            }
+
+            function heard( e )
+            {
+                if( ! busy || e.data.id !== asked ) return;     // an answer to a question nobody is asking any more
+
+                busy = false;
+                o.answer( e.data.m );
+            }
+
+            // Takes the machine's turn off the table: the wait before it, and
+            // the search itself if one is running. An idle worker is kept for
+            // the next turn.
+            function stop()
+            {
+                if( timer ) { clearTimeout( timer ); timer = 0; }
+                if( ! busy ) return;
+
+                busy = false;
+                asked++;
+                worker.terminate();
+                worker = null;
+            }
+
+            return {
+                turn: function () { timer = setTimeout( function () { timer = 0; ask(); }, o.wait ); },
+                stop: stop,
+                idle: function () { return ! timer && ! busy; }   // nothing pending and nothing asked
+            };
+        }
+
+        // The timed games' clock and pause (Minesweeper, Sudoku, Solitaire).
+        //
+        // The elapsed time is READ from two timestamps, never counted by the
+        // interval: stopping the interval while the pane is off screen (or the
+        // tab is in the background) then only stops the repaint, and the clock
+        // is still right when the player comes back. A pause SHIFTS startedAt
+        // on the way out rather than counting the seconds itself; pausedAt is
+        // where it stopped.
+        //
+        // The board is COVERED while it is paused: a stopped clock over a board
+        // the player can still read is not a pause, it is free thinking time.
+        // Nothing to pause before the clock starts or once the game is over,
+        // so the button is disabled at both ends.
+        //
+        //   g.els()     { time, cover, btn } - the game binds them in its init()
+        //   g.over(), g.live()               - the game's own state
+        //   g.onPause(), g.onResume()        - optional: what else stops / comes back
+        function stopwatch( g )
+        {
+            var w = { startedAt: 0, endedAt: 0, pausedAt: 0, paused: false };
+            var ticker = 0;
+
+            // Three readings, in this order: a finished game is frozen at
+            // endedAt, a PAUSED one at pausedAt, and a running one is now. The
+            // paused case matters because startedAt is not shifted until the
+            // resume - without it, coming back to a paused board would print
+            // the seconds it spent waiting and then take them off again.
+            w.seconds = function ()
+            {
+                if( ! w.startedAt ) return 0;
+                return Math.floor( ( ( w.endedAt || ( w.paused ? w.pausedAt : Date.now() ) ) - w.startedAt ) / 1000 );
+            };
+
+            w.run = function ()
+            {
+                if( ticker || g.over() || w.paused || ! w.startedAt || ! g.live() || document.hidden ) return;
+                ticker = setInterval( function ()
+                {
+                    // Any dialog over the app pauses it - the help sheet, the
+                    // install prompt, "session expired" - the same rule the
+                    // canvas games follow: time under a sheet is not played.
+                    if( document.querySelector( '.sheet-backdrop.open' ) ) { w.pause(); return; }
+                    g.els().time.textContent = clock( w.seconds() );
+                }, 250 );
+            };
+
+            w.stop = function () { if( ticker ) clearInterval( ticker ); ticker = 0; };
+
+            // The clock starts on the first move, not on the deal: a board left
+            // while another game is played is not a game that took an hour.
+            w.begin = function ()
+            {
+                if( w.startedAt ) return;
+                w.startedAt = Date.now();
+                w.run();
+                w.paint();
+            };
+
+            w.reset = function () { w.startedAt = 0; w.endedAt = 0; };
+            w.end   = function () { w.endedAt = Date.now(); };
+
+            w.paint = function () { pauseButton( g.els().btn, w.paused, ! w.startedAt || g.over() ); };
+
+            w.pause = function ()
+            {
+                if( w.paused || g.over() || ! w.startedAt ) return;
+
+                w.paused   = true;
+                w.pausedAt = Date.now();
+                if( g.onPause ) g.onPause();
+                w.stop();
+                g.els().cover.hidden = false;
+                w.paint();
+                // Heard only when the player pressed it: leave() gets here with
+                // `live` already false, and a hidden tab with document.hidden.
+                if( g.live() && ! document.hidden ) Sfx.play( 'pause' );
+            };
+
+            w.resume = function ()
+            {
+                if( ! w.paused ) return;
+
+                w.startedAt += Date.now() - w.pausedAt;   // the pause never happened, as far as the clock is concerned
+                w.paused = false;
+                g.els().cover.hidden = true;
+                g.els().time.textContent = clock( w.seconds() );
+                w.run();
+                w.paint();
+                if( g.onResume ) g.onResume();
+                Sfx.play( 'resume' );
+            };
+
+            w.unpause = function ()                     // a new game: no pause to come back from
+            {
+                w.paused = false;
+                g.els().cover.hidden = true;
+                w.paint();
+            };
+
+            return w;
+        }
+
         // A record only ever goes UP. The plug re-reads the file on focus and on
         // a tap, and that answer can be OLDER than the game being played right
         // now - our own write may still be in the outbox - so a score beaten on
@@ -1396,7 +1594,7 @@
 
         window.NayiveGames = {
             T: T, TF: TF, STEP: STEP, clock: clock, keyBusy: keyBusy,
-            pauseButton: pauseButton, keepBest: keepBest, gameLoop: gameLoop, roving: roving, adoptTimes: adoptTimes,
+            pauseButton: pauseButton, stopwatch: stopwatch, machine: machine, keepBest: keepBest, gameLoop: gameLoop, roving: roving, adoptTimes: adoptTimes,
             arcade: arcade, saveBest: saveBest, saveTime: saveTime, sfx: Sfx,
             add: function ( name, mod ) { MODS[ name ] = mod; }
         };

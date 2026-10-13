@@ -17,19 +17,13 @@
 //     Photos' places.json; and the note save (updateComments).
 import fs from "node:fs";
 import path from "node:path";
-import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, sleep, REPO, disk } from "./lib.mjs";
 import { installRace, arm, disarm, raced } from "./race.mjs";
 
 const s = await server();
 const PNG = fs.readFileSync( path.join( REPO, "client/apps/icons/icon-192.png" ) );
 const seed = ( rel, body ) => { const f = path.join( s.home(), rel ); fs.mkdirSync( path.dirname( f ), { recursive: true } ); fs.writeFileSync( f, body ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 // The other device's change, as the source of a function text -> text.
 const add = ( obj ) => `t => JSON.stringify( Object.assign( JSON.parse( t ), ${JSON.stringify( obj )} ) )`;
 

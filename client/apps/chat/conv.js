@@ -649,7 +649,7 @@
     // the list is a block already.
     C.textNodes = function ( el, text )
     {
-        var q = S.searching && S.searching.q ? S.searching.q.toLowerCase() : "";
+        var m = S.searching && NayiveUI.matcher( S.searching.q ), q = m ? m.terms.map( NayiveUI.fold ) : [];
         window.NayiveChatMarks.parse( text ).forEach( function ( bl )
         {
             if( bl.list )
@@ -705,16 +705,27 @@
         return parts.length <= 3 && parts.every( function ( g ) { return EMOJI_RE.test( g ); } );
     };
 
+    // `q` is the search's words / phrases (NayiveUI.matcher terms), folded:
+    // each one found gets a mark, the nearest first.
     function plain( el, s, q )
     {
         if( ! s ) return;
-        if( ! q ) { el.appendChild( document.createTextNode( s ) ); return; }
-        var low = s.toLowerCase(), at = 0, i;
-        while( ( i = low.indexOf( q, at ) ) >= 0 )
+        // Folded text keeps the length of what is typed in nearly every case;
+        // when it does not (Korean syllables split apart), no mark at all.
+        var low = q.length ? NayiveUI.fold( s ) : "", at = 0;
+        if( low.length !== s.length ) { el.appendChild( document.createTextNode( s ) ); return; }
+        for( ;; )
         {
+            var i = -1, len = 0;
+            q.forEach( function ( w )
+            {
+                var k = low.indexOf( w, at );
+                if( k >= 0 && ( i < 0 || k < i || k === i && w.length > len ) ) { i = k; len = w.length; }
+            } );
+            if( i < 0 ) break;
             if( i > at ) el.appendChild( document.createTextNode( s.slice( at, i ) ) );
-            el.appendChild( h( "mark", { text: s.slice( i, i + q.length ) } ) );
-            at = i + q.length;
+            el.appendChild( h( "mark", { text: s.slice( i, i + len ) } ) );
+            at = i + len;
         }
         if( at < s.length ) el.appendChild( document.createTextNode( s.slice( at ) ) );
     }
@@ -729,6 +740,10 @@
             var slot = h( "span", { class: "tick" } );
             slot.appendChild( C.tickEl( S.open, m ) );
             el.appendChild( slot );
+            // sent without sound (the Send menu or the night ask): a crossed speaker
+            // after the tick, for the sender only, grey like the time
+            if( m.silent ) el.appendChild( h( "span", { class: "silent", attrs: { title: T( "chat.sentSilent" ), "aria-label": T( "chat.sentSilent" ) } },
+                                              C.ic( "volume-x" ) ) );
         }
         return el;
     }

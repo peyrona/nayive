@@ -21,7 +21,8 @@
 #   3. the Android app    android/publish.sh -> android/build/site/
 #                         -> ~/web_sites/app/  (https://<origin>/app/)
 #      (nayive.apk + version.json, which installed phones check once a day:
-#       bump versionCode in android/app/build.gradle or they never see it)
+#       publish.sh raises the version in android/app/build.gradle by itself
+#       whenever android/ changed, so they always see the new APK)
 #
 # The VPS tree mirrors the repo (since 2026-09-15): ~/nayive/store/ is the
 # run-root (config/, homes/), ~/nayive/client/apps/ the apps, ~/nayive/server/go/nayive
@@ -203,13 +204,25 @@ PREBUILD_STEPS+=(
     "android/publish.sh"                        # the release APK + version.json, into android/build/site/ (skipped if android/ is unchanged)
 )
 
+STEPS_OK=0
+APK_NOTE=""
+DATA_SAFETY="SKIPPED (./deploy.sh --all-tests runs it)"
 for step in "${PREBUILD_STEPS[@]}"; do
     if [ "$ALL_TESTS" = 0 ] && [[ "$step" == *data-safety-test/run.mjs* ]]; then
         echo "==> pre-build: SKIPPED $step (use --all-tests)"
         continue
     fi
+    # A dry run changes nothing here either: publish.sh would raise the APK's
+    # version in build.gradle for a build that never reaches the VPS.
+    if [ "$DRY_RUN" = 1 ] && [ "$step" = "android/publish.sh" ]; then
+        echo "==> pre-build: SKIPPED $step (dry run: the APK is not rebuilt)"
+        APK_NOTE=" - last local build (dry run: not rebuilt)"
+        continue
+    fi
     echo "==> pre-build: $step"
     ( cd "$SCRIPT_DIR" && eval "$step" ) || { echo "ERROR: pre-build step failed: $step" >&2; exit 1; }
+    STEPS_OK=$((STEPS_OK + 1))
+    [[ "$step" == *data-safety-test/run.mjs* ]] && DATA_SAFETY="ALL GREEN"
 done
 
 # ------------------------------------------------------------------------------
@@ -226,6 +239,42 @@ echo "==> Building the Go server (linux/amd64)"
     go build -trimpath -ldflags='-s -w' -o "$BUILD_DIR/nayive" . ) \
     || { echo "ERROR: go build failed." >&2; exit 1; }
 echo "==> Built $(du -h "$BUILD_DIR/nayive" | cut -f1) binary"
+
+# ------------------------------------------------------------------------------
+# SUMMARY — printed last (also after a dry run or a failed restart): what was
+# done and which version of each part is now on the VPS. Nayive's version is
+# git's (the last tag + commits since, "-dirty" = uncommitted changes); the
+# server has none of its own, so it shows its Go and its checksum.
+# ------------------------------------------------------------------------------
+RESTART="not needed (binary unchanged)"
+summary() {
+    local verb="Copied" apk_name apk_code sent gone
+    [ "$DRY_RUN" = 1 ] && verb="Would copy"
+    apk_name=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$APKSITE/version.json" 2>/dev/null)
+    apk_code=$(sed -n 's/.*"code": *\([0-9]*\).*/\1/p' "$APKSITE/version.json" 2>/dev/null)
+    sent=$(grep -c '^<f' "$BUILD_DIR/apps.log" 2>/dev/null || true)
+    gone=$(grep -c '^\*deleting' "$BUILD_DIR/apps.log" 2>/dev/null || true)
+    echo
+    echo "================================ SUMMARY ================================"
+    [ "$DRY_RUN" = 1 ] && echo "  DRY RUN - nothing was changed on the VPS."
+    echo "  Nayive      $(git -C "$SCRIPT_DIR" describe --tags --always --dirty 2>/dev/null || echo '?')"
+    echo "  Go server   $(go env GOVERSION), sha256 $(sha256sum "$BUILD_DIR/nayive" | cut -c1-12), $(du -h "$BUILD_DIR/nayive" | cut -f1)"
+    if [ -z "$BIN_CHANGES" ] || [[ "$BIN_CHANGES" == "the running "* ]]
+    then echo "              already on the VPS; restart: $RESTART"
+    else echo "              $verb to the VPS; restart: $RESTART"; fi
+    echo "  Apps        cache $(sed -n 's/^var CACHE_VERSION = "\(.*\)";/\1/p' "$APPSSRC/sw.js")"
+    echo "              $verb: ${sent:-0} file(s) sent, ${gone:-0} deleted"
+    echo "  Android     APK ${apk_name:-?} (code ${apk_code:-?})$APK_NOTE"
+    if grep -q 'nayive.apk' "$BUILD_DIR/apk.log" 2>/dev/null; then echo "              $verb to the VPS - phones see it at their next daily check"
+    else                                                            echo "              already on the VPS"; fi
+    echo "  Checks      $STEPS_OK pre-build step(s) passed; data-safety: $DATA_SAFETY"
+    if [ -n "${DIRTY_N:-}" ]; then
+        if [ "$DRY_RUN" = 1 ]; then echo "  WARNING     $DIRTY_N uncommitted change(s) in server/go/ or client/apps/ would be shipped"
+        else                        echo "  WARNING     $DIRTY_N uncommitted change(s) in server/go/ or client/apps/ were shipped"; fi
+    fi
+    echo "  Took        $((SECONDS / 60)) min $((SECONDS % 60)) s"
+    echo "========================================================================="
+}
 
 # Fail fast with a helpful hint if SSH auth / the remote dirs aren't ready.
 ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "test -d '$REMOTE_APPS_DIR' && test -d '$(dirname "$REMOTE_BIN")'" \
@@ -268,14 +317,15 @@ fi
 echo "==> Deploying apps  $APPSSRC/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"
 SW_FILES=("$APPSSRC/sw.js")
 [ -f "$APPSSRC/sw.js.gz" ] && SW_FILES+=("$APPSSRC/sw.js.gz")
+# (Both listings also go to apps.log, for the summary.)
 if ! rsync "${DRY[@]}" -rltz --itemize-changes --delete-delay --delay-updates \
       --exclude='.*' --exclude='*~' --exclude='*.swp' \
       --exclude='/sw.js' --exclude='/sw.js.gz' \
       -e "$RSYNC_RSH" \
-      "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" ||
+      "$APPSSRC/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" | tee "$BUILD_DIR/apps.log" ||
    ! rsync "${DRY[@]}" -ltz --itemize-changes --delay-updates \
       -e "$RSYNC_RSH" \
-      "${SW_FILES[@]}" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/"; then
+      "${SW_FILES[@]}" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/" | tee -a "$BUILD_DIR/apps.log"; then
     echo "ERROR: apps rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APPS_DIR/ failed." >&2
     exit 1
 fi
@@ -288,7 +338,7 @@ fi
 echo "==> Deploying the Android app  $APKSITE/  ->  $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/"
 if { [ "$DRY_RUN" = 0 ] && ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "mkdir -p '$REMOTE_APK_DIR'"; } ||
    ! rsync "${DRY[@]}" -rlzc --itemize-changes --exclude='version.json' \
-      -e "$RSYNC_RSH" "$APKSITE/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/" ||
+      -e "$RSYNC_RSH" "$APKSITE/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/" | tee "$BUILD_DIR/apk.log" ||
    ! rsync "${DRY[@]}" -zc --itemize-changes \
       -e "$RSYNC_RSH" "$APKSITE/version.json" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/version.json"; then
     echo "ERROR: Android app rsync to $REMOTE_USER@$REMOTE_HOST:$REMOTE_APK_DIR/ failed." >&2
@@ -315,6 +365,8 @@ if [ "$DRY_RUN" = 1 ]; then
         echo "==> DRY RUN: a real deploy would restart $SERVICE ($BIN_CHANGES)"
     fi
     echo "==> Dry run complete — nothing was changed on the VPS."
+    RESTART="${BIN_CHANGES:+would restart}"; RESTART="${RESTART:-not needed}"
+    summary
     exit 0
 elif [ -z "$BIN_CHANGES" ]; then
     echo "==> Server binary unchanged — service not restarted."
@@ -326,6 +378,7 @@ elif ! ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" \
     echo "      ExecStart=$REMOTE_BIN -config $REMOTE_RUNROOT/config/server.json"   >&2
     echo "      AmbientCapabilities=CAP_NET_BIND_SERVICE"                           >&2
     echo "    then: sudo systemctl daemon-reload && sudo systemctl restart $SERVICE" >&2
+    RESTART="NOT DONE - $SERVICE does not run $REMOTE_BIN (see above)"
 else
     echo "==> Restarting $SERVICE ($BIN_CHANGES)"
     # -t: allocate a remote TTY so 'sudo' can prompt for a password if this user
@@ -335,7 +388,11 @@ else
         "sudo systemctl restart '$SERVICE' && systemctl --no-pager --lines=0 status '$SERVICE'" \
         || { echo "ERROR: could not restart $SERVICE — restart it by hand:" >&2
              echo "       ssh -t -p $REMOTE_PORT $REMOTE_USER@$REMOTE_HOST sudo systemctl restart $SERVICE" >&2
+             RESTART="FAILED - restart it by hand (see above)"
+             summary
              exit 1; }
+    RESTART="done"
 fi
 
 echo "==> Deploy complete."
+summary

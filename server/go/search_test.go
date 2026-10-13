@@ -108,6 +108,79 @@ func TestSearchSpec(t *testing.T) {
 	}
 }
 
+// TestSearchFold - both searches are accent- and case-blind, on either side:
+// "jose" finds "José", "NIÑO" finds "nino", and a name stored decomposed
+// (e + U+0301, as macOS writes it) is found like a composed one.
+func TestSearchFold(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"José Niño.txt", "Canción.mp3", "Me\u0301xico.pdf", "nino.txt", "Otro.txt",
+		"Hauptstraße.txt", "Œuvre.txt", "l’eau.txt", "Müller.txt", "Mueller.odt", "fumar.txt"} {
+		if err := os.WriteFile(filepath.Join(root, n), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	roots := []SearchRoot{{Dir: root, Prefix: "files"}}
+	names := func(nodes []Node) string {
+		out := []string{}
+		for _, n := range nodes {
+			out = append(out, strings.TrimPrefix(n.Path, "files/"))
+		}
+		sort.Strings(out)
+		return strings.Join(out, "|")
+	}
+	for pat, want := range map[string]string{
+		"*jose*":    "José Niño.txt",
+		"*NIÑO*":    "José Niño.txt|nino.txt",
+		"*cancion*": "Canción.mp3",
+		"*méxico*":  "Me\u0301xico.pdf",
+		"*strasse*": "Hauptstraße.txt",
+		"*oeuvre*":  "Œuvre.txt",
+		"*l'eau*":   "l’eau.txt",
+		"*mueller*": "Mueller.odt|Müller.txt",
+		"*müller*":  "Mueller.odt|Müller.txt",
+		"*muller*":  "Müller.txt",
+		"*fue*":     "",
+	} {
+		nodes, _ := Search(roots, pat, 100)
+		if got := names(nodes); got != want {
+			t.Errorf("find %q: got %q, want %q", pat, got, want)
+		}
+	}
+
+	sp, err := parseSearchSpec(Query{"name": {"has:CANCIÓN"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, _ := SearchBy(roots, 100, sp.keep)
+	if got := names(nodes); got != "Canción.mp3" {
+		t.Errorf("search has:CANCIÓN: got %q", got)
+	}
+
+	// Drive's box sends "niño -josé" as these two rules (drive/listing.js).
+	sp, err = parseSearchSpec(Query{"name": {"has:NIÑO", "not:josé"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, _ = SearchBy(roots, 100, sp.keep)
+	if got := names(nodes); got != "nino.txt" {
+		t.Errorf("search has:NIÑO not:josé: got %q", got)
+	}
+
+	sp, err = parseSearchSpec(Query{"name": {"has:müller", "not:.odt"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, _ = SearchBy(roots, 100, sp.keep)
+	if got := names(nodes); got != "Müller.txt" {
+		t.Errorf("search has:müller not:.odt: got %q", got)
+	}
+	sp, _ = parseSearchSpec(Query{"name": {"has:ller", "not:Mueller"}})
+	nodes, _ = SearchBy(roots, 100, sp.keep)
+	if got := names(nodes); got != "" {
+		t.Errorf("search not:Mueller must drop Müller too: got %q", got)
+	}
+}
+
 // TestBiggest - the n largest files of the WHOLE tree, biggest first, never a
 // folder, never what the listings hide (dot-folders like .trash, dot-files,
 // temp files, symlinks). More files than n must not change the answer: the walk

@@ -331,7 +331,17 @@ func newToken() string {
 // is built by hand so its attributes come out in one fixed order that the
 // tests can read line by line; no browser cares either way.
 func sessionCookieHeader(token string, ttl time.Duration, remember, secure bool) string {
-	out := CookieName + "=" + token + "; HttpOnly; SameSite=Lax; Path=/"
+	return cookieHeader(CookieName, token, true, ttl, remember, secure)
+}
+
+// cookieHeader is one Set-Cookie value, the attributes always in this order.
+// The session cookie and the two that live beside it (store_owner.go) share it.
+func cookieHeader(name, value string, httpOnly bool, ttl time.Duration, remember, secure bool) string {
+	out := name + "=" + value
+	if httpOnly {
+		out += "; HttpOnly"
+	}
+	out += "; SameSite=Lax; Path=/"
 	if remember {
 		// No Max-Age at all makes it a session cookie: gone when the browser
 		// closes. "Mantenme conectado" is what asks for a persistent one.

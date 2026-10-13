@@ -23,7 +23,6 @@ const IS_MAC = NayiveUI.isMac;
 
 // "Ctrl+F" on a PC, "⌘F" on a Mac (NayiveUI.keyLabel: the modifier NAMES
 // translated - Strg in German - the Mac glyphs the same in every language).
-const HINT_SEP = ' · ';                                   // "Renombrar · F2"
 
 // The Ctrl of the platform, and nothing else held down. e.code (not e.key)
 // because e.key is what the LAYOUT produces: Ctrl+F on a Cyrillic keyboard
@@ -55,29 +54,10 @@ function focusSearch()
     document.getElementById( 'searchInput' ).select();
 }
 
-// Hangs " · Ctrl+F" off each shortcut button's tooltip — and takes it off
-// again on a phone. A middle dot rather than parentheses: the search tip
-// already ends in "(uno)". Idempotent, because updateToolbarState rewrites
-// some of these titles ("Descargar selección") on every selection change
-// and calls us right after.
-function applyKeyHints()
-{
-    const phone = isPhone();
-
-    for( const s of SHORTCUTS )
-    {
-        const el = document.getElementById( s.el );
-        if( ! el ) continue;
-
-        const hint = HINT_SEP + s.label();
-        let   t    = el.getAttribute( 'title' ) || '';
-
-        if( t.slice( -hint.length ) === hint ) t = t.slice( 0, -hint.length );
-        if( ! t ) continue;                    // no tooltip yet: nothing to hang the hint on
-
-        el.setAttribute( 'title', phone ? t : t + hint );
-    }
-}
+// Shortcut hints on the tooltips (NayiveUI.keyHints). updateToolbarState
+// rewrites some of these titles ("Descargar selección") on every selection
+// change and calls this right after.
+function applyKeyHints() { NayiveUI.keyHints( SHORTCUTS, isPhone() ); }
 
 function onShortcutKey( e )
 {

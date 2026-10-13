@@ -15,6 +15,7 @@ What the service does, all through ONE long poll to `/api/device/wait`
 | A Chat call | rings (the phone's ringtone, obeying silent/vibrate) with a full-screen Contestar / Rechazar |
 | A voice call at the ear | the screen goes off near the ear (proximity sensor), as in a phone call; the page's padlock stays away |
 | Unread messages | a silent notification carrying the number: the icon's badge (a dot on Pixel) |
+| Everything web push brings | chat messages, missed calls, Planner and trip reminders, mail, "video ready", "¿Dónde estás?": shown by the app itself (from versionCode 6, `server/go/push_app.go`), so a phone without Google gets them all; the Chrome inside the app gets none of them, so nothing comes twice |
 | "Buscar mi móvil" | rings on the ALARM stream - heard with the phone silenced - until Parar on the phone, and sends where it is |
 | A new APK | once a day, `<origin>/app/version.json` → a notification |
 | New photos and videos | once a day on Wi-Fi, when switched on in Mi cuenta: to the trip's photo folder, else `files/Camera/<year>/`; nothing deleted on the phone |

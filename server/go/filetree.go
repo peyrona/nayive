@@ -445,11 +445,11 @@ type SearchRoot struct {
 // `limit` and the walk stopped early.
 //
 // Matching is shell-style (`*`, `?`, `[seq]`) on the BASENAME only,
-// case-insensitive.
+// case- and accent-blind (foldForms, search.go).
 func Search(roots []SearchRoot, pattern string, limit int) ([]Node, bool) {
-	pat := strings.ToLower(pattern)
+	pats := foldForms(pattern)
 	return SearchBy(roots, limit, func(name string, _ fs.DirEntry) bool {
-		return fnmatch(strings.ToLower(name), pat)
+		return anyForm(foldForms(name), pats, fnmatch)
 	})
 }
 

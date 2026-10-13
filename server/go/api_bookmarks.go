@@ -218,10 +218,7 @@ func pageTitle(body []byte, ctype string) string {
 	}
 	t := html.UnescapeString(string(m[1]))
 	t = strings.TrimSpace(bmSpacesRe.ReplaceAllString(t, " "))
-	if utf8.RuneCountInString(t) > bmTitleChars {
-		t = string([]rune(t)[:bmTitleChars])
-	}
-	return t
+	return capRunes(t, bmTitleChars)
 }
 
 // bmToUTF8 decodes a page to UTF-8. A charset the Content-Type names wins;

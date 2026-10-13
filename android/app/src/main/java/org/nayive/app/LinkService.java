@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
  * GET /api/device/wait is held open by the server until something about this
  * phone changes, or for `hold` seconds, and answers the phone's whole state:
  *
- *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null, "media", "ear"}
+ *   {"v", "hold", "track", "badge", "call": {...}|null, "find": {...}|null, "media", "ear", "notes": [...]}
  *
  * No Google, no FCM, no second app. What the answer says is applied as it is:
  * track -> positions on/off, badge -> the unread notification, call -> ring,
@@ -48,6 +48,9 @@ import java.util.concurrent.Executors;
  * ear -> a voice call is on in this phone's browser: the screen goes off near
  * the ear, as in a phone call (server/go/devices_ear.go). The wait says ear=1
  * when the phone has the sensor; without it the page puts up its own padlock.
+ * notes -> what web push brings on other phones - chat, reminders, mail -
+ * shown here and acked (server/go/push_app.go), so no Google is needed. The
+ * wait says the phone's zone and language: a reminder rings on its clock.
  */
 public class LinkService extends Service {
 
@@ -242,7 +245,9 @@ public class LinkService extends Service {
             maybeCheckUpdate();
             Api.Reply r;
             try {
-                r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version) + (ear != null ? "&ear=1" : ""),
+                r = Api.get(this, "/api/device/wait?v=" + Uri.encode(version) + (ear != null ? "&ear=1" : "")
+                                + "&tz=" + Uri.encode(java.util.TimeZone.getDefault().getID())
+                                + "&lang=" + Uri.encode(java.util.Locale.getDefault().getLanguage()),
                         (holdSeconds + 30) * 1000);
             } catch (IOException e) {
                 failures++;
@@ -314,7 +319,10 @@ public class LinkService extends Service {
             show(trackWanted ? (Tracker.allowedAlways(this) ? Notes.Link.TRACKING : Notes.Link.FIX) : Notes.Link.ON);
         }
 
-        Notes.pending(this, s.optInt("badge", 0));
+        int badge = s.optInt("badge", 0);
+        Notes.pending(this, badge);
+        if (badge == 0 && s.has("badge")) Notes.clearChat(this);
+        showNotes(s.optJSONArray("notes"));
 
         // "Upload new photos and videos": when it was switched on, 0 = off.
         // An answer with no "media" at all (401, an older server) changes nothing.
@@ -347,6 +355,35 @@ public class LinkService extends Service {
         } else if (Ringer.kind() == Ringer.FIND) {
             Ringer.stop(this);
             Notes.cancel(this, Notes.FIND);
+        }
+    }
+
+    /**
+     * The server's notes: each one newer than the last shown, then one ack up
+     * to the newest - the server keeps them until then (and resends them after
+     * a lost answer; lastNote stops them showing twice).
+     */
+    private void showNotes(JSONArray notes) {
+        if (notes == null || notes.length() == 0) return;
+        long last = Prefs.lastNote(this), newest = 0;
+        for (int i = 0; i < notes.length(); i++) {
+            JSONObject n = notes.optJSONObject(i);
+            if (n == null) continue;
+            long id = n.optLong("id", 0);
+            newest = Math.max(newest, id);
+            if (id <= last) continue;
+            Notes.note(this, id, n.optString("title", "Nayive"), n.optString("body", ""),
+                    n.optString("tag", ""), n.optString("url", ""), n.optBoolean("quiet", false));
+        }
+        if (newest > last) Prefs.setLastNote(this, newest);
+        if (newest > 0) {
+            long upTo = newest;
+            sender.execute(() -> {
+                try {
+                    ack(this, new JSONObject().put("notes", upTo));
+                } catch (JSONException ignored) {
+                }
+            });
         }
     }
 

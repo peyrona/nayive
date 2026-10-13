@@ -12,18 +12,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, REPO, disk } from "./lib.mjs";
 
 const s = await server();
 const phone = await s.client();
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 const PNG = fs.readFileSync( path.join( REPO, "client/apps/icons/icon-192.png" ) );
 const tail = rel => { try { return fs.readFileSync( path.join( s.home(), rel ) ).subarray( PNG.length ).toString(); } catch { return null; } };
 

@@ -418,8 +418,8 @@
         if( S.filter === "unread" && ! c.unread ) return false;
         if( S.filter === "groups" && c.kind !== "g" ) return false;
         if( ! S.query ) return true;
-        var q = C.fold( S.query );
-        return C.fold( c.name ).indexOf( q ) >= 0 || ( c.last && C.fold( c.last.text ).indexOf( q ) >= 0 );
+        var q = NayiveUI.matcher( S.query );
+        return ! q || q( c.name + "\n" + ( c.last && c.last.text || "" ) );
     }
 
     // A message of mine still waiting on this device counts as the newest.
@@ -818,8 +818,8 @@
         function drawCards()
         {
             var typed = input.value.trim();
-            var q = card && typed === card.name ? "" : C.fold( typed );
-            var shown = book.filter( function ( c ) { return ! q || C.fold( c.name ).indexOf( q ) >= 0; } ).slice( 0, 200 );
+            var q = card && typed === card.name ? null : NayiveUI.matcher( typed );
+            var shown = book.filter( function ( c ) { return ! q || q( c.name ); } ).slice( 0, 200 );
             cards.textContent = "";
             if( ! shown.length ) cards.appendChild( h( "p", { class: "list-note", text: T( book.length ? "chat.noMatch" : "chat.noContacts" ) } ) );
             shown.forEach( function ( c )

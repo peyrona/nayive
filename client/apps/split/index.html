@@ -226,18 +226,7 @@
             .part-row input      { width: 100px; }
             .row-meta            { white-space: normal; }
         }
-        /* EXPORT PDF - exportPdf() fills #printRoot and calls window.print(); the user
-           picks "Save as PDF". display:none on screen; scoped to .printing (set on
-           <html> by exportPdf) so a plain Ctrl+P still prints the page itself. */
-        #printRoot { display: none; }
-        @media print
-        {
-            @page { margin: 14mm; }
-            .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
-            .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
-            .printing #printRoot { display: block !important; }
-        }
-        #printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        /* EXPORT PDF: the base is shared/app.css (EXPORT TO PDF). */
         #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
         #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; color: #111; }
         #printRoot .pr-sub { font-size: 13px; color: #444; }
@@ -251,7 +240,6 @@
         #printRoot .pr-neg { color: #b00020; }
         #printRoot .pr-date { white-space: nowrap; color: #444; font-variant-numeric: tabular-nums; }
         #printRoot .pr-pay td { color: #555; font-style: italic; }
-        #printRoot .pr-empty { color: #666; font-style: italic; }
     </style>
 </head>
 <body>
@@ -1144,8 +1132,8 @@
 
         function renderHome()
         {
-            const q      = search.trim().toLowerCase();
-            const hit    = g => ! q || [ g.name || '' ].concat( visibleMembers( g ).map( m => m.name || '' ) ).join( ' ' ).toLowerCase().indexOf( q ) !== -1;
+            const q      = NayiveUI.matcher( search );
+            const hit    = g => ! q || q( [ g.name || '' ].concat( visibleMembers( g ).map( m => m.name || '' ) ).join( ' ' ) );
             const own    = groups.filter( g => ! g._ro && ! g.archived && hit( g ) ).sort( byName );
             const shared = groups.filter( g => g._ro && hit( g ) ).sort( byName );
             const arch   = groups.filter( g => ! g._ro && g.archived && hit( g ) ).sort( byName );
@@ -1296,14 +1284,14 @@
             const bits = [ e.text || '', e.date || '', e.currency || '', M.toDecimal( e.amount, e.currency || g.currency, DEC ) ];
             if( e.type === 'payment' ) bits.push( nameOf( g, e.from ), nameOf( g, e.to ), T( 'split.payment' ) );
             else { bits.push( nameOf( g, e.paidBy ) ); M.participants( e ).ids.forEach( id => bits.push( nameOf( g, id ) ) ); }
-            return bits.join( ' ' ).toLowerCase().indexOf( q ) !== -1;
+            return q( bits.join( ' ' ) );
         }
 
         function renderEntries()
         {
             const g    = current;
             const all  = sortedEntries( g );
-            const q    = search.trim().toLowerCase();
+            const q    = NayiveUI.matcher( search );
             const rows = q ? all.filter( e => entryMatches( g, e, q ) ) : all;
 
             if( searchFold ) searchFold.count( q ? rows.length + ' / ' + all.length : '' );

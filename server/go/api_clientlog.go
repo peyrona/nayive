@@ -74,13 +74,13 @@ func NewClientLog(runRoot string) *ClientLog {
 // Add logs one report for `user`, unless it is over the hour's limit or the
 // same error was already logged this hour. It answers whether a line was written.
 func (c *ClientLog) Add(user string, rep clientReport) (bool, error) {
-	rep.App = cut(rep.App, 40)
-	rep.Kind = cut(rep.Kind, 20)
-	rep.Message = cut(rep.Message, 500)
-	rep.Source = cut(rep.Source, 300)
-	rep.Stack = cut(rep.Stack, 2000)
-	rep.Browser = cut(rep.Browser, 60)
-	rep.UA = cut(rep.UA, 300)
+	rep.App = clipRunes(rep.App, 40)
+	rep.Kind = clipRunes(rep.Kind, 20)
+	rep.Message = clipRunes(rep.Message, 500)
+	rep.Source = clipRunes(rep.Source, 300)
+	rep.Stack = clipRunes(rep.Stack, 2000)
+	rep.Browser = clipRunes(rep.Browser, 60)
+	rep.UA = clipRunes(rep.UA, 300)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -127,17 +127,6 @@ func appendRolling(path string, line []byte) error {
 		return err
 	}
 	return f.Close()
-}
-
-// cut keeps at most n bytes of s, never splitting a UTF-8 character.
-func cut(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && s[n]&0xC0 == 0x80 { // a continuation byte: step back to the start
-		n--
-	}
-	return s[:n]
 }
 
 // apiClientLog is POST /api/clientlog. It answers 204 whether the line was

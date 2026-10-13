@@ -404,6 +404,14 @@ func clipRunes(s string, n int) string {
 	return s[:n]
 }
 
+// capRunes cuts s to at most n letters (runes).
+func capRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) > n {
+		return string([]rune(s)[:n])
+	}
+	return s
+}
+
 func (s *Server) mailAddAccount(w http.ResponseWriter, r *http.Request, user string) {
 	var in struct {
 		Email    string `json:"email"`

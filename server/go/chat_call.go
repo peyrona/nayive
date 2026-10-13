@@ -801,6 +801,9 @@ func (h *ChatHub) callPushesTo(o *chatOwner, c *chatCall, to, kind string) []cha
 	mine := acct != ""
 	if mine {
 		subs = h.users.UserPush(acct).Subs
+		if kind == "missed" {
+			subs = h.users.PushTargets(acct) // the app shows a missed call as a note (push_app.go)
+		}
 	}
 	link := URLPrefix + "/chat/?c=" + c.Conv
 	if !mine && ct != nil {

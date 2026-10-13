@@ -313,27 +313,7 @@
             .phone-month .fc-daygrid-day.is-picked .pm-dots i { background: var(--on-accent); }
         }
 
-        /* --- EXPORT -> PDF (print) ---------------------------------------------
-           No PDF library: exportPdf() fills #printRoot with a plain, light-theme
-           listing and calls window.print(); the user picks "Save as PDF" in the
-           browser's own dialog. Same shape trips uses. #printRoot is display:none
-           on screen and only shown on paper. */
-        #printRoot { display: none; }
-
-        /* Scoped to .printing (set on <html> by exportPdf, dropped on afterprint) so a
-           plain Ctrl+P still prints the page itself rather than a blank sheet. */
-        @media print
-        {
-            @page { margin: 14mm; }
-            /* The app locks the page (html, body { height: 100%; overflow: hidden })
-               so the calendar can own the scroll - left alone that clips the printed
-               listing to a single page. */
-            .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
-            .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
-            .printing #printRoot { display: block !important; }
-        }
-
-        #printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        /* --- EXPORT -> PDF (print): the base is shared/app.css (EXPORT TO PDF). */
         #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 18px; }
         #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; color: #111; }
         #printRoot .pr-range { font-size: 13px; color: #444; }
@@ -345,8 +325,6 @@
         #printRoot table.pr-ev td.pr-when { width: 140px; white-space: nowrap; color: #444; font-variant-numeric: tabular-nums; }
         #printRoot .pr-title { font-weight: 600; }
         #printRoot .pr-meta { color: #555; font-size: 10.5px; white-space: pre-line; }
-        #printRoot .pr-empty { color: #666; font-style: italic; }
-        #printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
     </style>
 </head>
 
@@ -1750,19 +1728,13 @@
         // Clicking an event opens it, as always.
 
         let searchFold = null;
-        let searchQ    = '';     // the folded query; '' = no search
+        let searchQ    = null;   // the box's test (NayiveUI.matcher); null = no search
         let searchHit  = null;   // { id, ms } of the occurrence the arrows landed on (its FullCalendar id)
         let hitScroll  = false;  // bring that event into view once it is drawn
 
         function searchMatch( def )
         {
-            return !! searchQ && foldText( def.title + ' ' + def.notes + ' ' + def.location ).includes( searchQ );
-        }
-
-        // Lower-case and strip diacritics so "medico" matches "Médico".
-        function foldText( s )
-        {
-            return String( s || '' ).toLowerCase().normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' );
+            return !! searchQ && searchQ( def.title + ' ' + def.notes + ' ' + def.location );
         }
 
         // Every matching occurrence from two years back to three ahead, in time
@@ -1807,7 +1779,7 @@
 
         function onSearchInput()
         {
-            searchQ   = foldText( document.getElementById( 'fSearch' ).value.trim() );
+            searchQ   = NayiveUI.matcher( document.getElementById( 'fSearch' ).value );
             searchHit = null;
             showSearchCount( searchQ ? searchHits() : [], -1 );
             repaintSearch();

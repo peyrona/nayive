@@ -125,7 +125,7 @@
         } );
         input.addEventListener( "input", function () { if( ! input.value ) E.search( "" ); } );
         // The funnel inside opens the advanced search (search.js).
-        E.searchFold = NayiveUI.searchFold( { box: E.$( "searchWrap" ), input: input, toggle: E.$( "searchBtn" ),
+        E.searchFold = NayiveUI.searchFold( { box: E.$( "searchWrap" ), input: input, toggle: E.$( "searchBtn" ), tip: false,
                                               filter: E.openAdvSearch, filterTitle: "mail.advTitle",
                                               onClose: E.clearSearch } );
 

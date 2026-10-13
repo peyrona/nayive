@@ -238,6 +238,7 @@ func (r *Reminders) tick() {
 		user := home.Name()
 
 		cfg := r.users.UserPush(user)
+		cfg.Subs = r.users.PushTargets(user) // with the Android app's phones (push_app.go)
 		if len(cfg.Subs) == 0 {
 			continue // no device registered: the same "nothing to do" as no calendar
 		}

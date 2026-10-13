@@ -8,7 +8,8 @@ package main
 // dialog sends its parts instead, every one of them optional:
 //
 //	name=<op>:<text>   repeated; op is has | not | starts | ends | is, tested on
-//	                   the lowercased basename, extension included
+//	                   the folded basename (fold: no accents, lower case),
+//	                   extension included
 //	any=1              one name rule is enough (default: every rule must hold)
 //	folders=1          folders are wanted (not "dir": that is the listing route)
 //	ext=<e>            repeated; files with these extensions are wanted. With
@@ -27,7 +28,54 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
+
+// fold is a name or a searched text made accent- and case-blind: "jose"
+// finds "José", "nino" finds "Niño", "strasse" finds "Straße", "oeuvre" finds
+// "œuvre", a typed ' finds the typographic ’. It folds exactly like the
+// client's NayiveUI.fold (shared/ui.js: marks U+0300-U+036F, then foldMore),
+// so both sides agree.
+func fold(s string) string {
+	var b strings.Builder
+	for _, c := range norm.NFD.String(s) {
+		if c < 0x300 || c > 0x36f {
+			b.WriteRune(c)
+		}
+	}
+	return foldMore.Replace(strings.ToLower(b.String()))
+}
+
+var foldMore = strings.NewReplacer("ß", "ss", "œ", "oe", "æ", "ae", "\u2018", "'", "\u2019", "'")
+
+// foldForms is fold(s), plus - when s has an umlaut - s with its umlauts
+// spelt the German way, folded: "Müller" -> "muller", "mueller". A search
+// tries every form of the name against every form of what was typed, so
+// "Mueller" finds "Müller" and back. Only umlauts are spelt out: folding
+// every "ue" would make "fue" find "fumar". As the client's foldUmlauts.
+func foldForms(s string) []string {
+	forms := []string{fold(s)}
+	if n := norm.NFC.String(s); strings.ContainsAny(n, "äöüÄÖÜ") {
+		forms = append(forms, fold(umlauts.Replace(n)))
+	}
+	return forms
+}
+
+var umlauts = strings.NewReplacer("ä", "ae", "ö", "oe", "ü", "ue", "Ä", "Ae", "Ö", "Oe", "Ü", "Ue")
+
+// anyForm is true when test holds for some form of the name and some form of
+// the text (foldForms).
+func anyForm(names, texts []string, test func(name, text string) bool) bool {
+	for _, n := range names {
+		for _, t := range texts {
+			if test(n, t) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // SearchSpec is one parsed ?search= request.
 type SearchSpec struct {
@@ -39,7 +87,11 @@ type SearchSpec struct {
 	since, until int64           // Unix seconds, 0 = no bound
 }
 
-type nameRule struct{ op, text string }
+// nameRule is one name=<op>:<text>; texts are the text's foldForms.
+type nameRule struct {
+	op    string
+	texts []string
+}
 
 // parseSearchSpec reads the query. A rule with an empty text is dropped; a
 // request that is left with nothing to filter on is an error, not the whole
@@ -55,8 +107,8 @@ func parseSearchSpec(q Query) (SearchSpec, error) {
 		default:
 			return sp, errors.New("bad name rule")
 		}
-		if text = strings.ToLower(strings.TrimSpace(text)); ok && text != "" {
-			sp.rules = append(sp.rules, nameRule{op, text})
+		if text = strings.TrimSpace(text); ok && fold(text) != "" {
+			sp.rules = append(sp.rules, nameRule{op, foldForms(text)})
 		}
 	}
 
@@ -89,10 +141,10 @@ func parseSearchSpec(q Query) (SearchSpec, error) {
 // keep is the SearchBy predicate.
 func (sp SearchSpec) keep(name string, d fs.DirEntry) bool {
 	if len(sp.rules) > 0 {
-		low := strings.ToLower(name)
+		names := foldForms(name)
 		hits := 0
 		for _, r := range sp.rules {
-			if r.match(low) {
+			if r.match(names) {
 				hits++
 			}
 		}
@@ -125,17 +177,21 @@ func (sp SearchSpec) keep(name string, d fs.DirEntry) bool {
 	return true
 }
 
-// match tests one rule against a lowercased basename.
-func (r nameRule) match(low string) bool {
-	switch r.op {
-	case "has":
-		return strings.Contains(low, r.text)
-	case "not":
-		return !strings.Contains(low, r.text)
-	case "starts":
-		return strings.HasPrefix(low, r.text)
-	case "ends":
-		return strings.HasSuffix(low, r.text)
+// match tests one rule against a basename's foldForms. "not" holds only
+// when no form has the text.
+func (r nameRule) match(names []string) bool {
+	if r.op == "not" {
+		return !anyForm(names, r.texts, strings.Contains)
 	}
-	return low == r.text // "is"
+	return anyForm(names, r.texts, func(n, t string) bool {
+		switch r.op {
+		case "has":
+			return strings.Contains(n, t)
+		case "starts":
+			return strings.HasPrefix(n, t)
+		case "ends":
+			return strings.HasSuffix(n, t)
+		}
+		return n == t // "is"
+	})
 }

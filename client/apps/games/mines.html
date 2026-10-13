@@ -259,12 +259,6 @@
             var mine = [], near = [], state = [], cells = [];
 
             var flags = 0, opened = 0, laid = false, over = false;
-            var startedAt = 0, endedAt = 0, ticker = 0;
-            // A pause SHIFTS startedAt on the way out rather than counting the
-            // seconds itself: the clock is read from two timestamps and never
-            // added up, so the only way to take time off it is to move the
-            // start. pausedAt is where it stopped.
-            var paused = false, pausedAt = 0;
             var times = {};                    // best time per level, in seconds
             var live  = false;                 // is this the pane on screen?
             var cursor = 0;                    // the square the keyboard is on (roving tabindex)
@@ -326,7 +320,7 @@
                 for( i = 0; i < total; i++ ) { mine.push( false ); near.push( 0 ); state.push( 0 ); }
 
                 flags = 0; opened = 0; laid = false; over = false;
-                startedAt = 0; endedAt = 0; cursor = 0;
+                watch.reset(); cursor = 0;
                 stopClock();
                 unpause();
 
@@ -385,91 +379,24 @@
                 bestEl.textContent = has( level ) ? clock( times[ level ] ) : '--';
             }
 
-            //---- the clock ---------------------------------------------------
+            //---- the clock and the pause ----------------------------------------
+            //
+            // NayiveGames.stopwatch (index.html): two timestamps, the elapsed
+            // time READ from them, the board covered while paused.
 
-            // The elapsed time is READ from two timestamps, never counted by the
-            // interval: stopping the interval while the pane is off screen (or
-            // the tab is in the background) then only stops the repaint, and the
-            // clock is still right when the player comes back.
-            function seconds()
-            {
-                if( ! startedAt ) return 0;
-
-                // Three readings, in this order: a finished game is frozen at
-                // endedAt, a PAUSED one at pausedAt, and a running one is now.
-                // The paused case matters because startedAt is not shifted until
-                // the resume - without it, coming back to a paused board would
-                // print the seconds it spent waiting and then take them off
-                // again a moment later.
-                return Math.floor( ( ( endedAt || ( paused ? pausedAt : Date.now() ) ) - startedAt ) / 1000 );
-            }
+            var watch = NayiveGames.stopwatch( {
+                els:  function () { return { time: timeEl, cover: coverEl, btn: pauseBtn }; },
+                over: function () { return over; },
+                live: function () { return live; },
+                onResume: function () { if( cells[ cursor ] ) cells[ cursor ].focus(); }
+            } );
+            var seconds = watch.seconds, runClock = watch.run, stopClock = watch.stop, paintPause = watch.paint,
+                pause = watch.pause, resume = watch.resume, unpause = watch.unpause;
 
             // A level either HAS a record or it does not; 0 is a perfectly good
             // one. It used to double as "none", and a 0:00 board - which is
             // what a scripted win produces - was then dropped on the next read.
             function has( k ) { return typeof times[ k ] === 'number'; }
-
-            function runClock()
-            {
-                if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
-                ticker = setInterval( function ()
-                {
-                    // Any dialog over the app pauses it - the help sheet, the
-                    // install prompt, "session expired" - the same rule the
-                    // canvas games follow: time under a sheet is not played.
-                    if( document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
-                    timeEl.textContent = clock( seconds() );
-                }, 250 );
-            }
-
-            function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
-
-            //---- pausing -----------------------------------------------------
-            //
-            // There is nothing to pause until the first square is opened (that
-            // is when the clock starts) and nothing to pause once the game is
-            // finished, so the button is disabled at both ends - the same rule
-            // the canvas games' "ready" and "over" states follow.
-
-            function paintPause()
-            {
-                pauseButton( pauseBtn, paused, ! startedAt || over );
-            }
-
-            function pause()
-            {
-                if( paused || over || ! startedAt ) return;
-
-                paused   = true;
-                pausedAt = Date.now();
-                stopClock();
-                coverEl.hidden = false;
-                paintPause();
-                // Heard only when the player pressed it: leave() gets here with
-                // `live` already false, and a hidden tab with document.hidden.
-                if( live && ! document.hidden ) sfx.play( 'pause' );
-            }
-
-            function resume()
-            {
-                if( ! paused ) return;
-
-                startedAt += Date.now() - pausedAt;   // the pause never happened, as far as the clock is concerned
-                paused = false;
-                coverEl.hidden = true;
-                timeEl.textContent = clock( seconds() );
-                runClock();
-                paintPause();
-                if( cells[ cursor ] ) cells[ cursor ].focus();
-                sfx.play( 'resume' );
-            }
-
-            function unpause()                        // a new game: no pause to come back from
-            {
-                paused = false;
-                coverEl.hidden = true;
-                paintPause();
-            }
 
             //---- the rules ---------------------------------------------------
 
@@ -477,9 +404,9 @@
             {
                 var was = opened;
 
-                if( over || paused || state[ i ] !== 0 ) return;
+                if( over || watch.paused || state[ i ] !== 0 ) return;
 
-                if( ! laid ) { lay( i ); startedAt = Date.now(); runClock(); paintPause(); }
+                if( ! laid ) { lay( i ); watch.begin(); }
 
                 if( mine[ i ] ) { state[ i ] = 1; paintCell( i ); finish( false, i ); return; }
 
@@ -518,7 +445,7 @@
             // not go on to swallow the tap that ends it.
             function flag( i )
             {
-                if( over || paused || state[ i ] === 1 ) return false;
+                if( over || watch.paused || state[ i ] === 1 ) return false;
 
                 if( state[ i ] === 2 ) { state[ i ] = 0; flags--; }
                 else                   { state[ i ] = 2; flags++; }
@@ -537,7 +464,7 @@
             {
                 var marked = 0, hidden = [];
 
-                if( over || paused || state[ i ] !== 1 || near[ i ] === 0 ) return;
+                if( over || watch.paused || state[ i ] !== 1 || near[ i ] === 0 ) return;
 
                 each( i, function ( n )
                 {
@@ -554,7 +481,7 @@
                 var i, secs;
 
                 over = true;
-                endedAt = Date.now();
+                watch.end();
                 stopClock();
                 paintPause();
                 boardEl.classList.add( 'is-over' );
@@ -685,7 +612,7 @@
             {
                 var c, r;
 
-                if( e.ctrlKey || e.altKey || e.metaKey || paused ) return;
+                if( e.ctrlKey || e.altKey || e.metaKey || watch.paused ) return;
                 if( ! boardEl.contains( document.activeElement ) ) return;
 
                 c = cursor % cols; r = ( cursor - c ) / cols;
@@ -769,7 +696,7 @@
 
                 document.getElementById( 'minesNew' ).addEventListener( 'click', newGame );
 
-                pauseBtn.addEventListener( 'click', function () { if( paused ) resume(); else pause(); } );
+                pauseBtn.addEventListener( 'click', function () { if( watch.paused ) resume(); else pause(); } );
                 // The whole cover, not just its button: it is one card and the
                 // card is what the eye and the thumb both aim at.
                 coverEl.addEventListener( 'click', resume );

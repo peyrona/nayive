@@ -61,28 +61,21 @@ function openCurrency( codeArg, matchedArg, contextName )
 
 let currencyLookupSeq = 0;
 
-function calcOnLocalChange( sVal )
+function calcOnLocalChange( sVal ) { calcOn( sVal, true  ); }
+function calcOnEurChange( sVal )   { calcOn( sVal, false ); }
+
+// One field typed into (`local`: the local currency's, else the euro one);
+// the other follows at the verified rate.
+function calcOn( sVal, local )
 {
     if( ! currencyLookup || ! currencyLookup.verified )
         return;   // no verified rate - the fields stay disabled, this should not fire
 
-    const rate = currencyLookup.verified.rate;
-    const n    = parseFloat( sVal );
+    const rate  = currencyLookup.verified.rate;
+    const n     = parseFloat( sVal );
+    const other = (sVal === '' || isNaN( n )) ? '' : String( round2( local ? n / rate : n * rate ) );
 
-    calcLocal = sVal;
-    calcEur   = (sVal === '' || isNaN( n )) ? '' : String( round2( n / rate ) );
-    renderCurrencySheet();
-}
-
-function calcOnEurChange( sVal )
-{
-    if( ! currencyLookup || ! currencyLookup.verified )
-        return;
-
-    const rate = currencyLookup.verified.rate;
-    const n    = parseFloat( sVal );
-
-    calcEur   = sVal;
-    calcLocal = (sVal === '' || isNaN( n )) ? '' : String( round2( n * rate ) );
+    calcLocal = local ? sVal  : other;
+    calcEur   = local ? other : sVal;
     renderCurrencySheet();
 }

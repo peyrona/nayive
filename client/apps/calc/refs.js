@@ -138,11 +138,6 @@ const MIRROR_COPY = [ 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'line
                       'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
                       'boxSizing', 'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'tabSize', 'textIndent' ];
 
-function escapeHtml( s )
-{
-    return s.replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
-}
-
 function mirrorOf( ta, make )
 {
     let m = ta.parentNode && ta.parentNode.querySelector( ':scope > .rf-mirror' );
@@ -188,12 +183,12 @@ function paintMirror( ta, list )
     let   html = '', at = 0;
     for( const rf of list )
     {
-        html += escapeHtml( text.slice( at, rf.from ) )
-              + '<span style="color:var(--rf-' + rf.color + ')">' + escapeHtml( text.slice( rf.from, rf.to ) ) + '</span>';
+        html += NayiveUI.escapeHtml( text.slice( at, rf.from ) )
+              + '<span style="color:var(--rf-' + rf.color + ')">' + NayiveUI.escapeHtml( text.slice( rf.from, rf.to ) ) + '</span>';
         at = rf.to;
     }
     // The space keeps a last empty line as tall as the textarea's.
-    m.innerHTML = html + escapeHtml( text.slice( at ) ) + ' ';
+    m.innerHTML = html + NayiveUI.escapeHtml( text.slice( at ) ) + ' ';
     m.hidden    = false;
 
     placeMirror( ta, m );

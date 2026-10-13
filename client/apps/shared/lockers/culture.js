@@ -1131,8 +1131,15 @@ function screen( cfg, OFFSET, isAlive )
         } );
     }
 
+    // A few px of drift every minute: no burn-in, too slow to notice.
+    function drift( grid, d )
+    {
+        var m = d.getMinutes();
+        grid.style.transform = "translate(" + ( ( dayNo( d ) * 7 + m * 13 ) % 13 - 6 ) + "px," + ( ( m * 7 ) % 11 - 5 ) + "px)";
+    }
+
     return { langsOf: langsOf, stage: stage, columns: columns, box: box, refill: refill,
-             turnLang: turnLang, hm: hm, drawTime: drawTime, drawDay: drawDay };
+             turnLang: turnLang, hm: hm, drawTime: drawTime, drawDay: drawDay, drift: drift };
 }
 
 window.NayiveSalon.engine =
@@ -1814,9 +1821,7 @@ function start( host, cfg )
         if( d.getMinutes() !== lastMin )
         {
             lastMin = d.getMinutes();
-            // A few px of drift every minute: no burn-in, too slow to notice.
-            grid.style.transform = "translate(" + ( ( dayNo( d ) * 7 + lastMin * 13 ) % 13 - 6 ) + "px," +
-                                                  ( ( lastMin * 7 ) % 11 - 5 ) + "px)";
+            kit.drift( grid, d );
         }
     }
 

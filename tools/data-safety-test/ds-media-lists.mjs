@@ -9,19 +9,12 @@
 //     Photos' places.json, Movies' progress.json (the newer per film wins).
 import fs from "node:fs";
 import path from "node:path";
-import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, REPO, disk } from "./lib.mjs";
 
 const s = await server();
 const PNG = fs.readFileSync( path.join( REPO, "client/apps/icons/icon-192.png" ) );
 const seed = ( rel, body ) => { const f = path.join( s.home(), rel ); fs.mkdirSync( path.dirname( f ), { recursive: true } ); fs.writeFileSync( f, body ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
-
 const LISTS   = "data/music/playlists.json";
 const POSTERS = "data/movies/posters.json";
 const PROG    = "data/movies/progress.json";

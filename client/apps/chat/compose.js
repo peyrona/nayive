@@ -1437,11 +1437,11 @@
         if( ! S.searching ) return;
         var q = input.value.trim();
         S.searching.q = q;
-        var f = C.fold( q );
-        S.searching.hits = ! q ? [] : S.order.filter( function ( id )
+        var f = NayiveUI.matcher( q );
+        S.searching.hits = ! f ? [] : S.order.filter( function ( id )
         {
             var m = S.msgs.get( id );
-            return m && ! m.deleted && ! C.msgHidden( id ) && C.fold( m.text || ( m.file && m.file.name ) || "" ).indexOf( f ) >= 0;
+            return m && ! m.deleted && ! C.msgHidden( id ) && f( m.text || ( m.file && m.file.name ) || "" );
         } );
         S.searching.at = S.searching.hits.length;
         C.renderAll();

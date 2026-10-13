@@ -5,18 +5,12 @@
 //     listing failed went up under their own names over the album's.
 // D7 (list-apps #24): a new trip named like one another device made since
 //     this page loaded replaced that trip's trip.json.
-import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 
 const s = await server();
 const phone = await s.client();
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 const c = await browser( s );
 
 //------------------------------------------------------------------------//

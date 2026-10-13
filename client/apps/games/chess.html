@@ -62,9 +62,12 @@
             border: 0; padding: 0; margin: 0; cursor: pointer;
             background: var(--sq-light); color: inherit;
             font-family: inherit; font-size: calc( var(--board) * 0.1 ); line-height: 1;
+            font-variant-emoji: text;
             touch-action: manipulation;
         }
         .chess-sq.dark { background: var(--sq-dark); }
+        /* The pawn's glyph is drawn bigger than the other pieces': brought to their size. */
+        .chess-sq.is-pawn { font-size: calc( var(--board) * 0.085 ); }
 
         /* ONE set of glyphs for both sides - the solid ones - painted white or
            black and outlined the other way round. The outlined Unicode set
@@ -886,7 +889,9 @@
             // ONE set of glyphs for both colours - the solid ones - painted
             // white or black by the style. The outlined set is a different
             // weight, so a board using both has two sizes of piece on it.
-            var GLYPH = [ '', '♟', '♞', '♝', '♜', '♛', '♚' ];
+            // The pawn alone is also an emoji (U+265F): U+FE0E asks for the
+            // text glyph, or it comes out black whatever its colour says.
+            var GLYPH = [ '', '♟\uFE0E', '♞', '♝', '♜', '♛', '♚' ];
 
             // Cell 0 of the grid is a8, so the board is laid out the way White
             // sees it, and SQ is the only place the screen and the 0x88 board
@@ -905,10 +910,6 @@
             var targets = [];                  // the moves out of `picked`
             var promoM  = null;                // the promotions waiting for a piece to be chosen
             var lastMv  = null;
-            var timer   = 0;                   // the machine's pending turn
-            var worker  = null;                // the machine's own thread, made on its first turn
-            var asked   = 0;                   // the number of the question in flight; an answer to any other is stale
-            var busy    = false;               // a question is out and not yet answered
 
             var squares = [];
             var boardEl, overEl, overTitleEl, overSubEl, overBtnEl, promoEl, statusEl;
@@ -944,71 +945,24 @@
                 state = 'thinking';
                 paint();
 
-                timer = setTimeout( function ()
-                {
-                    timer = 0;
-                    ask();
-                }, WAIT );
+                mach.turn();
             }
 
             //---- the machine's thread ----------------------------------------
             //
-            // The worker is made from chessEngine's own source, as a blob, and
-            // not from a file of its own: the page needs the same rules the
-            // moment it is mounted, which is before any second file could have
-            // loaded. A blob is also nothing to download, so offline it thinks
-            // exactly as well as online.
-            //
-            // Every question carries a number, and an answer is only played if
-            // it is to the LAST question asked: a new game or leaving the pane
-            // ends the search in flight (terminate - a search left running would
-            // hold the next question up behind it), and the number throws away
-            // an answer that was already on its way.
+            // NayiveGames.machine (index.html): a worker made from chessEngine's
+            // own source, and a number on every question so an answer to an old
+            // one is dropped.
 
-            var brainUrl = '';
-            var alone    = false;              // no worker to be had: think on the page, as it always did
-
-            function brain()
-            {
-                var w;
-
-                if( ! brainUrl )
-                    brainUrl = URL.createObjectURL( new Blob( [
-                        'var E = (' + chessEngine.toString() + ')();\n'
-                      + 'onmessage = function ( e ) { postMessage( { id: e.data.id, m: E.think( e.data.pos, e.data.level ) } ); };\n'
-                      + '//# sourceURL=chess-worker.js\n' ], { type: 'text/javascript' } ) );
-
-                w = new Worker( brainUrl );
-                w.onmessage = heard;
-                w.onerror   = function ( e )
-                {
-                    e.preventDefault();
-                    stop();
-                    alone = true;
-                    if( state === 'thinking' ) ask();
-                };
-                return w;
-            }
-
-            function ask()
-            {
-                if( ! alone && ! worker )
-                {
-                    try { worker = brain(); } catch ( e ) { alone = true; }
-                }
-                if( alone ) { answer( E.think( pos, level ) ); return; }
-
-                busy = true;
-                worker.postMessage( { id: ++asked, pos: pos, level: level } );
-            }
-
-            function heard( e )
-            {
-                if( ! busy || e.data.id !== asked ) return;     // an answer to a question nobody is asking any more
-
-                busy = false;
-                answer( e.data.m );
-            }
+            var mach = NayiveGames.machine( {
+                engine:   chessEngine,
+                name:     'chess',
+                wait:     WAIT,
+                question: function () { return { pos: pos, level: level }; },
+                think:    function ( p, l ) { return E.think( p, l ); },
+                thinking: function () { return state === 'thinking'; },
+                answer:   answer
+            } );
 
             // The answer is looked up among the page's own legal moves rather
             // than played as it came: whatever the worker says, the move played
@@ -1023,20 +977,6 @@
                 list = legal( pos );
                 for( i = 0; i < list.length; i++ )
                     if( list[ i ].from === m.from && list[ i ].to === m.to && list[ i ].promo === m.promo ) { play( list[ i ] ); return; }
-            }
-
-            // Takes the machine's turn off the table: the wait before it, and the
-            // search itself if one is running. An idle worker is kept for the
-            // next turn.
-            function stop()
-            {
-                if( timer ) { clearTimeout( timer ); timer = 0; }
-                if( ! busy ) return;
-
-                busy = false;
-                asked++;
-                worker.terminate();
-                worker = null;
             }
 
             // The sounds are the other games'. A piece put down is Minesweeper's
@@ -1145,7 +1085,7 @@
 
             function newGame()
             {
-                stop();
+                mach.stop();
 
                 pos     = startPos();
                 history = [];
@@ -1255,6 +1195,7 @@
                     if( sq === check  ) cls += ' is-check';
                     if( lastMv && ( sq === lastMv.from || sq === lastMv.to ) ) cls += ' is-last';
                     if( m ) cls += m.cap ? ' is-take' : ' is-move';
+                    if( p && kind( p ) === 1 ) cls += ' is-pawn';
 
                     el.className   = cls;
                     el.textContent = p ? GLYPH[ kind( p ) ] : '';
@@ -1336,12 +1277,12 @@
 
                 // The machine was thinking when the pane went away, and leave()
                 // took its turn off the table. This is where it gets it back.
-                if( state === 'thinking' && ! timer && ! busy ) machineTurn();
+                if( state === 'thinking' && mach.idle() ) machineTurn();
             }
 
             function leave()
             {
-                stop();
+                mach.stop();
             }
 
             function init()

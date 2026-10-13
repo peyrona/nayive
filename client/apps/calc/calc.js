@@ -1430,6 +1430,10 @@ function wireSettings()
 {
     document.getElementById( 'settingsBtn' ).addEventListener( 'click', openSettings );
 
+    // The toolbar's own fonts and sizes: one list each, in index.html.
+    document.getElementById( 'setFont' ).innerHTML = document.getElementById( 'fmtFontFamily' ).innerHTML;
+    document.getElementById( 'setSize' ).innerHTML = document.getElementById( 'fmtFontSize' ).innerHTML;
+
     for( const id in SET_FIELDS )
     {
         setCtls[ id ] = NayiveUI.autoSave( document.getElementById( id ), async function( v )

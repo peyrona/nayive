@@ -7,19 +7,13 @@
 // F6 write half (store-core #11, list-apps #27): the screen-locker settings
 //     dialog's ✓ (data/salon.json).
 // share-target: "remember this album" (data/photos/config.json).
-import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 import { installRace, arm, raced } from "./race.mjs";
 
 const s = await server();
 const phone = await s.client();
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 const add = ( obj ) => `t => JSON.stringify( Object.assign( JSON.parse( t ), ${JSON.stringify( obj )} ) )`;
 
 const DICT = "data/write/dict.json", SALON = "data/salon.json", CFG = "data/photos/config.json";

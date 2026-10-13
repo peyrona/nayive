@@ -448,13 +448,6 @@ body.calc-painting #gridHost .htCore td { cursor: copy; }
 .fe-actions            { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 640px) { #fePanel.open { display: none; } }
 
-/* On / off rows in the number-format dialog: the text, then the shared .switch */
-.field label.check
-{
-    display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0;
-    font-size: 0.9rem; color: var(--text); cursor: pointer;
-}
-
 .nf-preview
 {
     padding: 10px 11px; border: 1px dashed var(--line); border-radius: var(--radius-s);

@@ -1357,9 +1357,7 @@ async function confirmParagraph()
     if( paraTouched.has( 'paList' ) ) await applyListFormat();
 }
 
-// Level n of the caret's list numbered the chosen way (docx-patch.js), then the
-// document back on screen with the caret where it was. load() starts a fresh
-// undo history (the dialog says so) and is not an edit, so the session is told.
+// Level n of the caret's list numbered the chosen way (docx-patch.js).
 async function applyListFormat()
 {
     if( ! paraList ) { NayiveUI.toast( NayiveUI.t( 'write.notInList' ) ); return; }
@@ -1368,6 +1366,17 @@ async function applyListFormat()
     const fmt  = document.getElementById( 'paListFormat' ).value;
     if( paraList.formats[ ilvl ] === fmt ) return;
 
+    const list = paraList;
+    await reloadPatched( function( bytes ) { return patcher.withListFormat( bytes, list, ilvl, fmt ); },
+                         list.paraId, 'list format' );
+}
+
+// The open document rewritten by `patch` (docx-patch.js: bytes in, new bytes
+// or null out), then back on screen with the caret in paragraph `paraId` and
+// the view where it was. load() starts a fresh undo history (the dialogs say
+// so) and is not an edit, so the session is told. `what` names it in the console.
+async function reloadPatched( patch, paraId, what )
+{
     const scroller = document.getElementById( 'editor' );
     const top      = scroller.scrollTop;
 
@@ -1377,19 +1386,19 @@ async function applyListFormat()
         // the middle of the load below.
         await session.flush();
 
-        const bytes = patcher.withListFormat( new Uint8Array( await editor.save() ), paraList, ilvl, fmt );
+        const bytes = patch( new Uint8Array( await editor.save() ) );
         if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
 
         await loadIntoEditor( bytes );
 
-        editor.exec( { type: 'setSelection', anchor: { paraId: paraList.paraId } } );
+        if( paraId ) editor.exec( { type: 'setSelection', anchor: { paraId: paraId } } );
         scroller.scrollTop = top;
         session.edited();
         focusEditor();
     }
     catch( e )
     {
-        console.error( 'Write: list format -', e );
+        console.error( 'Write: ' + what + ' -', e );
         NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
     }
 }
@@ -1560,30 +1569,10 @@ async function confirmStyles()
     }
     if( ! Object.keys( changes ).length ) { focusEditor(); return; }
 
-    const scroller = document.getElementById( 'editor' );
-    const top      = scroller.scrollTop;
-    let   paraId   = null;
+    let paraId = null;
     try { const sel = editor.snapshot().selection; paraId = sel && sel.from && sel.from.paraId; } catch( _ ) {}
 
-    try
-    {
-        await session.flush();          // a pending autosave goes now, not in the middle of the load
-
-        const bytes = patcher.withStyles( new Uint8Array( await editor.save() ), changes );
-        if( ! bytes ) { NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) ); return; }
-
-        await loadIntoEditor( bytes );
-
-        if( paraId ) editor.exec( { type: 'setSelection', anchor: { paraId: paraId } } );
-        scroller.scrollTop = top;
-        session.edited();
-        focusEditor();
-    }
-    catch( e )
-    {
-        console.error( 'Write: styles -', e );
-        NayiveUI.toast( NayiveUI.t( 'write.actionFailed' ) );
-    }
+    await reloadPatched( function( bytes ) { return patcher.withStyles( bytes, changes ); }, paraId, 'styles' );
 }
 
 //----------------------------------------------------------------------------//
@@ -1936,28 +1925,9 @@ function onShortcutKey( e )
     if( btn && ! btn.disabled ) btn.click();
 }
 
-// Hang " - Ctrl+P" off each button's tooltip on a PC, and take it off again on a
-// phone. Idempotent: i18n rewrites these titles when the language changes.
-const HINT_SEP = ' · ';
-
-function applyKeyHints()
-{
-    const phone = PHONE.matches;
-
-    for( const s of SHORTCUTS )
-    {
-        const el = s.el && document.getElementById( s.el );
-        if( ! el ) continue;
-
-        const hint = HINT_SEP + s.label();
-        let   t    = el.getAttribute( 'title' ) || '';
-
-        if( t.slice( -hint.length ) === hint ) t = t.slice( 0, -hint.length );
-        if( ! t ) continue;
-
-        el.setAttribute( 'title', phone ? t : t + hint );
-    }
-}
+// Shortcut hints on the tooltips (NayiveUI.keyHints); i18n rewrites these
+// titles when the language changes.
+function applyKeyHints() { NayiveUI.keyHints( SHORTCUTS, PHONE.matches ); }
 
 // The help sheet: the same table, rendered (the sheet is Calc's too).
 function openShortcuts()

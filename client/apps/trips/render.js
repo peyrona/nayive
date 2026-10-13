@@ -220,20 +220,19 @@ function searchParts()
 }
 
 // Accent- and case-blind.
-function searchFoldText( s ) { return String( s || '' ).normalize( 'NFD' ).replace( /[\u0300-\u036f]/g, '' ).toLowerCase(); }
 
 // Hides what does not match, after every content render. A section label
 // with nothing left under it goes too; a folded section opens while searching.
 function applySearch()
 {
     const content = document.getElementById( 'tripContent' );
-    const q = searchFoldText( tripQuery.trim() );
+    const q = NayiveUI.matcher( tripQuery );
     // A stage's own documents go with their stage.
     const items = content.querySelectorAll( view === 'list' ? '.trip-card' : '.stage-item, .file-row:not(.stage-item .file-row)' );
     let shown = 0;
     items.forEach( function( el )
     {
-        const hit = ! q || searchFoldText( el._find || el.textContent ).indexOf( q ) >= 0;
+        const hit = ! q || q( el._find || el.textContent );
         el.hidden = ! hit;
         if( hit ) shown++;
     } );
@@ -740,6 +739,13 @@ function buildStageItem( trip, st, sViewerTz, bIsLast, hereId )
     // The node icon is this stage's onward transport (matches the map leg leaving it);
     // the final stage has no onward journey, so it shows a location pin instead.
     node.appendChild( svgIcon( bIsLast ? ICON_PIN : ( ownKey( TRANSPORT_ICONS, st.transport ) || TRANSPORT_ICONS.other ), 17 ) );
+    // The node is a second drag handle (same as the grip below).
+    if( ! tripIsRO( trip ) )
+    {
+        node.classList.add( 'drag' );
+        node.title = T( 'trips.dragToReorder' );
+        node.addEventListener( 'pointerdown', function( e ) { onStageDragStart( e, st.id ); } );
+    }
     item.appendChild( node );
 
     const card = document.createElement( 'div' );

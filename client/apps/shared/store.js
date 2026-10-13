@@ -2016,16 +2016,7 @@
 
             if( res.conflict )
             {
-                // Only the entry that was refused: a newer one is checked on its own.
-                await pathTx( db, path, "readwrite", function ( c )
-                {
-                    return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
-                } );
-                // This page's plug says so only for its own save (another
-                // window's waits for that window).
-                if( holds( held[ path ], entry ) ) emit( "conflict" );
-                else await settle();
-                toldConflict( path, entry );
+                await markConflict( db, path, entry );
                 return { ok: false, conflict: true };
             }
 
@@ -2374,6 +2365,20 @@
             } );
         }
 
+        // `entry` is held back as a conflict (toldConflict's `why`). Only that
+        // entry: a newer one is checked on its own. This page's plug says so
+        // only for its own save (another window's waits for that window).
+        async function markConflict( db, path, entry, why )
+        {
+            await pathTx( db, path, "readwrite", function ( c )
+            {
+                return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
+            } );
+            if( holds( held[ path ], entry ) ) emit( "conflict" );
+            else await settle();
+            toldConflict( path, entry, why );
+        }
+
         // Drops `entry` and its cached copy in one step (nothing left to
         // requeue it from), and its mark. True when it was still there.
         async function dropEntry( db, path, entry )
@@ -2409,13 +2414,7 @@
 
             if( open )
             {
-                await pathTx( db, path, "readwrite", function ( c )
-                {
-                    return sameEntry( c.out, entry ) ? { out: Object.assign( {}, c.out, { conflict: true } ) } : {};
-                } );
-                if( holds( held[ path ], entry ) ) emit( "conflict" );
-                else await settle();
-                toldConflict( path, entry, "dismissed" );
+                await markConflict( db, path, entry, "dismissed" );
                 return { ok: false, conflict: true, dismissed: true };
             }
             await dropEntry( db, path, entry );

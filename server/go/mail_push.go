@@ -29,7 +29,7 @@ func (h *MailHub) pushNew(ctx context.Context, user string, a *mailAcct, added i
 	if h.push == nil || h.users == nil {
 		return
 	}
-	subs := h.users.UserPush(user).Subs
+	subs := h.users.PushTargets(user)
 	if len(subs) == 0 {
 		return
 	}

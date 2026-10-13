@@ -24,6 +24,8 @@
     <string name="chan_pending">Por ler</string>
     <string name="chan_updates">Atualizações</string>
     <string name="chan_media">Fotos enviadas</string>
+    <string name="chan_messages">Mensagens</string>
+    <string name="chan_alerts">Avisos</string>
     <string name="link_on">O Nayive está ligado</string>
     <string name="link_tracking">O Nayive guarda a tua posição da viagem</string>
     <string name="link_enrol">Abre o Nayive e entra com o teu utilizador para ativar este telemóvel</string>

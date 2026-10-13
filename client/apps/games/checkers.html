@@ -753,10 +753,6 @@
             var targets = [];                  // the moves still open to it, all sharing `chain` as their start
             var must    = {};                  // square -> 1 for a piece that has to take (worked out in render)
             var lastMv  = null;
-            var timer   = 0;                   // the machine's pending turn
-            var worker  = null;                // the machine's own thread, made on its first turn
-            var asked   = 0;                   // the number of the question in flight; an answer to any other is stale
-            var busy    = false;               // a question is out and not yet answered
 
             var squares = [];
             var boardEl, overEl, overTitleEl, overSubEl, overBtnEl, statusEl;
@@ -790,64 +786,24 @@
                 state = 'thinking';
                 paint();
 
-                timer = setTimeout( function ()
-                {
-                    timer = 0;
-                    ask();
-                }, WAIT );
+                mach.turn();
             }
 
             //---- the machine's thread ----------------------------------------
             //
-            // Chess's, move for move: a worker made from checkersEngine's own
-            // source as a blob (the page needs the same rules the moment it is
-            // mounted, and a blob works offline as it does online), and a
-            // number on every question so an answer to an old one is dropped.
+            // NayiveGames.machine (index.html): a worker made from checkersEngine's
+            // own source, and a number on every question so an answer to an old
+            // one is dropped.
 
-            var brainUrl = '';
-            var alone    = false;              // no worker to be had: think on the page, as it always did
-
-            function brain()
-            {
-                var w;
-
-                if( ! brainUrl )
-                    brainUrl = URL.createObjectURL( new Blob( [
-                        'var E = (' + checkersEngine.toString() + ')();\n'
-                      + 'onmessage = function ( e ) { postMessage( { id: e.data.id, m: E.think( e.data.pos, e.data.level ) } ); };\n'
-                      + '//# sourceURL=checkers-worker.js\n' ], { type: 'text/javascript' } ) );
-
-                w = new Worker( brainUrl );
-                w.onmessage = heard;
-                w.onerror   = function ( e )
-                {
-                    e.preventDefault();
-                    stop();
-                    alone = true;
-                    if( state === 'thinking' ) ask();
-                };
-                return w;
-            }
-
-            function ask()
-            {
-                if( ! alone && ! worker )
-                {
-                    try { worker = brain(); } catch ( e ) { alone = true; }
-                }
-                if( alone ) { answer( E.think( pos, level ) ); return; }
-
-                busy = true;
-                worker.postMessage( { id: ++asked, pos: pos, level: level } );
-            }
-
-            function heard( e )
-            {
-                if( ! busy || e.data.id !== asked ) return;     // an answer to a question nobody is asking any more
-
-                busy = false;
-                answer( e.data.m );
-            }
+            var mach = NayiveGames.machine( {
+                engine:   checkersEngine,
+                name:     'checkers',
+                wait:     WAIT,
+                question: function () { return { pos: pos, level: level }; },
+                think:    function ( p, l ) { return E.think( p, l ); },
+                thinking: function () { return state === 'thinking'; },
+                answer:   answer
+            } );
 
             // The answer is looked up among the page's own legal moves - the
             // same piece by the same run of squares - so the move played is one
@@ -861,20 +817,6 @@
                 list = legal( pos );
                 for( i = 0; i < list.length; i++ )
                     if( list[ i ].from === m.from && list[ i ].path.join() === m.path.join() ) { play( list[ i ] ); return; }
-            }
-
-            // Takes the machine's turn off the table: the wait before it, and the
-            // search itself if one is running. An idle worker is kept for the
-            // next turn.
-            function stop()
-            {
-                if( timer ) { clearTimeout( timer ); timer = 0; }
-                if( ! busy ) return;
-
-                busy = false;
-                asked++;
-                worker.terminate();
-                worker = null;
             }
 
             // The sounds are the other games'. A piece put down is Minesweeper's
@@ -957,7 +899,7 @@
 
             function newGame()
             {
-                stop();
+                mach.stop();
 
                 pos     = startPos();
                 history = [];
@@ -1204,12 +1146,12 @@
 
                 // The machine was thinking when the pane went away, and leave()
                 // took its turn off the table. This is where it gets it back.
-                if( state === 'thinking' && ! timer && ! busy ) machineTurn();
+                if( state === 'thinking' && mach.idle() ) machineTurn();
             }
 
             function leave()
             {
-                stop();
+                mach.stop();
             }
 
             function init()

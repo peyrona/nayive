@@ -206,6 +206,10 @@ type Users struct {
 	// asked for; never dropped, so a stamp always compares with its own.
 	epochMu sync.Mutex
 	epochs  map[string]*atomic.Uint64
+
+	// appTargets puts the Android app's phones among the push targets
+	// (push_app.go, PushTargets). Set once, before serving; nil: none.
+	appTargets func(user string, subs []PushSub) []PushSub
 }
 
 type usageEntry struct {

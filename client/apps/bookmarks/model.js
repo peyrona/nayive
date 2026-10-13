@@ -588,29 +588,22 @@ function initialOf( n )
 }
 
 //------------------------------------------------------------------------//
-// SEARCH  -  accent-insensitive, every word must match. "#tag" matches tags
-// only (from the start of the tag).
-
-function fold( s ) { return String( s || '' ).normalize( 'NFD' ).replace( /[̀-ͯ]/g, '' ).toLowerCase(); }
+// SEARCH  -  the shared rule (NayiveUI.matcher: words in any order, "phrase",
+// -word, accent-insensitive). A "#tag" word matches tags only (from the start
+// of the tag).
 
 function makeMatcher( q )
 {
-    const words = fold( q ).split( /\s+/ ).filter( Boolean );
-    if( ! words.length ) return null;
+    const tagWords = [];
+    const rest = String( q || '' ).replace( /(^|\s)#(\S*)/g, function( all, sp, t ) { tagWords.push( NayiveUI.fold( t ) ); return sp; } );
+    const text = NayiveUI.matcher( rest );
+    if( ! text && ! tagWords.length ) return null;
     return function( n )
     {
-        const tags = isFolder( n ) ? [] : n.tags.map( fold );
-        const hay  = isFolder( n ) ? fold( n.title )
-                   : fold( n.title ) + '\n' + fold( n.url ) + '\n' + tags.join( '\n' ) + '\n' + fold( n.notes );
-        return words.every( function( w )
-        {
-            if( w.charAt( 0 ) === '#' )
-            {
-                const t = w.slice( 1 );
-                return !! t && tags.some( function( x ) { return x.indexOf( t ) === 0; } );
-            }
-            return hay.indexOf( w ) >= 0;
-        } );
+        const tags = isFolder( n ) ? [] : n.tags.map( NayiveUI.fold );
+        const ok   = tagWords.every( function( t ) { return !! t && tags.some( function( x ) { return x.indexOf( t ) === 0; } ); } );
+        return ok && ( ! text || text( isFolder( n ) ? n.title
+                                     : ( n.title || '' ) + '\n' + ( n.url || '' ) + '\n' + tags.join( '\n' ) + '\n' + ( n.notes || '' ) ) );
     };
 }
 
@@ -618,8 +611,8 @@ function makeMatcher( q )
 // "web dev" is one tag, not two words.
 function tagMatcher( tag )
 {
-    const t = fold( tag );
-    return function( n ) { return ! isFolder( n ) && n.tags.some( function( x ) { return fold( x ) === t; } ); };
+    const t = NayiveUI.fold( tag );
+    return function( n ) { return ! isFolder( n ) && n.tags.some( function( x ) { return NayiveUI.fold( x ) === t; } ); };
 }
 
 // Newest / oldest first; an unknown date ("") last either way.

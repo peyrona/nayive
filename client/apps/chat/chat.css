@@ -368,6 +368,7 @@ button.who { cursor: pointer; }
 .meta svg       { width: 16px; height: 16px; }
 .meta .read     { color: var(--tick-read); }
 .meta .edited   { font-style: italic; }
+.meta .silent   { display: inline-flex; }
 .meta.on-media
 {
     position: absolute; right: 8px; bottom: 7px; margin: 0; float: none;

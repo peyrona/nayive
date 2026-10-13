@@ -893,8 +893,7 @@ function start( host, cfg )
         {
             lastMin = d.getMinutes();
             drawSky( d );
-            grid.style.transform = "translate(" + ( ( E.dayNo( d ) * 7 + lastMin * 13 ) % 13 - 6 ) + "px," +
-                                                  ( ( lastMin * 7 ) % 11 - 5 ) + "px)";
+            kit.drift( grid, d );
         }
     }
 

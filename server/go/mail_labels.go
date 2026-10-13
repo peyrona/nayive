@@ -202,9 +202,7 @@ func cleanSignature(s string) string {
 		}
 		return r
 	}, s)
-	if utf8.RuneCountInString(s) > mailSignatureMax {
-		s = string([]rune(s)[:mailSignatureMax])
-	}
+	s = capRunes(s, mailSignatureMax)
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " \t")

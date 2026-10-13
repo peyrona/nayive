@@ -62,7 +62,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -83,14 +82,7 @@ func whoValue(role, user string) string {
 
 // whoCookieHeader lives exactly as long as the session cookie beside it.
 func whoCookieHeader(role, user string, ttl time.Duration, remember, secure bool) string {
-	out := WhoCookieName + "=" + whoValue(role, user) + "; SameSite=Lax; Path=/"
-	if remember {
-		out += "; Max-Age=" + strconv.Itoa(int(ttl.Seconds()))
-	}
-	if secure {
-		out += "; Secure"
-	}
-	return out
+	return cookieHeader(WhoCookieName, whoValue(role, user), false, ttl, remember, secure)
 }
 
 func clearWhoCookieHeader() string {
@@ -133,14 +125,7 @@ func wasValue(user string, from []string) string {
 
 // wasCookieHeader lives exactly as long as the nayive_who cookie beside it.
 func wasCookieHeader(value string, ttl time.Duration, remember, secure bool) string {
-	out := WasCookieName + "=" + value + "; SameSite=Lax; Path=/"
-	if remember {
-		out += "; Max-Age=" + strconv.Itoa(int(ttl.Seconds()))
-	}
-	if secure {
-		out += "; Secure"
-	}
-	return out
+	return cookieHeader(WasCookieName, value, false, ttl, remember, secure)
 }
 
 func clearWasCookieHeader() string {

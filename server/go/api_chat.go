@@ -471,7 +471,7 @@ func (s *Server) chatSummary(w http.ResponseWriter, r *http.Request, a chatActor
 			contacts = append(contacts, h.contactOut(o, c))
 		}
 		res["contacts"] = contacts
-		res["devices"] = len(h.users.UserPush(o.user).Subs)
+		res["devices"] = len(h.users.PushTargets(o.user))
 		res["motto"] = o.data.Me.Motto // their own page shows it under "Chat"
 		// The homes whose chats this user reads through /api/chat/via/<home>,
 		// and every other account, for "Nuevo chat".
@@ -698,7 +698,7 @@ func (h *ChatHub) contactOut(o *chatOwner, c *ChatContact) chatContactOut {
 	out := chatContactOut{ID: c.ID, Name: c.Name, Token: c.Token, User: c.User, Card: c.Card, Created: c.Created,
 		Opened: c.Opened, Push: len(c.Subs) > 0, Groups: []string{}}
 	if c.User != "" {
-		out.Push = len(h.users.UserPush(c.User).Subs) > 0
+		out.Push = len(h.users.PushTargets(c.User)) > 0
 	}
 	for _, g := range o.data.Groups {
 		if !g.Deleted && contains(g.Members, c.ID) {

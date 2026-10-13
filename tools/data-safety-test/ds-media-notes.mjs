@@ -18,7 +18,7 @@
 //     narrow window so it cannot widen.)
 import fs from "node:fs";
 import path from "node:path";
-import { server, browser, ok, section, done, onDisk, sleep, REPO } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, REPO, disk } from "./lib.mjs";
 import { png, bytesOnDisk, PW } from "./office-lib.mjs";
 
 const s = await server( { test: "test", ana: "ana-clave" } );
@@ -28,13 +28,6 @@ const NOTES = "data/photos/comments.json";
 const notes = () => { try { return JSON.parse( onDisk( s, NOTES ) ); } catch { return null; } };
 const exists = rel => fs.existsSync( path.join( s.home(), rel ) );
 // Waits for a condition on the server's disk (never a fixed time).
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
-
 // Before the browser reads anything, so straight to disk is safe.
 seed( "files/F/a.png", PNG );
 seed( "files/F/b.png", PNG );

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -83,12 +82,12 @@ func setCardPhoto(path, uid string, img []byte) error {
 	return syncDir(filepath.Dir(path))
 }
 
-// imageKind is "JPEG" or "PNG" by the bytes' own signature, or "".
+// imageKind is "JPEG" or "PNG" by the bytes' own signature (iconType), or "".
 func imageKind(b []byte) string {
-	switch {
-	case len(b) > 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF:
+	switch iconType(b) {
+	case "image/jpeg":
 		return "JPEG"
-	case len(b) > 8 && bytes.Equal(b[:8], []byte("\x89PNG\r\n\x1a\n")):
+	case "image/png":
 		return "PNG"
 	}
 	return ""

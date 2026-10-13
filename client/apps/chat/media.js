@@ -1126,9 +1126,9 @@
             body.insertBefore( h( "div", { class: "section-label", style: "margin-top:12px", text: T( "chat.orWrite" ) } ), body.children[ 3 ] );
             var draw = function ( all )
             {
-                var q = C.fold( search.value );
+                var q = NayiveUI.matcher( search.value );
                 list.textContent = "";
-                var shown = all.filter( function ( c ) { return ( c.tels.length || c.emails.length ) && ( ! q || C.fold( c.name ).indexOf( q ) >= 0 ); } ).slice( 0, 80 );
+                var shown = all.filter( function ( c ) { return ( c.tels.length || c.emails.length ) && ( ! q || q( c.name ) ); } ).slice( 0, 80 );
                 if( ! shown.length ) list.appendChild( h( "p", { class: "hint", style: "margin:6px 0", text: T( all.length ? "chat.noMatch" : "chat.noContacts" ) } ) );
                 shown.forEach( function ( c )
                 {

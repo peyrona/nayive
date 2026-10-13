@@ -933,9 +933,9 @@ function renderLibrary()
 
     // The search box filters every view: the songs, and the albums / artists /
     // folder songs made of the songs it matches.
-    var q = st.search.trim().toLowerCase();
+    var q = NayiveUI.matcher( st.search );
     var pool = ! q ? st.songs : st.songs.filter( function ( s )
-    { return ( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ).toLowerCase().indexOf( q ) !== -1; } );
+    { return q( s.title + " " + ( s.artist || "" ) + " " + ( s.album || "" ) ); } );
     NayiveMedia.searchCount( pool.length, st.songs.length );
 
     if( st.filter === "songs" )
@@ -986,7 +986,7 @@ function renderLibrary()
         var pl = playlistById( st.playlistId );
         var all = playlistSongs( pl );
         var inPool = new Set( pool );
-        var shown = ! q ? all : all.filter( function ( s ) { return inPool.has( s ) || s.missing && s.title.toLowerCase().indexOf( q ) !== -1; } );
+        var shown = ! q ? all : all.filter( function ( s ) { return inPool.has( s ) || s.missing && q( s.title ); } );
         var gone = all.filter( function ( s ) { return s.missing; } ).length;
         html += '<h2 class="view-head">' + esc( pl ? pl.name : "" ) + '<small>' + esc( NayiveUI.tf( "music.nSongs", { n: all.length } ) ) +
                 ( gone ? " · " + esc( NayiveUI.tf( gone === 1 ? "music.oneMissing" : "music.nMissing", { n: gone } ) ) : "" ) + '</small></h2>';

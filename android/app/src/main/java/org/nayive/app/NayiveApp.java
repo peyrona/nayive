@@ -18,6 +18,8 @@ public class NayiveApp extends Application {
     static final String CH_PENDING = "pending";  // the unread count (the icon's badge)
     static final String CH_UPDATES = "updates";  // a new APK
     static final String CH_MEDIA = "media";      // photos and videos uploaded
+    static final String CH_MESSAGES = "messages"; // a chat message, a missed call (server notes)
+    static final String CH_ALERTS = "alerts";    // reminders, trips, mail, anything else (server notes)
 
     @Override
     public void onCreate() {
@@ -57,5 +59,11 @@ public class NayiveApp extends Application {
                 NotificationManager.IMPORTANCE_LOW);
         media.setShowBadge(false);
         nm.createNotificationChannel(media);
+
+        // What web push brings on other phones, with no Google (LinkService "notes").
+        nm.createNotificationChannel(new NotificationChannel(CH_MESSAGES, getString(R.string.chan_messages),
+                NotificationManager.IMPORTANCE_HIGH));
+        nm.createNotificationChannel(new NotificationChannel(CH_ALERTS, getString(R.string.chan_alerts),
+                NotificationManager.IMPORTANCE_HIGH));
     }
 }

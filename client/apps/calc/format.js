@@ -555,34 +555,25 @@ function splitSelection()
 // interactive drag-to-freeze divider; the setting itself is what the renderer
 // actually reads, and it's what the right-click freeze_column/unfreeze_column
 // menu items end up changing too, one column at a time).
-function toggleFreezeColumns()
-{
-    if( ! lastSelection ) return;
-
-    const was = table.getSettings().fixedColumnsStart;
-    const now = was > 0 ? 0 : ( lastSelection.c1 + 1 );
-
-    table.updateSettings( { fixedColumnsStart: now } );
-    undoStep( function() { table.updateSettings( { fixedColumnsStart: was } ); },
-              function() { table.updateSettings( { fixedColumnsStart: now } ); } );
-
-    updateToolbarActiveState();
-    scheduleAutosave();
-}
+function toggleFreezeColumns() { toggleFreeze( 'fixedColumnsStart', 'c1' ); }
 
 // The same move for rows. fixedRowsTop is the setting the renderer reads and
 // the one encodeFromGrid writes into the file's frozen pane, so a frozen
 // header row now survives a save like a frozen column always did.
-function toggleFreezeRows()
+function toggleFreezeRows() { toggleFreeze( 'fixedRowsTop', 'r1' ); }
+
+// Freeze grid setting `key` up to the selection's `edge` (its c1 or r1), or
+// unfreeze when something is already frozen; one undo step.
+function toggleFreeze( key, edge )
 {
     if( ! lastSelection ) return;
 
-    const was = table.getSettings().fixedRowsTop;
-    const now = was > 0 ? 0 : ( lastSelection.r1 + 1 );
+    const was = table.getSettings()[ key ];
+    const now = was > 0 ? 0 : ( lastSelection[ edge ] + 1 );
 
-    table.updateSettings( { fixedRowsTop: now } );
-    undoStep( function() { table.updateSettings( { fixedRowsTop: was } ); },
-              function() { table.updateSettings( { fixedRowsTop: now } ); } );
+    table.updateSettings( { [ key ]: now } );
+    undoStep( function() { table.updateSettings( { [ key ]: was } ); },
+              function() { table.updateSettings( { [ key ]: now } ); } );
 
     updateToolbarActiveState();
     scheduleAutosave();

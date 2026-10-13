@@ -96,6 +96,7 @@ func NewServer(cfg *Config, log Logger) (*Server, error) {
 		scheme:    "http",
 	}
 	s.chat.Hook(s.devices)
+	s.devices.HookPush(users, push) // the app's phones get pushes too (push_app.go)
 
 	// TIMEOUTS. ReadHeaderTimeout is the one that matters: it stops a client
 	// that opens a socket and dribbles headers forever (Slowloris). IdleTimeout

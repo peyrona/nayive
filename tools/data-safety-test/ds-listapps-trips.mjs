@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 
 const s = await server();
 const c = await browser( s );
@@ -20,12 +20,6 @@ await c.evaluate( "localStorage.setItem( 'balata-intro-dismiss:trips', '1' ); tr
 
 const seed = async ( rel, body ) => { const r = await phone.put( rel, body ); if( r.status !== 200 ) throw new Error( "seed " + rel + ": " + r.status ); };
 const json = rel => { try { return JSON.parse( onDisk( s, rel ) ); } catch { return null; } };
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
-}
 async function reopen( p, want )
 {
     await c.send( "Page.navigate", { url: "about:blank" } );

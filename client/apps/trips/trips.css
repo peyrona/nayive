@@ -132,6 +132,8 @@ html.is-windowed .route-panel .trip-panel { min-height: 100%; border-radius: 0; 
 .stage-item:last-child { margin-bottom: 0; }
 .stage-node { position: absolute; left: -38px; top: 1px; width: 30px; height: 30px; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; color: var(--accent); }
 .stage-node svg { width: 17px; height: 17px; }
+.stage-node.drag { cursor: grab; touch-action: none; }
+.stage-node.drag:active { cursor: grabbing; }
 .stage-node.here { background: var(--accent); color: var(--on-accent); }
 .stage-card { background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 12px 11px; cursor: pointer; }
 .stage-card.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -324,12 +326,10 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- Trip -> PDF (print) ------------------------------------------------ */
 /* #printRoot is filled by exportTripPdf() just before window.print(), then
-   cleared on afterprint. It is display:none on screen and only shown for print. */
-#printRoot { display: none; }
-
+   cleared on afterprint. Hidden on screen, the page margin and the sheet's
+   base look: shared/app.css (EXPORT TO PDF). */
 @media print
 {
-    @page { margin: 14mm; }
     html, body { background: #fff !important; }
     #app, .sheet-backdrop, #docUploadInput, #toast { display: none !important; }
     /* On paper the sheet fills the page - undo the off-screen staging
@@ -338,13 +338,11 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
     .leaflet-control-attribution { font-size: 8px; }
 }
 
-#printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 #printRoot h1, #printRoot h2 { color: #111; }
 #printRoot .pr-head { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 18px; }
 #printRoot .pr-head h1 { margin: 0 0 3px; font-size: 22px; }
 #printRoot .pr-sec { margin-bottom: 20px; }
 #printRoot .pr-sec > h2 { font-size: 13px; margin: 0 0 8px; padding-bottom: 3px; border-bottom: 1px solid #bbb; text-transform: uppercase; letter-spacing: .05em; }
-#printRoot .pr-empty { color: #666; font-style: italic; }
 #printRoot ul.pr-doclist { margin: 0; padding-left: 18px; }
 #printRoot ul.pr-doclist li { margin-bottom: 8px; }
 #printRoot .pr-doc-name { font-weight: 600; }
@@ -365,7 +363,6 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 #printRoot table.pr-kv td { vertical-align: top; padding: 1px 0; white-space: pre-line; }
 #printRoot .pr-stage-docs { margin-top: 6px; font-size: 11px; }
 #printRoot .pr-stage-docs .pr-doc-path { display: block; margin-left: 12px; }
-#printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
 
 /* Route map on the last page. -webkit-print-color-adjust keeps the tiles and
    the coloured route legs from being dropped to greyscale by the print engine. */

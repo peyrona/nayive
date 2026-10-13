@@ -238,8 +238,6 @@
         return document.importNode( DOMPurify.sanitize( html, PURE ), true );
     }
 
-    function esc( t ) { return t.replace( /&/g, "&amp;" ).replace( /</g, "&lt;" ).replace( />/g, "&gt;" ); }
-
     // Plain text as the editor's lines: one <div> each. Spaces the editor
     // would drop - at a line's ends (the signature's "-- "), or in a row -
     // go in as no-break spaces (plainText turns them back).
@@ -248,7 +246,7 @@
         return String( text || "" ).split( "\n" ).map( function ( l )
         {
             l = l.replace( /^ | $/g, "\u00a0" ).replace( / {2}/g, " \u00a0" );
-            return "<div>" + ( l ? esc( l ) : "<br>" ) + "</div>";
+            return "<div>" + ( l ? NayiveUI.escapeHtml( l ) : "<br>" ) + "</div>";
         } ).join( "" );
     }
 
@@ -1461,17 +1459,15 @@
 
     var sugField = null, sugItems = [], sugAt = -1;
 
-    function norm( s ) { return String( s || "" ).toLowerCase().normalize( "NFD" ).replace( /[̀-ͯ]/g, "" ); }
-
     function suggest( input )
     {
         var v = input.value, cut = Math.max( v.lastIndexOf( "," ), v.lastIndexOf( ";" ) );
-        var word = norm( v.slice( cut + 1 ).trim() );
+        var word = NayiveUI.fold( v.slice( cut + 1 ).trim() );
         if( ! book || word.length < 1 ) { hideSuggest(); return; }
-        var have = norm( v );
+        var have = NayiveUI.fold( v );
         sugItems = book.filter( function ( c )
         {
-            return ( norm( c.name ).indexOf( word ) >= 0 || norm( c.email ).indexOf( word ) >= 0 ) && have.indexOf( norm( c.email ) ) < 0;
+            return ( NayiveUI.fold( c.name ).indexOf( word ) >= 0 || NayiveUI.fold( c.email ).indexOf( word ) >= 0 ) && have.indexOf( NayiveUI.fold( c.email ) ) < 0;
         } ).slice( 0, 6 );
         if( ! sugItems.length ) { hideSuggest(); return; }
         sugField = input;

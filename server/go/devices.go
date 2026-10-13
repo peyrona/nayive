@@ -11,7 +11,7 @@ package main
 // uses. Through it the phone learns, with the screen off, what a web page
 // cannot wait for:
 //
-//	GET /api/device/wait?v=V   (the app) -> {"v","hold","track","badge","call","find","media","ear"}
+//	GET /api/device/wait?v=V&tz=&lang=   (the app) -> {"v","hold","track","badge","call","find","media","ear","notes"}
 //
 //	track  a trip of the owner covers today, on the owner's clock (the rule
 //	       positions.go keeps positions by): send positions
@@ -22,6 +22,9 @@ package main
 //	       (unix seconds; 0 = off) - api_device_media.go
 //	ear    a voice call is on in this phone's browser: screen off near the ear
 //	       (devices_ear.go; the wait says ear=1 when the phone can)
+//	notes  the notifications web push would bring - chat, reminders, mail...
+//	       (push_app.go): an app from appNotesMin on shows them itself, so the
+//	       phone needs no Google; tz/lang are the phone's zone and language
 //
 // It answers at once when that differs from V (a hash of the answer the phone
 // last saw), otherwise when something changes, otherwise after `hold` seconds.
@@ -45,7 +48,7 @@ package main
 //	POST   /api/device/<id>/ear         (session) {on} a voice call at the ear (devices_ear.go)
 //
 //	POST   /api/device/report           (the app) {positions?, find?}
-//	POST   /api/device/ack              (the app) {call|find, act: decline|stop}
+//	POST   /api/device/ack              (the app) {call|find, act: decline|stop} | {notes: lastId}
 //	       /api/device/media/...        (the app) the photo upload (api_device_media.go)
 //
 // The app's credential is its token, in the X-Nayive-Device header: a URL ends
@@ -57,6 +60,9 @@ package main
 // to the ONE Chrome that sits inside an enrolled phone's TWA (its endpoint comes
 // with the enrolment): a call's ring, which the app already rings, and the ±2 h
 // "turn the location app on/off" alerts, since that phone switches itself.
+// From appNotesMin on, the app takes every other push of that Chrome too
+// (push_app.go) - and a phone whose browser has no web push gets them all the
+// same. iPhones and computers keep web push as it is.
 //
 // THE LAST POSITION. "Buscar mi móvil" also shows where the owner was last seen,
 // from every source there is: this app, GPSLogger, Overland, a photo's GPS, a
@@ -75,6 +81,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -163,11 +170,14 @@ type Devices struct {
 	seen   map[string]int64 // id -> unix seconds; on disk at most every deviceSeenSave
 	log    Logger
 
-	wake    chan struct{}          // closed and replaced on every change: each wait re-checks itself
-	rings   map[string]*deviceRing // account -> the call ringing for it
-	finds   map[string]*deviceFind // find id -> the find
-	trips   map[string]tripsToday  // account -> "a trip covers today", cached a minute
-	ear     earTable               // a voice call at the ear (devices_ear.go)
+	wake    chan struct{}           // closed and replaced on every change: each wait re-checks itself
+	rings   map[string]*deviceRing  // account -> the call ringing for it
+	finds   map[string]*deviceFind  // find id -> the find
+	trips   map[string]tripsToday   // account -> "a trip covers today", cached a minute
+	ear     earTable                // a voice call at the ear (devices_ear.go)
+	notes   map[string][]deviceNote // phone id -> notifications not yet acked (push_app.go)
+	noteSeq int64
+	locales map[string]phoneLocale // phone id -> its zone and language, from its wait
 	closing chan struct{}
 	once    sync.Once
 
@@ -189,6 +199,8 @@ func NewDevices(configDir, homesDir string, log Logger) *Devices {
 		rings:   make(map[string]*deviceRing),
 		finds:   make(map[string]*deviceFind),
 		trips:   make(map[string]tripsToday),
+		notes:   make(map[string][]deviceNote),
+		locales: make(map[string]phoneLocale),
 		closing: make(chan struct{}),
 	}
 }
@@ -293,10 +305,19 @@ func (d *Devices) byID(id string) *deviceRow {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
+	if r := d.rowLocked(id); r != nil {
+		c := *r
+		return &c
+	}
+	return nil
+}
+
+// rowLocked is phone `id`'s row, or nil. Ids are unique (newChatID). Caller
+// holds d.mu and has called ensureLoaded.
+func (d *Devices) rowLocked(id string) *deviceRow {
 	for i := range d.rows {
 		if d.rows[i].ID == id {
-			r := d.rows[i]
-			return &r
+			return &d.rows[i]
 		}
 	}
 	return nil
@@ -392,16 +413,15 @@ func (d *Devices) SetEndpoint(owner, id, endpoint string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
-	for i := range d.rows {
-		if d.rows[i].Owner == owner && d.rows[i].ID == id {
-			if d.rows[i].Endpoint != endpoint {
-				d.rows[i].Endpoint = endpoint
-				d.save()
-			}
-			return true
-		}
+	r := d.rowLocked(id)
+	if r == nil || r.Owner != owner {
+		return false
 	}
-	return false
+	if r.Endpoint != endpoint {
+		r.Endpoint = endpoint
+		d.save()
+	}
+	return true
 }
 
 // SetMedia switches `owner`'s phone `id`'s photo upload on or off, and/or sets
@@ -411,27 +431,24 @@ func (d *Devices) SetMedia(owner, id string, on *bool, dir *string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
-	for i := range d.rows {
-		r := &d.rows[i]
-		if r.Owner != owner || r.ID != id {
-			continue
-		}
-		if on != nil {
-			switch {
-			case *on && r.Media == 0:
-				r.Media = time.Now().Unix()
-			case !*on:
-				r.Media = 0
-			}
-		}
-		if dir != nil {
-			r.MediaDir = strings.Join(publicPhotoDir(*dir), "/")
-		}
-		d.save()
-		d.kickLocked()
-		return true
+	r := d.rowLocked(id)
+	if r == nil || r.Owner != owner {
+		return false
 	}
-	return false
+	if on != nil {
+		switch {
+		case *on && r.Media == 0:
+			r.Media = time.Now().Unix()
+		case !*on:
+			r.Media = 0
+		}
+	}
+	if dir != nil {
+		r.MediaDir = strings.Join(publicPhotoDir(*dir), "/")
+	}
+	d.save()
+	d.kickLocked()
+	return true
 }
 
 // mediaFiled: phone `id` already sent the file it calls `phoneID`.
@@ -439,14 +456,8 @@ func (d *Devices) mediaFiled(id, phoneID string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
-	for _, r := range d.rows {
-		if r.ID == id {
-			for _, p := range r.MediaDone {
-				if p == phoneID {
-					return true
-				}
-			}
-		}
+	if r := d.rowLocked(id); r != nil {
+		return slices.Contains(r.MediaDone, phoneID)
 	}
 	return false
 }
@@ -458,15 +469,12 @@ func (d *Devices) noteMediaFiled(id, phoneID string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.ensureLoaded()
-	for i := range d.rows {
-		if r := &d.rows[i]; r.ID == id {
-			r.MediaDone = append(r.MediaDone, phoneID)
-			if n := len(r.MediaDone); n > mediaDoneMax {
-				r.MediaDone = append([]string(nil), r.MediaDone[n-mediaDoneMax:]...)
-			}
-			d.save()
-			return
+	if r := d.rowLocked(id); r != nil {
+		r.MediaDone = append(r.MediaDone, phoneID)
+		if n := len(r.MediaDone); n > mediaDoneMax {
+			r.MediaDone = append([]string(nil), r.MediaDone[n-mediaDoneMax:]...)
 		}
+		d.save()
 	}
 }
 
@@ -566,9 +574,10 @@ func (d *Devices) SkipCallPush(account, endpoint string) bool {
 }
 
 // HasApp: this push endpoint belongs to a phone with the app, which turns its
-// positions on and off by itself - it needs no "turn it on" alert.
+// positions on and off by itself - it needs no "turn it on" alert. The app's
+// own target (push_app.go) is that phone too.
 func (d *Devices) HasApp(account, endpoint string) bool {
-	return d.linked(account, endpoint) != nil
+	return strings.HasPrefix(endpoint, appEndpoint) || d.linked(account, endpoint) != nil
 }
 
 // -----------------------------------------------------------------------------
@@ -803,6 +812,7 @@ type deviceState struct {
 	Find  *deviceFindOut `json:"find"`
 	Media int64          `json:"media"`
 	Ear   bool           `json:"ear"`
+	Notes []deviceNote   `json:"notes"`
 }
 
 // version is what the phone echoes back: equal means nothing to tell it.
@@ -866,6 +876,7 @@ func (s *Server) deviceStateFor(r *deviceRow) (deviceState, time.Time) {
 			next = end
 		}
 	}
+	st.Notes = s.devices.notesFor(r.ID)
 	return st, next
 }
 
@@ -1075,7 +1086,7 @@ func (s *Server) deviceList(w http.ResponseWriter, r *http.Request, user string)
 		"devices": out,
 		"finds":   s.devices.findsOf(user),
 		"last":    s.devices.Last(user),
-		"push":    len(s.users.UserPush(user).Subs),
+		"push":    len(s.users.PushTargets(user)),
 	})
 }
 
@@ -1102,9 +1113,13 @@ func (s *Server) deviceFindStart(w http.ResponseWriter, r *http.Request, user st
 	}
 
 	f := s.devices.AskFind(user)
+	asker := ""
+	if r := s.devices.linked(user, body.Endpoint); r != nil {
+		asker = appEndpoint + r.ID // asked from inside the app: not that phone either
+	}
 	var subs []PushSub
-	for _, sub := range s.users.UserPush(user).Subs {
-		if sub.Endpoint != body.Endpoint {
+	for _, sub := range s.users.PushTargets(user) {
+		if sub.Endpoint != body.Endpoint && sub.Endpoint != asker {
 			subs = append(subs, sub)
 		}
 	}
@@ -1129,6 +1144,8 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 	}
 	defer waits.release(key)
 	s.devices.ear.opened(dev.ID, queryValue(r, "ear") == "1")
+	s.devices.setLocale(dev.ID, queryValue(r, "tz"), queryValue(r, "lang"))
+	s.devices.setApp(dev.ID, r.Header.Get("X-Nayive-App"))
 	defer s.devices.ear.closed(dev.ID)
 	seen := queryValue(r, "v")
 	deadline := time.Now().Add(deviceHold)
@@ -1143,6 +1160,7 @@ func (s *Server) deviceWait(w http.ResponseWriter, r *http.Request, dev *deviceR
 			sendJSON(w, r, http.StatusOK, map[string]any{
 				"v": v, "hold": int(deviceHold / time.Second),
 				"track": st.Track, "badge": st.Badge, "call": st.Call, "find": st.Find, "media": st.Media, "ear": st.Ear,
+				"notes": st.Notes,
 			})
 			return
 		}
@@ -1215,9 +1233,10 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 		return
 	}
 	var body struct {
-		Call string `json:"call"`
-		Find string `json:"find"`
-		Act  string `json:"act"`
+		Call  string `json:"call"`
+		Find  string `json:"find"`
+		Act   string `json:"act"`
+		Notes int64  `json:"notes"`
 	}
 	if !readJSONBody(w, r, &body) {
 		return
@@ -1230,6 +1249,8 @@ func (s *Server) deviceAck(w http.ResponseWriter, r *http.Request, dev *deviceRo
 		}
 	case body.Find != "" && body.Act == "stop":
 		s.devices.StopFind(dev.Owner, body.Find, "stopped")
+	case body.Notes > 0:
+		s.devices.ackNotes(dev.ID, body.Notes)
 	default:
 		sendError(w, r, http.StatusBadRequest, "no sé qué hacer con eso")
 		return

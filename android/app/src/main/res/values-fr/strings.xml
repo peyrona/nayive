@@ -24,6 +24,8 @@
     <string name="chan_pending">Non lus</string>
     <string name="chan_updates">Mises à jour</string>
     <string name="chan_media">Photos envoyées</string>
+    <string name="chan_messages">Messages</string>
+    <string name="chan_alerts">Alertes</string>
     <string name="link_on">Nayive est connecté</string>
     <string name="link_tracking">Nayive garde ta position de voyage</string>
     <string name="link_enrol">Ouvre Nayive et connecte-toi pour activer ce téléphone</string>

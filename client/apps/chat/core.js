@@ -446,12 +446,6 @@
 
     C.fmtBytes = function ( n ) { return NayiveUI.fmtBytes( n ); };
 
-    // Accent- and case-blind, for searching.
-    C.fold = function ( s )
-    {
-        return String( s || "" ).normalize( "NFD" ).replace( /[̀-ͯ]/g, "" ).toLowerCase();
-    };
-
     // ---------------------------------------------------------------------
     // the conversation list's words for a message
     // ---------------------------------------------------------------------

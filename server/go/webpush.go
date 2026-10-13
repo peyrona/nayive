@@ -64,6 +64,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -125,6 +126,11 @@ type VapidStore struct {
 	jwts    map[string]cachedJWT
 	client  *http.Client
 	log     Logger
+
+	// local takes a message for a phone of the Android app (push_app.go): it
+	// goes through the app's own connection, never a push service. Set once,
+	// before serving.
+	local func(phone string, payload []byte, ttl int) bool
 }
 
 type cachedJWT struct {
@@ -581,6 +587,15 @@ func (v *VapidStore) SendJSON(sub PushSub, payload any, ttl int) (int, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return 0, err
+	}
+	// A phone of the Android app: no push service, no encryption - its own
+	// connection to this server carries it. Gone: the same 410 a dead
+	// subscription gets.
+	if phone, ok := strings.CutPrefix(sub.Endpoint, appEndpoint); ok {
+		if v.local != nil && v.local(phone, raw, ttl) {
+			return http.StatusCreated, nil
+		}
+		return http.StatusGone, errors.New("push: that phone is gone")
 	}
 	if len(raw) > maxPlaintext {
 		raw = clipPushBody(raw)

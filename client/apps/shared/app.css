@@ -949,6 +949,13 @@ html.is-windowed .app-title { margin-right: 1.5rem; }
     color: var(--text-dim);
 }
 
+/* An on / off row: the text, then the shared .switch at the end (Calc, Write). */
+.field label.check
+{
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0;
+    font-size: 0.9rem; color: var(--text); cursor: pointer;
+}
+
 .field-row
 {
     display: flex;
@@ -3041,6 +3048,32 @@ html.nv-locked body { visibility: hidden; }
     .tree-sheet .ntree .tree-row             { min-height: 40px; }
     .tree-sheet .ntree .tree-name            { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ---------------------------------------------------------------------------
+ * EXPORT TO PDF (print)
+ *
+ * No PDF library: the page fills its hidden #printRoot with a plain,
+ * light-theme sheet and calls window.print(); the user picks "Save as PDF".
+ * NayiveUI.printPage (Calendar, Split) sets .printing on <html> until
+ * afterprint, so a plain Ctrl+P still prints the page itself. Trips stages its
+ * own sheet (trips.css) on top of the same base. Each page adds its own
+ * .pr-* parts.
+ * ------------------------------------------------------------------------- */
+#printRoot { display: none; }
+
+@media print
+{
+    @page { margin: 14mm; }
+    /* An app that locks the page (html, body { height: 100%; overflow: hidden })
+       would clip the printed sheet to a single page. */
+    .printing, .printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
+    .printing #app, .printing .sheet-backdrop, .printing #toast { display: none !important; }
+    .printing #printRoot { display: block !important; }
+}
+
+#printRoot { color: #111; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+#printRoot .pr-empty { color: #666; font-style: italic; }
+#printRoot .pr-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #bbb; color: #666; font-size: 10.5px; }
 
 /* ---------------------------------------------------------------------------
  * FINGER-SIZED TARGETS (touch screens only)

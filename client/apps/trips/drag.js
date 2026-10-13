@@ -3,7 +3,8 @@
 //------------------------------------------------------------------------//
 // STAGE DRAG & DROP - reorder within the itinerary (Pointer Events, so mouse,
 // touch and pen all work). Two ways in:
-//   - the grip icon before each title: drag starts on pointerdown (any pointer);
+//   - the grip icon before each title, or the transport circle on the timeline:
+//     drag starts on pointerdown (any pointer);
 //   - anywhere else on the card, mouse/pen only: press and move past a few px
 //     promotes to a drag; a plain press-release stays a click and opens the
 //     editor. Touch keeps using the grip so a swipe still scrolls the page.

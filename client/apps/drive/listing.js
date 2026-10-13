@@ -4,23 +4,30 @@
  */
 "use strict";
 
-// A plain word searches as a substring; a query with * or ? is an
-// anchored wildcard — the rule the search box has always shown. Either
-// way we hand the server a shell glob and it matches basenames,
-// case-insensitive (GET /api/files?find=).
-function buildPattern( raw )
+// What the box asks the server, which matches basenames accent- and
+// case-blind. A query with * or ? is an anchored shell glob - the rule the
+// search box has always shown (GET ?find=). Anything else is the shared rule
+// (NayiveUI.matcher): one word or "phrase" is still a ?find= substring;
+// several, or a -word, become the advanced search's name rules (has / not,
+// every one must hold).
+function buildQuery( raw )
 {
     const q = (raw || '').trim();
     if( ! q ) return null;
-    return (q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1) ? q : ('*' + q + '*');
+    if( q.indexOf( '*' ) !== -1 || q.indexOf( '?' ) !== -1 ) return { glob: q };
+    const m = NayiveUI.matcher( q );
+    if( ! m ) return null;
+    if( m.terms.length === 1 && ! m.not.length ) return { glob: '*' + m.terms[ 0 ] + '*' };
+    return { spec: { rules: m.terms.map( t => ( { op: 'has', text: t } ) )
+                            .concat( m.not.map( t => ( { op: 'not', text: t } ) ) ) } };
 }
 
 // Runs whichever search is on: the "Biggest files" list, the advanced one
-// (advsearch.js) when it is in force, else the box's glob.
+// (advsearch.js) when it is in force, else the box's (buildQuery).
 async function runSearch()
 {
-    const pattern = advSearch || bigMode ? null : buildPattern( searchQuery );
-    if( ! advSearch && ! bigMode && ! pattern )
+    const asked = advSearch || bigMode ? null : buildQuery( searchQuery );
+    if( ! advSearch && ! bigMode && ! asked )
     {
         searchHits = null;
         searchTruncated = false;
@@ -33,7 +40,8 @@ async function runSearch()
     {
         const r = bigMode   ? await GumApi.biggest( BIG_COUNT )
                 : advSearch ? await GumApi.search( advSearch.spec )
-                :             await GumApi.find( pattern );
+                : asked.spec ? await GumApi.search( asked.spec )
+                :             await GumApi.find( asked.glob );
         if( seq !== searchSeq ) return;          // a newer query already went out
         searchHits      = pruneNodes( r.nodes || [] );
         searchTruncated = !! r.truncated;

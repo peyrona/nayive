@@ -334,11 +334,6 @@
             var hist  = [];                    // undo: the whole table before each move, as a string
             var auto  = 0;                     // the timer that walks the last cards home
 
-            // The clock, exactly as the two timed games keep theirs: two
-            // timestamps, never added up, so stopping the interval behind
-            // another pane or a hidden tab only stops a repaint.
-            var startedAt = 0, endedAt = 0, ticker = 0;
-            var paused = false, pausedAt = 0;
             var times  = {};                   // best time per draw mode, in seconds
 
             var tableEl, colsEl, stockEl, wasteEl, foundEls = [], colEls = [];
@@ -420,7 +415,7 @@
                 found = [ [], [], [], [] ];
 
                 sel = null; moves = 0; over = false; hist = [];
-                startedAt = 0; endedAt = 0;
+                watch.reset();
                 stopAuto();
                 stopClock();
                 unpause();
@@ -448,7 +443,7 @@
                 // Not while the table is paused, and not once it is finished:
                 // a won game is a result, and the button is disabled at both
                 // ends the way the pause button is.
-                if( paused || over || ! hist.length ) return;
+                if( watch.paused || over || ! hist.length ) return;
 
                 stopAuto();
                 was = JSON.parse( hist.pop() );
@@ -590,7 +585,7 @@
             {
                 var was = sel;
 
-                if( paused || over || auto ) return;
+                if( watch.paused || over || auto ) return;
 
                 if( pile === 'stock' ) { sel = null; tapStock(); return; }
 
@@ -645,7 +640,7 @@
                 var i, top;
 
                 auto = 0;
-                if( paused || over ) return;
+                if( watch.paused || over ) return;
 
                 for( i = 0; i < 7; i++ )
                 {
@@ -668,86 +663,20 @@
                 auto = 0;
             }
 
-            //---- the clock -----------------------------------------------------
+            //---- the clock and the pause ----------------------------------------
             //
-            // Minesweeper's and Sudoku's, word for word: two timestamps, the
-            // elapsed time READ from them, and a pause that shifts the start
-            // rather than counting the seconds itself.
+            // NayiveGames.stopwatch (index.html): two timestamps, the elapsed
+            // time READ from them, the board covered while paused.
 
-            function seconds()
-            {
-                if( ! startedAt ) return 0;
-                return Math.floor( ( ( endedAt || ( paused ? pausedAt : Date.now() ) ) - startedAt ) / 1000 );
-            }
-
-            function runClock()
-            {
-                if( ticker || over || paused || ! startedAt || ! live || document.hidden ) return;
-                ticker = setInterval( function ()
-                {
-                    // Any dialog over the app pauses it - the help sheet, the
-                    // install prompt, "session expired" - the same rule the
-                    // canvas games follow: time under a sheet is not played.
-                    if( document.querySelector( '.sheet-backdrop.open' ) ) { pause(); return; }
-                    timeEl.textContent = clock( seconds() );
-                }, 250 );
-            }
-
-            function stopClock() { if( ticker ) clearInterval( ticker ); ticker = 0; }
-
-            // The clock starts on the first move and not on the deal: a table
-            // dealt and left while another game is played two cards away is not
-            // a game that took twenty minutes.
-            function begin()
-            {
-                if( startedAt ) return;
-                startedAt = Date.now();
-                runClock();
-                paintPause();
-            }
-
-            //---- pausing --------------------------------------------------------
-
-            function paintPause()
-            {
-                pauseButton( pauseBtn, paused, ! startedAt || over );
-            }
-
-            function pause()
-            {
-                if( paused || over || ! startedAt ) return;
-
-                paused   = true;
-                pausedAt = Date.now();
-                stopAuto();
-                stopClock();
-                coverEl.hidden = false;
-                paintPause();
-                // Heard only when the player pressed it: leave() gets here with
-                // `live` already false, and a hidden tab with document.hidden.
-                if( live && ! document.hidden ) sfx.play( 'pause' );
-            }
-
-            function resume()
-            {
-                if( ! paused ) return;
-
-                startedAt += Date.now() - pausedAt;   // the pause never happened, as far as the clock is concerned
-                paused = false;
-                coverEl.hidden = true;
-                timeEl.textContent = clock( seconds() );
-                runClock();
-                paintPause();
-                mayAuto();
-                sfx.play( 'resume' );
-            }
-
-            function unpause()                        // a new deal: no pause to come back from
-            {
-                paused = false;
-                coverEl.hidden = true;
-                paintPause();
-            }
+            var watch = NayiveGames.stopwatch( {
+                els:  function () { return { time: timeEl, cover: coverEl, btn: pauseBtn }; },
+                over: function () { return over; },
+                live: function () { return live; },
+                onPause:  function () { stopAuto(); },
+                onResume: function () { mayAuto(); }
+            } );
+            var seconds = watch.seconds, runClock = watch.run, stopClock = watch.stop, paintPause = watch.paint,
+                pause = watch.pause, resume = watch.resume, unpause = watch.unpause, begin = watch.begin;
 
             //---- the end --------------------------------------------------------
 
@@ -758,7 +687,7 @@
                 if( found[ 0 ].length + found[ 1 ].length + found[ 2 ].length + found[ 3 ].length < 52 ) return false;
 
                 over    = true;
-                endedAt = Date.now();
+                watch.end();
                 stopAuto();
                 stopClock();
                 paintPause();
@@ -1111,7 +1040,7 @@
                     } );
                 } );
 
-                pauseBtn.addEventListener( 'click', function () { if( paused ) resume(); else pause(); } );
+                pauseBtn.addEventListener( 'click', function () { if( watch.paused ) resume(); else pause(); } );
                 undoBtn.addEventListener( 'click', undo );
                 document.getElementById( 'solNew' ).addEventListener( 'click', newGame );
                 document.getElementById( 'solOverBtn' ).addEventListener( 'click', newGame );

@@ -11,7 +11,7 @@
 // io.js export (S6 review): a folder listing that failed counted as "no
 //     names taken", and the export replaced a file of that name. Now
 //     create-only, the next free name on 412.
-import { server, browser, ok, section, done, onDisk, sleep } from "./lib.mjs";
+import { server, browser, ok, section, done, onDisk, disk } from "./lib.mjs";
 
 const s = await server();
 const c = await browser( s );
@@ -33,12 +33,6 @@ async function phoneAdds( id, title )
     d.nodes[ id ] = bm( id, title );
     d.nodes.root.children.push( id );
     await write( JSON.stringify( d, null, 2 ) );
-}
-async function disk( fn, ms = 15000 )
-{
-    const end = Date.now() + ms;
-    while( Date.now() < end ) { try { if( fn() ) return true; } catch {} await sleep( 100 ); }
-    return false;
 }
 async function reopen()
 {

@@ -659,6 +659,19 @@
                '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d[ 1 ] + '</svg>';
     }
 
+    // A × button of class `cls`, titled `title` ("Cerrar" when none), that runs `onClick`.
+    function xButton( cls, onClick, title )
+    {
+        var b = document.createElement( "button" );
+        b.type      = "button";
+        b.className = cls;
+        b.title     = title || t( "ui.close" );
+        b.setAttribute( "aria-label", b.title );
+        b.innerHTML = icon( "x" );
+        if( onClick ) b.addEventListener( "click", onClick );
+        return b;
+    }
+
     // PASSWORD EYE - the button beside a password field shows / hides its
     // text (the launcher's "Mi cuenta", the admin panel; login.html keeps its
     // own copy, as it does not load this file).
@@ -693,6 +706,9 @@
     //   o.onClose() the field has been emptied: drop the search (default:
     //               an "input" event on it)
     //   o.min       the narrowest the field may get beside the icons (180)
+    //   o.tip       false: the field's words go to a server with rules of its
+    //               own (eMail), so no "how to search" tooltip (ui.searchTip,
+    //               the matcher's rule); an app's own title on it is kept
     //   o.step( d ) the field steps through its hits in place (Calendar): an
     //               up / down pair before the ×, and Enter / Shift+Enter;
     //               d is -1 or +1. canStep( false ) greys the pair.
@@ -716,6 +732,12 @@
             toggle.title = t( "ui.search" );
             toggle.setAttribute( "aria-label", t( "ui.search" ) );
             box.parentNode.insertBefore( toggle, box );
+        }
+        var said = input.getAttribute( "data-i18n-attr" ) || "";
+        if( o.tip !== false && ! /(^|,)\s*title:/.test( said ) && ! input.title )
+        {
+            input.setAttribute( "data-i18n-attr", ( said ? said + ", " : "" ) + "title:ui.searchTip" );
+            input.title = t( "ui.searchTip" );
         }
         toggle.classList.add( "search-fold-toggle" );
         box.classList.add( "search-fold" );
@@ -2088,13 +2110,7 @@
         // Close (x) in the top-right corner, like every other Nayive dialog. It is
         // sticky, not just absolute, so it stays put while a long button list
         // scrolls under it. First child so it sits above the title.
-        var xb = document.createElement( "button" );
-        xb.type      = "button";
-        xb.className = "sheet-close intro-close";
-        xb.title     = opts.confirm || t( "ui.close" );
-        xb.setAttribute( "aria-label", xb.title );
-        xb.innerHTML = icon( "x" );
-        xb.addEventListener( "click", finish );
+        var xb = xButton( "sheet-close intro-close", finish, opts.confirm );
         sheet.insertBefore( xb, sheet.firstChild );
 
         // The launcher keeps its wide "No volver a mostrar" button at the bottom.
@@ -2586,10 +2602,7 @@
             if( done ) return;
             done = true;
             if( timer ) clearInterval( timer );
-            document.removeEventListener( "keydown", onKey, true );
-            window.removeEventListener( "resize", place );
-            window.removeEventListener( "orientationchange", place );
-            window.removeEventListener( "scroll", place, true );
+            follow( false, place, onKey );
             if( over.parentNode ) over.parentNode.removeChild( over );
             coachOpen = false;
         }
@@ -2607,10 +2620,7 @@
             if( secs <= 0 ) { clearInterval( timer ); timer = null; }
         }, 1000 );
 
-        document.addEventListener( "keydown", onKey, true );
-        window.addEventListener( "resize", place );
-        window.addEventListener( "orientationchange", place );
-        window.addEventListener( "scroll", place, true );
+        follow( true, place, onKey );
     }
 
     // Show the coach marks now. `force` ignores the "seen it" flag (demo/test).
@@ -2885,12 +2895,7 @@
         var arrow = bub.appendChild( document.createElement( "span" ) );
         arrow.className = "coach-arrow";
 
-        var xb = bub.appendChild( document.createElement( "button" ) );
-        xb.type      = "button";
-        xb.className = "coach-close";
-        xb.title     = t( "ui.tour.quit" );
-        xb.setAttribute( "aria-label", xb.title );
-        xb.innerHTML = icon( "x" );
+        var xb = bub.appendChild( xButton( "coach-close", null, t( "ui.tour.quit" ) ) );
 
         var head  = bub.appendChild( document.createElement( "div" ) );
         head.className = "tour-head";
@@ -3115,22 +3120,28 @@
             token++;
             leave();
             document.removeEventListener( "click", onTap, true );
-            document.removeEventListener( "keydown", onKey, true );
-            window.removeEventListener( "resize", place );
-            window.removeEventListener( "orientationchange", place );
-            window.removeEventListener( "scroll", place, true );
+            follow( false, place, onKey );
             if( over.parentNode ) over.parentNode.removeChild( over );
             tourOpen = false;
         }
 
         document.body.appendChild( over );
         document.addEventListener( "click", onTap, true );
-        document.addEventListener( "keydown", onKey, true );
-        window.addEventListener( "resize", place );
-        window.addEventListener( "orientationchange", place );
-        window.addEventListener( "scroll", place, true );
+        follow( true, place, onKey );
         go( 0 );
         return true;
+    }
+
+    // The coach marks and the tour keep their overlay on its targets: `place`
+    // runs on resize, turn and scroll, `onKey` gets every key first. `on`
+    // false takes them off again.
+    function follow( on, place, onKey )
+    {
+        var f = on ? "addEventListener" : "removeEventListener";
+        document[ f ]( "keydown", onKey, true );
+        window[ f ]( "resize", place );
+        window[ f ]( "orientationchange", place );
+        window[ f ]( "scroll", place, true );
     }
 
     // NayiveUI.tour() - the steps given to firstRun, or these ones.
@@ -4046,14 +4057,7 @@
         back._finish = finish;
 
         // Corner x, sticky, above the title - like every other Nayive dialog.
-        var xb = document.createElement( "button" );
-        xb.type      = "button";
-        xb.className = "sheet-close intro-close";
-        xb.title     = t( "ui.close" );
-        xb.setAttribute( "aria-label", xb.title );
-        xb.innerHTML = icon( "x" );
-        xb.addEventListener( "click", finish );
-        sheet.appendChild( xb );
+        var xb = sheet.appendChild( xButton( "sheet-close intro-close", finish ) );
 
         var logo = document.createElement( "img" );
         logo.className = "install-logo";
@@ -4292,14 +4296,7 @@
         function finish() { d.close(); }
         d.back._finish = finish;
 
-        var xb = document.createElement( "button" );
-        xb.type      = "button";
-        xb.className = "sheet-close intro-close";
-        xb.title     = t( "ui.close" );
-        xb.setAttribute( "aria-label", xb.title );
-        xb.innerHTML = icon( "x" );
-        xb.addEventListener( "click", finish );
-        sheet.appendChild( xb );
+        var xb = sheet.appendChild( xButton( "sheet-close intro-close", finish ) );
 
         var h = document.createElement( "h2" );
         h.className   = "install-title";
@@ -5538,13 +5535,7 @@
         head.className = "quota-card-head";
         var title = document.createElement( "strong" );
         title.textContent = t( "ui.quota.title" );
-        var close = document.createElement( "button" );
-        close.type      = "button";
-        close.className = "icon-btn sm";
-        close.title     = t( "ui.close" );
-        close.setAttribute( "aria-label", t( "ui.close" ) );
-        close.innerHTML = icon( "x" );
-        close.addEventListener( "click", function () { card.remove(); } );
+        var close = xButton( "icon-btn sm", function () { card.remove(); } );
         head.appendChild( title );
         head.appendChild( close );
 
@@ -5623,6 +5614,42 @@
     // "files/a/b.txt" -> "b.txt"
     function baseName( path ) { return String( path || "" ).split( "/" ).pop(); }
 
+    // Hangs " · Ctrl+F" off the tooltip of each shortcut's button (`list`:
+    // { el: its id, label() }) - and takes it off again on a phone. A middle
+    // dot, not parentheses: some tips already end in "(uno)". Idempotent, so
+    // it can run again after a title is rewritten (selection, language).
+    // Drive's and Write's toolbars.
+    function keyHints( list, phone )
+    {
+        list.forEach( function ( s )
+        {
+            var el = s.el && document.getElementById( s.el );
+            if( ! el ) return;
+
+            var hint = " · " + s.label();
+            var tip  = el.getAttribute( "title" ) || "";
+
+            if( tip.slice( -hint.length ) === hint ) tip = tip.slice( 0, -hint.length );
+            if( ! tip ) return;                    // no tooltip yet: nothing to hang the hint on
+
+            el.setAttribute( "title", phone ? tip : tip + hint );
+        } );
+    }
+
+    // Where `path` is after the moves in `pairs` ([ old, new ]): the same
+    // place, or the new one when it is (or lives inside) a moved item.
+    // Drive's and Photos' undo of a move.
+    function followPath( path, pairs )
+    {
+        for( var i = 0; i < pairs.length; i++ )
+        {
+            var pr = pairs[ i ];
+            if( path === pr[ 0 ] )                    return pr[ 1 ];
+            if( path.indexOf( pr[ 0 ] + "/" ) === 0 ) return pr[ 1 ] + path.slice( pr[ 0 ].length );
+        }
+        return path;
+    }
+
     // "foto.jpg" -> "foto (2).jpg", "foto (3).jpg"... while the name is in
     // `taken` (a Set of the folder's names). Photos' and the share target's
     // uploads; Drive passes its "(copia)" word to GumApi.uniqueName instead.
@@ -5637,13 +5664,76 @@
         return stem + " (" + i + ")" + ext;
     }
 
+    // Text for searching: accent- and case-blind, so "jose" finds "José" and
+    // "nino" finds "Niño" (the ñ folds too); "strasse" finds "Straße", "oeuvre"
+    // finds "œuvre", and a typed ' finds the typographic ’. Both sides of a
+    // comparison go through it. The server's Drive search folds the same way
+    // (search.go, fold).
+    var FOLD_MORE = { "ß": "ss", "œ": "oe", "æ": "ae", "\u2018": "'", "\u2019": "'" };
+    function fold( s )
+    {
+        return String( s == null ? "" : s ).normalize( "NFD" ).replace( /[\u0300-\u036f]/g, "" ).toLowerCase()
+               .replace( /[ßœæ\u2018\u2019]/g, function ( c ) { return FOLD_MORE[ c ]; } );
+    }
+
+    // A text with its umlauts spelt the German way, folded: "Müller" ->
+    // "mueller". The matcher tries it on both sides, so "Mueller" finds
+    // "Müller" and "Müller" finds "Mueller" ("Muller" finds both, by fold).
+    // Only umlauts are spelt out - folding every "ue" would make "fue" find
+    // "fumar". null when there is no umlaut (most texts).
+    function foldUmlauts( s )
+    {
+        var n = String( s == null ? "" : s ).normalize( "NFC" );
+        if( ! /[äöüÄÖÜ]/.test( n ) ) return null;
+        return fold( n.replace( /[äöüÄÖÜ]/g, function ( c ) { return c.normalize( "NFD" ).charAt( 0 ) + "e"; } ) );
+    }
+
+    // A search box's text as a test, the one rule of every box: words in any
+    // order (factura luz), "an exact phrase", -word to leave out; accent- and
+    // case-blind (fold, foldUmlauts). A "-" inside a word (e-mail) or alone is
+    // a letter. Returns null when nothing is asked, else m( text ) -> true /
+    // false, with m.terms (the words / phrases to find, as typed: Chat folds
+    // them for its hit marks) and m.not (those to leave out). Drive sends both
+    // to its server, which folds them the same way.
+    function matcher( raw )
+    {
+        var want = [], skip = [], wantF = [], skipF = [];
+        String( raw == null ? "" : raw ).replace( /(-?)"([^"]*)"?|(\S+)/g, function ( all, neg, phrase, word )
+        {
+            var not = word ? word.length > 1 && word.charAt( 0 ) === "-" : !! neg;
+            var w = ( word ? ( not ? word.slice( 1 ) : word ) : phrase ).replace( /\s+/g, " " ).trim();
+            var f = fold( w );
+            if( ! f ) return "";
+            ( not ? skip : want ).push( w );
+            ( not ? skipF : wantF ).push( [ f, foldUmlauts( w ) ] );
+            return "";
+        } );
+        if( ! want.length && ! skip.length ) return null;
+        var m = function ( text )
+        {
+            var t  = fold( text ).replace( /\s+/g, " " );    // a phrase spans any run of spaces
+            var de = foldUmlauts( text );
+            if( de ) de = de.replace( /\s+/g, " " );
+            var has = function ( w )
+            {
+                return t.indexOf( w[ 0 ] ) >= 0 || ( !! w[ 1 ] && t.indexOf( w[ 1 ] ) >= 0 ) ||
+                       ( !! de && ( de.indexOf( w[ 0 ] ) >= 0 || ( !! w[ 1 ] && de.indexOf( w[ 1 ] ) >= 0 ) ) );
+            };
+            for( var i = 0; i < wantF.length; i++ ) if( ! has( wantF[ i ] ) ) return false;
+            for( var j = 0; j < skipF.length; j++ ) if( has( skipF[ j ] ) ) return false;
+            return true;
+        };
+        m.terms = want;
+        m.not   = skip;
+        return m;
+    }
+
     // A name as a safe folder / file name: "Córdoba 2026" -> "cordoba-2026".
-    // Accents are dropped (NFD), not the letters; anything else that is not a-z
+    // Accents are dropped (fold), not the letters; anything else that is not a-z
     // or 0-9 becomes one "-". `max` cuts it; `fallback` stands in for "".
     function slugify( s, fallback, max )
     {
-        var out = String( s || "" ).normalize( "NFD" ).replace( /[\u0300-\u036f]/g, "" )
-                  .toLowerCase().replace( /[^a-z0-9]+/g, "-" ).replace( /^-+|-+$/g, "" );
+        var out = fold( s || "" ).replace( /[^a-z0-9]+/g, "-" ).replace( /^-+|-+$/g, "" );
         if( max ) out = out.slice( 0, max );
         return out || fallback || "item";
     }
@@ -6494,7 +6584,11 @@
         todayIso:   todayIso,
         extOf:      extOf,
         baseName:   baseName,
+        followPath: followPath,
+        keyHints:   keyHints,
         uniqueName: uniqueName,    // "foto.jpg" -> "foto (2).jpg" in a folder that has it
+        fold:       fold,          // "José" -> "jose": every search compares through it
+        matcher:    matcher,       // a search box's text -> test: words any order, "phrase", -word
         slugify:    slugify,       // "Córdoba" -> "cordoba" (Trips, Split)
         timeZones:  timeZones,     // every IANA zone (the launcher, Calendar)
         applySyncState: applySyncState,   // store state -> the header plug (classes + title)

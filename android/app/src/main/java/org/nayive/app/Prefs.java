@@ -79,4 +79,9 @@ final class Prefs {
     static long updateChecked(Context c) { return sp(c).getLong("updateChecked", 0); }
 
     static void setUpdateChecked(Context c, long at) { sp(c).edit().putLong("updateChecked", at).apply(); }
+
+    /** The newest server notification already shown here (its id). */
+    static long lastNote(Context c) { return sp(c).getLong("lastNote", 0); }
+
+    static void setLastNote(Context c, long id) { sp(c).edit().putLong("lastNote", id).apply(); }
 }

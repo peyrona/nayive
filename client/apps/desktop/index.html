@@ -284,18 +284,18 @@
         .task.front > svg { margin-right: calc(1rem - 6px); }   /* + .text-btn's 6px gap = 1rem */
         .task > .task-ctl { display: flex; flex: 0 0 auto; margin-left: auto; overflow: visible; }
         .task:not(.front) > .task-ctl { display: none; }
-        .task-ctl > .task-x, #cdChip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
+        .task-ctl > .task-x, #cds > .cd-chip > .task-x { width: 22px; height: 22px; margin-left: auto; overflow: visible; color: var(--text-dim); }
         .task-ctl > .task-x   { margin-left: 0; }
         .task-ctl > .task-x svg { width: 14px; height: 14px; color: inherit; }
         .task-ctl > [data-win="scale"] { color: var(--win-scale); }
         .task-ctl > [data-win="min"]   { color: var(--warn); }
         .task-ctl > [data-win="max"]   { color: var(--ok); }
         .task-ctl > [data-win="close"] { color: var(--danger); }
-        #cdChip > .task-x svg   { width: 12px; height: 12px; color: inherit; }
-        #cdChip > .task-x:hover { color: var(--text); }
-        body.touch .task-ctl > .task-x, body.touch #cdChip > .task-x { width: 36px; height: 36px; }
+        #cds > .cd-chip > .task-x svg   { width: 12px; height: 12px; color: inherit; }
+        #cds > .cd-chip > .task-x:hover { color: var(--text); }
+        body.touch .task-ctl > .task-x, body.touch #cds > .cd-chip > .task-x { width: 36px; height: 36px; }
         body.touch .task-ctl > .task-x svg { width: 18px; height: 18px; }
-        body.touch #cdChip > .task-x svg   { width: 16px; height: 16px; }
+        body.touch #cds > .cd-chip > .task-x svg   { width: 16px; height: 16px; }
 
         /* The "⋮" sits closer to its neighbours: half the room a plain .icon-btn
            leaves on each side (his call for the "?" it replaced, 2026-09-28).
@@ -411,26 +411,29 @@
         #moreMenu .menu-item[disabled] > svg,
         #moreMenu .menu-item[disabled] > [data-i18n] { opacity: 0.42; }
 
-        /* A running countdown, just before the clock: its time left, in the accent (its
-           text shows only once time is up). A press on it (not on its small buttons) opens the dialog. */
-        #cdChip       { gap: 6px; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 10px; flex: 0 1 auto; min-width: 0;
+        /* The running countdowns, just before the clock, one chip each (oldest first):
+           its time left, in the accent (its text shows only once time is up). A press
+           on it (not on its small buttons) opens the dialog to change that one. */
+        #cds          { display: contents; }
+        #cds > .cd-chip       { gap: 6px; height: calc(var(--bar-h) - 14px); max-width: 300px; padding: 0 3px 0 10px; flex: 0 1 auto; min-width: 0;
                         color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); white-space: nowrap; }
-        #cdChip b     { font-weight: 600; font-variant-numeric: tabular-nums; }
-        #cdChip > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); font-weight: 500; }
-        #cdChip > .cd-text:empty { display: none; }
-        #cdChip.paused b { opacity: 0.55; }
+        #cds > .cd-chip b     { font-weight: 600; font-variant-numeric: tabular-nums; }
+        #cds > .cd-chip > .cd-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-dim); font-weight: 500; }
+        #cds > .cd-chip > .cd-text:empty { display: none; }
+        #cds > .cd-chip.paused b { opacity: 0.55; }
         /* Its small buttons at the right end (the window buttons' x look): Pause / Play
            and Stop while it runs; time's up: the chip stays, with the text (or 0:00),
            and only an x to take it away. */
-        #cdChip > .task-x + .task-x { margin-left: 0; }
-        #cdChip > .cd-stop, #cdChip > .cd-stop:hover { color: var(--danger); }
-        #cdChip.done  { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-        #cdChip.done > .cd-text { color: var(--text); font-weight: 600; }
-        #cdChip b:empty, #cdChip .task-x[hidden] { display: none; }
+        #cds > .cd-chip > .task-x + .task-x { margin-left: 0; }
+        #cds > .cd-chip > .cd-stop, #cds > .cd-chip > .cd-stop:hover { color: var(--danger); }
+        #cds > .cd-chip.done  { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+        #cds > .cd-chip.done > .cd-text { color: var(--text); font-weight: 600; }
+        #cds > .cd-chip b:empty, #cds > .cd-chip .task-x[hidden] { display: none; }
 
         /* THE COUNTDOWN DIALOG - hours / minutes / seconds side by side, the text below.
            Not centred: it opens by the clock (or its chip), like the month (cdOpen). */
         #cdBackdrop > .sheet { position: fixed; }
+        .cd-note      { margin: 0 0 12px; font-size: 0.8rem; line-height: 1.4; color: var(--text-dim); }
         .cd-nums      { flex-wrap: nowrap; }
         .cd-nums .field { flex: 1 1 0; min-width: 76px; }
         .cd-nums .field input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
@@ -476,15 +479,15 @@
         body.bar-side  .task > .task-ctl { flex-direction: column; margin: 0; }
         body.bar-side  #batt    { flex-direction: column; gap: 0; padding: 4px 0; font-size: 0.75rem; }
         body.bar-side  #clock,
-        body.bar-side  #cdChip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
+        body.bar-side  #cds > .cd-chip  { flex-direction: column; width: calc(var(--bar-h) - 4px); max-width: none; height: auto;
                                   padding: 6px 2px; gap: 2px; white-space: normal; text-align: center;
                                   font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
         body.bar-side  #clock  { padding: 4px 2px; }
         body.bar-side  #clock2 { width: calc(var(--bar-h) - 4px); padding: 4px 2px;
                                  white-space: normal; text-align: center; font-size: 0.7rem; line-height: 1.2; overflow-wrap: anywhere; }
         body.bar-side  #clock > span, body.bar-side  #clock > b { justify-content: center; padding: 2px; }
-        body.bar-side  #cdChip > .cd-text { display: none; }
-        body.bar-side  #cdChip > .task-x  { margin: 0; }
+        body.bar-side  #cds > .cd-chip > .cd-text { display: none; }
+        body.bar-side  #cds > .cd-chip > .task-x  { margin: 0; }
         body.bar-side  #moreBtn,
         body.bar-side  #helpBtn { margin: 0; }
         body.bar-left  .menu    { left: calc(var(--bar-h) + 8px); bottom: 8px; max-height: calc(100dvh - 16px); }
@@ -527,7 +530,9 @@
         <div class="bar" id="bar">
             <button class="icon-btn" id="menuBtn" data-i18n-attr="title:ui.toApps" title="Apps"><img src="../icons/icon-192.png" alt=""></button>
             <div class="tasks" id="tasks"></div>
-            <button id="cdChip" class="text-btn ghost" type="button" hidden><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button>
+            <!-- COUNTDOWNS - one chip each (see THE COUNTDOWNS), cloned from cdTpl. -->
+            <span id="cds"></span>
+            <template id="cdTpl"><button class="cd-chip text-btn ghost" type="button"><b></b><span class="cd-text"></span><span class="icon-btn task-x cd-pp" role="button" data-cd="pp"></span><span class="icon-btn task-x cd-stop" role="button" data-cd="stop"></span><span class="icon-btn task-x cd-x" role="button" data-cd="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></span></button></template>
             <!-- WEATHER - the sky now (set.weatherBar, see WEATHER below); a press shows today's forecast. -->
             <button id="wxBtn" class="icon-btn" type="button" aria-expanded="false" hidden data-i18n-attr="aria-label:desktop.weather"></button>
             <!-- BATTERY - its level (set.battBar, see BATTERY below); shows only, no press. -->
@@ -633,12 +638,13 @@
         <div class="switcher" id="switcher" role="listbox" hidden data-i18n-attr="aria-label:desktop.switchWin"></div>
     </div>
 
-    <!-- COUNTDOWN - opened by the clock (or the countdown's chip on the bar): hours /
-         minutes / seconds + an optional text; Play starts it (a running one is
-         replaced). Pause / Play and Stop live on the chip, not here. -->
+    <!-- COUNTDOWN - opened by the clock (a new one, beside the others) or by a
+         countdown's chip (to change that one): hours / minutes / seconds + an
+         optional text; Play starts it. Pause / Play and Stop live on the chip. -->
     <div class="sheet-backdrop" id="cdBackdrop">
-        <div class="sheet sheet--pack" role="dialog" aria-modal="true" data-i18n-attr="aria-label:desktop.countdown">
-            <h2 data-i18n="desktop.countdown"></h2>
+        <div class="sheet sheet--pack" role="dialog" aria-modal="true" aria-labelledby="cdTitle">
+            <h2 id="cdTitle"></h2>
+            <p class="cd-note" id="cdNote" data-i18n="desktop.cdNote"></p>
             <div class="field-row cd-nums">
                 <div class="field"><label for="cdH" data-i18n="desktop.cdHours"></label><input id="cdH" type="number" min="0" max="99" step="1" inputmode="numeric"></div>
                 <div class="field"><label for="cdM" data-i18n="desktop.cdMins"></label><input id="cdM" type="number" min="0" max="59" step="1" inputmode="numeric"></div>
@@ -2606,26 +2612,40 @@
     wxBtn.addEventListener( 'click', calClose );
 
     //------------------------------------------------------------------------//
-    // THE COUNTDOWN - one at a time, on this device (localStorage), so it goes
-    // on after a reload. Running = `end` (a wall-clock time, never a counter a
-    // sleeping tab would slow down); paused = `left` (ms still to go); idle =
-    // neither. `last` is the length last started, to offer it again. While one
-    // runs or is paused, its chip sits on the bar just before the clock - the
-    // time left (not the text) and small Pause / Play and Stop buttons.
-    // Time's up (`done`): beeps again and again until a press on the chip, a
-    // system notice when the desktop is not on screen, and NO dialog - the button stays on the bar with the text (or 0:00
-    // when there is none) and a small x at its end that takes it away.
+    // THE COUNTDOWNS - as many as wanted at once, on this device (localStorage),
+    // so they go on after a reload. Each: running = `end` (a wall-clock time,
+    // never a counter a sleeping tab would slow down); paused = `left` (ms still
+    // to go); `len` its length in seconds. `last` is the length last started, to
+    // offer it again for a new one. Each has its own chip on the bar, just before
+    // the clock (oldest first) - the time left (not the text) and small Pause /
+    // Play and Stop buttons. The clock adds a new one; a chip changes its own.
+    // Time's up (`done`): beeps again and again until a press on a chip, a
+    // system notice when the desktop is not on screen, and NO dialog - the chip
+    // stays on the bar with the text (or 0:00 when there is none) and a small x
+    // at its end that takes it away.
 
-    var CD_KEY = 'balata-countdown';
-    var cd = Object.assign( { end: 0, left: 0, done: false, text: '', last: 300 }, store( CD_KEY ) || {} );
-    var cdChip = document.getElementById( 'cdChip' ), cdBack = document.getElementById( 'cdBackdrop' );
+    var CD_KEY = 'balata-countdowns', CD_OLD = 'balata-countdown';   // until 2026-10-12: one countdown
+    var cds = cdLoad();
+    var cdBox = document.getElementById( 'cds' ), cdTpl = document.getElementById( 'cdTpl' ), cdBack = document.getElementById( 'cdBackdrop' );
     var cdH = document.getElementById( 'cdH' ), cdM = document.getElementById( 'cdM' ), cdS = document.getElementById( 'cdS' );
     var cdText = document.getElementById( 'cdText' ), cdPlay = document.getElementById( 'cdPlay' );
-    var cdPP = cdChip.querySelector( '.cd-pp' ), cdStop = cdChip.querySelector( '.cd-stop' ), cdX = cdChip.querySelector( '.cd-x' );
-    var cdTimer = 0, audio = null, ringTimer = 0;
+    var cdTitle = document.getElementById( 'cdTitle' ), cdNote = document.getElementById( 'cdNote' );
+    var cdTimer = 0, audio = null, ringTimer = 0, cdEdit = 0;      // cdEdit: the id the dialog changes (0 = a new one)
 
-    function cdSave() { store( CD_KEY, cd ); }
-    function cdMs()   { return cd.end ? Math.max( 0, cd.end - Date.now() ) : cd.left; }
+    function cdLoad()
+    {
+        var v = store( CD_KEY );
+        if( ! v )                                           // the old single one, if any
+        {
+            var o = store( CD_OLD ) || {};
+            v = { list: ( o.end || o.left || o.done ) ? [ { id: 1, end: o.end || 0, left: o.left || 0, done: !! o.done, text: o.text || '', len: o.last || 300 } ] : [],
+                  last: o.last };
+        }
+        return { list: Array.isArray( v.list ) ? v.list : [], last: v.last > 0 ? v.last : 300 };
+    }
+    function cdSave() { store( CD_KEY, cds ); try { localStorage.removeItem( CD_OLD ); } catch( e ) {} }
+    function cdById( id ) { return cds.list.filter( function ( c ) { return c.id === id; } )[ 0 ]; }
+    function cdMs( c )    { return c.end ? Math.max( 0, c.end - Date.now() ) : c.left; }
     function cdFmt( ms )
     {
         var s = Math.ceil( ms / 1000 ), h = Math.floor( s / 3600 ), m = Math.floor( s / 60 ) % 60;
@@ -2633,38 +2653,63 @@
         return ( h ? h + ':' + pad( m ) : m ) + ':' + pad( s );
     }
 
+    // One chip per countdown, in the list's order; chips of ones gone go too.
     function cdPaint()
     {
-        var on = !! ( cd.end || cd.left ), left = cdFmt( cdMs() ), done = ! on && !! cd.done;
-        if( ! done ) stopRing();                            // started again, stopped, or taken away (also in another tab)
-        cdChip.hidden = ! on && ! done;
-        cdChip.classList.toggle( 'paused', on && ! cd.end );
-        cdChip.classList.toggle( 'done', done );
-        cdChip.querySelector( 'b' ).textContent = on ? left : done && ! cd.text ? cdFmt( 0 ) : '';
-        cdChip.querySelector( '.cd-text' ).textContent = done ? cd.text : '';   // the text only once time is up
-        cdChip.title = t( done ? 'desktop.cdDone' : 'desktop.countdown' );
-        cdPP.hidden = cdStop.hidden = ! on;
-        cdX.hidden = ! done;
-        var pp = cd.end ? 'pause' : 'play';
-        if( cdPP.getAttribute( 'data-icon' ) !== pp && window.NayiveUI )
+        if( ! cds.list.some( function ( c ) { return c.done; } ) ) stopRing();   // all started again, stopped or taken away (also in another tab)
+        var keep = {};
+        cds.list.forEach( function ( c )
         {
-            cdPP.innerHTML = NayiveUI.icon( pp );
-            cdPP.setAttribute( 'data-icon', pp );
+            keep[ c.id ] = true;
+            var el = cdBox.querySelector( '[data-id="' + c.id + '"]' );
+            if( ! el ) { el = cdTpl.content.firstElementChild.cloneNode( true ); el.setAttribute( 'data-id', c.id ); }
+            cdBox.appendChild( el );                        // (re)placed in order
+            cdPaintChip( el, c );
+        } );
+        Array.prototype.slice.call( cdBox.children ).forEach( function ( el ) { if( ! keep[ el.getAttribute( 'data-id' ) ] ) el.remove(); } );
+    }
+
+    function cdPaintChip( el, c )
+    {
+        var on = !! ( c.end || c.left ), done = ! on && !! c.done;
+        var pp = el.querySelector( '.cd-pp' ), stop = el.querySelector( '.cd-stop' ), x = el.querySelector( '.cd-x' );
+        el.classList.toggle( 'paused', on && ! c.end );
+        el.classList.toggle( 'done', done );
+        el.querySelector( 'b' ).textContent = on ? cdFmt( cdMs( c ) ) : done && ! c.text ? cdFmt( 0 ) : '';
+        el.querySelector( '.cd-text' ).textContent = done ? c.text : '';   // the text only once time is up
+        el.title = done ? t( 'desktop.cdDone' ) : t( 'desktop.countdown' ) + ( c.text ? ' - ' + c.text : '' );
+        pp.hidden = stop.hidden = ! on;
+        x.hidden = ! done;
+        var icon = c.end ? 'pause' : 'play';
+        if( pp.getAttribute( 'data-icon' ) !== icon && window.NayiveUI )
+        {
+            pp.innerHTML = NayiveUI.icon( icon );
+            pp.setAttribute( 'data-icon', icon );
         }
-        if( ! cdStop.firstChild && window.NayiveUI ) cdStop.innerHTML = NayiveUI.icon( 'stop' );
-        tip( cdPP, cd.end ? 'desktop.cdPause' : 'desktop.cdContinue' );
-        tip( cdStop, 'desktop.cdStop' );
-        tip( cdX, 'ui.close' );
+        if( ! stop.firstChild && window.NayiveUI ) stop.innerHTML = NayiveUI.icon( 'stop' );
+        tip( pp, c.end ? 'desktop.cdPause' : 'desktop.cdContinue' );
+        tip( stop, 'desktop.cdStop' );
+        tip( x, 'ui.close' );
     }
 
     function tip( el, key ) { el.title = t( key ); el.setAttribute( 'aria-label', el.title ); }
 
+    // Ends the ones whose time is up, repaints, and comes back at the next
+    // second change of the soonest running one.
     function cdTick()
     {
         clearTimeout( cdTimer );
-        if( cd.end && cd.end <= Date.now() ) { cdDone(); return; }
+        var now = Date.now(), ended = cds.list.filter( function ( c ) { return c.end && c.end <= now; } );
+        if( ended.length ) cdDone( ended );
         cdPaint();
-        if( cd.end ) cdTimer = setTimeout( cdTick, ( cd.end - Date.now() ) % 1000 + 20 );
+        var next = 0;
+        cds.list.forEach( function ( c )
+        {
+            if( ! c.end ) return;
+            var ms = ( c.end - now ) % 1000 + 20;
+            if( ! next || ms < next ) next = ms;
+        } );
+        if( next ) cdTimer = setTimeout( cdTick, next );
     }
 
     // The AudioContext is made on a press (Start), or a browser keeps it silent.
@@ -2699,30 +2744,35 @@
     function ring()     { stopRing(); beep(); ringTimer = setInterval( beep, 2500 ); }
     function stopRing() { clearInterval( ringTimer ); ringTimer = 0; }
 
-    function cdDone()
+    function cdDone( ended )
     {
-        var text = cd.text;
-        cd.end = cd.left = 0;
-        cd.done = true;
-        cdSave();
-        cdPaint();
-        ring();
-        try
+        ended.forEach( function ( c )
         {
-            if( document.hidden && window.Notification && Notification.permission === 'granted' )
-                new Notification( t( 'desktop.cdDone' ), { body: text, icon: '../icons/icon-192.png' } );
-        } catch( e ) {}
+            c.end = c.left = 0;
+            c.done = true;
+            try
+            {
+                if( document.hidden && window.Notification && Notification.permission === 'granted' )
+                    new Notification( t( 'desktop.cdDone' ), { body: c.text, icon: '../icons/icon-192.png' } );
+            } catch( e ) {}
+        } );
+        cdSave();
+        ring();
     }
 
-    // `by`: what was pressed (the clock or the chip); the dialog sits beside it,
-    // on the desk side of the bar, as the month does.
+    // `by`: what was pressed (the clock or a chip); the dialog sits beside it,
+    // on the desk side of the bar, as the month does. `c`: the countdown to
+    // change (its chip), or none for a new one (the clock).
     var cdBy = clock;
-    function cdOpen( by )
+    function cdOpen( by, c )
     {
         closeMenu();
-        var s = cd.last > 0 ? cd.last : 300;
+        cdEdit = c ? c.id : 0;
+        var s = c && c.len > 0 ? c.len : cds.last;
         cdH.value = Math.floor( s / 3600 ); cdM.value = Math.floor( s / 60 ) % 60; cdS.value = s % 60;
-        cdText.value = cd.text;
+        cdText.value = c ? c.text : '';
+        cdTitle.textContent = t( c ? 'desktop.cdChange' : 'desktop.cdNew' );
+        cdNote.hidden = !! c;
         if( window.NayiveUI ) NayiveUI.open( 'cdBackdrop' );
         else cdBack.classList.add( 'open' );
         cdBy = by || clock;
@@ -2730,24 +2780,31 @@
     }
     window.addEventListener( 'resize', function ()
     {
-        if( cdBack.classList.contains( 'open' ) ) placeBy( cdBy, cdBack.querySelector( '.sheet' ) );
+        if( cdBack.classList.contains( 'open' ) ) placeBy( cdBy.isConnected ? cdBy : clock, cdBack.querySelector( '.sheet' ) );
     } );
 
     function num( el, max ) { var n = Math.floor( +el.value ); return n > 0 ? Math.min( n, max ) : 0; }
 
+    // Play: restarts the one being changed (if still there), else adds a new one.
     function cdStart()
     {
         var secs = num( cdH, 99 ) * 3600 + num( cdM, 59 ) * 60 + num( cdS, 59 );
         if( ! secs ) { cdH.focus(); return; }
-        if( window.NayiveUI ) NayiveUI.undoSettle();       // a Stop's Undo must not come back over this one
         wakeAudio();
-        cd = { end: Date.now() + secs * 1000, left: 0, done: false, text: cdText.value.trim(), last: secs };
+        var c = cdEdit && cdById( cdEdit );
+        if( ! c )
+        {
+            c = { id: cds.list.reduce( function ( n, x ) { return Math.max( n, x.id ); }, 0 ) + 1 };
+            cds.list.push( c );
+        }
+        Object.assign( c, { end: Date.now() + secs * 1000, left: 0, done: false, text: cdText.value.trim(), len: secs } );
+        cds.last = secs;
         cdSave();
         if( window.NayiveUI ) NayiveUI.close( 'cdBackdrop' );
         cdTick();
     }
 
-    // The clock: its weekday / date opens the month (a second press closes it), the rest the countdown.
+    // The clock: its weekday / date opens the month (a second press closes it), the rest a new countdown.
     clock.addEventListener( 'click', function ( e )
     {
         var head = clock.querySelector( 'span' );
@@ -2760,30 +2817,31 @@
     {
         el.addEventListener( 'keydown', function ( e ) { if( e.key === 'Enter' ) { e.preventDefault(); cdStart(); } } );
     } );
-    // The chip: Pause / Play, Stop (at once, no "are you sure") and, time's up,
-    // the x that takes it away; anywhere else opens the dialog.
-    cdChip.addEventListener( 'click', function ( e )
+    // A chip: Pause / Play, Stop (at once, no "are you sure") and, time's up,
+    // the x that takes it away; anywhere else opens the dialog to change it.
+    cdBox.addEventListener( 'click', function ( e )
     {
+        var chip = e.target.closest( '.cd-chip' ), c = chip && cdById( +chip.getAttribute( 'data-id' ) );
+        if( ! c ) return;
         var b = e.target.closest( '[data-cd]' ), what = b && b.getAttribute( 'data-cd' );
-        stopRing();                                         // any press on it silences it
-        if( ! what ) { cdOpen( cdChip ); return; }
+        stopRing();                                         // any press on a chip silences it
+        if( ! what ) { cdOpen( chip, c ); return; }
         if( what === 'pp' )
         {
-            if( cd.end ) { cd.left = Math.max( 1000, cd.end - Date.now() ); cd.end = 0; }
-            else         { wakeAudio(); cd.end = Date.now() + cd.left; cd.left = 0; }
+            if( c.end ) { c.left = Math.max( 1000, c.end - Date.now() ); c.end = 0; }
+            else        { wakeAudio(); c.end = Date.now() + c.left; c.left = 0; }
         }
         else                                                // stop / x
         {
-            var was = { end: cd.end, left: cd.left, done: cd.done };
-            cd.end = cd.left = 0; cd.done = false;
-            // Undo: the same end moment (never one gone by meanwhile), the same
-            // time left when paused, or the time's-up chip again. Not over a new one.
+            var at = cds.list.indexOf( c ), was = Object.assign( {}, c );
+            cds.list.splice( at, 1 );
+            // Undo: back in its place with the same end moment (never one gone by
+            // meanwhile), the same time left when paused, or its time's-up chip.
             if( window.NayiveUI ) NayiveUI.undoToast( t( what === 'stop' ? 'desktop.cdStopped' : 'ui.toast.removed' ), function ()
             {
-                if( cd.end || cd.left ) return;
-                if( was.end ) { if( was.end <= Date.now() ) return; wakeAudio(); cd.end = was.end; cd.done = false; }
-                else if( was.left ) { cd.left = was.left; cd.done = false; }
-                else cd.done = was.done;
+                if( cdById( was.id ) || ( was.end && was.end <= Date.now() ) ) return;
+                if( was.end ) wakeAudio();
+                cds.list.splice( Math.min( at, cds.list.length ), 0, was );
                 cdSave();
                 cdTick();
             } );
@@ -2791,11 +2849,11 @@
         cdSave();
         cdTick();
     } );
-    // Another tab of the desktop started / paused / stopped it: follow.
+    // Another tab of the desktop started / paused / stopped one: follow.
     window.addEventListener( 'storage', function ( e )
     {
         if( e.key !== CD_KEY ) return;
-        cd = Object.assign( { end: 0, left: 0, done: false, text: '', last: 300 }, store( CD_KEY ) || {} );
+        cds = cdLoad();
         cdTick();
     } );
     // First look once shared/ui.js (deferred) is in: a countdown that ended while

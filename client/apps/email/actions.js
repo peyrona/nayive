@@ -122,7 +122,7 @@
     async function pickMatching()
     {
         var days = +E.$( "pickOlder" ).value, seen = E.$( "pickSeen" ).value;
-        var from = E.$( "pickFrom" ).value.trim().toLowerCase(), subj = E.$( "pickSubject" ).value.trim().toLowerCase();
+        var from = NayiveUI.matcher( E.$( "pickFrom" ).value ), subj = NayiveUI.matcher( E.$( "pickSubject" ).value );
         var label = E.$( "pickLabel" ).value, attach = E.$( "pickAttach" ).checked, starred = E.$( "pickStarred" ).checked;
         var before = days ? Date.now() - days * 86400000 : 0;
         NayiveUI.close( "pickSheet" );
@@ -132,8 +132,8 @@
             if( before && ! ( new Date( m.date ).getTime() < before ) ) return false;
             if( seen === "unread" && m.seen ) return false;
             if( seen === "read" && ! m.seen ) return false;
-            if( from && ! ( m.from || [] ).some( function ( a ) { return ( ( a.name || "" ) + " " + ( a.addr || "" ) ).toLowerCase().indexOf( from ) >= 0; } ) ) return false;
-            if( subj && ( m.subject || "" ).toLowerCase().indexOf( subj ) < 0 ) return false;
+            if( from && ! from( ( m.from || [] ).map( function ( a ) { return ( a.name || "" ) + " " + ( a.addr || "" ); } ).join( "\n" ) ) ) return false;
+            if( subj && ! subj( m.subject ) ) return false;
             if( label && ( m.labels || [] ).indexOf( label ) < 0 ) return false;
             if( attach && ! m.attach ) return false;
             if( starred && ! m.flagged ) return false;

@@ -696,7 +696,7 @@ func (c *Converter) notify(job ConvertJob, outPath string) {
 	}
 	link := URLPrefix + "/drive/?sel=" + url.QueryEscape(sel)
 
-	for _, sub := range c.users.UserPush(job.User).Subs {
+	for _, sub := range c.users.PushTargets(job.User) {
 		var title, body string
 		if outPath != "" {
 			title = c.phrases.phrase(sub.Lang, "push.convertDoneTitle", "Película convertida")
